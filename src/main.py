@@ -877,7 +877,7 @@ if __name__ == "__main__":
 
         #discord bot. Look for changes in the bot token
         currentDiscordBotToken = setdat.get("discord_bot_token", "")
-        if setdat["discord_bot"] and currentDiscordBotToken and currentDiscordBotToken != prevDiscordBotToken:
+        if setdat.get("discord_bot", "") and currentDiscordBotToken and currentDiscordBotToken != prevDiscordBotToken:
             if discordBotProc is not None and discordBotProc.is_alive():
                 print("Detected change in discord bot token, killing previous bot process")
                 discordBotProc.terminate()
@@ -999,4 +999,5 @@ if __name__ == "__main__":
             
             
         
+
 
