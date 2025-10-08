@@ -1073,6 +1073,22 @@ if __name__ == "__main__":
                 pass  # If eel is not ready, continue
         elif run.value == 0:
             if macroProc:
+                # Generate and send final report before stopping
+                try:
+                    print("Generating final report...")
+                    from modules.submacros.hourlyReport import HourlyReport
+                    finalReportObj = HourlyReport()
+                    finalReportData = finalReportObj.generateFinalReport(setdat)
+                    if finalReportData:
+                        logger.finalReport("Final Report", "", "purple")
+                        print("Final report sent successfully")
+                    else:
+                        print("Failed to generate final report")
+                except Exception as e:
+                    print(f"Error generating final report: {e}")
+                    import traceback
+                    traceback.print_exc()
+                
                 logger.webhook("Macro Stopped", "Existance Macro", "red")
                 run.value = 3
                 gui.setRunState(3)  # Update the global run state
