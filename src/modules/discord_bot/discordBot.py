@@ -301,10 +301,10 @@ def discordBot(token, run, status):
 
             # Define emojis and icons for different tasks (same as GUI)
             fieldEmojis = {
-                "sunflower": "🌻", "dandelion": "🌼", "mushroom": "🍄", "blue_flower": "🔷",
+                "sunflower": "🌻", "dandelion": "🌼", "mushroom": "🍄", "blue flower": "🔷",
                 "clover": "🍀", "strawberry": "🍓", "spider": "🕸️", "bamboo": "🐼",
                 "pineapple": "🍍", "stump": "🐌", "cactus": "🌵", "pumpkin": "🎃",
-                "pine_tree": "🌲", "rose": "🌹", "mountain_top": "⛰️", "pepper": "🌶️", "coconut": "🥥"
+                "pine tree": "🌲", "rose": "🌹", "mountain top": "⛰️", "pepper": "🌶️", "coconut": "🥥"
             }
 
             collectEmojis = {
@@ -597,9 +597,9 @@ def discordBot(token, run, status):
         """Auto-complete function for all possible field names"""
         # All possible field names in the game
         all_possible_fields = [
-            "sunflower", "dandelion", "mushroom", "blue_flower", "clover", "strawberry",
-            "spider", "bamboo", "pineapple", "stump", "cactus", "pumpkin", "pine_tree",
-            "rose", "mountain_top", "pepper", "coconut"
+            "sunflower", "dandelion", "mushroom", "blue flower", "clover", "strawberry",
+            "spider", "bamboo", "pineapple", "stump", "cactus", "pumpkin", "pine tree",
+            "rose", "mountain top", "pepper", "coconut"
         ]
         choices = []
 
