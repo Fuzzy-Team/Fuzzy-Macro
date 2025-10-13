@@ -1076,14 +1076,45 @@ if __name__ == "__main__":
                 # Generate and send final report before stopping
                 try:
                     print("Generating final report...")
-                    from modules.submacros.hourlyReport import HourlyReport
-                    finalReportObj = HourlyReport()
-                    finalReportData = finalReportObj.generateFinalReport(setdat)
-                    if finalReportData:
-                        logger.finalReport("Final Report", "", "purple")
+                    from modules.submacros.finalReport import FinalReport
+                    import os
+                    
+                    # Create final report object
+                    finalReportObj = FinalReport()
+                    sessionStats = finalReportObj.generateFinalReport(setdat)
+                    
+                    # Check if report was generated successfully
+                    if sessionStats and os.path.exists("finalReport.png"):
+                        # Format session summary for webhook
+                        sessionTime = sessionStats.get("total_session_time", 0)
+                        hours = int(sessionTime / 3600)
+                        minutes = int((sessionTime % 3600) / 60)
+                        timeStr = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+                        
+                        totalHoney = sessionStats.get("total_honey", 0)
+                        avgHoneyPerHour = sessionStats.get("avg_honey_per_hour", 0)
+                        
+                        def millify(n):
+                            """Format large numbers with suffixes"""
+                            if n < 1000:
+                                return str(int(n))
+                            elif n < 1000000:
+                                return f"{n/1000:.1f}K"
+                            elif n < 1000000000:
+                                return f"{n/1000000:.1f}M"
+                            elif n < 1000000000000:
+                                return f"{n/1000000000:.1f}B"
+                            else:
+                                return f"{n/1000000000000:.1f}T"
+                        
+                        description = f"Runtime: {timeStr}\nTotal Honey: {millify(totalHoney)}\nAvg/Hour: {millify(avgHoneyPerHour)}"
+                        
+                        # Send final report webhook
+                        logger.finalReport("Session Complete", description, "purple")
                         print("Final report sent successfully")
                     else:
-                        print("Failed to generate final report")
+                        print("Failed to generate final report - no data available")
+                        
                 except Exception as e:
                     print(f"Error generating final report: {e}")
                     import traceback
