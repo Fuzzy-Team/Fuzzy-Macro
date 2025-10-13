@@ -68,9 +68,11 @@ class FinalReportDrawer(HourlyReportDrawer):
         y = 470
         statSpacing = (self.availableSpace+self.leftPadding)//5
         
-        # Show average honey per hour
+        # Show average honey per hour (with "Estimated" if less than 1 hour)
         avgHoneyPerHour = sessionStats.get("avg_honey_per_hour", 0)
-        self.drawStatCard(self.leftPadding, y, "average_icon", self.millify(avgHoneyPerHour), "Average Honey\nPer Hour")
+        sessionTime = sessionStats.get("total_session_time", 0)
+        avgLabel = "Estimated Avg\nPer Hour" if sessionTime < 3600 else "Average Honey\nPer Hour"
+        self.drawStatCard(self.leftPadding, y, "average_icon", self.millify(avgHoneyPerHour), avgLabel)
         
         # Show total honey made
         totalHoney = sessionStats.get("total_honey", 0)
@@ -315,9 +317,11 @@ class FinalReportDrawer(HourlyReportDrawer):
         self.drawSessionStat(y2, "session_honey_icon", "Total Gained", self.millify(totalHoney), "#FDE395")
         y2 += 300
         
-        # Average honey per hour
+        # Average honey per hour (with "Est." if less than 1 hour)
         avgHoneyPerHour = sessionStats.get("avg_honey_per_hour", 0)
-        self.drawSessionStat(y2, "average_icon", "Avg/Hour", self.millify(avgHoneyPerHour), "#00FF88")
+        totalSessionTime = sessionStats.get("total_session_time", 0)
+        avgSidebarLabel = "Est. Avg/Hour" if totalSessionTime < 3600 else "Avg/Hour"
+        self.drawSessionStat(y2, "average_icon", avgSidebarLabel, self.millify(avgHoneyPerHour), "#00FF88")
 
         #task time breakdown
         y2 += 500
@@ -471,6 +475,7 @@ class FinalReport:
         prevHoney = self.hourlyReport.hourlyReportStats["honey_per_min"][0]
         for x in self.hourlyReport.hourlyReportStats["honey_per_min"][1:]:
             if x > prevHoney:
+                # Honey gained in this minute, divided by 60 for per-second rate
                 honeyPerSec.append((x-prevHoney)/60)
             else:
                 honeyPerSec.append(0)
@@ -494,8 +499,9 @@ class FinalReport:
         # Calculate average honey per hour for the entire session
         avgHoneyPerHour = (sessionHoney / (sessionTime / 3600)) if sessionTime > 0 else 0
         
-        # Calculate peak honey rate
-        peakHoneyRate = max(honeyPerSec) if honeyPerSec else 0
+        # Calculate peak honey rate (filter out zeros for more accurate peak)
+        validHoneyPerSec = [x for x in honeyPerSec if x > 0]
+        peakHoneyRate = max(validHoneyPerSec) if validHoneyPerSec else 0
         
         # Create a deep copy of stats to avoid modification
         hourlyReportStats = copy.deepcopy(self.hourlyReport.hourlyReportStats)
@@ -547,4 +553,5 @@ class FinalReport:
             import traceback
             traceback.print_exc()
             return None
+
 

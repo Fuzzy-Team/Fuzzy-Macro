@@ -1073,7 +1073,19 @@ if __name__ == "__main__":
                 pass  # If eel is not ready, continue
         elif run.value == 0:
             if macroProc:
-                # Generate and send final report before stopping
+                # Stop macro and release all inputs first
+                logger.webhook("Macro Stopped", "Existance Macro", "red")
+                run.value = 3
+                gui.setRunState(3)  # Update the global run state
+                try:
+                    gui.toggleStartStop()  # Update UI
+                except:
+                    pass  # If eel is not ready, continue
+                
+                # Stop all inputs and processes
+                stopApp()
+                
+                # Generate and send final report AFTER stopping inputs
                 try:
                     print("Generating final report...")
                     from modules.submacros.finalReport import FinalReport
@@ -1107,7 +1119,9 @@ if __name__ == "__main__":
                             else:
                                 return f"{n/1000000000000:.1f}T"
                         
-                        description = f"Runtime: {timeStr}\nTotal Honey: {millify(totalHoney)}\nAvg/Hour: {millify(avgHoneyPerHour)}"
+                        # Add "Estimated" label if session was less than 1 hour
+                        avgLabel = "Est. Avg/Hour" if sessionTime < 3600 else "Avg/Hour"
+                        description = f"Runtime: {timeStr}\nTotal Honey: {millify(totalHoney)}\n{avgLabel}: {millify(avgHoneyPerHour)}"
                         
                         # Send final report webhook
                         logger.finalReport("Session Complete", description, "purple")
@@ -1119,15 +1133,6 @@ if __name__ == "__main__":
                     print(f"Error generating final report: {e}")
                     import traceback
                     traceback.print_exc()
-                
-                logger.webhook("Macro Stopped", "Existance Macro", "red")
-                run.value = 3
-                gui.setRunState(3)  # Update the global run state
-                try:
-                    gui.toggleStartStop()  # Update UI
-                except:
-                    pass  # If eel is not ready, continue
-                stopApp()
         elif run.value == 4: #disconnected
             macroProc.kill()
             logger.webhook("","Disconnected", "red", "screen", ping_category="ping_disconnects")
