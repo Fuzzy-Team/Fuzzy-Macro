@@ -331,9 +331,10 @@ with open("./data/bss/auto_planter_ranking.json", "r") as f:
     autoPlanterRankings = json.load(f) 
 
 class macro:
-    def __init__(self, status, logQueue, updateGUI):
+    def __init__(self, status, logQueue, updateGUI, run=None):
         self.status = status
         self.updateGUI = updateGUI
+        self.run = run
         self.setdat = settingsManager.loadAllSettings()
         self.fieldSettings = settingsManager.loadFields()
 
@@ -1677,6 +1678,14 @@ class macro:
             self.keyboard.press('shift')
         
         while keepGathering:
+            # Check if macro is paused
+            if self.run is not None:
+                while self.run.value == 5:
+                    # Release mouse and keys while paused
+                    mouse.mouseUp()
+                    self.keyboard.releaseMovement()
+                    time.sleep(1)  # Wait while paused
+            
             #goo timer is now handled by background thread
 
             patternStartTime = time.time()

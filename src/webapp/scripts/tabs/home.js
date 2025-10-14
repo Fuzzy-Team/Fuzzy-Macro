@@ -19,14 +19,24 @@ async function updateStartButtonText() {
   try {
     const runState = await eel.getRunState()();
     const isRunning = runState === 2; // 2 means running
+    const isPaused = runState === 5; // 5 means paused
 
     const button = document.getElementById("start-btn");
     if (button) {
-      if (isRunning) {
+      if (isPaused) {
+        button.classList.add("paused");
+        button.classList.remove("active");
+        button.disabled = true;
+        button.textContent = `⏸️ Paused`;
+      } else if (isRunning) {
         button.classList.add("active");
+        button.classList.remove("paused");
+        button.disabled = false;
         button.textContent = `Stop [${stopKey}]`;
       } else {
         button.classList.remove("active");
+        button.classList.remove("paused");
+        button.disabled = false;
         button.textContent = `Start [${startKey}]`;
       }
     }
@@ -34,6 +44,7 @@ async function updateStartButtonText() {
     // Fallback to just setting start text
     const button = document.getElementById("start-btn");
     if (button) {
+      button.disabled = false;
       button.textContent = `Start [${startKey}]`;
     }
   }
@@ -50,16 +61,27 @@ async function toggleStartStop() {
   try {
     const runState = await eel.getRunState()();
     const isRunning = runState === 2; // 2 means running
+    const isPaused = runState === 5; // 5 means paused
 
     const button = document.getElementById("start-btn");
     if (button) {
-      if (isRunning) {
+      if (isPaused) {
+        // Macro is paused, show paused indicator
+        button.classList.add("paused");
+        button.classList.remove("active");
+        button.disabled = true;
+        button.textContent = `⏸️ Paused`;
+      } else if (isRunning) {
         // Macro is running, show stop button
         button.classList.add("active");
+        button.classList.remove("paused");
+        button.disabled = false;
         button.textContent = `Stop [${stopKey}]`;
       } else {
         // Macro is not running, show start button
         button.classList.remove("active");
+        button.classList.remove("paused");
+        button.disabled = false;
         button.textContent = `Start [${startKey}]`;
       }
     }
@@ -245,6 +267,7 @@ async function checkAndUpdateButtonState() {
   try {
     const runState = await eel.getRunState()();
     const isRunning = runState === 2;
+    const isPaused = runState === 5;
 
     const settings = await loadAllSettings();
     const startKey = settings.start_keybind || "F1";
@@ -252,11 +275,20 @@ async function checkAndUpdateButtonState() {
 
     const button = document.getElementById("start-btn");
     if (button) {
-      if (isRunning) {
+      if (isPaused) {
+        button.classList.add("paused");
+        button.classList.remove("active");
+        button.disabled = true;
+        button.textContent = `⏸️ Paused`;
+      } else if (isRunning) {
         button.classList.add("active");
+        button.classList.remove("paused");
+        button.disabled = false;
         button.textContent = `Stop [${stopKey}]`;
       } else {
         button.classList.remove("active");
+        button.classList.remove("paused");
+        button.disabled = false;
         button.textContent = `Start [${startKey}]`;
       }
     }

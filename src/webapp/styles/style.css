@@ -236,6 +236,17 @@ main {
   background-color: #36393f;
 }
 
+.purple-button.paused {
+  background-color: #f0ad4e;
+  color: #2f3136;
+  font-weight: 500;
+}
+
+.purple-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 #task-list img {
   height: 0.9rem;
   margin-right: 0.3rem;

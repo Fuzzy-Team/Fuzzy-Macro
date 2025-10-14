@@ -122,11 +122,51 @@ def discordBot(token, run, status):
             return 
         run.value = 0
         await interaction.response.send_message("Stopping Macro")
+    
+    @bot.tree.command(name = "pause", description = "Pause the macro")
+    async def pause(interaction: discord.Interaction):
+        if run.value != 2:
+            await interaction.response.send_message("❌ Macro is not running. Cannot pause.")
+            return
+        
+        # Get current status before pausing
+        current_status = status.value if hasattr(status, 'value') and status.value else "Unknown"
+        
+        run.value = 5
+        await interaction.response.send_message(f"⏸️ Pausing Macro\n📍 Current task: {current_status.replace('_', ' ').title()}")
+    
+    @bot.tree.command(name = "resume", description = "Resume the paused macro")
+    async def resume(interaction: discord.Interaction):
+        if run.value != 5:
+            await interaction.response.send_message("❌ Macro is not paused. Cannot resume.")
+            return
+        run.value = 2
+        await interaction.response.send_message("▶️ Resuming Macro\n🎮 Bringing Roblox to foreground...")
         
     @bot.tree.command(name = "rejoin", description = "Make the macro rejoin the game.")
     async def rejoin(interaction: discord.Interaction):
         run.value = 4
         await interaction.response.send_message("Macro is rejoining")
+    
+    @bot.tree.command(name = "status", description = "Get the current macro status")
+    async def get_status(interaction: discord.Interaction):
+        status_messages = {
+            0: "⏹️ Stopping",
+            1: "▶️ Starting",
+            2: "✅ Running",
+            3: "⏹️ Stopped",
+            4: "🔄 Disconnected/Rejoining",
+            5: "⏸️ Paused"
+        }
+        
+        macro_status = status_messages.get(run.value, "❓ Unknown")
+        current_task = status.value if hasattr(status, 'value') and status.value else "None"
+        
+        embed = discord.Embed(title="📊 Macro Status", color=0x00ff00 if run.value == 2 else (0xffaa00 if run.value == 5 else 0xff0000))
+        embed.add_field(name="State", value=macro_status, inline=True)
+        embed.add_field(name="Current Task", value=current_task.replace('_', ' ').title(), inline=True)
+        
+        await interaction.response.send_message(embed=embed)
 
     @bot.tree.command(name = "amulet", description = "Choose to keep or replace an amulet")
     @app_commands.describe(option = "keep or replace an amulet")
@@ -1154,7 +1194,7 @@ def discordBot(token, run, status):
         """Show available commands"""
         embed = discord.Embed(title="🤖 BSS Macro Discord Bot", description="Available Commands:", color=0x0099ff)
 
-        embed.add_field(name="🔧 **Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/stop` - Stop the macro\n`/rejoin` - Make macro rejoin game\n`/screenshot` - Get screenshot\n`/settings` - View current settings", inline=False)
+        embed.add_field(name="🔧 **Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/pause` - Pause the macro\n`/resume` - Resume the macro\n`/stop` - Stop the macro\n`/status` - Get macro status and current task\n`/rejoin` - Make macro rejoin game\n`/screenshot` - Get screenshot\n`/settings` - View current settings", inline=False)
 
         embed.add_field(name="🌾 **Field Management**", value="`/fields` - View field configuration\n`/enablefield <field>` - Enable a field\n`/disablefield <field>` - Disable a field\n`/swapfield <current> <new>` - Swap one field for another (new can be any field)", inline=False)
 
@@ -1168,7 +1208,9 @@ def discordBot(token, run, status):
 
         # embed.add_field(name="📁 **Profile Management**", value="`/profiles` - List available profiles\n`/currentprofile` - Show current profile\n`/switchprofile <name>` - Switch profile", inline=False)
 
-        embed.add_field(name="📊 **Status & Monitoring**", value="`/status` - Get macro status\n`/taskqueue` - Show current task queue\n`/battery` - Check battery status\n`/streamurl` - Get stream URL", inline=False)
+        embed.add_field(name="📊 **Status & Monitoring**", value="`/status` - Get macro status and current task\n`/taskqueue` - Show current task queue\n`/battery` - Check battery status\n`/streamurl` - Get stream URL", inline=False)
+        
+        embed.add_field(name="⚙️ **Advanced**", value="`/amulet <keep/replace>` - Choose amulet action\n`/close` - Close macro and Roblox", inline=False)
 
         await interaction.response.send_message(embed=embed)
 

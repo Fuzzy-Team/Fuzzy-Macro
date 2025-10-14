@@ -34,8 +34,8 @@ from modules.submacros.hourlyReport import HourlyReport
 mw, mh = pag.size()
 
 #controller for the macro
-def macro(status, logQueue, updateGUI):
-    macro = macroModule.macro(status, logQueue, updateGUI)
+def macro(status, logQueue, updateGUI, run):
+    macro = macroModule.macro(status, logQueue, updateGUI, run)
     #invert the regularMobsInFields dict
     #instead of storing mobs in field, store the fields associated with each mob
     regularMobData = {}
@@ -61,6 +61,10 @@ def macro(status, logQueue, updateGUI):
     #makes it easy to do any checks after a task is complete (like stinger hunt, rejoin every, etc)
     def runTask(func = None, args = (), resetAfter = True, convertAfter = True):
         nonlocal taskCompleted
+        # Check if paused before executing task
+        while run.value == 5:
+            time.sleep(1)  # Wait while paused
+        
         #execute the task
         if func:
             returnVal = func(*args) 
@@ -71,6 +75,10 @@ def macro(status, logQueue, updateGUI):
         if resetAfter: 
             macro.reset(convert=convertAfter)
 
+        # Check if paused before priority tasks
+        while run.value == 5:
+            time.sleep(1)  # Wait while paused
+        
         #do priority tasks
         if macro.night and macro.setdat["stinger_hunt"]:
             macro.stingerHunt()
@@ -187,6 +195,10 @@ def macro(status, logQueue, updateGUI):
         return settings_cache
     
     while True:
+        # Check if macro is paused
+        while run.value == 5:
+            time.sleep(1)  # Wait while paused
+            
         macro.setdat = get_cached_settings()
         #run empty task
         #this is in case no other settings are selected 
@@ -640,6 +652,9 @@ def macro(status, logQueue, updateGUI):
         for field in boostedGatherFields:
             st = time.time()
             while time.time() - st < 15*60:
+                # Check if paused
+                while run.value == 5:
+                    time.sleep(1)  # Wait while paused
                 runTask(macro.gather, args=(field,), resetAfter=False)
 
         #add gather tab fields
@@ -868,6 +883,8 @@ if __name__ == "__main__":
     #1: start (start process)
     #2: already running (do nothing)
     #3: already stopped (do nothing)
+    #4: disconnected (rejoin)
+    #5: paused (pause execution)
     manager = multiprocessing.Manager()
     run = multiprocessing.Value('i', 3)
     gui.setRunState(3)  # Initialize the global run state
@@ -979,6 +996,7 @@ if __name__ == "__main__":
 
     discordBotProc = None
     prevDiscordBotToken = None
+    prevRunState = run.value  # Track previous run state for GUI updates
     
     # Cache settings for main GUI loop to avoid reloading every 0.5 seconds
     gui_settings_cache = {}
@@ -1005,6 +1023,19 @@ if __name__ == "__main__":
             discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status), daemon=True)
             prevDiscordBotToken = currentDiscordBotToken
             discordBotProc.start()
+
+        # Check if run state changed (e.g., paused via Discord)
+        if run.value != prevRunState:
+            # If resuming from pause (5 -> 2), reopen Roblox
+            if prevRunState == 5 and run.value == 2:
+                appManager.openApp("Roblox")
+            
+            gui.setRunState(run.value)
+            try:
+                gui.toggleStartStop()  # Update UI
+            except:
+                pass  # If eel is not ready, continue
+            prevRunState = run.value
 
         if run.value == 1:
             #create and set webhook obj for the logger
@@ -1057,7 +1088,7 @@ if __name__ == "__main__":
                                     but there are no more items left to craft.\n\
 				                    Check the 'repeat' setting on your blender items and reset blender data.")
             #macro proc
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run), daemon=True)
             macroProc.start()
 
             logger.webhook("Macro Started", f'Existance Macro v2.13.13\nDisplay: {screenInfo["display_type"]}, {screenInfo["screen_width"]}x{screenInfo["screen_height"]}', "purple")
@@ -1139,7 +1170,7 @@ if __name__ == "__main__":
             appManager.closeApp("Roblox")
             keyboardModule.releaseMovement()
             mouse.mouseUp()
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state
@@ -1155,7 +1186,7 @@ if __name__ == "__main__":
             appManager.openApp("Roblox")
             keyboardModule.releaseMovement()
             mouse.mouseUp()
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state
@@ -1225,8 +1256,8 @@ from modules.submacros.hourlyReport import HourlyReport
 mw, mh = pag.size()
 
 #controller for the macro
-def macro(status, logQueue, updateGUI):
-    macro = macroModule.macro(status, logQueue, updateGUI)
+def macro(status, logQueue, updateGUI, run):
+    macro = macroModule.macro(status, logQueue, updateGUI, run)
     #invert the regularMobsInFields dict
     #instead of storing mobs in field, store the fields associated with each mob
     regularMobData = {}
@@ -1252,6 +1283,10 @@ def macro(status, logQueue, updateGUI):
     #makes it easy to do any checks after a task is complete (like stinger hunt, rejoin every, etc)
     def runTask(func = None, args = (), resetAfter = True, convertAfter = True):
         nonlocal taskCompleted
+        # Check if paused before executing task
+        while run.value == 5:
+            time.sleep(1)  # Wait while paused
+        
         #execute the task
         if func:
             returnVal = func(*args) 
@@ -1262,6 +1297,10 @@ def macro(status, logQueue, updateGUI):
         if resetAfter: 
             macro.reset(convert=convertAfter)
 
+        # Check if paused before priority tasks
+        while run.value == 5:
+            time.sleep(1)  # Wait while paused
+        
         #do priority tasks
         if macro.night and macro.setdat["stinger_hunt"]:
             macro.stingerHunt()
@@ -1818,6 +1857,9 @@ def macro(status, logQueue, updateGUI):
         for field in boostedGatherFields:
             st = time.time()
             while time.time() - st < 15*60:
+                # Check if paused
+                while run.value == 5:
+                    time.sleep(1)  # Wait while paused
                 runTask(macro.gather, args=(field,), resetAfter=False)
 
         #add gather tab fields
