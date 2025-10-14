@@ -78,7 +78,7 @@ def update_profile_setting(setting_key, value):
     except Exception as e:
         return False, f"❌ Error updating profile setting: {str(e)}"
 
-def discordBot(token, run, status):
+def discordBot(token, run, status, skipTask):
     bot = commands.Bot(command_prefix="!b", intents=discord.Intents.all())
 
     @bot.event
@@ -142,6 +142,16 @@ def discordBot(token, run, status):
             return
         run.value = 2
         await interaction.response.send_message("▶️ Resuming Macro\n🎮 Bringing Roblox to foreground...")
+    
+    @bot.tree.command(name = "skip", description = "Skip the current task")
+    async def skip(interaction: discord.Interaction):
+        if run.value != 2:
+            await interaction.response.send_message("❌ Macro is not running. Cannot skip task.")
+            return
+        
+        current_task = status.value if hasattr(status, 'value') and status.value else "Unknown"
+        skipTask.value = 1
+        await interaction.response.send_message(f"⏭️ Skipping Task")
         
     @bot.tree.command(name = "rejoin", description = "Make the macro rejoin the game.")
     async def rejoin(interaction: discord.Interaction):
@@ -1194,7 +1204,7 @@ def discordBot(token, run, status):
         """Show available commands"""
         embed = discord.Embed(title="🤖 BSS Macro Discord Bot", description="Available Commands:", color=0x0099ff)
 
-        embed.add_field(name="🔧 **Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/pause` - Pause the macro\n`/resume` - Resume the macro\n`/stop` - Stop the macro\n`/status` - Get macro status and current task\n`/rejoin` - Make macro rejoin game\n`/screenshot` - Get screenshot\n`/settings` - View current settings", inline=False)
+        embed.add_field(name="🔧 **Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/pause` - Pause the macro\n`/resume` - Resume the macro\n`/skip` - Skip the current task\n`/stop` - Stop the macro\n`/status` - Get macro status and current task\n`/rejoin` - Make macro rejoin game\n`/screenshot` - Get screenshot\n`/settings` - View current settings", inline=False)
 
         embed.add_field(name="🌾 **Field Management**", value="`/fields` - View field configuration\n`/enablefield <field>` - Enable a field\n`/disablefield <field>` - Disable a field\n`/swapfield <current> <new>` - Swap one field for another (new can be any field)", inline=False)
 

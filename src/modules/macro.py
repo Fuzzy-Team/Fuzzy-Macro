@@ -331,10 +331,11 @@ with open("./data/bss/auto_planter_ranking.json", "r") as f:
     autoPlanterRankings = json.load(f) 
 
 class macro:
-    def __init__(self, status, logQueue, updateGUI, run=None):
+    def __init__(self, status, logQueue, updateGUI, run=None, skipTask=None):
         self.status = status
         self.updateGUI = updateGUI
         self.run = run
+        self.skipTask = skipTask
         self.setdat = settingsManager.loadAllSettings()
         self.fieldSettings = settingsManager.loadFields()
 
@@ -1685,6 +1686,14 @@ class macro:
                     mouse.mouseUp()
                     self.keyboard.releaseMovement()
                     time.sleep(1)  # Wait while paused
+            
+            # Check if skip was requested
+            if self.skipTask is not None and self.skipTask.value == 1:
+                self.skipTask.value = 0  # Reset skip flag
+                stopGather()
+                self.logger.webhook("Task Skipped", f"Skipped gathering in {field.title()}", "orange")
+                self.reset(convert=False)
+                return
             
             #goo timer is now handled by background thread
 

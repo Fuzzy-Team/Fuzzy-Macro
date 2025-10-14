@@ -34,8 +34,8 @@ from modules.submacros.hourlyReport import HourlyReport
 mw, mh = pag.size()
 
 #controller for the macro
-def macro(status, logQueue, updateGUI, run):
-    macro = macroModule.macro(status, logQueue, updateGUI, run)
+def macro(status, logQueue, updateGUI, run, skipTask):
+    macro = macroModule.macro(status, logQueue, updateGUI, run, skipTask)
     #invert the regularMobsInFields dict
     #instead of storing mobs in field, store the fields associated with each mob
     regularMobData = {}
@@ -64,6 +64,16 @@ def macro(status, logQueue, updateGUI, run):
         # Check if paused before executing task
         while run.value == 5:
             time.sleep(1)  # Wait while paused
+        
+        # Check if skip was requested
+        if skipTask.value == 1:
+            skipTask.value = 0  # Reset skip flag
+            macro.logger.webhook("Task Skipped", f"Skipped: {status.value.replace('_', ' ').title()}", "orange")
+            status.value = ""
+            taskCompleted = True
+            if resetAfter:
+                macro.reset(convert=False)
+            return None
         
         #execute the task
         if func:
@@ -889,6 +899,7 @@ if __name__ == "__main__":
     run = multiprocessing.Value('i', 3)
     gui.setRunState(3)  # Initialize the global run state
     updateGUI = multiprocessing.Value('i', 0)
+    skipTask = multiprocessing.Value('i', 0)  # 0 = don't skip, 1 = skip current task
     status = manager.Value(ctypes.c_wchar_p, "none")
     logQueue = manager.Queue()
     watch_for_hotkeys(run)
@@ -1020,7 +1031,7 @@ if __name__ == "__main__":
                 print("Detected change in discord bot token, killing previous bot process")
                 discordBotProc.terminate()
                 discordBotProc.join()
-            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status), daemon=True)
+            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask), daemon=True)
             prevDiscordBotToken = currentDiscordBotToken
             discordBotProc.start()
 
@@ -1088,7 +1099,7 @@ if __name__ == "__main__":
                                     but there are no more items left to craft.\n\
 				                    Check the 'repeat' setting on your blender items and reset blender data.")
             #macro proc
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask), daemon=True)
             macroProc.start()
 
             logger.webhook("Macro Started", f'Existance Macro v2.13.13\nDisplay: {screenInfo["display_type"]}, {screenInfo["screen_width"]}x{screenInfo["screen_height"]}', "purple")
@@ -1170,7 +1181,7 @@ if __name__ == "__main__":
             appManager.closeApp("Roblox")
             keyboardModule.releaseMovement()
             mouse.mouseUp()
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state
@@ -1186,7 +1197,7 @@ if __name__ == "__main__":
             appManager.openApp("Roblox")
             keyboardModule.releaseMovement()
             mouse.mouseUp()
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state
@@ -1256,8 +1267,8 @@ from modules.submacros.hourlyReport import HourlyReport
 mw, mh = pag.size()
 
 #controller for the macro
-def macro(status, logQueue, updateGUI, run):
-    macro = macroModule.macro(status, logQueue, updateGUI, run)
+def macro(status, logQueue, updateGUI, run, skipTask):
+    macro = macroModule.macro(status, logQueue, updateGUI, run, skipTask)
     #invert the regularMobsInFields dict
     #instead of storing mobs in field, store the fields associated with each mob
     regularMobData = {}
@@ -1286,6 +1297,16 @@ def macro(status, logQueue, updateGUI, run):
         # Check if paused before executing task
         while run.value == 5:
             time.sleep(1)  # Wait while paused
+        
+        # Check if skip was requested
+        if skipTask.value == 1:
+            skipTask.value = 0  # Reset skip flag
+            macro.logger.webhook("Task Skipped", f"Skipped: {status.value.replace('_', ' ').title()}", "orange")
+            status.value = ""
+            taskCompleted = True
+            if resetAfter:
+                macro.reset(convert=False)
+            return None
         
         #execute the task
         if func:
