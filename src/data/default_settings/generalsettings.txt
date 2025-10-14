@@ -31,6 +31,7 @@ existance_broke=False
 stream_resolution=0.75
 stream_fps=30
 enable_stream=False
+pin_stream_url=True
 low_performance=False
 only_send_hourly_report=False
 bees=50

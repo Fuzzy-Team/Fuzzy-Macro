@@ -902,6 +902,7 @@ if __name__ == "__main__":
     skipTask = multiprocessing.Value('i', 0)  # 0 = don't skip, 1 = skip current task
     status = manager.Value(ctypes.c_wchar_p, "none")
     logQueue = manager.Queue()
+    initialMessageInfo = manager.dict()  # Shared dict for initial webhook message info
     watch_for_hotkeys(run)
     logger = logModule.log(logQueue, False, None, False, blocking=True)
 
@@ -1031,7 +1032,7 @@ if __name__ == "__main__":
                 print("Detected change in discord bot token, killing previous bot process")
                 discordBotProc.terminate()
                 discordBotProc.join()
-            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask), daemon=True)
+            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, initialMessageInfo), daemon=True)
             prevDiscordBotToken = currentDiscordBotToken
             discordBotProc.start()
 
@@ -1065,6 +1066,14 @@ if __name__ == "__main__":
                     time.sleep(0.1)
                     if stream.publicURL:
                         logger.webhook("Stream Started", f'Stream URL: {stream.publicURL}', "purple")
+                        
+                        # If bot is enabled, populate initial message info for pinning the stream message
+                        if setdat["discord_bot"] and setdat["pin_stream_url"]:
+                            import modules.logging.webhook as webhookModule
+                            if webhookModule.last_message_id and webhookModule.last_channel_id:
+                                initialMessageInfo['message_id'] = webhookModule.last_message_id
+                                initialMessageInfo['channel_id'] = webhookModule.last_channel_id
+                                initialMessageInfo['should_pin'] = True
                         return
 
                 logger.webhook("", f'Stream could not start. Check terminal for more info', "red", ping_category="ping_critical_errors")
@@ -1117,6 +1126,10 @@ if __name__ == "__main__":
             if macroProc:
                 # Stop macro and release all inputs first
                 logger.webhook("Macro Stopped", "Existance Macro", "red")
+                
+                # Clear the initial message info for next start
+                initialMessageInfo.clear()
+                
                 run.value = 3
                 gui.setRunState(3)  # Update the global run state
                 try:

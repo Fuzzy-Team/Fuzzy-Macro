@@ -1,6 +1,12 @@
 from discord_webhook import DiscordEmbed, DiscordWebhook
 from requests.exceptions import SSLError, ConnectionError
+
+# Global variable to store message ID for pinning
+last_message_id = None
+last_channel_id = None
+
 def webhook(url, title, desc, time, color, imagePath = None, ping_user_id = None):
+    global last_message_id, last_channel_id
     webhook = DiscordWebhook(url = url,rate_limit_retry=True)
     
     # Add ping if user ID is provided
@@ -20,6 +26,13 @@ def webhook(url, title, desc, time, color, imagePath = None, ping_user_id = None
     # add embed object to webhook
     webhook.add_embed(embed)
     try:
-        webhook.execute()
+        response = webhook.execute()
+        # Store message ID and channel ID for potential pinning
+        if response and hasattr(response, 'json'):
+            response_data = response.json()
+            last_message_id = response_data.get('id')
+            last_channel_id = response_data.get('channel_id')
+        return response
     except Exception as e:
         print(f"Webhook Error: {e}")
+        return None

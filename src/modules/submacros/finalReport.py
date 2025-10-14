@@ -42,7 +42,7 @@ class FinalReportDrawer(HourlyReportDrawer):
 
         # Calculate time range for x-axis based on actual session length
         sessionTime = sessionStats.get("total_session_time", 0)
-        dataPoints = len(honeyPerSec)
+        dataPoints = len(honeyPerSec) if honeyPerSec else 1
         
         # Create appropriate time labels based on session duration
         if sessionTime > 0:
@@ -111,6 +111,8 @@ class FinalReportDrawer(HourlyReportDrawer):
         # Use different x-label function for session view
         def sessionTimeLabel(i, val):
             """Format time labels based on session duration"""
+            if val == 0:
+                return "0m"
             if sessionTime < 3600:  # Less than 1 hour
                 return f"{int(val)}m"
             elif sessionTime < 86400:  # Less than 24 hours
@@ -472,14 +474,15 @@ class FinalReport:
         
         # Calculate honey/sec for the entire session
         honeyPerSec = [0]
-        prevHoney = self.hourlyReport.hourlyReportStats["honey_per_min"][0]
-        for x in self.hourlyReport.hourlyReportStats["honey_per_min"][1:]:
-            if x > prevHoney:
-                # Honey gained in this minute, divided by 60 for per-second rate
-                honeyPerSec.append((x-prevHoney)/60)
-            else:
-                honeyPerSec.append(0)
-            prevHoney = x
+        if len(self.hourlyReport.hourlyReportStats["honey_per_min"]) > 0:
+            prevHoney = self.hourlyReport.hourlyReportStats["honey_per_min"][0]
+            for x in self.hourlyReport.hourlyReportStats["honey_per_min"][1:]:
+                if x > prevHoney:
+                    # Honey gained in this minute, divided by 60 for per-second rate
+                    honeyPerSec.append((x-prevHoney)/60)
+                else:
+                    honeyPerSec.append(0)
+                prevHoney = x
         
         # Calculate session statistics
         if len(set(self.hourlyReport.hourlyReportStats["honey_per_min"])) <= 1:
@@ -491,13 +494,13 @@ class FinalReport:
         sessionHoney = 0
         sessionTime = 0
         if onlyValidHourlyHoney and self.hourlyReport.hourlyReportStats.get("start_honey"):
-            sessionHoney = onlyValidHourlyHoney[-1] - self.hourlyReport.hourlyReportStats["start_honey"]
+            sessionHoney = max(0, onlyValidHourlyHoney[-1] - self.hourlyReport.hourlyReportStats["start_honey"])
         
         if self.hourlyReport.hourlyReportStats.get("start_time"):
             sessionTime = time.time() - self.hourlyReport.hourlyReportStats["start_time"]
         
         # Calculate average honey per hour for the entire session
-        avgHoneyPerHour = (sessionHoney / (sessionTime / 3600)) if sessionTime > 0 else 0
+        avgHoneyPerHour = max(0, (sessionHoney / (sessionTime / 3600)) if sessionTime > 0 else 0)
         
         # Calculate peak honey rate (filter out zeros for more accurate peak)
         validHoneyPerSec = [x for x in honeyPerSec if x > 0]

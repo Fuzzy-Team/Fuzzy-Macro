@@ -405,6 +405,11 @@ class HourlyReport():
 
     def filterOutliers(self, values, threshold=3):
         nonZeroValues = [x for x in values if x]
+        
+        # If no non-zero values or insufficient data, return original values
+        if len(nonZeroValues) < 2:
+            return values
+        
         # Calculate the mean and standard deviation
         mean = np.mean(nonZeroValues)
         std_dev = np.std(nonZeroValues)
@@ -474,9 +479,9 @@ class HourlyReport():
             onlyValidHourlyHoney = self.hourlyReportStats["honey_per_min"].copy()
         else:
             onlyValidHourlyHoney = [x for x in self.hourlyReportStats["honey_per_min"] if x] #removes all zeroes
-        sessionHoney = onlyValidHourlyHoney[-1]- self.hourlyReportStats["start_honey"]
+        sessionHoney = max(0, onlyValidHourlyHoney[-1]- self.hourlyReportStats["start_honey"])
         sessionTime = time.time()-self.hourlyReportStats["start_time"]
-        honeyThisHour = onlyValidHourlyHoney[-1] - onlyValidHourlyHoney[0]
+        honeyThisHour = max(0, onlyValidHourlyHoney[-1] - onlyValidHourlyHoney[0])
 
         hourlyReportStats = copy.deepcopy(self.hourlyReportStats)
 
@@ -659,9 +664,10 @@ class HourlyReportDrawer:
             #pad the data
             data = [0]*(len(xData) - len(data)) + data
         
-            xInterval = width / (len(data) - 1)
+            # Prevent division by zero with minimal data
+            xInterval = width / max(len(data) - 1, 1)
             if not maxY:
-                maxY = max(data) 
+                maxY = max(data) if data else 1
                 if not maxY:
                     maxY = 1
             else:
@@ -683,8 +689,8 @@ class HourlyReportDrawer:
             
             #draw y labels and y grid
             #calculating ticks
-            yInterval = height/(ticks-1)
-            yValInterval = maxY/(ticks-1)
+            yInterval = height/max(ticks-1, 1)
+            yValInterval = maxY/max(ticks-1, 1)
 
             for i in range(ticks):
                 y = graphY - yInterval*i
@@ -720,7 +726,7 @@ class HourlyReportDrawer:
 
                 for i in range(height):
                     # Normalize position (0 to 1)
-                    ratio = i / float(height - 1)
+                    ratio = i / float(max(height - 1, 1))
 
                     # Find which two stops this ratio is between
                     for j in range(len(sorted_stops) - 1):
@@ -1090,7 +1096,8 @@ class HourlyReportDrawer:
         #section 1: hourly stats
         y = 470
         statSpacing = (self.availableSpace+self.leftPadding)//5
-        self.drawStatCard(self.leftPadding, y, "average_icon", self.millify(sessionHoney/(sessionTime/3600)), "Average Honey\nPer Hour")
+        avgHoneyPerHour = max(0, sessionHoney/(sessionTime/3600)) if sessionTime > 0 else 0
+        self.drawStatCard(self.leftPadding, y, "average_icon", self.millify(avgHoneyPerHour), "Average Honey\nPer Hour")
         self.drawStatCard(self.leftPadding+statSpacing*1, y, "honey_icon", self.millify(honeyThisHour), "Honey Made\nThis Hour", (248,191,23))
         self.drawStatCard(self.leftPadding+statSpacing*2, y, "kill_icon", hourlyReportStats["bugs"], "Bugs Killed\nThis Hour", (254,101,99), (254,101,99))
         self.drawStatCard(self.leftPadding+statSpacing*3, y, "quest_icon", hourlyReportStats["quests_completed"], "Quests Completed\nThis Hour", (103,253,153), (103,253,153))
