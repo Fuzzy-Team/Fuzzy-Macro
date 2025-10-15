@@ -95,6 +95,21 @@ class BuffDetector():
             # Replace multiple consecutive dots with single dot
             import re
             buffCount = re.sub(r'\.\.+', '.', buffCount)
+            
+            # Validate that the result is a valid number (handle cases like "5.3.7" or ".")
+            if buffCount:
+                try:
+                    float(buffCount)
+                except ValueError:
+                    # If not a valid float, try to extract just the first valid number
+                    # Split by '.' and take first two parts to make a valid decimal
+                    parts = buffCount.split('.')
+                    if len(parts) > 2:
+                        # Multiple dots: take first integer part and first decimal part
+                        buffCount = f"{parts[0]}.{parts[1]}" if parts[1] else parts[0]
+                    elif buffCount == '.':
+                        # Just a dot, default to 1
+                        buffCount = ''
 
         if buff:
             print(buff)
