@@ -759,7 +759,7 @@ def watch_for_hotkeys(run):
     pressed_keys = set()
     
     # Add debouncing to prevent duplicate triggers
-    last_trigger_time = {"start": 0, "stop": 0}
+    last_trigger_time = {"start": 0.0, "stop": 0.0}
     debounce_duration = 0.3  # 300ms debounce
     
     # Add threading lock for synchronization
@@ -864,7 +864,12 @@ def watch_for_hotkeys(run):
         """Check if the stop keybind is currently held down"""
         try:
             settings = get_cached_settings()
+            if not settings:
+                return False
+                
             stop_keybind = settings.get("stop_keybind", "F3")
+            if not stop_keybind:
+                return False
             
             # Parse the stop keybind to get individual keys
             stop_keys = stop_keybind.split("+")
@@ -925,17 +930,25 @@ def watch_for_hotkeys(run):
                 if current_combo == start_keybind:
                     if run.value == 2: #already running
                         return
-                    # Check debounce
-                    if current_time - last_trigger_time["start"] < debounce_duration:
-                        return
+                    # Check debounce with error handling
+                    try:
+                        if current_time - last_trigger_time["start"] < debounce_duration:
+                            return
+                    except (TypeError, ValueError):
+                        # Reset trigger time if there's a comparison error
+                        last_trigger_time["start"] = 0.0
                     last_trigger_time["start"] = current_time
                     run.value = 1
                 elif current_combo == stop_keybind and not stop_key_held:
                     if run.value == 3: #already stopped
                         return
-                    # Check debounce
-                    if current_time - last_trigger_time["stop"] < debounce_duration:
-                        return
+                    # Check debounce with error handling
+                    try:
+                        if current_time - last_trigger_time["stop"] < debounce_duration:
+                            return
+                    except (TypeError, ValueError):
+                        # Reset trigger time if there's a comparison error
+                        last_trigger_time["stop"] = 0.0
                     last_trigger_time["stop"] = current_time
                     run.value = 0
             except Exception as e:
