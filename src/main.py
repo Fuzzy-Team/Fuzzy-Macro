@@ -758,6 +758,23 @@ def watch_for_hotkeys(run):
     # Track currently pressed keys for combination detection
     pressed_keys = set()
     
+    # Add debouncing to prevent duplicate triggers
+    last_trigger_time = {"start": 0, "stop": 0}
+    debounce_duration = 0.3  # 300ms debounce
+    
+    # Add threading lock for synchronization
+    import threading
+    key_lock = threading.Lock()
+    
+    # Add key state cleanup to handle stuck keys
+    last_cleanup_time = 0
+    cleanup_interval = 5.0  # Clean up every 5 seconds
+    
+    # Force stop tracking
+    stop_key_held = False
+    force_stop_check_interval = 0.1  # Check every 100ms
+    last_force_stop_check = 0
+    
     # Cache settings to avoid reloading on every keypress
     settings_cache = {}
     last_settings_load = 0
@@ -790,49 +807,45 @@ def watch_for_hotkeys(run):
         return recording_cache["start"] or recording_cache["stop"]
     
     def convert_key_to_string(key):
-        """Optimized key conversion with minimal string operations"""
-        key_str = str(key)
-        if key_str.startswith("Key."):
-            key_str = key_str[4:]  # Remove "Key." prefix
-        
-        # Use dictionary lookup for better performance
-        key_mapping = {
-            "ctrl_l": "Ctrl", "ctrl_r": "Ctrl",
-            "alt_l": "Alt", "alt_r": "Alt", 
-            "shift_l": "Shift", "shift_r": "Shift",
-            "cmd_l": "Cmd", "cmd_r": "Cmd", "cmd": "Cmd",
-            "space": "Space"
-        }
-        
-        if key_str in key_mapping:
-            return key_mapping[key_str]
-        elif key_str.startswith("f") and len(key_str) <= 3:
-            return key_str.upper()  # F1, F2, etc.
-        elif key_str.startswith("'") and key_str.endswith("'"):
-            return key_str[1:-1].upper()  # Remove quotes and uppercase
-        elif len(key_str) == 1:
-            return key_str.upper()  # A, B, C, etc.
-        else:
-            return key_str
+        """Optimized key conversion with minimal string operations and error handling"""
+        try:
+            key_str = str(key)
+            if key_str.startswith("Key."):
+                key_str = key_str[4:]  # Remove "Key." prefix
+            
+            # Use dictionary lookup for better performance
+            key_mapping = {
+                "ctrl_l": "Ctrl", "ctrl_r": "Ctrl",
+                "alt_l": "Alt", "alt_r": "Alt", 
+                "shift_l": "Shift", "shift_r": "Shift",
+                "cmd_l": "Cmd", "cmd_r": "Cmd", "cmd": "Cmd",
+                "space": "Space",
+                "enter": "Enter", "return": "Enter",
+                "tab": "Tab", "backspace": "Backspace",
+                "delete": "Delete", "esc": "Escape"
+            }
+            
+            if key_str in key_mapping:
+                return key_mapping[key_str]
+            elif key_str.startswith("f") and len(key_str) <= 3:
+                return key_str.upper()  # F1, F2, etc.
+            elif key_str.startswith("'") and key_str.endswith("'"):
+                return key_str[1:-1].upper()  # Remove quotes and uppercase
+            elif len(key_str) == 1:
+                return key_str.upper()  # A, B, C, etc.
+            else:
+                return key_str
+        except Exception as e:
+            # Log error but don't crash the listener
+            print(f"Error converting key {key}: {e}")
+            return str(key)
     
-    def on_press(key):
-        nonlocal run
-        
-        # Get cached settings
-        settings = get_cached_settings()
-        start_keybind = settings.get("start_keybind", "F1")
-        stop_keybind = settings.get("stop_keybind", "F3")
-        
-        # Convert key to string for comparison
-        key_str = convert_key_to_string(key)
-        pressed_keys.add(key_str)
-        
-        # Check for key combinations
-        # Sort keys in a consistent order: modifiers first, then main key
+    def build_key_combination():
+        """Build current key combination string in consistent order"""
         modifier_keys = ['Ctrl', 'Alt', 'Shift', 'Cmd']
         sorted_keys = []
         
-        # Add modifiers first
+        # Add modifiers first in consistent order
         for mod in modifier_keys:
             if mod in pressed_keys:
                 sorted_keys.append(mod)
@@ -845,27 +858,131 @@ def watch_for_hotkeys(run):
         non_modifier_keys.sort()
         sorted_keys.extend(non_modifier_keys)
         
-        current_combo = "+".join(sorted_keys)
+        return "+".join(sorted_keys)
+    
+    def is_stop_keybind_held():
+        """Check if the stop keybind is currently held down"""
+        try:
+            settings = get_cached_settings()
+            stop_keybind = settings.get("stop_keybind", "F3")
+            
+            # Parse the stop keybind to get individual keys
+            stop_keys = stop_keybind.split("+")
+            
+            # Check if all keys in the stop keybind are currently pressed
+            for key in stop_keys:
+                if key not in pressed_keys:
+                    return False
+            return True
+        except Exception as e:
+            print(f"Error checking stop keybind: {e}")
+            return False
+    
+    def on_press(key):
+        nonlocal run, last_cleanup_time, stop_key_held, last_force_stop_check
         
-        # Don't start/stop macro if we're recording a keybind
-        if is_recording_keybind():
-            return  # Ignore keybind during recording
+        # Use lock to prevent race conditions
+        with key_lock:
+            try:
+                # Periodic cleanup of stuck keys
+                current_time = time.time()
+                if current_time - last_cleanup_time > cleanup_interval:
+                    # Clear all pressed keys to reset state
+                    pressed_keys.clear()
+                    last_cleanup_time = current_time
+                
+                # Get cached settings
+                settings = get_cached_settings()
+                start_keybind = settings.get("start_keybind", "F1")
+                stop_keybind = settings.get("stop_keybind", "F3")
+                
+                # Convert key to string for comparison
+                key_str = convert_key_to_string(key)
+                pressed_keys.add(key_str)
+                
+                # Build current key combination
+                current_combo = build_key_combination()
+                
+                # Don't start/stop macro if we're recording a keybind
+                if is_recording_keybind():
+                    return  # Ignore keybind during recording
 
-        if current_combo == start_keybind:
-            if run.value == 2: #already running
+                # Check for force stop (stop keybind held down)
+                if is_stop_keybind_held():
+                    if not stop_key_held:
+                        stop_key_held = True
+                        print("Stop keybind held - force stopping macro")
+                    # Force stop immediately when stop keybind is held
+                    if run.value != 0:  # Only if not already stopped
+                        run.value = 0
+                        print("Force stop triggered")
+                else:
+                    stop_key_held = False
+
+                # Add debouncing to prevent duplicate triggers
+                current_time = time.time()
+                
+                if current_combo == start_keybind:
+                    if run.value == 2: #already running
+                        return
+                    # Check debounce
+                    if current_time - last_trigger_time["start"] < debounce_duration:
+                        return
+                    last_trigger_time["start"] = current_time
+                    run.value = 1
+                elif current_combo == stop_keybind and not stop_key_held:
+                    if run.value == 3: #already stopped
+                        return
+                    # Check debounce
+                    if current_time - last_trigger_time["stop"] < debounce_duration:
+                        return
+                    last_trigger_time["stop"] = current_time
+                    run.value = 0
+            except Exception as e:
+                # Log error but don't crash the listener
+                print(f"Error in on_press: {e}")
                 return
-            run.value = 1
-        elif current_combo == stop_keybind:
-            if run.value == 3: #already stopped
-                return
-            run.value = 0
     
     def on_release(key):
         # Remove released key from pressed keys using optimized conversion
-        key_str = convert_key_to_string(key)
-        pressed_keys.discard(key_str)
+        with key_lock:
+            try:
+                key_str = convert_key_to_string(key)
+                pressed_keys.discard(key_str)
+                
+                # Check if stop keybind is no longer held
+                if not is_stop_keybind_held():
+                    nonlocal stop_key_held
+                    stop_key_held = False
+            except Exception as e:
+                # Log error but don't crash the listener
+                print(f"Error in on_release: {e}")
+                return
 
-    keyboard.Listener(on_press=on_press, on_release=on_release).start()
+    # Start keyboard listener with error handling and recovery
+    def start_keyboard_listener():
+        try:
+            listener = keyboard.Listener(on_press=on_press, on_release=on_release)
+            listener.start()
+            return listener
+        except Exception as e:
+            print(f"Failed to start keyboard listener: {e}")
+            # Try to restart after a short delay
+            import threading
+            def restart_listener():
+                time.sleep(1)
+                try:
+                    listener = keyboard.Listener(on_press=on_press, on_release=on_release)
+                    listener.start()
+                    print("Keyboard listener restarted successfully")
+                except Exception as e2:
+                    print(f"Failed to restart keyboard listener: {e2}")
+            
+            restart_thread = threading.Thread(target=restart_listener, daemon=True)
+            restart_thread.start()
+            return None
+    
+    start_keyboard_listener()
 
 if __name__ == "__main__":
     print("Loading gui...")
