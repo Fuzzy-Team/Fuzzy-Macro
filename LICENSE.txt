@@ -1,4 +1,4 @@
-Copyright (c) 2024, exihs
+Copyright (c) 2024-2025, exihs
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
