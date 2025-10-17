@@ -78,7 +78,7 @@ def update_profile_setting(setting_key, value):
     except Exception as e:
         return False, f"❌ Error updating profile setting: {str(e)}"
 
-def discordBot(token, run, status, skipTask, initial_message_info=None):
+def discordBot(token, run, status, skipTask, initial_message_info=None, updateGUI=None):
     bot = commands.Bot(command_prefix="!b", intents=discord.Intents.all())
     
     # Store initial message info for pinning
@@ -1278,9 +1278,33 @@ def discordBot(token, run, status, skipTask, initial_message_info=None):
             await interaction.response.send_message(f"❌ Error switching profile: {str(e)}")
     '''
     
+    @bot.tree.command(name="hiveslot", description="Change the hive slot number (1-6)")
+    @app_commands.describe(slot="Hive slot number (1-6, where 1 is closest to cannon)")
+    async def hive_slot(interaction: discord.Interaction, slot: int):
+        """Change the hive slot number"""
+        try:
+            # Validate slot range
+            if slot < 1 or slot > 6:
+                await interaction.response.send_message("❌ Hive slot must be between 1 and 6")
+                return
+            
+            # Update the setting
+            success, message = update_setting("hive_number", slot)
+            
+            if success:
+                # Trigger GUI update if updateGUI is available
+                if updateGUI is not None:
+                    updateGUI.value = 1
+                await interaction.response.send_message(f"✅ Hive slot changed to {slot}")
+            else:
+                await interaction.response.send_message(f"❌ {message}")
+                
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error changing hive slot: {str(e)}")
+
     @bot.tree.command(name="fieldonly", description="Toggle field-only mode (gathers in fields only, skips all other tasks)")
     @app_commands.describe(enable="Enable or disable field-only mode")
-    async def field_only_mode(interaction: discord.Interaction, enable: bool):
+    async def field_only_mode(interaction: discord.Interaction, enable: str):
         """Toggle field-only mode"""
         try:
             success, message = update_setting("field_only_mode", enable)
@@ -1302,7 +1326,7 @@ def discordBot(token, run, status, skipTask, initial_message_info=None):
         """Show available commands"""
         embed = discord.Embed(title="🤖 BSS Macro Discord Bot", description="Available Commands:", color=0x0099ff)
 
-        embed.add_field(name="🔧 **Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/pause` - Pause the macro\n`/resume` - Resume the macro\n`/skip` - Skip the current task\n`/stop` - Stop the macro\n`/status` - Get macro status and current task\n`/rejoin` - Make macro rejoin game\n`/screenshot` - Get screenshot\n`/settings` - View current settings", inline=False)
+        embed.add_field(name="🔧 **Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/pause` - Pause the macro\n`/resume` - Resume the macro\n`/skip` - Skip the current task\n`/stop` - Stop the macro\n`/status` - Get macro status and current task\n`/rejoin` - Make macro rejoin game\n`/screenshot` - Get screenshot\n`/settings` - View current settings\n`/hiveslot <1-6>` - Change hive slot number", inline=False)
 
         embed.add_field(name="🌾 **Field Management**", value="`/fields` - View field configuration\n`/enablefield <field>` - Enable a field\n`/disablefield <field>` - Disable a field\n`/swapfield <current> <new>` - Swap one field for another (new can be any field)\n`/fieldonly <true/false>` - Toggle field-only mode (gathers in fields only)", inline=False)
 
