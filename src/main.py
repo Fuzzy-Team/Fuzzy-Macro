@@ -216,6 +216,22 @@ def macro(status, logQueue, updateGUI, run, skipTask):
 
         updateGUI.value = 1
 
+        # Check if field-only mode is enabled
+        if macro.setdat.get("field_only_mode", False):
+            # Field-only mode: skip all tasks except field gathering
+            # Get gather fields from settings
+            gatherFields = []
+            for i in range(3):
+                if macro.setdat["fields_enabled"][i]:
+                    gatherFields.append(macro.setdat["fields"][i])
+            
+            # Gather in enabled fields
+            for field in gatherFields:
+                runTask(macro.gather, args=(field,), resetAfter=False)
+            
+            # Skip to next iteration
+            continue
+
         #handle quests
         questGatherFields = []
         questGumdropGatherFields = []
@@ -1574,6 +1590,22 @@ def macro(status, logQueue, updateGUI, run, skipTask):
         runTask(resetAfter=False)
 
         updateGUI.value = 1
+
+        # Check if field-only mode is enabled
+        if macro.setdat.get("field_only_mode", False):
+            # Field-only mode: skip all tasks except field gathering
+            # Get gather fields from settings
+            gatherFields = []
+            for i in range(3):
+                if macro.setdat["fields_enabled"][i]:
+                    gatherFields.append(macro.setdat["fields"][i])
+            
+            # Gather in enabled fields
+            for field in gatherFields:
+                runTask(macro.gather, args=(field,), resetAfter=False)
+            
+            # Skip to next iteration
+            continue
 
         #handle quests
         questGatherFields = []

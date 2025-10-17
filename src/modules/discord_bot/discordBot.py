@@ -1278,6 +1278,25 @@ def discordBot(token, run, status, skipTask, initial_message_info=None):
             await interaction.response.send_message(f"❌ Error switching profile: {str(e)}")
     '''
     
+    @bot.tree.command(name="fieldonly", description="Toggle field-only mode (gathers in fields only, skips all other tasks)")
+    @app_commands.describe(enable="Enable or disable field-only mode")
+    async def field_only_mode(interaction: discord.Interaction, enable: bool):
+        """Toggle field-only mode"""
+        try:
+            success, message = update_setting("field_only_mode", enable)
+            status = "enabled" if enable else "disabled"
+            
+            # Update GUI if available
+            try:
+                import eel
+                eel.updateFieldOnlyMode()
+            except:
+                pass  # GUI not available, continue
+            
+            await interaction.response.send_message(f"🌾 Field-only mode {status}!\n{message}")
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error toggling field-only mode: {str(e)}")
+
     @bot.tree.command(name="help", description="Show available commands")
     async def help_command(interaction: discord.Interaction):
         """Show available commands"""
@@ -1285,7 +1304,7 @@ def discordBot(token, run, status, skipTask, initial_message_info=None):
 
         embed.add_field(name="🔧 **Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/pause` - Pause the macro\n`/resume` - Resume the macro\n`/skip` - Skip the current task\n`/stop` - Stop the macro\n`/status` - Get macro status and current task\n`/rejoin` - Make macro rejoin game\n`/screenshot` - Get screenshot\n`/settings` - View current settings", inline=False)
 
-        embed.add_field(name="🌾 **Field Management**", value="`/fields` - View field configuration\n`/enablefield <field>` - Enable a field\n`/disablefield <field>` - Disable a field\n`/swapfield <current> <new>` - Swap one field for another (new can be any field)", inline=False)
+        embed.add_field(name="🌾 **Field Management**", value="`/fields` - View field configuration\n`/enablefield <field>` - Enable a field\n`/disablefield <field>` - Disable a field\n`/swapfield <current> <new>` - Swap one field for another (new can be any field)\n`/fieldonly <true/false>` - Toggle field-only mode (gathers in fields only)", inline=False)
 
         embed.add_field(name="📜 **Quest Management**", value="`/quests` - View quest configuration\n`/enablequest <quest>` - Enable a quest\n`/disablequest <quest>` - Disable a quest", inline=False)
 

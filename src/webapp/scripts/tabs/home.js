@@ -129,9 +129,40 @@ function secondsToMinsAndHours(time) {
 //load the tasks
 //also set max-height for logs
 eel.expose(loadTasks);
+eel.expose(updateFieldOnlyMode);
+async function updateFieldOnlyMode() {
+  // Update field-only mode dropdown to match current settings
+  const settings = await loadAllSettings();
+  const fieldOnlyDropdown = document.getElementById("field_only_mode");
+  if (fieldOnlyDropdown) {
+    const currentValue = settings.field_only_mode ? "true" : "false";
+    if (fieldOnlyDropdown.value !== currentValue) {
+      fieldOnlyDropdown.value = currentValue;
+    }
+  }
+}
+
 async function loadTasks() {
   const setdat = await loadAllSettings();
   let out = "";
+
+  // Update field-only mode dropdown to match current settings
+  const fieldOnlyDropdown = document.getElementById("field_only_mode");
+  if (fieldOnlyDropdown) {
+    const currentValue = setdat.field_only_mode ? "true" : "false";
+    if (fieldOnlyDropdown.value !== currentValue) {
+      fieldOnlyDropdown.value = currentValue;
+    }
+  }
+
+  // Check if field-only mode is enabled
+  if (setdat.field_only_mode) {
+    out += taskHTML("Field Only Mode", "🌾 Gathering in fields only");
+    // Display the tasks
+    document.getElementById("task-list").innerHTML = out;
+    return;
+  }
+
   //load quest givers
   for (const [k, v] of Object.entries(questGiverEmojis)) {
     if (!setdat[k]) continue;
@@ -292,6 +323,15 @@ async function checkAndUpdateButtonState() {
         button.textContent = `Start [${startKey}]`;
       }
     }
+
+    // Update field-only mode dropdown to match current settings
+    const fieldOnlyDropdown = document.getElementById("field_only_mode");
+    if (fieldOnlyDropdown) {
+      const currentValue = settings.field_only_mode ? "true" : "false";
+      if (fieldOnlyDropdown.value !== currentValue) {
+        fieldOnlyDropdown.value = currentValue;
+      }
+    }
   } catch (error) {
     console.error("Error checking button state:", error);
   }
@@ -304,6 +344,13 @@ $("#home-placeholder")
   .load("../htmlImports/tabs/home.html", async () => {
     await loadTasks();
     await updateStartButtonText();
+
+    // Initialize field-only mode dropdown
+    const settings = await loadAllSettings();
+    const fieldOnlyDropdown = document.getElementById("field_only_mode");
+    if (fieldOnlyDropdown) {
+      fieldOnlyDropdown.value = settings.field_only_mode ? "true" : "false";
+    }
 
     // Start checking button state every 500ms
     buttonStateInterval = setInterval(checkAndUpdateButtonState, 500);
@@ -355,4 +402,12 @@ $("#home-placeholder")
     setTimeout(() => {
       btn.classList.remove("active");
     }, 700);
+  })
+  .on("change", "#field_only_mode", async (event) => {
+    // Handle field-only mode dropdown
+    const selectedValue = event.currentTarget.value;
+    const isFieldOnlyMode = selectedValue === "true";
+    await eel.saveGeneralSetting("field_only_mode", isFieldOnlyMode);
+    // Reload tasks to reflect the change
+    await loadTasks();
   });
