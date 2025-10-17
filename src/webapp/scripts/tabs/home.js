@@ -158,6 +158,17 @@ async function loadTasks() {
   // Check if field-only mode is enabled
   if (setdat.field_only_mode) {
     out += taskHTML("Field Only Mode", "🌾 Gathering in fields only");
+
+    // Still show the fields to be gathered in field-only mode
+    for (let i = 0; i <= setdat.fields_enabled.length; i++) {
+      if (!setdat.fields_enabled[i]) continue;
+      const field = setdat.fields[i];
+      out += taskHTML(
+        `Gather ${i + 1}`,
+        `${fieldEmojis[field.replaceAll(" ", "_")]} ${field}`
+      );
+    }
+
     // Display the tasks
     document.getElementById("task-list").innerHTML = out;
     return;
