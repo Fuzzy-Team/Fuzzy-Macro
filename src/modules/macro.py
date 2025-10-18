@@ -594,10 +594,12 @@ class macro:
     #run the path to go to a field
     #faceDir what direction to face after landing in a field (default, north, south)
     def goToField(self, field, faceDir = "default"):
-        self.location = field
-        self.runPath(f"cannon_to_field/{field}")
+        # Normalize field name to handle both space and underscore formats
+        normalized_field = field.replace('_', ' ')
+        self.location = normalized_field
+        self.runPath(f"cannon_to_field/{normalized_field}")
         if faceDir == "default": return
-        self.faceDirection(field, faceDir)
+        self.faceDirection(normalized_field, faceDir)
 
     def convertCyrillic(self, original):
         out = ""
@@ -1554,7 +1556,10 @@ class macro:
         return f"{int(m)}m {int(s):02d}s"
     
     def gather(self, field, settingsOverride = {}, questGumdrops=False):
-        fieldSetting = {**self.fieldSettings[field], **settingsOverride}
+        # Normalize field name to handle both space and underscore formats
+        # Convert underscores to spaces for fieldSettings lookup
+        normalized_field = field.replace('_', ' ')
+        fieldSetting = {**self.fieldSettings[normalized_field], **settingsOverride}
         for i in range(3):
             self.waitForBees()
             #go to field
@@ -1564,7 +1569,7 @@ class macro:
             #go to start location (match natro's)
             startLocation = fieldSetting["start_location"]
             moveSpeedFactor = 18/self.setdat["movespeed"]
-            flen, fwid = [x*fieldSetting["distance"]/10 for x in startLocationDimensions[field]]
+            flen, fwid = [x*fieldSetting["distance"]/10 for x in startLocationDimensions[normalized_field]]
             if "upper" in startLocation or "top" in startLocation:
                 self.sleepMSMove("w", flen*moveSpeedFactor)
             elif "lower" in startLocation or "bottom" in startLocation:
