@@ -11,6 +11,8 @@ import requests
 from io import BytesIO
 import ast
 import json
+import webbrowser
+import time
 
 eel.init('webapp')
 run = None
@@ -178,5 +180,7 @@ def launch():
     try:
         eel.start('index.html',app_mode = True,block = False, cmdline_args=["--incognito", "--new-window"])
     except EnvironmentError:
-        msgBox(title = "error", text = "Google Chrome could not be found. Ensure that:\
-     \n1. Google Chrome is installed\nGoogle chrome is in the applications folder (open the google chrome dmg file. From the pop up, drag the icon into the folder)")
+        print("Chrome/Chromium could not be found. You can access the macro at: http://localhost:8000/")
+        eel.start('index.html', block=False, mode=None)
+        time.sleep(2)
+        webbrowser.open("http://localhost:8000/", new=2)
