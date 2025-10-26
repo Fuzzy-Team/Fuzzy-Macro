@@ -139,4 +139,14 @@ class log:
         if self.enableDiscordPing and self.discordUserID and self.pingSettings.get("ping_hourly_reports", False):
             ping_user_id = self.discordUserID
             
-        logWebhook.webhook(self.webhookURL, title, desc, timeModule.strftime("%H:%M:%S", timeModule.localtime()), colors[color], "hourlyReport.png", ping_user_id) 
+        logWebhook.webhook(self.webhookURL, title, desc, timeModule.strftime("%H:%M:%S", timeModule.localtime()), colors[color], "hourlyReport.png", ping_user_id)
+    
+    def finalReport(self, title, desc, color):
+        if not self.enableWebhook: return
+        
+        # Determine if we should ping for final reports (same as hourly reports)
+        ping_user_id = None
+        if self.enableDiscordPing and self.discordUserID and self.pingSettings.get("ping_hourly_reports", False):
+            ping_user_id = self.discordUserID
+            
+        logWebhook.webhook(self.webhookURL, title, desc, timeModule.strftime("%H:%M:%S", timeModule.localtime()), colors[color], "finalReport.png", ping_user_id) 

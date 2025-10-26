@@ -41,6 +41,25 @@ def loadFields():
     with open(f"../settings/profiles/{profileName}/fields.txt") as f:
         out = ast.literal_eval(f.read())
     f.close()
+    
+    # Auto-add missing goo settings for backward compatibility
+    # This ensures users upgrading from older versions get the new goo functionality
+    fieldsUpdated = False
+    for field, settings in out.items():
+        # Add missing goo settings if they don't exist
+        if "goo" not in settings:
+            settings["goo"] = False  # Default to disabled
+            fieldsUpdated = True
+        if "goo_interval" not in settings:
+            settings["goo_interval"] = 3  # Default to 3 seconds (minimum allowed)
+            fieldsUpdated = True
+    
+    # Save the updated fields if any were modified
+    if fieldsUpdated:
+        with open(f"../settings/profiles/{profileName}/fields.txt", "w") as f:
+            f.write(str(out))
+        f.close()
+    
     for field,settings in out.items():
         for k,v in settings.items():
             #check if integer
@@ -56,8 +75,33 @@ def saveField(field, settings):
         f.write(str(fieldsData))
     f.close()
 
+def syncFieldSettings(setting, value):
+    """Synchronize field settings from profile to general settings"""
+    try:
+        # Update the general settings file
+        generalSettingsPath = "../settings/generalsettings.txt"
+        generalData = readSettingsFile(generalSettingsPath)
+        generalData[setting] = value
+        saveDict(generalSettingsPath, generalData)
+    except Exception as e:
+        print(f"Warning: Could not sync field settings to general settings: {e}")
+
+def syncFieldSettingsToProfile(setting, value):
+    """Synchronize field settings from general to profile settings"""
+    try:
+        # Update the profile settings file
+        profileSettingsPath = f"../settings/profiles/{profileName}/settings.txt"
+        profileData = readSettingsFile(profileSettingsPath)
+        profileData[setting] = value
+        saveDict(profileSettingsPath, profileData)
+    except Exception as e:
+        print(f"Warning: Could not sync field settings to profile settings: {e}")
+
 def saveProfileSetting(setting, value):
     saveSettingFile(setting, value, f"../settings/profiles/{profileName}/settings.txt")
+    # Synchronize field settings with general settings
+    if setting in ["fields", "fields_enabled"]:
+        syncFieldSettings(setting, value)
 
 def saveDictProfileSettings(dict):
 
@@ -75,6 +119,9 @@ def incrementProfileSetting(setting, incrValue):
 
 def saveGeneralSetting(setting, value):
     saveSettingFile(setting, value, "../settings/generalsettings.txt")
+    # Synchronize field settings with profile settings
+    if setting in ["fields", "fields_enabled"]:
+        syncFieldSettingsToProfile(setting, value)
 
 def loadSettings():
     return readSettingsFile(f"../settings/profiles/{profileName}/settings.txt")
@@ -82,6 +129,32 @@ def loadSettings():
 #return a dict containing all settings except field (general, profile, planters)
 def loadAllSettings():
     return {**loadSettings(), **readSettingsFile("../settings/generalsettings.txt")}
+
+def initializeFieldSync():
+    """Initialize field synchronization between profile and general settings"""
+    try:
+        profileData = readSettingsFile(f"../settings/profiles/{profileName}/settings.txt")
+        generalData = readSettingsFile("../settings/generalsettings.txt")
+        
+        # Check if field settings exist in both files
+        profileFields = profileData.get("fields", [])
+        generalFields = generalData.get("fields", [])
+        
+        # If general settings has different fields, sync from profile to general
+        if profileFields != generalFields and profileFields:
+            generalData["fields"] = profileFields
+            saveDict("../settings/generalsettings.txt", generalData)
+            
+        # Sync fields_enabled as well
+        profileFieldsEnabled = profileData.get("fields_enabled", [])
+        generalFieldsEnabled = generalData.get("fields_enabled", [])
+        
+        if profileFieldsEnabled != generalFieldsEnabled and profileFieldsEnabled:
+            generalData["fields_enabled"] = profileFieldsEnabled
+            saveDict("../settings/generalsettings.txt", generalData)
+            
+    except Exception as e:
+        print(f"Warning: Could not initialize field synchronization: {e}")
 
 #clear a file
 def clearFile(filePath):

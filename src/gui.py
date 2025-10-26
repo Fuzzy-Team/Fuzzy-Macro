@@ -129,6 +129,7 @@ eel.expose(settingsManager.loadAllSettings)
 eel.expose(settingsManager.saveProfileSetting)
 eel.expose(settingsManager.saveGeneralSetting)
 eel.expose(settingsManager.saveDictProfileSettings)
+eel.expose(settingsManager.initializeFieldSync)
 
 def updateGUI():
     settings = settingsManager.loadAllSettings()
@@ -137,6 +138,20 @@ def updateGUI():
 
 def toggleStartStop():
     eel.toggleStartStop()
+
+# Global variable to store run state
+_run_state = 3  # 0=stop, 1=start, 2=running, 3=stopped
+
+def setRunState(state):
+    global _run_state
+    _run_state = state
+
+def getRunState():
+    return _run_state
+
+# Expose functions to eel
+eel.expose(getRunState)
+eel.expose(setRunState)
 
 def launch():
 
@@ -178,9 +193,10 @@ def launch():
     # #  \n1. Google Chrome is installed\nGoogle chrome is in the applications folder (open the google chrome dmg file. From the pop up, drag the icon into the folder)")
     
     try:
-        eel.start('index.html',app_mode = True,block = False, cmdline_args=["--incognito", "--new-window"])
+        eel.start('index.html', mode = "chrome", app_mode = True, block = False, cmdline_args=["--incognito", "--app=http://localhost:8000"])
     except EnvironmentError:
-        print("Chrome/Chromium could not be found. You can access the macro at: http://localhost:8000/")
-        eel.start('index.html', block=False, mode=None)
-        time.sleep(2)
-        webbrowser.open("http://localhost:8000/", new=2)
+            try:
+                # Try chrome-app mode as fallback
+                eel.start('index.html', mode = "chrome-app", app_mode = True, block = False, cmdline_args=["--incognito", "--app=http://localhost:8000"])
+            except EnvironmentError:
+                msgBox(title = "Browser Error", text = "Neither Google Chrome nor a Chromium based browser could be found.\n\nPlease install Google Chrome:\n1. Download Chrome from: https://www.google.com/chrome/\n2. Open the downloaded .dmg file\n3. Drag Chrome to your Applications folder")
