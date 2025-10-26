@@ -11,6 +11,8 @@ import requests
 from io import BytesIO
 import ast
 import json
+import webbrowser
+import time
 
 eel.init('webapp')
 run = None
