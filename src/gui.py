@@ -195,8 +195,9 @@ def launch():
     try:
         eel.start('index.html', mode = "chrome", app_mode = True, block = False, cmdline_args=["--incognito", "--app=http://localhost:8000"])
     except EnvironmentError:
-            try:
-                # Try chrome-app mode as fallback
-                eel.start('index.html', mode = "chrome-app", app_mode = True, block = False, cmdline_args=["--incognito", "--app=http://localhost:8000"])
-            except EnvironmentError:
-                msgBox(title = "Browser Error", text = "Neither Google Chrome nor a Chromium based browser could be found.\n\nPlease install Google Chrome:\n1. Download Chrome from: https://www.google.com/chrome/\n2. Open the downloaded .dmg file\n3. Drag Chrome to your Applications folder")
+        eel.start('index.html', mode = "chrome-app", app_mode = True, block = False, cmdline_args=["--incognito", "--app=http://localhost:8000"])
+    except EnvironmentError:
+        print("Chrome/Chromium could not be found. You can access the macro at: http://localhost:8000/")
+        eel.start('index.html', block=False, mode=None)
+        time.sleep(2)
+        webbrowser.open("http://localhost:8000/", new=2)
