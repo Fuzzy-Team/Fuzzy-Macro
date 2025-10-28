@@ -1361,7 +1361,9 @@ if __name__ == "__main__":
                     import traceback
                     traceback.print_exc()
         elif run.value == 4: #disconnected
-            macroProc.kill()
+            if macroProc and macroProc.is_alive():
+                macroProc.kill()
+                macroProc.join()
             logger.webhook("","Disconnected", "red", "screen", ping_category="ping_disconnects")
             appManager.closeApp("Roblox")
             keyboardModule.releaseMovement()
