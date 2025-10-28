@@ -38,7 +38,7 @@ def discordBot(token, run, status):
             await interaction.followup.send(file = discord.File(fp=imageBinary, filename="screenshot.png"))
 
     @bot.tree.command(name = "start", description = "Start")
-    async def stop(interaction: discord.Interaction):
+    async def start(interaction: discord.Interaction):
         if run.value == 2: 
             await interaction.response.send_mesasge("Macro is already running")
             return 
