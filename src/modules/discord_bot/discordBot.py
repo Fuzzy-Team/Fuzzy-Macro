@@ -228,9 +228,92 @@ def discordBot(token, run, status, skipTask, initial_message_info=None, updateGU
             await interaction.response.send_message("❌ Macro is not running. Cannot skip task.")
             return
         
-        current_task = status.value if hasattr(status, 'value') and status.value else "Unknown"
-        skipTask.value = 1
-        await interaction.response.send_message(f"⏭️ Skipping Task")
+        await interaction.response.defer()
+        
+        try:
+            settings = get_cached_settings()
+            current_status = status.value if hasattr(status, 'value') else ""
+            
+            # Define emojis (same as task queue)
+            fieldEmojis = {
+                "sunflower": "🌻", "dandelion": "🌼", "mushroom": "🍄", "blue flower": "🔷",
+                "clover": "🍀", "strawberry": "🍓", "spider": "🕸️", "bamboo": "🐼",
+                "pineapple": "🍍", "stump": "🐌", "cactus": "🌵", "pumpkin": "🎃",
+                "pine tree": "🌲", "rose": "🌹", "mountain top": "⛰️", "pepper": "🌶️", "coconut": "🥥"
+            }
+            
+            collectEmojis = {
+                "wealth_clock": "🕒", "blueberry_dispenser": "🔵", "strawberry_dispenser": "🍓",
+                "coconut_dispenser": "🥥", "royal_jelly_dispenser": "💎", "treat_dispenser": "🦴",
+                "ant_pass_dispenser": "🎫", "glue_dispenser": "🧴", "stockings": "🧦",
+                "feast": "🍽️", "samovar": "🏺", "snow_machine": "❄️", "lid_art": "🖼️",
+                "candles": "🕯️", "wreath": "🎄", "sticker_printer": "🖨️", "mondo_buff": "🐣",
+                "memory_match": "🍍", "mega_memory_match": "🌟", "extreme_memory_match": "🌶️",
+                "winter_memory_match": "❄️", "honeystorm": "🟧", "Auto_Field_Boost": "🎲"
+            }
+            
+            killEmojis = {
+                "scorpion": "", "werewolf": "", "ladybug": "", "rhinobeetle": "",
+                "spider": "", "mantis": "", "ant_challenge": "🎯", "coconut_crab": "",
+                "stump_snail": "🐌", "stinger_hunt": ""
+            }
+            
+            fieldBoosterEmojis = {
+                "blue_booster": "🔵", "red_booster": "🔴", "mountain_booster": "⚪"
+            }
+            
+            questGiverEmojis = {
+                "polar_bear_quest": "🐻‍❄️", "honey_bee_quest": "🐝",
+                "bucko_bee_quest": "💙", "riley_bee_quest": "❤️"
+            }
+            
+            def to_title_case(text):
+                """Convert text to title case"""
+                return text.replace("_", " ").title()
+            
+            # Get current task display name
+            current_task_display = "Unknown Task"
+            if current_status.startswith("gather_"):
+                field_name = current_status.replace("gather_", "").replace("_", " ")
+                emoji = fieldEmojis.get(field_name.replace(" ", "_"), "")
+                current_task_display = f"{emoji} {field_name.title()}" if emoji else field_name.title()
+            elif current_status == "converting":
+                blender_items = []
+                for i in range(1, 4):
+                    item = settings.get(f"blender_item_{i}", "none")
+                    if item != "none":
+                        blender_items.append(to_title_case(item.replace(" ", "_")))
+                if blender_items:
+                    current_task_display = f"Blender: {', '.join(blender_items)}"
+                else:
+                    current_task_display = "Blender"
+            elif current_status == "bugrun":
+                enabled_mobs = []
+                for mob_key in ["ladybug", "rhinobeetle", "scorpion", "mantis", "spider", "werewolf", "coconut_crab", "stump_snail"]:
+                    if settings.get(mob_key, False):
+                        emoji = killEmojis.get(mob_key, "")
+                        mob_name = mob_key.replace("_", " ").title()
+                        enabled_mobs.append(f"{emoji} {mob_name}" if emoji else mob_name)
+                if enabled_mobs:
+                    current_task_display = f"Kill: {', '.join(enabled_mobs[:3])}"  # Limit to 3 for display
+                else:
+                    current_task_display = "Mob Run"
+            elif current_status:
+                current_task_display = to_title_case(current_status)
+            
+            # Set skip flag
+            skipTask.value = 1
+            
+            # Create embed showing what will be skipped
+            embed = discord.Embed(title="⏭️ Skipping Task", color=0xffa500)
+            embed.add_field(name="Current Task", value=f"**{current_task_display}**", inline=False)
+            embed.add_field(name="Status", value="Task will be skipped on next check.", inline=False)
+            
+            await interaction.followup.send(embed=embed)
+            
+        except Exception as e:
+            skipTask.value = 1  # Still set skip flag even if display fails
+            await interaction.followup.send(f"⏭️ Skipping Task\n❌ Error displaying task info: {str(e)}")
         
     @bot.tree.command(name = "rejoin", description = "Make the macro rejoin the game.")
     async def rejoin(interaction: discord.Interaction):
@@ -449,7 +532,7 @@ def discordBot(token, run, status, skipTask, initial_message_info=None, updateGU
             killEmojis = {
                 "scorpion": "", "werewolf": "", "ladybug": "", "rhinobeetle": "",
                 "spider": "", "mantis": "", "ant_challenge": "🎯", "coconut_crab": "",
-                "stump_snail": "🐌"
+                "stump_snail": "🐌", "stinger_hunt": ""
             }
 
             fieldBoosterEmojis = {
@@ -461,170 +544,263 @@ def discordBot(token, run, status, skipTask, initial_message_info=None, updateGU
                 "bucko_bee_quest": "💙", "riley_bee_quest": "❤️"
             }
 
-            def get_detailed_status_text(status, settings_data):
-                """Get more detailed text for current task status"""
-                if status.startswith("gather_"):
-                    field_name = status.split("_")[1]
-                    field_display = field_name.replace("_", " ").title()
-                    return f"🔄 Gathering from **{field_display}**"
+            def to_title_case(text):
+                """Convert text to title case"""
+                return text.replace("_", " ").title()
 
-                elif status == "converting":
-                    # Check if blender is enabled and what items are being crafted
-                    if settings_data.get("blender_enable", False):
-                        blender_items = []
-                        for i in range(1, 4):
-                            item = settings_data.get(f"blender_item_{i}", "none")
-                            if item != "none":
-                                blender_items.append(item.replace("_", " ").title())
-
-                        if blender_items:
-                            return f"🔄 Converting: **{', '.join(blender_items)}**"
-                        else:
-                            return "🔄 Converting honey"
+            # Helper function to check if a task is enabled and get its display info (matches GUI exactly)
+            def get_task_display_info(task_id):
+                """Get task display info matching GUI's getTaskDisplayInfo"""
+                # Handle gather tasks
+                if task_id.startswith("gather_"):
+                    field_name = task_id.replace("gather_", "").replace("_", " ")
+                    # Check if this field is enabled
+                    field_list = settings.get("fields", [])
+                    fields_enabled = settings.get("fields_enabled", [])
+                    for i in range(3):
+                        if i < len(fields_enabled) and i < len(field_list) and fields_enabled[i] and field_list[i] == field_name:
+                            emoji = fieldEmojis.get(field_name.replace(" ", "_"), "")
+                            is_current = current_status == f"gather_{field_name.replace(' ', '_')}"
+                            desc = f"{emoji} {field_name}" if emoji else field_name
+                            if is_current:
+                                return {"enabled": True, "title": f"Gather {i + 1}", "desc": desc, "is_current": True}
+                            return {"enabled": True, "title": f"Gather {i + 1}", "desc": desc, "is_current": False}
+                    return {"enabled": False}
+                
+                # Handle collect tasks
+                if task_id.startswith("collect_"):
+                    collect_name = task_id.replace("collect_", "")
+                    
+                    # Special case: sticker_printer
+                    if collect_name == "sticker_printer":
+                        if not settings.get("sticker_printer"):
+                            return {"enabled": False}
+                        emoji = collectEmojis.get("sticker_printer", "")
+                        desc = f"{emoji} {to_title_case('sticker printer')}" if emoji else to_title_case("sticker printer")
+                        return {"enabled": True, "title": "Collect", "desc": desc, "is_current": False}
+                    
+                    # Special case: sticker_stack
+                    if collect_name == "sticker_stack":
+                        if not settings.get("sticker_stack"):
+                            return {"enabled": False}
+                        return {"enabled": True, "title": "Collect Buff", "desc": "Sticker Stack", "is_current": False}
+                    
+                    # Regular collect items
+                    if not settings.get(collect_name):
+                        return {"enabled": False}
+                    emoji = collectEmojis.get(collect_name, "")
+                    desc = f"{emoji} {to_title_case(collect_name)}" if emoji else to_title_case(collect_name)
+                    return {"enabled": True, "title": "Collect", "desc": desc, "is_current": False}
+                
+                # Handle kill tasks
+                if task_id.startswith("kill_"):
+                    mob = task_id.replace("kill_", "")
+                    if not settings.get(mob):
+                        return {"enabled": False}
+                    display_name = mob if mob != "rhinobeetle" else "rhino beetle"
+                    emoji = killEmojis.get(mob, "")
+                    desc = f"{emoji} {to_title_case(display_name)}" if emoji else to_title_case(display_name)
+                    is_current = current_status == "bugrun"
+                    return {"enabled": True, "title": "Kill", "desc": desc, "is_current": is_current}
+                
+                # Handle quest tasks
+                if task_id.startswith("quest_"):
+                    quest_name = task_id.replace("quest_", "")
+                    quest_key = f"{quest_name}_quest"
+                    if not settings.get(quest_key):
+                        return {"enabled": False}
+                    emoji = questGiverEmojis.get(quest_key, "")
+                    desc = f"{emoji} {to_title_case(quest_name)}" if emoji else to_title_case(quest_name)
+                    return {"enabled": True, "title": "Quest", "desc": desc, "is_current": False}
+                
+                # Handle special tasks
+                if task_id == "blender":
+                    if not settings.get("blender_enable"):
+                        return {"enabled": False}
+                    selected_blender_items = {}
+                    for i in range(1, 4):
+                        item = settings.get(f"blender_item_{i}", "none")
+                        if item != "none" and item:
+                            selected_blender_items[to_title_case(item.replace(" ", "_"))] = item
+                    if selected_blender_items:
+                        desc = ", ".join(selected_blender_items.keys())
                     else:
-                        return "🔄 Converting honey"
-
-                elif status == "bugrun":
-                    # Try to be more specific about mob runs
-                    enabled_mobs = []
-                    mob_emojis = {
-                        "ladybug": "🐞", "rhinobeetle": "🪲", "scorpion": "🦂",
-                        "mantis": "🦗", "spider": "🕷️", "werewolf": "🐺",
-                        "coconut_crab": "🦀", "stump_snail": "🐌"
-                    }
-
-                    for mob_key in ["ladybug", "rhinobeetle", "scorpion", "mantis", "spider", "werewolf", "coconut_crab", "stump_snail"]:
-                        if settings_data.get(mob_key, False):
-                            emoji = mob_emojis.get(mob_key, "")
-                            mob_name = mob_key.replace("_", " ").title()
-                            enabled_mobs.append(f"{emoji} {mob_name}" if emoji else mob_name)
-
-                    if enabled_mobs:
-                        return f"⚔️ Fighting: **{', '.join(enabled_mobs)}**"
-                    else:
-                        return "⚔️ Mob run in progress"
-
-                elif status == "rejoining":
-                    return "🔄 Rejoining game server"
-
-                elif status == "amulet_wait":
-                    return "⏳ Waiting for amulet decision"
-
+                        desc = "Blender"
+                    is_current = current_status == "converting"
+                    return {"enabled": True, "title": "Blender", "desc": desc, "is_current": is_current}
+                
+                if task_id == "planters":
+                    if not settings.get("planters_mode"):
+                        return {"enabled": False}
+                    mode_text = "Manual" if settings.get("planters_mode") == 1 else "Auto"
+                    return {"enabled": True, "title": "Planters", "desc": mode_text, "is_current": False}
+                
+                if task_id == "mondo_buff":
+                    if not settings.get("mondo_buff"):
+                        return {"enabled": False}
+                    emoji = collectEmojis.get("mondo_buff", "")
+                    desc = f"{emoji} {to_title_case('mondo buff')}" if emoji else to_title_case("mondo buff")
+                    return {"enabled": True, "title": "Collect", "desc": desc, "is_current": False}
+                
+                if task_id == "stinger_hunt":
+                    if not settings.get("stinger_hunt"):
+                        return {"enabled": False}
+                    emoji = killEmojis.get("stinger_hunt", "")
+                    desc = f"{emoji} {to_title_case('stinger hunt')}" if emoji else to_title_case("stinger hunt")
+                    return {"enabled": True, "title": "Kill", "desc": desc, "is_current": False}
+                
+                if task_id == "auto_field_boost":
+                    if not settings.get("Auto_Field_Boost"):
+                        return {"enabled": False}
+                    emoji = collectEmojis.get("Auto_Field_Boost", "")
+                    desc = f"{emoji} {to_title_case('auto field boost')}" if emoji else to_title_case("auto field boost")
+                    return {"enabled": True, "title": "Collect Buff", "desc": desc, "is_current": False}
+                
+                if task_id == "ant_challenge":
+                    if not settings.get("ant_challenge"):
+                        return {"enabled": False}
+                    emoji = killEmojis.get("ant_challenge", "")
+                    desc = f"{emoji} {to_title_case('ant challenge')}" if emoji else to_title_case("ant challenge")
+                    return {"enabled": True, "title": "Kill", "desc": desc, "is_current": False}
+                
+                # Field boosters (blue_booster, red_booster, mountain_booster)
+                if task_id in ["collect_blue_booster", "collect_red_booster", "collect_mountain_booster"]:
+                    booster_name = task_id.replace("collect_", "")
+                    if not settings.get(booster_name):
+                        return {"enabled": False}
+                    emoji = fieldBoosterEmojis.get(booster_name, "")
+                    desc = f"{emoji} {to_title_case(booster_name)}" if emoji else to_title_case(booster_name)
+                    return {"enabled": True, "title": "Collect Buff", "desc": desc, "is_current": False}
+                
+                return {"enabled": False}
+            
+            # Get priority order from settings
+            priority_order = settings.get("task_priority_order", [])
+            
+            # Build task list similar to GUI (simple list format)
+            task_list = []
+            
+            # Check for field-only mode
+            if settings.get("field_only_mode", False):
+                task_list.append({"title": "Field Only Mode", "desc": "🌾 Gathering in fields only", "is_current": False})
+                field_list = settings.get("fields", [])
+                fields_enabled = settings.get("fields_enabled", [])
+                for i in range(len(fields_enabled)):
+                    if i < len(field_list) and fields_enabled[i]:
+                        field = field_list[i]
+                        emoji = fieldEmojis.get(field.replace(" ", "_"), "")
+                        desc = f"{emoji} {field}" if emoji else field
+                        is_current = current_status == f"gather_{field.replace(' ', '_')}"
+                        task_list.append({"title": f"Gather {i + 1}", "desc": desc, "is_current": is_current})
+            else:
+                # If priority order exists, use it; otherwise fall back to old order
+                if priority_order and len(priority_order) > 0:
+                    # Display tasks in priority order
+                    for task_id in priority_order:
+                        task_info = get_task_display_info(task_id)
+                        if task_info.get("enabled"):
+                            task_list.append({
+                                "title": task_info.get("title", "Task"),
+                                "desc": task_info.get("desc", ""),
+                                "is_current": task_info.get("is_current", False)
+                            })
                 else:
-                    return f"🔄 {status.replace('_', ' ').title()}"
-
-                return f"🔄 {status.replace('_', ' ').title()}"
-
-            # Helper function to format task items
-            def format_task_items(emoji_dict, enabled_items, task_type, current_status=""):
-                items = []
-                for item_key, emoji in emoji_dict.items():
-                    if settings.get(item_key, False):
-                        # Check if this is the current task
-                        is_current = False
-                        if task_type == "gather" and current_status.startswith("gather_"):
-                            current_field = current_status.split("_")[1]
-                            if item_key == current_field:
-                                is_current = True
-                        elif task_type == "convert" and current_status == "converting":
-                            is_current = True
-                        elif task_type == "bugrun" and current_status == "bugrun":
-                            is_current = True
-
-                        # Format the item
-                        if emoji:
-                            if is_current:
-                                items.append(f"▶️ **{emoji} {item_key.replace('_', ' ').title()}** 🔄")
-                            else:
-                                items.append(f"{emoji} {item_key.replace('_', ' ').title()}")
+                    # Fallback to old order if no priority order is set
+                    # Quests
+                    for quest_key, emoji in questGiverEmojis.items():
+                        if settings.get(quest_key):
+                            quest_name = quest_key.replace("_quest", "").replace("_", " ")
+                            desc = f"{emoji} {to_title_case(quest_name)}" if emoji else to_title_case(quest_name)
+                            task_list.append({"title": "Quest", "desc": desc, "is_current": False})
+                    
+                    # Collectibles
+                    for collect_key, emoji in collectEmojis.items():
+                        if settings.get(collect_key):
+                            desc = f"{emoji} {to_title_case(collect_key)}" if emoji else to_title_case(collect_key)
+                            task_list.append({"title": "Collect", "desc": desc, "is_current": False})
+                    
+                    # Blender
+                    if settings.get("blender_enable"):
+                        blender_items = {}
+                        for i in range(1, 4):
+                            item = settings.get(f"blender_item_{i}", "none")
+                            if item != "none":
+                                blender_items[to_title_case(item.replace(" ", "_"))] = item
+                        if blender_items:
+                            desc = ", ".join(blender_items.keys())
                         else:
-                            if is_current:
-                                items.append(f"▶️ **{item_key.replace('_', ' ').title()}** 🔄")
-                            else:
-                                items.append(f"{item_key.replace('_', ' ').title()}")
-
-                return items
-
-            # Build task list similar to GUI
-            embed = discord.Embed(title="📋 Current Task Queue", color=0x00ff00)
-
-            # Quests
-            quest_items = format_task_items(questGiverEmojis, {}, "quest")
-            if quest_items:
-                embed.add_field(name="📜 Quests", value="\n".join(quest_items), inline=False)
-
-            # Collectibles
-            collect_items = format_task_items(collectEmojis, {}, "collect")
-            if collect_items:
-                embed.add_field(name="🎁 Collectibles", value="\n".join(collect_items), inline=False)
-
-            # Blender
-            if settings.get("blender_enable", False):
-                blender_items = []
-                for i in range(1, 4):
-                    item = settings.get(f"blender_item_{i}", "none")
-                    if item != "none":
+                            desc = "Blender"
                         is_current = current_status == "converting"
-                        if is_current:
-                            blender_items.append(f"▶️ **{item.replace('_', ' ').title()}** 🔄")
-                        else:
-                            blender_items.append(f"{item.replace('_', ' ').title()}")
-
-                if blender_items:
-                    embed.add_field(name="🥤 Blender", value="\n".join(blender_items), inline=False)
-
-            # Planters
-            planters_mode = settings.get("planters_mode", 0)
-            if planters_mode > 0:
-                mode_text = "Manual" if planters_mode == 1 else "Auto"
-                embed.add_field(name="🌱 Planters", value=mode_text, inline=False)
-
-            # Kill tasks
-            kill_items = format_task_items(killEmojis, {}, "kill")
-            if kill_items:
-                embed.add_field(name="⚔️ Combat", value="\n".join(kill_items), inline=False)
-
-            # Field boosters and sticker stack
-            booster_items = format_task_items(fieldBoosterEmojis, {}, "boosters")
-            sticker_items = []
-            if settings.get("sticker_stack", False):
-                sticker_items.append("Sticker Stack")
-
-            if booster_items or sticker_items:
-                all_buff_items = booster_items + sticker_items
-                embed.add_field(name="🎯 Buffs", value="\n".join(all_buff_items), inline=False)
-
-            # Gather fields
-            gather_items = []
-            field_list = settings.get("fields", [])
-            fields_enabled = settings.get("fields_enabled", [])
-
-            for i, field_name in enumerate(field_list):
-                if i < len(fields_enabled) and fields_enabled[i]:
-                    emoji = fieldEmojis.get(field_name, "")
-                    is_current = current_status == f"gather_{field_name}"
-
-                    if emoji:
-                        if is_current:
-                            gather_items.append(f"▶️ **{emoji} {field_name.replace('_', ' ').title()}** 🔄")
-                        else:
-                            gather_items.append(f"{emoji} {field_name.replace('_', ' ').title()}")
-                    else:
-                        if is_current:
-                            gather_items.append(f"▶️ **{field_name.replace('_', ' ').title()}** 🔄")
-                        else:
-                            gather_items.append(f"{field_name.replace('_', ' ').title()}")
-
-            if gather_items:
-                embed.add_field(name="🌾 Gathering", value="\n".join(gather_items), inline=False)
-
-            # Show current status if no specific task is highlighted
-            if current_status and not any("🔄" in field.value for field in embed.fields):
-                status_text = get_detailed_status_text(current_status, settings)
-                embed.add_field(name="🔄 Current Task", value=status_text, inline=False)
-
-            if not embed.fields:
+                        task_list.append({"title": "Blender", "desc": desc, "is_current": is_current})
+                    
+                    # Planters
+                    if settings.get("planters_mode"):
+                        mode_text = "Manual" if settings.get("planters_mode") == 1 else "Auto"
+                        task_list.append({"title": "Planters", "desc": mode_text, "is_current": False})
+                    
+                    # Kill tasks
+                    for mob_key, emoji in killEmojis.items():
+                        if settings.get(mob_key):
+                            mob_name = mob_key if mob_key != "rhinobeetle" else "rhino beetle"
+                            desc = f"{emoji} {to_title_case(mob_name)}" if emoji else to_title_case(mob_name)
+                            is_current = current_status == "bugrun"
+                            task_list.append({"title": "Kill", "desc": desc, "is_current": is_current})
+                    
+                    # Field boosters
+                    for booster_key, emoji in fieldBoosterEmojis.items():
+                        if settings.get(booster_key):
+                            desc = f"{emoji} {to_title_case(booster_key)}"
+                            task_list.append({"title": "Collect Buff", "desc": desc, "is_current": False})
+                    
+                    # Sticker stack
+                    if settings.get("sticker_stack"):
+                        task_list.append({"title": "Collect Buff", "desc": "Sticker Stack", "is_current": False})
+                    
+                    # Gather fields
+                    field_list = settings.get("fields", [])
+                    fields_enabled = settings.get("fields_enabled", [])
+                    for i in range(len(fields_enabled)):
+                        if i < len(field_list) and fields_enabled[i]:
+                            field = field_list[i]
+                            emoji = fieldEmojis.get(field.replace(" ", "_"), "")
+                            desc = f"{emoji} {field}" if emoji else field
+                            is_current = current_status == f"gather_{field.replace(' ', '_')}"
+                            task_list.append({"title": f"Gather {i + 1}", "desc": desc, "is_current": is_current})
+            
+            # Build embed with tasks displayed like GUI (simple list format)
+            embed = discord.Embed(title="📋 Current Task Queue", color=0x00ff00)
+            
+            if not task_list:
                 embed.add_field(name="📭 No Tasks", value="No tasks are currently enabled.", inline=False)
+            else:
+                # Format tasks: only show description (no category titles)
+                task_text = ""
+                for i, task in enumerate(task_list):
+                    desc = task["desc"]
+                    is_current = task["is_current"]
+                    
+                    # Bold the current task
+                    if is_current:
+                        task_text += f"**{desc}**\n"
+                    else:
+                        task_text += f"{desc}\n"
+                
+                # Discord embed field value limit is 1024 characters
+                if len(task_text) > 1024:
+                    # Split into multiple fields if needed
+                    chunks = []
+                    current_chunk = ""
+                    for i, task in enumerate(task_list):
+                        desc = task["desc"]
+                        is_current = task["is_current"]
+                    
+                    if current_chunk:
+                        chunks.append(current_chunk.rstrip())
+                    
+                    for i, chunk in enumerate(chunks):
+                        embed.add_field(name=f"Tasks (Part {i + 1})" if len(chunks) > 1 else "Tasks", value=chunk, inline=False)
+                else:
+                    embed.add_field(name="Tasks", value=task_text.rstrip(), inline=False)
 
             await interaction.followup.send(embed=embed)
 
