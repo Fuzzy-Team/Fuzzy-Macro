@@ -62,7 +62,7 @@ def macro(status, logQueue, updateGUI, run, skipTask):
     
     #function to run a task
     #makes it easy to do any checks after a task is complete (like stinger hunt, rejoin every, etc)
-    def runTask(func = None, args = (), resetAfter = True, convertAfter = True, taskName = "", taskPriority = 0):
+    def runTask(func = None, args = (), resetAfter = True, convertAfter = True):
         nonlocal taskCompleted, was_paused
         # Check if paused before executing task
         while run.value == 5:
@@ -78,16 +78,10 @@ def macro(status, logQueue, updateGUI, run, skipTask):
             macro.logger.webhook("Task Skipped", f"Skipped: {status.value.replace('_', ' ').title()}", "orange")
             status.value = ""
             taskCompleted = True
-            current_task_name = ""
-            current_task_priority = 0
             if resetAfter:
                 macro.reset(convert=False)
             return None
-
-        # Update current task tracking
-        current_task_name = taskName
-        current_task_priority = taskPriority
-
+        
         #execute the task
         if func:
             returnVal = func(*args) 
@@ -95,12 +89,8 @@ def macro(status, logQueue, updateGUI, run, skipTask):
         else:
             returnVal = None
         #task done
-        if resetAfter:
+        if resetAfter: 
             macro.reset(convert=convertAfter)
-
-        # Reset current task after completion
-        current_task_name = ""
-        current_task_priority = 0
 
         # Check if paused before priority tasks
         while run.value == 5:
@@ -227,121 +217,7 @@ def macro(status, logQueue, updateGUI, run, skipTask):
     
     # Track pause state to send webhook only once when entering pause
     was_paused = False
-
-    # Priority system variables
-    current_task_priority = 0
-    current_task_name = ""
-    last_priority_check = 0
-    priority_check_interval = 60  # Check every 60 seconds (1 minute)
-
-    def get_available_tasks_with_priorities():
-        """Check all tasks that can be completed and return them with their priorities"""
-        available_tasks = []
-        settings = macro.setdat
-
-        # Check gather tasks
-        for i in range(3):
-            if settings["fields_enabled"][i]:
-                field_name = settings["fields"][i]
-                field_key = field_name.replace(" ", "_")
-                priority_key = f"priority_gather_{field_key}"
-                priority = int(settings.get(priority_key, 0))
-                available_tasks.append(("gather", field_name, priority))
-
-        # Check collect tasks
-        for k, _ in macroModule.collectData.items():
-            if settings.get(k, False) and macro.hasRespawned(k, macro.collectCooldowns[k]):
-                priority_key = f"priority_collect_{k}"
-                priority = int(settings.get(priority_key, 0))
-                available_tasks.append(("collect", k, priority))
-
-        # Check sticker printer separately
-        if settings.get("sticker_printer", False) and macro.hasRespawned("sticker_printer", macro.collectCooldowns["sticker_printer"]):
-            priority = int(settings.get("priority_collect_sticker_printer", 0))
-            available_tasks.append(("collect", "sticker_printer", priority))
-
-        # Check blender
-        if settings.get("blender_enable", False):
-            with open("./data/user/blender.txt", "r") as f:
-                blenderData = ast.literal_eval(f.read())
-            f.close()
-            if blenderData["collectTime"] > -1 and time.time() > blenderData["collectTime"]:
-                priority = int(settings.get("priority_blender", 0))
-                available_tasks.append(("blender", "blender", priority))
-
-        # Check planters
-        def goToNextCycle(cycle, slot):
-            for _ in range(8):
-                cycle += 1
-                if cycle > 5:
-                    cycle = 1
-                if settings[f"cycle{cycle}_{slot+1}_planter"] != "none" and settings[f"cycle{cycle}_{slot+1}_field"] != "none":
-                    return cycle
-            else:
-                return False
-
-        if settings.get("planters_mode", 0) == 1:
-            with open("./data/user/manualplanters.txt", "r") as f:
-                planterDataRaw = f.read()
-            f.close()
-            if planterDataRaw.strip():
-                planterData = ast.literal_eval(planterDataRaw)
-                for i in range(3):
-                    cycle = planterData["cycles"][i]
-                    if planterData["planters"][i] and time.time() > planterData["harvestTimes"][i]:
-                        priority = int(settings.get("priority_planters", 0))
-                        available_tasks.append(("planters", f"planter_{i}", priority))
-
-        # Check kill tasks
-        kill_mobs = ["stump_snail", "ladybug", "rhinobeetle", "scorpion", "mantis", "spider", "werewolf", "coconut_crab"]
-        for mob in kill_mobs:
-            if settings.get(mob, False):
-                priority_key = f"priority_kill_{mob}"
-                priority = int(settings.get(priority_key, 0))
-                available_tasks.append(("kill", mob, priority))
-
-        # Check quests
-        quest_tasks = []
-        quest_data = [
-            ("polar bear", "polar_bear_quest"),
-            ("honey bee", "honey_bee_quest"),
-            ("bucko bee", "bucko_bee_quest"),
-            ("riley bee", "riley_bee_quest")
-        ]
-        for questName, enabledKey in quest_data:
-            if settings.get(enabledKey, False):
-                priority_key = f"priority_quest_{enabledKey.replace('_quest', '').replace('_', '_')}"
-                priority = int(settings.get(priority_key, 0))
-                quest_tasks.append((questName, priority))
-
-        # For quests, we need to check if they're actually available (not just enabled)
-        # For now, assume enabled quests are available
-        for quest_name, priority in quest_tasks:
-            available_tasks.append(("quest", quest_name, priority))
-
-        return available_tasks
-
-    def should_switch_to_higher_priority_task():
-        """Check if there's a higher priority task available"""
-        nonlocal current_task_priority, last_priority_check
-
-        current_time = time.time()
-        if current_time - last_priority_check < priority_check_interval:
-            return None  # Not time to check yet
-
-        last_priority_check = current_time
-        available_tasks = get_available_tasks_with_priorities()
-
-        # Find the highest priority available task
-        if available_tasks:
-            best_task = max(available_tasks, key=lambda x: x[2])
-            best_task_type, best_task_name, best_priority = best_task
-
-            if best_priority > current_task_priority:
-                return best_task
-
-        return None
-
+    
     while True:
         # Check if macro is paused
         while run.value == 5:
@@ -355,10 +231,9 @@ def macro(status, logQueue, updateGUI, run, skipTask):
         if was_paused:
             was_paused = False
             
-        macro.setdat = settingsManager.loadAllSettings()
-
+        macro.setdat = get_cached_settings()
         #run empty task
-        #this is in case no other settings are selected
+        #this is in case no other settings are selected 
         runTask(resetAfter=False)
 
         updateGUI.value = 1
@@ -379,7 +254,7 @@ def macro(status, logQueue, updateGUI, run, skipTask):
             # Skip to next iteration
             continue
 
-        #handle quests
+        #handle quests first (needed for quest-related gathering fields)
         questGatherFields = []
         questGumdropGatherFields = []
         redFieldNeeded = False
@@ -417,26 +292,7 @@ def macro(status, logQueue, updateGUI, run, skipTask):
             macro.feedBee(item, quantity)
             taskCompleted = True
 
-        #collect
-        for k, _ in macroModule.collectData.items():
-            #check if the cooldown is up
-            if macro.setdat[k] and macro.hasRespawned(k, macro.collectCooldowns[k]):
-                runTask(macro.collect, args=(k,))
-
-        if macro.setdat["sticker_printer"] and macro.hasRespawned("sticker_printer", macro.collectCooldowns["sticker_printer"]):
-            runTask(macro.collectStickerPrinter)
-        #blender
-        if macro.setdat["blender_enable"]:
-            with open("./data/user/blender.txt", "r") as f:
-                blenderData = ast.literal_eval(f.read())
-            f.close()
-            #collectTime: time where the blender is done crafting
-            #item: the next item number to craft
-            #check if its time to collect the previous item
-            if blenderData["collectTime"] > -1 and time.time() > blenderData["collectTime"]:
-                runTask(macro.blender, args=(blenderData,))
-
-        #planters
+        # Helper function for manual planters
         def goToNextCycle(cycle, slot):
             #go to the next cycle
             for _ in range(8):
@@ -448,433 +304,526 @@ def macro(status, logQueue, updateGUI, run, skipTask):
             else: 
                 return False
         
+        # Get priority order from settings, or use empty list if not set
+        priorityOrder = macro.setdat.get("task_priority_order", [])
+        
+        # Track which tasks have been executed to avoid duplicates
+        executedTasks = set()
+        
+        # Track planter data for gather fields
         planterDataRaw = None
-        if macro.setdat["planters_mode"] == 1:
-            with open("./data/user/manualplanters.txt", "r") as f:
-                planterDataRaw = f.read()
-            f.close()
-            #no data, place planters
-            if not planterDataRaw.strip():
-                planterData = { #planter data to be stored in a file
-                    "cycles": [1,1,1],
-                    "planters": ["","",""],
-                    "fields": ["","",""],
-                    "gatherFields": ["","",""],
-                    "harvestTimes": [0,0,0]
-                }
-                for i in range(3):
-                    if macro.setdat[f"cycle1_{i+1}_planter"] == "none" or macro.setdat[f"cycle1_{i+1}_field"] == "none":
-                        continue
-                    planter = runTask(macro.placePlanterInCycle, args = (i, 1),resetAfter=False)
-                    if planter:
-                        planterData["planters"][i] = planter[0]
-                        planterData["fields"][i] = planter[1]
-                        planterData["harvestTimes"][i] = planter[2]
-                        planterData["gatherFields"][i] = planter[1] if planter[3] else ""
-                        with open("./data/user/manualplanters.txt", "w") as f:
-                            f.write(str(planterData))
+        
+        # Helper function to execute a task by its ID
+        def executeTask(taskId):
+            nonlocal planterDataRaw, executedTasks
+            
+            # Skip if already executed
+            if taskId in executedTasks:
+                return False
+            
+            # Handle quest tasks
+            if taskId.startswith("quest_"):
+                questName = taskId.replace("quest_", "").replace("_", " ")
+                questKey = f"{questName.replace(' ', '_')}_quest"
+                if not macro.setdat.get(questKey):
+                    return False
+                # Quest handling is done above, just mark as executed
+                executedTasks.add(taskId)
+                return True
+            
+            # Handle collect tasks
+            if taskId.startswith("collect_"):
+                collectName = taskId.replace("collect_", "")
+                
+                # Special case: sticker_printer
+                if collectName == "sticker_printer":
+                    if macro.setdat["sticker_printer"] and macro.hasRespawned("sticker_printer", macro.collectCooldowns["sticker_printer"]):
+                        runTask(macro.collectStickerPrinter)
+                        executedTasks.add(taskId)
+                        return True
+                    return False
+                
+                # Special case: sticker_stack
+                if collectName == "sticker_stack":
+                    if macro.setdat["sticker_stack"]:
+                        with open("./data/user/sticker_stack.txt", "r") as f:
+                            stickerStackCD = int(f.read())
                         f.close()
-
-            #planter data does exist, check if its time to collect them
-            else: 
-                planterData = ast.literal_eval(planterDataRaw)
-                #check all 3 slots to see if planters are ready to harvest
+                        if macro.hasRespawned("sticker_stack", stickerStackCD):
+                            runTask(macro.collect, args=("sticker_stack",))
+                            executedTasks.add(taskId)
+                            return True
+                    return False
+                
+                # Field boosters (handled separately due to gather logic)
+                if collectName in ["blue_booster", "red_booster", "mountain_booster"]:
+                    if collectName in macroModule.fieldBoosterData:
+                        if macro.setdat[collectName] and macro.hasRespawned(collectName, macro.collectCooldowns[collectName]) and macro.hasRespawned("last_booster", macro.setdat["boost_seperate"]*60):
+                            boostedField = runTask(macro.collect, args=(collectName,))
+                            if macro.setdat["gather_boosted"] and boostedField:
+                                # Gather in boosted field for 15 minutes
+                                st = time.time()
+                                while time.time() - st < 15*60:
+                                    # Check if paused
+                                    while run.value == 5:
+                                        if not was_paused:
+                                            macro.logger.webhook("", "Macro is paused", "orange")
+                                            was_paused = True
+                                        time.sleep(1)
+                                    runTask(macro.gather, args=(boostedField,), resetAfter=False)
+                            executedTasks.add(taskId)
+                            return True
+                    return False
+                
+                # Regular collect items
+                if collectName in macroModule.collectData:
+                    if macro.setdat[collectName] and macro.hasRespawned(collectName, macro.collectCooldowns[collectName]):
+                        runTask(macro.collect, args=(collectName,))
+                        executedTasks.add(taskId)
+                        return True
+                return False
+            
+            # Handle kill tasks
+            if taskId.startswith("kill_"):
+                mob = taskId.replace("kill_", "")
+                
+                # Special cases: coconut_crab and stump_snail
+                if mob == "coconut_crab":
+                    if macro.setdat["coconut_crab"] and macro.hasRespawned("coconut_crab", 36*60*60, applyMobRespawnBonus=True):
+                        macro.coconutCrab()
+                        executedTasks.add(taskId)
+                        return True
+                    return False
+                
+                if mob == "stump_snail":
+                    if macro.setdat["stump_snail"] and macro.hasRespawned("stump_snail", 96*60*60, applyMobRespawnBonus=True):
+                        runTask(macro.stumpSnail)
+                        executedTasks.add(taskId)
+                        return True
+                    return False
+                
+                # Regular mobs
+                if mob in regularMobData:
+                    if macro.setdat[mob]:
+                        # Check all fields for this mob and kill in each field where it has respawned
+                        killedInAnyField = False
+                        for f in regularMobData[mob]:
+                            if macro.hasMobRespawned(mob, f):
+                                runTask(macro.killMob, args=(mob, f,), convertAfter=False)
+                                killedInAnyField = True
+                        # Only mark as executed if we actually killed in at least one field
+                        if killedInAnyField:
+                            executedTasks.add(taskId)
+                            return True
+                return False
+            
+            # Handle gather tasks
+            if taskId.startswith("gather_"):
+                fieldName = taskId.replace("gather_", "").replace("_", " ")
+                
+                # Check if this field is enabled in gather tab
                 for i in range(3):
-                    cycle = planterData["cycles"][i]
-                    if planterData["planters"][i] and time.time() > planterData["harvestTimes"][i]:
-                        #Collect planter
-                        if runTask(macro.collectPlanter, args=(planterData["planters"][i], planterData["fields"][i])):
-                            planterData["harvestTimes"][i] = ""
-                            planterData["planters"][i] = ""
-                            planterData["fields"][i] = ""
-                            with open("./data/user/manualplanters.txt", "w") as f:
-                                f.write(str(planterData))
-                            f.close()
-                            updateGUI.value = 1
-
-                #check for planters to place
-                for i in range(3):
-                    cycle = planterData["cycles"][i]
-                    #check if planter slot is occupied
-                    if planterData["planters"][i]:
-                        continue
-                    #if that planter is currently placed down by a different slot, do not harvest and place
-                    #this avoids overlapping the same planter
-                    nextCycle = goToNextCycle(cycle, i)
-                    if not nextCycle: #make sure the column (slot) isnt just empty
-                        continue
-
-                    planterToPlace = macro.setdat[f"cycle{nextCycle}_{i+1}_planter"]
-                    otherSlotPlanters = planterData["planters"][:i] + planterData["planters"][i+1:]
-                    if planterToPlace in otherSlotPlanters:
-                        continue
-
-                    #also check for fields
-                    fieldToPlace = macro.setdat[f"cycle{nextCycle}_{i+1}_field"]
-                    otherSlotFields = planterData["fields"][:i] + planterData["fields"][i+1:]
-                    if fieldToPlace in otherSlotFields:
-                        continue
+                    if macro.setdat["fields_enabled"][i] and macro.setdat["fields"][i] == fieldName:
+                        runTask(macro.gather, args=(fieldName,), resetAfter=False)
+                        executedTasks.add(taskId)
+                        return True
+                
+                # Check if it's a quest gather field
+                if fieldName in questGatherFields or fieldName in questGumdropGatherFields:
+                    questGatherOverrides = {}
+                    if macro.setdat["quest_gather_mins"]:
+                        questGatherOverrides["mins"] = macro.setdat["quest_gather_mins"]
+                    if macro.setdat["quest_gather_return"] != "no override":
+                        questGatherOverrides["return"] = macro.setdat["quest_gather_return"]
                     
-                    #place planter
-                    planter = runTask(macro.placePlanterInCycle, args = (i, nextCycle),resetAfter=False)
-                    if planter:
-                        planterData["cycles"][i] = nextCycle
-                        planterData["planters"][i] = planter[0]
-                        planterData["fields"][i] = planter[1]
-                        planterData["harvestTimes"][i] = planter[2]
-                        planterData["gatherFields"][i] = planter[1] if planter[3] else ""
-                        with open("./data/user/manualplanters.txt", "w") as f:
-                            f.write(str(planterData))
+                    isGumdrop = fieldName in questGumdropGatherFields
+                    runTask(macro.gather, args=(fieldName, questGatherOverrides, isGumdrop), resetAfter=False)
+                    executedTasks.add(taskId)
+                    return True
+                
+                return False
+            
+            # Handle special tasks
+            if taskId == "blender":
+                if macro.setdat["blender_enable"]:
+                    with open("./data/user/blender.txt", "r") as f:
+                        blenderData = ast.literal_eval(f.read())
+                    f.close()
+                    if blenderData["collectTime"] > -1 and time.time() > blenderData["collectTime"]:
+                        runTask(macro.blender, args=(blenderData,))
+                        executedTasks.add(taskId)
+                        return True
+                return False
+            
+            if taskId == "planters":
+                if not macro.setdat["planters_mode"]:
+                    return False
+                
+                # Manual planters
+                if macro.setdat["planters_mode"] == 1:
+                    if planterDataRaw is None:
+                        with open("./data/user/manualplanters.txt", "r") as f:
+                            planterDataRaw = f.read()
+                        f.close()
+                    
+                    if not planterDataRaw.strip():
+                        planterData = {
+                            "cycles": [1,1,1],
+                            "planters": ["","",""],
+                            "fields": ["","",""],
+                            "gatherFields": ["","",""],
+                            "harvestTimes": [0,0,0]
+                        }
+                        for i in range(3):
+                            if macro.setdat[f"cycle1_{i+1}_planter"] == "none" or macro.setdat[f"cycle1_{i+1}_field"] == "none":
+                                continue
+                            planter = runTask(macro.placePlanterInCycle, args = (i, 1),resetAfter=False)
+                            if planter:
+                                planterData["planters"][i] = planter[0]
+                                planterData["fields"][i] = planter[1]
+                                planterData["harvestTimes"][i] = planter[2]
+                                planterData["gatherFields"][i] = planter[1] if planter[3] else ""
+                                with open("./data/user/manualplanters.txt", "w") as f:
+                                    f.write(str(planterData))
+                                f.close()
+                        executedTasks.add(taskId)
+                        return True
+                    else:
+                        planterData = ast.literal_eval(planterDataRaw)
+                        for i in range(3):
+                            cycle = planterData["cycles"][i]
+                            if planterData["planters"][i] and time.time() > planterData["harvestTimes"][i]:
+                                if runTask(macro.collectPlanter, args=(planterData["planters"][i], planterData["fields"][i])):
+                                    planterData["harvestTimes"][i] = ""
+                                    planterData["planters"][i] = ""
+                                    planterData["fields"][i] = ""
+                                    with open("./data/user/manualplanters.txt", "w") as f:
+                                        f.write(str(planterData))
+                                    f.close()
+                                    updateGUI.value = 1
+                        
+                        for i in range(3):
+                            cycle = planterData["cycles"][i]
+                            if planterData["planters"][i]:
+                                continue
+                            nextCycle = goToNextCycle(cycle, i)
+                            if not nextCycle:
+                                continue
+                            
+                            planterToPlace = macro.setdat[f"cycle{nextCycle}_{i+1}_planter"]
+                            otherSlotPlanters = planterData["planters"][:i] + planterData["planters"][i+1:]
+                            if planterToPlace in otherSlotPlanters:
+                                continue
+                            
+                            fieldToPlace = macro.setdat[f"cycle{nextCycle}_{i+1}_field"]
+                            otherSlotFields = planterData["fields"][:i] + planterData["fields"][i+1:]
+                            if fieldToPlace in otherSlotFields:
+                                continue
+                            
+                            planter = runTask(macro.placePlanterInCycle, args = (i, nextCycle),resetAfter=False)
+                            if planter:
+                                planterData["cycles"][i] = nextCycle
+                                planterData["planters"][i] = planter[0]
+                                planterData["fields"][i] = planter[1]
+                                planterData["harvestTimes"][i] = planter[2]
+                                planterData["gatherFields"][i] = planter[1] if planter[3] else ""
+                                with open("./data/user/manualplanters.txt", "w") as f:
+                                    f.write(str(planterData))
+                                f.close()
+                                updateGUI.value = 1
+                        executedTasks.add(taskId)
+                        return True
+                
+                # Auto planters
+                elif macro.setdat["planters_mode"] == 2:
+                    with open("./data/user/auto_planters.json", "r") as f:
+                        data = json.load(f)
+                        planterData = data["planters"]
+                        nectarLastFields = data["nectar_last_field"]
+                    f.close()
+
+                    def saveAutoPlanterData():
+                        data = {
+                            "planters": planterData,
+                            "nectar_last_field": nectarLastFields,
+                        }
+                        with open("./data/user/auto_planters.json", "w") as f:
+                            json.dump(data, f, indent=3)
                         f.close()
                         updateGUI.value = 1
-
-        #auto planters
-        elif macro.setdat["planters_mode"] == 2:
-            with open("./data/user/auto_planters.json", "r") as f:
-                data = json.load(f)
-                planterData = data["planters"]
-                nectarLastFields = data["nectar_last_field"]
-            f.close()
-
-            def saveAutoPlanterData():
-                data = {
-                    "planters": planterData,
-                    "nectar_last_field": nectarLastFields,
-                }
-                with open("./data/user/auto_planters.json", "w") as f:
-                    json.dump(data, f, indent=3)
-                f.close()
-                updateGUI.value = 1
-            
-            def getCurrentNectarPercent(nectar):
-                #get the current nectar from the buffs area
-                res = macro.buffDetector.getNectar(nectar)
-                print(f"Current {nectar} Nectar: {res}%")
-                return res
-            
-            def getEstimateNectarPercent(nectar):
-                #get the estimate nectar from growing planters
-                estimatedNectarPercent = 0
-                for i in range(3):
-                    if planterData[i]["nectar"] == nectar:
-                        estimatedNectarPercent += planterData[i]["nectar_est_percent"]
-                return estimatedNectarPercent
-            
-            def getTotalNectarPercent(nectar):
-                #get current + estimate nectar:
-                return getCurrentNectarPercent(nectar) + getEstimateNectarPercent(nectar)
-
-            def getNextField(nectar):
-                #get the next field for that nectar
-                availableFields = []
-                occupiedFields = [planter["field"] for planter in planterData]
-                for field in macroModule.nectarFields[nectar]:
-                    if macro.setdat[f"auto_field_{field.replace(' ','_')}"] and not field in occupiedFields:
-                        availableFields.append(field)
-                if not availableFields:
-                    return None
-                #get the next field to plant in
-                for i, field in enumerate(availableFields):
-                    if field == nectarLastFields[nectar]:
-                        nextFieldIndex = i+1
-                        if nextFieldIndex >= len(availableFields):
-                            nextFieldIndex = 0
-                        return availableFields[nextFieldIndex]
-                #couldnt find the previous field in the available fields
-                return availableFields[1] if len(availableFields) > 1 else availableFields[0]
-            
-            def getBestPlanter(field):
-                #return the planter obj for the best planter in the specified field
-                bestPlanterObj = None
-                occupiedPlanters = [planter["planter"] for planter in planterData]
-                for planterObj in macroModule.autoPlanterRankings[field]:
-                    planter = planterObj["name"]
-                    settingPlanter = planter.replace(" ", "_")
-                    if not planter in occupiedPlanters and macro.setdat[f"auto_planter_{settingPlanter}"]:
-                        bestPlanterObj = planterObj
-                        return bestPlanterObj
-            
-            def savePlacedPlanter(slot, field, planter, nectar):
-                nonlocal planterData, nectarLastFields
-                estimatedNectarPercent = getTotalNectarPercent(nectar)
-
-                for i in range(5):
-                    if macro.setdat[f"auto_priority_{i}_nectar"] == nectar:
-                        minPercent = max(macro.setdat[f"auto_priority_{i}_min"], estimatedNectarPercent)
-                        break
-                
-                if macro.setdat["auto_planters_collect_auto"]:
-                    totalBonus = planter["nectar_bonus"] * planter["grow_bonus"]
-                    #time to get 100% nectar
-                    timeToCap = max(0.25, ((max(0, (100 - estimatedNectarPercent) / planter["nectar_bonus"]) * 0.24) / planter["grow_bonus"]))
-
-                    if totalBonus < 1.2: #bad/inefficient planter, max at 30mins
-                        growTime = min(timeToCap, 0.5)
-                    #haven't reached min percent and current nectar is a low amount
-                    elif minPercent > estimatedNectarPercent and estimatedNectarPercent <=90:
-                        if estimatedNectarPercent > 20:
-                            bonusTime = (100/estimatedNectarPercent)*totalBonus
-                            growTime = (((minPercent - estimatedNectarPercent + bonusTime) / planter["nectar_bonus"]) * 0.24) / planter["grow_bonus"]
-                        #build nectar
-                        elif estimatedNectarPercent > 10:
-                            growTime = min(planter["grow_time"], 4)
-                        else:
-                            growTime = min(planter["grow_time"], 2)
-                    else: #already met minimum percent
-                        growTime = timeToCap
-
-                    finalGrowTime = min(planter["grow_time"], (growTime + growTime/totalBonus), timeToCap + timeToCap/totalBonus)*60*60
-                    planterHarvestTime = time.time() + finalGrowTime
-                elif macro.setdat["auto_planters_collect_full"]:
-                    finalGrowTime = planter["grow_time"]*60*60
-                    planterHarvestTime = time.time() + finalGrowTime
-                else:
-                    finalGrowTime = min(planter["grow_time"], macro.setdat["auto_planters_collect_every"])*60*60
-                    lowestHarvestTime = time.time() + finalGrowTime
-                    #sync harvest times with planters that are currently growing
-                    for i in range(3):
-                        harvestTime = planterData[i]["harvest_time"]
-                        if harvestTime > time.time() and lowestHarvestTime > harvestTime:
-                            lowestHarvestTime = harvestTime
-
-                    planterHarvestTime = lowestHarvestTime
-                    finalGrowTime = lowestHarvestTime - time.time()
-                
-                planterEstPerc = round((finalGrowTime * planter["nectar_bonus"]/864), 1)
-
-                planterData[slot] = {
-                    "planter": planter["name"],
-                    "nectar": nectar,
-                    "field": field,
-                    "harvest_time": planterHarvestTime,
-                    "nectar_est_percent": planterEstPerc
-                }
-                planterReady = time.strftime("%H:%M:%S", time.gmtime(finalGrowTime))
-                macro.logger.webhook("", f"Planter will be ready in: {planterReady}", "light blue")
-                nectarLastFields[nectar] = field
-                saveAutoPlanterData()
-
-
-            
-            planterSlotsToHarvest = []
-            #check if planters should be collected (based on nectar)
-            for i in range(5):
-                nectar = macro.setdat[f"auto_priority_{i}_nectar"]
-                if nectar == "none":
-                    continue
-                currentNectarPerc = getCurrentNectarPercent(nectar)
-                estimateNectarPerc = getEstimateNectarPercent(nectar) 
-                #collect all planters that will overfill nectar
-                if (macro.setdat["auto_planters_collect_auto"] and (
-                    (currentNectarPerc > 99) or
-                    (currentNectarPerc > 90 and currentNectarPerc + estimateNectarPerc > 110) or
-                    (currentNectarPerc + estimateNectarPerc > 120)
-                    )):
-                    for j in range(3):
-                        if (nectar == planterData[j]["nectar"]):
-                            planterSlotsToHarvest.append(j)
-            
-            #check if planters should be collected (based on harvest time)
-            for i in range(3):
-                planter = planterData[i]
-                if planter["planter"] and time.time() > planter["harvest_time"]:
-                    planterSlotsToHarvest.append(i)
-            
-            #harvest planters
-            planterSlotsToHarvest = list(set(planterSlotsToHarvest))
-            for slot in planterSlotsToHarvest:
-                planter = planterData[slot]
-                if runTask(macro.collectPlanter, args=(planter["planter"], planter["field"])):
-                    planterData[slot] = {
-                        "planter": "",
-                        "nectar": "",
-                        "field": "",
-                        "harvest_time": 0,
-                        "nectar_est_percent": 0
-                    }
-                    saveAutoPlanterData()
-            
-            #determine max number of planters
-            #sanity check in case the user sets max planters to a value higher than the actual number of planters enabled
-            maxAllowedPlanters = 0
-            for x in macroModule.allPlanters:
-                x = x.replace(" ","_")
-                if macro.setdat[f"auto_planter_{x}"]:
-                    maxAllowedPlanters += 1
-            maxAllowedPlanters = min(maxAllowedPlanters, macro.setdat["auto_max_planters"])
-
-            #determine how many planters are currently placed
-            plantersPlaced = sum(bool(p["planter"]) for p in planterData)
-
-            #1. place planters to meet nectar priority
-            for i in range(5):
-                if plantersPlaced >= maxAllowedPlanters:
-                    break
-                nectar = macro.setdat[f"auto_priority_{i}_nectar"]
-                #place planters until all slots are maxed or nectar priority is met
-                for j in range(3):
-                    planter = planterData[j]
-                    if planter["planter"]:
-                        continue
-
-                    nextField = getNextField(nectar)
-                    if nextField is None:
-                        break
-
-                    minPerc = macro.setdat[f"auto_priority_{i}_min"]
-                    totalNectarPercent = getTotalNectarPercent(nectar)
-                    if totalNectarPercent > minPerc:
-                        break
-
-                    #place planter
-                    planterToPlace = getBestPlanter(nextField)
-                    if planterToPlace is None:
-                        break
-                    if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False):
-                        savePlacedPlanter(j, nextField, planterToPlace, nectar)
-                        plantersPlaced += 1
-            
-            #2. leftover planters, prioritise lowest nectar percentage
-            if plantersPlaced < maxAllowedPlanters:
-                nectarPercentages = []
-                for nectar in macroModule.nectarFields:
-                    nectarPercentages.append((nectar, getTotalNectarPercent(nectar)))
-                nectarPercentages.sort(key=lambda x: x[1])
-
-                for nectar, totalNectarPercent in nectarPercentages:
-                    if plantersPlaced >= maxAllowedPlanters:
-                        break
-                    #place planters until all slots are maxed or nectar is maxed
-                    for j in range(3):
-                        planter = planterData[j]
-                        if planter["planter"]:
-                            continue
-
-                        nextField = getNextField(nectar)
-                        if nextField is None:
-                            break
-
-                        if totalNectarPercent > 110:
-                            break
-
-                        #place planter
-                        planterToPlace = getBestPlanter(nextField)
-                        if planterToPlace is None:
-                            break
-                        if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False):
-                            savePlacedPlanter(j, nextField, planterToPlace, nectar)
-                            plantersPlaced += 1
-            
-            #3. all nectars are maxed, just place in priority
-            if plantersPlaced < maxAllowedPlanters:
-                for i in range(5):
-                    if plantersPlaced >= maxAllowedPlanters:
-                        break
-                    nectar = macro.setdat[f"auto_priority_{i}_nectar"]
-                    #place planters until all slots are maxed or nectar priority is met
-                    for j in range(3):
-                        planter = planterData[j]
-                        if planter["planter"]:
-                            continue
-
-                        nextField = getNextField(nectar)
-                        if nextField is None:
-                            break
-
-                        #place planter
-                        planterToPlace = getBestPlanter(nextField)
-                        if planterToPlace is None:
-                            break
-                        if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False):
-                            savePlacedPlanter(j, nextField, planterToPlace, nectar)
-                            plantersPlaced += 1
                     
-                 
-        #mob run
-        for mob, fields in regularMobData.items():
-            if not macro.setdat[mob]: continue
-            for f in fields:
-                if macro.hasMobRespawned(mob, f):
-                    runTask(macro.killMob, args=(mob, f,), convertAfter=False)
-        #ant challenge
-        if macro.setdat["ant_challenge"]: 
-            runTask(macro.antChallenge)
+                    def getCurrentNectarPercent(nectar):
+                        res = macro.buffDetector.getNectar(nectar)
+                        print(f"Current {nectar} Nectar: {res}%")
+                        return res
+                    
+                    def getEstimateNectarPercent(nectar):
+                        estimatedNectarPercent = 0
+                        for i in range(3):
+                            if planterData[i]["nectar"] == nectar:
+                                estimatedNectarPercent += planterData[i]["nectar_est_percent"]
+                        return estimatedNectarPercent
+                    
+                    def getTotalNectarPercent(nectar):
+                        return getCurrentNectarPercent(nectar) + getEstimateNectarPercent(nectar)
 
-        #coconut crab
-        if macro.setdat["coconut_crab"] and macro.hasRespawned("coconut_crab", 36*60*60, applyMobRespawnBonus=True):
-            macro.coconutCrab()
+                    def getNextField(nectar):
+                        availableFields = []
+                        occupiedFields = [planter["field"] for planter in planterData]
+                        for field in macroModule.nectarFields[nectar]:
+                            if macro.setdat[f"auto_field_{field.replace(' ','_')}"] and not field in occupiedFields:
+                                availableFields.append(field)
+                        if not availableFields:
+                            return None
+                        for i, field in enumerate(availableFields):
+                            if field == nectarLastFields[nectar]:
+                                nextFieldIndex = i+1
+                                if nextFieldIndex >= len(availableFields):
+                                    nextFieldIndex = 0
+                                return availableFields[nextFieldIndex]
+                        return availableFields[1] if len(availableFields) > 1 else availableFields[0]
+                    
+                    def getBestPlanter(field):
+                        bestPlanterObj = None
+                        occupiedPlanters = [planter["planter"] for planter in planterData]
+                        for planterObj in macroModule.autoPlanterRankings[field]:
+                            planter = planterObj["name"]
+                            settingPlanter = planter.replace(" ", "_")
+                            if not planter in occupiedPlanters and macro.setdat[f"auto_planter_{settingPlanter}"]:
+                                bestPlanterObj = planterObj
+                                return bestPlanterObj
+                    
+                    def savePlacedPlanter(slot, field, planter, nectar):
+                        nonlocal planterData, nectarLastFields
+                        estimatedNectarPercent = getTotalNectarPercent(nectar)
+
+                        for i in range(5):
+                            if macro.setdat[f"auto_priority_{i}_nectar"] == nectar:
+                                minPercent = max(macro.setdat[f"auto_priority_{i}_min"], estimatedNectarPercent)
+                                break
+                        
+                        if macro.setdat["auto_planters_collect_auto"]:
+                            totalBonus = planter["nectar_bonus"] * planter["grow_bonus"]
+                            timeToCap = max(0.25, ((max(0, (100 - estimatedNectarPercent) / planter["nectar_bonus"]) * 0.24) / planter["grow_bonus"]))
+
+                            if totalBonus < 1.2:
+                                growTime = min(timeToCap, 0.5)
+                            elif minPercent > estimatedNectarPercent and estimatedNectarPercent <=90:
+                                if estimatedNectarPercent > 20:
+                                    bonusTime = (100/estimatedNectarPercent)*totalBonus
+                                    growTime = (((minPercent - estimatedNectarPercent + bonusTime) / planter["nectar_bonus"]) * 0.24) / planter["grow_bonus"]
+                                elif estimatedNectarPercent > 10:
+                                    growTime = min(planter["grow_time"], 4)
+                                else:
+                                    growTime = min(planter["grow_time"], 2)
+                            else:
+                                growTime = timeToCap
+
+                            finalGrowTime = min(planter["grow_time"], (growTime + growTime/totalBonus), timeToCap + timeToCap/totalBonus)*60*60
+                            planterHarvestTime = time.time() + finalGrowTime
+                        elif macro.setdat["auto_planters_collect_full"]:
+                            finalGrowTime = planter["grow_time"]*60*60
+                            planterHarvestTime = time.time() + finalGrowTime
+                        else:
+                            finalGrowTime = min(planter["grow_time"], macro.setdat["auto_planters_collect_every"])*60*60
+                            lowestHarvestTime = time.time() + finalGrowTime
+                            for i in range(3):
+                                harvestTime = planterData[i]["harvest_time"]
+                                if harvestTime > time.time() and lowestHarvestTime > harvestTime:
+                                    lowestHarvestTime = harvestTime
+
+                            planterHarvestTime = lowestHarvestTime
+                            finalGrowTime = lowestHarvestTime - time.time()
+                        
+                        planterEstPerc = round((finalGrowTime * planter["nectar_bonus"]/864), 1)
+
+                        planterData[slot] = {
+                            "planter": planter["name"],
+                            "nectar": nectar,
+                            "field": field,
+                            "harvest_time": planterHarvestTime,
+                            "nectar_est_percent": planterEstPerc
+                        }
+                        planterReady = time.strftime("%H:%M:%S", time.gmtime(finalGrowTime))
+                        macro.logger.webhook("", f"Planter will be ready in: {planterReady}", "light blue")
+                        nectarLastFields[nectar] = field
+                        saveAutoPlanterData()
+
+                    planterSlotsToHarvest = []
+                    for i in range(5):
+                        nectar = macro.setdat[f"auto_priority_{i}_nectar"]
+                        if nectar == "none":
+                            continue
+                        currentNectarPerc = getCurrentNectarPercent(nectar)
+                        estimateNectarPerc = getEstimateNectarPercent(nectar) 
+                        if (macro.setdat["auto_planters_collect_auto"] and (
+                            (currentNectarPerc > 99) or
+                            (currentNectarPerc > 90 and currentNectarPerc + estimateNectarPerc > 110) or
+                            (currentNectarPerc + estimateNectarPerc > 120)
+                            )):
+                            for j in range(3):
+                                if (nectar == planterData[j]["nectar"]):
+                                    planterSlotsToHarvest.append(j)
+                    
+                    for i in range(3):
+                        planter = planterData[i]
+                        if planter["planter"] and time.time() > planter["harvest_time"]:
+                            planterSlotsToHarvest.append(i)
+                    
+                    planterSlotsToHarvest = list(set(planterSlotsToHarvest))
+                    for slot in planterSlotsToHarvest:
+                        planter = planterData[slot]
+                        if runTask(macro.collectPlanter, args=(planter["planter"], planter["field"])):
+                            planterData[slot] = {
+                                "planter": "",
+                                "nectar": "",
+                                "field": "",
+                                "harvest_time": 0,
+                                "nectar_est_percent": 0
+                            }
+                            saveAutoPlanterData()
+                    
+                    maxAllowedPlanters = 0
+                    for x in macroModule.allPlanters:
+                        x = x.replace(" ","_")
+                        if macro.setdat[f"auto_planter_{x}"]:
+                            maxAllowedPlanters += 1
+                    maxAllowedPlanters = min(maxAllowedPlanters, macro.setdat["auto_max_planters"])
+
+                    plantersPlaced = sum(bool(p["planter"]) for p in planterData)
+
+                    for i in range(5):
+                        if plantersPlaced >= maxAllowedPlanters:
+                            break
+                        nectar = macro.setdat[f"auto_priority_{i}_nectar"]
+                        for j in range(3):
+                            planter = planterData[j]
+                            if planter["planter"]:
+                                continue
+
+                            nextField = getNextField(nectar)
+                            if nextField is None:
+                                break
+
+                            minPerc = macro.setdat[f"auto_priority_{i}_min"]
+                            totalNectarPercent = getTotalNectarPercent(nectar)
+                            if totalNectarPercent > minPerc:
+                                break
+
+                            planterToPlace = getBestPlanter(nextField)
+                            if planterToPlace is None:
+                                break
+                            if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False):
+                                savePlacedPlanter(j, nextField, planterToPlace, nectar)
+                                plantersPlaced += 1
+                    
+                    if plantersPlaced < maxAllowedPlanters:
+                        nectarPercentages = []
+                        for nectar in macroModule.nectarFields:
+                            nectarPercentages.append((nectar, getTotalNectarPercent(nectar)))
+                        nectarPercentages.sort(key=lambda x: x[1])
+
+                        for nectar, totalNectarPercent in nectarPercentages:
+                            if plantersPlaced >= maxAllowedPlanters:
+                                break
+                            for j in range(3):
+                                planter = planterData[j]
+                                if planter["planter"]:
+                                    continue
+
+                                nextField = getNextField(nectar)
+                                if nextField is None:
+                                    break
+
+                                if totalNectarPercent > 110:
+                                    break
+
+                                planterToPlace = getBestPlanter(nextField)
+                                if planterToPlace is None:
+                                    break
+                                if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False):
+                                    savePlacedPlanter(j, nextField, planterToPlace, nectar)
+                                    plantersPlaced += 1
+                    
+                    if plantersPlaced < maxAllowedPlanters:
+                        for i in range(5):
+                            if plantersPlaced >= maxAllowedPlanters:
+                                break
+                            nectar = macro.setdat[f"auto_priority_{i}_nectar"]
+                            for j in range(3):
+                                planter = planterData[j]
+                                if planter["planter"]:
+                                    continue
+
+                                nextField = getNextField(nectar)
+                                if nextField is None:
+                                    break
+
+                                planterToPlace = getBestPlanter(nextField)
+                                if planterToPlace is None:
+                                    break
+                                if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False):
+                                    savePlacedPlanter(j, nextField, planterToPlace, nectar)
+                                    plantersPlaced += 1
+                    
+                    executedTasks.add(taskId)
+                    return True
+                
+                return False
             
-        #stump snail
-        if macro.setdat["stump_snail"] and macro.hasRespawned("stump_snail", 96*60*60, applyMobRespawnBonus=True):
-            runTask(macro.stumpSnail)
+            if taskId == "ant_challenge":
+                if macro.setdat["ant_challenge"]:
+                    runTask(macro.antChallenge)
+                    executedTasks.add(taskId)
+                    return True
+                return False
+            
+            # Special priority tasks (stinger_hunt, mondo_buff, auto_field_boost) are handled after each task
+            if taskId in ["stinger_hunt", "mondo_buff", "auto_field_boost"]:
+                # These are handled in runTask's priority tasks section
+                executedTasks.add(taskId)
+                return False
+            
+            return False
         
-        #sticker stack
-        if macro.setdat["sticker_stack"]:
-            with open("./data/user/sticker_stack.txt", "r") as f:
-                stickerStackCD = int(f.read())
-            f.close()
-            if macro.hasRespawned("sticker_stack", stickerStackCD):
-                runTask(macro.collect, args=("sticker_stack",))
-        #field boosters
-        boostedGatherFields = []
-        for k, _ in macroModule.fieldBoosterData.items():
-            #check if the cooldown is up
-            if macro.setdat[k] and macro.hasRespawned(k, macro.collectCooldowns[k]) and macro.hasRespawned("last_booster", macro.setdat["boost_seperate"]*60):
-                boostedField = runTask(macro.collect, args=(k,))
-                if macro.setdat["gather_boosted"] and boostedField:
-                    boostedGatherFields.append(boostedField)
-
-        allGatheredFields = []
-        allGatheredFields.extend(boostedGatherFields)
-        #gather in boosted fields
-        #gather for the entire 15min duration
-        for field in boostedGatherFields:
-            st = time.time()
-            while time.time() - st < 15*60:
-                # Check if paused
-                while run.value == 5:
-                    if not was_paused:
-                        # Send webhook message when first entering pause state
-                        macro.logger.webhook("", "Macro is paused", "orange")
-                        was_paused = True
-                    time.sleep(1)  # Wait while paused
-                runTask(macro.gather, args=(field,), resetAfter=False)
-
-        #add gather tab fields
-        gatherFields = []
-        for i in range(3):
-            if macro.setdat["fields_enabled"][i]:
-                gatherFields.append(macro.setdat["fields"][i])
-        
-        #add planter gather fields
-        if planterDataRaw:
-            planterGatherFields = [x for x in ast.literal_eval(planterDataRaw)["gatherFields"] if x]
+        # Execute tasks in priority order
+        if priorityOrder and len(priorityOrder) > 0:
+            for taskId in priorityOrder:
+                executeTask(taskId)
         else:
-            planterGatherFields = []
-        gatherFields.extend([x for x in planterGatherFields if x not in gatherFields])
+            # Fallback to old order if no priority order is set
+            #collect
+            for k, _ in macroModule.collectData.items():
+                if macro.setdat[k] and macro.hasRespawned(k, macro.collectCooldowns[k]):
+                    runTask(macro.collect, args=(k,))
 
-        #remove fields that are already in boosted fields
-        gatherFields = [x for x in gatherFields if not x in boostedGatherFields]
+            if macro.setdat["sticker_printer"] and macro.hasRespawned("sticker_printer", macro.collectCooldowns["sticker_printer"]):
+                runTask(macro.collectStickerPrinter)
+            
+            #blender
+            if macro.setdat["blender_enable"]:
+                with open("./data/user/blender.txt", "r") as f:
+                    blenderData = ast.literal_eval(f.read())
+                f.close()
+                if blenderData["collectTime"] > -1 and time.time() > blenderData["collectTime"]:
+                    runTask(macro.blender, args=(blenderData,))
 
-        allGatheredFields.extend(gatherFields)
-        
-        for field in gatherFields:
-            runTask(macro.gather, args=(field,), resetAfter=False)
-
-        #do quests
-
+        # Handle quest gather fields and required fields that weren't executed in priority order
+        # These need to be handled separately as they depend on quest requirements
         blueFields = ["blue flower", "bamboo", "pine tree", "stump"]
         redFields = ["mushroom", "strawberry", "rose", "pepper"]
-
-        #setup the override
+        
+        # Setup quest gather overrides
         questGatherOverrides = {}
         if macro.setdat["quest_gather_mins"]:
             questGatherOverrides["mins"] = macro.setdat["quest_gather_mins"]
         if macro.setdat["quest_gather_return"] != "no override":
             questGatherOverrides["return"] = macro.setdat["quest_gather_return"]
-            
-
-        #do goo-field gathers first
+        
+        # Track all gathered fields to avoid duplicates
+        allGatheredFields = []
+        
+        # Handle gumdrop gather fields first
         if blueGumdropFieldNeeded:
             for f in blueFields:
                 if f in questGumdropGatherFields:
@@ -890,17 +839,17 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                 questGumdropGatherFields.append("rose")
 
         for field in questGumdropGatherFields:
-            runTask(macro.gather, args=(field, questGatherOverrides, True), resetAfter=False)
-        allGatheredFields.extend(questGumdropGatherFields)
+            if field not in allGatheredFields:
+                runTask(macro.gather, args=(field, questGatherOverrides, True), resetAfter=False)
+                allGatheredFields.append(field)
 
-
-        #do regular gathers
+        # Handle regular quest gather fields
         questGatherFields = [x for x in questGatherFields if not (x in allGatheredFields)]
         for field in questGatherFields:
             runTask(macro.gather, args=(field, questGatherOverrides), resetAfter=False)
-        allGatheredFields.extend(questGatherFields)
+            allGatheredFields.append(field)
 
-        #do required blue/red fields
+        # Handle required blue/red fields for quests
         if blueFieldNeeded:
             for f in blueFields:
                 if f in allGatheredFields:
@@ -922,9 +871,20 @@ def macro(status, logQueue, updateGUI, run, skipTask):
         if fieldNeeded and not allGatheredFields:
             runTask(macro.gather, args=("pine tree",), resetAfter=False)
         
+        # Handle planter gather fields (if not already gathered)
+        if planterDataRaw:
+            try:
+                planterGatherFields = [x for x in ast.literal_eval(planterDataRaw)["gatherFields"] if x]
+                for field in planterGatherFields:
+                    if field not in allGatheredFields:
+                        runTask(macro.gather, args=(field,), resetAfter=False)
+                        allGatheredFields.append(field)
+            except:
+                pass
+        
+        # Old code removed - all tasks now execute via priority order
+        
         mouse.click()
-        
-        
 
 
 def watch_for_hotkeys(run):
