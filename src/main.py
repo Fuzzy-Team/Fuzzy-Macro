@@ -728,8 +728,8 @@ def macro(status, logQueue, updateGUI, run, skipTask):
 
                     #place planter
                     planterToPlace = getBestPlanter(nextField)
-					if planterToPlace is None:
-							break
+                    if planterToPlace is None:
+                        break
                     if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False):
                         savePlacedPlanter(j, nextField, planterToPlace, nectar)
                         plantersPlaced += 1
@@ -759,8 +759,8 @@ def macro(status, logQueue, updateGUI, run, skipTask):
 
                         #place planter
                         planterToPlace = getBestPlanter(nextField)
-						if planterToPlace is None:
-							break
+                        if planterToPlace is None:
+                            break
                         if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False):
                             savePlacedPlanter(j, nextField, planterToPlace, nectar)
                             plantersPlaced += 1
@@ -783,8 +783,8 @@ def macro(status, logQueue, updateGUI, run, skipTask):
 
                         #place planter
                         planterToPlace = getBestPlanter(nextField)
-						if planterToPlace is None:
-							break
+                        if planterToPlace is None:
+                            break
                         if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False):
                             savePlacedPlanter(j, nextField, planterToPlace, nectar)
                             plantersPlaced += 1
