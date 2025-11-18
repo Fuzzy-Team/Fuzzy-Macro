@@ -174,64 +174,246 @@ async function loadTasks() {
     return;
   }
 
-  //load quest givers
-  for (const [k, v] of Object.entries(questGiverEmojis)) {
-    if (!setdat[k]) continue;
-    out += taskHTML(
-      "Quest",
-      `${v} ${toTitleCase(k.replaceAll("quest", "").replaceAll("_", " "))}`
-    );
+  // Get priority order from settings, or use default order if not set
+  const priorityOrder = setdat.task_priority_order || [];
+
+  // Helper function to check if a task is enabled and get its display info
+  function getTaskDisplayInfo(taskId) {
+    if (taskId.startsWith("gather_")) {
+      const fieldName = taskId.replace("gather_", "").replace("_", " ");
+      // Check if this field is enabled
+      for (let i = 0; i < 3; i++) {
+        if (setdat.fields_enabled[i] && setdat.fields[i] === fieldName) {
+          const emoji = fieldEmojis[fieldName.replaceAll(" ", "_")] || "";
+          return {
+            enabled: true,
+            title: `Gather ${i + 1}`,
+            desc: `${emoji} ${fieldName}`,
+          };
+        }
+      }
+      return { enabled: false };
+    }
+
+    if (taskId.startsWith("collect_")) {
+      const collectName = taskId.replace("collect_", "");
+
+      // Handle special cases
+      if (collectName === "sticker_printer") {
+        if (!setdat.sticker_printer) return { enabled: false };
+        return {
+          enabled: true,
+          title: "Collect",
+          desc: `${collectEmojis.sticker_printer || ""} ${toTitleCase(
+            "sticker printer"
+          )}`,
+        };
+      }
+
+      if (collectName === "sticker_stack") {
+        if (!setdat.sticker_stack) return { enabled: false };
+        return {
+          enabled: true,
+          title: "Collect Buff",
+          desc: toImgArray(stickerStackIcon).join("<br>"),
+        };
+      }
+
+      // Regular collect items
+      if (!setdat[collectName]) return { enabled: false };
+      const emoji = collectEmojis[collectName] || "";
+      return {
+        enabled: true,
+        title: "Collect",
+        desc: `${emoji} ${toTitleCase(collectName.replaceAll("_", " "))}`,
+      };
+    }
+
+    if (taskId.startsWith("kill_")) {
+      const mob = taskId.replace("kill_", "");
+      // Check if this mob is enabled
+      if (!setdat[mob]) return { enabled: false };
+      const displayName = mob === "rhinobeetle" ? "rhino beetle" : mob;
+      const emoji = killEmojis[mob] || "";
+      return {
+        enabled: true,
+        title: "Kill",
+        desc: `${emoji} ${toTitleCase(displayName.replaceAll("_", " "))}`,
+      };
+    }
+
+    if (taskId.startsWith("quest_")) {
+      const questName = taskId.replace("quest_", "");
+      const questKey = `${questName}_quest`;
+      if (!setdat[questKey]) return { enabled: false };
+      const emoji = questGiverEmojis[questKey] || "";
+      return {
+        enabled: true,
+        title: "Quest",
+        desc: `${emoji} ${toTitleCase(questName.replaceAll("_", " "))}`,
+      };
+    }
+
+    // Special tasks
+    if (taskId === "blender") {
+      if (!setdat.blender_enable) return { enabled: false };
+      const selectedBlenderItems = {};
+      for (let i = 1; i < 4; i++) {
+        const item = setdat[`blender_item_${i}`]?.replaceAll(" ", "_");
+        if (item == "none" || !item) continue;
+        selectedBlenderItems[toTitleCase(item.replaceAll("_", " "))] =
+          blenderIcons[item];
+      }
+      return {
+        enabled: true,
+        title: "Blender",
+        desc: toImgArray(selectedBlenderItems).join("<br>"),
+      };
+    }
+
+    if (taskId === "planters") {
+      if (!setdat.planters_mode) return { enabled: false };
+      const type = setdat.planters_mode == 1 ? "Manual" : "Auto";
+      return {
+        enabled: true,
+        title: "Planters",
+        desc: type,
+      };
+    }
+
+    if (taskId === "mondo_buff") {
+      if (!setdat.mondo_buff) return { enabled: false };
+      return {
+        enabled: true,
+        title: "Collect",
+        desc: `${collectEmojis.mondo_buff || ""} ${toTitleCase("mondo buff")}`,
+      };
+    }
+
+    if (taskId === "stinger_hunt") {
+      if (!setdat.stinger_hunt) return { enabled: false };
+      return {
+        enabled: true,
+        title: "Kill",
+        desc: `${killEmojis.stinger_hunt || ""} ${toTitleCase("stinger hunt")}`,
+      };
+    }
+
+    if (taskId === "auto_field_boost") {
+      if (!setdat.Auto_Field_Boost) return { enabled: false };
+      return {
+        enabled: true,
+        title: "Collect Buff",
+        desc: `${collectEmojis.Auto_Field_Boost || ""} ${toTitleCase(
+          "auto field boost"
+        )}`,
+      };
+    }
+
+    if (taskId === "ant_challenge") {
+      if (!setdat.ant_challenge) return { enabled: false };
+      return {
+        enabled: true,
+        title: "Kill",
+        desc: `${killEmojis.ant_challenge || ""} ${toTitleCase(
+          "ant challenge"
+        )}`,
+      };
+    }
+
+    // Field boosters (blue_booster, red_booster, mountain_booster)
+    if (
+      taskId === "collect_blue_booster" ||
+      taskId === "collect_red_booster" ||
+      taskId === "collect_mountain_booster"
+    ) {
+      const boosterName = taskId.replace("collect_", "");
+      if (!setdat[boosterName]) return { enabled: false };
+      const emoji = fieldBoosterEmojis[boosterName] || "";
+      return {
+        enabled: true,
+        title: "Collect Buff",
+        desc: `${emoji} ${toTitleCase(boosterName.replaceAll("_", " "))}`,
+      };
+    }
+
+    return { enabled: false };
   }
 
-  //load collect
-  for (const [k, v] of Object.entries(collectEmojis)) {
-    if (!setdat[k]) continue;
-    out += taskHTML("Collect", `${v} ${toTitleCase(k.replaceAll("_", " "))}`);
-  }
-  //blender
-  if (setdat["blender_enable"]) {
-    const selectedBlenderItems = {};
-    for (let i = 1; i < 4; i++) {
-      const item = setdat[`blender_item_${i}`].replaceAll(" ", "_");
-      if (item == "none") continue;
-      selectedBlenderItems[toTitleCase(item.replaceAll("_", " "))] =
-        blenderIcons[item];
+  // If priority order exists, use it; otherwise fall back to old order
+  if (priorityOrder && priorityOrder.length > 0) {
+    // Display tasks in priority order
+    for (const taskId of priorityOrder) {
+      const taskInfo = getTaskDisplayInfo(taskId);
+      if (taskInfo.enabled) {
+        out += taskHTML(taskInfo.title, taskInfo.desc);
+      }
     }
-    out += taskHTML("Blender", toImgArray(selectedBlenderItems).join("<br>"));
+  } else {
+    // Fallback to old order if no priority order is set
+    //load quest givers
+    for (const [k, v] of Object.entries(questGiverEmojis)) {
+      if (!setdat[k]) continue;
+      out += taskHTML(
+        "Quest",
+        `${v} ${toTitleCase(k.replaceAll("quest", "").replaceAll("_", " "))}`
+      );
+    }
+
+    //load collect
+    for (const [k, v] of Object.entries(collectEmojis)) {
+      if (!setdat[k]) continue;
+      out += taskHTML("Collect", `${v} ${toTitleCase(k.replaceAll("_", " "))}`);
+    }
+    //blender
+    if (setdat["blender_enable"]) {
+      const selectedBlenderItems = {};
+      for (let i = 1; i < 4; i++) {
+        const item = setdat[`blender_item_${i}`].replaceAll(" ", "_");
+        if (item == "none") continue;
+        selectedBlenderItems[toTitleCase(item.replaceAll("_", " "))] =
+          blenderIcons[item];
+      }
+      out += taskHTML("Blender", toImgArray(selectedBlenderItems).join("<br>"));
+    }
+    //planters
+    if (setdat["planters_mode"]) {
+      const type = setdat["planters_mode"] == 1 ? "Manual" : "Auto";
+      out += taskHTML("Planters", type);
+    }
+    //load kill
+    for (let [k, v] of Object.entries(killEmojis)) {
+      if (!setdat[k]) continue;
+      if (k == "rhinobeetle") k = "rhino beetle";
+      out += taskHTML("Kill", `${v} ${toTitleCase(k.replaceAll("_", " "))}`);
+    }
+    //load field boosters
+    for (const [k, v] of Object.entries(fieldBoosterEmojis)) {
+      if (!setdat[k]) continue;
+      out += taskHTML(
+        "Collect Buff",
+        `${v} ${toTitleCase(k.replaceAll("_", " "))}`
+      );
+    }
+    //load sticker stack
+    for (const [k, v] of Object.entries(stickerStackIcon)) {
+      if (!setdat[k]) continue;
+      out += taskHTML(
+        "Collect Buff",
+        toImgArray(stickerStackIcon).join("<br>")
+      );
+    }
+    //load the gather
+    for (let i = 0; i <= setdat.fields_enabled.length; i++) {
+      if (!setdat.fields_enabled[i]) continue;
+      const field = setdat.fields[i];
+      out += taskHTML(
+        `Gather ${i + 1}`,
+        `${fieldEmojis[field.replaceAll(" ", "_")]} ${field}`
+      );
+    }
   }
-  //planters
-  if (setdat["planters_mode"]) {
-    const type = setdat["planters_mode"] == 1 ? "Manual" : "Auto";
-    out += taskHTML("Planters", type);
-  }
-  //load kill
-  for (let [k, v] of Object.entries(killEmojis)) {
-    if (!setdat[k]) continue;
-    if (k == "rhinobeetle") k = "rhino beetle";
-    out += taskHTML("Kill", `${v} ${toTitleCase(k.replaceAll("_", " "))}`);
-  }
-  //load field boosters
-  for (const [k, v] of Object.entries(fieldBoosterEmojis)) {
-    if (!setdat[k]) continue;
-    out += taskHTML(
-      "Collect Buff",
-      `${v} ${toTitleCase(k.replaceAll("_", " "))}`
-    );
-  }
-  //load sticker stack
-  for (const [k, v] of Object.entries(stickerStackIcon)) {
-    if (!setdat[k]) continue;
-    out += taskHTML("Collect Buff", toImgArray(stickerStackIcon).join("<br>"));
-  }
-  //load the gather
-  for (let i = 0; i <= setdat.fields_enabled.length; i++) {
-    if (!setdat.fields_enabled[i]) continue;
-    const field = setdat.fields[i];
-    out += taskHTML(
-      `Gather ${i + 1}`,
-      `${fieldEmojis[field.replaceAll(" ", "_")]} ${field}`
-    );
-  }
+
   //display the tasks
   document.getElementById("task-list").innerHTML = out;
 

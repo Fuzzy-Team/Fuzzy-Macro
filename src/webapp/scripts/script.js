@@ -87,6 +87,129 @@ function generateSettingObject(properties) {
   return out;
 }
 
+function loadDragListOrder(dragListElement, orderArray) {
+  if (!orderArray || !Array.isArray(orderArray)) return;
+
+  const container = dragListElement.querySelector(".drag-list-container");
+  if (!container) return;
+
+  // Clear existing items
+  container.innerHTML = "";
+
+  // Helper function to get category
+  function getCategory(taskId) {
+    if (taskId.startsWith("gather_")) return "gather";
+    if (taskId.startsWith("collect_")) return "collect";
+    if (taskId.startsWith("kill_")) return "kill";
+    if (taskId.startsWith("quest_")) return "quest";
+    return "special";
+  }
+
+  // Helper function to get category badge
+  function getCategoryBadge(category) {
+    const badges = {
+      gather: "GATHER",
+      collect: "COLLECT",
+      kill: "KILL",
+      quest: "QUEST",
+      special: "SPECIAL",
+    };
+    return badges[category] || "";
+  }
+
+  // Create items in the specified order
+  orderArray.forEach((taskId) => {
+    let taskName = taskId; // Default to taskId if not found in map
+
+    // Convert task ID to display name
+    const displayNames = {
+      gather_pine_tree: "Gather: Pine Tree",
+      gather_sunflower: "Gather: Sunflower",
+      gather_dandelion: "Gather: Dandelion",
+      gather_mushroom: "Gather: Mushroom",
+      gather_blue_flower: "Gather: Blue Flower",
+      gather_clover: "Gather: Clover",
+      gather_strawberry: "Gather: Strawberry",
+      gather_spider: "Gather: Spider",
+      gather_bamboo: "Gather: Bamboo",
+      gather_cactus: "Gather: Cactus",
+      gather_rose: "Gather: Rose",
+      gather_pineapple: "Gather: Pineapple",
+      gather_pumpkin: "Gather: Pumpkin",
+      gather_coconut: "Gather: Coconut",
+      gather_pepper: "Gather: Pepper",
+      gather_mountain_top: "Gather: Mountain Top",
+      gather_stump: "Gather: Stump",
+      collect_wealth_clock: "Collect: Wealth Clock",
+      collect_blueberry_dispenser: "Collect: Blueberry Dispenser",
+      collect_strawberry_dispenser: "Collect: Strawberry Dispenser",
+      collect_coconut_dispenser: "Collect: Coconut Dispenser",
+      collect_royal_jelly_dispenser: "Collect: Royal Jelly Dispenser",
+      collect_treat_dispenser: "Collect: Treat Dispenser",
+      collect_ant_pass_dispenser: "Collect: Ant Pass Dispenser",
+      collect_glue_dispenser: "Collect: Glue Dispenser",
+      collect_stockings: "Collect: Stockings",
+      collect_wreath: "Collect: Wreath",
+      collect_feast: "Collect: Feast",
+      collect_samovar: "Collect: Samovar",
+      collect_snow_machine: "Collect: Snow Machine",
+      collect_lid_art: "Collect: Lid Art",
+      collect_candles: "Collect: Candles",
+      collect_memory_match: "Collect: Memory Match",
+      collect_mega_memory_match: "Collect: Mega Memory Match",
+      collect_extreme_memory_match: "Collect: Extreme Memory Match",
+      collect_winter_memory_match: "Collect: Winter Memory Match",
+      collect_honeystorm: "Collect: Honeystorm",
+      collect_blue_booster: "Collect: Blue Booster",
+      collect_red_booster: "Collect: Red Booster",
+      collect_mountain_booster: "Collect: Mountain Booster",
+      collect_sticker_stack: "Collect: Sticker Stack",
+      collect_sticker_printer: "Collect: Sticker Printer",
+      kill_stump_snail: "Kill: Stump Snail",
+      kill_ladybug: "Kill: Ladybug",
+      kill_rhinobeetle: "Kill: Rhinobeetle",
+      kill_scorpion: "Kill: Scorpion",
+      kill_mantis: "Kill: Mantis",
+      kill_spider: "Kill: Spider",
+      kill_werewolf: "Kill: Werewolf",
+      kill_coconut_crab: "Kill: Coconut Crab",
+      mondo_buff: "Collect: Mondo Buff",
+      stinger_hunt: "Stinger Hunt",
+      auto_field_boost: "Auto Field Boost",
+      ant_challenge: "Ant Challenge",
+      quest_polar_bear: "Quest: Polar Bear",
+      quest_honey_bee: "Quest: Honey Bee",
+      quest_bucko_bee: "Quest: Bucko Bee",
+      quest_riley_bee: "Quest: Riley Bee",
+      blender: "Blender",
+      planters: "Planters",
+    };
+
+    if (displayNames[taskId]) {
+      taskName = displayNames[taskId];
+    }
+
+    const category = getCategory(taskId);
+    const badge = getCategoryBadge(category);
+
+    const itemElement = document.createElement("div");
+    itemElement.className = "drag-item";
+    itemElement.setAttribute("data-id", taskId);
+    itemElement.setAttribute("data-category", category);
+    itemElement.setAttribute("draggable", "true");
+    itemElement.innerHTML = `
+      <span class="drag-handle">⋮⋮</span>
+      <span class="category-badge">${badge}</span>
+      <span class="drag-text">${taskName}</span>
+      <div class="drag-actions">
+        <button class="drag-action-btn move-to-top" title="Move to top">↑ Top</button>
+        <button class="drag-action-btn move-to-bottom" title="Move to bottom">↓ Bottom</button>
+      </div>
+    `;
+    container.appendChild(itemElement);
+  });
+}
+
 //load fields based on the obj data
 eel.expose(loadInputs);
 function loadInputs(obj, save = "") {
@@ -103,6 +226,9 @@ function loadInputs(obj, save = "") {
       ele.dataset.keybind = v;
       const displayText = v ? v.replace(/\+/g, " + ") : "Click to record";
       ele.querySelector(".keybind-display").textContent = displayText;
+    } else if (ele.className.includes("drag-list")) {
+      // Handle drag list elements
+      loadDragListOrder(ele, v);
     } else {
       ele.value = v;
     }

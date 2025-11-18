@@ -62,7 +62,7 @@ def macro(status, logQueue, updateGUI, run, skipTask):
     
     #function to run a task
     #makes it easy to do any checks after a task is complete (like stinger hunt, rejoin every, etc)
-    def runTask(func = None, args = (), resetAfter = True, convertAfter = True):
+    def runTask(func = None, args = (), resetAfter = True, convertAfter = True, taskName = "", taskPriority = 0):
         nonlocal taskCompleted, was_paused
         # Check if paused before executing task
         while run.value == 5:
@@ -78,10 +78,16 @@ def macro(status, logQueue, updateGUI, run, skipTask):
             macro.logger.webhook("Task Skipped", f"Skipped: {status.value.replace('_', ' ').title()}", "orange")
             status.value = ""
             taskCompleted = True
+            current_task_name = ""
+            current_task_priority = 0
             if resetAfter:
                 macro.reset(convert=False)
             return None
-        
+
+        # Update current task tracking
+        current_task_name = taskName
+        current_task_priority = taskPriority
+
         #execute the task
         if func:
             returnVal = func(*args) 
@@ -89,8 +95,12 @@ def macro(status, logQueue, updateGUI, run, skipTask):
         else:
             returnVal = None
         #task done
-        if resetAfter: 
+        if resetAfter:
             macro.reset(convert=convertAfter)
+
+        # Reset current task after completion
+        current_task_name = ""
+        current_task_priority = 0
 
         # Check if paused before priority tasks
         while run.value == 5:
@@ -217,7 +227,121 @@ def macro(status, logQueue, updateGUI, run, skipTask):
     
     # Track pause state to send webhook only once when entering pause
     was_paused = False
-    
+
+    # Priority system variables
+    current_task_priority = 0
+    current_task_name = ""
+    last_priority_check = 0
+    priority_check_interval = 60  # Check every 60 seconds (1 minute)
+
+    def get_available_tasks_with_priorities():
+        """Check all tasks that can be completed and return them with their priorities"""
+        available_tasks = []
+        settings = macro.setdat
+
+        # Check gather tasks
+        for i in range(3):
+            if settings["fields_enabled"][i]:
+                field_name = settings["fields"][i]
+                field_key = field_name.replace(" ", "_")
+                priority_key = f"priority_gather_{field_key}"
+                priority = int(settings.get(priority_key, 0))
+                available_tasks.append(("gather", field_name, priority))
+
+        # Check collect tasks
+        for k, _ in macroModule.collectData.items():
+            if settings.get(k, False) and macro.hasRespawned(k, macro.collectCooldowns[k]):
+                priority_key = f"priority_collect_{k}"
+                priority = int(settings.get(priority_key, 0))
+                available_tasks.append(("collect", k, priority))
+
+        # Check sticker printer separately
+        if settings.get("sticker_printer", False) and macro.hasRespawned("sticker_printer", macro.collectCooldowns["sticker_printer"]):
+            priority = int(settings.get("priority_collect_sticker_printer", 0))
+            available_tasks.append(("collect", "sticker_printer", priority))
+
+        # Check blender
+        if settings.get("blender_enable", False):
+            with open("./data/user/blender.txt", "r") as f:
+                blenderData = ast.literal_eval(f.read())
+            f.close()
+            if blenderData["collectTime"] > -1 and time.time() > blenderData["collectTime"]:
+                priority = int(settings.get("priority_blender", 0))
+                available_tasks.append(("blender", "blender", priority))
+
+        # Check planters
+        def goToNextCycle(cycle, slot):
+            for _ in range(8):
+                cycle += 1
+                if cycle > 5:
+                    cycle = 1
+                if settings[f"cycle{cycle}_{slot+1}_planter"] != "none" and settings[f"cycle{cycle}_{slot+1}_field"] != "none":
+                    return cycle
+            else:
+                return False
+
+        if settings.get("planters_mode", 0) == 1:
+            with open("./data/user/manualplanters.txt", "r") as f:
+                planterDataRaw = f.read()
+            f.close()
+            if planterDataRaw.strip():
+                planterData = ast.literal_eval(planterDataRaw)
+                for i in range(3):
+                    cycle = planterData["cycles"][i]
+                    if planterData["planters"][i] and time.time() > planterData["harvestTimes"][i]:
+                        priority = int(settings.get("priority_planters", 0))
+                        available_tasks.append(("planters", f"planter_{i}", priority))
+
+        # Check kill tasks
+        kill_mobs = ["stump_snail", "ladybug", "rhinobeetle", "scorpion", "mantis", "spider", "werewolf", "coconut_crab"]
+        for mob in kill_mobs:
+            if settings.get(mob, False):
+                priority_key = f"priority_kill_{mob}"
+                priority = int(settings.get(priority_key, 0))
+                available_tasks.append(("kill", mob, priority))
+
+        # Check quests
+        quest_tasks = []
+        quest_data = [
+            ("polar bear", "polar_bear_quest"),
+            ("honey bee", "honey_bee_quest"),
+            ("bucko bee", "bucko_bee_quest"),
+            ("riley bee", "riley_bee_quest")
+        ]
+        for questName, enabledKey in quest_data:
+            if settings.get(enabledKey, False):
+                priority_key = f"priority_quest_{enabledKey.replace('_quest', '').replace('_', '_')}"
+                priority = int(settings.get(priority_key, 0))
+                quest_tasks.append((questName, priority))
+
+        # For quests, we need to check if they're actually available (not just enabled)
+        # For now, assume enabled quests are available
+        for quest_name, priority in quest_tasks:
+            available_tasks.append(("quest", quest_name, priority))
+
+        return available_tasks
+
+    def should_switch_to_higher_priority_task():
+        """Check if there's a higher priority task available"""
+        nonlocal current_task_priority, last_priority_check
+
+        current_time = time.time()
+        if current_time - last_priority_check < priority_check_interval:
+            return None  # Not time to check yet
+
+        last_priority_check = current_time
+        available_tasks = get_available_tasks_with_priorities()
+
+        # Find the highest priority available task
+        if available_tasks:
+            best_task = max(available_tasks, key=lambda x: x[2])
+            best_task_type, best_task_name, best_priority = best_task
+
+            if best_priority > current_task_priority:
+                return best_task
+
+        return None
+
     while True:
         # Check if macro is paused
         while run.value == 5:
@@ -231,9 +355,10 @@ def macro(status, logQueue, updateGUI, run, skipTask):
         if was_paused:
             was_paused = False
             
-        macro.setdat = get_cached_settings()
+        macro.setdat = settingsManager.loadAllSettings()
+
         #run empty task
-        #this is in case no other settings are selected 
+        #this is in case no other settings are selected
         runTask(resetAfter=False)
 
         updateGUI.value = 1
@@ -1472,6 +1597,226 @@ def macro(status, logQueue, updateGUI, run, skipTask):
 
     taskCompleted = True
     questCache = {}
+
+        # Priority system: track current position in task queue
+    # Track the last executed task's index in the priority_order list
+    last_executed_index = -1  # -1 means no task has been executed yet
+
+    def get_available_priority_tasks(start_from_index=None):
+        """Get all available tasks in priority order, starting from a specific index
+        
+        Args:
+            start_from_index: Index to start checking from. If None, starts from last_executed_index + 1.
+                             This ensures we always progress through the list.
+        """
+        available_tasks = []
+        settings = macro.setdat
+
+        # Get the priority order from settings
+        priority_order = settings.get("task_priority_order", [])
+        if not priority_order:
+            return available_tasks
+
+        # Determine starting index
+        if start_from_index is None:
+            # Start from the next task after the last executed one
+            start_index = (last_executed_index + 1) % len(priority_order) if last_executed_index >= 0 else 0
+        else:
+            start_index = start_from_index % len(priority_order)
+
+        # Check tasks starting from start_index, wrapping around if needed
+        checked_count = 0
+        current_index = start_index
+        
+        while checked_count < len(priority_order):
+            task_id = priority_order[current_index]
+            
+            task_available = False
+            task_type = None
+            task_data = None
+
+            if task_id.startswith("gather_"):
+                field_name = task_id.replace("gather_", "").replace("_", " ")
+                # Check if this field is enabled and available
+                for i in range(3):
+                    if settings["fields_enabled"][i] and settings["fields"][i] == field_name:
+                        task_available = True
+                        task_type = "gather"
+                        task_data = field_name
+                        break
+
+            elif task_id.startswith("collect_"):
+                collect_name = task_id.replace("collect_", "")
+                if collect_name == "sticker_printer":
+                    if settings.get("sticker_printer", False) and macro.hasRespawned("sticker_printer", macro.collectCooldowns["sticker_printer"]):
+                        task_available = True
+                        task_type = "collect_sticker_printer"
+                        task_data = "sticker_printer"
+                else:
+                    # Regular collect tasks
+                    if settings.get(collect_name, False) and macro.hasRespawned(collect_name, macro.collectCooldowns.get(collect_name, 0)):
+                        task_available = True
+                        task_type = "collect"
+                        task_data = collect_name
+
+            elif task_id == "blender":
+                if settings.get("blender_enable", False):
+                    try:
+                        with open("./data/user/blender.txt", "r") as f:
+                            blenderData = ast.literal_eval(f.read())
+                        if blenderData["collectTime"] > -1 and time.time() > blenderData["collectTime"]:
+                            task_available = True
+                            task_type = "blender"
+                            task_data = blenderData
+                    except:
+                        pass
+
+            elif task_id == "planters":
+                if settings.get("planters_mode", 0) == 1:
+                    try:
+                        with open("./data/user/manualplanters.txt", "r") as f:
+                            planterDataRaw = f.read()
+                        if planterDataRaw.strip():
+                            planterData = ast.literal_eval(planterDataRaw)
+                            for i in range(3):
+                                if planterData["planters"][i] and time.time() > planterData["harvestTimes"][i]:
+                                    task_available = True
+                                    task_type = "planters"
+                                    task_data = (planterData["planters"][i], planterData["fields"][i], i)
+                                    break  # Only add the first available planter
+                    except:
+                        pass
+
+            elif task_id.startswith("kill_"):
+                mob = task_id.replace("kill_", "")
+                kill_mobs = ["stump_snail", "ladybug", "rhinobeetle", "scorpion", "mantis", "spider", "werewolf", "coconut_crab"]
+                mob_fields = {
+                    "stump_snail": "pine tree",
+                    "ladybug": "clover",
+                    "rhinobeetle": "clover",
+                    "scorpion": "rose",
+                    "mantis": None,
+                    "spider": "spider",
+                    "werewolf": "pumpkin",
+                    "coconut_crab": "coconut"
+                }
+                # Check if mob is enabled (settings use mob name directly, not kill_mob)
+                if mob in kill_mobs and settings.get(mob, False):
+                    field = mob_fields.get(mob)
+                    if field and macro.hasMobRespawned(mob, field):
+                        task_available = True
+                        task_type = "kill"
+                        task_data = (mob, field)
+
+            elif task_id == "mondo_buff":
+                if settings.get("mondo_buff", False) and macro.hasMondoRespawned():
+                    task_available = True
+                    task_type = "mondo_buff"
+                    task_data = "mondo_buff"
+
+            elif task_id == "stinger_hunt":
+                if settings.get("stinger_hunt", False) and macro.night:
+                    task_available = True
+                    task_type = "stinger_hunt"
+                    task_data = "stinger_hunt"
+
+            elif task_id == "auto_field_boost":
+                if settings.get("Auto_Field_Boost", False) and not macro.AFBLIMIT:
+                    if macro.hasAFBRespawned("AFB_dice_cd", macro.setdat["AFB_rebuff"]*60) or macro.hasAFBRespawned("AFB_glitter_cd", macro.setdat["AFB_rebuff"]*60-30):
+                        task_available = True
+                        task_type = "auto_field_boost"
+                        task_data = "auto_field_boost"
+
+            elif task_id == "ant_challenge":
+                if settings.get("ant_challenge", False):
+                    task_available = True
+                    task_type = "ant_challenge"
+                    task_data = "ant_challenge"
+
+            elif task_id.startswith("quest_"):
+                quest_name = task_id.replace("quest_", "").replace("_", " ")
+                quest_key = task_id.replace("quest_", "") + "_quest"
+                if settings.get(quest_key, False):
+                    task_available = True
+                    task_type = "quest"
+                    task_data = quest_name
+
+            # If task is available, add it to the list with the original task_id and index
+            if task_available:
+                available_tasks.append((task_type, task_data, task_id, current_index))
+            
+            # Move to next index, wrapping around if needed
+            current_index = (current_index + 1) % len(priority_order)
+            checked_count += 1
+
+        return available_tasks
+
+    def execute_highest_priority_task():
+        """Check for and execute the highest priority task available"""
+        # Get available tasks starting from the next index after the last executed task
+        # This ensures we always progress through the priority list
+        # The function automatically wraps around, so we'll check all tasks in order
+        available_tasks = get_available_priority_tasks()
+        
+        if not available_tasks:
+            return False
+
+        # Get the first available task (already in priority order)
+        # Tuple format: (task_type, task_data, task_id, index)
+        task_type, task_data, task_id, task_index = available_tasks[0]
+
+        # Track the index of the task we just executed
+        # This ensures we start from the next task in the list on the next iteration
+        nonlocal last_executed_index
+        last_executed_index = task_index
+
+        # Execute the task based on type
+        if task_type == "gather":
+            runTask(macro.gather, args=(task_data,), taskName=f"gather_{task_data}")
+        elif task_type == "collect":
+            runTask(macro.collect, args=(task_data,), taskName=f"collect_{task_data}")
+        elif task_type == "collect_sticker_printer":
+            runTask(macro.collectStickerPrinter, taskName="sticker_printer")
+        elif task_type == "blender":
+            runTask(macro.blender, args=(task_data,), taskName="blender")
+        elif task_type == "planters":
+            planter, field, slot = task_data
+            runTask(macro.collectPlanter, args=(planter, field), taskName=f"planter_{slot}")
+            # Clear the planter data after collection
+            try:
+                with open("./data/user/manualplanters.txt", "r") as f:
+                    planterData = ast.literal_eval(f.read())
+                planterData["planters"][slot] = ""
+                planterData["fields"][slot] = ""
+                planterData["harvestTimes"][slot] = ""
+                with open("./data/user/manualplanters.txt", "w") as f:
+                    f.write(str(planterData))
+            except:
+                pass
+        elif task_type == "kill":
+            mob, field = task_data
+            runTask(macro.killMob, args=(mob, field), convertAfter=False, taskName=f"kill_{mob}")
+        elif task_type == "mondo_buff":
+            macro.collectMondoBuff()
+        elif task_type == "stinger_hunt":
+            macro.stingerHunt()
+        elif task_type == "auto_field_boost":
+            macro.AFB(gatherInterrupt=False)
+        elif task_type == "ant_challenge":
+            runTask(macro.antChallenge, taskName="ant_challenge")
+        elif task_type == "quest":
+            quest_functions = {
+                "polar bear": macro.doPolarQuest,
+                "honey bee": macro.doHoneyBeeQuest,
+                "bucko bee": macro.doBuckoBeeQuest,
+                "riley bee": macro.doRileyBeeQuest
+            }
+            if task_data in quest_functions:
+                runTask(quest_functions[task_data], taskName=f"quest_{task_data}")
+
+        return True
+
+
     
     macro.start()
     #macro.useItemInInventory("blueclayplanter")
@@ -1480,7 +1825,7 @@ def macro(status, logQueue, updateGUI, run, skipTask):
     
     #function to run a task
     #makes it easy to do any checks after a task is complete (like stinger hunt, rejoin every, etc)
-    def runTask(func = None, args = (), resetAfter = True, convertAfter = True):
+    def runTask(func = None, args = (), resetAfter = True, convertAfter = True, taskName = "", taskPriority = 0):
         nonlocal taskCompleted, was_paused
         # Check if paused before executing task
         while run.value == 5:
@@ -1496,10 +1841,16 @@ def macro(status, logQueue, updateGUI, run, skipTask):
             macro.logger.webhook("Task Skipped", f"Skipped: {status.value.replace('_', ' ').title()}", "orange")
             status.value = ""
             taskCompleted = True
+            current_task_name = ""
+            current_task_priority = 0
             if resetAfter:
                 macro.reset(convert=False)
             return None
-        
+
+        # Update current task tracking
+        current_task_name = taskName
+        current_task_priority = taskPriority
+
         #execute the task
         if func:
             returnVal = func(*args) 
@@ -1507,8 +1858,12 @@ def macro(status, logQueue, updateGUI, run, skipTask):
         else:
             returnVal = None
         #task done
-        if resetAfter: 
+        if resetAfter:
             macro.reset(convert=convertAfter)
+
+        # Reset current task after completion
+        current_task_name = ""
+        current_task_priority = 0
 
         # Check if paused before priority tasks
         while run.value == 5:
@@ -1622,9 +1977,15 @@ def macro(status, logQueue, updateGUI, run, skipTask):
     #macro.rejoin()
     while True:
         macro.setdat = settingsManager.loadAllSettings()
-        #run empty task
-        #this is in case no other settings are selected 
-        runTask(resetAfter=False)
+
+        # Check for priority tasks FIRST - only execute if available
+        if execute_highest_priority_task():
+            # After executing priority task, skip normal flow and continue to next iteration
+            updateGUI.value = 1
+            continue
+        else:
+            # No priority tasks available, run empty task
+            runTask(resetAfter=False)
 
         updateGUI.value = 1
 
