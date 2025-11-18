@@ -430,9 +430,6 @@ async function loadTasks() {
                 )}_planter.png">
                 <div class="field-row">
                     <span>${toTitleCase(field)}</span>
-                    <img src="./assets/icons/${
-                      fieldNectarIcons[field.toLowerCase().replaceAll(" ", "_")]
-                    }.png">
                 </div>
                 <span class="time ${
                   timeRemaining == "Ready!" ? "ready" : ""
