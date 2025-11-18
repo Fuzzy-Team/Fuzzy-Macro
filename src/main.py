@@ -406,15 +406,18 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                 if mob in regularMobData:
                     if macro.setdat[mob]:
                         # Check all fields for this mob and kill in each field where it has respawned
+                        # We need to check ALL fields before moving to the next task
                         killedInAnyField = False
                         for f in regularMobData[mob]:
                             if macro.hasMobRespawned(mob, f):
                                 runTask(macro.killMob, args=(mob, f,), convertAfter=False)
                                 killedInAnyField = True
-                        # Only mark as executed if we actually killed in at least one field
-                        if killedInAnyField:
-                            executedTasks.add(taskId)
-                            return True
+                                # After killing in one field, return True to trigger re-check
+                                # This allows the outer loop to iterate again and check remaining fields
+                                return True
+                        # If we checked all fields and none had respawned mobs, return False
+                        # This will allow the loop to move to the next task
+                        return False
                 return False
             
             # Handle gather tasks
@@ -788,8 +791,41 @@ def macro(status, logQueue, updateGUI, run, skipTask):
         
         # Execute tasks in priority order
         if priorityOrder and len(priorityOrder) > 0:
-            for taskId in priorityOrder:
-                executeTask(taskId)
+            # Keep executing tasks until no more tasks can be executed
+            # This ensures mobs check all fields before moving to next task
+            maxIterations = len(priorityOrder) * 10  # Safety limit to prevent infinite loops
+            iteration = 0
+            while iteration < maxIterations:
+                iteration += 1
+                anyTaskExecuted = False
+                # Track which regular mob tasks we've checked in this iteration to prevent infinite loops
+                regularMobTasksChecked = set()
+                for taskId in priorityOrder:
+                    # Skip if already executed (for non-mob tasks)
+                    if taskId in executedTasks:
+                        continue
+                    # For regular mob kill tasks, track if we've checked them this iteration
+                    # This prevents checking the same mob multiple times in one iteration
+                    isRegularMobTask = taskId.startswith("kill_") and taskId.replace("kill_", "") not in ["coconut_crab", "stump_snail"]
+                    if isRegularMobTask:
+                        if taskId in regularMobTasksChecked:
+                            continue  # Already checked this mob in this iteration
+                        regularMobTasksChecked.add(taskId)
+                    # Execute the task
+                    if executeTask(taskId):
+                        anyTaskExecuted = True
+                        # For regular mob kill tasks, don't mark as executed so they can be checked again in next iteration
+                        # This allows checking all fields for the mob before moving on
+                        if not isRegularMobTask:
+                            executedTasks.add(taskId)
+                    # For regular mob tasks, if we killed in any field, break to start next iteration
+                    # This ensures we check all fields for the mob before moving to the next task
+                    # The break causes the while loop to continue, which will re-check this mob
+                    if isRegularMobTask and anyTaskExecuted:
+                        break  # Break inner loop to start next iteration and re-check this mob
+                # If no tasks were executed, break the loop
+                if not anyTaskExecuted:
+                    break
         else:
             # Fallback to old order if no priority order is set
             #collect
