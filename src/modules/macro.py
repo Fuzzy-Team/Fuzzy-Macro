@@ -1036,7 +1036,7 @@ class macro:
         if convertBalloon: self.saveTiming("convert_balloon")
         self.status.value = ""
         #deal with the extra delay
-        self.logger.webhook("", f"Finished converting (Time: {self.convertSecsToMinsAndSecs(time.time()-st)})", "brown", ping_category="ping_conversion_events")
+        self.logger.webhook("", f"Finished converting (Time: {self.convertSecsToMinsAndSecs(time.time()-st)})", "brown", "honey-pollen", ping_category="ping_conversion_events")
         wait = self.setdat["convert_wait"]
         if (wait):
             self.logger.webhook("", f'Waiting for an additional {wait} seconds', "light green")
@@ -3879,46 +3879,48 @@ class macro:
             macVersion, _, _ = platform.mac_ver()
             macVersion = float('.'.join(macVersion.split('.')[:2]))
 
-            if 14 <= macVersion <= 15 and platform.processor() == "arm" and self.isFullScreen():
-                self.logger.webhook("","Detecting and disabling game mode","dark brown")
-                #make sure roblox is not fullscreen
-                self.toggleFullScreen()
+            # if 14 <= macVersion <= 15 and platform.processor() == "arm" and self.isFullScreen():
+            #     self.logger.webhook("","Detecting and disabling game mode","dark brown")
+            #     #make sure roblox is not fullscreen
+            #     self.toggleFullScreen()
 
-                #find the game mode button
-                lightGameMode = self.adjustImage("./images/mac", "gamemodelight")
-                darkGameMode = self.adjustImage("./images/mac", "gamemodedark")
-                x = self.robloxWindow.mw/2.3
-                time.sleep(1.2)
-                #find light mode
-                res = locateImageOnScreen(lightGameMode, self.robloxWindow.mx+(x), self.robloxWindow.my+(0), self.robloxWindow.mw-x, 60, 0.7)
-                if res is None: #cant find light, find dark
-                    res = locateImageOnScreen(darkGameMode, self.robloxWindow.mx+(x), self.robloxWindow.my+(0), self.robloxWindow.mw-x, 60, 0.7)
-                #found either light or dark
-                if not res is None:
-                    gx, gy = [x//self.robloxWindow.multi for x in res[1]]
-                    mouse.moveTo(self.robloxWindow.mx+(gx+x), self.robloxWindow.my+(gy))
-                    time.sleep(0.1)
-                    mouse.fastClick()
-                    time.sleep(0.5)
-                    #check if game mode is enabled
-                    screen = mssScreenshot(x, 0, self.robloxWindow.mw-x, 150)
-                    ocrRes = ocr.ocrRead(screen)
-                    for i in ocrRes:
-                        if "mode off" in i[1][0].lower():
-                            #disable game mode
-                            bX, bY = ocr.getCenter(i[0])
-                            if self.display_type == "retina":
-                                bX //= 2
-                                bY //= 2
-                            mouse.moveTo(self.robloxWindow.mx+(x+bX), self.robloxWindow.my+(bY))
-                            mouse.click()                        
-                            break
-                    else: #game mode is already disabled/couldnt be found
-                        mouse.moveTo(self.robloxWindow.mx+(x+gx), self.robloxWindow.my+(gy))
-                        mouse.click()
-                #fullscreen back roblox
-                appManager.openApp("Roblox")
-                self.toggleFullScreen()
+            #     #find the game mode button
+            #     lightGameMode = self.adjustImage("./images/mac", "gamemodelight")
+            #     darkGameMode = self.adjustImage("./images/mac", "gamemodedark")
+            #     x = self.robloxWindow.mw/2.3
+            #     time.sleep(1.2)
+            #     #find light mode
+            #     res = locateImageOnScreen(lightGameMode, self.robloxWindow.mx+(x), self.robloxWindow.my+(0), self.robloxWindow.mw-x, 60, 0.7)
+            #     if res is None: #cant find light, find dark
+            #         res = locateImageOnScreen(darkGameMode, self.robloxWindow.mx+(x), self.robloxWindow.my+(0), self.robloxWindow.mw-x, 60, 0.7)
+            #     #found either light or dark
+            #     if not res is None:
+            #         gx, gy = [x//self.robloxWindow.multi for x in res[1]]
+            #         mouse.moveTo(self.robloxWindow.mx+(gx+x), self.robloxWindow.my+(gy))
+            #         time.sleep(0.1)
+            #         mouse.fastClick()
+            #         time.sleep(0.5)
+            #         #check if game mode is enabled
+            #         screen = mssScreenshot(x, 0, self.robloxWindow.mw-x, 150)
+            #         ocrRes = ocr.ocrRead(screen)
+            #         for i in ocrRes:
+            #             if "mode off" in i[1][0].lower():
+            #                 #disable game mode
+            #                 bX, bY = ocr.getCenter(i[0])
+            #                 if self.display_type == "retina":
+            #                     bX //= 2
+            #                     bY //= 2
+            #                 mouse.moveTo(self.robloxWindow.mx+(x+bX), self.robloxWindow.my+(bY))
+            #                 mouse.click()                        
+            #                 break
+            #         else: #game mode is already disabled/couldnt be found
+            #             mouse.moveTo(self.robloxWindow.mx+(x+gx), self.robloxWindow.my+(gy))
+            #             mouse.click()
+            #     #fullscreen back roblox
+            #     appManager.openApp("Roblox")
+            #     self.toggleFullScreen()
+            appManager.setAppFullscreen(fullscreen=False)
+            appManager.maximiseAppWindow()
             time.sleep(1)
             self.moveMouseToDefault()
 

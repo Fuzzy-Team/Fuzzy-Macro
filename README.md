@@ -10,7 +10,7 @@ Roblox Bee Swarm Simulator macro for macOS. Free, open source, and actively main
 - Discord: https://discord.gg/3qf8bgqCVu
 - Repo: https://github.com/existancepy/bss-macro-py
 
-![GUI](https://raw.githubusercontent.com/LaganYT/Existance-Macro/refs/heads/main/src/gui.png)
+![GUI](https://github.com/LaganYT/Existance-Macro/blob/06dd4987b68053c9bdfa842a17e51db3b7c83d30/src/gui.png)
 
 ## Features
 
@@ -127,3 +127,4 @@ https://existance-macro.gitbook.io/existance-macro-docs/
 
 - Designed for macOS.
 - This project and documentation are a work in progress but actively supported.
+

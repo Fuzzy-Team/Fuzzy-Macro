@@ -5,6 +5,9 @@ import subprocess
 from modules.misc.appleScript import runAppleScript
 import pygetwindow as gw
 import pyautogui as pag
+from ApplicationServices import AXUIElementIsAttributeSettable, AXUIElementCreateApplication, kAXErrorSuccess, AXUIElementSetAttributeValue, AXUIElementCopyAttributeValue, AXValueCreate, kAXValueCGPointType, kAXValueCGSizeType, AXUIElementCopyAttributeNames
+from Quartz import CGPoint, CGSize
+from CoreFoundation import CFRelease
 mw,mh = pag.size()
 
 class WindowMgr:
@@ -101,10 +104,42 @@ def getWindowSize(windowName):
     #window not found, most likely also fullscreen (but unfocused)
     return 0,0,mw,mh
 
+def setAppFullscreenMac(app="Roblox", fullscreen=True):
+    workspace = NSWorkspace.sharedWorkspace()
+    for app in workspace.runningApplications():
+        if app.localizedName() == "Roblox":
+            pid = app.processIdentifier()
+            break
+    else:
+        return
+    
+    appRef = AXUIElementCreateApplication(pid)
+    _, windowRef = AXUIElementCopyAttributeValue(appRef, "AXMainWindow", None)
+    AXUIElementSetAttributeValue(windowRef, "AXFullScreen", fullscreen)
+
+def maximiseAppWindowMac(app="Roblox"):
+    workspace = NSWorkspace.sharedWorkspace()
+    for app in workspace.runningApplications():
+        if app.localizedName() == "Roblox":
+            pid = app.processIdentifier()
+            break
+    else:
+        return
+    
+    appRef = AXUIElementCreateApplication(pid)
+    _, windowRef = AXUIElementCopyAttributeValue(appRef, "AXMainWindow", None)
+    _, attributes = AXUIElementCopyAttributeNames(windowRef, None)
+    pos = AXValueCreate(kAXValueCGPointType, CGPoint(0, 0))
+    size = AXValueCreate(kAXValueCGSizeType, CGSize(mw, mh))
+    AXUIElementSetAttributeValue(windowRef, "AXPosition", pos)
+    AXUIElementSetAttributeValue(windowRef, "AXSize", size)
+
 if sys.platform == "darwin":
     from AppKit import NSWorkspace
     openApp = openAppMac
     isAppOpen = isAppOpenMac
+    maximiseAppWindow = maximiseAppWindowMac
+    setAppFullscreen = setAppFullscreenMac
 else:
     import win32gui, win32con,  win32com.client
     openApp = openAppWindows
