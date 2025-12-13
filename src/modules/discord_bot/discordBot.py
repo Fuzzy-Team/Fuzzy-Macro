@@ -189,7 +189,7 @@ def discordBot(token, run, status, skipTask, initial_message_info=None, updateGU
     @bot.tree.command(name = "start", description = "Start")
     async def start(interaction: discord.Interaction):
         if run.value == 2: 
-            await interaction.response.send_mesasge("Macro is already running")
+            await interaction.response.send_message("Macro is already running")
             return 
         run.value = 1
         await interaction.response.send_message("Starting Macro")
@@ -197,7 +197,7 @@ def discordBot(token, run, status, skipTask, initial_message_info=None, updateGU
     @bot.tree.command(name = "stop", description = "Stop the macro")
     async def stop(interaction: discord.Interaction):
         if run.value == 3: 
-            await interaction.response.send_mesasge("Macro is already stopped")
+            await interaction.response.send_message("Macro is already stopped")
             return 
         run.value = 0
         await interaction.response.send_message("Stopping Macro")
