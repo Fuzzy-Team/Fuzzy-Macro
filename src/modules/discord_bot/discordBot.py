@@ -793,7 +793,23 @@ def discordBot(token, run, status, skipTask, initial_message_info=None, updateGU
                     for i, task in enumerate(task_list):
                         desc = task["desc"]
                         is_current = task["is_current"]
+                        
+                        # Format the task line
+                        if is_current:
+                            task_line = f"**{desc}**\n"
+                        else:
+                            task_line = f"{desc}\n"
+                        
+                        # Check if adding this line would exceed the limit
+                        if len(current_chunk) + len(task_line) > 1024:
+                            # Save current chunk and start a new one
+                            if current_chunk:
+                                chunks.append(current_chunk.rstrip())
+                            current_chunk = task_line
+                        else:
+                            current_chunk += task_line
                     
+                    # Add the last chunk if it exists
                     if current_chunk:
                         chunks.append(current_chunk.rstrip())
                     

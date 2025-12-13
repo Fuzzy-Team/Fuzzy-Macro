@@ -1036,7 +1036,7 @@ class macro:
         if convertBalloon: self.saveTiming("convert_balloon")
         self.status.value = ""
         #deal with the extra delay
-        self.logger.webhook("", f"Finished converting (Time: {self.convertSecsToMinsAndSecs(time.time()-st)})", "brown", "honey-pollen", ping_category="ping_conversion_events")
+        self.logger.webhook("", f"Finished converting (Time: {self.convertSecsToMinsAndSecs(time.time()-st)})", "brown", "screen", ping_category="ping_conversion_events")
         wait = self.setdat["convert_wait"]
         if (wait):
             self.logger.webhook("", f'Waiting for an additional {wait} seconds', "light green")
@@ -1767,11 +1767,11 @@ class macro:
                 self.reset()
                 break
             elif getGatherTime() > maxGatherTime:
-                self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Time Limit - Return: {returnType.title()}", "light green", "honey-pollen")
+                self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Time Limit - Return: {returnType.title()}", "light green", "screen")
                 keepGathering = False
             #check backpack
             elif self.getBackpack() >= fieldSetting["backpack"]:
-                self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Backpack - Return: {returnType.title()}", "light green", "honey-pollen")
+                self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Backpack - Return: {returnType.title()}", "light green", "screen")
                 keepGathering = False
 
         #gathering was interrupted
@@ -3919,8 +3919,9 @@ class macro:
             #     #fullscreen back roblox
             #     appManager.openApp("Roblox")
             #     self.toggleFullScreen()
-            appManager.setAppFullscreen(fullscreen=False)
-            appManager.maximiseAppWindow()
+            # Removed lines that were un-fullscreening Roblox on startup
+            # appManager.setAppFullscreen(fullscreen=False)
+            # appManager.maximiseAppWindow()
             time.sleep(1)
             self.moveMouseToDefault()
 
