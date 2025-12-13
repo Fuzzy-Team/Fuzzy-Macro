@@ -1683,22 +1683,7 @@ class macro:
         if fieldSetting["shift_lock"]: 
             self.keyboard.press('shift')
         
-        # Track pause state to send webhook only once when entering pause
-        was_paused = False
-        
         while keepGathering:
-            # Check if macro is paused
-            if self.run is not None:
-                while self.run.value == 5:
-                    if not was_paused:
-                        # Send webhook message when first entering pause state
-                        self.logger.webhook("", "Macro is paused", "orange")
-                        was_paused = True
-                    # Release mouse and keys while paused
-                    mouse.mouseUp()
-                    self.keyboard.releaseMovement()
-                    time.sleep(1)  # Wait while paused
-            
             # Check if skip was requested
             if self.skipTask is not None and self.skipTask.value == 1:
                 self.skipTask.value = 0  # Reset skip flag

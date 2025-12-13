@@ -202,26 +202,6 @@ def discordBot(token, run, status, skipTask, initial_message_info=None, updateGU
         run.value = 0
         await interaction.response.send_message("Stopping Macro")
     
-    @bot.tree.command(name = "pause", description = "Pause the macro")
-    async def pause(interaction: discord.Interaction):
-        if run.value != 2:
-            await interaction.response.send_message("❌ Macro is not running. Cannot pause.")
-            return
-        
-        # Get current status before pausing
-        current_status = status.value if hasattr(status, 'value') and status.value else "Unknown"
-        
-        run.value = 5
-        await interaction.response.send_message(f"⏸️ Pausing Macro\n📍 Current task: {current_status.replace('_', ' ').title()}")
-    
-    @bot.tree.command(name = "resume", description = "Resume the paused macro")
-    async def resume(interaction: discord.Interaction):
-        if run.value != 5:
-            await interaction.response.send_message("❌ Macro is not paused. Cannot resume.")
-            return
-        run.value = 2
-        await interaction.response.send_message("▶️ Resuming Macro\n🎮 Bringing Roblox to foreground...")
-    
     @bot.tree.command(name = "skip", description = "Skip the current task")
     async def skip(interaction: discord.Interaction):
         if run.value != 2:
@@ -327,14 +307,13 @@ def discordBot(token, run, status, skipTask, initial_message_info=None, updateGU
             1: "▶️ Starting",
             2: "✅ Running",
             3: "⏹️ Stopped",
-            4: "🔄 Disconnected/Rejoining",
-            5: "⏸️ Paused"
+            4: "🔄 Disconnected/Rejoining"
         }
         
         macro_status = status_messages.get(run.value, "❓ Unknown")
         current_task = status.value if hasattr(status, 'value') and status.value else "None"
         
-        embed = discord.Embed(title="📊 Macro Status", color=0x00ff00 if run.value == 2 else (0xffaa00 if run.value == 5 else 0xff0000))
+        embed = discord.Embed(title="📊 Macro Status", color=0x00ff00 if run.value == 2 else 0xff0000)
         embed.add_field(name="State", value=macro_status, inline=True)
         embed.add_field(name="Current Task", value=current_task.replace('_', ' ').title(), inline=True)
         
@@ -1518,7 +1497,7 @@ def discordBot(token, run, status, skipTask, initial_message_info=None, updateGU
         """Show available commands"""
         embed = discord.Embed(title="🤖 BSS Macro Discord Bot", description="Available Commands:", color=0x0099ff)
 
-        embed.add_field(name="🔧 **Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/pause` - Pause the macro\n`/resume` - Resume the macro\n`/skip` - Skip the current task\n`/stop` - Stop the macro\n`/status` - Get macro status and current task\n`/rejoin` - Make macro rejoin game\n`/screenshot` - Get screenshot\n`/settings` - View current settings\n`/hiveslot <1-6>` - Change hive slot number", inline=False)
+        embed.add_field(name="🔧 **Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/skip` - Skip the current task\n`/stop` - Stop the macro\n`/status` - Get macro status and current task\n`/rejoin` - Make macro rejoin game\n`/screenshot` - Get screenshot\n`/settings` - View current settings\n`/hiveslot <1-6>` - Change hive slot number", inline=False)
 
         embed.add_field(name="🌾 **Field Management**", value="`/fields` - View field configuration\n`/enablefield <field>` - Enable a field\n`/disablefield <field>` - Disable a field\n`/swapfield <current> <new>` - Swap one field for another (new can be any field)\n`/fieldonly <true/false>` - Toggle field-only mode (gathers in fields only)", inline=False)
 

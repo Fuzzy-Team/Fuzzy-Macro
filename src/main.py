@@ -57,21 +57,10 @@ def macro(status, logQueue, updateGUI, run, skipTask):
     
     macro.start()
     #macro.useItemInInventory("blueclayplanter")
-    # Track pause state to send webhook only once when entering pause
-    was_paused = False
-    
     #function to run a task
     #makes it easy to do any checks after a task is complete (like stinger hunt, rejoin every, etc)
     def runTask(func = None, args = (), resetAfter = True, convertAfter = True):
-        nonlocal taskCompleted, was_paused
-        # Check if paused before executing task
-        while run.value == 5:
-            if not was_paused:
-                # Send webhook message when first entering pause state
-                macro.logger.webhook("", "Macro is paused", "orange")
-                was_paused = True
-            time.sleep(1)  # Wait while paused
-        
+        nonlocal taskCompleted
         # Check if skip was requested
         if skipTask.value == 1:
             skipTask.value = 0  # Reset skip flag
@@ -91,14 +80,6 @@ def macro(status, logQueue, updateGUI, run, skipTask):
         #task done
         if resetAfter: 
             macro.reset(convert=convertAfter)
-
-        # Check if paused before priority tasks
-        while run.value == 5:
-            if not was_paused:
-                # Send webhook message when first entering pause state
-                macro.logger.webhook("", "Macro is paused", "orange")
-                was_paused = True
-            time.sleep(1)  # Wait while paused
         
         #do priority tasks
         if macro.night and macro.setdat["stinger_hunt"]:
@@ -215,22 +196,7 @@ def macro(status, logQueue, updateGUI, run, skipTask):
             last_settings_load = current_time
         return settings_cache
     
-    # Track pause state to send webhook only once when entering pause
-    was_paused = False
-    
     while True:
-        # Check if macro is paused
-        while run.value == 5:
-            if not was_paused:
-                # Send webhook message when first entering pause state
-                macro.logger.webhook("", "Macro is paused", "orange")
-                was_paused = True
-            time.sleep(1)  # Wait while paused
-        
-        # Reset pause flag when no longer paused
-        if was_paused:
-            was_paused = False
-            
         macro.setdat = get_cached_settings()
         #run empty task
         #this is in case no other settings are selected 
@@ -364,12 +330,6 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                                 # Gather in boosted field for 15 minutes
                                 st = time.time()
                                 while time.time() - st < 15*60:
-                                    # Check if paused
-                                    while run.value == 5:
-                                        if not was_paused:
-                                            macro.logger.webhook("", "Macro is paused", "orange")
-                                            was_paused = True
-                                        time.sleep(1)
                                     runTask(macro.gather, args=(boostedField,), resetAfter=False)
                             executedTasks.add(taskId)
                             return True
@@ -1193,7 +1153,6 @@ if __name__ == "__main__":
     #2: already running (do nothing)
     #3: already stopped (do nothing)
     #4: disconnected (rejoin)
-    #5: paused (pause execution)
     manager = multiprocessing.Manager()
     run = multiprocessing.Value('i', 3)
     gui.setRunState(3)  # Initialize the global run state
@@ -1335,12 +1294,8 @@ if __name__ == "__main__":
             prevDiscordBotToken = currentDiscordBotToken
             discordBotProc.start()
 
-        # Check if run state changed (e.g., paused via Discord)
+        # Check if run state changed
         if run.value != prevRunState:
-            # If resuming from pause (5 -> 2), reopen Roblox
-            if prevRunState == 5 and run.value == 2:
-                appManager.openApp("Roblox")
-            
             gui.setRunState(run.value)
             try:
                 gui.toggleStartStop()  # Update UI
