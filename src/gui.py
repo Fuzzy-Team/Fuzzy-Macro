@@ -131,6 +131,15 @@ eel.expose(settingsManager.saveGeneralSetting)
 eel.expose(settingsManager.saveDictProfileSettings)
 eel.expose(settingsManager.initializeFieldSync)
 
+# Profile management functions
+eel.expose(settingsManager.listProfiles)
+eel.expose(settingsManager.getCurrentProfile)
+eel.expose(settingsManager.switchProfile)
+eel.expose(settingsManager.createProfile)
+eel.expose(settingsManager.deleteProfile)
+eel.expose(settingsManager.renameProfile)
+eel.expose(settingsManager.duplicateProfile)
+
 def updateGUI():
     settings = settingsManager.loadAllSettings()
     eel.loadInputs(settings)
