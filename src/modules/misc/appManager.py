@@ -106,9 +106,9 @@ def getWindowSize(windowName):
 
 def setAppFullscreenMac(app="Roblox", fullscreen=True):
     workspace = NSWorkspace.sharedWorkspace()
-    for app in workspace.runningApplications():
-        if app.localizedName() == "Roblox":
-            pid = app.processIdentifier()
+    for runningApp in workspace.runningApplications():
+        if runningApp.localizedName() == app:
+            pid = runningApp.processIdentifier()
             break
     else:
         return
@@ -119,9 +119,9 @@ def setAppFullscreenMac(app="Roblox", fullscreen=True):
 
 def maximiseAppWindowMac(app="Roblox"):
     workspace = NSWorkspace.sharedWorkspace()
-    for app in workspace.runningApplications():
-        if app.localizedName() == "Roblox":
-            pid = app.processIdentifier()
+    for runningApp in workspace.runningApplications():
+        if runningApp.localizedName() == app:
+            pid = runningApp.processIdentifier()
             break
     else:
         return
