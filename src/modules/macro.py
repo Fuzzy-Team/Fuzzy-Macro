@@ -1036,7 +1036,7 @@ class macro:
         if convertBalloon: self.saveTiming("convert_balloon")
         self.status.value = ""
         #deal with the extra delay
-        self.logger.webhook("", f"Finished converting (Time: {self.convertSecsToMinsAndSecs(time.time()-st)})", "brown", "honey-pollen", ping_category="ping_conversion_events")
+        self.logger.webhook("", f"Finished converting (Time: {self.convertSecsToMinsAndSecs(time.time()-st)})", "brown", "screen", ping_category="ping_conversion_events")
         wait = self.setdat["convert_wait"]
         if (wait):
             self.logger.webhook("", f'Waiting for an additional {wait} seconds', "light green")
@@ -1683,22 +1683,7 @@ class macro:
         if fieldSetting["shift_lock"]: 
             self.keyboard.press('shift')
         
-        # Track pause state to send webhook only once when entering pause
-        was_paused = False
-        
         while keepGathering:
-            # Check if macro is paused
-            if self.run is not None:
-                while self.run.value == 5:
-                    if not was_paused:
-                        # Send webhook message when first entering pause state
-                        self.logger.webhook("", "Macro is paused", "orange")
-                        was_paused = True
-                    # Release mouse and keys while paused
-                    mouse.mouseUp()
-                    self.keyboard.releaseMovement()
-                    time.sleep(1)  # Wait while paused
-            
             # Check if skip was requested
             if self.skipTask is not None and self.skipTask.value == 1:
                 self.skipTask.value = 0  # Reset skip flag
@@ -1767,11 +1752,11 @@ class macro:
                 self.reset()
                 break
             elif getGatherTime() > maxGatherTime:
-                self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Time Limit - Return: {returnType.title()}", "light green", "honey-pollen")
+                self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Time Limit - Return: {returnType.title()}", "light green", "screen")
                 keepGathering = False
             #check backpack
             elif self.getBackpack() >= fieldSetting["backpack"]:
-                self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Backpack - Return: {returnType.title()}", "light green", "honey-pollen")
+                self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Backpack - Return: {returnType.title()}", "light green", "screen")
                 keepGathering = False
 
         #gathering was interrupted
@@ -3919,8 +3904,9 @@ class macro:
             #     #fullscreen back roblox
             #     appManager.openApp("Roblox")
             #     self.toggleFullScreen()
-            appManager.setAppFullscreen(fullscreen=False)
-            appManager.maximiseAppWindow()
+            # Removed lines that were un-fullscreening Roblox on startup
+            # appManager.setAppFullscreen(fullscreen=False)
+            # appManager.maximiseAppWindow()
             time.sleep(1)
             self.moveMouseToDefault()
 

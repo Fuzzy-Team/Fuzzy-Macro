@@ -19,23 +19,15 @@ async function updateStartButtonText() {
   try {
     const runState = await eel.getRunState()();
     const isRunning = runState === 2; // 2 means running
-    const isPaused = runState === 5; // 5 means paused
 
     const button = document.getElementById("start-btn");
     if (button) {
-      if (isPaused) {
-        button.classList.add("paused");
-        button.classList.remove("active");
-        button.disabled = true;
-        button.textContent = `⏸️ Paused`;
-      } else if (isRunning) {
+      if (isRunning) {
         button.classList.add("active");
-        button.classList.remove("paused");
         button.disabled = false;
         button.textContent = `Stop [${stopKey}]`;
       } else {
         button.classList.remove("active");
-        button.classList.remove("paused");
         button.disabled = false;
         button.textContent = `Start [${startKey}]`;
       }
@@ -61,26 +53,17 @@ async function toggleStartStop() {
   try {
     const runState = await eel.getRunState()();
     const isRunning = runState === 2; // 2 means running
-    const isPaused = runState === 5; // 5 means paused
 
     const button = document.getElementById("start-btn");
     if (button) {
-      if (isPaused) {
-        // Macro is paused, show paused indicator
-        button.classList.add("paused");
-        button.classList.remove("active");
-        button.disabled = true;
-        button.textContent = `⏸️ Paused`;
-      } else if (isRunning) {
+      if (isRunning) {
         // Macro is running, show stop button
         button.classList.add("active");
-        button.classList.remove("paused");
         button.disabled = false;
         button.textContent = `Stop [${stopKey}]`;
       } else {
         // Macro is not running, show start button
         button.classList.remove("active");
-        button.classList.remove("paused");
         button.disabled = false;
         button.textContent = `Start [${startKey}]`;
       }
@@ -182,7 +165,7 @@ async function loadTasks() {
     if (taskId.startsWith("gather_")) {
       const fieldName = taskId.replace("gather_", "").replace("_", " ");
       // Check if this field is enabled
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < setdat.fields_enabled.length; i++) {
         if (setdat.fields_enabled[i] && setdat.fields[i] === fieldName) {
           const emoji = fieldEmojis[fieldName.replaceAll(" ", "_")] || "";
           return {
@@ -488,7 +471,6 @@ async function checkAndUpdateButtonState() {
   try {
     const runState = await eel.getRunState()();
     const isRunning = runState === 2;
-    const isPaused = runState === 5;
 
     const settings = await loadAllSettings();
     const startKey = settings.start_keybind || "F1";
@@ -496,19 +478,12 @@ async function checkAndUpdateButtonState() {
 
     const button = document.getElementById("start-btn");
     if (button) {
-      if (isPaused) {
-        button.classList.add("paused");
-        button.classList.remove("active");
-        button.disabled = true;
-        button.textContent = `⏸️ Paused`;
-      } else if (isRunning) {
+      if (isRunning) {
         button.classList.add("active");
-        button.classList.remove("paused");
         button.disabled = false;
         button.textContent = `Stop [${stopKey}]`;
       } else {
         button.classList.remove("active");
-        button.classList.remove("paused");
         button.disabled = false;
         button.textContent = `Start [${startKey}]`;
       }

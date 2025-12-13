@@ -124,7 +124,30 @@ def saveGeneralSetting(setting, value):
         syncFieldSettingsToProfile(setting, value)
 
 def loadSettings():
-    return readSettingsFile(f"../settings/profiles/{profileName}/settings.txt")
+    settings = readSettingsFile(f"../settings/profiles/{profileName}/settings.txt")
+    # Ensure fields and fields_enabled arrays have 5 elements
+    defaultSettings = readSettingsFile("./data/default_settings/settings.txt")
+    defaultFields = defaultSettings.get("fields", ['pine tree', 'sunflower', 'dandelion', 'pine tree', 'sunflower'])
+    defaultFieldsEnabled = defaultSettings.get("fields_enabled", [True, False, False, False, False])
+    
+    fields = settings.get("fields", [])
+    fieldsEnabled = settings.get("fields_enabled", [])
+    
+    # Extend arrays to 5 elements if needed
+    updated = False
+    while len(fields) < 5:
+        fields.append(defaultFields[len(fields)] if len(fields) < len(defaultFields) else defaultFields[-1])
+        updated = True
+    while len(fieldsEnabled) < 5:
+        fieldsEnabled.append(defaultFieldsEnabled[len(fieldsEnabled)] if len(fieldsEnabled) < len(defaultFieldsEnabled) else False)
+        updated = True
+    
+    if updated:
+        settings["fields"] = fields
+        settings["fields_enabled"] = fieldsEnabled
+        saveDict(f"../settings/profiles/{profileName}/settings.txt", settings)
+    
+    return settings
 
 #return a dict containing all settings except field (general, profile, planters)
 def loadAllSettings():
