@@ -3,9 +3,12 @@ import modules.misc.appManager as appManager
 import modules.misc.settingsManager as settingsManager
 import time
 import pyautogui as pag
+
+# We'll use a wrapper for time.sleep that respects pause state
+# This will be initialized when the macro class is created
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP, benchmarkMSS, mssScreenshotPillowRGBA
 from modules.controls.keyboard import keyboard
-from modules.controls.sleep import sleep
+from modules.controls.sleep import sleep, set_run_state, pauseable_sleep, wait_while_paused, is_paused
 import modules.controls.mouse as mouse
 from modules.screen.screenData import getScreenData
 import modules.logging.log as logModule
@@ -336,6 +339,11 @@ class macro:
         self.updateGUI = updateGUI
         self.run = run
         self.skipTask = skipTask
+        
+        # Set the run state for pause-aware sleep functions
+        if run is not None:
+            set_run_state(run)
+        
         self.setdat = settingsManager.loadAllSettings()
         self.fieldSettings = settingsManager.loadFields()
 
@@ -408,6 +416,26 @@ class macro:
         self.robloxWindow.setRobloxWindowBounds(setYOffset=setYOffset)
         if setYOffset:
             self.logger.webhook("", f"Detect Y Offset: {self.robloxWindow.contentYOffset}", "dark brown")
+    
+    def checkPauseAndWait(self):
+        """Check if macro is paused and wait until resumed. Returns True if stop was requested."""
+        if self.run is None:
+            return False
+        # Check for pause request (state 5) - transition to paused (state 6)
+        if self.run.value == 5:
+            # Release all movement keys and mouse
+            self.keyboard.releaseMovement()
+            mouse.mouseUp()
+            # Transition to paused state - this signals the main loop that we've stopped
+            self.run.value = 6
+        # Wait while paused (state 6)
+        while self.run.value == 6:
+            # Keep inputs released while paused
+            self.keyboard.releaseMovement()
+            mouse.mouseUp()
+            time.sleep(0.1)
+        # Check if stop was requested (state 0)
+        return self.run.value == 0
     
     #thread to detect night
     #night detection is done by converting the screenshot to hsv and checking the average brightness
@@ -965,7 +993,14 @@ class macro:
         if self.enableNightDetection:
             self.keyboard.press(",")
         
-        while True: 
+        while True:
+            # Check if paused and wait
+            if self.checkPauseAndWait():
+                # Stop was requested while paused
+                self.status.value = ""
+                self.converting = False
+                return False
+            
             #check if the macro is done converting/not converting
             text = self.getTextBesideE()
             #done converting
@@ -1684,6 +1719,12 @@ class macro:
             self.keyboard.press('shift')
         
         while keepGathering:
+            # Check if paused and wait
+            if self.checkPauseAndWait():
+                # Stop was requested while paused
+                stopGather()
+                return
+            
             # Check if skip was requested
             if self.skipTask is not None and self.skipTask.value == 1:
                 self.skipTask.value = 0  # Reset skip flag
@@ -2302,6 +2343,11 @@ class macro:
             elif k in ["a","d"]: lastSideKey = k
             self.keyboard.walk(k, t)
         while True:
+            # Check if paused and wait
+            if self.checkPauseAndWait():
+                # Stop was requested while paused
+                self.mobRunStatus = "done"
+                break
             dodgeWalk("s", distance*1.2)
             if self.mobRunStatus != "attacking": break
             dodgeWalk("a", distance*1.8)
@@ -2340,6 +2386,9 @@ class macro:
                 startFrontKey = "w"
 
             while True:
+                # Check if paused and wait
+                if self.checkPauseAndWait():
+                    return  # Stop was requested
                 for _ in range(2):
                     self.keyboard.walk(startFrontKey, 0.72*f)
                     if self.mobRunStatus == "done": return
@@ -2448,6 +2497,13 @@ class macro:
         self.died = False
         st = time.time() 
         while loop:
+            # Check if paused and wait
+            if self.checkPauseAndWait():
+                # Stop was requested while paused
+                self.night = False
+                self.stopVic = True
+                updateHourlyTime()
+                return
             for code in pathLines:
                 exec(code)
                 #run checks
@@ -2479,6 +2535,10 @@ class macro:
             self.logger.webhook("", "Failed to land in stump field", "red", "screen", ping_category="ping_critical_errors")
             self.reset()
         while True:
+            # Check if paused and wait
+            if self.checkPauseAndWait():
+                # Stop was requested while paused
+                return
             mouse.click()
             keepOldData = self.keepOldCheck()
             if keepOldData is not None:

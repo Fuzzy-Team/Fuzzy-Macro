@@ -9,64 +9,119 @@ function ahref(link) {
   eel.openLink(link);
 }
 
-//update the start button text with current keybinds
+//update the button text with current keybinds and state
 async function updateStartButtonText() {
   const settings = await loadAllSettings();
   const startKey = settings.start_keybind || "F1";
   const stopKey = settings.stop_keybind || "F3";
+  const pauseKey = settings.pause_keybind || "F2";
 
-  // Check if macro is currently running
+  // Check current run state
   try {
     const runState = await eel.getRunState()();
-    const isRunning = runState === 2; // 2 means running
+    // 2 = running, 3 = stopped, 6 = paused
 
-    const button = document.getElementById("start-btn");
-    if (button) {
-      if (isRunning) {
-        button.classList.add("active");
-        button.disabled = false;
-        button.textContent = `Stop [${stopKey}]`;
-      } else {
-        button.classList.remove("active");
-        button.disabled = false;
-        button.textContent = `Start [${startKey}]`;
+    const startBtn = document.getElementById("start-btn");
+    const stopBtn = document.getElementById("stop-btn");
+    const pauseBtn = document.getElementById("pause-btn");
+
+    if (runState === 2) {
+      // Running: show Stop + Pause buttons
+      if (startBtn) startBtn.style.display = "none";
+      if (stopBtn) {
+        stopBtn.style.display = "block";
+        stopBtn.textContent = `Stop [${stopKey}]`;
       }
+      if (pauseBtn) {
+        pauseBtn.style.display = "block";
+        pauseBtn.textContent = `Pause [${pauseKey}]`;
+        pauseBtn.classList.add("active");
+      }
+    } else if (runState === 6) {
+      // Paused: show Stop + Resume buttons
+      if (startBtn) startBtn.style.display = "none";
+      if (stopBtn) {
+        stopBtn.style.display = "block";
+        stopBtn.textContent = `Stop [${stopKey}]`;
+      }
+      if (pauseBtn) {
+        pauseBtn.style.display = "block";
+        pauseBtn.textContent = `Resume [${pauseKey}]`;
+        pauseBtn.classList.remove("active");
+      }
+    } else {
+      // Stopped: show Start button only
+      if (startBtn) {
+        startBtn.style.display = "block";
+        startBtn.classList.remove("active");
+        startBtn.disabled = false;
+        startBtn.textContent = `Start [${startKey}]`;
+      }
+      if (stopBtn) stopBtn.style.display = "none";
+      if (pauseBtn) pauseBtn.style.display = "none";
     }
   } catch (error) {
-    // Fallback to just setting start text
-    const button = document.getElementById("start-btn");
-    if (button) {
-      button.disabled = false;
-      button.textContent = `Start [${startKey}]`;
+    // Fallback to just showing start button
+    const startBtn = document.getElementById("start-btn");
+    if (startBtn) {
+      startBtn.style.display = "block";
+      startBtn.disabled = false;
+      startBtn.textContent = `Start [${startKey}]`;
     }
   }
 }
 
-//toggle the start/stop button visuals
+//toggle the start/stop/pause button visuals based on run state
 eel.expose(toggleStartStop);
 async function toggleStartStop() {
   const settings = await loadAllSettings();
   const startKey = settings.start_keybind || "F1";
   const stopKey = settings.stop_keybind || "F3";
+  const pauseKey = settings.pause_keybind || "F2";
 
-  // Check if macro is currently running by checking the run state
+  // Check current run state
   try {
     const runState = await eel.getRunState()();
-    const isRunning = runState === 2; // 2 means running
+    // 2 = running, 3 = stopped, 6 = paused
 
-    const button = document.getElementById("start-btn");
-    if (button) {
-      if (isRunning) {
-        // Macro is running, show stop button
-        button.classList.add("active");
-        button.disabled = false;
-        button.textContent = `Stop [${stopKey}]`;
-      } else {
-        // Macro is not running, show start button
-        button.classList.remove("active");
-        button.disabled = false;
-        button.textContent = `Start [${startKey}]`;
+    const startBtn = document.getElementById("start-btn");
+    const stopBtn = document.getElementById("stop-btn");
+    const pauseBtn = document.getElementById("pause-btn");
+
+    if (runState === 2) {
+      // Running: show Stop + Pause buttons
+      if (startBtn) startBtn.style.display = "none";
+      if (stopBtn) {
+        stopBtn.style.display = "block";
+        stopBtn.textContent = `Stop [${stopKey}]`;
       }
+      if (pauseBtn) {
+        pauseBtn.style.display = "block";
+        pauseBtn.textContent = `Pause [${pauseKey}]`;
+        pauseBtn.classList.add("active");
+      }
+    } else if (runState === 6) {
+      // Paused: show Stop + Resume buttons
+      if (startBtn) startBtn.style.display = "none";
+      if (stopBtn) {
+        stopBtn.style.display = "block";
+        stopBtn.textContent = `Stop [${stopKey}]`;
+      }
+      if (pauseBtn) {
+        pauseBtn.style.display = "block";
+        pauseBtn.textContent = `Resume [${pauseKey}]`;
+        pauseBtn.classList.remove("active");
+      }
+    } else {
+      // Stopped: show Start button only
+      if (startBtn) {
+        startBtn.style.display = "block";
+        startBtn.classList.remove("active");
+        startBtn.disabled = false;
+        startBtn.textContent = `Start [${startKey}]`;
+      }
+      if (stopBtn) stopBtn.style.display = "none";
+      if (pauseBtn) pauseBtn.style.display = "none";
     }
 
     return true; // Success
@@ -470,23 +525,51 @@ function closeWindow() {
 async function checkAndUpdateButtonState() {
   try {
     const runState = await eel.getRunState()();
-    const isRunning = runState === 2;
+    // 2 = running, 3 = stopped, 6 = paused
 
     const settings = await loadAllSettings();
     const startKey = settings.start_keybind || "F1";
     const stopKey = settings.stop_keybind || "F3";
+    const pauseKey = settings.pause_keybind || "F2";
 
-    const button = document.getElementById("start-btn");
-    if (button) {
-      if (isRunning) {
-        button.classList.add("active");
-        button.disabled = false;
-        button.textContent = `Stop [${stopKey}]`;
-      } else {
-        button.classList.remove("active");
-        button.disabled = false;
-        button.textContent = `Start [${startKey}]`;
+    const startBtn = document.getElementById("start-btn");
+    const stopBtn = document.getElementById("stop-btn");
+    const pauseBtn = document.getElementById("pause-btn");
+
+    if (runState === 2) {
+      // Running: show Stop + Pause buttons
+      if (startBtn) startBtn.style.display = "none";
+      if (stopBtn) {
+        stopBtn.style.display = "block";
+        stopBtn.textContent = `Stop [${stopKey}]`;
       }
+      if (pauseBtn) {
+        pauseBtn.style.display = "block";
+        pauseBtn.textContent = `Pause [${pauseKey}]`;
+        pauseBtn.classList.add("active");
+      }
+    } else if (runState === 6) {
+      // Paused: show Stop + Resume buttons
+      if (startBtn) startBtn.style.display = "none";
+      if (stopBtn) {
+        stopBtn.style.display = "block";
+        stopBtn.textContent = `Stop [${stopKey}]`;
+      }
+      if (pauseBtn) {
+        pauseBtn.style.display = "block";
+        pauseBtn.textContent = `Resume [${pauseKey}]`;
+        pauseBtn.classList.remove("active");
+      }
+    } else {
+      // Stopped: show Start button only
+      if (startBtn) {
+        startBtn.style.display = "block";
+        startBtn.classList.remove("active");
+        startBtn.disabled = false;
+        startBtn.textContent = `Start [${startKey}]`;
+      }
+      if (stopBtn) stopBtn.style.display = "none";
+      if (pauseBtn) pauseBtn.style.display = "none";
     }
 
     // Update field-only mode dropdown to match current settings
@@ -536,12 +619,22 @@ $("#home-placeholder")
     document.getElementById("log-type").innerText = result;
   })
   .on("click", "#start-btn", (event) => {
-    //start button
-    //no need to change display, python will trigger toggleStartStop
-    if (event.currentTarget.classList.contains("active")) {
-      eel.stop();
-    } else {
-      eel.start();
+    //start button - only used when macro is stopped
+    eel.start();
+  })
+  .on("click", "#stop-btn", (event) => {
+    //stop button - stops the macro completely
+    eel.stop();
+  })
+  .on("click", "#pause-btn", async (event) => {
+    //pause/resume button - toggle between pause and resume
+    const runState = await eel.getRunState()();
+    if (runState === 2) {
+      // Running -> Pause
+      eel.pause();
+    } else if (runState === 6) {
+      // Paused -> Resume
+      eel.resume();
     }
   })
   .on("click", "#update-btn", async (event) => {
