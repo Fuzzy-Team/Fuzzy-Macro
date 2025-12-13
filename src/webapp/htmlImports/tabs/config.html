@@ -43,8 +43,19 @@
       background-size: 100% 100%;
       background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23fd7777' fill-rule='evenodd' d='M5.467 4.392a.75.75 0 0 1-.001 1.06A9.22 9.22 0 0 0 2.75 12a9.22 9.22 0 0 0 2.775 6.606a.75.75 0 1 1-1.05 1.071A10.72 10.72 0 0 1 1.25 12c0-2.972 1.207-5.664 3.156-7.609a.75.75 0 0 1 1.06.001m13.15.072a.75.75 0 0 1 1.06.011A10.72 10.72 0 0 1 22.75 12c0 2.964-1.2 5.65-3.141 7.594a.75.75 0 1 1-1.062-1.06A9.22 9.22 0 0 0 21.25 12a9.22 9.22 0 0 0-2.644-6.475a.75.75 0 0 1 .01-1.06M8.308 7.488a.75.75 0 0 1-.035 1.06c-.949.888-1.524 2.102-1.524 3.434c0 1.348.589 2.575 1.558 3.466a.75.75 0 1 1-1.016 1.104c-1.252-1.151-2.042-2.77-2.042-4.57c0-1.779.771-3.38 2-4.53a.75.75 0 0 1 1.06.036m7.434.038a.75.75 0 0 1 1.06-.024c1.197 1.145 1.947 2.727 1.947 4.48c0 1.775-.767 3.373-1.99 4.521a.75.75 0 1 1-1.027-1.093c.945-.887 1.517-2.1 1.517-3.428c0-1.313-.559-2.512-1.484-3.396a.75.75 0 0 1-.023-1.06' clip-rule='evenodd'/%3E%3Cpath fill='%23fd7777' d='M13.656 10.451c.896.658 1.344.987 1.344 1.55c0 .562-.448.89-1.344 1.548a13 13 0 0 1-.718.495c-.197.125-.421.254-.653.381c-.894.49-1.34.734-1.741.463s-.437-.838-.51-1.971c-.02-.32-.034-.635-.034-.917s.013-.596.034-.917c.072-1.133.109-1.7.51-1.97c.4-.271.847-.027 1.74.462c.233.127.457.256.654.381c.226.143.471.314.718.495'/%3E%3C/svg%3E");
     }
+    .mdi--folder-account {
+      display: inline-block;
+      width: 1.4rem;
+      height: 1.4rem;
+      background-repeat: no-repeat;
+      background-size: 100% 100%;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%2377bb7a' d='M19 17v2H7v-2s0-4 6-4s6 4 6 4m-3-9a3 3 0 1 0-6 0a3 3 0 0 0 6 0m3.5-4H12l-2-2H4.5A2.5 2.5 0 0 0 2 4.5v15A2.5 2.5 0 0 0 4.5 22h15a2.5 2.5 0 0 0 2.5-2.5v-13A2.5 2.5 0 0 0 19.5 4'/%3E%3C/svg%3E");
+    }
   </style>
-  <div id="setting-bss" class="settings-tab-item active">
+  <div id="setting-profiles" class="settings-tab-item active">
+    <span class="mdi--folder-account"></span>Profiles
+  </div>
+  <div id="setting-bss" class="settings-tab-item">
     <span class="fxemoji--honeybee"></span>Bss
   </div>
   <div id="setting-priorities" class="settings-tab-item">
@@ -69,6 +80,195 @@
   </div>
 </div>
 <div style="display: flex; justify-content: center; width: 100%">
+  <div
+    style="width: 74%; overflow-y: auto; height: 94vh; display: none"
+    id="profiles"
+  >
+    <style>
+      .profile-card {
+        background: #36393f;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        border: 1px solid #4f545c;
+      }
+      .profile-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.5rem;
+      }
+      .profile-card-title {
+        color: #dcddde;
+        font-size: 1.1rem;
+        font-weight: 600;
+      }
+      .profile-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        max-height: 300px;
+        overflow-y: auto;
+      }
+      .profile-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #2f3136;
+        padding: 0.75rem 1rem;
+        border-radius: 6px;
+        border: 1px solid transparent;
+        transition: all 0.2s ease;
+      }
+      .profile-item:hover {
+        border-color: #7a77bb;
+      }
+      .profile-item.active {
+        border-color: #77bb7a;
+        background: #2a3a2a;
+      }
+      .profile-item-name {
+        color: #dcddde;
+        font-weight: 500;
+      }
+      .profile-item-actions {
+        display: flex;
+        gap: 0.5rem;
+      }
+      .profile-btn {
+        padding: 0.4rem 0.8rem;
+        border-radius: 4px;
+        border: none;
+        cursor: pointer;
+        font-size: 0.85rem;
+        font-family: inherit;
+        transition: all 0.2s ease;
+      }
+      .profile-btn-primary {
+        background: #7a77bb;
+        color: white;
+      }
+      .profile-btn-primary:hover {
+        background: #5c59a3;
+      }
+      .profile-btn-success {
+        background: #77bb7a;
+        color: white;
+      }
+      .profile-btn-success:hover {
+        background: #5a9a5c;
+      }
+      .profile-btn-danger {
+        background: #f04747;
+        color: white;
+      }
+      .profile-btn-danger:hover {
+        background: #d84040;
+      }
+      .profile-btn-secondary {
+        background: #4f545c;
+        color: #dcddde;
+      }
+      .profile-btn-secondary:hover {
+        background: #686d73;
+      }
+      .profile-input {
+        background: #2f3136;
+        border: 1px solid #4f545c;
+        border-radius: 4px;
+        padding: 0.5rem 0.75rem;
+        color: #dcddde;
+        font-size: 0.95rem;
+        width: 200px;
+        font-family: inherit;
+      }
+      .profile-input:focus {
+        outline: none;
+        border-color: #7a77bb;
+      }
+      .profile-status {
+        padding: 0.5rem 1rem;
+        border-radius: 4px;
+        margin-top: 0.5rem;
+        font-size: 0.9rem;
+      }
+      .profile-status.success {
+        background: rgba(119, 187, 122, 0.2);
+        color: #77bb7a;
+        border: 1px solid #77bb7a;
+      }
+      .profile-status.error {
+        background: rgba(240, 71, 71, 0.2);
+        color: #f04747;
+        border: 1px solid #f04747;
+      }
+      .current-profile-badge {
+        background: #77bb7a;
+        color: white;
+        padding: 0.2rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-left: 0.5rem;
+      }
+    </style>
+    <div class="poppins-medium standard-container" style="display: block; justify-items: unset; padding-top: 1rem;">
+      <h2>Profile Management</h2>
+      <p style="font-weight: 500; font-size: 1rem;">Save and switch between different configuration profiles. Each profile stores your settings, field configurations, and task priorities separately.</p>
+      <div class="seperator"></div>
+      
+      <!-- Current Profile Section -->
+      <div class="profile-card">
+        <div class="profile-card-header">
+          <span class="profile-card-title">📁 Current Profile</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 1rem;">
+          <span id="current-profile-display" style="color: #77bb7a; font-size: 1.2rem; font-weight: 600;">Loading...</span>
+        </div>
+      </div>
+
+      <!-- Switch Profile Section -->
+      <div class="profile-card">
+        <div class="profile-card-header">
+          <span class="profile-card-title">🔄 Switch Profile</span>
+        </div>
+        <p style="color: #b9bbbe; margin-bottom: 1rem; font-size: 0.9rem;">Select a profile to switch to. Your current settings will be saved automatically.</p>
+        <div class="profile-list" id="profile-list">
+          <!-- Profile items will be loaded dynamically -->
+        </div>
+      </div>
+
+      <!-- Create Profile Section -->
+      <div class="profile-card">
+        <div class="profile-card-header">
+          <span class="profile-card-title">➕ Create New Profile</span>
+        </div>
+        <p style="color: #b9bbbe; margin-bottom: 1rem; font-size: 0.9rem;">Create a new profile based on your current settings.</p>
+        <div style="display: flex; gap: 0.75rem; align-items: center;">
+          <input type="text" id="new-profile-name" class="profile-input" placeholder="Enter profile name...">
+          <button class="profile-btn profile-btn-success" onclick="createNewProfile()">Create Profile</button>
+        </div>
+        <div id="create-profile-status"></div>
+      </div>
+
+      <!-- Duplicate Profile Section -->
+      <div class="profile-card">
+        <div class="profile-card-header">
+          <span class="profile-card-title">📋 Duplicate Profile</span>
+        </div>
+        <p style="color: #b9bbbe; margin-bottom: 1rem; font-size: 0.9rem;">Create a copy of an existing profile with a new name.</p>
+        <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+          <select id="duplicate-source-profile" class="profile-input" style="width: 150px;">
+            <!-- Options will be loaded dynamically -->
+          </select>
+          <span style="color: #b9bbbe;">→</span>
+          <input type="text" id="duplicate-new-name" class="profile-input" placeholder="New profile name...">
+          <button class="profile-btn profile-btn-primary" onclick="duplicateExistingProfile()">Duplicate</button>
+        </div>
+        <div id="duplicate-profile-status"></div>
+      </div>
+    </div>
+  </div>
   <div
     style="width: 74%; overflow-y: auto; height: 94vh; display: none"
     id="bss"

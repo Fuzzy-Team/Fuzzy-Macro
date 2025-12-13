@@ -1451,25 +1451,27 @@ def discordBot(token, run, status, skipTask, initial_message_info=None, updateGU
         success, message = update_setting(mob_key, False)
         await interaction.response.send_message(message)
 
-    '''
     # === PROFILE MANAGEMENT COMMANDS ===
 
     @bot.tree.command(name="profiles", description="List available profiles")
     async def list_profiles(interaction: discord.Interaction):
         """List available profiles"""
         try:
-            profiles_dir = "../settings/profiles"
-            if os.path.exists(profiles_dir):
-                profiles = [d for d in os.listdir(profiles_dir) if os.path.isdir(os.path.join(profiles_dir, d))]
-                if profiles:
-                    embed = discord.Embed(title="📁 Available Profiles", color=0x00ff00)
-                    embed.add_field(name="Profiles", value="\n".join(f"• `{p}`" for p in profiles), inline=False)
-                    embed.set_footer(text="Use /switchprofile <name> to switch profiles")
-                    await interaction.response.send_message(embed=embed)
-                else:
-                    await interaction.response.send_message("❌ No profiles found")
+            profiles = settingsManager.listProfiles()
+            current = settingsManager.getCurrentProfile()
+            if profiles:
+                profile_lines = []
+                for p in profiles:
+                    if p == current:
+                        profile_lines.append(f"• `{p}` ✅ (active)")
+                    else:
+                        profile_lines.append(f"• `{p}`")
+                embed = discord.Embed(title="📁 Available Profiles", color=0x00ff00)
+                embed.add_field(name="Profiles", value="\n".join(profile_lines), inline=False)
+                embed.set_footer(text="Use /switchprofile <name> to switch profiles")
+                await interaction.response.send_message(embed=embed)
             else:
-                await interaction.response.send_message("❌ Profiles directory not found")
+                await interaction.response.send_message("❌ No profiles found")
 
         except Exception as e:
             await interaction.response.send_message(f"❌ Error listing profiles: {str(e)}")
@@ -1478,8 +1480,8 @@ def discordBot(token, run, status, skipTask, initial_message_info=None, updateGU
     async def current_profile(interaction: discord.Interaction):
         """Show current profile"""
         try:
-            current_profile = settingsManager.profileName
-            await interaction.response.send_message(f"📁 **Current Profile:** `{current_profile}`")
+            current = settingsManager.getCurrentProfile()
+            await interaction.response.send_message(f"📁 **Current Profile:** `{current}`")
 
         except Exception as e:
             await interaction.response.send_message(f"❌ Error getting current profile: {str(e)}")
@@ -1489,22 +1491,43 @@ def discordBot(token, run, status, skipTask, initial_message_info=None, updateGU
     async def switch_profile(interaction: discord.Interaction, profile: str):
         """Switch to a different profile"""
         try:
-            profiles_dir = "../settings/profiles"
-            profile_path = os.path.join(profiles_dir, profile)
-
-            if not os.path.exists(profile_path) or not os.path.isdir(profile_path):
-                await interaction.response.send_message(f"❌ Profile '{profile}' not found")
-                return
-
-            # Update the profile name in settingsManager
-            settingsManager.profileName = profile
-            clear_settings_cache()
-
-            await interaction.response.send_message(f"✅ Switched to profile: `{profile}`")
+            success, message = settingsManager.switchProfile(profile)
+            if success:
+                clear_settings_cache()
+                await interaction.response.send_message(f"✅ {message}")
+            else:
+                await interaction.response.send_message(f"❌ {message}")
 
         except Exception as e:
             await interaction.response.send_message(f"❌ Error switching profile: {str(e)}")
-    '''
+
+    @bot.tree.command(name="createprofile", description="Create a new profile based on current settings")
+    @app_commands.describe(name="Name for the new profile")
+    async def create_profile(interaction: discord.Interaction, name: str):
+        """Create a new profile"""
+        try:
+            success, message = settingsManager.createProfile(name)
+            if success:
+                await interaction.response.send_message(f"✅ {message}")
+            else:
+                await interaction.response.send_message(f"❌ {message}")
+
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error creating profile: {str(e)}")
+
+    @bot.tree.command(name="deleteprofile", description="Delete a profile (cannot delete active profile)")
+    @app_commands.describe(name="Name of the profile to delete")
+    async def delete_profile(interaction: discord.Interaction, name: str):
+        """Delete a profile"""
+        try:
+            success, message = settingsManager.deleteProfile(name)
+            if success:
+                await interaction.response.send_message(f"✅ {message}")
+            else:
+                await interaction.response.send_message(f"❌ {message}")
+
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error deleting profile: {str(e)}")
     
     @bot.tree.command(name="hiveslot", description="Change the hive slot number (1-6)")
     @app_commands.describe(slot="Hive slot number (1-6, where 1 is closest to cannon)")
