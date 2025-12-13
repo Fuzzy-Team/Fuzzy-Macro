@@ -31,6 +31,16 @@ def stop():
     run.value = 0
 
 @eel.expose
+def pause():
+    if run.value != 2: return #only pause if running
+    run.value = 5  # 5 = pause request
+
+@eel.expose
+def resume():
+    if run.value != 6: return #only resume if paused
+    run.value = 2  # 2 = running (resume)
+
+@eel.expose
 def getPatterns():
     return [x.replace(".py","") for x in os.listdir("../settings/patterns") if ".py" in x]
 
@@ -140,7 +150,8 @@ def toggleStartStop():
     eel.toggleStartStop()
 
 # Global variable to store run state
-_run_state = 3  # 0=stop, 1=start, 2=running, 3=stopped
+# 0=stop request, 1=start request, 2=running, 3=stopped, 4=disconnected, 5=pause request, 6=paused
+_run_state = 3
 
 def setRunState(state):
     global _run_state

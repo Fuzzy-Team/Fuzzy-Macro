@@ -196,12 +196,59 @@ def discordBot(token, run, status, skipTask, initial_message_info=None, updateGU
 
     @bot.tree.command(name = "stop", description = "Stop the macro")
     async def stop(interaction: discord.Interaction):
-        if run.value == 3: 
+        if run.value == 3:
             await interaction.response.send_message("Macro is already stopped")
-            return 
+            return
         run.value = 0
         await interaction.response.send_message("Stopping Macro")
-    
+
+    @bot.tree.command(name = "pause", description = "Pause the macro temporarily")
+    async def pause(interaction: discord.Interaction):
+        if run.value != 2:
+            if run.value == 6:
+                await interaction.response.send_message("⏸️ Macro is already paused. Use `/resume` to continue.")
+            elif run.value == 3:
+                await interaction.response.send_message("❌ Macro is not running. Use `/start` to start it first.")
+            else:
+                await interaction.response.send_message("❌ Macro is not in a state that can be paused.")
+            return
+        
+        await interaction.response.send_message("⏸️ Attempting to pause macro...")
+        run.value = 5  # 5 = pause request
+        
+        # Wait for macro to acknowledge pause (up to 5 seconds for quick response)
+        import asyncio
+        for _ in range(50):  # 50 * 0.1 = 5 seconds max
+            await asyncio.sleep(0.1)
+            if run.value == 6:  # 6 = paused
+                await interaction.followup.send("✅ Macro paused successfully! Use `/resume` to continue.")
+                return
+        
+        await interaction.followup.send("⚠️ Pause request sent. Macro will pause at the next checkpoint.")
+        
+        # Continue waiting in background for up to 60 more seconds
+        for _ in range(600):  # 600 * 0.1 = 60 seconds max
+            await asyncio.sleep(0.1)
+            if run.value == 6:  # 6 = paused
+                await interaction.followup.send("✅ Macro has now paused! Use `/resume` to continue.")
+                return
+            elif run.value not in [5, 6]:  # State changed to something else (stopped, etc.)
+                return  # Don't send anything, state changed
+
+    @bot.tree.command(name = "resume", description = "Resume a paused macro")
+    async def resume(interaction: discord.Interaction):
+        if run.value != 6:
+            if run.value == 2:
+                await interaction.response.send_message("▶️ Macro is already running.")
+            elif run.value == 3:
+                await interaction.response.send_message("❌ Macro is stopped. Use `/start` to start it.")
+            else:
+                await interaction.response.send_message("❌ Macro is not paused.")
+            return
+        
+        run.value = 2  # 2 = running (resume)
+        await interaction.response.send_message("▶️ Macro resumed!")
+
     @bot.tree.command(name = "skip", description = "Skip the current task")
     async def skip(interaction: discord.Interaction):
         if run.value != 2:
@@ -307,13 +354,23 @@ def discordBot(token, run, status, skipTask, initial_message_info=None, updateGU
             1: "▶️ Starting",
             2: "✅ Running",
             3: "⏹️ Stopped",
-            4: "🔄 Disconnected/Rejoining"
+            4: "🔄 Disconnected/Rejoining",
+            5: "⏸️ Pausing...",
+            6: "⏸️ Paused"
         }
-        
+
         macro_status = status_messages.get(run.value, "❓ Unknown")
         current_task = status.value if hasattr(status, 'value') and status.value else "None"
-        
-        embed = discord.Embed(title="📊 Macro Status", color=0x00ff00 if run.value == 2 else 0xff0000)
+
+        # Color: green for running, orange for paused, red for stopped/other
+        if run.value == 2:
+            embed_color = 0x00ff00  # Green
+        elif run.value in [5, 6]:
+            embed_color = 0xffa500  # Orange for paused
+        else:
+            embed_color = 0xff0000  # Red
+
+        embed = discord.Embed(title="📊 Macro Status", color=embed_color)
         embed.add_field(name="State", value=macro_status, inline=True)
         embed.add_field(name="Current Task", value=current_task.replace('_', ' ').title(), inline=True)
         

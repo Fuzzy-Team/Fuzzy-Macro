@@ -197,6 +197,18 @@ def macro(status, logQueue, updateGUI, run, skipTask):
         return settings_cache
     
     while True:
+        # Check for pause request (state 5) - release inputs and transition to paused
+        if run.value == 5:
+            macro.keyboard.releaseMovement()
+            mouse.mouseUp()
+            run.value = 6  # Transition to paused state
+        # Check for pause - wait while paused
+        while run.value == 6:  # 6 = paused
+            time.sleep(0.1)  # Wait while paused
+        # Check if stop was requested while paused
+        if run.value == 0:
+            break  # Exit macro loop if stop requested
+        
         macro.setdat = get_cached_settings()
         #run empty task
         #this is in case no other settings are selected 
@@ -888,7 +900,7 @@ def watch_for_hotkeys(run):
     pressed_keys = set()
     
     # Add debouncing to prevent duplicate triggers
-    last_trigger_time = {"start": 0.0, "stop": 0.0}
+    last_trigger_time = {"start": 0.0, "stop": 0.0, "pause": 0.0}
     debounce_duration = 0.3  # 300ms debounce
     
     # Add threading lock for synchronization
@@ -910,7 +922,7 @@ def watch_for_hotkeys(run):
     settings_cache_duration = 1.0  # Reload settings every 1 second max
     
     # Cache Eel recording state to avoid repeated calls
-    recording_cache = {"start": False, "stop": False}
+    recording_cache = {"start": False, "stop": False, "pause": False}
     last_recording_check = 0
     recording_cache_duration = 0.5  # Check recording state every 0.5 seconds max
     
@@ -930,10 +942,11 @@ def watch_for_hotkeys(run):
                 import eel
                 recording_cache["start"] = eel.getElementProperty("start_keybind", "dataset.recording")() == "true"
                 recording_cache["stop"] = eel.getElementProperty("stop_keybind", "dataset.recording")() == "true"
+                recording_cache["pause"] = eel.getElementProperty("pause_keybind", "dataset.recording")() == "true"
                 last_recording_check = current_time
             except:
-                recording_cache = {"start": False, "stop": False}
-        return recording_cache["start"] or recording_cache["stop"]
+                recording_cache = {"start": False, "stop": False, "pause": False}
+        return recording_cache["start"] or recording_cache["stop"] or recording_cache["pause"]
     
     def convert_key_to_string(key):
         """Optimized key conversion with minimal string operations and error handling"""
@@ -1029,6 +1042,7 @@ def watch_for_hotkeys(run):
                 settings = get_cached_settings()
                 start_keybind = settings.get("start_keybind", "F1")
                 stop_keybind = settings.get("stop_keybind", "F3")
+                pause_keybind = settings.get("pause_keybind", "F2")
                 
                 # Convert key to string for comparison
                 key_str = convert_key_to_string(key)
@@ -1036,6 +1050,10 @@ def watch_for_hotkeys(run):
                 
                 # Build current key combination
                 current_combo = build_key_combination()
+                
+                # Debug: print key detection
+                if current_combo in [start_keybind, stop_keybind, pause_keybind]:
+                    print(f"Key combo detected: {current_combo}, start={start_keybind}, stop={stop_keybind}, pause={pause_keybind}")
                 
                 # Don't start/stop macro if we're recording a keybind
                 if is_recording_keybind():
@@ -1080,6 +1098,26 @@ def watch_for_hotkeys(run):
                         last_trigger_time["stop"] = 0.0
                     last_trigger_time["stop"] = current_time
                     run.value = 0
+                elif current_combo == pause_keybind:
+                    print(f"Pause keybind detected! current_combo={current_combo}, pause_keybind={pause_keybind}, run.value={run.value}")
+                    # Check debounce with error handling
+                    try:
+                        if current_time - last_trigger_time["pause"] < debounce_duration:
+                            print("Debounce blocked pause")
+                            return
+                    except (TypeError, ValueError):
+                        # Reset trigger time if there's a comparison error
+                        last_trigger_time["pause"] = 0.0
+                    last_trigger_time["pause"] = current_time
+                    # Toggle between pause and resume
+                    if run.value == 2:  # Running -> Pause
+                        print("Setting run.value to 5 (pause request)")
+                        run.value = 5  # 5 = pause request
+                    elif run.value == 6:  # Paused -> Resume
+                        print("Setting run.value to 2 (resume)")
+                        run.value = 2  # 2 = running (resume)
+                    else:
+                        print(f"run.value is {run.value}, not 2 or 6, so no action taken")
             except Exception as e:
                 # Log error but don't crash the listener
                 print(f"Error in on_press: {e}")
@@ -1296,6 +1334,9 @@ if __name__ == "__main__":
 
         # Check if run state changed
         if run.value != prevRunState:
+            # Check for resume (transition from paused to running)
+            if prevRunState == 6 and run.value == 2:
+                logger.webhook("Macro Resumed", "Existance Macro", "bright green")
             gui.setRunState(run.value)
             try:
                 gui.toggleStartStop()  # Update UI
@@ -1458,6 +1499,47 @@ if __name__ == "__main__":
                 gui.toggleStartStop()  # Update UI
             except:
                 pass  # If eel is not ready, continue
+        elif run.value == 5:  # Pause request
+            # Send "attempting to pause" message first (same as Discord command)
+            logger.webhook("Attempting to pause macro", "Waiting for current action to complete...", "yellow")
+            gui.setRunState(5)  # Update GUI to show pausing state
+            try:
+                gui.toggleStartStop()  # Update UI
+            except:
+                pass
+            # Wait for macro process to acknowledge pause (it will set run.value = 6)
+            # The macro process releases its own inputs when it sees state 5
+            # Give it up to 5 seconds for quick response
+            pause_wait_start = time.time()
+            paused_quickly = False
+            while run.value == 5 and time.time() - pause_wait_start < 5:
+                time.sleep(0.1)
+                if run.value == 6:
+                    paused_quickly = True
+                    break
+            
+            # If didn't pause quickly, send checkpoint message
+            if not paused_quickly and run.value == 5:
+                logger.webhook("Pause request sent", "Macro will pause at the next checkpoint", "yellow")
+            
+            # Continue waiting up to 60 more seconds total
+            while run.value == 5 and time.time() - pause_wait_start < 60:
+                time.sleep(0.1)
+            
+            # If macro didn't acknowledge, force transition (safety fallback)
+            if run.value == 5:
+                keyboardModule.releaseMovement()
+                mouse.mouseUp()
+                run.value = 6
+        elif run.value == 6 and prevRunState == 5:  # Macro just acknowledged pause
+            # Now that macro has stopped its inputs, send the success webhook
+            logger.webhook("Macro Paused", "Use F2 or /resume to continue", "orange")
+            gui.setRunState(6)  # Update the global run state
+            try:
+                gui.toggleStartStop()  # Update UI
+            except:
+                pass  # If eel is not ready, continue
+        # Note: run.value == 6 (paused) is handled in the macro process loop - it waits for resume
         
         #Check for crash
         if macroProc and not macroProc.is_alive() and hasattr(macroProc, "exitcode") and macroProc.exitcode is not None and macroProc.exitcode < 0:
