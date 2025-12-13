@@ -557,8 +557,8 @@ def discordBot(token, run, status, skipTask, initial_message_info=None, updateGU
                     # Check if this field is enabled
                     field_list = settings.get("fields", [])
                     fields_enabled = settings.get("fields_enabled", [])
-                    for i in range(3):
-                        if i < len(fields_enabled) and i < len(field_list) and fields_enabled[i] and field_list[i] == field_name:
+                    for i in range(len(fields_enabled)):
+                        if i < len(field_list) and fields_enabled[i] and field_list[i] == field_name:
                             emoji = fieldEmojis.get(field_name.replace(" ", "_"), "")
                             is_current = current_status == f"gather_{field_name.replace(' ', '_')}"
                             desc = f"{emoji} {field_name}" if emoji else field_name

@@ -182,7 +182,7 @@ async function loadTasks() {
     if (taskId.startsWith("gather_")) {
       const fieldName = taskId.replace("gather_", "").replace("_", " ");
       // Check if this field is enabled
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < setdat.fields_enabled.length; i++) {
         if (setdat.fields_enabled[i] && setdat.fields[i] === fieldName) {
           const emoji = fieldEmojis[fieldName.replaceAll(" ", "_")] || "";
           return {

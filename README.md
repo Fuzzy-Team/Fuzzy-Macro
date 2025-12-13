@@ -25,7 +25,7 @@ Roblox Bee Swarm Simulator macro for macOS. Free, open source, and actively main
 
 - **Gather**
 
-  - Farm up to 3 fields with Natro-compatible settings
+  - Farm up to 5 fields with Natro-compatible settings
   - Patterns (shapes), size/width, invert axes, direction and turns
   - Shift-lock handling and field drift compensation (Saturator tracking)
   - Time- or backpack%-based stop conditions
@@ -127,4 +127,3 @@ https://existance-macro.gitbook.io/existance-macro-docs/
 
 - Designed for macOS.
 - This project and documentation are a work in progress but actively supported.
-

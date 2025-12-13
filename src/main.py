@@ -243,7 +243,7 @@ def macro(status, logQueue, updateGUI, run, skipTask):
             # Field-only mode: skip all tasks except field gathering
             # Get gather fields from settings
             gatherFields = []
-            for i in range(3):
+            for i in range(len(macro.setdat["fields_enabled"])):
                 if macro.setdat["fields_enabled"][i]:
                     gatherFields.append(macro.setdat["fields"][i])
             
@@ -425,7 +425,7 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                 fieldName = taskId.replace("gather_", "").replace("_", " ")
                 
                 # Check if this field is enabled in gather tab
-                for i in range(3):
+                for i in range(len(macro.setdat["fields_enabled"])):
                     if macro.setdat["fields_enabled"][i] and macro.setdat["fields"][i] == fieldName:
                         runTask(macro.gather, args=(fieldName,), resetAfter=False)
                         executedTasks.add(taskId)
