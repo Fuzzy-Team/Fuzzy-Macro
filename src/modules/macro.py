@@ -3167,11 +3167,11 @@ class macro:
         permissionPopup = self.adjustImage("./images/mac", "allow")
         permissionPopup2 = self.adjustImage("./images/mac", "allowfor")
         permissionPopup3 = self.adjustImage("./images/mac", "cancel")
-        x = self.mw/4
-        y = self.mh/3
-        res = locateImageOnScreen(permissionPopup, x, y, self.mw/2, self.mh/3, 0.8)
-        res2 = locateImageOnScreen(permissionPopup2, x, y, self.mw/2, self.mh/3, 0.8)
-        res3 = locateImageOnScreen(permissionPopup3, x, y, self.mw/2, self.mh/3, 0.8)
+        x = self.robloxWindow.mw/4
+        y = self.robloxWindow.mh/3
+        res = locateImageOnScreen(permissionPopup, x, y, self.robloxWindow.mw/2, self.robloxWindow.mh/3, 0.8)
+        res2 = locateImageOnScreen(permissionPopup2, x, y, self.robloxWindow.mw/2, self.robloxWindow.mh/3, 0.8)
+        res3 = locateImageOnScreen(permissionPopup3, x, y, self.robloxWindow.mw/2, self.robloxWindow.mh/3, 0.8)
         if res or res2 or res3:
             if res or res2:
                 self.logger.webhook("", "Detected: Terminal permission popup", "orange")
