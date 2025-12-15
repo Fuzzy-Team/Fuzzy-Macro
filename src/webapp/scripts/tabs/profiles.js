@@ -10,6 +10,9 @@ async function loadProfiles() {
 
   // Load profile list
   await loadProfileList();
+
+  // Set up file input event listener after HTML is loaded
+  setupFileInputListener();
 }
 
 /*
@@ -77,6 +80,21 @@ async function loadProfileList() {
           option.selected = true;
         }
         duplicateSelect.appendChild(option);
+      });
+    }
+
+    // Update export profile dropdown
+    const exportSelect = document.getElementById("export-profile-select");
+    if (exportSelect) {
+      exportSelect.innerHTML = "";
+      profiles.forEach((profile) => {
+        const option = document.createElement("option");
+        option.value = profile;
+        option.textContent = profile;
+        if (profile === currentProfile) {
+          option.selected = true;
+        }
+        exportSelect.appendChild(option);
       });
     }
   } catch (error) {
@@ -240,6 +258,193 @@ async function duplicateExistingProfile() {
     }
   } catch (error) {
     showProfileStatus("duplicate-profile-status", `Error: ${error}`, "error");
+  }
+}
+
+async function exportProfile() {
+  const profileSelect = document.getElementById("export-profile-select");
+  const profileName = profileSelect.value;
+
+  if (!profileName) {
+    showProfileStatus(
+      "export-profile-status",
+      "Please select a profile to export",
+      "error"
+    );
+    return;
+  }
+
+  try {
+    const result = await eel.exportProfile(profileName)();
+    const [success, contentOrMessage, filename] = result;
+
+    if (success) {
+      // Create download link for the JSON content
+      const blob = new Blob([contentOrMessage], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      URL.revokeObjectURL(url);
+
+      showProfileStatus(
+        "export-profile-status",
+        `Profile exported as ${filename}`,
+        "success"
+      );
+    } else {
+      showProfileStatus("export-profile-status", contentOrMessage, "error");
+    }
+  } catch (error) {
+    showProfileStatus("export-profile-status", `Error: ${error}`, "error");
+  }
+}
+
+// Modal functions for import profile
+function showImportModal(fileName) {
+  const modal = document.getElementById("import-profile-modal");
+  const selectedFileSpan = document.getElementById("modal-selected-file");
+  const profileNameInput = document.getElementById("modal-profile-name");
+
+  if (modal && selectedFileSpan && profileNameInput) {
+    selectedFileSpan.textContent = fileName;
+    profileNameInput.value = "imported_profile";
+    modal.style.display = "flex";
+
+    // Focus and select the input after modal is shown
+    setTimeout(() => {
+      profileNameInput.focus();
+      profileNameInput.select();
+
+      // Add keyboard event listener for Enter/Escape
+      const handleKeyPress = function (e) {
+        if (e.key === "Enter") {
+          confirmImportProfile();
+        } else if (e.key === "Escape") {
+          hideImportModal();
+        }
+      };
+
+      profileNameInput.addEventListener("keydown", handleKeyPress);
+
+      // Store the handler so we can remove it later
+      profileNameInput._keyHandler = handleKeyPress;
+    }, 100);
+  }
+}
+
+function hideImportModal() {
+  const modal = document.getElementById("import-profile-modal");
+  const profileNameInput = document.getElementById("modal-profile-name");
+  const fileInput = document.getElementById("import-profile-file");
+  const fileNameDisplay = document.getElementById("import-file-name");
+
+  if (modal) {
+    modal.style.display = "none";
+  }
+
+  // Clean up keyboard event listener
+  if (profileNameInput && profileNameInput._keyHandler) {
+    profileNameInput.removeEventListener(
+      "keydown",
+      profileNameInput._keyHandler
+    );
+    delete profileNameInput._keyHandler;
+  }
+
+  // Reset file input and display
+  if (fileInput) {
+    fileInput.value = "";
+    delete fileInput.dataset.selectedFile;
+  }
+
+  if (fileNameDisplay) {
+    fileNameDisplay.textContent = "No file selected";
+  }
+}
+
+async function confirmImportProfile() {
+  const fileInput = document.getElementById("import-profile-file");
+  const profileNameInput = document.getElementById("modal-profile-name");
+
+  if (!fileInput.files || fileInput.files.length === 0) {
+    showProfileStatus(
+      "import-profile-status",
+      "No file selected for import",
+      "error"
+    );
+    hideImportModal();
+    return;
+  }
+
+  const profileName = profileNameInput.value.trim();
+  if (!profileName) {
+    alert("Please enter a profile name");
+    profileNameInput.focus();
+    return;
+  }
+
+  const file = fileInput.files[0];
+
+  try {
+    // Read file content as text
+    const fileContent = await file.text();
+
+    // Import the profile
+    const [success, message] = await eel.importProfileContent(
+      fileContent,
+      profileName
+    )();
+
+    if (success) {
+      showProfileStatus("import-profile-status", message, "success");
+      hideImportModal();
+      await loadProfileList();
+    } else {
+      showProfileStatus("import-profile-status", message, "error");
+      // Don't hide modal on error so user can try again
+    }
+  } catch (error) {
+    showProfileStatus("import-profile-status", `Error: ${error}`, "error");
+    // Don't hide modal on error
+  }
+}
+
+// Set up file input event listener (called after HTML is loaded)
+function setupFileInputListener() {
+  const importFileInput = document.getElementById("import-profile-file");
+  if (importFileInput) {
+    importFileInput.addEventListener("change", function (e) {
+      const fileNameDisplay = document.getElementById("import-file-name");
+      console.log("File input changed, files:", e.target.files);
+
+      if (e.target.files && e.target.files.length > 0) {
+        const fileName = e.target.files[0].name;
+        console.log("Selected file:", fileName);
+
+        // Store the selected file temporarily
+        e.target.dataset.selectedFile = fileName;
+
+        // Show the import modal
+        showImportModal(fileName);
+
+        console.log("Modal shown for file:", fileName);
+      } else {
+        console.log("No files selected");
+        if (fileNameDisplay) {
+          fileNameDisplay.textContent = "No file selected";
+        }
+        delete e.target.dataset.selectedFile;
+      }
+    });
+    console.log("File input listener set up successfully");
+  } else {
+    console.error("Could not find import-profile-file element");
   }
 }
 

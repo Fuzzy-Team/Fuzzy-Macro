@@ -1,6 +1,10 @@
 import ast
 import os
 import shutil
+import json
+import zipfile
+import tempfile
+from datetime import datetime
 
 #returns a dictionary containing the settings
 profileName = "a"
@@ -29,15 +33,25 @@ def switchProfile(name):
     global profileName
     profiles_dir = getProfilesDir()
     profile_path = os.path.join(profiles_dir, name)
-    
+
     if not os.path.exists(profile_path) or not os.path.isdir(profile_path):
         return False, f"Profile '{name}' not found"
-    
+
+    # Check if required profile files exist
+    settings_file = os.path.join(profile_path, "settings.txt")
+    fields_file = os.path.join(profile_path, "fields.txt")
+
+    if not os.path.exists(settings_file):
+        return False, f"Profile '{name}' is missing settings.txt file"
+
+    if not os.path.exists(fields_file):
+        return False, f"Profile '{name}' is missing fields.txt file"
+
     profileName = name
-    
+
     # Sync the new profile's field settings to general settings
     initializeFieldSync()
-    
+
     return True, f"Switched to profile: {name}"
 
 def createProfile(name):
@@ -262,7 +276,13 @@ def saveGeneralSetting(setting, value):
         syncFieldSettingsToProfile(setting, value)
 
 def loadSettings():
-    settings = readSettingsFile(f"../settings/profiles/{profileName}/settings.txt")
+    try:
+        settings = readSettingsFile(f"../settings/profiles/{profileName}/settings.txt")
+    except FileNotFoundError:
+        print(f"Warning: Profile '{profileName}' settings file not found, using defaults")
+        # Fall back to default settings if profile file is missing
+        settings = readSettingsFile("./data/default_settings/settings.txt")
+
     # Ensure fields and fields_enabled arrays have 5 elements
     defaultSettings = readSettingsFile("./data/default_settings/settings.txt")
     defaultFields = defaultSettings.get("fields", ['pine tree', 'sunflower', 'dandelion', 'pine tree', 'sunflower'])
@@ -294,7 +314,12 @@ def loadAllSettings():
 def initializeFieldSync():
     """Initialize field synchronization between profile and general settings"""
     try:
-        profileData = readSettingsFile(f"../settings/profiles/{profileName}/settings.txt")
+        try:
+            profileData = readSettingsFile(f"../settings/profiles/{profileName}/settings.txt")
+        except FileNotFoundError:
+            print(f"Warning: Profile '{profileName}' settings file not found during sync, skipping")
+            return
+
         generalData = readSettingsFile("../settings/generalsettings.txt")
         
         # Check if field settings exist in both files
@@ -316,6 +341,114 @@ def initializeFieldSync():
             
     except Exception as e:
         print(f"Warning: Could not initialize field synchronization: {e}")
+
+def exportProfile(profile_name):
+    """Export a profile to JSON content for browser download"""
+    profiles_dir = getProfilesDir()
+    profile_path = os.path.join(profiles_dir, profile_name)
+
+    if not os.path.exists(profile_path):
+        return False, f"Profile '{profile_name}' not found"
+
+    # Read profile data
+    try:
+        settings_file = os.path.join(profile_path, "settings.txt")
+        fields_file = os.path.join(profile_path, "fields.txt")
+
+        if not os.path.exists(settings_file) or not os.path.exists(fields_file):
+            return False, f"Profile '{profile_name}' is missing required files"
+
+        settings_data = readSettingsFile(settings_file)
+        fields_data = loadFields() if profile_name == getCurrentProfile() else ast.literal_eval(open(fields_file).read())
+
+        # Create export data structure
+        export_data = {
+            "profile_name": profile_name,
+            "export_date": datetime.now().isoformat(),
+            "version": "1.0",
+            "settings": settings_data,
+            "fields": fields_data
+        }
+
+        # Generate filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"profile_{profile_name}_{timestamp}.json"
+
+        # Return JSON content and filename
+        json_content = json.dumps(export_data, indent=2, ensure_ascii=False)
+        return True, json_content, filename
+
+    except Exception as e:
+        return False, f"Failed to export profile: {str(e)}"
+
+def importProfile(import_path, new_profile_name=None):
+    """Import a profile from a JSON file"""
+    if not os.path.exists(import_path):
+        return False, f"Import file '{import_path}' not found"
+
+    try:
+        # Read and validate import data
+        with open(import_path, 'r', encoding='utf-8') as f:
+            import_data = json.load(f)
+
+        return _importProfileData(import_data, new_profile_name)
+    except Exception as e:
+        return False, f"Failed to import profile: {str(e)}"
+
+def importProfileContent(json_content, new_profile_name=None):
+    """Import a profile from JSON content string"""
+    try:
+        import_data = json.loads(json_content)
+        return _importProfileData(import_data, new_profile_name)
+    except json.JSONDecodeError:
+        return False, "Invalid JSON content"
+    except Exception as e:
+        return False, f"Failed to import profile: {str(e)}"
+
+def _importProfileData(import_data, new_profile_name=None):
+    """Internal function to import profile data"""
+    try:
+        # Validate structure
+        required_keys = ["profile_name", "settings", "fields"]
+        for key in required_keys:
+            if key not in import_data:
+                return False, f"Invalid import file: missing '{key}' key"
+
+        # Determine new profile name
+        if new_profile_name is None:
+            original_name = import_data["profile_name"]
+            new_profile_name = original_name
+            counter = 1
+            while os.path.exists(os.path.join(getProfilesDir(), new_profile_name)):
+                new_profile_name = f"{original_name}_imported_{counter}"
+                counter += 1
+
+        # Sanitize profile name
+        new_profile_name = new_profile_name.strip().replace(' ', '_').lower()
+        if not new_profile_name:
+            return False, "Profile name cannot be empty"
+
+        # Check if profile already exists
+        new_profile_path = os.path.join(getProfilesDir(), new_profile_name)
+        if os.path.exists(new_profile_path):
+            return False, f"Profile '{new_profile_name}' already exists"
+
+        # Create profile directory
+        os.makedirs(new_profile_path)
+
+        # Write settings file
+        settings_file = os.path.join(new_profile_path, "settings.txt")
+        saveDict(settings_file, import_data["settings"])
+
+        # Write fields file
+        fields_file = os.path.join(new_profile_path, "fields.txt")
+        with open(fields_file, 'w') as f:
+            f.write(str(import_data["fields"]))
+
+        return True, f"Profile imported successfully as '{new_profile_name}'"
+
+    except Exception as e:
+        return False, f"Failed to import profile: {str(e)}"
 
 #clear a file
 def clearFile(filePath):

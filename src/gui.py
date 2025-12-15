@@ -149,6 +149,9 @@ eel.expose(settingsManager.createProfile)
 eel.expose(settingsManager.deleteProfile)
 eel.expose(settingsManager.renameProfile)
 eel.expose(settingsManager.duplicateProfile)
+eel.expose(settingsManager.exportProfile)
+eel.expose(settingsManager.importProfile)
+eel.expose(settingsManager.importProfileContent)
 
 def updateGUI():
     settings = settingsManager.loadAllSettings()

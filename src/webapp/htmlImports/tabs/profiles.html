@@ -235,6 +235,156 @@
         </div>
         <div id="duplicate-profile-status"></div>
       </div>
+
+      <!-- Export Profile Section -->
+      <div class="profile-card">
+        <div class="profile-card-header">
+          <span class="profile-card-title">📤 Export Profile</span>
+        </div>
+        <p style="color: #b9bbbe; margin-bottom: 1rem; font-size: 0.9rem">
+          Export a profile to a JSON file for backup or sharing.
+        </p>
+        <div
+          style="
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+            flex-wrap: wrap;
+          "
+        >
+          <select
+            id="export-profile-select"
+            class="profile-input"
+            style="width: 200px"
+          >
+            <!-- Options will be loaded dynamically -->
+          </select>
+          <button
+            class="profile-btn profile-btn-success"
+            onclick="exportProfile()"
+          >
+            Export Profile
+          </button>
+        </div>
+        <div id="export-profile-status"></div>
+      </div>
+
+      <!-- Import Profile Section -->
+      <div class="profile-card">
+        <div class="profile-card-header">
+          <span class="profile-card-title">📥 Import Profile</span>
+        </div>
+        <p style="color: #b9bbbe; margin-bottom: 1rem; font-size: 0.9rem">
+          Import a profile from a JSON file. Choose a new name for the imported
+          profile.
+        </p>
+        <div
+          style="
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+            flex-wrap: wrap;
+          "
+        >
+          <input
+            type="file"
+            id="import-profile-file"
+            accept=".json"
+            style="display: none"
+          />
+          <button
+            class="profile-btn profile-btn-secondary"
+            onclick="document.getElementById('import-profile-file').click()"
+          >
+            Choose File
+          </button>
+          <span id="import-file-name" style="color: #b9bbbe; font-size: 0.9rem"
+            >No file selected</span
+          >
+        </div>
+        <div id="import-profile-status"></div>
+      </div>
+
+      <!-- Import Profile Modal -->
+      <div
+        id="import-profile-modal"
+        style="
+          display: none;
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: rgba(0, 0, 0, 0.7);
+          z-index: 1000;
+          justify-content: center;
+          align-items: center;
+        "
+      >
+        <div
+          style="
+            background: #36393f;
+            border-radius: 8px;
+            padding: 2rem;
+            width: 400px;
+            max-width: 90%;
+            border: 1px solid #4f545c;
+          "
+        >
+          <h3 style="color: #dcddde; margin: 0 0 1rem 0; font-size: 1.2rem">
+            Import Profile
+          </h3>
+
+          <div style="margin-bottom: 1rem">
+            <label
+              style="
+                color: #b9bbbe;
+                display: block;
+                margin-bottom: 0.5rem;
+                font-size: 0.9rem;
+              "
+            >
+              Selected file:
+              <span id="modal-selected-file" style="color: #dcddde"></span>
+            </label>
+          </div>
+
+          <div style="margin-bottom: 1.5rem">
+            <label
+              style="
+                color: #b9bbbe;
+                display: block;
+                margin-bottom: 0.5rem;
+                font-size: 0.9rem;
+              "
+            >
+              Profile name:
+            </label>
+            <input
+              type="text"
+              id="modal-profile-name"
+              class="profile-input"
+              placeholder="Enter profile name..."
+              style="width: 100%; box-sizing: border-box"
+            />
+          </div>
+
+          <div style="display: flex; gap: 0.75rem; justify-content: flex-end">
+            <button
+              class="profile-btn profile-btn-secondary"
+              onclick="hideImportModal()"
+            >
+              Cancel
+            </button>
+            <button
+              class="profile-btn profile-btn-primary"
+              onclick="confirmImportProfile()"
+            >
+              Import Profile
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
