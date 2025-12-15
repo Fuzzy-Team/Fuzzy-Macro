@@ -3162,15 +3162,27 @@ class macro:
         f.close()
     
     #click the "allow for one month" on the "terminal is requesting to bypass" popup
+    #Source: https://github.com/sevmanash/sevs-modified-macro/blob/main/src/modules/macro.py
     def clickPermissionPopup(self):
         permissionPopup = self.adjustImage("./images/mac", "allow")
-        x = self.robloxWindow.mw/4
-        y = self.robloxWindow.mh/3
-        res = locateImageOnScreen(permissionPopup, self.robloxWindow.mx+(x), self.robloxWindow.my+(y), self.robloxWindow.mw/2, self.robloxWindow.mh/3, 0.8)
-        if res:
-            self.logger.webhook("", "Detected: Terminal permission popup", "orange")
-            x2, y2 = [j//self.robloxWindow.multi for j in res[1]]
-            mouse.moveTo(self.robloxWindow.mx+(x+x2), self.robloxWindow.my+(y+y2))
+        permissionPopup2 = self.adjustImage("./images/mac", "allowfor")
+        permissionPopup3 = self.adjustImage("./images/mac", "cancel")
+        x = self.mw/4
+        y = self.mh/3
+        res = locateImageOnScreen(permissionPopup, x, y, self.mw/2, self.mh/3, 0.8)
+        res2 = locateImageOnScreen(permissionPopup2, x, y, self.mw/2, self.mh/3, 0.8)
+        res3 = locateImageOnScreen(permissionPopup3, x, y, self.mw/2, self.mh/3, 0.8)
+        if res or res2 or res3:
+            if res or res2:
+                self.logger.webhook("", "Detected: Terminal permission popup", "orange")
+            else:
+                self.logger.webhook("", "Detected: Screen permission popup", "orange")
+            reses = res or res2 or res3  
+            x2, y2 = reses[1]
+            if self.display_type == "retina":
+                x2 /= 2
+                y2 /= 2
+            mouse.moveTo(x+x2, y+y2)
             time.sleep(0.08)
             mouse.moveBy(1,1)
             time.sleep(0.1)
