@@ -73,7 +73,7 @@ Roblox Bee Swarm Simulator macro for macOS. Free, open source, and actively main
 
 - **Discord Bot**
 
-  - Remote control via Discord commands (start, stop, skip)
+  - Remote control via Discord commands (start, stop, pause, resume, skip)
   - Field management (enable/disable fields, swap fields, field-only mode)
   - Quest and collectible management
   - Mob run configuration
