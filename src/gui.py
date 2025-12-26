@@ -122,6 +122,27 @@ def clearAFB():
 
     with open("data/user/AFB.txt", "w") as f:
         f.write(data_str)
+
+@eel.expose
+def resetFieldToDefault(field_name):
+    """Reset a field's settings to the default values"""
+    try:
+        # Load default field settings
+        with open("data/default_settings/fields.txt", "r") as f:
+            default_fields = ast.literal_eval(f.read())
+
+        # Get the default settings for the specified field
+        if field_name in default_fields:
+            default_settings = default_fields[field_name]
+            # Save the default settings for this field
+            settingsManager.saveField(field_name, default_settings)
+            return True
+        else:
+            print(f"Warning: Field '{field_name}' not found in default settings")
+            return False
+    except Exception as e:
+        print(f"Error resetting field to default: {e}")
+        return False
         
 @eel.expose
 def update():

@@ -1210,9 +1210,9 @@ if __name__ == "__main__":
     settingsManager.saveDict("../settings/profiles/a/settings.txt", {**profileSettingsReference, **profileSettings})
 
     #update general settings
-    generalSettings = settingsManager.readSettingsFile("../settings/generalsettings.txt")
+    generalSettings = settingsManager.readSettingsFile("../settings/profiles/a/generalsettings.txt")
     generalSettingsReference = settingsManager.readSettingsFile("./data/default_settings/generalsettings.txt")
-    settingsManager.saveDict("../settings/generalsettings.txt", {**generalSettingsReference, **generalSettings})
+    settingsManager.saveDict("../settings/profiles/a/generalsettings.txt", {**generalSettingsReference, **generalSettings})
 
     #convert ahk pattern
     ahkPatterns = [x for x in os.listdir("../settings/patterns") if ".ahk" in x]

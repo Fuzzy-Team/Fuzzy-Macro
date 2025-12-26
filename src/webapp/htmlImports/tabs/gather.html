@@ -239,6 +239,16 @@
           },
         ]
       );
+
+      // Add reset button at the bottom
+      const resetButtonContainer = document.createElement('div');
+      resetButtonContainer.style.cssText = 'display: flex; justify-content: center; margin-top: 20px; margin-bottom: 20px;';
+      resetButtonContainer.innerHTML = `
+        <button id="reset-field-button" class="standard-button" style="background-color: #dc3545; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 14px;">
+          🔄 Reset Field to Default
+        </button>
+      `;
+      parentElement.appendChild(resetButtonContainer);
     </script>
   </div>
 </div>

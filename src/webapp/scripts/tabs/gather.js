@@ -95,4 +95,40 @@ $("#gather-placeholder")
   ) //load home tab, switch to field 1 once its done loading
   .on("click", ".gather-tab-item", (event) =>
     switchGatherTab(event.currentTarget)
-  ); //navigate between fields
+  ) //navigate between fields
+  .on("click", "#reset-field-button", async (event) => {
+    event.preventDefault();
+
+    // Get the currently selected field name
+    const fieldDropdown = document.getElementById("field");
+    const currentFieldName = getDropdownValue(fieldDropdown);
+
+    if (!currentFieldName) {
+      alert("Please select a field first.");
+      return;
+    }
+
+    // Show confirmation dialog
+    const confirmReset = confirm(`Are you sure you want to reset "${currentFieldName}" field settings to default values? This action cannot be undone.`);
+
+    if (!confirmReset) {
+      return;
+    }
+
+    try {
+      // Call the reset function
+      const success = await eel.resetFieldToDefault(currentFieldName)();
+
+      if (success) {
+        // Reload the field data and update the UI
+        const data = (await eel.loadFields()())[currentFieldName];
+        loadInputs(data);
+        alert(`Successfully reset "${currentFieldName}" field settings to defaults.`);
+      } else {
+        alert(`Failed to reset "${currentFieldName}" field settings. Field may not exist in default settings.`);
+      }
+    } catch (error) {
+      console.error("Error resetting field:", error);
+      alert("An error occurred while resetting field settings.");
+    }
+  });

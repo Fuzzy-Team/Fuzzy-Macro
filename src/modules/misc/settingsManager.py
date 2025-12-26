@@ -253,7 +253,7 @@ def syncFieldSettings(setting, value):
     """Synchronize field settings from profile to general settings"""
     try:
         # Update the general settings file
-        generalSettingsPath = "../settings/generalsettings.txt"
+        generalSettingsPath = f"../settings/profiles/{profileName}/generalsettings.txt"
         generalData = readSettingsFile(generalSettingsPath)
         generalData[setting] = value
         saveDict(generalSettingsPath, generalData)
@@ -339,7 +339,7 @@ def loadAllSettings():
     except FileNotFoundError:
         # Fall back to global generalsettings if profile-specific one doesn't exist
         print(f"Warning: Profile '{profileName}' generalsettings file not found, using global generalsettings")
-        generalSettings = readSettingsFile("../settings/generalsettings.txt")
+        generalSettings = readSettingsFile("../settings/profiles/{profileName}/generalsettings.txt")
     return {**loadSettings(), **generalSettings}
 
 def initializeFieldSync():
@@ -351,7 +351,7 @@ def initializeFieldSync():
             print(f"Warning: Profile '{profileName}' settings file not found during sync, skipping")
             return
 
-        generalData = readSettingsFile("../settings/generalsettings.txt")
+        generalData = readSettingsFile("../settings/profiles/{profileName}/generalsettings.txt")
         
         # Check if field settings exist in both files
         profileFields = profileData.get("fields", [])
@@ -360,7 +360,7 @@ def initializeFieldSync():
         # If general settings has different fields, sync from profile to general
         if profileFields != generalFields and profileFields:
             generalData["fields"] = profileFields
-            saveDict("../settings/generalsettings.txt", generalData)
+            saveDict("../settings/profiles/{profileName}/generalsettings.txt", generalData)
             
         # Sync fields_enabled as well
         profileFieldsEnabled = profileData.get("fields_enabled", [])
@@ -368,7 +368,7 @@ def initializeFieldSync():
         
         if profileFieldsEnabled != generalFieldsEnabled and profileFieldsEnabled:
             generalData["fields_enabled"] = profileFieldsEnabled
-            saveDict("../settings/generalsettings.txt", generalData)
+            saveDict("../settings/profiles/{profileName}/generalsettings.txt", generalData)
             
     except Exception as e:
         print(f"Warning: Could not initialize field synchronization: {e}")
@@ -497,6 +497,10 @@ def migrateProfilesToGeneralSettings():
     profiles_dir = getProfilesDir()
     global_generalsettings = "../settings/generalsettings.txt"
 
+    # Check if global generalsettings exists - if not, migration is already complete
+    if not os.path.exists(global_generalsettings):
+        return
+
     if not os.path.exists(profiles_dir):
         return
 
@@ -506,6 +510,8 @@ def migrateProfilesToGeneralSettings():
     except FileNotFoundError:
         print("Warning: Global generalsettings.txt not found, cannot migrate profiles")
         return
+
+    migration_performed = False
 
     # Iterate through all profiles
     for profile_name in listProfiles():
@@ -520,7 +526,17 @@ def migrateProfilesToGeneralSettings():
         try:
             shutil.copy2(global_generalsettings, generalsettings_file)
             print(f"Migrated generalsettings.txt for profile: {profile_name}")
+            migration_performed = True
         except Exception as e:
             print(f"Warning: Failed to migrate generalsettings.txt for profile '{profile_name}': {e}")
 
-    print("Profile migration completed")
+    # Only print completion message and delete old file if migration was actually performed
+    if migration_performed:
+        print("Profile migration completed")
+
+        # Delete the old global generalsettings file since all profiles now have their own copies
+        try:
+            os.remove(global_generalsettings)
+            print("Removed old global generalsettings.txt file")
+        except Exception as e:
+            print(f"Warning: Failed to remove old global generalsettings.txt file: {e}")
