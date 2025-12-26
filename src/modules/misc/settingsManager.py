@@ -59,7 +59,7 @@ def switchProfile(name):
     return True, f"Switched to profile: {name}"
 
 def createProfile(name):
-    """Create a new profile by copying the current profile"""
+    """Create a new profile using default settings from settings/defaults/"""
     global profileName
     profiles_dir = getProfilesDir()
 
@@ -73,22 +73,30 @@ def createProfile(name):
     if os.path.exists(new_profile_path):
         return False, f"Profile '{name}' already exists"
 
-    # Ensure current profile has generalsettings.txt
-    current_profile_path = os.path.join(profiles_dir, profileName)
-    current_generalsettings = os.path.join(current_profile_path, "generalsettings.txt")
-    if not os.path.exists(current_generalsettings):
-        # Copy from global generalsettings if profile doesn't have one
-        global_generalsettings = "../settings/generalsettings.txt"
-        try:
-            shutil.copy2(global_generalsettings, current_generalsettings)
-        except Exception as e:
-            return False, f"Failed to create generalsettings.txt for current profile: {str(e)}"
-
-    # Copy current profile to new profile
+    # Create the new profile directory
     try:
-        shutil.copytree(current_profile_path, new_profile_path)
+        os.makedirs(new_profile_path)
+
+        # Copy default profile settings (fields.txt and settings.txt)
+        default_profile_path = "../settings/defaults/profiles/a"
+        if os.path.exists(default_profile_path):
+            for file_name in ["fields.txt", "settings.txt"]:
+                src_file = os.path.join(default_profile_path, file_name)
+                dst_file = os.path.join(new_profile_path, file_name)
+                if os.path.exists(src_file):
+                    shutil.copy2(src_file, dst_file)
+
+        # Copy default generalsettings.txt
+        default_generalsettings = "../settings/defaults/generalsettings.txt"
+        if os.path.exists(default_generalsettings):
+            dst_generalsettings = os.path.join(new_profile_path, "generalsettings.txt")
+            shutil.copy2(default_generalsettings, dst_generalsettings)
+
         return True, f"Created profile: {name}"
     except Exception as e:
+        # Clean up partial profile if creation failed
+        if os.path.exists(new_profile_path):
+            shutil.rmtree(new_profile_path)
         return False, f"Failed to create profile: {str(e)}"
 
 def deleteProfile(name):
