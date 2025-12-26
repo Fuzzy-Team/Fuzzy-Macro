@@ -40,12 +40,16 @@ def switchProfile(name):
     # Check if required profile files exist
     settings_file = os.path.join(profile_path, "settings.txt")
     fields_file = os.path.join(profile_path, "fields.txt")
+    generalsettings_file = os.path.join(profile_path, "generalsettings.txt")
 
     if not os.path.exists(settings_file):
         return False, f"Profile '{name}' is missing settings.txt file"
 
     if not os.path.exists(fields_file):
         return False, f"Profile '{name}' is missing fields.txt file"
+
+    if not os.path.exists(generalsettings_file):
+        return False, f"Profile '{name}' is missing generalsettings.txt file"
 
     profileName = name
 
@@ -58,19 +62,29 @@ def createProfile(name):
     """Create a new profile by copying the current profile"""
     global profileName
     profiles_dir = getProfilesDir()
-    
+
     # Sanitize the profile name
     name = name.strip().replace(' ', '_').lower()
     if not name:
         return False, "Profile name cannot be empty"
-    
+
     # Check if profile already exists
     new_profile_path = os.path.join(profiles_dir, name)
     if os.path.exists(new_profile_path):
         return False, f"Profile '{name}' already exists"
-    
-    # Copy current profile to new profile
+
+    # Ensure current profile has generalsettings.txt
     current_profile_path = os.path.join(profiles_dir, profileName)
+    current_generalsettings = os.path.join(current_profile_path, "generalsettings.txt")
+    if not os.path.exists(current_generalsettings):
+        # Copy from global generalsettings if profile doesn't have one
+        global_generalsettings = "../settings/generalsettings.txt"
+        try:
+            shutil.copy2(global_generalsettings, current_generalsettings)
+        except Exception as e:
+            return False, f"Failed to create generalsettings.txt for current profile: {str(e)}"
+
+    # Copy current profile to new profile
     try:
         shutil.copytree(current_profile_path, new_profile_path)
         return True, f"Created profile: {name}"
@@ -270,7 +284,7 @@ def incrementProfileSetting(setting, incrValue):
     return data
 
 def saveGeneralSetting(setting, value):
-    saveSettingFile(setting, value, "../settings/generalsettings.txt")
+    saveSettingFile(setting, value, f"../settings/profiles/{profileName}/generalsettings.txt")
     # Synchronize field settings with profile settings
     if setting in ["fields", "fields_enabled"]:
         syncFieldSettingsToProfile(setting, value)
@@ -309,7 +323,16 @@ def loadSettings():
 
 #return a dict containing all settings except field (general, profile, planters)
 def loadAllSettings():
-    return {**loadSettings(), **readSettingsFile("../settings/generalsettings.txt")}
+    # Auto-migrate profiles to have their own generalsettings.txt files
+    migrateProfilesToGeneralSettings()
+
+    try:
+        generalSettings = readSettingsFile(f"../settings/profiles/{profileName}/generalsettings.txt")
+    except FileNotFoundError:
+        # Fall back to global generalsettings if profile-specific one doesn't exist
+        print(f"Warning: Profile '{profileName}' generalsettings file not found, using global generalsettings")
+        generalSettings = readSettingsFile("../settings/generalsettings.txt")
+    return {**loadSettings(), **generalSettings}
 
 def initializeFieldSync():
     """Initialize field synchronization between profile and general settings"""
@@ -354,12 +377,14 @@ def exportProfile(profile_name):
     try:
         settings_file = os.path.join(profile_path, "settings.txt")
         fields_file = os.path.join(profile_path, "fields.txt")
+        generalsettings_file = os.path.join(profile_path, "generalsettings.txt")
 
-        if not os.path.exists(settings_file) or not os.path.exists(fields_file):
+        if not os.path.exists(settings_file) or not os.path.exists(fields_file) or not os.path.exists(generalsettings_file):
             return False, f"Profile '{profile_name}' is missing required files"
 
         settings_data = readSettingsFile(settings_file)
         fields_data = loadFields() if profile_name == getCurrentProfile() else ast.literal_eval(open(fields_file).read())
+        generalsettings_data = readSettingsFile(generalsettings_file)
 
         # Create export data structure
         export_data = {
@@ -367,7 +392,8 @@ def exportProfile(profile_name):
             "export_date": datetime.now().isoformat(),
             "version": "1.0",
             "settings": settings_data,
-            "fields": fields_data
+            "fields": fields_data,
+            "generalsettings": generalsettings_data
         }
 
         # Generate filename
@@ -409,7 +435,7 @@ def _importProfileData(import_data, new_profile_name=None):
     """Internal function to import profile data"""
     try:
         # Validate structure
-        required_keys = ["profile_name", "settings", "fields"]
+        required_keys = ["profile_name", "settings", "fields", "generalsettings"]
         for key in required_keys:
             if key not in import_data:
                 return False, f"Invalid import file: missing '{key}' key"
@@ -445,6 +471,10 @@ def _importProfileData(import_data, new_profile_name=None):
         with open(fields_file, 'w') as f:
             f.write(str(import_data["fields"]))
 
+        # Write generalsettings file
+        generalsettings_file = os.path.join(new_profile_path, "generalsettings.txt")
+        saveDict(generalsettings_file, import_data["generalsettings"])
+
         return True, f"Profile imported successfully as '{new_profile_name}'"
 
     except Exception as e:
@@ -453,3 +483,36 @@ def _importProfileData(import_data, new_profile_name=None):
 #clear a file
 def clearFile(filePath):
     open(filePath, 'w').close()
+
+def migrateProfilesToGeneralSettings():
+    """Migrate existing profiles to have their own generalsettings.txt files"""
+    profiles_dir = getProfilesDir()
+    global_generalsettings = "../settings/generalsettings.txt"
+
+    if not os.path.exists(profiles_dir):
+        return
+
+    # Read global generalsettings
+    try:
+        global_data = readSettingsFile(global_generalsettings)
+    except FileNotFoundError:
+        print("Warning: Global generalsettings.txt not found, cannot migrate profiles")
+        return
+
+    # Iterate through all profiles
+    for profile_name in listProfiles():
+        profile_path = os.path.join(profiles_dir, profile_name)
+        generalsettings_file = os.path.join(profile_path, "generalsettings.txt")
+
+        # Skip if profile already has generalsettings.txt
+        if os.path.exists(generalsettings_file):
+            continue
+
+        # Copy global generalsettings to profile
+        try:
+            shutil.copy2(global_generalsettings, generalsettings_file)
+            print(f"Migrated generalsettings.txt for profile: {profile_name}")
+        except Exception as e:
+            print(f"Warning: Failed to migrate generalsettings.txt for profile '{profile_name}': {e}")
+
+    print("Profile migration completed")
