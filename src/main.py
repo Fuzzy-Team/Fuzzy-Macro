@@ -219,16 +219,36 @@ def macro(status, logQueue, updateGUI, run, skipTask):
         # Check if field-only mode is enabled
         if macro.setdat.get("field_only_mode", False):
             # Field-only mode: skip all tasks except field gathering
-            # Get gather fields from settings
-            gatherFields = []
-            for i in range(len(macro.setdat["fields_enabled"])):
-                if macro.setdat["fields_enabled"][i]:
-                    gatherFields.append(macro.setdat["fields"][i])
-            
-            # Gather in enabled fields
-            for field in gatherFields:
-                runTask(macro.gather, args=(field,), resetAfter=False)
-            
+            # Get priority order and filter to only include enabled field gathering tasks
+            priorityOrder = macro.setdat.get("task_priority_order", [])
+            executedTasks = set()
+
+            # Filter priority order to only include gather tasks for enabled fields
+            fieldOnlyTasks = []
+            for taskId in priorityOrder:
+                if taskId.startswith("gather_"):
+                    fieldName = taskId.replace("gather_", "").replace("_", " ")
+                    # Check if this field is enabled
+                    for i in range(len(macro.setdat["fields_enabled"])):
+                        if macro.setdat["fields_enabled"][i] and macro.setdat["fields"][i] == fieldName:
+                            fieldOnlyTasks.append(taskId)
+                            break
+
+            # If no gather tasks are in priority order, fall back to sequential order of enabled fields
+            if not fieldOnlyTasks:
+                for i in range(len(macro.setdat["fields_enabled"])):
+                    if macro.setdat["fields_enabled"][i]:
+                        field = macro.setdat["fields"][i]
+                        fieldOnlyTasks.append(f"gather_{field.replace(' ', '_')}")
+
+            # Execute field gathering tasks in priority order
+            for taskId in fieldOnlyTasks:
+                if taskId.startswith("gather_"):
+                    fieldName = taskId.replace("gather_", "").replace("_", " ")
+                    if taskId not in executedTasks:
+                        runTask(macro.gather, args=(fieldName,), resetAfter=False)
+                        executedTasks.add(taskId)
+
             # Skip to next iteration
             continue
 

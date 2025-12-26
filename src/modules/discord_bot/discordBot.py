@@ -721,13 +721,34 @@ def discordBot(token, run, status, skipTask, initial_message_info=None, updateGU
                 task_list.append({"title": "Field Only Mode", "desc": "🌾 Gathering in fields only", "is_current": False})
                 field_list = settings.get("fields", [])
                 fields_enabled = settings.get("fields_enabled", [])
-                for i in range(len(fields_enabled)):
-                    if i < len(field_list) and fields_enabled[i]:
-                        field = field_list[i]
-                        emoji = fieldEmojis.get(field.replace(" ", "_"), "")
-                        desc = f"{emoji} {field}" if emoji else field
-                        is_current = current_status == f"gather_{field.replace(' ', '_')}"
-                        task_list.append({"title": f"Gather {i + 1}", "desc": desc, "is_current": is_current})
+                
+                # Filter priority order to only include gather tasks for enabled fields
+                field_only_tasks = []
+                for task_id in priority_order:
+                    if task_id.startswith("gather_"):
+                        field_name = task_id.replace("gather_", "").replace("_", " ")
+                        # Check if this field is enabled
+                        for i in range(len(fields_enabled)):
+                            if i < len(field_list) and fields_enabled[i] and field_list[i] == field_name:
+                                field_only_tasks.append(task_id)
+                                break
+                
+                # If no gather tasks are in priority order, fall back to sequential order of enabled fields
+                if not field_only_tasks:
+                    for i in range(len(fields_enabled)):
+                        if i < len(field_list) and fields_enabled[i]:
+                            field = field_list[i]
+                            field_only_tasks.append(f"gather_{field.replace(' ', '_')}")
+                
+                # Display gather tasks in priority order
+                gather_index = 1
+                for task_id in field_only_tasks:
+                    field_name = task_id.replace("gather_", "").replace("_", " ")
+                    emoji = fieldEmojis.get(field_name.replace(" ", "_"), "")
+                    desc = f"{emoji} {field_name}" if emoji else field_name
+                    is_current = current_status == f"gather_{field_name.replace(' ', '_')}"
+                    task_list.append({"title": f"Gather {gather_index}", "desc": desc, "is_current": is_current})
+                    gather_index += 1
             else:
                 # If priority order exists, use it; otherwise fall back to old order
                 if priority_order and len(priority_order) > 0:

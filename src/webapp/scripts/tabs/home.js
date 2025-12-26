@@ -197,14 +197,43 @@ async function loadTasks() {
   if (setdat.field_only_mode) {
     out += taskHTML("Field Only Mode", "🌾 Gathering in fields only");
 
-    // Still show the fields to be gathered in field-only mode
-    for (let i = 0; i <= setdat.fields_enabled.length; i++) {
-      if (!setdat.fields_enabled[i]) continue;
-      const field = setdat.fields[i];
+    // Get priority order and filter to only include gather tasks for enabled fields
+    const priorityOrder = setdat.task_priority_order || [];
+    const fieldOnlyTasks = [];
+    
+    // Filter priority order to only include gather tasks for enabled fields
+    for (const taskId of priorityOrder) {
+      if (taskId.startsWith("gather_")) {
+        const fieldName = taskId.replace("gather_", "").replace("_", " ");
+        // Check if this field is enabled
+        for (let i = 0; i < setdat.fields_enabled.length; i++) {
+          if (setdat.fields_enabled[i] && setdat.fields[i] === fieldName) {
+            fieldOnlyTasks.push(taskId);
+            break;
+          }
+        }
+      }
+    }
+
+    // If no gather tasks are in priority order, fall back to sequential order of enabled fields
+    if (fieldOnlyTasks.length === 0) {
+      for (let i = 0; i < setdat.fields_enabled.length; i++) {
+        if (setdat.fields_enabled[i]) {
+          const field = setdat.fields[i];
+          fieldOnlyTasks.push(`gather_${field.replaceAll(" ", "_")}`);
+        }
+      }
+    }
+
+    // Display gather tasks in priority order
+    let gatherIndex = 1;
+    for (const taskId of fieldOnlyTasks) {
+      const fieldName = taskId.replace("gather_", "").replace("_", " ");
       out += taskHTML(
-        `Gather ${i + 1}`,
-        `${fieldEmojis[field.replaceAll(" ", "_")]} ${field}`
+        `Gather ${gatherIndex}`,
+        `${fieldEmojis[fieldName.replaceAll(" ", "_")]} ${fieldName}`
       );
+      gatherIndex++;
     }
 
     // Display the tasks

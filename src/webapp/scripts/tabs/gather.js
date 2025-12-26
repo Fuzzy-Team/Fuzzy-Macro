@@ -109,7 +109,9 @@ $("#gather-placeholder")
     }
 
     // Show confirmation dialog
-    const confirmReset = confirm(`Are you sure you want to reset "${currentFieldName}" field settings to default values? This action cannot be undone.`);
+    const confirmReset = confirm(
+      `Are you sure you want to reset "${currentFieldName}" field settings to default values? This action cannot be undone.`
+    );
 
     if (!confirmReset) {
       return;
@@ -123,9 +125,13 @@ $("#gather-placeholder")
         // Reload the field data and update the UI
         const data = (await eel.loadFields()())[currentFieldName];
         loadInputs(data);
-        alert(`Successfully reset "${currentFieldName}" field settings to defaults.`);
+        alert(
+          `Successfully reset "${currentFieldName}" field settings to defaults.`
+        );
       } else {
-        alert(`Failed to reset "${currentFieldName}" field settings. Field may not exist in default settings.`);
+        alert(
+          `Failed to reset "${currentFieldName}" field settings. Field may not exist in default settings.`
+        );
       }
     } catch (error) {
       console.error("Error resetting field:", error);
