@@ -339,7 +339,7 @@ def loadAllSettings():
     except FileNotFoundError:
         # Fall back to global generalsettings if profile-specific one doesn't exist
         print(f"Warning: Profile '{profileName}' generalsettings file not found, using global generalsettings")
-        generalSettings = readSettingsFile("../settings/profiles/{profileName}/generalsettings.txt")
+        generalSettings = readSettingsFile(f"../settings/profiles/{profileName}/generalsettings.txt")
     return {**loadSettings(), **generalSettings}
 
 def initializeFieldSync():
@@ -351,24 +351,24 @@ def initializeFieldSync():
             print(f"Warning: Profile '{profileName}' settings file not found during sync, skipping")
             return
 
-        generalData = readSettingsFile("../settings/profiles/{profileName}/generalsettings.txt")
-        
+        generalData = readSettingsFile(f"../settings/profiles/{profileName}/generalsettings.txt")
+
         # Check if field settings exist in both files
         profileFields = profileData.get("fields", [])
         generalFields = generalData.get("fields", [])
-        
+
         # If general settings has different fields, sync from profile to general
         if profileFields != generalFields and profileFields:
             generalData["fields"] = profileFields
-            saveDict("../settings/profiles/{profileName}/generalsettings.txt", generalData)
-            
+            saveDict(f"../settings/profiles/{profileName}/generalsettings.txt", generalData)
+
         # Sync fields_enabled as well
         profileFieldsEnabled = profileData.get("fields_enabled", [])
         generalFieldsEnabled = generalData.get("fields_enabled", [])
-        
+
         if profileFieldsEnabled != generalFieldsEnabled and profileFieldsEnabled:
             generalData["fields_enabled"] = profileFieldsEnabled
-            saveDict("../settings/profiles/{profileName}/generalsettings.txt", generalData)
+            saveDict(f"../settings/profiles/{profileName}/generalsettings.txt", generalData)
             
     except Exception as e:
         print(f"Warning: Could not initialize field synchronization: {e}")
