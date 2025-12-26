@@ -9,10 +9,33 @@ from datetime import datetime
 #returns a dictionary containing the settings
 profileName = "a"
 
-# Profile management functions
+# Get the project root directory (4 levels up from this file: src/modules/misc/settingsManager.py)
+def getProjectRoot():
+    """Get the project root directory path"""
+    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+# Helper functions for common paths
 def getProfilesDir():
     """Get the profiles directory path"""
-    return "../settings/profiles"
+    return os.path.join(getProjectRoot(), "settings", "profiles")
+
+def getProfilePath(profile_name=None):
+    """Get the path to a specific profile directory"""
+    if profile_name is None:
+        profile_name = profileName
+    return os.path.join(getProfilesDir(), profile_name)
+
+def getDefaultSettingsPath():
+    """Get the path to default settings directory"""
+    return os.path.join(getProjectRoot(), "src", "data", "default_settings")
+
+def getSettingsDir():
+    """Get the settings directory path"""
+    return os.path.join(getProjectRoot(), "settings")
+
+def getPatternsDir():
+    """Get the patterns directory path"""
+    return os.path.join(getProjectRoot(), "settings", "patterns")
 
 def listProfiles():
     """List all available profiles"""
@@ -78,7 +101,7 @@ def createProfile(name):
         os.makedirs(new_profile_path)
 
         # Copy default profile settings (fields.txt and settings.txt)
-        default_profile_path = "../settings/defaults/profiles/a"
+        default_profile_path = os.path.join(getProjectRoot(), "settings", "defaults", "profiles", "a")
         if os.path.exists(default_profile_path):
             for file_name in ["fields.txt", "settings.txt"]:
                 src_file = os.path.join(default_profile_path, file_name)
@@ -87,7 +110,7 @@ def createProfile(name):
                     shutil.copy2(src_file, dst_file)
 
         # Copy default generalsettings.txt
-        default_generalsettings = "../settings/defaults/generalsettings.txt"
+        default_generalsettings = os.path.join(getProjectRoot(), "settings", "defaults", "generalsettings.txt")
         if os.path.exists(default_generalsettings):
             dst_generalsettings = os.path.join(new_profile_path, "generalsettings.txt")
             shutil.copy2(default_generalsettings, dst_generalsettings)
@@ -212,7 +235,8 @@ def saveSettingFile(setting,value, path):
     saveDict(path, data)
 
 def loadFields():
-    with open(f"../settings/profiles/{profileName}/fields.txt") as f:
+    fields_path = os.path.join(getProfilePath(), "fields.txt")
+    with open(fields_path) as f:
         out = ast.literal_eval(f.read())
     f.close()
     
@@ -230,7 +254,7 @@ def loadFields():
     
     # Save the updated fields if any were modified
     if fieldsUpdated:
-        with open(f"../settings/profiles/{profileName}/fields.txt", "w") as f:
+        with open(fields_path, "w") as f:
             f.write(str(out))
         f.close()
     
@@ -245,7 +269,8 @@ def loadFields():
 def saveField(field, settings):
     fieldsData = loadFields()
     fieldsData[field] = settings
-    with open(f"../settings/profiles/{profileName}/fields.txt", "w") as f:
+    fields_path = os.path.join(getProfilePath(), "fields.txt")
+    with open(fields_path, "w") as f:
         f.write(str(fieldsData))
     f.close()
 
@@ -253,7 +278,7 @@ def syncFieldSettings(setting, value):
     """Synchronize field settings from profile to general settings"""
     try:
         # Update the general settings file
-        generalSettingsPath = f"../settings/profiles/{profileName}/generalsettings.txt"
+        generalSettingsPath = os.path.join(getProfilePath(), "generalsettings.txt")
         generalData = readSettingsFile(generalSettingsPath)
         generalData[setting] = value
         saveDict(generalSettingsPath, generalData)
@@ -264,7 +289,7 @@ def syncFieldSettingsToProfile(setting, value):
     """Synchronize field settings from general to profile settings"""
     try:
         # Update the profile settings file
-        profileSettingsPath = f"../settings/profiles/{profileName}/settings.txt"
+        profileSettingsPath = os.path.join(getProfilePath(), "settings.txt")
         profileData = readSettingsFile(profileSettingsPath)
         profileData[setting] = value
         saveDict(profileSettingsPath, profileData)
@@ -272,41 +297,46 @@ def syncFieldSettingsToProfile(setting, value):
         print(f"Warning: Could not sync field settings to profile settings: {e}")
 
 def saveProfileSetting(setting, value):
-    saveSettingFile(setting, value, f"../settings/profiles/{profileName}/settings.txt")
+    settings_path = os.path.join(getProfilePath(), "settings.txt")
+    saveSettingFile(setting, value, settings_path)
     # Synchronize field settings with general settings
     if setting in ["fields", "fields_enabled"]:
         syncFieldSettings(setting, value)
 
 def saveDictProfileSettings(dict):
-
-    saveDict(f"../settings/profiles/{profileName}/settings.txt", {**readSettingsFile(f"../settings/profiles/{profileName}/settings.txt"), **dict})
+    settings_path = os.path.join(getProfilePath(), "settings.txt")
+    saveDict(settings_path, {**readSettingsFile(settings_path), **dict})
 
 #increment a setting, and return the dictionary for the setting
 def incrementProfileSetting(setting, incrValue):
     #get the dictionary
-    data = readSettingsFile(f"../settings/profiles/{profileName}/settings.txt")
+    settings_path = os.path.join(getProfilePath(), "settings.txt")
+    data = readSettingsFile(settings_path)
     #update the dictionary
     data[setting] += incrValue
     #write it
-    saveDict(f"../settings/profiles/{profileName}/settings.txt", data)
+    saveDict(settings_path, data)
     return data
 
 def saveGeneralSetting(setting, value):
-    saveSettingFile(setting, value, f"../settings/profiles/{profileName}/generalsettings.txt")
+    generalsettings_path = os.path.join(getProfilePath(), "generalsettings.txt")
+    saveSettingFile(setting, value, generalsettings_path)
     # Synchronize field settings with profile settings
     if setting in ["fields", "fields_enabled"]:
         syncFieldSettingsToProfile(setting, value)
 
 def loadSettings():
+    settings_path = os.path.join(getProfilePath(), "settings.txt")
+    default_settings_path = os.path.join(getDefaultSettingsPath(), "settings.txt")
     try:
-        settings = readSettingsFile(f"../settings/profiles/{profileName}/settings.txt")
+        settings = readSettingsFile(settings_path)
     except FileNotFoundError:
         print(f"Warning: Profile '{profileName}' settings file not found, using defaults")
         # Fall back to default settings if profile file is missing
-        settings = readSettingsFile("./data/default_settings/settings.txt")
+        settings = readSettingsFile(default_settings_path)
 
     # Ensure fields and fields_enabled arrays have 5 elements
-    defaultSettings = readSettingsFile("./data/default_settings/settings.txt")
+    defaultSettings = readSettingsFile(default_settings_path)
     defaultFields = defaultSettings.get("fields", ['pine tree', 'sunflower', 'dandelion', 'pine tree', 'sunflower'])
     defaultFieldsEnabled = defaultSettings.get("fields_enabled", [True, False, False, False, False])
     
@@ -325,7 +355,7 @@ def loadSettings():
     if updated:
         settings["fields"] = fields
         settings["fields_enabled"] = fieldsEnabled
-        saveDict(f"../settings/profiles/{profileName}/settings.txt", settings)
+        saveDict(settings_path, settings)
     
     return settings
 
@@ -334,24 +364,27 @@ def loadAllSettings():
     # Auto-migrate profiles to have their own generalsettings.txt files
     migrateProfilesToGeneralSettings()
 
+    generalsettings_path = os.path.join(getProfilePath(), "generalsettings.txt")
     try:
-        generalSettings = readSettingsFile(f"../settings/profiles/{profileName}/generalsettings.txt")
+        generalSettings = readSettingsFile(generalsettings_path)
     except FileNotFoundError:
         # Fall back to global generalsettings if profile-specific one doesn't exist
         print(f"Warning: Profile '{profileName}' generalsettings file not found, using global generalsettings")
-        generalSettings = readSettingsFile(f"../settings/profiles/{profileName}/generalsettings.txt")
+        generalSettings = readSettingsFile(generalsettings_path)
     return {**loadSettings(), **generalSettings}
 
 def initializeFieldSync():
     """Initialize field synchronization between profile and general settings"""
     try:
+        settings_path = os.path.join(getProfilePath(), "settings.txt")
+        generalsettings_path = os.path.join(getProfilePath(), "generalsettings.txt")
         try:
-            profileData = readSettingsFile(f"../settings/profiles/{profileName}/settings.txt")
+            profileData = readSettingsFile(settings_path)
         except FileNotFoundError:
             print(f"Warning: Profile '{profileName}' settings file not found during sync, skipping")
             return
 
-        generalData = readSettingsFile(f"../settings/profiles/{profileName}/generalsettings.txt")
+        generalData = readSettingsFile(generalsettings_path)
 
         # Check if field settings exist in both files
         profileFields = profileData.get("fields", [])
@@ -360,7 +393,7 @@ def initializeFieldSync():
         # If general settings has different fields, sync from profile to general
         if profileFields != generalFields and profileFields:
             generalData["fields"] = profileFields
-            saveDict(f"../settings/profiles/{profileName}/generalsettings.txt", generalData)
+            saveDict(generalsettings_path, generalData)
 
         # Sync fields_enabled as well
         profileFieldsEnabled = profileData.get("fields_enabled", [])
@@ -368,7 +401,7 @@ def initializeFieldSync():
 
         if profileFieldsEnabled != generalFieldsEnabled and profileFieldsEnabled:
             generalData["fields_enabled"] = profileFieldsEnabled
-            saveDict(f"../settings/profiles/{profileName}/generalsettings.txt", generalData)
+            saveDict(generalsettings_path, generalData)
             
     except Exception as e:
         print(f"Warning: Could not initialize field synchronization: {e}")
@@ -495,7 +528,7 @@ def clearFile(filePath):
 def migrateProfilesToGeneralSettings():
     """Migrate existing profiles to have their own generalsettings.txt files"""
     profiles_dir = getProfilesDir()
-    global_generalsettings = "../settings/generalsettings.txt"
+    global_generalsettings = os.path.join(getSettingsDir(), "generalsettings.txt")
 
     # Check if global generalsettings exists - if not, migration is already complete
     if not os.path.exists(global_generalsettings):

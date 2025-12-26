@@ -12,6 +12,7 @@ from threading import Thread
 import eel
 import time
 import sys
+import os
 import ast
 import subprocess
 import atexit
@@ -1226,29 +1227,41 @@ if __name__ == "__main__":
 
     #update settings
     profileSettings = settingsManager.loadSettings()
-    profileSettingsReference = settingsManager.readSettingsFile("./data/default_settings/settings.txt")
-    settingsManager.saveDict("../settings/profiles/a/settings.txt", {**profileSettingsReference, **profileSettings})
+    profileSettingsReference = settingsManager.readSettingsFile(os.path.join(settingsManager.getDefaultSettingsPath(), "settings.txt"))
+    settingsManager.saveDict(os.path.join(settingsManager.getProfilePath("a"), "settings.txt"), {**profileSettingsReference, **profileSettings})
 
     #update general settings
-    generalSettings = settingsManager.readSettingsFile("../settings/profiles/a/generalsettings.txt")
-    generalSettingsReference = settingsManager.readSettingsFile("./data/default_settings/generalsettings.txt")
-    settingsManager.saveDict("../settings/profiles/a/generalsettings.txt", {**generalSettingsReference, **generalSettings})
+    generalsettings_path = os.path.join(settingsManager.getProfilePath("a"), "generalsettings.txt")
+    generalSettingsReference = settingsManager.readSettingsFile(os.path.join(settingsManager.getDefaultSettingsPath(), "generalsettings.txt"))
+    try:
+        generalSettings = settingsManager.readSettingsFile(generalsettings_path)
+    except FileNotFoundError:
+        # If generalsettings.txt doesn't exist, create it from defaults
+        generalSettings = {}
+        # Ensure the profile directory exists
+        profile_dir = settingsManager.getProfilePath("a")
+        os.makedirs(profile_dir, exist_ok=True)
+    settingsManager.saveDict(generalsettings_path, {**generalSettingsReference, **generalSettings})
 
     #convert ahk pattern
-    ahkPatterns = [x for x in os.listdir("../settings/patterns") if ".ahk" in x]
-    for pattern in ahkPatterns:
-        with open(f"../settings/patterns/{pattern}", "r") as f:
-            ahk = f.read()
-        f.close()
-        try:
-            python = ahkPatternToPython(ahk)
-            print(f"Converted: {pattern}")
-            patternName = pattern.rsplit(".", 1)[0].lower()
-            with open(f"../settings/patterns/{patternName}.py", "w") as f:
-                f.write(python)
+    patterns_dir = settingsManager.getPatternsDir()
+    if os.path.exists(patterns_dir):
+        ahkPatterns = [x for x in os.listdir(patterns_dir) if ".ahk" in x]
+        for pattern in ahkPatterns:
+            pattern_path = os.path.join(patterns_dir, pattern)
+            with open(pattern_path, "r") as f:
+                ahk = f.read()
             f.close()
-        except:
-            messageBox.msgBox(title="Failed to convert pattern", text=f"There was an error converting {pattern}. The pattern will not be used.")
+            try:
+                python = ahkPatternToPython(ahk)
+                print(f"Converted: {pattern}")
+                patternName = pattern.rsplit(".", 1)[0].lower()
+                output_path = os.path.join(patterns_dir, f"{patternName}.py")
+                with open(output_path, "w") as f:
+                    f.write(python)
+                f.close()
+            except:
+                messageBox.msgBox(title="Failed to convert pattern", text=f"There was an error converting {pattern}. The pattern will not be used.")
     
     #setup stream class
     stream = cloudflaredStream()
