@@ -188,13 +188,18 @@ def macro(status, logQueue, updateGUI, run, skipTask):
     settings_cache = {}
     last_settings_load = 0
     settings_cache_duration = 0.5  # Reload settings every 0.5 seconds max
-    
+    last_profile_name = settingsManager.getCurrentProfile()  # Track profile changes
+
     def get_cached_settings():
-        nonlocal settings_cache, last_settings_load
+        nonlocal settings_cache, last_settings_load, last_profile_name
         current_time = time.time()
-        if current_time - last_settings_load > settings_cache_duration:
+        current_profile = settingsManager.getCurrentProfile()
+
+        # Invalidate cache if profile changed or cache expired
+        if current_profile != last_profile_name or current_time - last_settings_load > settings_cache_duration:
             settings_cache = settingsManager.loadAllSettings()
             last_settings_load = current_time
+            last_profile_name = current_profile
         return settings_cache
     
     while True:

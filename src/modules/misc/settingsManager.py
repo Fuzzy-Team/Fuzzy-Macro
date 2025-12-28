@@ -424,7 +424,7 @@ def exportProfile(profile_name):
             return False, f"Profile '{profile_name}' is missing required files"
 
         settings_data = readSettingsFile(settings_file)
-        fields_data = loadFields() if profile_name == getCurrentProfile() else ast.literal_eval(open(fields_file).read())
+        fields_data = ast.literal_eval(open(fields_file).read())
         generalsettings_data = readSettingsFile(generalsettings_file)
 
         # Create export data structure
