@@ -35,7 +35,11 @@ from modules.submacros.hourlyReport import HourlyReport
 mw, mh = pag.size()
 
 #controller for the macro
-def macro(status, logQueue, updateGUI, run, skipTask):
+def macro(status, logQueue, updateGUI, run, skipTask, sharedProfileName=None):
+    # Set up shared profile name for this process
+    if sharedProfileName is not None:
+        settingsManager.setSharedProfileName(sharedProfileName)
+    
     macro = macroModule.macro(status, logQueue, updateGUI, run, skipTask)
     #invert the regularMobsInFields dict
     #instead of storing mobs in field, store the fields associated with each mob
@@ -1225,6 +1229,12 @@ if __name__ == "__main__":
     status = manager.Value(ctypes.c_wchar_p, "none")
     logQueue = manager.Queue()
     initialMessageInfo = manager.dict()  # Shared dict for initial webhook message info
+
+    # Create shared profile name for multiprocessing
+    currentProfile = settingsManager.getCurrentProfile()
+    sharedProfileName = manager.Value(ctypes.c_wchar_p, currentProfile)
+    settingsManager.setSharedProfileName(sharedProfileName)
+
     watch_for_hotkeys(run)
     logger = logModule.log(logQueue, False, None, False, blocking=True)
 
@@ -1441,7 +1451,7 @@ if __name__ == "__main__":
                                     but there are no more items left to craft.\n\
 				                    Check the 'repeat' setting on your blender items and reset blender data.")
             #macro proc
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, sharedProfileName), daemon=True)
             macroProc.start()
 
             logger.webhook("Macro Started", f'Existance Macro v2.13.15\nDisplay: {screenInfo["display_type"]}, {screenInfo["screen_width"]}x{screenInfo["screen_height"]}', "purple")
@@ -1529,7 +1539,7 @@ if __name__ == "__main__":
             appManager.closeApp("Roblox")
             keyboardModule.releaseMovement()
             mouse.mouseUp()
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, sharedProfileName), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state
@@ -1586,7 +1596,7 @@ if __name__ == "__main__":
             appManager.openApp("Roblox")
             keyboardModule.releaseMovement()
             mouse.mouseUp()
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, sharedProfileName), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state
