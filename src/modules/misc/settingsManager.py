@@ -8,6 +8,7 @@ from datetime import datetime
 
 #returns a dictionary containing the settings
 profileName = "a"
+_sharedProfileName = None  # Will be set to a multiprocessing.Value by main process
 
 # Get the project root directory (4 levels up from this file: src/modules/misc/settingsManager.py)
 def getProjectRoot():
@@ -22,7 +23,7 @@ def getProfilesDir():
 def getProfilePath(profile_name=None):
     """Get the path to a specific profile directory"""
     if profile_name is None:
-        profile_name = profileName
+        profile_name = getCurrentProfile()
     return os.path.join(getProfilesDir(), profile_name)
 
 def getDefaultSettingsPath():
@@ -46,9 +47,16 @@ def listProfiles():
         return sorted(profiles)
     return []
 
+def setSharedProfileName(sharedValue):
+    """Set the shared profile name value for multiprocessing"""
+    global _sharedProfileName
+    _sharedProfileName = sharedValue
+
 def getCurrentProfile():
     """Get the current profile name"""
-    global profileName
+    global profileName, _sharedProfileName
+    if _sharedProfileName is not None:
+        return _sharedProfileName.value
     return profileName
 
 def switchProfile(name):
@@ -75,6 +83,8 @@ def switchProfile(name):
         return False, f"Profile '{name}' is missing generalsettings.txt file"
 
     profileName = name
+    if _sharedProfileName is not None:
+        _sharedProfileName.value = name
 
     # Sync the new profile's field settings to general settings
     initializeFieldSync()
@@ -170,6 +180,8 @@ def renameProfile(old_name, new_name):
         # If we renamed the current profile, update the reference
         if old_name == profileName:
             profileName = new_name
+            if _sharedProfileName is not None:
+                _sharedProfileName.value = new_name
         return True, f"Renamed profile from '{old_name}' to '{new_name}'"
     except Exception as e:
         return False, f"Failed to rename profile: {str(e)}"
@@ -424,7 +436,7 @@ def exportProfile(profile_name):
             return False, f"Profile '{profile_name}' is missing required files"
 
         settings_data = readSettingsFile(settings_file)
-        fields_data = ast.literal_eval(open(fields_file).read())
+        fields_data = loadFields() if profile_name == getCurrentProfile() else ast.literal_eval(open(fields_file).read())
         generalsettings_data = readSettingsFile(generalsettings_file)
 
         # Create export data structure
