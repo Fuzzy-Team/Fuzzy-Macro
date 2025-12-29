@@ -35,11 +35,7 @@ from modules.submacros.hourlyReport import HourlyReport
 mw, mh = pag.size()
 
 #controller for the macro
-def macro(status, logQueue, updateGUI, run, skipTask, sharedProfileName=None):
-    # Set up shared profile name for this process
-    if sharedProfileName is not None:
-        settingsManager.setSharedProfileName(sharedProfileName)
-    
+def macro(status, logQueue, updateGUI, run, skipTask):
     macro = macroModule.macro(status, logQueue, updateGUI, run, skipTask)
     #invert the regularMobsInFields dict
     #instead of storing mobs in field, store the fields associated with each mob
@@ -192,18 +188,13 @@ def macro(status, logQueue, updateGUI, run, skipTask, sharedProfileName=None):
     settings_cache = {}
     last_settings_load = 0
     settings_cache_duration = 0.5  # Reload settings every 0.5 seconds max
-    last_profile_name = settingsManager.getCurrentProfile()  # Track profile changes
-
+    
     def get_cached_settings():
-        nonlocal settings_cache, last_settings_load, last_profile_name
+        nonlocal settings_cache, last_settings_load
         current_time = time.time()
-        current_profile = settingsManager.getCurrentProfile()
-
-        # Invalidate cache if profile changed or cache expired
-        if current_profile != last_profile_name or current_time - last_settings_load > settings_cache_duration:
+        if current_time - last_settings_load > settings_cache_duration:
             settings_cache = settingsManager.loadAllSettings()
             last_settings_load = current_time
-            last_profile_name = current_profile
         return settings_cache
     
     while True:
@@ -220,8 +211,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, sharedProfileName=None):
             break  # Exit macro loop if stop requested
         
         macro.setdat = get_cached_settings()
+        # Check if profile has changed and reload settings if needed
+        macro.checkAndReloadSettings()
         #run empty task
-        #this is in case no other settings are selected 
+        #this is in case no other settings are selected
         runTask(resetAfter=False)
 
         updateGUI.value = 1
@@ -1229,24 +1222,19 @@ if __name__ == "__main__":
     status = manager.Value(ctypes.c_wchar_p, "none")
     logQueue = manager.Queue()
     initialMessageInfo = manager.dict()  # Shared dict for initial webhook message info
-
-    # Create shared profile name for multiprocessing
-    currentProfile = settingsManager.getCurrentProfile()
-    sharedProfileName = manager.Value(ctypes.c_wchar_p, currentProfile)
-    settingsManager.setSharedProfileName(sharedProfileName)
-
     watch_for_hotkeys(run)
     logger = logModule.log(logQueue, False, None, False, blocking=True)
 
     disconnectCooldownUntil = 0 #only for running disconnect check on low performance
 
-    #update settings
+    #update settings for current profile
+    currentProfile = settingsManager.getCurrentProfile()
     profileSettings = settingsManager.loadSettings()
     profileSettingsReference = settingsManager.readSettingsFile(os.path.join(settingsManager.getDefaultSettingsPath(), "settings.txt"))
-    settingsManager.saveDict(os.path.join(settingsManager.getProfilePath("a"), "settings.txt"), {**profileSettingsReference, **profileSettings})
+    settingsManager.saveDict(os.path.join(settingsManager.getProfilePath(currentProfile), "settings.txt"), {**profileSettingsReference, **profileSettings})
 
-    #update general settings
-    generalsettings_path = os.path.join(settingsManager.getProfilePath("a"), "generalsettings.txt")
+    #update general settings for current profile
+    generalsettings_path = os.path.join(settingsManager.getProfilePath(currentProfile), "generalsettings.txt")
     generalSettingsReference = settingsManager.readSettingsFile(os.path.join(settingsManager.getDefaultSettingsPath(), "generalsettings.txt"))
     try:
         generalSettings = settingsManager.readSettingsFile(generalsettings_path)
@@ -1254,7 +1242,7 @@ if __name__ == "__main__":
         # If generalsettings.txt doesn't exist, create it from defaults
         generalSettings = {}
         # Ensure the profile directory exists
-        profile_dir = settingsManager.getProfilePath("a")
+        profile_dir = settingsManager.getProfilePath(currentProfile)
         os.makedirs(profile_dir, exist_ok=True)
     settingsManager.saveDict(generalsettings_path, {**generalSettingsReference, **generalSettings})
 
@@ -1451,7 +1439,7 @@ if __name__ == "__main__":
                                     but there are no more items left to craft.\n\
 				                    Check the 'repeat' setting on your blender items and reset blender data.")
             #macro proc
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, sharedProfileName), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask), daemon=True)
             macroProc.start()
 
             logger.webhook("Macro Started", f'Existance Macro v2.13.15\nDisplay: {screenInfo["display_type"]}, {screenInfo["screen_width"]}x{screenInfo["screen_height"]}', "purple")
@@ -1539,7 +1527,7 @@ if __name__ == "__main__":
             appManager.closeApp("Roblox")
             keyboardModule.releaseMovement()
             mouse.mouseUp()
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, sharedProfileName), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state
@@ -1596,7 +1584,7 @@ if __name__ == "__main__":
             appManager.openApp("Roblox")
             keyboardModule.releaseMovement()
             mouse.mouseUp()
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, sharedProfileName), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state

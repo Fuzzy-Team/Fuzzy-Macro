@@ -346,6 +346,8 @@ class macro:
         
         self.setdat = settingsManager.loadAllSettings()
         self.fieldSettings = settingsManager.loadFields()
+        # Track profile changes to reload settings when profile is switched
+        self._last_profile_change_counter = settingsManager.getProfileChangeCounter()
 
         self.robloxWindow = RobloxWindowBounds()
         
@@ -410,6 +412,55 @@ class macro:
 
 
         self.setRobloxWindowInfo(setYOffset=False)
+
+    def checkAndReloadSettings(self):
+        """Check if profile has changed and reload settings if needed"""
+        current_counter = settingsManager.getProfileChangeCounter()
+        if current_counter != self._last_profile_change_counter:
+            self._last_profile_change_counter = current_counter
+            # Reload settings
+            old_profile = settingsManager.getCurrentProfile()
+            self.setdat = settingsManager.loadAllSettings()
+            self.fieldSettings = settingsManager.loadFields()
+            # Update logger with new webhook settings
+            pingSettings = {
+                "ping_critical_errors": self.setdat.get("ping_critical_errors", False),
+                "ping_disconnects": self.setdat.get("ping_disconnects", False),
+                "ping_character_deaths": self.setdat.get("ping_character_deaths", False),
+                "ping_vicious_bee": self.setdat.get("ping_vicious_bee", False),
+                "ping_mondo_buff": self.setdat.get("ping_mondo_buff", False),
+                "ping_ant_challenge": self.setdat.get("ping_ant_challenge", False),
+                "ping_sticker_events": self.setdat.get("ping_sticker_events", False),
+                "ping_mob_events": self.setdat.get("ping_mob_events", False),
+                "ping_conversion_events": self.setdat.get("ping_conversion_events", False),
+                "ping_hourly_reports": self.setdat.get("ping_hourly_reports", False)
+            }
+            self.logger.enableWebhook = self.setdat["enable_webhook"]
+            self.logger.webhookURL = self.setdat["webhook_link"]
+            self.logger.sendScreenshots = self.setdat["send_screenshot"]
+            self.logger.enableDiscordPing = self.setdat["enable_discord_ping"]
+            self.logger.discordUserID = self.setdat["discord_user_id"]
+            self.logger.pingSettings = pingSettings
+            self.logger.webhookTimeFormat = self.setdat.get("webhook_time_format", 24)
+            self.logger.hourlyReportOnly = self.setdat["only_send_hourly_report"]
+            # Update keyboard movespeed
+            self.keyboard.movespeed = self.setdat["movespeed"]
+            # Update haste compensation
+            self.hasteCompensation = HasteCompensationRevamped(self.robloxWindow, self.setdat["movespeed"])
+            self.keyboard.hasteCompensation = self.setdat["haste_compensation"]
+            self.keyboard.hasteCompensationObj = self.hasteCompensation
+            # Update hourly report time format
+            self.hourlyReport.timeFormat = self.setdat.get("hourly_report_time_format", 24)
+            # Update collect cooldowns
+            self.collectCooldowns = dict([(k, v[2]) for k,v in mergedCollectData.items()])
+            self.collectCooldowns["sticker_printer"] = 1*60*60
+            # Update night detection
+            self.enableNightDetection = True if self.setdat["stinger_hunt"] else False
+            # Update vic fields
+            self.vicFields = ["pepper", "mountain top", "rose", "cactus", "spider", "clover"]
+            self.vicFields = [x for x in self.vicFields if self.setdat["stinger_{}".format(x.replace(" ","_"))]]
+            # Log the profile change
+            self.logger.webhook("Profile Changed", f"Switched to profile: {old_profile}", "blue")
 
     #get the size of the roblox window and update the relevant variables
     def setRobloxWindowInfo(self, setYOffset=True):

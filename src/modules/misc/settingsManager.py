@@ -8,12 +8,41 @@ from datetime import datetime
 
 #returns a dictionary containing the settings
 profileName = "a"
-_sharedProfileName = None  # Will be set to a multiprocessing.Value by main process
+# Track profile changes for running macro processes
+_profile_change_counter = 0
+
+# File to store current profile persistence (defined after getProjectRoot)
+CURRENT_PROFILE_FILE = None
+
+def loadCurrentProfile():
+    """Load the current profile from persistent storage"""
+    global profileName
+    try:
+        if os.path.exists(CURRENT_PROFILE_FILE):
+            with open(CURRENT_PROFILE_FILE, "r") as f:
+                saved_profile = f.read().strip()
+                if saved_profile and os.path.exists(getProfilePath(saved_profile)):
+                    profileName = saved_profile
+    except Exception as e:
+        print(f"Warning: Could not load current profile: {e}")
+
+def saveCurrentProfile():
+    """Save the current profile to persistent storage"""
+    try:
+        with open(CURRENT_PROFILE_FILE, "w") as f:
+            f.write(profileName)
+    except Exception as e:
+        print(f"Warning: Could not save current profile: {e}")
+
+# Load the current profile when the module is imported (called at the end of the file)
 
 # Get the project root directory (4 levels up from this file: src/modules/misc/settingsManager.py)
 def getProjectRoot():
     """Get the project root directory path"""
     return os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+# File to store current profile persistence
+CURRENT_PROFILE_FILE = os.path.join(getProjectRoot(), "src", "data", "user", "current_profile.txt")
 
 # Helper functions for common paths
 def getProfilesDir():
@@ -23,7 +52,7 @@ def getProfilesDir():
 def getProfilePath(profile_name=None):
     """Get the path to a specific profile directory"""
     if profile_name is None:
-        profile_name = getCurrentProfile()
+        profile_name = profileName
     return os.path.join(getProfilesDir(), profile_name)
 
 def getDefaultSettingsPath():
@@ -47,17 +76,15 @@ def listProfiles():
         return sorted(profiles)
     return []
 
-def setSharedProfileName(sharedValue):
-    """Set the shared profile name value for multiprocessing"""
-    global _sharedProfileName
-    _sharedProfileName = sharedValue
-
 def getCurrentProfile():
     """Get the current profile name"""
-    global profileName, _sharedProfileName
-    if _sharedProfileName is not None:
-        return _sharedProfileName.value
+    global profileName
     return profileName
+
+def getProfileChangeCounter():
+    """Get the profile change counter for detecting profile switches"""
+    global _profile_change_counter
+    return _profile_change_counter
 
 def switchProfile(name):
     """Switch to a different profile"""
@@ -83,8 +110,11 @@ def switchProfile(name):
         return False, f"Profile '{name}' is missing generalsettings.txt file"
 
     profileName = name
-    if _sharedProfileName is not None:
-        _sharedProfileName.value = name
+    # Save the profile selection persistently
+    saveCurrentProfile()
+    # Increment the change counter to notify running processes
+    global _profile_change_counter
+    _profile_change_counter += 1
 
     # Sync the new profile's field settings to general settings
     initializeFieldSync()
@@ -180,8 +210,6 @@ def renameProfile(old_name, new_name):
         # If we renamed the current profile, update the reference
         if old_name == profileName:
             profileName = new_name
-            if _sharedProfileName is not None:
-                _sharedProfileName.value = new_name
         return True, f"Renamed profile from '{old_name}' to '{new_name}'"
     except Exception as e:
         return False, f"Failed to rename profile: {str(e)}"
@@ -532,6 +560,9 @@ def _importProfileData(import_data, new_profile_name=None):
 
     except Exception as e:
         return False, f"Failed to import profile: {str(e)}"
+
+# Load the current profile when the module is imported
+loadCurrentProfile()
 
 #clear a file
 def clearFile(filePath):
