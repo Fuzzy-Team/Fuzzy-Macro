@@ -78,7 +78,7 @@ def update_profile_setting(setting_key, value):
     except Exception as e:
         return False, f"❌ Error updating profile setting: {str(e)}"
 
-def discordBot(token, run, status, skipTask, initial_message_info=None, updateGUI=None):
+def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_info=None, updateGUI=None):
     bot = commands.Bot(command_prefix="!b", intents=discord.Intents.all())
     
     # Store initial message info for pinning
@@ -347,6 +347,42 @@ def discordBot(token, run, status, skipTask, initial_message_info=None, updateGU
         run.value = 4
         await interaction.response.send_message("Macro is rejoining")
     
+    @bot.tree.command(name = "logs", description = "Show the last 10 macro actions from the log")
+    async def show_logs(interaction: discord.Interaction):
+        """Show the last 10 actions from the macro log"""
+        try:
+            if recentLogs is None or len(recentLogs) == 0:
+                await interaction.response.send_message("📝 No recent macro logs available.")
+                return
+
+            embed = discord.Embed(title="📋 Recent Macro Actions", color=0x00ff00)
+
+            # Get the last 10 logs (or fewer if not available)
+            recent_actions = list(recentLogs)[-20:] if len(recentLogs) > 20 else list(recentLogs)
+
+            log_text = ""
+            for log_entry in recent_actions:
+                time_str = log_entry.get('time', 'Unknown')
+                title = log_entry.get('title', 'Unknown')
+                desc = log_entry.get('desc', '')
+
+                # Format the log entry
+                if desc:
+                    log_text += f"`{time_str}` **{title}** - {desc}\n"
+                else:
+                    log_text += f"`{time_str}` **{title}**\n"
+
+            if log_text:
+                embed.add_field(name="Recent Actions", value=log_text.rstrip(), inline=False)
+            else:
+                embed.add_field(name="Recent Actions", value="No actions to display", inline=False)
+
+            embed.set_footer(text=f"Showing last {len(recent_actions)} actions")
+            await interaction.response.send_message(embed=embed)
+
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error retrieving logs: {str(e)}")
+
     @bot.tree.command(name = "status", description = "Get the current macro status")
     async def get_status(interaction: discord.Interaction):
         status_messages = {
@@ -1612,7 +1648,7 @@ def discordBot(token, run, status, skipTask, initial_message_info=None, updateGU
 
         # embed.add_field(name="📁 **Profile Management**", value="`/profiles` - List available profiles\n`/currentprofile` - Show current profile\n`/switchprofile <name>` - Switch profile", inline=False)
 
-        embed.add_field(name="📊 **Status & Monitoring**", value="`/status` - Get macro status and current task\n`/taskqueue` - Show current task queue\n`/battery` - Check battery status\n`/streamurl` - Get stream URL", inline=False)
+        embed.add_field(name="📊 **Status & Monitoring**", value="`/status` - Get macro status and current task\n`/logs` - Show recent macro actions\n`/taskqueue` - Show current task queue\n`/battery` - Check battery status\n`/streamurl` - Get stream URL", inline=False)
         
         embed.add_field(name="⚙️ **Advanced**", value="`/amulet <keep/replace>` - Choose amulet action\n`/close` - Close macro and Roblox", inline=False)
 

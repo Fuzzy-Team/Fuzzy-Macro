@@ -1221,6 +1221,7 @@ if __name__ == "__main__":
     skipTask = multiprocessing.Value('i', 0)  # 0 = don't skip, 1 = skip current task
     status = manager.Value(ctypes.c_wchar_p, "none")
     logQueue = manager.Queue()
+    recentLogs = manager.list()  # Shared list to store recent log entries for discord bot
     initialMessageInfo = manager.dict()  # Shared dict for initial webhook message info
     watch_for_hotkeys(run)
     logger = logModule.log(logQueue, False, None, False, blocking=True)
@@ -1364,7 +1365,7 @@ if __name__ == "__main__":
                 print("Detected change in discord bot token, killing previous bot process")
                 discordBotProc.terminate()
                 discordBotProc.join()
-            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, initialMessageInfo, updateGUI), daemon=True)
+            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, initialMessageInfo, updateGUI), daemon=True)
             prevDiscordBotToken = currentDiscordBotToken
             discordBotProc.start()
 
@@ -1598,6 +1599,17 @@ if __name__ == "__main__":
             logData = logQueue.get()
             if logData["type"] == "webhook": #webhook
                 msg = f"{logData['title']}<br>{logData['desc']}"
+
+                # Add to recent logs list (keep last 20 entries)
+                log_entry = {
+                    'time': logData['time'],
+                    'title': logData['title'],
+                    'desc': logData['desc']
+                }
+                recentLogs.append(log_entry)
+                # Keep only the last 20 entries
+                if len(recentLogs) > 20:
+                    recentLogs[:] = recentLogs[-20:]
 
             #add it to gui
             gui.log(logData["time"], msg, logData["color"])
