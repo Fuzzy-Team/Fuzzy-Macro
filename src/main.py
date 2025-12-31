@@ -316,17 +316,11 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                                 questCompleterTasks.extend(validActions)
 
                                 if validActions:
-                                    macro.logger.webhook("Quest Completer",
-                                                       f"✓ '{objectiveText[:50]}...' → {validActions}",
-                                                       "light blue")
+                                    print(f"[Quest Parser] ✓ '{objectiveText[:50]}...' → {validActions}")
                                 else:
-                                    macro.logger.webhook("Quest Completer",
-                                                       f"✗ '{objectiveText[:50]}...' → filtered",
-                                                       "orange")
+                                    print(f"[Quest Parser] ✗ '{objectiveText[:50]}...' → filtered")
                             except Exception as e:
-                                macro.logger.webhook("Quest Completer",
-                                                   f"Parse error: '{objectiveText[:30]}...' - {str(e)[:50]}",
-                                                   "red")
+                                print(f"[Quest Parser] Parse error: '{objectiveText[:30]}...' - {str(e)[:50]}")
 
                         # Cache the tasks and add to priority order
                         if questCompleterTasks:
@@ -1145,10 +1139,10 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                             cachedTasks = questCache[questCacheKey]
                             isQuestTask = taskId.startswith(('gather_', 'kill_', 'collect_', 'craft', 'feed_bee_')) and taskId in cachedTasks
                             if isQuestTask and taskId not in executedTasks:
-                            # For quest completer tasks, try to execute them bypassing normal settings restrictions
+                                # For quest completer tasks, try to execute them bypassing normal settings restrictions
                                 questTaskExecuted = executeQuestTask(taskId)
-                            if questTaskExecuted:
-                                anyTaskExecuted = True
+                                if questTaskExecuted:
+                                    anyTaskExecuted = True
                                 executedTasks.add(taskId)
                                 macro.logger.webhook("Quest Completer",
                                                    f"Executed quest task: {taskId}",
