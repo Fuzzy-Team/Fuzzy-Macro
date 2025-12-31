@@ -653,3 +653,261 @@ function handleKeybindKeyUp(event) {
   // Finalize the keybind when any key is released
   finalizeKeybind();
 }
+
+/*
+=============================================
+Image Zoom Functionality
+=============================================
+*/
+
+let zoomLevel = 1;
+let zoomModal = null;
+let zoomedImage = null;
+let currentImageSrc = null;
+let imageContainer = null;
+let mouseX = 0;
+let mouseY = 0;
+let translateX = 0;
+let translateY = 0;
+
+function initializeImageZoom() {
+  // Create zoom modal if it doesn't exist
+  if (!zoomModal) {
+    zoomModal = document.createElement("div");
+    zoomModal.id = "zoom-modal";
+    zoomModal.style.cssText = `
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.9);
+      z-index: 10000;
+      cursor: zoom-out;
+      overflow: hidden;
+    `;
+    
+    imageContainer = document.createElement("div");
+    imageContainer.id = "zoom-image-container";
+    imageContainer.style.cssText = `
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 100%;
+      height: 100%;
+      position: relative;
+      overflow: hidden;
+    `;
+    
+    zoomedImage = document.createElement("img");
+    zoomedImage.id = "zoomed-image";
+    zoomedImage.style.cssText = `
+      max-width: 90vw;
+      max-height: 90vh;
+      transition: transform 0.1s ease;
+      cursor: zoom-in;
+      transform-origin: center center;
+    `;
+    
+    const controlsContainer = document.createElement("div");
+    controlsContainer.style.cssText = `
+      position: fixed;
+      top: 2rem;
+      right: 2rem;
+      display: flex;
+      gap: 1rem;
+      z-index: 10001;
+    `;
+    
+    const zoomInBtn = document.createElement("button");
+    zoomInBtn.textContent = "+";
+    zoomInBtn.className = "zoom-control-btn";
+    zoomInBtn.onclick = (e) => {
+      e.stopPropagation();
+      zoomImageCentered(1.2);
+    };
+    
+    const zoomOutBtn = document.createElement("button");
+    zoomOutBtn.textContent = "-";
+    zoomOutBtn.className = "zoom-control-btn";
+    zoomOutBtn.onclick = (e) => {
+      e.stopPropagation();
+      zoomImageCentered(0.8);
+    };
+    
+    const resetBtn = document.createElement("button");
+    resetBtn.textContent = "Reset";
+    resetBtn.className = "zoom-control-btn";
+    resetBtn.onclick = (e) => {
+      e.stopPropagation();
+      resetZoom();
+    };
+    
+    const closeBtn = document.createElement("button");
+    closeBtn.textContent = "×";
+    closeBtn.className = "zoom-control-btn";
+    closeBtn.style.fontSize = "2rem";
+    closeBtn.onclick = (e) => {
+      e.stopPropagation();
+      closeZoomModal();
+    };
+    
+    controlsContainer.appendChild(zoomInBtn);
+    controlsContainer.appendChild(zoomOutBtn);
+    controlsContainer.appendChild(resetBtn);
+    controlsContainer.appendChild(closeBtn);
+    
+    imageContainer.appendChild(zoomedImage);
+    zoomModal.appendChild(imageContainer);
+    zoomModal.appendChild(controlsContainer);
+    
+    // Track mouse position for scroll wheel zoom
+    imageContainer.addEventListener("mousemove", (e) => {
+      const rect = imageContainer.getBoundingClientRect();
+      mouseX = e.clientX - rect.left;
+      mouseY = e.clientY - rect.top;
+    });
+    
+    // Scroll wheel zoom (mouse position based)
+    imageContainer.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const delta = e.deltaY > 0 ? 0.9 : 1.1;
+      zoomImageAtMouse(delta, e.clientX, e.clientY);
+    });
+    
+    // Close on background click
+    zoomModal.onclick = (e) => {
+      if (e.target === zoomModal) {
+        closeZoomModal();
+      }
+    };
+    
+    // Close on Escape key
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && zoomModal.style.display === "block") {
+        closeZoomModal();
+      }
+    });
+    
+    document.body.appendChild(zoomModal);
+  }
+  
+  // Add click handlers to all zoomable images
+  document.addEventListener("click", (e) => {
+    if (e.target.classList.contains("zoomable-image")) {
+      e.preventDefault();
+      e.stopPropagation();
+      openZoomModal(e.target.src);
+    }
+  });
+}
+
+function openZoomModal(imageSrc) {
+  if (!zoomModal) {
+    initializeImageZoom();
+  }
+  currentImageSrc = imageSrc;
+  zoomedImage.src = imageSrc;
+  zoomLevel = 1;
+  translateX = 0;
+  translateY = 0;
+  zoomedImage.style.transform = `translate(${translateX}px, ${translateY}px) scale(${zoomLevel})`;
+  zoomModal.style.display = "block";
+  document.body.style.overflow = "hidden";
+  
+  // Reset transform origin to center
+  zoomedImage.style.transformOrigin = "center center";
+}
+
+function closeZoomModal() {
+  if (zoomModal) {
+    zoomModal.style.display = "none";
+    document.body.style.overflow = "";
+    zoomLevel = 1;
+    translateX = 0;
+    translateY = 0;
+  }
+}
+
+function zoomImageAtMouse(factor, clientX, clientY) {
+  const rect = imageContainer.getBoundingClientRect();
+  const containerCenterX = rect.left + rect.width / 2;
+  const containerCenterY = rect.top + rect.height / 2;
+  
+  // Get mouse position relative to container center
+  const mouseOffsetX = clientX - containerCenterX;
+  const mouseOffsetY = clientY - containerCenterY;
+  
+  // Calculate new zoom level
+  const newZoomLevel = zoomLevel * factor;
+  const clampedZoom = Math.max(0.5, Math.min(newZoomLevel, 5));
+  
+  if (clampedZoom === zoomLevel) return; // No change if at limits
+  
+  // Calculate the zoom point relative to the image center
+  // We need to adjust translate to keep the point under the mouse fixed
+  const zoomRatio = clampedZoom / zoomLevel;
+  
+  // Adjust translate to zoom towards mouse position
+  translateX = translateX * zoomRatio - mouseOffsetX * (zoomRatio - 1);
+  translateY = translateY * zoomRatio - mouseOffsetY * (zoomRatio - 1);
+  
+  zoomLevel = clampedZoom;
+  updateImageTransform();
+}
+
+function zoomImageCentered(factor) {
+  const newZoomLevel = zoomLevel * factor;
+  zoomLevel = Math.max(0.5, Math.min(newZoomLevel, 5));
+  
+  // For centered zoom, reset translate
+  translateX = 0;
+  translateY = 0;
+  zoomedImage.style.transformOrigin = "center center";
+  updateImageTransform();
+}
+
+function updateImageTransform() {
+  zoomedImage.style.transform = `translate(${translateX}px, ${translateY}px) scale(${zoomLevel})`;
+}
+
+function resetZoom() {
+  zoomLevel = 1;
+  translateX = 0;
+  translateY = 0;
+  zoomedImage.style.transformOrigin = "center center";
+  updateImageTransform();
+}
+
+// Initialize zoom when DOM is ready
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initializeImageZoom);
+} else {
+  initializeImageZoom();
+}
+
+// Re-initialize when new content is loaded (for dynamically loaded tabs)
+// Use MutationObserver to detect when new images are added
+const observer = new MutationObserver((mutations) => {
+  mutations.forEach((mutation) => {
+    mutation.addedNodes.forEach((node) => {
+      if (node.nodeType === 1) { // Element node
+        // Check if the node or its children contain zoomable images
+        if (node.classList && node.classList.contains("zoomable-image")) {
+          // Image is already set up by event delegation
+        } else if (node.querySelectorAll) {
+          const images = node.querySelectorAll(".zoomable-image");
+          // Images will be handled by event delegation
+        }
+      }
+    });
+  });
+});
+
+// Start observing the document body for changes
+observer.observe(document.body, {
+  childList: true,
+  subtree: true
+});
