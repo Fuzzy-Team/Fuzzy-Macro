@@ -977,6 +977,40 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                         if macro.hasRespawned("vicious_bee", 36*60*60, applyMobRespawnBonus=True):
                             runTask(macro.viciousBee)
                             return True
+                    elif mob == "ant":
+                        # Ant killing via Ant Challenge
+                        macro.logger.webhook("Quest Completer", "Executing ant challenge for quest", "light blue")
+                        runTask(macro.antChallenge)
+                        macro.logger.webhook("Quest Completer", "Completed ant challenge", "bright green")
+                        return True
+                    elif mob == "beetle":
+                        # Try to find and kill beetles (not king beetles)
+                        # Beetles might spawn in various fields, try common ones
+                        commonFields = ["strawberry", "clover", "bamboo", "pineapple"]
+                        for field in commonFields:
+                            fieldIndex = -1
+                            for i in range(len(macro.setdat["fields"])):
+                                if macro.setdat["fields"][i] == field:
+                                    fieldIndex = i
+                                    break
+
+                            if fieldIndex >= 0:
+                                fieldWasEnabled = macro.setdat["fields_enabled"][fieldIndex]
+                                if not fieldWasEnabled:
+                                    macro.setdat["fields_enabled"][fieldIndex] = True
+
+                                try:
+                                    macro.logger.webhook("Quest Completer", f"Attempting to kill beetle in field: {field}", "light blue")
+                                    # Try to kill beetle if available
+                                    runTask(macro.killMob, args=(mob, field,), convertAfter=False)
+                                    macro.logger.webhook("Quest Completer", f"Completed beetle kill attempt in field: {field}", "bright green")
+                                    return True
+                                except Exception as e:
+                                    continue  # Try next field
+                                finally:
+                                    macro.setdat["fields_enabled"][fieldIndex] = fieldWasEnabled
+                        macro.logger.webhook("Quest Completer", "No beetles found to kill", "orange")
+                        return False
                     else:
                         # For regular mobs, check if mob exists in regularMobData
                         if mob in regularMobData:
@@ -1105,11 +1139,14 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                         if not isRegularMobTask:
                             executedTasks.add(taskId)
                     else:
-                        # Task couldn't be executed - check if it's a quest completer task
-                        isQuestTask = taskId.startswith(('gather_', 'kill_', 'collect_', 'craft', 'feed_bee_'))
-                        if isQuestTask and taskId not in executedTasks:
+                        # Task couldn't be executed - check if it's a quest completer task in the cache
+                        questCacheKey = "quest_completer_objectives"
+                        if questCacheKey in questCache:
+                            cachedTasks = questCache[questCacheKey]
+                            isQuestTask = taskId.startswith(('gather_', 'kill_', 'collect_', 'craft', 'feed_bee_')) and taskId in cachedTasks
+                            if isQuestTask and taskId not in executedTasks:
                             # For quest completer tasks, try to execute them bypassing normal settings restrictions
-                            questTaskExecuted = executeQuestTask(taskId)
+                                questTaskExecuted = executeQuestTask(taskId)
                             if questTaskExecuted:
                                 anyTaskExecuted = True
                                 executedTasks.add(taskId)
