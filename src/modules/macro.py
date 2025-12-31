@@ -331,7 +331,126 @@ nectarFields = {
 }
 allPlanters = ["paper", "ticket", "festive", "sticker", "plastic", "candy", "red_clay", "blue_clay", "tacky", "pesticide", "heat-treated", "hydroponic", "petal", "planter_of_plenty"]
 with open("./data/bss/auto_planter_ranking.json", "r") as f:
-    autoPlanterRankings = json.load(f) 
+    autoPlanterRankings = json.load(f)
+
+# Quest completer name mappings
+questCompleterFieldNames = {
+    # Common field name variations
+    "strawberry": "strawberry",
+    "strawberries": "strawberry",
+    "blue_flower": "blue flower",
+    "blue flower": "blue flower",
+    "blueflower": "blue flower",
+    "pine_tree": "pine tree",
+    "pine tree": "pine tree",
+    "pinetree": "pine tree",
+    "sunflower": "sunflower",
+    "sunflowers": "sunflower",
+    "mushroom": "mushroom",
+    "mushrooms": "mushroom",
+    "rose": "rose",
+    "roses": "rose",
+    "clover": "clover",
+    "clovers": "clover",
+    "bamboo": "bamboo",
+    "cactus": "cactus",
+    "cactuses": "cactus",
+    "pumpkin": "pumpkin",
+    "pumpkins": "pumpkin",
+    "pineapple": "pineapple",
+    "pineapples": "pineapple",
+    "coconut": "coconut",
+    "coconuts": "coconut",
+    "dandelion": "dandelion",
+    "dandelions": "dandelion",
+    "spider": "spider",
+    "spiders": "spider",
+    "stump": "stump",
+    "stumps": "stump",
+    "pepper": "pepper",
+    "peppers": "pepper",
+    "mountain_top": "mountain top",
+    "mountain top": "mountain top",
+    "mountaintop": "mountain top"
+}
+
+questCompleterMobNames = {
+    # Common mob name variations
+    "scorpion": "scorpion",
+    "scorpions": "scorpion",
+    "mantis": "mantis",
+    "mantises": "mantis",
+    "spider": "spider",
+    "spiders": "spider",
+    "ladybug": "ladybug",
+    "ladybugs": "ladybug",
+    "rhinobeetle": "rhinobeetle",
+    "rhino_beetle": "rhinobeetle",
+    "rhino beetle": "rhinobeetle",
+    "rhinobeetles": "rhinobeetle",
+    "ant": "ant",
+    "ants": "ant",
+    "army_ant": "armyant",
+    "army ant": "armyant",
+    "armyant": "armyant",
+    "fire_ant": "fireant",
+    "fire ant": "fireant",
+    "fireant": "fireant",
+    "werewolf": "werewolf",
+    "werewolves": "werewolf",
+    "wolf": "werewolf",
+    "wolves": "werewolf"
+}
+
+questCompleterCollectNames = {
+    # Common collectible name variations
+    "blue_booster": "blue_booster",
+    "blue booster": "blue_booster",
+    "red_booster": "red_booster",
+    "red booster": "red_booster",
+    "mountain_booster": "mountain_booster",
+    "mountain booster": "mountain_booster",
+    "sticker_printer": "sticker_printer",
+    "sticker printer": "sticker_printer",
+    "sticker_stack": "sticker_stack",
+    "sticker stack": "sticker_stack",
+    "blueberry_dispenser": "blueberry_dispenser",
+    "blueberry dispenser": "blueberry_dispenser",
+    "strawberry_dispenser": "strawberry_dispenser",
+    "strawberry dispenser": "strawberry_dispenser",
+    "coconut_dispenser": "coconut_dispenser",
+    "coconut dispenser": "coconut_dispenser",
+    "royal_jelly_dispenser": "royal_jelly_dispenser",
+    "royal jelly dispenser": "royal_jelly_dispenser",
+    "treat_dispenser": "treat_dispenser",
+    "treat dispenser": "treat_dispenser",
+    "ant_pass_dispenser": "ant_pass_dispenser",
+    "ant pass dispenser": "ant_pass_dispenser",
+    "glue_dispenser": "glue_dispenser",
+    "glue dispenser": "glue_dispenser",
+    "wealth_clock": "wealth_clock",
+    "wealth clock": "wealth_clock",
+    "stockings": "stockings",
+    "wreath": "wreath",
+    "feast": "feast",
+    "samovar": "samovar",
+    "snow_machine": "snow_machine",
+    "snow machine": "snow_machine",
+    "lid_art": "lid_art",
+    "lid art": "lid_art",
+    "candles": "candles",
+    "memory_match": "memory_match",
+    "memory match": "memory_match",
+    "mega_memory_match": "mega_memory_match",
+    "mega memory match": "mega_memory_match",
+    "extreme_memory_match": "extreme_memory_match",
+    "extreme memory match": "extreme_memory_match",
+    "winter_memory_match": "winter_memory_match",
+    "winter memory match": "winter_memory_match",
+    "honeystorm": "honeystorm",
+    "honey_storm": "honeystorm",
+    "honey storm": "honeystorm"
+} 
 
 class macro:
     def __init__(self, status, logQueue, updateGUI, run=None, skipTask=None):
@@ -3645,6 +3764,582 @@ class macro:
         self.toggleQuest()
         self.moveMouseToDefault()
         return incompleteObjectives
+
+    def detectQuestObjectives(self):
+        """
+        Detects quest objectives from the quest UI using OCR without depending on quest_data.txt.
+        Scrolls through the entire quest list to capture all objectives.
+        Returns a list of raw objective strings.
+        """
+        def screenshotQuest(screenshotHeight, mode="gray"):
+            # Take a screenshot of the quest page
+            mode = mode.lower()
+            if mode == "rgba":
+                screenshotFunction = mssScreenshotPillowRGBA
+            else:
+                screenshotFunction = mssScreenshotNP
+            screen = screenshotFunction(self.robloxWindow.mx, self.robloxWindow.my+150, 300, min(screenshotHeight, self.robloxWindow.mh-(self.robloxWindow.my+150)))
+            if mode == "gray":
+                screen = cv2.cvtColor(screen, cv2.COLOR_BGRA2GRAY)
+            return screen
+
+        def processScreenshotForObjectives(screen):
+            """Process a single screenshot for quest objectives"""
+            screenGray = cv2.cvtColor(screen, cv2.COLOR_BGR2GRAY)
+            img = cv2.inRange(screenGray, 0, 50)
+            img = cv2.GaussianBlur(img, (5, 5), 0)
+
+            # Dilute the image so that texts can be merged into chunks
+            kernelSize = 10 if self.robloxWindow.isRetina else 7
+            kernel = np.ones((kernelSize, kernelSize), np.uint8)
+            img = cv2.dilate(img, kernel, iterations=1)
+            contours, _ = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+            # Filter out the contour sizes
+            minArea = 4000*self.robloxWindow.multi       # Too small = noise
+            maxArea = 40000*self.robloxWindow.multi     # Too big = background or large UI elements
+            maxHeight = 75*self.robloxWindow.multi       # Cap height to filter out title bar
+
+            objectives = []
+            for contour in contours[::-1]:
+                x, y, w, h = cv2.boundingRect(contour)
+                # Check if contour meets size requirements
+                area = w*h
+                if area < minArea or area > maxArea or h > maxHeight:
+                    continue
+
+                textImg = Image.fromarray(screen[y:y+h, x:x+w])
+                textChunk = []
+                for line in ocr.ocrRead(textImg):
+                    textChunk.append(self.convertCyrillic(line[1][0].strip().lower()))
+                textChunk = ''.join(textChunk)
+
+                # Skip if this is a "complete" status indicator
+                if "complete" in textChunk and len(textChunk.split()) < 5:
+                    continue
+
+                # Clean up the text and add to objectives if not empty
+                cleanedText = textChunk.strip()
+                if cleanedText:
+                    objectives.append(cleanedText)
+
+            return objectives
+
+        # Open inventory to ensure quest page is closed
+        self.toggleInventory("close")
+        self.toggleQuest()
+
+        # Wait for quest UI to fully load and render text
+        self.logger.webhook("Quest Completer", "Waiting for quest UI to load...", "light blue")
+        sleep(5.0)  # Give quest UI time to load and render all text
+
+        # Verify quest UI is open by checking for quest title area
+        max_attempts = 10
+        for attempt in range(max_attempts):
+            screen = cv2.cvtColor(np.array(screenshotQuest(200, mode="RGBA")), cv2.COLOR_RGBA2BGR)
+            cropTargetColor = [247, 240, 229]  # Quest title bar color
+            cropColorTolerance = 3
+            lower = np.array([c - cropColorTolerance for c in cropTargetColor], dtype=np.uint8)
+            upper = np.array([c + cropColorTolerance for c in cropTargetColor], dtype=np.uint8)
+            cropMask = cv2.inRange(screen, lower, upper)
+            if np.any(cropMask > 0):
+                self.logger.webhook("Quest Completer", f"Quest UI loaded successfully (attempt {attempt + 1})", "light blue")
+                break
+            sleep(0.5)
+        else:
+            self.logger.webhook("Quest Completer", "Warning: Could not verify quest UI loaded", "orange")
+
+        # Scroll to top
+        self.logger.webhook("Quest Completer", "Scrolling to top of quest list...", "light blue")
+        prevHash = None
+        for _ in range(200):
+            mouse.scroll(100)
+            sleep(0.08)
+            hash = imagehash.average_hash(Image.fromarray(screenshotQuest(100)))
+            if not prevHash is None and prevHash == hash:
+                break
+            prevHash = hash
+
+        sleep(0.4)
+
+        # Scroll through quest list slowly, capturing screenshots
+        self.logger.webhook("Quest Completer", "Scanning quest objectives...", "light blue")
+        allObjectives = set()  # Use set to avoid duplicates
+        scrollStep = 50  # Scroll amount per step
+        screenshotInterval = 3  # Take screenshot every N scroll steps
+        maxScrollSteps = 100  # Maximum scroll steps to prevent infinite loop
+
+        for step in range(maxScrollSteps):
+            # Take screenshot and process for objectives
+            screen = cv2.cvtColor(np.array(screenshotQuest(800, mode="RGBA")), cv2.COLOR_RGBA2BGR)
+
+            # Crop below the quest title (same logic as before)
+            cropTargetColor = [247, 240, 229]
+            cropColorTolerance = 3
+            lower = np.array([c - cropColorTolerance for c in cropTargetColor], dtype=np.uint8)
+            upper = np.array([c + cropColorTolerance for c in cropTargetColor], dtype=np.uint8)
+
+            cropMask = cv2.inRange(screen, lower, upper)
+            cropRows = np.any(cropMask > 0, axis=1)
+            startIndex = None
+            endIndex = 0
+
+            maxHeight = 20*self.robloxWindow.multi
+            for i, hasColor in enumerate(cropRows):
+                if i > maxHeight and startIndex is None:
+                    break
+                if hasColor and startIndex is None:
+                    startIndex = i
+                elif not hasColor and startIndex is not None:
+                    endIndex = i
+                    break
+
+            if endIndex:
+                screen = screen[endIndex:, :]
+
+            # Process this screenshot for objectives
+            objectives = processScreenshotForObjectives(screen)
+            allObjectives.update(objectives)
+
+            # Scroll down
+            mouse.scroll(-scrollStep)
+            sleep(0.15)  # Wait for scroll to complete
+
+            # Check if we've reached the bottom (screen hasn't changed much)
+            if step % screenshotInterval == 0 and step > 0:
+                currentHash = imagehash.average_hash(Image.fromarray(screenshotQuest(100)))
+                if prevHash is not None and currentHash == prevHash:
+                    break  # We've reached the end
+                prevHash = currentHash
+
+        # Close the quest UI
+        self.toggleQuest()
+        self.moveMouseToDefault()
+
+        self.logger.webhook("Quest Completer", f"Quest scanning complete. Found {len(allObjectives)} unique objectives.", "light blue")
+        return list(allObjectives)
+
+        # Crop it below the quest title
+        # This is done by detecting the color of the title bar, since relying on ocr's bounding box can cause it to overcrop
+        cropTargetColor = [247, 240, 229]
+        cropColorTolerance = 3
+        lower = np.array([c - cropColorTolerance for c in cropTargetColor], dtype=np.uint8)
+        upper = np.array([c + cropColorTolerance for c in cropTargetColor], dtype=np.uint8)
+
+        # Create a mask for the target color
+        cropMask = cv2.inRange(screen, lower, upper)
+        cropRows = np.any(cropMask > 0, axis=1)
+        startIndex = None
+        endIndex = 0
+
+        # Start searching for the start and end y points of the quest title
+        # If it can't find the title bar in the first y pixels, stop the search
+        # In some cases, the questTitleYPos already crops below the quest title
+        maxHeight = 20*self.robloxWindow.multi
+        for i, hasColor in enumerate(cropRows):
+            if i > maxHeight and startIndex is None:
+                break
+            if hasColor and startIndex is None:
+                # Found the starting point of the first quest title area
+                startIndex = i
+            elif not hasColor and startIndex is not None:
+                # Found the ending point of the quest title area
+                endIndex = i
+                break
+
+        # Crop
+        if endIndex:
+            screen = screen[endIndex:, :]
+
+        # Convert to grayscale
+        screenGray = cv2.cvtColor(screen, cv2.COLOR_BGR2GRAY)
+        img = cv2.inRange(screenGray, 0, 50)
+        img = cv2.GaussianBlur(img, (5, 5), 0)
+
+        # Dilute the image so that texts can be merged into chunks
+        kernelSize = 10 if self.robloxWindow.isRetina else 7
+        kernel = np.ones((kernelSize, kernelSize), np.uint8)
+        img = cv2.dilate(img, kernel, iterations=1)
+        contours, _ = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        # Filter out the contour sizes
+        minArea = 4000*self.robloxWindow.multi       # Too small = noise
+        maxArea = 40000*self.robloxWindow.multi     # Too big = background or large UI elements
+        maxHeight = 75*self.robloxWindow.multi       # Cap height to filter out title bar
+
+        rawObjectives = []
+        for contour in contours[::-1]:
+            x, y, w, h = cv2.boundingRect(contour)
+            # Check if contour meets size requirements
+            area = w*h
+            if area < minArea or area > maxArea or h > maxHeight:
+                continue
+
+            textImg = Image.fromarray(screen[y:y+h, x:x+w])
+            textChunk = []
+            for line in ocr.ocrRead(textImg):
+                textChunk.append(self.convertCyrillic(line[1][0].strip().lower()))
+            textChunk = ''.join(textChunk)
+
+            # Skip if this is a "complete" status indicator
+            if "complete" in textChunk and len(textChunk.split()) < 5:
+                continue
+
+            # Clean up the text and add to objectives if not empty
+            cleanedText = textChunk.strip()
+            if cleanedText:
+                rawObjectives.append(cleanedText)
+
+        # Close the quest UI
+        self.toggleQuest()
+        self.moveMouseToDefault()
+
+        return rawObjectives
+
+    def parseQuestObjective(self, objectiveText):
+        """
+        Parses a raw objective text string into structured data.
+        Returns dict with 'action', 'target', and 'quantity' keys.
+        """
+        import re
+
+        # Clean and normalize the text
+        text = objectiveText.lower().strip()
+
+        # Fix common OCR errors
+        ocr_fixes = {
+            'trom': 'from',
+            'completel': 'complete',
+            'dippebeams': 'dipper beams',
+            'stafi': 'staff',
+            'gitts': 'gifts',
+            'duped': 'duped',
+            'glitched': 'glitched',
+            'corrupting': 'corrupting',
+            'repairing': 'repairing',
+            'robo': 'robo',
+            'obtain': 'obtain',
+            'fielc': 'field',
+            'pamal.ll': 'complete',
+            'pumpkirpatch': 'pumpkin patch',
+            'red brickfield': 'red brick field',
+            'electro-magnet': 'electromagnet',
+            'giveto': 'give to',
+            'red-cact-rose': 'red-cactus-rose'
+        }
+
+        for ocr_error, correction in ocr_fixes.items():
+            text = text.replace(ocr_error, correction)
+
+        # Fix number formatting (dots instead of commas)
+        # Pattern: number.number.number -> number,number,number
+        text = re.sub(r'(\d{1,3})\.(\d{3})\.(\d{3})', r'\1,\2,\3', text)
+        # Pattern: number.number -> number,number
+        text = re.sub(r'(\d{1,3})\.(\d{3})', r'\1,\2', text)
+
+        # Extract quantity - look for numbers
+        quantity = 1  # default
+        quantity_match = re.search(r'\b(\d+)\b', text)
+        if quantity_match:
+            quantity = int(quantity_match.group(1))
+
+        # Define patterns for different action types
+        patterns = [
+            # Catch patterns (special catching mechanics)
+            (r'.*\b(catch|chase)\b.*', 'catch', r'.*'),
+            # Craft patterns (check first - specific crafting actions)
+            (r'.*\b(craft|make)\b.*\b(blender|ingredients)\b.*', 'craft', r'.*'),
+            # Obtain patterns (specific obtain actions)
+            (r'.*\b(obtain|get)\b.*', 'obtain', r'.*'),
+            # Challenge patterns (check first - specific mini-games like Ant Challenge)
+            (r'.*\b(get|earn|achieve)\b.*\b(score|amulet)\b.*\b(challenge)\b.*', 'challenge', r'.*'),
+            # Feed patterns (check first as they have specific targets)
+            (r'.*\b(feed|give)\b.*\b(blueberr\w*|strawberr\w*)\b.*', 'feed', r'blueberr\w*|strawberr\w*'),
+            # Token patterns
+            (r'.*\b(token|ability|boost)\b.*', 'token', r'(blue|red|rage|honey).*?(boost|ability)?|.*?(boost).*?(blue|red)'),
+            # Collect patterns (specific collectible items only)
+            (r'.*\b(booster|dispenser|machine|printer|stack|clock|stocking|wreath|feast|samovar|snow|art|candle|match|storm)\b.*', 'collect', r'(booster|dispenser|machine|printer|stack|clock|stocking|wreath|feast|samovar|snow|art|candle|match|storm)'),
+            # Kill patterns
+            (r'.*\b(kill|defeat|destroy|slay)\b.*', 'kill', r'(scorpion|mantis|spider|beetle|ladybug|rhinobeetle|ant|werewolf|wolf)'),
+            # Gather patterns (fields/plants)
+            (r'.*\b(gather|collect|get|harvest|pick)\b.*', 'gather', r'(strawberr\w*|blue\s*flower|pine\s*tree|mushroom|rose|clover|bamboo|cactus|pumpkin|pineapple|coconut|dandelion|spider|stump|pepper|mountain\s*top)'),
+            # Fallback patterns
+            (r'.*\b(blueberr\w*|strawberr\w*)\b.*', 'fieldtoken', r'blueberr\w*|strawberr\w*'),
+            (r'.*\b(scorpion|mantis|spider|beetle|ladybug|rhinobeetle|ant|werewolf|wolf)\b.*', 'kill', r'scorpion|mantis|spider|beetle|ladybug|rhinobeetle|ant|werewolf|wolf'),
+            (r'.*', 'unknown', r'.*')  # Default fallback changed from 'gather' to 'unknown'
+        ]
+
+        action = None
+        target = text
+
+        for pattern, action_type, target_pattern in patterns:
+            if re.search(pattern, text):
+                action = action_type
+                # Extract target using the target pattern
+                target_match = re.search(target_pattern, text)
+                if target_match:
+                    target = target_match.group(0).strip()
+                break
+
+        # Normalize target names
+        target = re.sub(r'[^\w\s]', '', target).strip()
+        target = re.sub(r'\s+', '_', target)
+
+        # Remove action words from target
+        action_words = ['use', 'collect', 'get', 'from', 'gather', 'kill', 'defeat', 'destroy', 'feed', 'give', 'to', 'bee']
+        for word in action_words:
+            target = re.sub(r'\b' + word + r'\b', '', target).strip()
+        target = re.sub(r'_+', '_', target).strip('_')  # Clean up extra underscores
+
+        # Handle common plural forms and normalize names
+        plural_to_singular = {
+            'strawberries': 'strawberry',
+            'blue_flowers': 'blue_flower',
+            'pine_trees': 'pine_tree',
+            'mushrooms': 'mushroom',
+            'roses': 'rose',
+            'clovers': 'clover',
+            'cactuses': 'cactus',
+            'cacti': 'cactus',
+            'pumpkins': 'pumpkin',
+            'pineapples': 'pineapple',
+            'coconuts': 'coconut',
+            'dandelions': 'dandelion',
+            'spiders': 'spider',
+            'stumps': 'stump',
+            'peppers': 'pepper',
+            'blueberries': 'blueberry',
+            'scorpions': 'scorpion',
+            'mantises': 'mantis',
+            'beetles': 'beetle',
+            'ladybugs': 'ladybug',
+            'ants': 'ant',
+            'werewolves': 'werewolf',
+            'wolves': 'werewolf'
+        }
+
+        target = plural_to_singular.get(target, target)
+
+        # For collect actions, normalize to standard names
+        if action == 'collect':
+            collect_mappings = {
+                'blue_booster': 'blue_booster',
+                'red_booster': 'red_booster',
+                'mountain_booster': 'mountain_booster',
+                'sticker_printer': 'sticker_printer',
+                'sticker_stack': 'sticker_stack',
+                'blueberry_dispenser': 'blueberry_dispenser',
+                'strawberry_dispenser': 'strawberry_dispenser',
+                'coconut_dispenser': 'coconut_dispenser',
+                'royal_jelly_dispenser': 'royal_jelly_dispenser',
+                'treat_dispenser': 'treat_dispenser',
+                'ant_pass_dispenser': 'ant_pass_dispenser',
+                'glue_dispenser': 'glue_dispenser',
+                'wealth_clock': 'wealth_clock',
+                'stockings': 'stockings',
+                'wreath': 'wreath',
+                'feast': 'feast',
+                'samovar': 'samovar',
+                'snow_machine': 'snow_machine',
+                'lid_art': 'lid_art',
+                'candles': 'candles',
+                'memory_match': 'memory_match',
+                'mega_memory_match': 'mega_memory_match',
+                'extreme_memory_match': 'extreme_memory_match',
+                'winter_memory_match': 'winter_memory_match',
+                'honey_storm': 'honeystorm'
+            }
+            # Try to match the target to known collect items
+            for key in collect_mappings:
+                if key.replace('_', '') in target.replace('_', ''):
+                    target = key
+                    break
+
+        # For feed actions, extract just the berry type
+        if action == 'feed':
+            if 'blueberr' in target:
+                target = 'blueberry'
+            elif 'strawberr' in target:
+                target = 'strawberry'
+
+        # For token actions, simplify target
+        if action == 'token':
+            # Check for boost tokens first
+            if 'boost' in text:
+                if 'blue' in target:
+                    target = 'blueboost'
+                elif 'red' in target:
+                    target = 'redboost'
+            elif 'blue' in target and 'boost' in text:
+                target = 'blueboost'
+            elif 'red' in target and 'boost' in text:
+                target = 'redboost'
+            elif 'blue' in target:
+                target = 'blue'
+            elif 'red' in target:
+                target = 'red'
+
+        return {
+            'action': action,
+            'target': target,
+            'quantity': quantity
+        }
+
+    def mapObjectiveToMacroAction(self, parsedObjective, originalText=""):
+        """
+        Maps a parsed objective to macro action format.
+        Returns a list of action strings compatible with the existing task system.
+        """
+        action = parsedObjective['action']
+        target = parsedObjective['target']
+        quantity = parsedObjective['quantity']
+        text = originalText  # For checking original text content
+
+        # Filter out specific quest types and completed tasks
+        if text.lower().startswith('polar bear:'):
+            return []  # Skip Polar Bear quest titles
+        if 'sticker stack badge' in text.lower():
+            return []  # Sticker stack badges are not collect_stack
+        if 'ultimate ant annihilation' in text.lower():
+            return []  # Quest title, not a task
+        if 'complete' in text.lower():
+            return []  # Skip completed tasks
+
+        # Normalize target names using the mapping dictionaries
+        normalizedTarget = target
+
+        if action == 'gather':
+            normalizedTarget = questCompleterFieldNames.get(target, target)
+        elif action == 'kill':
+            normalizedTarget = questCompleterMobNames.get(target, target)
+        elif action == 'collect':
+            normalizedTarget = questCompleterCollectNames.get(target, target)
+        elif action == 'feed':
+            # For feed actions, normalize to singular forms
+            if 'blueberr' in target:
+                normalizedTarget = 'blueberry'
+            elif 'strawberr' in target:
+                normalizedTarget = 'strawberry'
+            elif 'sunflower' in target and 'seed' in target:
+                normalizedTarget = 'sunflower_seed'
+            elif 'treat' in target:
+                normalizedTarget = 'treat'
+            elif 'pineapple' in target:
+                normalizedTarget = 'pineapple'
+            elif 'moon' in target and 'charm' in target:
+                normalizedTarget = 'moon_charm'
+            else:
+                normalizedTarget = target
+
+        # Special handling for different action types
+        if action == 'gather':
+            # Handle goo collection from specific colors
+            if 'goo' in text.lower() and 'red' in text.lower():
+                # "Collect X goo from red flowers" → gather from red fields
+                return ['gather_red']  # Gather from red fields for goo
+            elif 'goo' in text.lower() and 'blue' in text.lower():
+                return ['gather_blue']  # Gather from blue fields for goo
+
+            # Only allow valid field names for gathering
+            validFields = ['pineapple', 'pumpkin', 'rose', 'cactus', 'pepper', 'strawberry', 'blueberry',
+                          'sunflower', 'dandelion', 'mushroom', 'clover', 'bamboo', 'spider', 'stump']
+            if normalizedTarget in validFields:
+                # These are field names that can be gathered
+                return [f"gather_{normalizedTarget}"]
+            else:
+                # Skip other gather actions (tool-based, malformed, etc.)
+                return []
+
+        elif action == 'kill':
+            # Filter out unsupported boss mobs
+            if 'king' in text.lower() and 'beetle' in normalizedTarget:
+                return []  # Cannot kill king beetles
+            if 'tunnel_bear' in normalizedTarget:
+                return []  # Cannot kill tunnel bears
+            if 'vicious' in text.lower() and 'bee' in normalizedTarget:
+                return ['stinger_hunt']
+            else:
+                # Format: kill_mob (macro handles quantity internally)
+                return [f"kill_{normalizedTarget}"]
+
+        elif action == 'collect':
+            # Format: collect_item
+            return [f"collect_{normalizedTarget}"]
+
+        elif action == 'feed':
+            # Format: feed_quantity_item (quantity is often * for unlimited)
+            if quantity > 1:
+                return [f"feed_{quantity}_{normalizedTarget}"]
+            else:
+                return [f"feed_*_{normalizedTarget}"]
+
+        elif action == 'token':
+            # Token collection is not supported - filter out
+            return []
+
+        elif action == 'pollengoo':
+            # Handle pollen goo actions
+            if 'blue' in target.lower():
+                return ['pollengoo_blue']
+            elif 'red' in target.lower():
+                return ['pollengoo_red']
+            else:
+                return [f"pollengoo_{normalizedTarget}"]
+
+        elif action == 'fieldtoken':
+            # Handle field token actions
+            if 'blueberry' in target.lower():
+                return ['fieldtoken_blueberry']
+            elif 'strawberry' in target.lower():
+                return ['fieldtoken_strawberry']
+            else:
+                return [f"fieldtoken_{normalizedTarget}"]
+
+        # Special mob handling
+        elif action == 'kill' and 'vicious' in target:
+            # "Defeat X Vicious Bees" → Use stinger hunt
+            return ['stinger_hunt']
+
+        elif action == 'feed':
+            # Feed actions → Use feedBee method
+            if quantity > 1:
+                return [f"feed_bee_{quantity}_{normalizedTarget}"]
+            else:
+                return [f"feed_bee_{normalizedTarget}"]
+
+        elif action == 'gather' and 'planter' in target:
+            # "Collect X Tokens from Planters" → Use planter placement
+            return ['planters']
+
+        elif action == 'craft':
+            # Only allow craft actions with specific context (ingredients, blender, etc.)
+            if 'ingredient' in target.lower() or 'blender' in target.lower():
+                return ['craft']
+            else:
+                # Generic "craft" without context - skip
+                return []
+
+        elif action == 'obtain':
+            # Obtain actions → Mark as unsupported for now
+            return []  # Don't add unsupported tasks
+
+        elif action == 'catch':
+            # Catch actions → Mark as unsupported for now
+            return []  # Don't add unsupported tasks
+
+        elif action == 'unknown':
+            # Unknown actions → Don't add to queue
+            return []
+
+        else:
+            # For other actions, only add if they look like valid macro tasks
+            task = f"{action}_{normalizedTarget}"
+            # Filter out malformed tasks, completed tasks, token tasks, and tool-based tasks
+            if (len(task) > 50 or '_' not in task or task.count('_') > 3 or
+                'complete' in task or task.startswith('token_') or
+                '_with_' in task):
+                return []  # Skip malformed/completed/token/tool-based tasks
+            return [task]
 
     def goToQuestGiver(self, questGiver, reason):
         for _ in range(3):
