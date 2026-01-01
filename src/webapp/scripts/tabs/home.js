@@ -449,50 +449,24 @@ async function loadTasks() {
     return { enabled: false };
   }
 
-  // Show gather tasks based on priority order, but show all instances from fields array for each type
+  // Show all tasks in priority order, but expand gather tasks to show all instances from fields array
   if (priorityOrder && priorityOrder.length > 0) {
-    // Get unique gather task types from priority order, preserving order
-    const gatherTaskTypes = [];
-    const seen = new Set();
+    // Process each task in priority order
     for (const taskId of priorityOrder) {
-      if (taskId.startsWith("gather_") && !seen.has(taskId)) {
-        gatherTaskTypes.push(taskId);
-        seen.add(taskId);
-      }
-    }
-
-    // For each gather task type in priority order, show all instances from fields array
-    for (const taskId of gatherTaskTypes) {
-      const fieldName = taskId.replace("gather_", "").replace("_", " ");
-      // Show all instances of this field from the fields array
-      for (let i = 0; i < setdat.fields.length; i++) {
-        if (setdat.fields_enabled[i] && setdat.fields[i] === fieldName) {
-          const field = setdat.fields[i];
-          out += taskHTML(
-            `Gather ${i + 1}`,
-            `${fieldEmojis[field.replaceAll(" ", "_")]} ${field}`
-          );
+      if (taskId.startsWith("gather_")) {
+        // For gather tasks, show all instances of that field type from fields array
+        const fieldName = taskId.replace("gather_", "").replace("_", " ");
+        for (let i = 0; i < setdat.fields.length; i++) {
+          if (setdat.fields_enabled[i] && setdat.fields[i] === fieldName) {
+            const field = setdat.fields[i];
+            out += taskHTML(
+              `Gather ${i + 1}`,
+              `${fieldEmojis[field.replaceAll(" ", "_")]} ${field}`
+            );
+          }
         }
-      }
-    }
-  } else {
-    // No priority order, show all gather tasks from fields array
-    for (let i = 0; i < setdat.fields.length; i++) {
-      if (setdat.fields_enabled[i]) {
-        const field = setdat.fields[i];
-        out += taskHTML(
-          `Gather ${i + 1}`,
-          `${fieldEmojis[field.replaceAll(" ", "_")]} ${field}`
-        );
-      }
-    }
-  }
-
-  // Show other tasks from priority order if it exists, otherwise fall back to old order
-  if (priorityOrder && priorityOrder.length > 0) {
-    // Display non-gather tasks from priority order
-    for (const taskId of priorityOrder) {
-      if (!taskId.startsWith("gather_")) {
+      } else {
+        // For non-gather tasks, show them normally
         const taskInfo = getTaskDisplayInfo(taskId);
         if (taskInfo.enabled) {
           out += taskHTML(taskInfo.title, taskInfo.desc);
