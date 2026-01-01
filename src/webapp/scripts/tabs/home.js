@@ -167,27 +167,44 @@ function secondsToMinsAndHours(time) {
 //load the tasks
 //also set max-height for logs
 eel.expose(loadTasks);
+// Prevent updates while user is actively changing the dropdown
+let isUserChangingMode = false;
+let modeUpdateTimeout = null;
+
 eel.expose(updateMacroMode);
 async function updateMacroMode() {
-  // Update macro mode dropdown to match current settings
-  const settings = await loadAllSettings();
-  const macroModeDropdown = document.getElementById("macro_mode");
-  if (macroModeDropdown) {
-    const currentValue = settings.macro_mode || "normal";
-
-    if (macroModeDropdown.value !== currentValue) {
-      macroModeDropdown.value = currentValue;
-    }
+  // Don't update if user is currently changing the dropdown
+  if (isUserChangingMode) {
+    return;
   }
+
+  // Clear any pending updates
+  if (modeUpdateTimeout) {
+    clearTimeout(modeUpdateTimeout);
+  }
+
+  // Debounce updates to prevent flashing
+  modeUpdateTimeout = setTimeout(async () => {
+    const settings = await loadAllSettings();
+    const macroModeDropdown = document.getElementById("macro_mode");
+    if (macroModeDropdown && !isUserChangingMode) {
+      const currentValue = settings.macro_mode || "normal";
+
+      // Only update if the value actually differs to prevent unnecessary DOM updates
+      if (macroModeDropdown.value !== currentValue) {
+        macroModeDropdown.value = currentValue;
+      }
+    }
+  }, 50);
 }
 
 async function loadTasks() {
   const setdat = await loadAllSettings();
   let out = "";
 
-  // Update macro mode dropdown to match current settings
+  // Update macro mode dropdown to match current settings (only if user is not actively changing it)
   const macroModeDropdown = document.getElementById("macro_mode");
-  if (macroModeDropdown) {
+  if (macroModeDropdown && !isUserChangingMode) {
     const currentValue = setdat.macro_mode || "normal";
 
     if (macroModeDropdown.value !== currentValue) {
@@ -202,7 +219,7 @@ async function loadTasks() {
     // Get priority order and filter to only include gather tasks for enabled fields
     const priorityOrder = setdat.task_priority_order || [];
     const fieldOnlyTasks = [];
-    
+
     // Filter priority order to only include gather tasks for enabled fields
     for (const taskId of priorityOrder) {
       if (taskId.startsWith("gather_")) {
@@ -252,7 +269,7 @@ async function loadTasks() {
       { key: "honey_bee_quest", name: "Honey Bee Quest", emoji: "🐝" },
       { key: "bucko_bee_quest", name: "Bucko Bee Quest", emoji: "🏴‍☠️" },
       { key: "riley_bee_quest", name: "Riley Bee Quest", emoji: "🎸" },
-      { key: "polar_bear_quest", name: "Polar Bear Quest", emoji: "🐻" }
+      { key: "polar_bear_quest", name: "Polar Bear Quest", emoji: "🐻" },
     ];
 
     for (const quest of questTasks) {
@@ -628,12 +645,15 @@ async function checkAndUpdateButtonState() {
 
     // Update field-only mode dropdown to match current settings
     const macroModeDropdown = document.getElementById("macro_mode");
-    if (macroModeDropdown) {
+    if (macroModeDropdown && !isUserChangingMode) {
       const currentValue = settings.macro_mode || "normal";
       // Convert backend values to UI values
-      const uiValue = currentValue === "field" ? "field_only" :
-                     currentValue === "quest" ? "quest_only" :
-                     currentValue;
+      const uiValue =
+        currentValue === "field"
+          ? "field_only"
+          : currentValue === "quest"
+          ? "quest_only"
+          : currentValue;
 
       if (macroModeDropdown.value !== uiValue) {
         macroModeDropdown.value = uiValue;
@@ -655,12 +675,15 @@ $("#home-placeholder")
     // Initialize field-only mode dropdown
     const settings = await loadAllSettings();
     const macroModeDropdown = document.getElementById("macro_mode");
-    if (macroModeDropdown) {
+    if (macroModeDropdown && !isUserChangingMode) {
       const currentValue = settings.macro_mode || "normal";
       // Convert backend values to UI values
-      const uiValue = currentValue === "field" ? "field_only" :
-                     currentValue === "quest" ? "quest_only" :
-                     currentValue;
+      const uiValue =
+        currentValue === "field"
+          ? "field_only"
+          : currentValue === "quest"
+          ? "quest_only"
+          : currentValue;
       macroModeDropdown.value = uiValue;
     }
 
@@ -726,16 +749,32 @@ $("#home-placeholder")
     }, 700);
   })
   .on("change", "#macro_mode", async (event) => {
-    // Handle macro mode dropdown
-    const selectedValue = event.currentTarget.value;
+    // Set flag to prevent updates during user interaction
+    isUserChangingMode = true;
 
-    // Convert UI values to backend values
-    const backendValue = selectedValue === "field_only" ? "field" :
-                        selectedValue === "quest_only" ? "quest" :
-                        selectedValue;
+    try {
+      // Handle macro mode dropdown
+      const selectedValue = event.currentTarget.value;
 
-    await eel.saveGeneralSetting("macro_mode", backendValue);
+      // Convert UI values to backend values
+      const backendValue =
+        selectedValue === "field_only"
+          ? "field"
+          : selectedValue === "quest_only"
+          ? "quest"
+          : selectedValue;
 
-    // Reload tasks to reflect the change
-    await loadTasks();
+      await eel.saveGeneralSetting("macro_mode", backendValue);
+
+      // Small delay before reloading tasks to ensure backend is updated
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Reload tasks to reflect the change
+      await loadTasks();
+    } finally {
+      // Clear the flag after a short delay to allow any pending updates
+      setTimeout(() => {
+        isUserChangingMode = false;
+      }, 100);
+    }
   });
