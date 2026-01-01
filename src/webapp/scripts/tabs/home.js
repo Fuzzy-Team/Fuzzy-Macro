@@ -260,9 +260,9 @@ async function loadTasks() {
     return;
   }
 
-  // Check if quest-only mode is enabled
+  // Check if quest mode is enabled
   if (setdat.macro_mode === "quest") {
-    out += taskHTML("Quest Only Mode", "📜 Doing quests only");
+    out += taskHTML("Quest Mode", "📜 Doing quests only");
 
     // Add quest tasks that are enabled
     const questTasks = [
@@ -647,16 +647,8 @@ async function checkAndUpdateButtonState() {
     const macroModeDropdown = document.getElementById("macro_mode");
     if (macroModeDropdown && !isUserChangingMode) {
       const currentValue = settings.macro_mode || "normal";
-      // Convert backend values to UI values
-      const uiValue =
-        currentValue === "field"
-          ? "field_only"
-          : currentValue === "quest"
-          ? "quest_only"
-          : currentValue;
-
-      if (macroModeDropdown.value !== uiValue) {
-        macroModeDropdown.value = uiValue;
+      if (macroModeDropdown.value !== currentValue) {
+        macroModeDropdown.value = currentValue;
       }
     }
   } catch (error) {
@@ -672,19 +664,12 @@ $("#home-placeholder")
     await loadTasks();
     await updateStartButtonText();
 
-    // Initialize field-only mode dropdown
+    // Initialize macro mode dropdown
     const settings = await loadAllSettings();
     const macroModeDropdown = document.getElementById("macro_mode");
     if (macroModeDropdown && !isUserChangingMode) {
       const currentValue = settings.macro_mode || "normal";
-      // Convert backend values to UI values
-      const uiValue =
-        currentValue === "field"
-          ? "field_only"
-          : currentValue === "quest"
-          ? "quest_only"
-          : currentValue;
-      macroModeDropdown.value = uiValue;
+      macroModeDropdown.value = currentValue;
     }
 
     // Start checking button state every 500ms
@@ -756,15 +741,7 @@ $("#home-placeholder")
       // Handle macro mode dropdown
       const selectedValue = event.currentTarget.value;
 
-      // Convert UI values to backend values
-      const backendValue =
-        selectedValue === "field_only"
-          ? "field"
-          : selectedValue === "quest_only"
-          ? "quest"
-          : selectedValue;
-
-      await eel.saveGeneralSetting("macro_mode", backendValue);
+      await eel.saveGeneralSetting("macro_mode", selectedValue);
 
       // Small delay before reloading tasks to ensure backend is updated
       await new Promise((resolve) => setTimeout(resolve, 10));
