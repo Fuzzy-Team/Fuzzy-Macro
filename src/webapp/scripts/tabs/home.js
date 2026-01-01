@@ -449,17 +449,58 @@ async function loadTasks() {
     return { enabled: false };
   }
 
-  // If priority order exists, use it; otherwise fall back to old order
+  // Show gather tasks based on priority order, but show all instances from fields array for each type
   if (priorityOrder && priorityOrder.length > 0) {
-    // Display tasks in priority order
+    // Get unique gather task types from priority order, preserving order
+    const gatherTaskTypes = [];
+    const seen = new Set();
     for (const taskId of priorityOrder) {
-      const taskInfo = getTaskDisplayInfo(taskId);
-      if (taskInfo.enabled) {
-        out += taskHTML(taskInfo.title, taskInfo.desc);
+      if (taskId.startsWith("gather_") && !seen.has(taskId)) {
+        gatherTaskTypes.push(taskId);
+        seen.add(taskId);
+      }
+    }
+
+    // For each gather task type in priority order, show all instances from fields array
+    for (const taskId of gatherTaskTypes) {
+      const fieldName = taskId.replace("gather_", "").replace("_", " ");
+      // Show all instances of this field from the fields array
+      for (let i = 0; i < setdat.fields.length; i++) {
+        if (setdat.fields_enabled[i] && setdat.fields[i] === fieldName) {
+          const field = setdat.fields[i];
+          out += taskHTML(
+            `Gather ${i + 1}`,
+            `${fieldEmojis[field.replaceAll(" ", "_")]} ${field}`
+          );
+        }
       }
     }
   } else {
-    // Fallback to old order if no priority order is set
+    // No priority order, show all gather tasks from fields array
+    for (let i = 0; i < setdat.fields.length; i++) {
+      if (setdat.fields_enabled[i]) {
+        const field = setdat.fields[i];
+        out += taskHTML(
+          `Gather ${i + 1}`,
+          `${fieldEmojis[field.replaceAll(" ", "_")]} ${field}`
+        );
+      }
+    }
+  }
+
+  // Show other tasks from priority order if it exists, otherwise fall back to old order
+  if (priorityOrder && priorityOrder.length > 0) {
+    // Display non-gather tasks from priority order
+    for (const taskId of priorityOrder) {
+      if (!taskId.startsWith("gather_")) {
+        const taskInfo = getTaskDisplayInfo(taskId);
+        if (taskInfo.enabled) {
+          out += taskHTML(taskInfo.title, taskInfo.desc);
+        }
+      }
+    }
+  } else {
+    // Fallback to old order for non-gather tasks if no priority order is set
     //load quest givers
     for (const [k, v] of Object.entries(questGiverEmojis)) {
       if (!setdat[k]) continue;
@@ -510,15 +551,6 @@ async function loadTasks() {
       out += taskHTML(
         "Collect Buff",
         toImgArray(stickerStackIcon).join("<br>")
-      );
-    }
-    //load the gather
-    for (let i = 0; i <= setdat.fields_enabled.length; i++) {
-      if (!setdat.fields_enabled[i]) continue;
-      const field = setdat.fields[i];
-      out += taskHTML(
-        `Gather ${i + 1}`,
-        `${fieldEmojis[field.replaceAll(" ", "_")]} ${field}`
       );
     }
   }
