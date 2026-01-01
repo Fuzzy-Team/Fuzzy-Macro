@@ -753,7 +753,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
             task_list = []
             
             # Check for field-only mode
-            if settings.get("field_only_mode", False):
+            if settings.get("macro_mode", "normal") == "field":
                 task_list.append({"title": "Field Only Mode", "desc": "🌾 Gathering in fields only", "is_current": False})
                 field_list = settings.get("fields", [])
                 fields_enabled = settings.get("fields_enabled", [])
@@ -785,6 +785,21 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
                     is_current = current_status == f"gather_{field_name.replace(' ', '_')}"
                     task_list.append({"title": f"Gather {gather_index}", "desc": desc, "is_current": is_current})
                     gather_index += 1
+            # Check for quest mode
+            elif settings.get("macro_mode", "normal") == "quest":
+                task_list.append({"title": "Quest Mode", "desc": "📜 Doing quests only", "is_current": False})
+
+                # Add quest tasks that are enabled
+                quest_tasks = [
+                    ("honey_bee_quest", "🐝 Honey Bee Quest"),
+                    ("bucko_bee_quest", "🏴‍☠️ Bucko Bee Quest"),
+                    ("riley_bee_quest", "🎸 Riley Bee Quest"),
+                    ("polar_bear_quest", "🐻 Polar Bear Quest")
+                ]
+
+                for quest_key, desc in quest_tasks:
+                    if settings.get(quest_key):
+                        task_list.append({"title": "Quest", "desc": desc, "is_current": False})
             else:
                 # If priority order exists, use it; otherwise fall back to old order
                 if priority_order and len(priority_order) > 0:
@@ -1610,24 +1625,34 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
         except Exception as e:
             await interaction.response.send_message(f"❌ Error changing hive slot: {str(e)}")
 
-    @bot.tree.command(name="fieldonly", description="Toggle field-only mode (gathers in fields only, skips all other tasks)")
-    @app_commands.describe(enable="Enable or disable field-only mode")
-    async def field_only_mode(interaction: discord.Interaction, enable: str):
-        """Toggle field-only mode"""
+    @bot.tree.command(name="macromode", description="Set macro mode (normal, quests, or field)")
+    @app_commands.describe(mode="Macro mode to set")
+    @app_commands.choices(mode=[
+        app_commands.Choice(name="normal", value="normal"),
+        app_commands.Choice(name="quests", value="quest"),
+        app_commands.Choice(name="field", value="field"),
+    ])
+    async def macro_mode(interaction: discord.Interaction, mode: str):
+        """Set macro mode"""
         try:
-            success, message = update_setting("field_only_mode", enable)
-            status = "enabled" if enable else "disabled"
-            
+            success, message = update_setting("macro_mode", mode)
+
             # Update GUI if available
             try:
                 import eel
-                eel.updateFieldOnlyMode()
+                eel.updateMacroMode()
             except:
                 pass  # GUI not available, continue
-            
-            await interaction.response.send_message(f"🌾 Field-only mode {status}!\n{message}")
+
+            mode_names = {
+                "normal": "Normal",
+                "quest": "Quest",
+                "field": "Field"
+            }
+
+            await interaction.response.send_message(f"🔄 Macro mode set to {mode_names[mode]}!\n{message}")
         except Exception as e:
-            await interaction.response.send_message(f"❌ Error toggling field-only mode: {str(e)}")
+            await interaction.response.send_message(f"❌ Error setting macro mode: {str(e)}")
 
     @bot.tree.command(name="help", description="Show available commands")
     async def help_command(interaction: discord.Interaction):
@@ -1636,9 +1661,11 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
 
         embed.add_field(name="🔧 **Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/skip` - Skip the current task\n`/stop` - Stop the macro\n`/status` - Get macro status and current task\n`/rejoin` - Make macro rejoin game\n`/screenshot` - Get screenshot\n`/settings` - View current settings\n`/hiveslot <1-6>` - Change hive slot number", inline=False)
 
-        embed.add_field(name="🌾 **Field Management**", value="`/fields` - View field configuration\n`/enablefield <field>` - Enable a field\n`/disablefield <field>` - Disable a field\n`/swapfield <current> <new>` - Swap one field for another (new can be any field)\n`/fieldonly <true/false>` - Toggle field-only mode (gathers in fields only)", inline=False)
+        embed.add_field(name="🌾 **Field Management**", value="`/fields` - View field configuration\n`/enablefield <field>` - Enable a field\n`/disablefield <field>` - Disable a field\n`/swapfield <current> <new>` - Swap one field for another (new can be any field)", inline=False)
 
         embed.add_field(name="📜 **Quest Management**", value="`/quests` - View quest configuration\n`/enablequest <quest>` - Enable a quest\n`/disablequest <quest>` - Disable a quest", inline=False)
+
+        embed.add_field(name="🔄 **Macro Mode**", value="`/macromode <normal/quests/field>` - Set macro mode (normal = all tasks, quests = quests only, field = fields only)", inline=False)
 
         embed.add_field(name="🎁 **Collectibles**", value="`/collectibles` - View collectibles\n`/enablecollectible <item>` - Enable collectible\n`/disablecollectible <item>` - Disable collectible", inline=False)
 

@@ -167,40 +167,59 @@ function secondsToMinsAndHours(time) {
 //load the tasks
 //also set max-height for logs
 eel.expose(loadTasks);
-eel.expose(updateFieldOnlyMode);
-async function updateFieldOnlyMode() {
-  // Update field-only mode dropdown to match current settings
-  const settings = await loadAllSettings();
-  const fieldOnlyDropdown = document.getElementById("field_only_mode");
-  if (fieldOnlyDropdown) {
-    const currentValue = settings.field_only_mode ? "true" : "false";
-    if (fieldOnlyDropdown.value !== currentValue) {
-      fieldOnlyDropdown.value = currentValue;
-    }
+// Prevent updates while user is actively changing the dropdown
+let isUserChangingMode = false;
+let modeUpdateTimeout = null;
+
+eel.expose(updateMacroMode);
+async function updateMacroMode() {
+  // Don't update if user is currently changing the dropdown
+  if (isUserChangingMode) {
+    return;
   }
+
+  // Clear any pending updates
+  if (modeUpdateTimeout) {
+    clearTimeout(modeUpdateTimeout);
+  }
+
+  // Debounce updates to prevent flashing
+  modeUpdateTimeout = setTimeout(async () => {
+    const settings = await loadAllSettings();
+    const macroModeDropdown = document.getElementById("macro_mode");
+    if (macroModeDropdown && !isUserChangingMode) {
+      const currentValue = settings.macro_mode || "normal";
+
+      // Only update if the value actually differs to prevent unnecessary DOM updates
+      if (macroModeDropdown.value !== currentValue) {
+        macroModeDropdown.value = currentValue;
+      }
+    }
+  }, 50);
 }
 
 async function loadTasks() {
   const setdat = await loadAllSettings();
   let out = "";
 
-  // Update field-only mode dropdown to match current settings
-  const fieldOnlyDropdown = document.getElementById("field_only_mode");
-  if (fieldOnlyDropdown) {
-    const currentValue = setdat.field_only_mode ? "true" : "false";
-    if (fieldOnlyDropdown.value !== currentValue) {
-      fieldOnlyDropdown.value = currentValue;
+  // Update macro mode dropdown to match current settings (only if user is not actively changing it)
+  const macroModeDropdown = document.getElementById("macro_mode");
+  if (macroModeDropdown && !isUserChangingMode) {
+    const currentValue = setdat.macro_mode || "normal";
+
+    if (macroModeDropdown.value !== currentValue) {
+      macroModeDropdown.value = currentValue;
     }
   }
 
   // Check if field-only mode is enabled
-  if (setdat.field_only_mode) {
+  if (setdat.macro_mode === "field") {
     out += taskHTML("Field Only Mode", "🌾 Gathering in fields only");
 
     // Get priority order and filter to only include gather tasks for enabled fields
     const priorityOrder = setdat.task_priority_order || [];
     const fieldOnlyTasks = [];
-    
+
     // Filter priority order to only include gather tasks for enabled fields
     for (const taskId of priorityOrder) {
       if (taskId.startsWith("gather_")) {
@@ -234,6 +253,29 @@ async function loadTasks() {
         `${fieldEmojis[fieldName.replaceAll(" ", "_")]} ${fieldName}`
       );
       gatherIndex++;
+    }
+
+    // Display the tasks
+    document.getElementById("task-list").innerHTML = out;
+    return;
+  }
+
+  // Check if quest mode is enabled
+  if (setdat.macro_mode === "quest") {
+    out += taskHTML("Quest Mode", "📜 Doing quests only");
+
+    // Add quest tasks that are enabled
+    const questTasks = [
+      { key: "honey_bee_quest", name: "Honey Bee Quest", emoji: "🐝" },
+      { key: "bucko_bee_quest", name: "Bucko Bee Quest", emoji: "🏴‍☠️" },
+      { key: "riley_bee_quest", name: "Riley Bee Quest", emoji: "🎸" },
+      { key: "polar_bear_quest", name: "Polar Bear Quest", emoji: "🐻" },
+    ];
+
+    for (const quest of questTasks) {
+      if (setdat[quest.key]) {
+        out += taskHTML(quest.name, `${quest.emoji} ${quest.name}`);
+      }
     }
 
     // Display the tasks
@@ -602,11 +644,11 @@ async function checkAndUpdateButtonState() {
     }
 
     // Update field-only mode dropdown to match current settings
-    const fieldOnlyDropdown = document.getElementById("field_only_mode");
-    if (fieldOnlyDropdown) {
-      const currentValue = settings.field_only_mode ? "true" : "false";
-      if (fieldOnlyDropdown.value !== currentValue) {
-        fieldOnlyDropdown.value = currentValue;
+    const macroModeDropdown = document.getElementById("macro_mode");
+    if (macroModeDropdown && !isUserChangingMode) {
+      const currentValue = settings.macro_mode || "normal";
+      if (macroModeDropdown.value !== currentValue) {
+        macroModeDropdown.value = currentValue;
       }
     }
   } catch (error) {
@@ -622,11 +664,12 @@ $("#home-placeholder")
     await loadTasks();
     await updateStartButtonText();
 
-    // Initialize field-only mode dropdown
+    // Initialize macro mode dropdown
     const settings = await loadAllSettings();
-    const fieldOnlyDropdown = document.getElementById("field_only_mode");
-    if (fieldOnlyDropdown) {
-      fieldOnlyDropdown.value = settings.field_only_mode ? "true" : "false";
+    const macroModeDropdown = document.getElementById("macro_mode");
+    if (macroModeDropdown && !isUserChangingMode) {
+      const currentValue = settings.macro_mode || "normal";
+      macroModeDropdown.value = currentValue;
     }
 
     // Start checking button state every 500ms
@@ -690,11 +733,25 @@ $("#home-placeholder")
       btn.classList.remove("active");
     }, 700);
   })
-  .on("change", "#field_only_mode", async (event) => {
-    // Handle field-only mode dropdown
-    const selectedValue = event.currentTarget.value;
-    const isFieldOnlyMode = selectedValue === "true";
-    await eel.saveGeneralSetting("field_only_mode", isFieldOnlyMode);
-    // Reload tasks to reflect the change
-    await loadTasks();
+  .on("change", "#macro_mode", async (event) => {
+    // Set flag to prevent updates during user interaction
+    isUserChangingMode = true;
+
+    try {
+      // Handle macro mode dropdown
+      const selectedValue = event.currentTarget.value;
+
+      await eel.saveGeneralSetting("macro_mode", selectedValue);
+
+      // Small delay before reloading tasks to ensure backend is updated
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Reload tasks to reflect the change
+      await loadTasks();
+    } finally {
+      // Clear the flag after a short delay to allow any pending updates
+      setTimeout(() => {
+        isUserChangingMode = false;
+      }, 100);
+    }
   });

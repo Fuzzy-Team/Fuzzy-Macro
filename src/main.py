@@ -213,6 +213,34 @@ def macro(status, logQueue, updateGUI, run, skipTask):
         macro.setdat = get_cached_settings()
         # Check if profile has changed and reload settings if needed
         macro.checkAndReloadSettings()
+
+        # Backward compatibility: convert old boolean flags to new macro_mode setting
+        if "field_only_mode" in macro.setdat or "quest_only_mode" in macro.setdat:
+            field_only = macro.setdat.get("field_only_mode", False)
+            quest_only = macro.setdat.get("quest_only_mode", False)
+
+            if field_only and quest_only:
+                # If both are somehow true, prioritize field mode
+                macro.setdat["macro_mode"] = "field"
+            elif field_only:
+                macro.setdat["macro_mode"] = "field"
+            elif quest_only:
+                macro.setdat["macro_mode"] = "quest"
+            else:
+                macro.setdat["macro_mode"] = "normal"
+
+            # Remove old settings
+            if "field_only_mode" in macro.setdat:
+                del macro.setdat["field_only_mode"]
+            if "quest_only_mode" in macro.setdat:
+                del macro.setdat["quest_only_mode"]
+
+            # Save the updated settings
+            try:
+                settingsManager.saveGeneralSetting("macro_mode", macro.setdat["macro_mode"])
+            except:
+                pass  # If save fails, continue with converted setting
+
         #run empty task
         #this is in case no other settings are selected
         runTask(resetAfter=False)
@@ -220,7 +248,7 @@ def macro(status, logQueue, updateGUI, run, skipTask):
         updateGUI.value = 1
 
         # Check if field-only mode is enabled
-        if macro.setdat.get("field_only_mode", False):
+        if macro.setdat.get("macro_mode", "normal") == "field":
             # Field-only mode: skip all tasks except field gathering
             # Get priority order and filter to only include enabled field gathering tasks
             priorityOrder = macro.setdat.get("task_priority_order", [])
@@ -251,6 +279,143 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                     if taskId not in executedTasks:
                         runTask(macro.gather, args=(fieldName,), resetAfter=False)
                         executedTasks.add(taskId)
+
+            # Skip to next iteration
+            continue
+
+        # Check if quest-only mode is enabled
+        if macro.setdat.get("macro_mode", "normal") == "quest":
+            # Quest-only mode: skip all tasks except quest-related tasks
+            # Initialize quest-related variables
+            questGatherFields = []
+            questGumdropGatherFields = []
+            redFieldNeeded = False
+            blueFieldNeeded = False
+            fieldNeeded = False
+            itemsToFeedBees = []
+            redGumdropFieldNeeded = False
+            blueGumdropFieldNeeded = False
+
+            # Get priority order and filter to only include quest tasks
+            priorityOrder = macro.setdat.get("task_priority_order", [])
+            executedTasks = set()
+
+            # Filter priority order to only include quest tasks
+            questOnlyTasks = []
+            for taskId in priorityOrder:
+                if taskId.startswith("quest_"):
+                    questOnlyTasks.append(taskId)
+
+            # If no quest tasks are in priority order, add all enabled quests
+            if not questOnlyTasks:
+                questMappings = [
+                    ("polar bear", "polar_bear_quest"),
+                    ("honey bee", "honey_bee_quest"),
+                    ("bucko bee", "bucko_bee_quest"),
+                    ("riley bee", "riley_bee_quest")
+                ]
+                for questName, questKey in questMappings:
+                    if macro.setdat.get(questKey):
+                        questOnlyTasks.append(f"quest_{questName.replace(' ', '_')}")
+
+            # Execute quest tasks in priority order
+            for taskId in questOnlyTasks:
+                if taskId.startswith("quest_"):
+                    questName = taskId.replace("quest_", "").replace("_", " ")
+                    questKey = f"{questName.replace(' ', '_')}_quest"
+                    if macro.setdat.get(questKey):
+                        # Handle quest feeding and gathering requirements
+                        questMappings = {
+                            "polar bear": "polar_bear_quest",
+                            "honey bee": "honey_bee_quest",
+                            "bucko bee": "bucko_bee_quest",
+                            "riley bee": "riley_bee_quest"
+                        }
+
+                        if questName in questMappings:
+                            enabledKey = questMappings[questName]
+                            if macro.setdat.get(enabledKey):
+                                setdatEnable, gatherFields, gumdropFields, needsRed, needsBlue, feedBees, needsRedGumdrop, needsBlueGumdrop, needsField = handleQuest(questName)
+                                for k in setdatEnable:
+                                    macro.setdat[k] = True
+                                questGatherFields.extend(gatherFields)
+                                questGumdropGatherFields.extend(gumdropFields)
+                                redFieldNeeded = redFieldNeeded or needsRed
+                                blueFieldNeeded = blueFieldNeeded or needsBlue
+                                itemsToFeedBees.extend(feedBees)
+                                redGumdropFieldNeeded = redGumdropFieldNeeded or needsRedGumdrop
+                                blueGumdropFieldNeeded = blueGumdropFieldNeeded or needsBlueGumdrop
+                                fieldNeeded = fieldNeeded or needsField
+
+                        if taskId not in executedTasks:
+                            executedTasks.add(taskId)
+
+            # Feed bees for quests (done once per cycle)
+            for item, quantity in itemsToFeedBees:
+                macro.feedBee(item, quantity)
+                taskCompleted = True
+
+            # Handle quest gather fields (done once per cycle)
+            questGatherOverrides = {}
+            if macro.setdat["quest_gather_mins"]:
+                questGatherOverrides["mins"] = macro.setdat["quest_gather_mins"]
+            if macro.setdat["quest_gather_return"] != "no override":
+                questGatherOverrides["return"] = macro.setdat["quest_gather_return"]
+
+            allGatheredFields = []
+
+            # Handle gumdrop gather fields first
+            if blueGumdropFieldNeeded:
+                blueFields = ["blue flower", "bamboo", "pine tree", "stump"]
+                for f in blueFields:
+                    if f in questGumdropGatherFields:
+                        break
+                else:
+                    questGumdropGatherFields.append("pine tree")
+
+            if redGumdropFieldNeeded:
+                redFields = ["mushroom", "strawberry", "rose", "pepper"]
+                for f in redFields:
+                    if f in questGumdropGatherFields:
+                        break
+                else:
+                    questGumdropGatherFields.append("rose")
+
+            for field in questGumdropGatherFields:
+                if field not in allGatheredFields:
+                    runTask(macro.gather, args=(field, questGatherOverrides, True), resetAfter=False)
+                    allGatheredFields.append(field)
+
+            # Handle regular quest gather fields
+            questGatherFields = [x for x in questGatherFields if not (x in allGatheredFields)]
+            for field in questGatherFields:
+                runTask(macro.gather, args=(field, questGatherOverrides), resetAfter=False)
+                allGatheredFields.append(field)
+
+            # Handle required blue/red fields for quests
+            blueFields = ["blue flower", "bamboo", "pine tree", "stump"]
+            redFields = ["mushroom", "strawberry", "rose", "pepper"]
+
+            if blueFieldNeeded:
+                for f in blueFields:
+                    if f in allGatheredFields:
+                        break
+                else:
+                    field = "pine tree"
+                    allGatheredFields.append(field)
+                    runTask(macro.gather, args=(field, questGatherOverrides), resetAfter=False)
+
+            if redFieldNeeded:
+                for f in redFields:
+                    if f in allGatheredFields:
+                        break
+                else:
+                    field = "rose"
+                    allGatheredFields.append(field)
+                    runTask(macro.gather, args=(field, questGatherOverrides), resetAfter=False)
+
+            if fieldNeeded and not allGatheredFields:
+                runTask(macro.gather, args=("pine tree",), resetAfter=False)
 
             # Skip to next iteration
             continue
