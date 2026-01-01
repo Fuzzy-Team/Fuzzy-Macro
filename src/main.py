@@ -442,11 +442,31 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                     # Detect quest objectives from screen
                     detectedObjectives = macro.detectQuestObjectives()
                     if detectedObjectives:
+                        # Send webhook showing detected quest objectives (similar to normal quests)
+                        objectivesText = '\n'.join(f"• {obj}" for obj in detectedObjectives)
+                        macro.logger.webhook("Quest Completer: Detected Quest Objectives",
+                                           f"**Detected {len(detectedObjectives)} quest objectives:**\n\n{objectivesText}",
+                                           "light blue")
                         macro.logger.webhook("Quest Completer", f"Detected {len(detectedObjectives)} quest objectives", "light blue")
 
-                        # Parse and map each objective
-                        questCompleterTasks = []
+                        # Filter out non-task objectives (quest titles, quest giver names, etc.)
+                        filteredObjectives = []
                         for objectiveText in detectedObjectives:
+                            # Skip objectives that are just quest titles or quest giver names
+                            lowerText = objectiveText.lower().strip()
+                            skipKeywords = [
+                                'bear:', 'bee:', 'breath of', 'ultimate ant', 'ladybug poppers',
+                                'honey hunt', 'repairs robo', 'corrupting the', 'blue-stump-rose',
+                                'strawberries', 'ladybug poppers'
+                            ]
+                            if any(keyword in lowerText for keyword in skipKeywords) or len(lowerText.split()) < 3:
+                                print(f"[Quest Parser] ✗ '{objectiveText[:50]}...' → skipped (non-task)")
+                                continue
+                            filteredObjectives.append(objectiveText)
+
+                        # Parse and map each filtered objective
+                        questCompleterTasks = []
+                        for objectiveText in filteredObjectives:
                             try:
                                 parsedObj = macro.parseQuestObjective(objectiveText)
                                 mappedActions = macro.mapObjectiveToMacroAction(parsedObj, objectiveText)
@@ -464,14 +484,13 @@ def macro(status, logQueue, updateGUI, run, skipTask):
 
                         # Cache the tasks and add to priority order
                         if questCompleterTasks:
-                            questCache[questCacheKey] = questCompleterTasks
-
                             priorityLevel = macro.setdat.get("quest_completer_priority", "Normal").lower()
                             priorityWeights = {"low": 10, "normal": 50, "high": 90}
                             priorityWeight = priorityWeights.get(priorityLevel, 50)
 
                             # Insert quest completer tasks into priority order
                             existingPriorityOrder = macro.setdat.get("task_priority_order", [])
+                            questCompleterTaskSet = set()  # Track which tasks are from quest completer
                             for task in questCompleterTasks:
                                 if task not in existingPriorityOrder:
                                     # Insert with priority weight (higher weight = higher priority)
@@ -489,19 +508,28 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                                             break
 
                                     existingPriorityOrder.insert(insertIndex, task)
+                                questCompleterTaskSet.add(task)
+
+                            # Cache the tasks after building the task set
+                            questCache[questCacheKey] = {
+                                'tasks': questCompleterTasks,
+                                'task_set': questCompleterTaskSet
+                            }
 
                             macro.logger.webhook("Quest Completer",
                                                f"Added {len(questCompleterTasks)} quest tasks to priority queue: {questCompleterTasks}",
                                                "light blue")
                         else:
-                            questCache[questCacheKey] = []
+                            questCache[questCacheKey] = {'tasks': [], 'task_set': set()}
                     else:
-                        questCache[questCacheKey] = []
+                        questCache[questCacheKey] = {'tasks': [], 'task_set': set()}
 
                 # Check if we have cached quest tasks to work on
-                elif questCacheKey in questCache and questCache[questCacheKey]:
+                elif questCacheKey in questCache and questCache[questCacheKey].get('tasks'):
                     # We have cached tasks, ensure they're still in priority order
-                    cachedTasks = questCache[questCacheKey]
+                    cachedData = questCache[questCacheKey]
+                    cachedTasks = cachedData.get('tasks', [])
+                    questTaskSet = cachedData.get('task_set', set())
                     existingPriorityOrder = macro.setdat.get("task_priority_order", [])
 
                     # Check if any cached tasks are still active
@@ -1276,8 +1304,10 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                         # Task couldn't be executed - check if it's a quest completer task in the cache
                         questCacheKey = "quest_completer_objectives"
                         if questCacheKey in questCache:
-                            cachedTasks = questCache[questCacheKey]
-                            isQuestTask = taskId.startswith(('gather_', 'kill_', 'collect_', 'craft', 'feed_bee_')) and taskId in cachedTasks
+                            cachedData = questCache[questCacheKey]
+                            cachedTasks = cachedData.get('tasks', [])
+                            questTaskSet = cachedData.get('task_set', set())
+                            isQuestTask = taskId in questTaskSet
                             if isQuestTask and taskId not in executedTasks:
                                 # For quest completer tasks, try to execute them bypassing normal settings restrictions
                                 questTaskExecuted = executeQuestTask(taskId)
