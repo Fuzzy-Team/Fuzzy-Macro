@@ -39,3 +39,4 @@ goo_slot=3
 start_keybind=F1
 stop_keybind=F3
 pause_keybind=F2
+macro_mode=normal

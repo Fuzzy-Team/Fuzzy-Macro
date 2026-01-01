@@ -167,15 +167,16 @@ function secondsToMinsAndHours(time) {
 //load the tasks
 //also set max-height for logs
 eel.expose(loadTasks);
-eel.expose(updateFieldOnlyMode);
-async function updateFieldOnlyMode() {
-  // Update field-only mode dropdown to match current settings
+eel.expose(updateMacroMode);
+async function updateMacroMode() {
+  // Update macro mode dropdown to match current settings
   const settings = await loadAllSettings();
-  const fieldOnlyDropdown = document.getElementById("field_only_mode");
-  if (fieldOnlyDropdown) {
-    const currentValue = settings.field_only_mode ? "true" : "false";
-    if (fieldOnlyDropdown.value !== currentValue) {
-      fieldOnlyDropdown.value = currentValue;
+  const macroModeDropdown = document.getElementById("macro_mode");
+  if (macroModeDropdown) {
+    const currentValue = settings.macro_mode || "normal";
+
+    if (macroModeDropdown.value !== currentValue) {
+      macroModeDropdown.value = currentValue;
     }
   }
 }
@@ -184,17 +185,18 @@ async function loadTasks() {
   const setdat = await loadAllSettings();
   let out = "";
 
-  // Update field-only mode dropdown to match current settings
-  const fieldOnlyDropdown = document.getElementById("field_only_mode");
-  if (fieldOnlyDropdown) {
-    const currentValue = setdat.field_only_mode ? "true" : "false";
-    if (fieldOnlyDropdown.value !== currentValue) {
-      fieldOnlyDropdown.value = currentValue;
+  // Update macro mode dropdown to match current settings
+  const macroModeDropdown = document.getElementById("macro_mode");
+  if (macroModeDropdown) {
+    const currentValue = setdat.macro_mode || "normal";
+
+    if (macroModeDropdown.value !== currentValue) {
+      macroModeDropdown.value = currentValue;
     }
   }
 
   // Check if field-only mode is enabled
-  if (setdat.field_only_mode) {
+  if (setdat.macro_mode === "field") {
     out += taskHTML("Field Only Mode", "🌾 Gathering in fields only");
 
     // Get priority order and filter to only include gather tasks for enabled fields
@@ -234,6 +236,29 @@ async function loadTasks() {
         `${fieldEmojis[fieldName.replaceAll(" ", "_")]} ${fieldName}`
       );
       gatherIndex++;
+    }
+
+    // Display the tasks
+    document.getElementById("task-list").innerHTML = out;
+    return;
+  }
+
+  // Check if quest-only mode is enabled
+  if (setdat.macro_mode === "quest") {
+    out += taskHTML("Quest Only Mode", "📜 Doing quests only");
+
+    // Add quest tasks that are enabled
+    const questTasks = [
+      { key: "honey_bee_quest", name: "Honey Bee Quest", emoji: "🐝" },
+      { key: "bucko_bee_quest", name: "Bucko Bee Quest", emoji: "🏴‍☠️" },
+      { key: "riley_bee_quest", name: "Riley Bee Quest", emoji: "🎸" },
+      { key: "polar_bear_quest", name: "Polar Bear Quest", emoji: "🐻" }
+    ];
+
+    for (const quest of questTasks) {
+      if (setdat[quest.key]) {
+        out += taskHTML(quest.name, `${quest.emoji} ${quest.name}`);
+      }
     }
 
     // Display the tasks
@@ -602,11 +627,16 @@ async function checkAndUpdateButtonState() {
     }
 
     // Update field-only mode dropdown to match current settings
-    const fieldOnlyDropdown = document.getElementById("field_only_mode");
-    if (fieldOnlyDropdown) {
-      const currentValue = settings.field_only_mode ? "true" : "false";
-      if (fieldOnlyDropdown.value !== currentValue) {
-        fieldOnlyDropdown.value = currentValue;
+    const macroModeDropdown = document.getElementById("macro_mode");
+    if (macroModeDropdown) {
+      const currentValue = settings.macro_mode || "normal";
+      // Convert backend values to UI values
+      const uiValue = currentValue === "field" ? "field_only" :
+                     currentValue === "quest" ? "quest_only" :
+                     currentValue;
+
+      if (macroModeDropdown.value !== uiValue) {
+        macroModeDropdown.value = uiValue;
       }
     }
   } catch (error) {
@@ -624,9 +654,14 @@ $("#home-placeholder")
 
     // Initialize field-only mode dropdown
     const settings = await loadAllSettings();
-    const fieldOnlyDropdown = document.getElementById("field_only_mode");
-    if (fieldOnlyDropdown) {
-      fieldOnlyDropdown.value = settings.field_only_mode ? "true" : "false";
+    const macroModeDropdown = document.getElementById("macro_mode");
+    if (macroModeDropdown) {
+      const currentValue = settings.macro_mode || "normal";
+      // Convert backend values to UI values
+      const uiValue = currentValue === "field" ? "field_only" :
+                     currentValue === "quest" ? "quest_only" :
+                     currentValue;
+      macroModeDropdown.value = uiValue;
     }
 
     // Start checking button state every 500ms
@@ -690,11 +725,17 @@ $("#home-placeholder")
       btn.classList.remove("active");
     }, 700);
   })
-  .on("change", "#field_only_mode", async (event) => {
-    // Handle field-only mode dropdown
+  .on("change", "#macro_mode", async (event) => {
+    // Handle macro mode dropdown
     const selectedValue = event.currentTarget.value;
-    const isFieldOnlyMode = selectedValue === "true";
-    await eel.saveGeneralSetting("field_only_mode", isFieldOnlyMode);
+
+    // Convert UI values to backend values
+    const backendValue = selectedValue === "field_only" ? "field" :
+                        selectedValue === "quest_only" ? "quest" :
+                        selectedValue;
+
+    await eel.saveGeneralSetting("macro_mode", backendValue);
+
     // Reload tasks to reflect the change
     await loadTasks();
   });
