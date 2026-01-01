@@ -409,7 +409,15 @@ questCompleterMobNames = {
     "wolf": "werewolf",
     "wolves": "werewolf",
     "king_beetle": "king_beetle",
-    "king beetle": "king_beetle"
+    "king beetle": "king_beetle",
+    "coconut_crab": "coconut_crab",
+    "coconut crab": "coconut_crab",
+    "coconut_crabs": "coconut_crab",
+    "coconut crabs": "coconut_crab",
+    "coconutcrab": "coconut_crab",
+    "coconutcrabs": "coconut_crab",
+    "mechsquito": "mechsquito",
+    "mechsquitos": "mechsquito"
 }
 
 questCompleterCollectNames = {
@@ -4072,12 +4080,12 @@ class macro:
             # Collect patterns (specific collectible items only)
             (r'.*\b(booster|dispenser|machine|printer|stack|clock|stocking|wreath|feast|samovar|snow|art|candle|match|storm)\b.*', 'collect', r'(booster|dispenser|machine|printer|stack|clock|stocking|wreath|feast|samovar|snow|art|candle|match|storm)'),
             # Kill patterns
-            (r'.*\b(kill|defeat|destroy|slay)\b.*', 'kill', r'(giant\s+ants?|army\s+ants?|fire\s+ants?|scorpions?|mantises?|spiders?|beetles?|ladybugs?|rhinobeetles?|ants?|werewolves?|wolves?|king\s+beetles?)'),
+            (r'.*\b(kill|defeat|destroy|slay)\b.*', 'kill', r'(giant\s+ants?|army\s+ants?|fire\s+ants?|coconut\s+crabs?|mechsquitos?|scorpions?|mantises?|spiders?|beetles?|ladybugs?|rhinobeetles?|ants?|werewolves?|wolves?|king\s+beetles?)'),
             # Gather patterns (fields/plants) - more flexible to handle OCR errors
             (r'.*\b(gather|collect|get|harvest|pick)\b.*', 'gather', r'(strawberr\w*|blue\s*flower|pine\s*tree|mushroom|rose|clover|bamboo|cactus|pumpkin|pineapple|coconut|dandelion|spider|stump|pepper|mountain\s*top|sunflower|sunflow\w*|pineappl\w*)'),
             # Fallback patterns
             (r'.*\b(blueberr\w*|strawberr\w*)\b.*', 'fieldtoken', r'blueberr\w*|strawberr\w*'),
-            (r'.*\b(scorpions?|mantises?|spiders?|beetles?|ladybugs?|rhinobeetles?|ants?|werewolves?|wolves?)\b.*', 'kill', r'scorpions?|mantises?|spiders?|beetles?|ladybugs?|rhinobeetles?|ants?|werewolves?|wolves?'),
+            (r'.*\b(coconut\s+crabs?|mechsquitos?|scorpions?|mantises?|spiders?|beetles?|ladybugs?|rhinobeetles?|ants?|werewolves?|wolves?)\b.*', 'kill', r'coconut\s+crabs?|mechsquitos?|scorpions?|mantises?|spiders?|beetles?|ladybugs?|rhinobeetles?|ants?|werewolves?|wolves?'),
             (r'.*', 'unknown', r'.*')  # Default fallback changed from 'gather' to 'unknown'
         ]
 
@@ -4101,6 +4109,8 @@ class macro:
         action_words = ['use', 'collect', 'get', 'from', 'gather', 'kill', 'defeat', 'destroy', 'feed', 'give', 'to', 'bee']
         for word in action_words:
             target = re.sub(r'\b' + word + r'\b', '', target).strip()
+        # Remove numbers from target (quantities shouldn't be part of the target name)
+        target = re.sub(r'\b\d+\b', '', target).strip()
         target = re.sub(r'_+', '_', target).strip('_')  # Clean up extra underscores
 
         # Handle common plural forms and normalize names
@@ -4128,6 +4138,10 @@ class macro:
             'ants': 'ant',
             'werewolves': 'werewolf',
             'wolves': 'werewolf',
+            'coconut_crabs': 'coconut_crab',
+            'coconut_crab': 'coconut_crab',
+            'mechsquitos': 'mechsquito',
+            'mechsquito': 'mechsquito',
             # OCR error corrections
             'sunflowefield': 'sunflower',
             'sunflow': 'sunflower',
