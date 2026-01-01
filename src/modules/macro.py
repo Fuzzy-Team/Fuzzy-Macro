@@ -390,16 +390,26 @@ questCompleterMobNames = {
     "rhinobeetles": "rhinobeetle",
     "ant": "ant",
     "ants": "ant",
+    "giant_ant": "ant",
+    "giant ant": "ant",
+    "giant_ants": "ant",
+    "giant ants": "ant",
     "army_ant": "armyant",
     "army ant": "armyant",
     "armyant": "armyant",
+    "army_ants": "armyant",
+    "army ants": "armyant",
     "fire_ant": "fireant",
     "fire ant": "fireant",
     "fireant": "fireant",
+    "fire_ants": "fireant",
+    "fire ants": "fireant",
     "werewolf": "werewolf",
     "werewolves": "werewolf",
     "wolf": "werewolf",
-    "wolves": "werewolf"
+    "wolves": "werewolf",
+    "king_beetle": "king_beetle",
+    "king beetle": "king_beetle"
 }
 
 questCompleterCollectNames = {
@@ -4055,17 +4065,19 @@ class macro:
             (r'.*\b(get|earn|achieve)\b.*\b(score|amulet)\b.*\b(challenge)\b.*', 'challenge', r'.*'),
             # Feed patterns (check first as they have specific targets)
             (r'.*\b(feed|give)\b.*\b(blueberr\w*|strawberr\w*)\b.*', 'feed', r'blueberr\w*|strawberr\w*'),
+            # Pollen collection patterns (color-specific pollen)
+            (r'.*\b(collect|get)\b.*\b(\d+)\b.*\b(blue|red|white)\b.*\b(pollen)\b.*', 'pollen', r'blue|red|white'),
             # Token patterns
             (r'.*\b(token|ability|boost)\b.*', 'token', r'(blue|red|rage|honey).*?(boost|ability)?|.*?(boost).*?(blue|red)'),
             # Collect patterns (specific collectible items only)
             (r'.*\b(booster|dispenser|machine|printer|stack|clock|stocking|wreath|feast|samovar|snow|art|candle|match|storm)\b.*', 'collect', r'(booster|dispenser|machine|printer|stack|clock|stocking|wreath|feast|samovar|snow|art|candle|match|storm)'),
             # Kill patterns
-            (r'.*\b(kill|defeat|destroy|slay)\b.*', 'kill', r'(scorpion|mantis|spider|beetle|ladybug|rhinobeetle|ant|werewolf|wolf)'),
-            # Gather patterns (fields/plants)
-            (r'.*\b(gather|collect|get|harvest|pick)\b.*', 'gather', r'(strawberr\w*|blue\s*flower|pine\s*tree|mushroom|rose|clover|bamboo|cactus|pumpkin|pineapple|coconut|dandelion|spider|stump|pepper|mountain\s*top)'),
+            (r'.*\b(kill|defeat|destroy|slay)\b.*', 'kill', r'(giant\s+ants?|army\s+ants?|fire\s+ants?|scorpions?|mantises?|spiders?|beetles?|ladybugs?|rhinobeetles?|ants?|werewolves?|wolves?|king\s+beetles?)'),
+            # Gather patterns (fields/plants) - more flexible to handle OCR errors
+            (r'.*\b(gather|collect|get|harvest|pick)\b.*', 'gather', r'(strawberr\w*|blue\s*flower|pine\s*tree|mushroom|rose|clover|bamboo|cactus|pumpkin|pineapple|coconut|dandelion|spider|stump|pepper|mountain\s*top|sunflower|sunflow\w*|pineappl\w*)'),
             # Fallback patterns
             (r'.*\b(blueberr\w*|strawberr\w*)\b.*', 'fieldtoken', r'blueberr\w*|strawberr\w*'),
-            (r'.*\b(scorpion|mantis|spider|beetle|ladybug|rhinobeetle|ant|werewolf|wolf)\b.*', 'kill', r'scorpion|mantis|spider|beetle|ladybug|rhinobeetle|ant|werewolf|wolf'),
+            (r'.*\b(scorpions?|mantises?|spiders?|beetles?|ladybugs?|rhinobeetles?|ants?|werewolves?|wolves?)\b.*', 'kill', r'scorpions?|mantises?|spiders?|beetles?|ladybugs?|rhinobeetles?|ants?|werewolves?|wolves?'),
             (r'.*', 'unknown', r'.*')  # Default fallback changed from 'gather' to 'unknown'
         ]
 
@@ -4115,7 +4127,16 @@ class macro:
             'ladybugs': 'ladybug',
             'ants': 'ant',
             'werewolves': 'werewolf',
-            'wolves': 'werewolf'
+            'wolves': 'werewolf',
+            # OCR error corrections
+            'sunflowefield': 'sunflower',
+            'sunflow': 'sunflower',
+            'pineapplpatch': 'pineapple',
+            'pineappl': 'pineapple',
+            'pumpkirpatch': 'pumpkin',
+            'coconucrab': 'coconut_crab',
+            'coconutcrab': 'coconut_crab',
+            'coconut_crabs': 'coconut_crab'
         }
 
         target = plural_to_singular.get(target, target)
@@ -4233,12 +4254,16 @@ class macro:
 
         # Special handling for different action types
         if action == 'gather':
-            # Handle goo collection from specific colors
-            if 'goo' in text.lower() and 'red' in text.lower():
-                # "Collect X goo from red flowers" → gather from red fields
-                return ['gather_red']  # Gather from red fields for goo
-            elif 'goo' in text.lower() and 'blue' in text.lower():
-                return ['gather_blue']  # Gather from blue fields for goo
+            # Handle goo collection from specific colors or fields
+            if 'goo' in text.lower():
+                if 'red' in text.lower():
+                    # "Collect X goo from red flowers" → gather from red fields
+                    return ['gather_red']  # Gather from red fields for goo
+                elif 'blue' in text.lower():
+                    return ['gather_blue']  # Gather from blue fields for goo
+                elif 'stump' in text.lower():
+                    return ['gather_stump']  # Gather from stump field for goo
+                # Add other field-specific goo handling as needed
 
             # Only allow valid field names for gathering
             validFields = ['pineapple', 'pumpkin', 'rose', 'cactus', 'pepper', 'strawberry', 'blueberry',
@@ -4276,6 +4301,17 @@ class macro:
         elif action == 'token':
             # Token collection is not supported - filter out
             return []
+
+        elif action == 'pollen':
+            # Handle pollen collection by color
+            if 'blue' in target.lower():
+                return ['pollen_blue']
+            elif 'red' in target.lower():
+                return ['pollen_red']
+            elif 'white' in target.lower():
+                return ['pollen_white']
+            else:
+                return [f"pollen_{normalizedTarget}"]
 
         elif action == 'pollengoo':
             # Handle pollen goo actions

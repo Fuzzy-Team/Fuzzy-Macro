@@ -482,6 +482,10 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                             except Exception as e:
                                 print(f"[Quest Parser] Parse error: '{objectiveText[:30]}...' - {str(e)[:50]}")
 
+                        # Remove duplicates while preserving order
+                        seen = set()
+                        questCompleterTasks = [task for task in questCompleterTasks if not (task in seen or seen.add(task))]
+
                         # Cache the tasks and add to priority order
                         if questCompleterTasks:
                             priorityLevel = macro.setdat.get("quest_completer_priority", "Normal").lower()
@@ -491,6 +495,11 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                             # Insert quest completer tasks into priority order
                             existingPriorityOrder = macro.setdat.get("task_priority_order", [])
                             questCompleterTaskSet = set()  # Track which tasks are from quest completer
+
+                            # Remove old quest tasks from priority order
+                            oldQuestTasks = questCache.get(questCacheKey, {}).get('task_set', set()) if questCacheKey in questCache else set()
+                            existingPriorityOrder = [task for task in existingPriorityOrder if task not in oldQuestTasks]
+
                             for task in questCompleterTasks:
                                 if task not in existingPriorityOrder:
                                     # Insert with priority weight (higher weight = higher priority)
@@ -1094,12 +1103,22 @@ def macro(status, logQueue, updateGUI, run, skipTask):
 
             return False
         
+        # Track quest task execution times to prevent spam
+        questTaskCooldowns = {}
+
         # Execute quest tasks bypassing normal settings restrictions
         def executeQuestTask(taskId):
             """
             Execute quest completer tasks, bypassing normal macro settings restrictions.
             This allows quest tasks to run even when the corresponding features are disabled.
             """
+            # Check cooldown to prevent executing the same quest task too frequently
+            currentTime = time.time()
+            if taskId in questTaskCooldowns:
+                lastExecuted = questTaskCooldowns[taskId]
+                if currentTime - lastExecuted < 60:  # 60 second cooldown between executions of the same quest task
+                    return False
+            questTaskCooldowns[taskId] = currentTime
             try:
                 # Handle gather tasks (field gathering)
                 if taskId.startswith("gather_"):
@@ -1117,6 +1136,10 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                                 macro.logger.webhook("Quest Completer", f"Executing gather in field: {storedFieldName}", "light blue")
                                 runTask(macro.gather, args=(storedFieldName,), resetAfter=False)
                                 macro.logger.webhook("Quest Completer", f"Completed gather in field: {storedFieldName}", "bright green")
+                                # Clear quest cache to force re-detection of updated objectives
+                                questCacheKey = "quest_completer_objectives"
+                                if questCacheKey in questCache:
+                                    del questCache[questCacheKey]
                                 return True
                             finally:
                                 # Restore original enabled state
@@ -1130,20 +1153,36 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                     if mob == "coconut_crab":
                         if macro.hasRespawned("coconut_crab", 36*60*60, applyMobRespawnBonus=True):
                             runTask(macro.coconutCrab)
+                            # Clear quest cache to force re-detection of updated objectives
+                            questCacheKey = "quest_completer_objectives"
+                            if questCacheKey in questCache:
+                                del questCache[questCacheKey]
                             return True
                     elif mob == "stump_snail":
                         if macro.hasRespawned("stump_snail", 96*60*60, applyMobRespawnBonus=True):
                             runTask(macro.stumpSnail)
+                            # Clear quest cache to force re-detection of updated objectives
+                            questCacheKey = "quest_completer_objectives"
+                            if questCacheKey in questCache:
+                                del questCache[questCacheKey]
                             return True
                     elif mob == "vicious_bee":
                         if macro.hasRespawned("vicious_bee", 36*60*60, applyMobRespawnBonus=True):
                             runTask(macro.viciousBee)
+                            # Clear quest cache to force re-detection of updated objectives
+                            questCacheKey = "quest_completer_objectives"
+                            if questCacheKey in questCache:
+                                del questCache[questCacheKey]
                             return True
                     elif mob == "ant":
                         # Ant killing via Ant Challenge
                         macro.logger.webhook("Quest Completer", "Executing ant challenge for quest", "light blue")
                         runTask(macro.antChallenge)
                         macro.logger.webhook("Quest Completer", "Completed ant challenge", "bright green")
+                        # Clear quest cache to force re-detection of updated objectives
+                        questCacheKey = "quest_completer_objectives"
+                        if questCacheKey in questCache:
+                            del questCache[questCacheKey]
                         return True
                     elif mob == "beetle":
                         # Try to find and kill beetles (not king beetles)
@@ -1166,6 +1205,10 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                                     # Try to kill beetle if available
                                     runTask(macro.killMob, args=(mob, field,), convertAfter=False)
                                     macro.logger.webhook("Quest Completer", f"Completed beetle kill attempt in field: {field}", "bright green")
+                                    # Clear quest cache to force re-detection of updated objectives
+                                    questCacheKey = "quest_completer_objectives"
+                                    if questCacheKey in questCache:
+                                        del questCache[questCacheKey]
                                     return True
                                 except Exception as e:
                                     continue  # Try next field
@@ -1194,6 +1237,10 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                                         macro.logger.webhook("Quest Completer", f"Executing kill {mob} in field: {field}", "light blue")
                                         runTask(macro.killMob, args=(mob, field,), convertAfter=False)
                                         macro.logger.webhook("Quest Completer", f"Completed kill {mob} in field: {field}", "bright green")
+                                        # Clear quest cache to force re-detection of updated objectives
+                                        questCacheKey = "quest_completer_objectives"
+                                        if questCacheKey in questCache:
+                                            del questCache[questCacheKey]
                                         return True  # Successfully attempted to kill
                                     except Exception as e:
                                         macro.logger.webhook("Quest Completer", f"Failed to kill {mob} in {field}: {str(e)}", "orange")
@@ -1219,6 +1266,10 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                             macro.logger.webhook("Quest Completer", f"Executing collect: {collectName}", "light blue")
                             runTask(macro.collect, args=(collectName,))
                             macro.logger.webhook("Quest Completer", f"Completed collect: {collectName}", "bright green")
+                            # Clear quest cache to force re-detection of updated objectives
+                            questCacheKey = "quest_completer_objectives"
+                            if questCacheKey in questCache:
+                                del questCache[questCacheKey]
                             return True
                         else:
                             # Calculate time remaining
@@ -1243,6 +1294,10 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                         macro.logger.webhook("Quest Completer", "Executing craft (blender)", "light blue")
                         runTask(macro.blender, args=(blenderData,))
                         macro.logger.webhook("Quest Completer", "Completed craft (blender)", "bright green")
+                        # Clear quest cache to force re-detection of updated objectives
+                        questCacheKey = "quest_completer_objectives"
+                        if questCacheKey in questCache:
+                            del questCache[questCacheKey]
                         return True
                     else:
                         if blenderData["collectTime"] > -1:
@@ -1313,16 +1368,16 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                                 questTaskExecuted = executeQuestTask(taskId)
                                 if questTaskExecuted:
                                     anyTaskExecuted = True
-                                executedTasks.add(taskId)
-                                macro.logger.webhook("Quest Completer",
-                                                   f"Executed quest task: {taskId}",
-                                                   "bright green")
+                                    # Don't add quest tasks to executedTasks - they should be re-executable until objectives are complete
+                                    macro.logger.webhook("Quest Completer",
+                                                       f"Executed quest task: {taskId}",
+                                                       "bright green")
                             else:
                                 # Quest task also couldn't be executed - mark as completed to prevent infinite loop
                                 executedTasks.add(taskId)
-                                macro.logger.webhook("Quest Completer",
-                                                   f"Quest task failed/completed: {taskId}",
-                                                   "light blue")
+                        else:
+                            # Not a quest task and couldn't be executed normally - silently skip
+                            executedTasks.add(taskId)
                     # For regular mob tasks, if we killed in any field, break to start next iteration
                     # This ensures we check all fields for the mob before moving to the next task
                     # The break causes the while loop to continue, which will re-check this mob
