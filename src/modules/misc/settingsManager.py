@@ -274,6 +274,15 @@ def saveSettingFile(setting,value, path):
     #write it
     saveDict(path, data)
 
+def removeSettingFile(setting, path):
+    #get the dictionary
+    data = readSettingsFile(path)
+    #remove the setting if it exists
+    if setting in data:
+        del data[setting]
+        #write it back
+        saveDict(path, data)
+
 def loadFields():
     fields_path = os.path.join(getProfilePath(), "fields.txt")
     with open(fields_path) as f:
@@ -365,6 +374,10 @@ def saveGeneralSetting(setting, value):
     if setting in ["fields", "fields_enabled"]:
         syncFieldSettingsToProfile(setting, value)
 
+def removeGeneralSetting(setting):
+    generalsettings_path = os.path.join(getProfilePath(), "generalsettings.txt")
+    removeSettingFile(setting, generalsettings_path)
+
 def loadSettings():
     settings_path = os.path.join(getProfilePath(), "settings.txt")
     default_settings_path = os.path.join(getDefaultSettingsPath(), "settings.txt")
@@ -411,6 +424,37 @@ def loadAllSettings():
         # Fall back to global generalsettings if profile-specific one doesn't exist
         print(f"Warning: Profile '{profileName}' generalsettings file not found, using global generalsettings")
         generalSettings = readSettingsFile(generalsettings_path)
+
+    # Migrate old boolean flags to new macro_mode setting
+    migrated = False
+    field_only = generalSettings.get("field_only_mode", False)
+    quest_only = generalSettings.get("quest_only_mode", False)
+
+    # Check if old settings exist (regardless of their value)
+    if "field_only_mode" in generalSettings or "quest_only_mode" in generalSettings:
+        if field_only and quest_only:
+            # If both are somehow true, prioritize field mode
+            generalSettings["macro_mode"] = "field"
+        elif field_only:
+            generalSettings["macro_mode"] = "field"
+        elif quest_only:
+            generalSettings["macro_mode"] = "quest"
+        else:
+            generalSettings["macro_mode"] = "normal"
+
+        # Remove old settings
+        if "field_only_mode" in generalSettings:
+            del generalSettings["field_only_mode"]
+            migrated = True
+        if "quest_only_mode" in generalSettings:
+            del generalSettings["quest_only_mode"]
+            migrated = True
+
+        # Save the migrated settings back to file
+        if migrated:
+            saveDict(generalsettings_path, generalSettings)
+            print("Migrated old field_only_mode/quest_only_mode settings to new macro_mode setting")
+
     return {**loadSettings(), **generalSettings}
 
 def initializeFieldSync():

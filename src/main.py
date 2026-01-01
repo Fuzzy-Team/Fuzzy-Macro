@@ -214,32 +214,7 @@ def macro(status, logQueue, updateGUI, run, skipTask):
         # Check if profile has changed and reload settings if needed
         macro.checkAndReloadSettings()
 
-        # Backward compatibility: convert old boolean flags to new macro_mode setting
-        if "field_only_mode" in macro.setdat or "quest_only_mode" in macro.setdat:
-            field_only = macro.setdat.get("field_only_mode", False)
-            quest_only = macro.setdat.get("quest_only_mode", False)
-
-            if field_only and quest_only:
-                # If both are somehow true, prioritize field mode
-                macro.setdat["macro_mode"] = "field"
-            elif field_only:
-                macro.setdat["macro_mode"] = "field"
-            elif quest_only:
-                macro.setdat["macro_mode"] = "quest"
-            else:
-                macro.setdat["macro_mode"] = "normal"
-
-            # Remove old settings
-            if "field_only_mode" in macro.setdat:
-                del macro.setdat["field_only_mode"]
-            if "quest_only_mode" in macro.setdat:
-                del macro.setdat["quest_only_mode"]
-
-            # Save the updated settings
-            try:
-                settingsManager.saveGeneralSetting("macro_mode", macro.setdat["macro_mode"])
-            except:
-                pass  # If save fails, continue with converted setting
+        # Migration from old boolean flags to macro_mode is now handled in settings loader
 
         #run empty task
         #this is in case no other settings are selected
