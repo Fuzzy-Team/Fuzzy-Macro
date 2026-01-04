@@ -281,6 +281,10 @@ main {
   margin-right: 0.8rem;
 }
 
+.credits {
+  font-size: 0.85rem;
+}
+
 .credits a {
   text-decoration: underline;
   cursor: pointer;
