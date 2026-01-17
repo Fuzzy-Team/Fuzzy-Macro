@@ -10,7 +10,6 @@ from modules.misc.messageBox import msgBox
 from modules.screen.imageSearch import locateTransparentImageOnScreen, locateTransparentImage
 from modules.screen.screenshot import mssScreenshotNP, mssScreenshot
 from modules.misc.imageManipulation import adjustImage
-import time
 import pyautogui as pag
 from modules.screen.ocr import ocrRead, imToString
 import copy
@@ -238,7 +237,7 @@ class BuffDetector():
                         break
 
                     #crop out
-                    y = min(0, y+self.buffSize-h)
+                    y = max(0, y+self.buffSize-h)
                     buffImgBGR = screen[y:y+self.buffSize, x:x+self.buffSize]
                     out = self.getBuffQuantityFromImg(buffImgBGR, True)
                     buffQuantity.append(out)
@@ -487,6 +486,8 @@ class HourlyReport():
         for x in self.hourlyReportStats["honey_per_min"][1:]:
             if x > prevHoney:
                 honeyPerMin.append((x-prevHoney)/60)
+            else:
+                honeyPerMin.append(0)  # Add zero for flat or decreasing values
             prevHoney = x
         
         #calculate some stats
@@ -759,7 +760,10 @@ class HourlyReportDrawer:
                         pos1, col1 = sorted_stops[j]
                         pos2, col2 = sorted_stops[j + 1]
                         if pos1 <= ratio <= pos2:
-                            local_ratio = (ratio - pos1) / (pos2 - pos1)
+                            if pos2 - pos1 == 0:
+                                local_ratio = 0
+                            else:
+                                local_ratio = (ratio - pos1) / (pos2 - pos1)
                             r = int(col1[0] + (col2[0] - col1[0]) * local_ratio)
                             g = int(col1[1] + (col2[1] - col1[1]) * local_ratio)
                             b = int(col1[2] + (col2[2] - col1[2]) * local_ratio)
@@ -1053,7 +1057,7 @@ class HourlyReportDrawer:
             img = Image.open(f"{self.assetPath}/{buffImages[i]}.png").convert("RGBA")
             width, height = img.size
             imageWidth = 250
-            imageHeight= int(width*(imageWidth/height))
+            imageHeight = int(height*(imageWidth/width))
             img = img.resize((imageWidth, imageHeight))
 
             if buff == "0":
@@ -1314,7 +1318,8 @@ class HourlyReportDrawer:
         y2 += 250
         self.drawSessionStat(y2, "time_icon", "Session Time", self.displayTime(sessionTime, ['d','h','m']), self.bodyColor)
         y2 += 300
-        self.drawSessionStat(y2, "honey_icon", "Current Honey", self.millify(onlyValidHourlyHoney[-1]), "#F8BF17")
+        current_honey = onlyValidHourlyHoney[-1] if onlyValidHourlyHoney else 0
+        self.drawSessionStat(y2, "honey_icon", "Current Honey", self.millify(current_honey), "#F8BF17")
         y2 += 300
         self.drawSessionStat(y2, "session_honey_icon", "Session Honey", self.millify(sessionHoney), "#FDE395")
 
