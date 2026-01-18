@@ -780,3 +780,29 @@ div:has(#planter-timers-container.show) #credits-container {
 .zoom-control-btn:active {
   background-color: #3c45a5;
 }
+/* Import Modal Styles */
+#import-modal textarea:focus {
+  border-color: #7a77bb;
+  background-color: #36393f;
+  box-shadow: 0 0 0 2px rgba(122, 119, 187, 0.2);
+}
+
+#import-modal #cancel-import-button:hover {
+  background-color: #4f535b;
+  border-color: #4f535b;
+}
+
+#import-modal #cancel-import-button:active {
+  background-color: #36393f;
+  border-color: #36393f;
+}
+
+#import-modal #confirm-import-button:hover {
+  background-color: #9390cc;
+  border-color: #9390cc;
+}
+
+#import-modal #confirm-import-button:active {
+  background-color: #6b688a;
+  border-color: #6b688a;
+}

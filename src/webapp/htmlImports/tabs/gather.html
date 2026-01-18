@@ -259,15 +259,15 @@
       // Add import modal (hidden by default)
       const importModal = document.createElement('div');
       importModal.id = 'import-modal';
-      importModal.style.cssText = 'display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;';
+      importModal.style.cssText = 'display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.75); z-index: 1000; justify-content: center; align-items: center; font-family: "Poppins", sans-serif;';
       importModal.innerHTML = `
-        <div style="background: white; padding: 20px; border-radius: 8px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto;">
-          <h3 style="margin-top: 0;">Import Field Settings</h3>
-          <p>Paste your JSON settings below:</p>
-          <textarea id="import-json-textarea" style="width: 100%; height: 300px; font-family: monospace; padding: 10px; border: 1px solid #ccc; border-radius: 4px; resize: vertical;" placeholder="Paste JSON here..."></textarea>
-          <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 15px;">
-            <button id="cancel-import-button" style="background-color: #6c757d; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">Cancel</button>
-            <button id="confirm-import-button" style="background-color: #007bff; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">Import</button>
+        <div style="background: #2f3136; padding: 1.5rem; border-radius: 8px; border: 1px solid #21262d; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; box-shadow: 0 8px 16px rgba(0, 0, 0, 0.6);">
+          <h3 style="margin: 0 0 0.5rem 0; font-size: 1.3rem; color: #e8e8e8; font-weight: 500;">Import Field Settings</h3>
+          <p style="color: #adb4bc; font-size: 0.95rem; margin: 0 0 1rem 0; font-weight: 400;">Paste your JSON settings below:</p>
+          <textarea id="import-json-textarea" style="width: 100%; height: 300px; font-family: 'Courier New', monospace; padding: 0.75rem; border: 1px solid #40444b; background-color: #36393f; color: #d2d3d2; border-radius: 4px; resize: vertical; box-sizing: border-box; font-size: 0.9rem;" placeholder="Paste JSON here..."></textarea>
+          <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 1.5rem;">
+            <button id="cancel-import-button" style="background-color: #40444b; color: #e8e8e8; border: 1px solid #40444b; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-family: 'Poppins', sans-serif; font-size: 0.95rem; font-weight: 500; transition: background-color 0.2s;">Cancel</button>
+            <button id="confirm-import-button" style="background-color: #7a77bb; color: #e8e8e8; border: 1px solid #7a77bb; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-family: 'Poppins', sans-serif; font-size: 0.95rem; font-weight: 500; transition: background-color 0.2s;">Import</button>
           </div>
         </div>
       `;
