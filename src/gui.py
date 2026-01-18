@@ -239,9 +239,10 @@ def launch():
     try:
         eel.start('index.html', mode = "chrome", app_mode = True, block = False, cmdline_args=["--incognito", "--app=http://localhost:8000"])
     except EnvironmentError:
-        eel.start('index.html', mode = "chrome-app", app_mode = True, block = False, cmdline_args=["--incognito", "--app=http://localhost:8000"])
-    except EnvironmentError:
-        print("Chrome/Chromium could not be found. You can access the macro at: http://localhost:8000/")
-        eel.start('index.html', block=False, mode=None)
-        time.sleep(2)
-        webbrowser.open("http://localhost:8000/", new=2)
+        try:
+            eel.start('index.html', mode = "chrome-app", app_mode = True, block = False, cmdline_args=["--incognito", "--app=http://localhost:8000"])
+        except EnvironmentError:
+            print("Chrome/Chromium could not be found. Opening in default browser...")
+            eel.start('index.html', block=False, mode=None)
+            time.sleep(2)
+            webbrowser.open("http://localhost:8000/", new=2)
