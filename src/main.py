@@ -100,7 +100,7 @@ def macro(status, logQueue, updateGUI, run, skipTask):
         status.value = ""
         return returnVal
     
-    def handleQuest(questGiver):
+    def handleQuest(questGiver, executeQuest=True):
         nonlocal questCache, taskCompleted
         
         gatherFieldsList = []
@@ -120,11 +120,19 @@ def macro(status, logQueue, updateGUI, run, skipTask):
         else:
             questObjective = questCache[questGiver]
 
-        if questObjective is None:  # Quest does not exist
-            questObjective = macro.getNewQuest(questGiver, False)
-        elif not len(questObjective):  # Quest completed
-            questObjective = macro.getNewQuest(questGiver, True)
-            macro.hourlyReport.addHourlyStat("quests_completed", 1)
+        # Only submit/get quests if executeQuest is True (when quest appears in priority queue)
+        if executeQuest:
+            if questObjective is None:  # Quest does not exist
+                questObjective = macro.getNewQuest(questGiver, False)
+            elif not len(questObjective):  # Quest completed
+                questObjective = macro.getNewQuest(questGiver, True)
+                macro.hourlyReport.addHourlyStat("quests_completed", 1)
+        else:
+            # If not executing, use cached quest or return empty if no quest exists or is completed
+            if questObjective is None or not len(questObjective):
+                # No quest found or quest completed - we're not executing, so we can't determine requirements
+                # Return empty requirements (will be determined when quest executes in priority order)
+                return setdatEnable, gatherFieldsList, gumdropGatherFieldsList, requireRedField, requireBlueField, feedBees, requireRedGumdropField, requireBlueGumdropField, requireField
 
         if questObjective is None: #still not able to find quest
             return setdatEnable, gatherFieldsList, gumdropGatherFieldsList, requireRedField, requireBlueField, feedBees, requireRedGumdropField, requireBlueGumdropField, requireField
@@ -395,7 +403,8 @@ def macro(status, logQueue, updateGUI, run, skipTask):
             # Skip to next iteration
             continue
 
-        #handle quests first (needed for quest-related gathering fields)
+        # Check quest requirements for ALL enabled quests (needed for quest-related gathering fields)
+        # But only feed bees for quests that appear in priority queue order
         questGatherFields = []
         questGumdropGatherFields = []
         redFieldNeeded = False
@@ -404,34 +413,40 @@ def macro(status, logQueue, updateGUI, run, skipTask):
         itemsToFeedBees = []
         redGumdropFieldNeeded = False
         blueGumdropFieldNeeded = False
+        
+        # Track which quests have been executed in priority order (for feeding bees)
+        executedQuests = set()
+        
+        # Store quest feed requirements per quest (to feed only when quest appears in priority)
+        questFeedRequirements = {}
 
+        # Check ALL enabled quests for requirements (to know what fields might be needed)
+        # But don't execute quests (submit/get) - that will happen when quest appears in priority queue
         for questName, enabledKey in [
             ("polar bear", "polar_bear_quest"),
             ("honey bee", "honey_bee_quest"),
             ("bucko bee", "bucko_bee_quest"),
             ("riley bee", "riley_bee_quest")
-            ]:
-
+        ]:
             if macro.setdat.get(enabledKey):
-                setdatEnable, gatherFields, gumdropFields, needsRed, needsBlue, feedBees, needsRedGumdrop, needsBlueGumdrop, needsField = handleQuest(questName)
+                # Check requirements without executing (submit/get) the quest
+                setdatEnable, gatherFields, gumdropFields, needsRed, needsBlue, feedBees, needsRedGumdrop, needsBlueGumdrop, needsField = handleQuest(questName, executeQuest=False)
+                # Enable any required settings
                 for k in setdatEnable:
                     macro.setdat[k] = True
+                # Store gather fields (will be used after priority queue)
                 questGatherFields.extend(gatherFields)
                 questGumdropGatherFields.extend(gumdropFields)
                 redFieldNeeded = redFieldNeeded or needsRed
                 blueFieldNeeded = blueFieldNeeded or needsBlue
-                itemsToFeedBees.extend(feedBees)
                 redGumdropFieldNeeded = redGumdropFieldNeeded or needsRedGumdrop
                 blueGumdropFieldNeeded = blueGumdropFieldNeeded or needsBlueGumdrop
                 fieldNeeded = fieldNeeded or needsField
+                # Store feed requirements (will be used when quest appears in priority queue)
+                questFeedRequirements[questName] = feedBees
         
                     
-        taskCompleted = False 
-
-        #feed bees for quest
-        for item, quantity in itemsToFeedBees:
-            macro.feedBee(item, quantity)
-            taskCompleted = True
+        taskCompleted = False
 
         # Helper function for manual planters
         def goToNextCycle(cycle, slot):
@@ -456,20 +471,31 @@ def macro(status, logQueue, updateGUI, run, skipTask):
         
         # Helper function to execute a task by its ID
         def executeTask(taskId):
-            nonlocal planterDataRaw, executedTasks
+            nonlocal planterDataRaw, executedTasks, taskCompleted
             
             # Skip if already executed
             if taskId in executedTasks:
                 return False
             
-            # Handle quest tasks
+            # Handle quest tasks - execute quest (submit/get) and feed bees when quest appears in priority order
             if taskId.startswith("quest_"):
                 questName = taskId.replace("quest_", "").replace("_", " ")
                 questKey = f"{questName.replace(' ', '_')}_quest"
                 if not macro.setdat.get(questKey):
                     return False
-                # Quest handling is done above, just mark as executed
+                
+                # Actually execute the quest (submit/get) - this will travel to quest giver if needed
+                handleQuest(questName, executeQuest=True)
+                
+                # Feed bees for this quest (requirements were already checked above)
+                if questName in questFeedRequirements:
+                    feedBees = questFeedRequirements[questName]
+                    for item, quantity in feedBees:
+                        macro.feedBee(item, quantity)
+                        taskCompleted = True
+                
                 executedTasks.add(taskId)
+                executedQuests.add(questName)
                 return True
             
             # Handle collect tasks
@@ -1063,7 +1089,7 @@ def watch_for_hotkeys(run):
     pressed_keys = set()
     
     # Add debouncing to prevent duplicate triggers
-    last_trigger_time = {"start": 0.0, "stop": 0.0, "pause": 0.0}
+    last_trigger_time = {"start": 0.0, "stop": 0.0}  # , "pause": 0.0}
     debounce_duration = 0.3  # 300ms debounce
     
     # Add threading lock for synchronization
@@ -1085,7 +1111,7 @@ def watch_for_hotkeys(run):
     settings_cache_duration = 1.0  # Reload settings every 1 second max
     
     # Cache Eel recording state to avoid repeated calls
-    recording_cache = {"start": False, "stop": False, "pause": False}
+    recording_cache = {"start": False, "stop": False}  # , "pause": False}
     last_recording_check = 0
     recording_cache_duration = 0.5  # Check recording state every 0.5 seconds max
     
@@ -1105,11 +1131,11 @@ def watch_for_hotkeys(run):
                 import eel
                 recording_cache["start"] = eel.getElementProperty("start_keybind", "dataset.recording")() == "true"
                 recording_cache["stop"] = eel.getElementProperty("stop_keybind", "dataset.recording")() == "true"
-                recording_cache["pause"] = eel.getElementProperty("pause_keybind", "dataset.recording")() == "true"
+                # recording_cache["pause"] = eel.getElementProperty("pause_keybind", "dataset.recording")() == "true"
                 last_recording_check = current_time
             except:
-                recording_cache = {"start": False, "stop": False, "pause": False}
-        return recording_cache["start"] or recording_cache["stop"] or recording_cache["pause"]
+                recording_cache = {"start": False, "stop": False}  # , "pause": False}
+        return recording_cache["start"] or recording_cache["stop"]  # or recording_cache["pause"]
     
     def convert_key_to_string(key):
         """Optimized key conversion with minimal string operations and error handling"""
@@ -1205,7 +1231,7 @@ def watch_for_hotkeys(run):
                 settings = get_cached_settings()
                 start_keybind = settings.get("start_keybind", "F1")
                 stop_keybind = settings.get("stop_keybind", "F3")
-                pause_keybind = settings.get("pause_keybind", "F2")
+                # pause_keybind = settings.get("pause_keybind", "F2")
                 
                 # Convert key to string for comparison
                 key_str = convert_key_to_string(key)
@@ -1213,10 +1239,6 @@ def watch_for_hotkeys(run):
                 
                 # Build current key combination
                 current_combo = build_key_combination()
-                
-                # Debug: print key detection
-                if current_combo in [start_keybind, stop_keybind, pause_keybind]:
-                    print(f"Key combo detected: {current_combo}, start={start_keybind}, stop={stop_keybind}, pause={pause_keybind}")
                 
                 # Don't start/stop macro if we're recording a keybind
                 if is_recording_keybind():
@@ -1226,11 +1248,16 @@ def watch_for_hotkeys(run):
                 if is_stop_keybind_held():
                     if not stop_key_held:
                         stop_key_held = True
-                        print("Stop keybind held - force stopping macro")
                     # Force stop immediately when stop keybind is held
                     if run.value != 0:  # Only if not already stopped
                         run.value = 0
-                        print("Force stop triggered")
+                        # Update GUI immediately (optimistically show stopped state)
+                        try:
+                            import gui
+                            gui.setRunState(3)  # Update GUI state optimistically to stopped
+                            gui.toggleStartStop()  # Update UI immediately
+                        except:
+                            pass  # If gui is not ready, continue
                 else:
                     stop_key_held = False
 
@@ -1249,6 +1276,13 @@ def watch_for_hotkeys(run):
                         last_trigger_time["start"] = 0.0
                     last_trigger_time["start"] = current_time
                     run.value = 1
+                    # Update GUI immediately (optimistically show running state)
+                    try:
+                        import gui
+                        gui.setRunState(2)  # Update GUI state optimistically to running
+                        gui.toggleStartStop()  # Update UI immediately
+                    except:
+                        pass  # If gui is not ready, continue
                 elif current_combo == stop_keybind and not stop_key_held:
                     if run.value == 3: #already stopped
                         return
@@ -1261,26 +1295,33 @@ def watch_for_hotkeys(run):
                         last_trigger_time["stop"] = 0.0
                     last_trigger_time["stop"] = current_time
                     run.value = 0
-                elif current_combo == pause_keybind:
-                    print(f"Pause keybind detected! current_combo={current_combo}, pause_keybind={pause_keybind}, run.value={run.value}")
-                    # Check debounce with error handling
+                    # Update GUI immediately (optimistically show stopped state)
                     try:
-                        if current_time - last_trigger_time["pause"] < debounce_duration:
-                            print("Debounce blocked pause")
-                            return
-                    except (TypeError, ValueError):
-                        # Reset trigger time if there's a comparison error
-                        last_trigger_time["pause"] = 0.0
-                    last_trigger_time["pause"] = current_time
-                    # Toggle between pause and resume
-                    if run.value == 2:  # Running -> Pause
-                        print("Setting run.value to 5 (pause request)")
-                        run.value = 5  # 5 = pause request
-                    elif run.value == 6:  # Paused -> Resume
-                        print("Setting run.value to 2 (resume)")
-                        run.value = 2  # 2 = running (resume)
-                    else:
-                        print(f"run.value is {run.value}, not 2 or 6, so no action taken")
+                        import gui
+                        gui.setRunState(3)  # Update GUI state optimistically to stopped
+                        gui.toggleStartStop()  # Update UI immediately
+                    except:
+                        pass  # If gui is not ready, continue
+                # elif current_combo == pause_keybind:
+                #     print(f"Pause keybind detected! current_combo={current_combo}, pause_keybind={pause_keybind}, run.value={run.value}")
+                #     # Check debounce with error handling
+                #     try:
+                #         if current_time - last_trigger_time["pause"] < debounce_duration:
+                #             print("Debounce blocked pause")
+                #             return
+                #     except (TypeError, ValueError):
+                #         # Reset trigger time if there's a comparison error
+                #         last_trigger_time["pause"] = 0.0
+                #     last_trigger_time["pause"] = current_time
+                #     # Toggle between pause and resume
+                #     if run.value == 2:  # Running -> Pause
+                #         print("Setting run.value to 5 (pause request)")
+                #         run.value = 5  # 5 = pause request
+                #     elif run.value == 6:  # Paused -> Resume
+                #         print("Setting run.value to 2 (resume)")
+                #         run.value = 2  # 2 = running (resume)
+                #     else:
+                #         print(f"run.value is {run.value}, not 2 or 6, so no action taken")
             except Exception as e:
                 # Log error but don't crash the listener
                 print(f"Error in on_press: {e}")
@@ -1523,9 +1564,9 @@ if __name__ == "__main__":
 
         if run.value == 1:
             #create and set webhook obj for the logger
-            logger.enableWebhook = setdat["enable_webhook"]
-            logger.webhookURL = setdat["webhook_link"]
-            logger.sendScreenshots = setdat["send_screenshot"]
+            logger.enableWebhook = setdat.get("enable_webhook", False)
+            logger.webhookURL = setdat.get("webhook_link", "")
+            logger.sendScreenshots = setdat.get("send_screenshot", True)
             stopThreads = False
 
             #reset hourly report data
