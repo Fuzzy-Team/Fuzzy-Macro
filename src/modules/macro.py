@@ -368,7 +368,7 @@ class macro:
             "ping_hourly_reports": self.setdat.get("ping_hourly_reports", False)
         }
         
-        self.logger = logModule.log(logQueue, self.setdat["enable_webhook"], self.setdat["webhook_link"], self.setdat["send_screenshot"], blocking=self.setdat["low_performance"], hourlyReportOnly=self.setdat["only_send_hourly_report"], robloxWindow=self.robloxWindow, enableDiscordPing=self.setdat["enable_discord_ping"], discordUserID=self.setdat["discord_user_id"], pingSettings=pingSettings, webhookTimeFormat=self.setdat.get("webhook_time_format", 24))
+        self.logger = logModule.log(logQueue, self.setdat.get("enable_webhook", False), self.setdat.get("webhook_link", ""), self.setdat.get("send_screenshot", True), blocking=self.setdat.get("low_performance", False), hourlyReportOnly=self.setdat.get("only_send_hourly_report", False), robloxWindow=self.robloxWindow, enableDiscordPing=self.setdat.get("enable_discord_ping", False), discordUserID=self.setdat.get("discord_user_id", ""), pingSettings=pingSettings, webhookTimeFormat=self.setdat.get("webhook_time_format", 24))
         self.buffDetector = BuffDetector(self.robloxWindow)
         self.hourlyReport = HourlyReport(self.buffDetector, self.setdat.get("hourly_report_time_format", 24))
         self.memoryMatch = MemoryMatch(self.robloxWindow)
@@ -435,11 +435,11 @@ class macro:
                 "ping_conversion_events": self.setdat.get("ping_conversion_events", False),
                 "ping_hourly_reports": self.setdat.get("ping_hourly_reports", False)
             }
-            self.logger.enableWebhook = self.setdat["enable_webhook"]
-            self.logger.webhookURL = self.setdat["webhook_link"]
-            self.logger.sendScreenshots = self.setdat["send_screenshot"]
-            self.logger.enableDiscordPing = self.setdat["enable_discord_ping"]
-            self.logger.discordUserID = self.setdat["discord_user_id"]
+            self.logger.enableWebhook = self.setdat.get("enable_webhook", False)
+            self.logger.webhookURL = self.setdat.get("webhook_link", "")
+            self.logger.sendScreenshots = self.setdat.get("send_screenshot", True)
+            self.logger.enableDiscordPing = self.setdat.get("enable_discord_ping", False)
+            self.logger.discordUserID = self.setdat.get("discord_user_id", "")
             self.logger.pingSettings = pingSettings
             self.logger.webhookTimeFormat = self.setdat.get("webhook_time_format", 24)
             self.logger.hourlyReportOnly = self.setdat["only_send_hourly_report"]
@@ -1374,14 +1374,14 @@ class macro:
     
     def rejoin(self, rejoinMsg = "Rejoining"):
         self.canDetectNight = False
-        psLink = self.setdat["private_server_link"]
+        psLink = self.setdat.get("private_server_link", "")
         self.logger.webhook("",rejoinMsg, "dark brown")
         self.status.value = "rejoining"
         mouse.mouseUp()
         keyboard.releaseMovement()
         for i in range(3):
-            joinPS = bool(psLink) #join private server?
-            rejoinMethod = self.setdat["rejoin_method"]
+            joinPS = bool(psLink and psLink.strip()) #join private server?
+            rejoinMethod = self.setdat.get("rejoin_method", "deeplink")
             browserLink = "https://www.roblox.com/games/4189852503?privateServerLinkCode=87708969133388638466933925137129"
             if i == 2 and joinPS: 
                 self.logger.webhook("", "Failed rejoining too many times, falling back to a public server", "red", "screen", ping_category="ping_disconnects")
@@ -1394,7 +1394,15 @@ class macro:
             if rejoinMethod == "deeplink":
                 deeplink = "roblox://placeID=1537690962"
                 if joinPS:
-                    deeplink += f"&linkCode={psLink.lower().split('code=')[1]}"
+                    try:
+                        if "code=" in psLink.lower():
+                            deeplink += f"&linkCode={psLink.lower().split('code=')[1]}"
+                        else:
+                            self.logger.webhook("", "Invalid private server link format. Expected 'code=' in link. Falling back to public server.", "red", ping_category="ping_critical_errors")
+                            joinPS = False
+                    except (IndexError, AttributeError) as e:
+                        self.logger.webhook("", f"Error parsing private server link: {e}. Falling back to public server.", "red", ping_category="ping_critical_errors")
+                        joinPS = False
                 appManager.openDeeplink(deeplink)
             elif rejoinMethod == "new tab":
                 webbrowser.open(browserLink, new = 2)
@@ -4068,7 +4076,8 @@ class macro:
             #     messageBox.msgBox(text='It seems like terminal does not have the accessibility permission. The macro will not work properly.\n\nTo fix it, go to System Settings -> Privacy and Security -> Accessibility -> add and enable Terminal.\n\nVisit #6system-settings in the discord for more detailed instructions\n\n NOTE: This popup might be incorrect. If the macro is able to input keypresses and interact with the game, you can dismiss this popup', title='Accessibility Permission')
             # time.sleep(1)
         
-        if "share" in self.setdat["private_server_link"] and self.setdat["rejoin_method"] == "deeplink":
+        private_server_link = self.setdat.get("private_server_link", "")
+        if private_server_link and "share" in private_server_link and self.setdat.get("rejoin_method") == "deeplink":
             messageBox.msgBox(text="You entered a 'share?code' private server link!\n\nTo fix this:\n1. Paste the link in your browser\n2. Wait for roblox to load in\n3. Copy the link from the top of your browser.  It should now be a 'privateServerLinkCode' link", title='Unsupported private server link')
 
     def start(self):

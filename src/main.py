@@ -49,7 +49,8 @@ def macro(status, logQueue, updateGUI, run, skipTask):
     #Limit werewolf to just pumpkin 
     regularMobData["werewolf"] = ["pumpkin"]
     
-    if "share" in macro.setdat["private_server_link"] and macro.setdat["rejoin_method"] == "deeplink":
+    private_server_link = macro.setdat.get("private_server_link", "")
+    if private_server_link and "share" in private_server_link and macro.setdat.get("rejoin_method") == "deeplink":
                 messageBox.msgBox(text="You entered a 'share?code' link!\n\nTo fix this:\n1. Paste the link in your browser\n2. Wait for roblox to load in\n3. Copy the link from the top of your browser.  It should now be a 'privateServerLinkCode' link", title='Unsupported private server link')
                 return
 
@@ -1563,8 +1564,8 @@ if __name__ == "__main__":
         setdat = gui_settings_cache
 
         #discord bot. Look for changes in the bot token
-        currentDiscordBotToken = setdat["discord_bot_token"]
-        if setdat["discord_bot"] and currentDiscordBotToken and currentDiscordBotToken != prevDiscordBotToken:
+        currentDiscordBotToken = setdat.get("discord_bot_token", "")
+        if setdat.get("discord_bot", False) and currentDiscordBotToken and currentDiscordBotToken.strip() and currentDiscordBotToken != prevDiscordBotToken:
             if discordBotProc is not None and discordBotProc.is_alive():
                 print("Detected change in discord bot token, killing previous bot process")
                 discordBotProc.terminate()
@@ -1604,7 +1605,7 @@ if __name__ == "__main__":
                         logger.webhook("Stream Started", f'Stream URL: {stream.publicURL}', "purple")
                         
                         # If bot is enabled, populate initial message info for pinning the stream message
-                        if setdat["discord_bot"] and setdat["pin_stream_url"]:
+                        if setdat.get("discord_bot", False) and setdat.get("pin_stream_url", False):
                             import modules.logging.webhook as webhookModule
                             if webhookModule.last_message_id and webhookModule.last_channel_id:
                                 initialMessageInfo['message_id'] = webhookModule.last_message_id
@@ -1615,10 +1616,10 @@ if __name__ == "__main__":
                 logger.webhook("", f'Stream could not start. Check terminal for more info', "red", ping_category="ping_critical_errors")
 
             streamLink = None
-            if setdat["enable_stream"]:
+            if setdat.get("enable_stream", False):
                 if stream.isCloudflaredInstalled():
                     logger.webhook("", "Starting Stream...", "light blue")
-                    streamLink = stream.start(setdat["stream_resolution"])
+                    streamLink = stream.start(setdat.get("stream_resolution", 0.75))
                     Thread(target=waitForStreamURL, daemon=True).start()
                 else:
                     messageBox.msgBox(text='Cloudflared is required for streaming but is not installed. Visit https://existance-macro.gitbook.io/existance-macro-docs/guides/optional-installations/stream-setup-installing-cloudflared for installation instructions', title='Cloudflared not installed')

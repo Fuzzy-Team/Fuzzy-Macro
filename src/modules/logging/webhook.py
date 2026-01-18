@@ -7,6 +7,12 @@ last_channel_id = None
 
 def webhook(url, title, desc, time, color, imagePath = None, ping_user_id = None, time_format=24):
     global last_message_id, last_channel_id
+    
+    # Check if URL is provided
+    if not url or not url.strip():
+        print(f"Warning: Webhook URL is empty. Skipping webhook message: {title} {desc}")
+        return None
+    
     webhook = DiscordWebhook(url = url,rate_limit_retry=True)
     
     # Add ping if user ID is provided
