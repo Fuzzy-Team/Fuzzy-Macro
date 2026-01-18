@@ -143,6 +143,24 @@ def resetFieldToDefault(field_name):
     except Exception as e:
         print(f"Error resetting field to default: {e}")
         return False
+
+@eel.expose
+def exportFieldSettings(field_name):
+    """Export field settings as JSON string"""
+    try:
+        return settingsManager.exportFieldSettings(field_name)
+    except Exception as e:
+        print(f"Error exporting field settings: {e}")
+        return None
+
+@eel.expose
+def importFieldSettings(field_name, json_settings):
+    """Import field settings from JSON string"""
+    try:
+        return settingsManager.importFieldSettings(field_name, json_settings)
+    except Exception as e:
+        print(f"Error importing field settings: {e}")
+        return False
         
 @eel.expose
 def update():

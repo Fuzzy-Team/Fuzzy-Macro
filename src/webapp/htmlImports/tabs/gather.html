@@ -240,15 +240,38 @@
         ]
       );
 
-      // Add reset button at the bottom
-      const resetButtonContainer = document.createElement('div');
-      resetButtonContainer.style.cssText = 'display: flex; justify-content: center; margin-top: 20px; margin-bottom: 20px;';
-      resetButtonContainer.innerHTML = `
+      // Add control buttons at the bottom
+      const buttonContainer = document.createElement('div');
+      buttonContainer.style.cssText = 'display: flex; justify-content: center; gap: 10px; margin-top: 20px; margin-bottom: 20px;';
+      buttonContainer.innerHTML = `
+        <button id="export-field-button" class="standard-button" style="background-color: #28a745; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 14px;">
+          📤 Export Settings
+        </button>
+        <button id="import-field-button" class="standard-button" style="background-color: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 14px;">
+          📥 Import Settings
+        </button>
         <button id="reset-field-button" class="standard-button" style="background-color: #dc3545; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 14px;">
           🔄 Reset Field to Default
         </button>
       `;
-      parentElement.appendChild(resetButtonContainer);
+      parentElement.appendChild(buttonContainer);
+
+      // Add import modal (hidden by default)
+      const importModal = document.createElement('div');
+      importModal.id = 'import-modal';
+      importModal.style.cssText = 'display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;';
+      importModal.innerHTML = `
+        <div style="background: white; padding: 20px; border-radius: 8px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto;">
+          <h3 style="margin-top: 0;">Import Field Settings</h3>
+          <p>Paste your JSON settings below:</p>
+          <textarea id="import-json-textarea" style="width: 100%; height: 300px; font-family: monospace; padding: 10px; border: 1px solid #ccc; border-radius: 4px; resize: vertical;" placeholder="Paste JSON here..."></textarea>
+          <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 15px;">
+            <button id="cancel-import-button" style="background-color: #6c757d; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">Cancel</button>
+            <button id="confirm-import-button" style="background-color: #007bff; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">Import</button>
+          </div>
+        </div>
+      `;
+      parentElement.appendChild(importModal);
     </script>
   </div>
 </div>

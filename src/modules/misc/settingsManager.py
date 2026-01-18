@@ -323,6 +323,53 @@ def saveField(field, settings):
         f.write(str(fieldsData))
     f.close()
 
+def exportFieldSettings(field_name):
+    """Export field settings as JSON string"""
+    fields_data = loadFields()
+    if field_name in fields_data:
+        return json.dumps(fields_data[field_name], indent=2)
+    else:
+        raise ValueError(f"Field '{field_name}' not found in current profile")
+
+def importFieldSettings(field_name, json_settings):
+    """Import field settings from JSON string"""
+    try:
+        settings = json.loads(json_settings)
+        # Validate that it's a dictionary
+        if not isinstance(settings, dict):
+            raise ValueError("Invalid JSON format: expected object")
+
+        # Check for missing patterns and replace with defaults
+        missing_patterns = []
+        available_patterns = getAvailablePatterns()
+
+        if "shape" in settings:
+            requested_pattern = settings["shape"]
+            if requested_pattern not in available_patterns:
+                # Replace with first available pattern (default)
+                default_pattern = available_patterns[0] if available_patterns else "cornerxe_lol"
+                settings["shape"] = default_pattern
+                missing_patterns.append(f"'{requested_pattern}' → '{default_pattern}'")
+
+        # Save the imported settings
+        saveField(field_name, settings)
+
+        # Return success with information about any pattern replacements
+        if missing_patterns:
+            return {"success": True, "missing_patterns": missing_patterns}
+        else:
+            return {"success": True, "missing_patterns": []}
+
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON format: {str(e)}")
+
+def getAvailablePatterns():
+    """Get list of available pattern names"""
+    patterns_dir = getPatternsDir()
+    if os.path.exists(patterns_dir):
+        return [f.replace(".py", "") for f in os.listdir(patterns_dir) if f.endswith(".py")]
+    return []
+
 def syncFieldSettings(setting, value):
     """Synchronize field settings from profile to general settings"""
     try:

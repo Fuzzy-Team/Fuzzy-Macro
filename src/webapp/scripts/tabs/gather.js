@@ -137,4 +137,100 @@ $("#gather-placeholder")
       console.error("Error resetting field:", error);
       alert("An error occurred while resetting field settings.");
     }
+  })
+  .on("click", "#export-field-button", async (event) => {
+    event.preventDefault();
+
+    // Get the currently selected field name
+    const fieldDropdown = document.getElementById("field");
+    const currentFieldName = getDropdownValue(fieldDropdown);
+
+    if (!currentFieldName) {
+      alert("Please select a field first.");
+      return;
+    }
+
+    try {
+      // Call the export function
+      const jsonSettings = await eel.exportFieldSettings(currentFieldName)();
+
+      if (jsonSettings) {
+        // Copy to clipboard
+        await navigator.clipboard.writeText(jsonSettings);
+        alert(`Settings for "${currentFieldName}" exported and copied to clipboard!`);
+      } else {
+        alert("Failed to export field settings. Field may not exist.");
+      }
+    } catch (error) {
+      console.error("Error exporting field settings:", error);
+      alert("An error occurred while exporting field settings.");
+    }
+  })
+  .on("click", "#import-field-button", async (event) => {
+    event.preventDefault();
+
+    // Get the currently selected field name
+    const fieldDropdown = document.getElementById("field");
+    const currentFieldName = getDropdownValue(fieldDropdown);
+
+    if (!currentFieldName) {
+      alert("Please select a field first.");
+      return;
+    }
+
+    // Show the import modal
+    const modal = document.getElementById("import-modal");
+    const textarea = document.getElementById("import-json-textarea");
+    textarea.value = "";
+    modal.style.display = "flex";
+  })
+  .on("click", "#cancel-import-button", (event) => {
+    event.preventDefault();
+    // Hide the import modal
+    document.getElementById("import-modal").style.display = "none";
+  })
+  .on("click", "#confirm-import-button", async (event) => {
+    event.preventDefault();
+
+    const fieldDropdown = document.getElementById("field");
+    const currentFieldName = getDropdownValue(fieldDropdown);
+    const textarea = document.getElementById("import-json-textarea");
+    const jsonSettings = textarea.value.trim();
+
+    if (!jsonSettings) {
+      alert("Please paste JSON settings to import.");
+      return;
+    }
+
+    try {
+      // Call the import function
+      const result = await eel.importFieldSettings(currentFieldName, jsonSettings)();
+
+      if (result && result.success) {
+        // Reload the field data and update the UI
+        const data = (await eel.loadFields()())[currentFieldName];
+        loadInputs(data);
+        // Hide the modal
+        document.getElementById("import-modal").style.display = "none";
+
+        // Show appropriate success message
+        if (result.missing_patterns && result.missing_patterns.length > 0) {
+          const patternMsg = result.missing_patterns.join(", ");
+          alert(`Successfully imported settings for "${currentFieldName}"!\n\nNote: Some patterns were not found and were replaced:\n${patternMsg}`);
+        } else {
+          alert(`Successfully imported settings for "${currentFieldName}"!`);
+        }
+      } else {
+        alert("Failed to import field settings. Please check your JSON format.");
+      }
+    } catch (error) {
+      console.error("Error importing field settings:", error);
+      alert("An error occurred while importing field settings. Please check your JSON format.");
+    }
+  })
+  .on("click", "#import-modal", function(event) {
+    // Close modal when clicking outside the modal content
+    if (event.target === this) {
+      $(this).hide();
+    }
   });
