@@ -155,9 +155,28 @@ $("#gather-placeholder")
       const jsonSettings = await eel.exportFieldSettings(currentFieldName)();
 
       if (jsonSettings) {
+        // Parse JSON to extract metadata
+        let metadata = {};
+        try {
+          const parsedData = JSON.parse(jsonSettings);
+          metadata = parsedData.metadata || {};
+        } catch (e) {
+          // If parsing fails, that's okay - just use empty metadata
+        }
+
         // Copy to clipboard
         await navigator.clipboard.writeText(jsonSettings);
-        alert(`Settings for "${currentFieldName}" exported and copied to clipboard!`);
+        
+        // Build success message with metadata
+        let successMsg = `Settings for "${currentFieldName}" exported and copied to clipboard!`;
+        if (metadata.macro_version) {
+          successMsg += `\n\nExport details:\nMacro version: ${metadata.macro_version}`;
+        }
+        if (metadata.export_date) {
+          successMsg += `\nExported: ${new Date(metadata.export_date).toLocaleString()}`;
+        }
+        
+        alert(successMsg);
       } else {
         alert("Failed to export field settings. Field may not exist.");
       }
@@ -213,13 +232,24 @@ $("#gather-placeholder")
         // Hide the modal
         document.getElementById("import-modal").style.display = "none";
 
-        // Show appropriate success message
+        // Build success message with metadata
+        let successMsg = `Successfully imported settings for "${currentFieldName}"!`;
+        
+        // Add metadata information if available
+        if (result.imported_from_field && result.imported_from_field !== "unknown") {
+          successMsg += `\n\nImported from field: ${result.imported_from_field}`;
+        }
+        if (result.macro_version && result.macro_version !== "unknown") {
+          successMsg += `\nMacro version: ${result.macro_version}`;
+        }
+        
+        // Add pattern replacement information
         if (result.missing_patterns && result.missing_patterns.length > 0) {
           const patternMsg = result.missing_patterns.join(", ");
-          alert(`Successfully imported settings for "${currentFieldName}"!\n\nNote: Some patterns were not found and were replaced:\n${patternMsg}`);
-        } else {
-          alert(`Successfully imported settings for "${currentFieldName}"!`);
+          successMsg += `\n\nNote: Some patterns were not found and were replaced:\n${patternMsg}`;
         }
+        
+        alert(successMsg);
       } else {
         alert("Failed to import field settings. Please check your JSON format.");
       }

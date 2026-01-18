@@ -67,6 +67,18 @@ def getPatternsDir():
     """Get the patterns directory path"""
     return os.path.join(getProjectRoot(), "settings", "patterns")
 
+def getMacroVersion():
+    """Get the macro version from version.txt file"""
+    try:
+        version_file = os.path.join(getProjectRoot(), "version.txt")
+        if os.path.exists(version_file):
+            with open(version_file, "r") as f:
+                version = f.read().strip()
+                return version if version else "1.0"
+    except Exception as e:
+        print(f"Warning: Could not read version.txt: {e}")
+    return "1.0"
+
 def listProfiles():
     """List all available profiles"""
     profiles_dir = getProfilesDir()
@@ -324,18 +336,40 @@ def saveField(field, settings):
     f.close()
 
 def exportFieldSettings(field_name):
-    """Export field settings as JSON string"""
+    """Export field settings as JSON string with metadata"""
     fields_data = loadFields()
     if field_name in fields_data:
-        return json.dumps(fields_data[field_name], indent=2)
+        # Create export data with metadata
+        export_data = {
+            "metadata": {
+                "field_name": field_name,
+                "macro_version": getMacroVersion(),
+                "export_date": datetime.now().isoformat()
+            },
+            "settings": fields_data[field_name]
+        }
+        return json.dumps(export_data, indent=2)
     else:
         raise ValueError(f"Field '{field_name}' not found in current profile")
 
 def importFieldSettings(field_name, json_settings):
-    """Import field settings from JSON string"""
+    """Import field settings from JSON string with backward compatibility"""
     try:
-        settings = json.loads(json_settings)
-        # Validate that it's a dictionary
+        data = json.loads(json_settings)
+        
+        # Handle new format with metadata
+        if isinstance(data, dict) and "metadata" in data and "settings" in data:
+            settings = data["settings"]
+            metadata = data.get("metadata", {})
+            exported_field = metadata.get("field_name", "unknown")
+            macro_version = metadata.get("macro_version", "unknown")
+        # Handle old format (direct settings object)
+        else:
+            settings = data
+            exported_field = "unknown"
+            macro_version = "unknown"
+        
+        # Validate that settings is a dictionary
         if not isinstance(settings, dict):
             raise ValueError("Invalid JSON format: expected object")
 
@@ -354,11 +388,14 @@ def importFieldSettings(field_name, json_settings):
         # Save the imported settings
         saveField(field_name, settings)
 
-        # Return success with information about any pattern replacements
-        if missing_patterns:
-            return {"success": True, "missing_patterns": missing_patterns}
-        else:
-            return {"success": True, "missing_patterns": []}
+        # Return success with information about any pattern replacements and metadata
+        result = {
+            "success": True,
+            "missing_patterns": missing_patterns,
+            "imported_from_field": exported_field,
+            "macro_version": macro_version
+        }
+        return result
 
     except json.JSONDecodeError as e:
         raise ValueError(f"Invalid JSON format: {str(e)}")

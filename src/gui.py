@@ -163,6 +163,11 @@ def importFieldSettings(field_name, json_settings):
         return False
         
 @eel.expose
+def getMacroVersion():
+    """Get the macro version from version.txt"""
+    return settingsManager.getMacroVersion()
+
+@eel.expose
 def update():
     updateFunc()
     eel.closeWindow()
