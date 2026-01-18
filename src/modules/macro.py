@@ -3797,6 +3797,13 @@ class macro:
         return time.time() - timing >= cooldown*mobRespawnBonus
     
     def AFB(self, gatherInterrupt = False, turnOffShiftLock = False):  # Auto Field Boost - WOOHOO
+
+        def normalize(text):
+            text = text.lower()
+            text = re.sub(r'[^a-z\s]', ' ', text)  # remove symbols
+            text = re.sub(r'\s+', ' ', text).strip()
+            return text
+
         returnVal = None
         # time limit - :(
         if self.AFBLIMIT: return True
@@ -3808,7 +3815,7 @@ class macro:
         Glitter = threading.Thread(target=self.useItemInInventory, args=("glitter",))
 
         x = self.setdat["AFB_attempts"]
-        field = self.setdat["AFB_field"]
+        field = [f.replace("_", " ") for f in self.setdat["AFB_field"].lower().split(" ")]
         rebuff = self.setdat["AFB_rebuff"]
         dice = self.setdat["AFB_dice"]
         glitter = self.setdat["AFB_glitter"]
@@ -3833,13 +3840,37 @@ class macro:
                 if self.cAFBDice or (self.hasAFBRespawned("AFB_dice_cd", rebuff*60) and not self.AFBglitter):
                     self.cAFBDice = False
                     # get all fields
-                    fields = ["rose", "strawberry", "mushroom", "pepper",  # red
-                            "sunflower", "dandelion", "spider", "coconut", # white
-                            "pine tree", "blue flower", "bamboo", "stump",  # blue
-                            "clover", "pineapple", "pumpkin", "cactus", "mountain top"]  # colored
+                    fields = {
+                        "rose": [["rose"]],
+                        "strawberry": [["strawberry"]],
+                        "mushroom": [["mushroom"]],
+                        "pepper": [["pepper"]],
+                        "sunflower": [["sunflower"]],
+                        "dandelion": [["dandelion"]],
+                        "spider": [["spider"]],
+                        "coconut": [["coconut"]],
+                        "pine tree": [["pine", "tree"]],
+                        "blue flower": [["blue", "flower"]],
+                        "bamboo": [["bamboo"]],
+                        "stump": [["stump"]],
+                        "clover": [["clover"]],
+                        "pineapple": [["pineapple"]],
+                        "pumpkin": [["pumpkin"]],
+                        "cactus": [["cactus"]],
+                        "mountain top": [["mountain", "top"]],
+                    }
                     # ignore detected lines with these words, reduces false positives
-                    ignore = {"strawberry", "strawberries", "blueberry", "blueberries", 
+                    ignore = {"strawberry", "strawberries", "blueberry", "blueberries",
                     "seed", "seeds", "pineapple", "pineapples", "honey", "from"}
+
+                    def ignore2(field, text):
+                        for word in ignore:
+                            # allow the word if it is part of the field name
+                            if word in field.replace(" ", ""):
+                                continue
+                            if word in text.split():
+                                return True
+                        return False
 
                     #begin
                     self.logger.webhook("", f"Auto Field Boost", "white")
@@ -3879,9 +3910,19 @@ class macro:
                                 self.saveAFB("AFB_dice_cd")
                                 self.AFBglitter = False
                                 return
-                        for _ in range(4): # detect text
-                            bluetexts += ocr.imToString("blue").lower() + "\n"
-                        bluetexts = " ".join(bluetexts.split())
+                        for _ in range(4):
+                            bluetexts += ocr.imToString("blue") + "\n"
+
+                        bluetexts = normalize(bluetexts)
+                        tokens = set(bluetexts.split())
+
+                        # smooth/loaded
+                        clean = normalize(bluetexts)
+                        # "and the" appears when using loaded and smooth
+                        and_the = [line for line in bluetexts.split("\n") if "boosted" in line]
+
+                        the = bluetexts.split()  # get each line of detected text
+                        boostedField = []
 
                         # smooth/loaded
                         clean = bluetexts.lower().replace(" and the ", " ") 
@@ -3891,54 +3932,64 @@ class macro:
                         boostedField = []
 
                         # for field dice only
-                        if "field" in dice: 
+                        if "field" in dice:
                             boostedField = None
-                            for f in fields:  
-                                if f.lower() in bluetexts and not any(word in f.lower() for word in ignore): 
-                                    if f.lower() == field.lower():  # only allow the chosen field
-                                        boostedField = f
-                                        break 
+                            for cf in field:
+                                for pattern in fields[cf]:
+                                    if set(pattern).issubset(tokens):
+                                        if not ignore2(cf, bluetexts):
+                                            boostedField = cf
+                                            break
+                                if boostedField:
+                                    break
+
                         #other die
                         else:
-                            boostedField = None
-                            for sentence in and_the: 
-                                if "boosted" in sentence:
-                                    for f in fields:
-                                        if f.lower() in sentence and not any(word in sentence for word in ignore):
-                                            boostedField = f
-                                    if boostedField: break  
+                            boostedFields = []
+                            for cf in field:
+                                cf_tokens = cf.split()
+                                for sentence in and_the:
+                                    sentence_tokens = set(normalize(sentence).split())
+                                    for pattern in fields[cf]:
+                                        if set(pattern).issubset(sentence_tokens) and not ignore2(cf, sentence):
+                                            if cf not in boostedFields:
+                                                boostedFields.append(cf)  
 
                         # field user selected is detected
                         if "field" in dice:
-                            if field == boostedField:
-                                self.logger.webhook("", f"Boosted Field: {field}", "bright green", "blue")
+                            if boostedField is not None:
+                                self.logger.webhook("", f"Boosted Field: {boostedField}", "bright green", "blue")
                                 returnVal = field
                                 self.keyboard.press("pagedown")
                                 for i in range(3):
                                     self.keyboard.press("o")
                                 if diceslot == 0: self.toggleInventory("close")
                                 self.saveAFB("AFB_dice_cd")
-                                if glitter: 
+                                if glitter:
                                     self.AFBglitter = True
                                     self.saveAFB("AFB_glitter_cd")
                                 return returnVal
                             else:
                                 continue
                         else:
-                            if field in boostedField:
-                                self.logger.webhook("", f"Boosted Field: {field}", "bright green", "blue")
+                            if field in boostedFields:
+                                self.logger.webhook("", f"Boosted Fields: {', '.join(boostedFields)}", "blue")
                                 returnVal = field
                                 self.keyboard.press("pagedown")
                                 for i in range(3):
                                     self.keyboard.press("o")
                                 if diceslot == 0: self.toggleInventory("close")
                                 self.saveAFB("AFB_dice_cd")
-                                if glitter: 
+                                if glitter:
                                     self.AFBglitter = True
                                     self.saveAFB("AFB_glitter_cd")
                                 return returnVal
                             else:
-                                self.logger.webhook("", f"Boosted Fields: {', '.join(boostedField)}", "red")
+                                if boostedFields:
+                                    self.logger.webhook("", f"Boosted Fields: {', '.join(boostedFields)}", "red")
+                                else:
+                                    self.logger.webhook("", "Boosted Fields: None", "red")
+                                time.sleep(0.5)
                                 time.sleep(0.5)
 
                 # glitter    
