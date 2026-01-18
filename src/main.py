@@ -1344,8 +1344,17 @@ def watch_for_hotkeys(run):
                 return
 
     # Start keyboard listener with error handling and recovery
+    # On macOS, this must be called on the main thread
     def start_keyboard_listener():
         try:
+            # Ensure we're on the main thread on macOS
+            if sys.platform == "darwin":
+                import threading
+                current_thread = threading.current_thread()
+                main_thread = threading.main_thread()
+                if current_thread is not main_thread:
+                    print("Warning: Keyboard listener should be started on main thread on macOS")
+            
             listener = keyboard.Listener(on_press=on_press, on_release=on_release)
             listener.start()
             return listener
@@ -1366,7 +1375,11 @@ def watch_for_hotkeys(run):
             restart_thread.start()
             return None
     
-    start_keyboard_listener()
+    # Don't start the listener here - it will be started after GUI launch on main thread
+    # start_keyboard_listener()
+    
+    # Return the function so it can be called later on the main thread
+    return start_keyboard_listener
 
 if __name__ == "__main__":
     print("Loading gui...")
@@ -1404,7 +1417,7 @@ if __name__ == "__main__":
     logQueue = manager.Queue()
     recentLogs = manager.list()  # Shared list to store recent log entries for discord bot
     initialMessageInfo = manager.dict()  # Shared dict for initial webhook message info
-    watch_for_hotkeys(run)
+    start_keyboard_listener_fn = watch_for_hotkeys(run)
     logger = logModule.log(logQueue, False, None, False, blocking=True)
 
     disconnectCooldownUntil = 0 #only for running disconnect check on low performance
@@ -1479,6 +1492,16 @@ if __name__ == "__main__":
     #setup and launch gui
     gui.run = run
     gui.launch()
+    
+    # Start keyboard listener after GUI launch to ensure it's on the main thread (required on macOS)
+    # This prevents TIS/TSM errors on macOS
+    if start_keyboard_listener_fn:
+        try:
+            start_keyboard_listener_fn()
+            print("Keyboard listener started successfully")
+        except Exception as e:
+            print(f"Failed to start keyboard listener after GUI launch: {e}")
+    
     #use run.value to control the macro loop
 
     #check color profile
