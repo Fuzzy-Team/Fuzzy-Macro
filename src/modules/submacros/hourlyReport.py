@@ -1113,7 +1113,7 @@ class HourlyReportDrawer:
         macroIcon = Image.open(f"{self.assetPath}/macro_icon.png")
         # macroIcon = macroIcon.resize((170, 170))
         self.canvas.paste(macroIcon, (5550, 100), macroIcon)
-        self.draw.text((5750, 120), "Existance Macro", fill=self.bodyColor, font=self.getFont("semibold", 70))
+        self.draw.text((5750, 120), "Fuzzy Macro", fill=self.bodyColor, font=self.getFont("semibold", 70))
 
         #draw title
         self.draw.text((self.leftPadding, 80), "Hourly Report", fill=self.bodyColor, font=self.getFont("bold", 120))

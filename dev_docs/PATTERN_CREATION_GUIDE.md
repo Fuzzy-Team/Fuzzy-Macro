@@ -1,6 +1,6 @@
-# Existance Macro:  Pattern Creation Guide
+# Fuzzy Macro:  Pattern Creation Guide
 
-This guide explains how to create custom gathering patterns for the Existance Macro.
+This guide explains how to create custom gathering patterns for the Fuzzy Macro.
 
 ---
 

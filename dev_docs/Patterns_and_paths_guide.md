@@ -1,6 +1,6 @@
-# Existance Macro:  Pattern & Path Creation Guide
+# Fuzzy Macro:  Pattern & Path Creation Guide
 
-This guide explains how to create custom gathering patterns and navigation paths for the Existance Macro.
+This guide explains how to create custom gathering patterns and navigation paths for the Fuzzy Macro.
 
 ---
 

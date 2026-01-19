@@ -1,6 +1,6 @@
-# Existance Macro:  Path Creation Guide
+# Fuzzy Macro:  Path Creation Guide
 
-This guide explains how to create custom navigation paths for the Existance Macro.
+This guide explains how to create custom navigation paths for the Fuzzy Macro.
 
 ---
 

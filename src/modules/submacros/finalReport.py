@@ -57,7 +57,7 @@ class FinalReportDrawer(HourlyReportDrawer):
         #draw icon
         macroIcon = Image.open(f"{self.assetPath}/macro_icon.png")
         self.canvas.paste(macroIcon, (5550, 100), macroIcon)
-        self.draw.text((5750, 120), "Existance Macro", fill=self.bodyColor, font=self.getFont("semibold", 70))
+        self.draw.text((5750, 120), "Fuzzy Macro", fill=self.bodyColor, font=self.getFont("semibold", 70))
 
         #draw title - FINAL REPORT
         self.draw.text((self.leftPadding, 80), "Session Summary", fill=self.bodyColor, font=self.getFont("bold", 120))

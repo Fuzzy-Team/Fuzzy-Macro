@@ -150,7 +150,7 @@ class cloudflaredStream:
             </script>
         </head>
         <body>
-            <h1>Existance Macro Live Stream</h1>
+            <h1>Fuzzy Macroe Stream</h1>
             <div class="video-container">
                 {% if streaming %}
                     <img src="/video_feed" alt="Live Stream">

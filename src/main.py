@@ -1,4 +1,3 @@
-
 from modules.misc import messageBox
 #check if step 3 installing dependencies was ran
 try:
@@ -934,8 +933,6 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                     executedTasks.add(taskId)
                     return True
                 
-                return False
-            
             if taskId == "ant_challenge":
                 if macro.setdat["ant_challenge"]:
                     runTask(macro.antChallenge)
@@ -1578,7 +1575,7 @@ if __name__ == "__main__":
         if run.value != prevRunState:
             # Check for resume (transition from paused to running)
             if prevRunState == 6 and run.value == 2:
-                logger.webhook("Macro Resumed", "Existance Macro", "bright green")
+                logger.webhook("Macro Resumed", "Fuzzy Macro", "bright green")
             gui.setRunState(run.value)
             try:
                 gui.toggleStartStop()  # Update UI
@@ -1649,7 +1646,7 @@ if __name__ == "__main__":
             macroProc.start()
 
             macro_version = settingsManager.getMacroVersion()
-            logger.webhook("Macro Started", f'Existance Macro v{macro_version}\nDisplay: {screenInfo["display_type"]}, {screenInfo["screen_width"]}x{screenInfo["screen_height"]}', "purple")
+            logger.webhook("Macro Started", f'Fuzzy Macro v{macro_version}\nDisplay: {screenInfo["display_type"]}, {screenInfo["screen_width"]}x{screenInfo["screen_height"]}', "purple")
             run.value = 2
             gui.setRunState(2)  # Update the global run state
             try:
@@ -1663,7 +1660,7 @@ if __name__ == "__main__":
         elif run.value == 0:
             if macroProc:
                 # Stop macro and release all inputs first
-                logger.webhook("Macro Stopped", "Existance Macro", "red")
+                logger.webhook("Macro Stopped", "Fuzzy Macro", "red")
                 
                 # Clear the initial message info for next start
                 initialMessageInfo.clear()

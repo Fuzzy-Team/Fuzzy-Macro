@@ -1,4 +1,4 @@
-#Ahk code converted by Existance Macro
+#Ahk code converted by Fuzzy Macro
 
 
 cforkgap=0.75 #flowers between lines
