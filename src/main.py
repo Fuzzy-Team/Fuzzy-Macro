@@ -7,8 +7,9 @@ except ModuleNotFoundError:
 from pynput import keyboard
 import multiprocessing
 import ctypes
+import threading
 from threading import Thread
-import eel
+## import eel  # Disabled for PyQt6 migration
 import time
 import sys
 import os
@@ -206,6 +207,12 @@ def macro(status, logQueue, updateGUI, run, skipTask):
         return settings_cache
     
     while True:
+        # Process Qt events to keep GUI responsive
+        try:
+            app.processEvents()
+        except:
+            pass  # App not ready yet
+        
         # Check for pause request (state 5) - release inputs and transition to paused
         if run.value == 5:
             macro.keyboard.releaseMovement()
@@ -214,6 +221,11 @@ def macro(status, logQueue, updateGUI, run, skipTask):
         # Check for pause - wait while paused
         while run.value == 6:  # 6 = paused
             time.sleep(0.1)  # Wait while paused
+            # Keep processing events during pause too
+            try:
+                app.processEvents()
+            except:
+                pass
         # Check if stop was requested while paused
         if run.value == 0:
             break  # Exit macro loop if stop requested
@@ -1126,10 +1138,10 @@ def watch_for_hotkeys(run):
         current_time = time.time()
         if current_time - last_recording_check > recording_cache_duration:
             try:
-                import eel
-                recording_cache["start"] = eel.getElementProperty("start_keybind", "dataset.recording")() == "true"
-                recording_cache["stop"] = eel.getElementProperty("stop_keybind", "dataset.recording")() == "true"
-                # recording_cache["pause"] = eel.getElementProperty("pause_keybind", "dataset.recording")() == "true"
+                # Eel-based keybind recording removed for PyQt6 migration
+                recording_cache["start"] = False
+                recording_cache["stop"] = False
+                # recording_cache["pause"] = False
                 last_recording_check = current_time
             except:
                 recording_cache = {"start": False, "stop": False}  # , "pause": False}
@@ -1382,7 +1394,7 @@ def watch_for_hotkeys(run):
 if __name__ == "__main__":
     print("Loading gui...")
     global stopThreads, macroProc
-    import gui
+    import gui_pyqt6 as gui
     import modules.screen.screenData as screenData
     from modules.controls.keyboard import keyboard as keyboardModule
     import modules.logging.log as logModule
@@ -1488,8 +1500,7 @@ if __name__ == "__main__":
     atexit.register(onExit)
         
     #setup and launch gui
-    gui.run = run
-    gui.launch()
+    gui_instance, app = gui.launch(run)
     
     # Start keyboard listener after GUI launch to ensure it's on the main thread (required on macOS)
     # This prevents TIS/TSM errors on macOS
@@ -1550,8 +1561,9 @@ if __name__ == "__main__":
     last_gui_settings_load = 0
     gui_settings_cache_duration = 1.0  # Reload settings every 1 second max
 
-    while True:
-        eel.sleep(0.5)
+    def gui_loop():
+        while True:
+            time.sleep(0.5)  # Replaced eel.sleep with time.sleep
         
         # Get cached settings
         current_time = time.time()
@@ -1829,3 +1841,14 @@ if __name__ == "__main__":
                 print("disconnected")
                 run.value = 4
                 disconnectCooldownUntil = time.time() + 300  # 5 min cooldown
+
+    # Start the GUI loop in a background thread so Qt's event loop can run on the main thread
+    gui_thread = threading.Thread(target=gui_loop, daemon=True)
+    gui_thread.start()
+
+    # Run the Qt event loop on the main thread (required on macOS)
+    try:
+        sys.exit(app.exec())
+    except Exception:
+        # Fallback to ensure app exec is called
+        app.exec()

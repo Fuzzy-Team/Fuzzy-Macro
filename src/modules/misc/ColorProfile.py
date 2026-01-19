@@ -94,5 +94,4 @@ class DisplayColorProfile:
             return profile_name
 
         except Exception as e:
-            print(f"Failed to get current color profile (this error can be ignored): {e}")
             return None
