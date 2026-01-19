@@ -14,62 +14,34 @@
     <script type="text/javascript" src="./scripts/emojis.js"></script>
   </head>
   <body>
-    <div id="header-placeholder"></div>
-    <main>
-      <div id="tabs-placeholder"></div>
-      <div
-        id="home-placeholder"
-        class="content"
-        style="
-          display: flex;
-          padding-top: 0.5rem;
-          padding-bottom: 0.8rem;
-          width: 100%;
-          margin-left: 1rem;
-          margin-right: 1rem;
-        "
-      ></div>
-      <div
-        id="gather-placeholder"
-        class="content"
-        style="width: 100%; display: none"
-      ></div>
-      <div
-        id="collect-placeholder"
-        class="content"
-        style="width: 100%; display: none"
-      ></div>
-      <div
-        id="config-placeholder"
-        class="content"
-        style="width: 100%; display: none"
-      ></div>
-      <div
-        id="kill-placeholder"
-        class="content"
-        style="width: 100%; display: none"
-      ></div>
-      <div
-        id="planters-placeholder"
-        class="content"
-        style="width: 100%; display: none; flex-direction: column"
-      ></div>
-      <div
-        id="boost-placeholder"
-        class="content"
-        style="width: 100%; display: none"
-      ></div>
-      <div
-        id="quests-placeholder"
-        class="content"
-        style="width: 100%; display: none"
-      ></div>
-      <div
-        id="profiles-placeholder"
-        class="content"
-        style="width: 100%; display: none"
-      ></div>
-    </main>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <div class="sidebar-container">
+            <div id="tabs-placeholder">
+                <!-- Tabs loaded via JS -->
+            </div>
+            <div class="credits">
+                Fuzzy Macro<br>
+                v1.0
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <main class="main-content-container">
+            <div id="header-placeholder"></div>
+            
+            <div id="home-placeholder" class="content" style="display: flex;"></div>
+            <div id="gather-placeholder" class="content"></div>
+            <div id="collect-placeholder" class="content"></div>
+            <div id="config-placeholder" class="content"></div>
+            <div id="kill-placeholder" class="content"></div>
+            <div id="planters-placeholder" class="content"></div>
+            <div id="boost-placeholder" class="content"></div>
+            <div id="quests-placeholder" class="content"></div>
+            <div id="profiles-placeholder" class="content"></div>
+        </main>
+    </div>
+
     <script type="text/javascript" src="/eel.js"></script>
     <script src="./scripts/script.js"></script>
     <script src="./scripts/tabs/tab.js"></script>
