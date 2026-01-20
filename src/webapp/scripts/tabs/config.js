@@ -6,7 +6,7 @@ Config Tab
 
 async function switchConfigTab(target) {
   //remove the active classes and hide all tabs
-  Array.from(document.getElementsByClassName("settings-tab-item")).forEach(
+  Array.from(document.getElementsByClassName("config-tab-item")).forEach(
     (x) => {
       x.classList.remove("active");
       document.getElementById(x.id.split("-")[1]).style.display = "none";
@@ -166,7 +166,7 @@ function initializeQuickActions() {
 
 $("#config-placeholder", loadConfig)
   .load("../htmlImports/tabs/config.html") //load config tab
-  .on("click", ".settings-tab-item", (event) =>
+  .on("click", ".config-tab-item", (event) =>
     switchConfigTab(event.currentTarget)
   ); //navigate between fields
 
