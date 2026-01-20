@@ -105,22 +105,37 @@ def _mark_backup_pending(destination):
 
 # Public helper: delete backup if pending (call from macro run)
 def delete_backup_if_pending(destination=None):
-    if destination is None:
-        destination = os.getcwd().replace("/src", "")
-    marker = os.path.join(destination, ".backup_pending")
-    backup = os.path.join(destination, "backup_macro.zip")
-    if os.path.exists(marker):
+    import sys
+    from modules.misc.messageBox import msgBoxOkCancel
+    # Try both root and /src for marker and backup
+    paths_to_check = []
+    if destination is not None:
+        paths_to_check.append(destination)
+    cwd = os.getcwd()
+    root = cwd.replace("/src", "")
+    paths_to_check.extend([cwd, root])
+    checked = set()
+    for base in paths_to_check:
+        if not base or base in checked:
+            continue
+        checked.add(base)
+        marker = os.path.join(base, ".backup_pending")
+        backup = os.path.join(base, "backup_macro.zip")
         try:
-            if os.path.exists(backup):
-                if os.path.isdir(backup):
-                    shutil.rmtree(backup)
-                else:
-                    os.remove(backup)
-        except Exception:
-            pass
-        try:
-            os.remove(marker)
-        except Exception:
+            if os.path.exists(marker) or os.path.exists(backup):
+                prompt = "A backup from a previous update was found.\nDo you want to delete the backup now? (Recommended if the macro is working fine.)"
+                response = msgBoxOkCancel("Delete Backup?", prompt)
+                if response:
+                    if os.path.exists(marker):
+                        os.remove(marker)
+                    if os.path.exists(backup):
+                        if os.path.isdir(backup):
+                            shutil.rmtree(backup)
+                        else:
+                            os.remove(backup)
+                break
+        except Exception as e:
+            print(f"[delete_backup_if_pending] Error: {e}", file=sys.stderr)
             pass
 
 
