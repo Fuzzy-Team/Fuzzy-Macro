@@ -79,11 +79,8 @@
     <span class="mdi--folder-account"></span>Profiles
   </div>
 </div>
-<div style="display: flex; justify-content: center; width: 100%">
-  <div
-    style="width: 74%; overflow-y: auto; height: 94vh; display: block"
-    id="bss"
-  >
+<div class="main-content-container">
+  <div id="bss" class="standard-container" style="width: 74%; overflow-y: auto; height: 94vh; display: block">
     <script>
       const parentBSS = document.getElementById("bss");
       buildStandardContainer(parentBSS, "Basic", "", [
@@ -195,10 +192,7 @@
       ]);
     </script>
   </div>
-  <div
-    style="width: 74%; overflow-y: auto; height: 94vh; display: none"
-    id="priorities"
-  >
+  <div id="priorities" class="standard-container" style="width: 74%; overflow-y: auto; height: 94vh; display: none">
     <script>
       const parentPriorities = document.getElementById("priorities");
 
@@ -223,284 +217,87 @@
         return badges[category] || "";
       }
 
-      // Helper function to create a drag item
-      function createDragItem(taskId, taskName) {
-        const category = getTaskCategory(taskId);
-        const badge = getCategoryBadge(category);
-        return `
-          <div class="drag-item" data-id="${taskId}" data-category="${category}" draggable="true">
-            <span class="drag-handle">⋮⋮</span>
-            <span class="category-badge">${badge}</span>
-            <span class="drag-text">${taskName}</span>
-            <div class="drag-actions">
-              <button class="drag-action-btn move-to-top" title="Move to top">↑ Top</button>
-              <button class="drag-action-btn move-to-bottom" title="Move to bottom">↓ Bottom</button>
-            </div>
-          </div>
-        `;
-      }
+      // Create standard container using shared builder
+      buildStandardContainer(parentPriorities, "Task Priority Order", "Drag and drop tasks to set their priority order. Tasks at the top have higher priority. Use the search box to quickly find tasks.", []);
 
-      // Create a full-width container for the drag list
-      const dragContainer = document.createElement("div");
-      dragContainer.style.cssText = "width: 100%; margin: 1rem 0;";
-      dragContainer.innerHTML = `
-        <div style="background: #36393f; padding: 1rem; border-radius: 8px; border: 1px solid #4f545c;">
-          <h3 style="color: #dcddde; margin: 0 0 0.5rem 0; font-size: 1.1rem;">Task Priority Order</h3>
-          <p style="color: #b9bbbe; margin: 0 0 1rem 0; font-size: 0.9rem;">Drag and drop tasks to set their priority order. Tasks at the top have higher priority. Use the search box to quickly find tasks.</p>
-          <input type="text" id="priority-search-input" class="priority-search" placeholder="🔍 Search tasks... (e.g., 'pine', 'collect', 'kill')" />
-          <div id="task_priority_order" class="drag-list" data-onchange="saveSetting(this, 'profile')">
-            <div class="drag-list-container" id="task_priority_order-container">
-              <div class="drag-item" data-id="gather_pine_tree" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Gather: Pine Tree</span>
-              </div>
-              <div class="drag-item" data-id="gather_sunflower" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Gather: Sunflower</span>
-              </div>
-              <div class="drag-item" data-id="gather_dandelion" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Gather: Dandelion</span>
-              </div>
-              <div class="drag-item" data-id="gather_mushroom" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Gather: Mushroom</span>
-              </div>
-              <div class="drag-item" data-id="gather_blue_flower" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Gather: Blue Flower</span>
-              </div>
-              <div class="drag-item" data-id="gather_clover" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Gather: Clover</span>
-              </div>
-              <div class="drag-item" data-id="gather_strawberry" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Gather: Strawberry</span>
-              </div>
-              <div class="drag-item" data-id="gather_spider" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Gather: Spider</span>
-              </div>
-              <div class="drag-item" data-id="gather_bamboo" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Gather: Bamboo</span>
-              </div>
-              <div class="drag-item" data-id="gather_cactus" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Gather: Cactus</span>
-              </div>
-              <div class="drag-item" data-id="gather_rose" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Gather: Rose</span>
-              </div>
-              <div class="drag-item" data-id="gather_pineapple" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Gather: Pineapple</span>
-              </div>
-              <div class="drag-item" data-id="gather_pumpkin" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Gather: Pumpkin</span>
-              </div>
-              <div class="drag-item" data-id="gather_coconut" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Gather: Coconut</span>
-              </div>
-              <div class="drag-item" data-id="gather_pepper" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Gather: Pepper</span>
-              </div>
-              <div class="drag-item" data-id="gather_mountain_top" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Gather: Mountain Top</span>
-              </div>
-              <div class="drag-item" data-id="gather_stump" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Gather: Stump</span>
-              </div>
-              <div class="drag-item" data-id="collect_wealth_clock" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Collect: Wealth Clock</span>
-              </div>
-              <div class="drag-item" data-id="collect_blueberry_dispenser" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Collect: Blueberry Dispenser</span>
-              </div>
-              <div class="drag-item" data-id="collect_strawberry_dispenser" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Collect: Strawberry Dispenser</span>
-              </div>
-              <div class="drag-item" data-id="collect_coconut_dispenser" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Collect: Coconut Dispenser</span>
-              </div>
-              <div class="drag-item" data-id="collect_royal_jelly_dispenser" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Collect: Royal Jelly Dispenser</span>
-              </div>
-              <div class="drag-item" data-id="collect_treat_dispenser" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Collect: Treat Dispenser</span>
-              </div>
-              <div class="drag-item" data-id="collect_ant_pass_dispenser" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Collect: Ant Pass Dispenser</span>
-              </div>
-              <div class="drag-item" data-id="collect_glue_dispenser" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Collect: Glue Dispenser</span>
-              </div>
-              <div class="drag-item" data-id="collect_stockings" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Collect: Stockings</span>
-              </div>
-              <div class="drag-item" data-id="collect_wreath" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Collect: Wreath</span>
-              </div>
-              <div class="drag-item" data-id="collect_feast" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Collect: Feast</span>
-              </div>
-              <div class="drag-item" data-id="collect_samovar" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Collect: Samovar</span>
-              </div>
-              <div class="drag-item" data-id="collect_snow_machine" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Collect: Snow Machine</span>
-              </div>
-              <div class="drag-item" data-id="collect_lid_art" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Collect: Lid Art</span>
-              </div>
-              <div class="drag-item" data-id="collect_candles" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Collect: Candles</span>
-              </div>
-              <div class="drag-item" data-id="collect_memory_match" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Collect: Memory Match</span>
-              </div>
-              <div class="drag-item" data-id="collect_mega_memory_match" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Collect: Mega Memory Match</span>
-              </div>
-              <div class="drag-item" data-id="collect_extreme_memory_match" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Collect: Extreme Memory Match</span>
-              </div>
-              <div class="drag-item" data-id="collect_winter_memory_match" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Collect: Winter Memory Match</span>
-              </div>
-              <div class="drag-item" data-id="collect_honeystorm" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Collect: Honeystorm</span>
-              </div>
-              <div class="drag-item" data-id="collect_blue_booster" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Collect: Blue Booster</span>
-              </div>
-              <div class="drag-item" data-id="collect_red_booster" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Collect: Red Booster</span>
-              </div>
-              <div class="drag-item" data-id="collect_mountain_booster" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Collect: Mountain Booster</span>
-              </div>
-              <div class="drag-item" data-id="collect_sticker_stack" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Collect: Sticker Stack</span>
-              </div>
-              <div class="drag-item" data-id="collect_sticker_printer" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Collect: Sticker Printer</span>
-              </div>
-              <div class="drag-item" data-id="kill_stump_snail" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Kill: Stump Snail</span>
-              </div>
-              <div class="drag-item" data-id="kill_ladybug" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Kill: Ladybug</span>
-              </div>
-              <div class="drag-item" data-id="kill_rhinobeetle" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Kill: Rhinobeetle</span>
-              </div>
-              <div class="drag-item" data-id="kill_scorpion" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Kill: Scorpion</span>
-              </div>
-              <div class="drag-item" data-id="kill_mantis" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Kill: Mantis</span>
-              </div>
-              <div class="drag-item" data-id="kill_spider" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Kill: Spider</span>
-              </div>
-              <div class="drag-item" data-id="kill_werewolf" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Kill: Werewolf</span>
-              </div>
-              <div class="drag-item" data-id="kill_coconut_crab" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Kill: Coconut Crab</span>
-              </div>
-              <div class="drag-item" data-id="mondo_buff" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Collect: Mondo Buff</span>
-              </div>
-              <div class="drag-item" data-id="stinger_hunt" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Stinger Hunt</span>
-              </div>
-              <div class="drag-item" data-id="auto_field_boost" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Auto Field Boost</span>
-              </div>
-              <div class="drag-item" data-id="ant_challenge" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Ant Challenge</span>
-              </div>
-              <div class="drag-item" data-id="quest_polar_bear" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Quest: Polar Bear</span>
-              </div>
-              <div class="drag-item" data-id="quest_honey_bee" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Quest: Honey Bee</span>
-              </div>
-              <div class="drag-item" data-id="quest_bucko_bee" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Quest: Bucko Bee</span>
-              </div>
-              <div class="drag-item" data-id="quest_riley_bee" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Quest: Riley Bee</span>
-              </div>
-              <div class="drag-item" data-id="blender" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Blender</span>
-              </div>
-              <div class="drag-item" data-id="planters" draggable="true">
-                <span class="drag-handle">⋮⋮</span>
-                <span class="drag-text">Planters</span>
-              </div>
-            </div>
+      // Find the container we just created
+      const priorityContainer = parentPriorities.querySelector('.standard-container');
+
+      // Insert search input and drag list
+      const dragListHTML = `
+        <input type="text" id="priority-search-input" class="priority-search" placeholder="🔍 Search tasks... (e.g., 'pine', 'collect', 'kill')" />
+        <div id="task_priority_order" class="drag-list" data-onchange="saveSetting(this, 'profile')">
+          <div class="drag-list-container" id="task_priority_order-container">
+            <!-- items will be enhanced by config.js -->
+            <div class="drag-item" data-id="gather_pine_tree" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Gather: Pine Tree</span></div>
+            <div class="drag-item" data-id="gather_sunflower" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Gather: Sunflower</span></div>
+            <div class="drag-item" data-id="gather_dandelion" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Gather: Dandelion</span></div>
+            <div class="drag-item" data-id="gather_mushroom" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Gather: Mushroom</span></div>
+            <div class="drag-item" data-id="gather_blue_flower" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Gather: Blue Flower</span></div>
+            <div class="drag-item" data-id="gather_clover" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Gather: Clover</span></div>
+            <div class="drag-item" data-id="gather_strawberry" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Gather: Strawberry</span></div>
+            <div class="drag-item" data-id="gather_spider" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Gather: Spider</span></div>
+            <div class="drag-item" data-id="gather_bamboo" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Gather: Bamboo</span></div>
+            <div class="drag-item" data-id="gather_cactus" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Gather: Cactus</span></div>
+            <div class="drag-item" data-id="gather_rose" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Gather: Rose</span></div>
+            <div class="drag-item" data-id="gather_pineapple" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Gather: Pineapple</span></div>
+            <div class="drag-item" data-id="gather_pumpkin" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Gather: Pumpkin</span></div>
+            <div class="drag-item" data-id="gather_coconut" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Gather: Coconut</span></div>
+            <div class="drag-item" data-id="gather_pepper" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Gather: Pepper</span></div>
+            <div class="drag-item" data-id="gather_mountain_top" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Gather: Mountain Top</span></div>
+            <div class="drag-item" data-id="gather_stump" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Gather: Stump</span></div>
+            <div class="drag-item" data-id="collect_wealth_clock" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Wealth Clock</span></div>
+            <div class="drag-item" data-id="collect_blueberry_dispenser" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Blueberry Dispenser</span></div>
+            <div class="drag-item" data-id="collect_strawberry_dispenser" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Strawberry Dispenser</span></div>
+            <div class="drag-item" data-id="collect_coconut_dispenser" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Coconut Dispenser</span></div>
+            <div class="drag-item" data-id="collect_royal_jelly_dispenser" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Royal Jelly Dispenser</span></div>
+            <div class="drag-item" data-id="collect_treat_dispenser" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Treat Dispenser</span></div>
+            <div class="drag-item" data-id="collect_ant_pass_dispenser" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Ant Pass Dispenser</span></div>
+            <div class="drag-item" data-id="collect_glue_dispenser" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Glue Dispenser</span></div>
+            <div class="drag-item" data-id="collect_stockings" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Stockings</span></div>
+            <div class="drag-item" data-id="collect_wreath" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Wreath</span></div>
+            <div class="drag-item" data-id="collect_feast" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Feast</span></div>
+            <div class="drag-item" data-id="collect_samovar" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Samovar</span></div>
+            <div class="drag-item" data-id="collect_snow_machine" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Snow Machine</span></div>
+            <div class="drag-item" data-id="collect_lid_art" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Lid Art</span></div>
+            <div class="drag-item" data-id="collect_candles" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Candles</span></div>
+            <div class="drag-item" data-id="collect_memory_match" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Memory Match</span></div>
+            <div class="drag-item" data-id="collect_mega_memory_match" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Mega Memory Match</span></div>
+            <div class="drag-item" data-id="collect_extreme_memory_match" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Extreme Memory Match</span></div>
+            <div class="drag-item" data-id="collect_winter_memory_match" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Winter Memory Match</span></div>
+            <div class="drag-item" data-id="collect_honeystorm" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Honeystorm</span></div>
+            <div class="drag-item" data-id="collect_blue_booster" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Blue Booster</span></div>
+            <div class="drag-item" data-id="collect_red_booster" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Red Booster</span></div>
+            <div class="drag-item" data-id="collect_mountain_booster" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Mountain Booster</span></div>
+            <div class="drag-item" data-id="collect_sticker_stack" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Sticker Stack</span></div>
+            <div class="drag-item" data-id="collect_sticker_printer" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Sticker Printer</span></div>
+            <div class="drag-item" data-id="kill_stump_snail" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Kill: Stump Snail</span></div>
+            <div class="drag-item" data-id="kill_ladybug" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Kill: Ladybug</span></div>
+            <div class="drag-item" data-id="kill_rhinobeetle" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Kill: Rhinobeetle</span></div>
+            <div class="drag-item" data-id="kill_scorpion" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Kill: Scorpion</span></div>
+            <div class="drag-item" data-id="kill_mantis" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Kill: Mantis</span></div>
+            <div class="drag-item" data-id="kill_spider" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Kill: Spider</span></div>
+            <div class="drag-item" data-id="kill_werewolf" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Kill: Werewolf</span></div>
+            <div class="drag-item" data-id="kill_coconut_crab" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Kill: Coconut Crab</span></div>
+            <div class="drag-item" data-id="mondo_buff" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Mondo Buff</span></div>
+            <div class="drag-item" data-id="stinger_hunt" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Stinger Hunt</span></div>
+            <div class="drag-item" data-id="auto_field_boost" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Auto Field Boost</span></div>
+            <div class="drag-item" data-id="ant_challenge" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Ant Challenge</span></div>
+            <div class="drag-item" data-id="quest_polar_bear" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Quest: Polar Bear</span></div>
+            <div class="drag-item" data-id="quest_honey_bee" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Quest: Honey Bee</span></div>
+            <div class="drag-item" data-id="quest_bucko_bee" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Quest: Bucko Bee</span></div>
+            <div class="drag-item" data-id="quest_riley_bee" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Quest: Riley Bee</span></div>
+            <div class="drag-item" data-id="blender" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Blender</span></div>
+            <div class="drag-item" data-id="planters" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Planters</span></div>
           </div>
         </div>
       `;
-      parentPriorities.appendChild(dragContainer);
 
-      // Enhance existing items with categories and actions after a short delay
+      if (priorityContainer) priorityContainer.innerHTML += dragListHTML;
+
+      // Enhance items with categories/actions (the shared config.js will also attach drag behavior)
       setTimeout(() => {
-        const container = document.getElementById(
-          "task_priority_order-container"
-        );
+        const container = document.getElementById("task_priority_order-container");
         if (container) {
           const items = container.querySelectorAll(".drag-item");
           items.forEach((item) => {
@@ -510,7 +307,6 @@
               const badge = getCategoryBadge(category);
               item.setAttribute("data-category", category);
 
-              // Add category badge if not present
               if (!item.querySelector(".category-badge")) {
                 const dragText = item.querySelector(".drag-text");
                 if (dragText) {
@@ -521,7 +317,6 @@
                 }
               }
 
-              // Add action buttons if not present
               if (!item.querySelector(".drag-actions")) {
                 const actionsDiv = document.createElement("div");
                 actionsDiv.className = "drag-actions";
@@ -537,10 +332,7 @@
       }, 100);
     </script>
   </div>
-  <div
-    style="width: 74%; overflow-y: auto; height: 94vh; display: none"
-    id="other"
-  >
+  <div id="other" class="standard-container" style="width: 74%; overflow-y: auto; height: 94vh; display: none">
     <script>
       const parentOther = document.getElementById("other");
       buildStandardContainer(parentOther, "Rejoining", "", [
@@ -664,10 +456,7 @@
       ]);
     </script>
   </div>
-  <div
-    style="width: 74%; overflow-y: auto; height: 94vh; display: none"
-    id="discord"
-  >
+  <div id="discord" class="standard-container" style="width: 74%; overflow-y: auto; height: 94vh; display: none">
     <script>
       const parentDiscord = document.getElementById("discord");
       buildStandardContainer(parentDiscord, "Webhook", "", [
@@ -856,10 +645,7 @@
       );
     </script>
   </div>
-  <div
-    style="width: 74%; overflow-y: auto; height: 94vh; display: none"
-    id="stream"
-  >
+  <div id="stream" class="standard-container" style="width: 74%; overflow-y: auto; height: 94vh; display: none">
     <script>
       const parentStream = document.getElementById("stream");
       buildStandardContainer(
@@ -934,13 +720,10 @@
     </script>
   </div>
 </div>
-<div style="display: flex; justify-content: center; width: 100%">
-  <div
-    style="width: 74%; overflow-y: auto; height: 94vh; display: none"
-    id="profiles"
-  >
-    <div class="main-content-container">
-      <div id="profiles-content" class="standard-container">
+
+<div class="main-content-container">
+  <div id="profiles" class="standard-container" style="width: 74%; overflow-y: auto; height: 94vh; display: none">
+    <div id="profiles-content" class="standard-container">
         <style>
           .profile-card {
             background: var(--surface);

@@ -162,17 +162,16 @@ function buildStandardContainer(parentElement, title, desc, settings) {
     //note: if i > 0, set a margin-top
     //is it better to setup a parent div and use gap instead? yes
     out += `
-        <form style="display: flex; align-items:flex-start; justify-content: space-between; padding-right: ${
-          inputPadding[e.type.name]
-        }; ${i ? "margin-top:1rem" : ""}";>
-            <div style="width: 70%;">
-                <label>${e.title}</label>
-                <p>${e.desc}</p>
-            </div>
-            ${buildInput(e.id, e.type)}
-        </form>
-        `;
-    out += "</form>";
+      <form style="display: flex; align-items:flex-start; justify-content: space-between; padding-right: ${
+        inputPadding[e.type.name]
+      }; ${i ? "margin-top:1rem" : ""}";>
+        <div style="width: 70%;">
+          <label>${e.title}</label>
+          <p>${e.desc}</p>
+        </div>
+        ${buildInput(e.id, e.type)}
+      </form>
+      `;
   });
 
   out += "</div>";
