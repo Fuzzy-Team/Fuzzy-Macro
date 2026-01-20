@@ -536,3 +536,7 @@ input:focus, select:focus { outline: none; }
   margin: 1rem 0;
   text-align: center;
 }
+.task-list-scroll {
+  max-height: 20rem; /* Adjust this value to fit 5 tasks exactly */
+  overflow-y: auto;
+}
