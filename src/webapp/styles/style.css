@@ -1,3 +1,18 @@
+/* Utility classes for layout and spacing */
+.flex-row { display: flex; flex-direction: row; }
+.flex-col { display: flex; flex-direction: column; }
+.flex-1 { flex: 1 1 0%; }
+.flex-grow-1 { flex-grow: 1; }
+.gap-xs { gap: 0.2rem; }
+.gap-sm { gap: 0.5rem; }
+.gap-md { gap: 1rem; }
+.gap-lg { gap: 2rem; }
+.ml-auto { margin-left: auto; }
+.ml-05 { margin-left: 0.5rem; }
+.w-100 { width: 100%; }
+.overflow-y-auto { overflow-y: auto; }
+.space-between { justify-content: space-between; }
+.d-none { display: none !important; }
 /* New Modern Dark Theme for Fuzzy Macro */
 @import url("https://fonts.googleapis.com/css2?family=Libre+Franklin:ital,wght@0,100..900;1,100..900&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap");
 
@@ -539,4 +554,8 @@ input:focus, select:focus { outline: none; }
 .task-list-scroll {
   max-height: 20rem; /* Adjust this value to fit 5 tasks exactly */
   overflow-y: auto;
+}
+#logs {
+  flex: 1 1 0%;
+  min-height: 0; /* Prevents overflow issues in flex containers */
 }

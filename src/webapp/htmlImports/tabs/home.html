@@ -1,54 +1,29 @@
-<div
-  id="home-parent"
-  style="display: flex; flex-direction: row; gap: 0.5rem"
->
-  <div style="flex: 1; display: flex; flex-direction: column; gap: 0.5rem">
+<div id="home-parent" class="flex-row gap-md">
+  <div class="flex-col flex-1 gap-md">
     <div class="poppins-semibold standard-container">
-      <h2>Macro</h2>
-      <button
-        class="purple-button"
-        style="margin-left: auto; display: none"
-        id="stop-btn"
-      >
-        Stop [F3]
-      </button>
-      <!-- <button
-        class="purple-button active"
-        style="margin-left: 0.5rem; display: none"
-        id="pause-btn"
-      >
-        Pause [F2]
-      </button> -->
-      <button class="purple-button" style="margin-left: auto" id="start-btn">
-        Start [F1]
-      </button>
+      <h2>Macro Control
+      <button class="purple-button ml-auto d-none" id="stop-btn">Stop [F3]</button>
+      <!-- <button class="purple-button active ml-05 d-none" id="pause-btn">Pause [F2]</button> -->
+      <button class="purple-button ml-auto" id="start-btn">Start [F1]</button>
+      </h2>
     </div>
-    <div
-      class="poppins-medium standard-container"
-      style="flex-grow: 1; overflow-y: auto"
-    >
+    <div class="poppins-medium standard-container flex-grow-1 overflow-y-auto">
       <h2>Tasks</h2>
-      <div id="task-list" class="task-list-scroll" style="width: 100%"></div>
+      <div id="task-list" class="task-list-scroll w-100"></div>
     </div>
-    <div
-      class="poppins-medium standard-container"
-      style="display: flex; flex-direction: column"
-    >
-      <h2>Macro Mode</h2>
-      <label style="margin-top: 0.5rem">
-        <select id="macro_mode">
+    <div class="flex-col flex-1 gap-md">
+    <div class="poppins-semibold standard-container">
+        <h2 style="margin: 0;">Macro Mode
+        <select class="ml-auto" id="macro_mode">
           <option value="normal">Normal Mode</option>
           <option value="field">Field Mode</option>
           <option value="quest">Quest Mode</option>
         </select>
-      </label>
-    </div>
-    <div
-      class="poppins-medium standard-container"
-      id="planter-timers-container"
-      style="display: flex; flex-direction: column"
-    >
-      <div style="display: flex; justify-content: space-between">
+        </h2>
+      </div>
+      </div>
+    <div class="poppins-medium standard-container flex-col" id="planter-timers-container">
+      <div class="flex-row space-between">
         <h2>Planter Timers</h2>
         <button
           class="purple-button"
@@ -60,21 +35,10 @@
       <div class="planter-timers"></div>
     </div>
   </div>
-  <div style="flex: 1; display: flex; flex-direction: column; gap: 0.5rem">
-    <div class="poppins-semibold standard-container">
-      <h2>Logs (<span id="log-type">Simple</span>)</h2>
-      <button class="purple-button active" id="log-btn">Detailed</button>
+  <div class="flex-col flex-1 gap-md">
+    <div class="poppins-regular standard-container flex-grow-1 overflow-y-auto flex-col gap-xs" id="logs">
+      <h2>Logs</h2>
+      <!-- Logs will be appended here -->
     </div>
-    <div
-      class="poppins-regular standard-container"
-      id="logs"
-      style="
-        flex-grow: 1;
-        overflow-y: auto;
-        display: flex;
-        flex-direction: column;
-        gap: 0.2rem;
-      "
-    ></div>
   </div>
 </div>
