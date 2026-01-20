@@ -208,12 +208,12 @@ def update(t="main"):
     except Exception:
         pass
 
-    # ensure e_macro.command is executable if present
-    e_macroPath = os.path.join(destination, "e_macro.command")
-    if os.path.exists(e_macroPath):
+    # ensure run_macro.command is executable if present
+    run_macroPath = os.path.join(destination, "run_macro.command")
+    if os.path.exists(run_macroPath):
         try:
-            st = os.stat(e_macroPath)
-            os.chmod(e_macroPath, st.st_mode | stat.S_IEXEC)
+            st = os.stat(run_macroPath)
+            os.chmod(run_macroPath, st.st_mode | stat.S_IEXEC)
         except Exception:
             pass
 
