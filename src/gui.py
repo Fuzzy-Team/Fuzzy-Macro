@@ -164,9 +164,14 @@ def getMacroVersion():
 
 @eel.expose
 def update():
-    updateFunc()
-    eel.closeWindow()
-    sys.exit()
+    try:
+        updated = updateFunc()
+    except Exception:
+        updated = False
+    if updated:
+        eel.closeWindow()
+        sys.exit()
+    return
 
 def log(time = "", msg = "", color = ""):
     eel.log(time, msg, color)

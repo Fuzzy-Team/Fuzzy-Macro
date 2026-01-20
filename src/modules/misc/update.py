@@ -162,11 +162,11 @@ def update(t="main"):
         remote_version = r.text.strip()
     except Exception:
         msgBox("Update failed", "Could not fetch remote version. Update aborted.")
-        return
+        return False
 
     if not _is_remote_newer(local_version, remote_version):
         msgBox("Up to date", "No update available. Remote version is not newer.")
-        return
+        return False
 
     # download zip
     try:
@@ -176,7 +176,7 @@ def update(t="main"):
         zipf.extractall(destination)
     except Exception:
         msgBox("Update failed", "Could not download or extract update zip.")
-        return
+        return False
 
     # find extracted folder (likely starts with 'Fuzzy-Macro')
     extracted = None
@@ -193,14 +193,14 @@ def update(t="main"):
                 break
     if not extracted:
         msgBox("Update failed", "Could not locate extracted update folder.")
-        return
+        return False
 
     # merge files, overwriting existing, but skip protected folders
     try:
         _merge_overwrite(extracted, destination, protected_folders, protected_files)
     except Exception:
         msgBox("Update failed", "Error while applying update files.")
-        return
+        return False
 
     # cleanup the extracted folder
     try:
@@ -218,3 +218,4 @@ def update(t="main"):
             pass
 
     msgBox("Update success", "Update complete. You can now relaunch the macro")
+    return True
