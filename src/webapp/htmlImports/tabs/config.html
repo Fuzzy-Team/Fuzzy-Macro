@@ -395,7 +395,7 @@
       ]);
     </script>
   </div>
-  <div id="discord" class="standard-container" style="width: 74%; overflow-y: auto; height: 94vh; display: none">
+  <div id="discord" class="standard-container sub-tab-panel" style="display: none">
     <script>
       const parentDiscord = document.getElementById("discord");
       buildStandardContainer(parentDiscord, "Webhook", "", [
@@ -584,7 +584,7 @@
       );
     </script>
   </div>
-  <div id="stream" class="standard-container" style="width: 74%; overflow-y: auto; height: 94vh; display: none">
+  <div id="stream" class="standard-container sub-tab-panel" style="display: none">
     <script>
       const parentStream = document.getElementById("stream");
       buildStandardContainer(
@@ -658,11 +658,10 @@
       );
     </script>
   </div>
-</div>
 
-<div class="main-content-container">
-  <div id="profiles" class="standard-container" style="width: 74%; overflow-y: auto; height: 94vh; display: none">
-    <div id="profiles-content" class="standard-container">
+
+
+  <div id="profiles" class="standard-container sub-tab-panel" style="display: none">
         <style>
           .profile-card {
             background: var(--surface);
@@ -712,7 +711,7 @@
         </style>
         <div
           class="poppins-medium"
-          style="display: block; justify-items: unset; padding-top: 1rem"
+          style="display: block; justify-items: unset; padding-top: 0rem"
         >
           <h2>Profile Management</h2>
           <p style="font-weight: 500; font-size: 1rem">
@@ -961,7 +960,6 @@
                 >
                   Import Profile
                 </button>
-              </div>
             </div>
           </div>
         </div>
