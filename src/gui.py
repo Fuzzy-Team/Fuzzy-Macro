@@ -171,6 +171,11 @@ def update():
     if updated:
         eel.closeWindow()
         sys.exit()
+    else:
+        try:
+            eel.updateButtonReset()()
+        except Exception:
+            pass
     return
 
 def log(time = "", msg = "", color = ""):
