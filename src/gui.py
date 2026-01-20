@@ -1,14 +1,9 @@
 import eel
-from modules.misc.messageBox import msgBox
 import webbrowser
 import modules.misc.settingsManager as settingsManager
 import os
 from modules.misc.update import update as updateFunc
 import sys
-import platform
-import zipfile
-import requests
-from io import BytesIO
 import ast
 import json
 import webbrowser
