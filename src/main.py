@@ -24,6 +24,12 @@ import modules.misc.settingsManager as settingsManager
 import modules.macro as macroModule
 import modules.controls.mouse as mouse
 import json
+# delete backup from previous update if pending
+try:
+    from modules.misc.update import delete_backup_if_pending
+    delete_backup_if_pending()
+except Exception:
+    pass
 
 try:
 	from modules.misc.ColorProfile import DisplayColorProfile

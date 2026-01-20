@@ -1,3 +1,17 @@
+// Ensure sidebar update button always works
+document.addEventListener("DOMContentLoaded", function() {
+  const updateBtn = document.getElementById("update-btn");
+  if (updateBtn) {
+    updateBtn.addEventListener("click", async function(event) {
+      if (!event.currentTarget.classList.contains("active")) {
+        purpleButtonToggle(event.currentTarget, ["Update", "Updating"]);
+        if (window.eel && typeof eel.update === "function") {
+          await eel.update();
+        }
+      }
+    });
+  }
+});
 //change the styling of the purple buttons
 //element: the purple button element
 //label: the text labels of the button [not-active-label, active-label]
@@ -237,15 +251,6 @@ function loadInputs(obj, save = "") {
     eel.saveDictProfileSettings(obj);
   }
 }
-
-/*
-=============================================
-Header
-=============================================
-*/
-//load the html
-$("#header-placeholder").load("../htmlImports/persistent/header.html");
-
 /*
 =============================================
 Utils
