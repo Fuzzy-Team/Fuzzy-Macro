@@ -41,9 +41,6 @@ upgrade_pip_tools() {
 chip=$(arch)
 os_ver=$(sw_vers -productVersion)
 
-#newline scroll
-printf "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
-
 #check mac compatibility
 
 if [ $chip = 'arm64' ]; then
@@ -210,8 +207,6 @@ install_pip_package "aiohttp==3.10.5"
 install_pip_package "pynput"
 install_pip_package "numpy<2"
 pip install "numpy<2"
-pip install "PyQt6>=6.6.0"
-pip install "PyQt6-WebEngine>=6.6.0"
 
 #download packages a second time
 #pip install eel
