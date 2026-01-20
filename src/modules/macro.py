@@ -8,13 +8,11 @@ import pyautogui as pag
 # This will be initialized when the macro class is created
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP, benchmarkMSS, mssScreenshotPillowRGBA
 from modules.controls.keyboard import keyboard
-from modules.controls.sleep import sleep, set_run_state, pauseable_sleep, wait_while_paused, is_paused
+from modules.controls.sleep import sleep, set_run_state
 import modules.controls.mouse as mouse
-from modules.screen.screenData import getScreenData
 import modules.logging.log as logModule
 from modules.submacros.fieldDriftCompensation import fieldDriftCompensation as fieldDriftCompensationClass
 from modules.screen.robloxWindow import RobloxWindowBounds
-from operator import itemgetter
 import sys
 import platform
 import os
@@ -23,7 +21,7 @@ import threading
 from modules.submacros.backpack import bpc
 from modules.screen.imageSearch import *
 import webbrowser
-from pynput.keyboard import Key, Controller
+from pynput.keyboard import Controller
 import cv2
 from datetime import timedelta, datetime
 from modules.misc.imageManipulation import *
