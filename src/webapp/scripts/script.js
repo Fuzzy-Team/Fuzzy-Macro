@@ -1,3 +1,12 @@
+// Expose a function to reset the update button from Python
+window.updateButtonReset = function() {
+  const updateBtn = document.getElementById("update-btn");
+  if (updateBtn) {
+    updateBtn.classList.remove("active");
+    updateBtn.innerText = "Update";
+  }
+};
+if (window.eel) eel.expose(window.updateButtonReset, 'updateButtonReset');
 // Ensure sidebar update button always works
 document.addEventListener("DOMContentLoaded", function() {
   const updateBtn = document.getElementById("update-btn");
