@@ -21,3 +21,4 @@ src/data/user
 settings/profiles
 .backup_pending
 backup_macro.zip
+backups/
