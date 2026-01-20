@@ -527,3 +527,12 @@ input:focus, select:focus { outline: none; }
   background-color: var(--surface);
   color: var(--text-main);
 }
+
+.app-title {
+  font-family: 'Libre Franklin', sans-serif;
+  font-weight: 700;
+  font-size: 1.5rem;
+  color: var(--primary);
+  margin: 1rem 0;
+  text-align: center;
+}

@@ -17,11 +17,14 @@
     <div class="app-container">
         <!-- Sidebar -->
         <div class="sidebar-container">
+          <div class="app-title">
+                Fuzzy Macro
+          </div>
             <div id="tabs-placeholder">
                 <!-- Tabs loaded via JS -->
             </div>
             <div class="credits">
-                Fuzzy Macro - v1.0
+                <span id="version">Loading version...</span><br>
                 <button id="update-button" class="purple-button" onclick="updateSettings()">Check for updates</button>
             </div>
         </div>
@@ -53,5 +56,16 @@
     <script src="./scripts/tabs/planters.js"></script>
     <script src="./scripts/tabs/boost.js"></script>
     <script src="./scripts/tabs/quests.js"></script>
+      <script>
+        // Fetch version from version.txt and display it
+        fetch('./version.txt')
+          .then(response => response.text())
+          .then(version => {
+            document.getElementById('version').textContent = 'v' + version.trim();
+          })
+          .catch(() => {
+            document.getElementById('version').textContent = 'v?';
+          });
+      </script>
   </body>
 </html>
