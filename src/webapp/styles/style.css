@@ -43,7 +43,6 @@ input:focus, select:focus { outline: none; }
     border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
-    padding-top: 2rem;
     flex-shrink: 0;
 }
 
@@ -172,7 +171,6 @@ input:focus, select:focus { outline: none; }
     border: 1px solid var(--border);
     border-radius: 12px;
     padding: 1.5rem;
-    margin-bottom: 2rem;
     box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     display: flex;
     flex-direction: column;
@@ -491,4 +489,41 @@ input:focus, select:focus { outline: none; }
 
 .planter-timers .planter span.ready {
   color: #4caf50;
+}
+/* Custom style for the select menu */
+#macro_mode {
+  appearance: none;
+  background-color: var(--surface);
+  color: var(--text-main);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: background-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+#macro_mode:hover {
+  background-color: var(--surface-hover);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+}
+
+#macro_mode:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--primary);
+}
+
+/* Optional: Add a custom arrow for the dropdown */
+#macro_mode {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23E0E0E0'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 1rem center;
+  background-size: 1rem;
+}
+
+/* Ensure the dropdown options match the theme */
+#macro_mode option {
+  background-color: var(--surface);
+  color: var(--text-main);
 }
