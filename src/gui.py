@@ -227,42 +227,7 @@ eel.expose(setRunState)
 
 def launch():
 
-    #download chromium
-    # chromiumPath = os.path.abspath("chrome-mac/Chromium.app")
-    # arch = platform.machine()
-    # macVersion, _, _ = platform.mac_ver()
-    # macVersion = float('.'.join(macVersion.split('.')[:2]))
-    
-    # chromiumDownloadURL = None
-    # if arch == "arm64":
-    #     chromiumDownloadURL = "https://storage.googleapis.com/chromium-browser-snapshots/Mac_Arm/1489261/chrome-mac.zip"
-    # elif macVersion >= 11:
-    #     chromiumDownloadURL = "https://storage.googleapis.com/chromium-browser-snapshots/Mac/1489261/chrome-mac.zip"
-
-    # if chromiumDownloadURL and not os.path.isdir(chromiumPath):
-    #     print("Downloading Chromium...")
-    #     req = requests.get(chromiumDownloadURL)
-    #     zipf= zipfile.ZipFile(BytesIO(req.content))
-    #     zipf.extractall("")
-
-    #     os.system(f"xattr -cr {chromiumPath}")
-    #     os.chmod(chromiumPath, 0o755)
-    #     os.system(f"chmod -R u+rx {chromiumPath}")
-    #     os.system('export GOOGLE_API_KEY="no"')
-    #     os.system('export GOOGLE_DEFAULT_CLIENT_ID="no"')
-    #     os.system('export GOOGLE_DEFAULT_CLIENT_SECRET="no"')
-
-
-    # if chromiumDownloadURL:
-    #     eel.browsers.set_path("chrome", os.path.join(chromiumPath, "Contents/MacOS/Chromium"))
-
-    # try:
-    #     eel.start('index.html',app_mode = True,block = False, cmdline_args=["--incognito", "--new-window", "--disable-infobars"])
-    # except EnvironmentError:
-    #     print("Chrome/Chromium could not be found. You can access the macro at: http://localhost:8000/")
-    #     eel.start('index.html', block=False)
-    # #     msgBox(title = "error", text = "Google Chrome could not be found. Ensure that:\
-    # #  \n1. Google Chrome is installed\nGoogle chrome is in the applications folder (open the google chrome dmg file. From the pop up, drag the icon into the folder)")
+    pass
     
     try:
         eel.start('index.html', mode = "chrome", app_mode = True, block = False, cmdline_args=["--incognito", "--app=http://localhost:8000"])
