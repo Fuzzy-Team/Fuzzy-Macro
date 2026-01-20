@@ -164,7 +164,32 @@
 
       // Insert search input and drag list
       const dragListHTML = `
-        <input type="text" id="priority-search-input" class="priority-search" placeholder="🔍 Search tasks... (e.g., 'pine', 'collect', 'kill')" />
+        <style>
+          .priority-search-wrapper { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+          .priority-search {
+            width:100%;
+            max-width:520px;
+            padding:8px 12px;
+            border-radius:8px;
+            background:var(--surface);
+            border:1px solid var(--border);
+            color:var(--text-main);
+            font-size:13px;
+            box-shadow:none;
+            outline:none;
+            transition:box-shadow 0.12s ease, border-color 0.12s ease, transform 0.06s ease;
+          }
+          .priority-search::placeholder { color:var(--text-dim); }
+          .priority-search:focus {
+            border-color:var(--primary);
+            box-shadow:0 0 0 6px rgba(157,142,195,0.08);
+            transform:translateY(-1px);
+          }
+          @media (max-width:600px) { .priority-search { max-width:100%; } }
+        </style>
+        <div class="priority-search-wrapper">
+          <input type="text" id="priority-search-input" class="priority-search" placeholder="🔍 Search tasks... (e.g., 'pine', 'collect', 'kill')" />
+        </div>
         <div id="task_priority_order" class="drag-list" data-onchange="saveSetting(this, 'profile')">
           <div class="drag-list-container" id="task_priority_order-container">
             <!-- items will be enhanced by config.js -->
