@@ -1604,11 +1604,6 @@ class macro:
                     self.keyboard.press("o")
                 self.moveMouseToDefault()
                 time.sleep(1)
-                #say existance so broke
-                if self.setdat["existance_broke"]:
-                    self.keyboard.press("/")
-                    self.keyboard.write(f'Existance so broke :weary: {datetime.now().strftime("%H:%M")}', 0.1)
-                    self.keyboard.press("enter")
                 self.convert()
                 #no need to reset
                 self.canDetectNight = True
