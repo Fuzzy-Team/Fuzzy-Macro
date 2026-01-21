@@ -11,6 +11,7 @@ from modules.screen.robloxWindow import RobloxWindowBounds
 colors = {
     "red": "D22B2B",
     "light blue": "89CFF0",
+    "blue": "89CFF0",
     "bright green": "7CFC00",
     "light green": "98FB98",
     "dark brown": "5C4033",
