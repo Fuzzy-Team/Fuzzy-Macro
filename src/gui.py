@@ -235,6 +235,21 @@ def getRecentLogs():
     # Return as a list of dicts for the frontend
     return list(_recent_logs)
 
+@eel.expose
+def clearRecentLogs():
+    global _recent_logs
+    # Clear the shared list
+    try:
+        # If it's a multiprocessing.Manager.list, we use del or clear()
+        if hasattr(_recent_logs, 'clear'):
+            _recent_logs.clear()
+        else:
+            del _recent_logs[:]
+    except Exception as e:
+        print(f"Error clearing logs: {e}")
+        # Fallback to re-initializing if clear fails
+        _recent_logs = []
+
 def launch():
 
     pass

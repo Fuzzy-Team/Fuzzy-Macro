@@ -750,4 +750,46 @@ $("#home-placeholder")
         isUserChangingMode = false;
       }, 100);
     }
+  })
+  .on("click", "#clear-logs-btn", async (event) => {
+    if (confirm("Are you sure you want to clear all logs?")) {
+      await eel.clearRecentLogs()();
+      const logs = document.getElementById("logs");
+      if (logs) logs.innerHTML = "";
+    }
+  })
+  .on("click", "#export-logs-btn", async (event) => {
+    try {
+      const recentLogs = await eel.getRecentLogs()();
+      if (!recentLogs || recentLogs.length === 0) {
+        alert("No logs to export.");
+        return;
+      }
+
+      let logText = "Fuzzy Macro Logs\n";
+      logText += "================\n\n";
+
+      recentLogs.forEach((logEntry) => {
+        const time = logEntry.time || "";
+        const title = logEntry.title || "";
+        const desc = logEntry.desc ? logEntry.desc.replace(/<br>/g, "\n") : "";
+        logText += `[${time}] ${title}\n${desc}\n\n`;
+      });
+
+      const blob = new Blob([logText], { type: "text/plain" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `fuzzy_macro_logs_${new Date()
+        .toISOString()
+        .slice(0, 19)
+        .replace(/:/g, "-")}.log`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error("Error exporting logs:", error);
+      alert("Failed to export logs.");
+    }
   });
