@@ -35,3 +35,4 @@ ngrok_auth=
 stream_quality=1920x1080
 start_keybind=F1
 stop_keybind=F3
+gui_theme=Brown
