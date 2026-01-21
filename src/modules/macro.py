@@ -3795,13 +3795,13 @@ class macro:
         return time.time() - timing >= cooldown*mobRespawnBonus
     
     def AFB(self, gatherInterrupt = False, turnOffShiftLock = False):  # Auto Field Boost - WOOHOO
-
+        
         def normalize(text):
             text = text.lower()
             text = re.sub(r'[^a-z\s]', ' ', text)  # remove symbols
             text = re.sub(r'\s+', ' ', text).strip()
             return text
-
+        
         returnVal = None
         # time limit - :(
         if self.AFBLIMIT: return True
@@ -3858,7 +3858,7 @@ class macro:
                         "mountain top": [["mountain", "top"]],
                     }
                     # ignore detected lines with these words, reduces false positives
-                    ignore = {"strawberry", "strawberries", "blueberry", "blueberries",
+                    ignore = {"strawberry", "strawberries", "blueberry", "blueberries", 
                     "seed", "seeds", "pineapple", "pineapples", "honey", "from"}
 
                     def ignore2(field, text):
@@ -3918,14 +3918,7 @@ class macro:
                         clean = normalize(bluetexts)
                         # "and the" appears when using loaded and smooth
                         and_the = [line for line in bluetexts.split("\n") if "boosted" in line]
-
-                        the = bluetexts.split()  # get each line of detected text
-                        boostedField = []
-
-                        # smooth/loaded
-                        clean = bluetexts.lower().replace(" and the ", " ") 
-                        # "and the" appears when using loaded and smooth
-                        and_the = [line for line in clean.split("\n") if "and the" in line] 
+                        
                         the = bluetexts.split()  # get each line of detected text
                         boostedField = []
 
@@ -3933,14 +3926,14 @@ class macro:
                         if "field" in dice:
                             boostedField = None
                             for cf in field:
-                                for pattern in fields[cf]:
+                                for pattern in fields[cf]:  
                                     if set(pattern).issubset(tokens):
                                         if not ignore2(cf, bluetexts):
                                             boostedField = cf
                                             break
                                 if boostedField:
                                     break
-
+                            
                         #other die
                         else:
                             boostedFields = []
@@ -3951,7 +3944,7 @@ class macro:
                                     for pattern in fields[cf]:
                                         if set(pattern).issubset(sentence_tokens) and not ignore2(cf, sentence):
                                             if cf not in boostedFields:
-                                                boostedFields.append(cf)  
+                                                boostedFields.append(cf)
 
                         # field user selected is detected
                         if "field" in dice:
@@ -3963,7 +3956,7 @@ class macro:
                                     self.keyboard.press("o")
                                 if diceslot == 0: self.toggleInventory("close")
                                 self.saveAFB("AFB_dice_cd")
-                                if glitter:
+                                if glitter: 
                                     self.AFBglitter = True
                                     self.saveAFB("AFB_glitter_cd")
                                 return returnVal
@@ -3978,7 +3971,7 @@ class macro:
                                     self.keyboard.press("o")
                                 if diceslot == 0: self.toggleInventory("close")
                                 self.saveAFB("AFB_dice_cd")
-                                if glitter:
+                                if glitter: 
                                     self.AFBglitter = True
                                     self.saveAFB("AFB_glitter_cd")
                                 return returnVal
@@ -3987,7 +3980,6 @@ class macro:
                                     self.logger.webhook("", f"Boosted Fields: {', '.join(boostedFields)}", "red")
                                 else:
                                     self.logger.webhook("", "Boosted Fields: None", "red")
-                                time.sleep(0.5)
                                 time.sleep(0.5)
 
                 # glitter    
