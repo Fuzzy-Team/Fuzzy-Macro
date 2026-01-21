@@ -446,6 +446,22 @@ input:focus, select:focus { outline: none; }
   vertical-align: middle;
 }
 
+.icon-img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  vertical-align: middle;
+  margin-right: 0.3rem;
+}
+
+/* Specific sizing for icons in dropdowns and labels */
+.custom-select .option img,
+.standard-container label img {
+  width: 18px;
+  height: 18px;
+  margin-right: 0.4rem;
+}
+
 /* Missing classes from original specific to functionality */
 .manual-planters-field,
 .manual-planters-planters {
