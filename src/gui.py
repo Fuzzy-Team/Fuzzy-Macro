@@ -11,6 +11,7 @@ import time
 
 eel.init('webapp')
 run = None
+_recent_logs = []
 @eel.expose
 def openLink(link):
     webbrowser.open(link, autoraise = True)
@@ -224,6 +225,15 @@ def getRunState():
 # Expose functions to eel
 eel.expose(getRunState)
 eel.expose(setRunState)
+
+def setRecentLogs(logs):
+    global _recent_logs
+    _recent_logs = logs
+
+@eel.expose
+def getRecentLogs():
+    # Return as a list of dicts for the frontend
+    return list(_recent_logs)
 
 def launch():
 

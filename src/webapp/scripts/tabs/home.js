@@ -625,6 +625,19 @@ $("#home-placeholder")
     await loadTasks();
     await updateStartButtonText();
 
+    // Load recent logs from backend
+    try {
+      const recentLogs = await eel.getRecentLogs()();
+      if (recentLogs && recentLogs.length > 0) {
+        recentLogs.forEach((logEntry) => {
+          const msg = `${logEntry.title}<br>${logEntry.desc}`;
+          log(logEntry.time, msg, logEntry.color);
+        });
+      }
+    } catch (error) {
+      console.error("Error loading recent logs:", error);
+    }
+
     // Initialize macro mode dropdown
     const settings = await loadAllSettings();
     const macroModeDropdown = document.getElementById("macro_mode");

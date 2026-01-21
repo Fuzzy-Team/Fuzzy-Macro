@@ -1416,11 +1416,12 @@ if __name__ == "__main__":
     manager = multiprocessing.Manager()
     run = multiprocessing.Value('i', 3)
     gui.setRunState(3)  # Initialize the global run state
+    recentLogs = manager.list()  # Shared list to store recent log entries for discord bot
+    gui.setRecentLogs(recentLogs)
     updateGUI = multiprocessing.Value('i', 0)
     skipTask = multiprocessing.Value('i', 0)  # 0 = don't skip, 1 = skip current task
     status = manager.Value(ctypes.c_wchar_p, "none")
     logQueue = manager.Queue()
-    recentLogs = manager.list()  # Shared list to store recent log entries for discord bot
     initialMessageInfo = manager.dict()  # Shared dict for initial webhook message info
     start_keyboard_listener_fn = watch_for_hotkeys(run)
     logger = logModule.log(logQueue, False, None, False, blocking=True)
@@ -1810,16 +1811,17 @@ if __name__ == "__main__":
             if logData["type"] == "webhook": #webhook
                 msg = f"{logData['title']}<br>{logData['desc']}"
 
-                # Add to recent logs list (keep last 20 entries)
+                # Add to recent logs list (keep last 100 entries)
                 log_entry = {
                     'time': logData['time'],
                     'title': logData['title'],
-                    'desc': logData['desc']
+                    'desc': logData['desc'],
+                    'color': logData['color']
                 }
                 recentLogs.append(log_entry)
-                # Keep only the last 20 entries
-                if len(recentLogs) > 20:
-                    recentLogs[:] = recentLogs[-20:]
+                # Keep only the last 100 entries
+                if len(recentLogs) > 100:
+                    recentLogs[:] = recentLogs[-100:]
 
             #add it to gui
             gui.log(logData["time"], msg, logData["color"])
