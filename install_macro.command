@@ -43,7 +43,7 @@ os_ver=$(sw_vers -productVersion)
 
 #check mac compatibility
 
-if [ $chip = 'arm64' ]; then
+if [ "$chip" = 'arm64' ]; then
 	if echo -e "$os_ver \n12.99.99" | sort -V | tail -n1 | grep -Fq "12.99.99"; then
 		printf "\033[31;1mYour mac is not compatible. It has to be Ventura or later. Consider updating it. \033[0m\n"
 		exit 1
@@ -62,7 +62,7 @@ printf "\033[32;1mYour mac is compatible \033[0m\n\n\n"
 python_ver="3.9"
 python_link="/www.python.org/ftp/python/3.9.8/python-3.9.8-macos11.pkg"
 constraints=$''
-if [ $chip = 'i386' ]; then
+if [ "$chip" = 'i386' ]; then
 	if echo -e "$os_ver \n10.15.0" | sort -V | tail -n1 | grep -Fq "10.15.0"; then
 		python_ver="3.8"
 		python_link="/www.python.org/ftp/python/3.8.0/python-3.8.0-macosx10.9.pkg"
@@ -96,7 +96,7 @@ else
 	printf "\033[1;35mPython is not installed, installing python ${python_ver}\nThere should be a popup for the python installer.\n\033[0m"
 	curl -O "https:/${python_link}" && open "${filename}"
 	# Wait until python installation has finished.
-	until $(python"${python_ver}" --version &> /dev/null); do
+	until python"${python_ver}" --version &> /dev/null; do
 	  sleep 5;
 	done
 	#printf "\033[1;35mPress enter to continue when python is installed\033[0m"
@@ -153,7 +153,7 @@ done
 pip install --upgrade pip setuptools wheel
 printf "\033[1;35mInstalling libraries\033[0m\n\n"
 
-if [ $python_ver = '3.9' ]; then
+if [ "$python_ver" = '3.9' ]; then
 	install_pip_package "opencv-python-headless"
 	install_pip_package "ocrmac"
 	install_pip_package "pyobjc-framework-ColorSync<12.0"
@@ -206,16 +206,82 @@ install_pip_package "requests" #used to check if this script was ran, should be 
 install_pip_package "aiohttp==3.10.5"
 install_pip_package "pynput"
 install_pip_package "numpy<2"
-pip install "numpy<2"
 
-#download packages a second time
-#pip install eel
-#pip install pynput
-#if echo -e "$os_ver \n10.15.0" | sort -V | head -n1 | grep -Fq "10.15.0"; then
-	#pip install ocrmac
-#fi
+"$VENV_PATH/bin/python" << "EOF"
 
-#/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/existancepy/bss-macro-py-easy-install/main/extras/Install_Certificates.txt)"
-#/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/existancepy/bss-macro-py-easy-install/main/extras/html2image_fix.txt)"
-printf "\n\n\n\033[32;1mInstallation complete!\nVisit the gitbook for the remaining instructions \033[0m\n"
+# install_certifi.py
+#
+# sample script to install or update a set of default Root Certificates
+# for the ssl module.  Uses the certificates provided by the certifi package:
+#       https://pypi.org/project/certifi/
+
+import os
+import os.path
+import ssl
+import stat
+import subprocess
+import sys
+
+STAT_0o775 = ( stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR
+             | stat.S_IRGRP | stat.S_IWGRP | stat.S_IXGRP
+             | stat.S_IROTH |                stat.S_IXOTH )
+
+def main():
+    openssl_dir, openssl_cafile = os.path.split(
+        ssl.get_default_verify_paths().openssl_cafile)
+
+    print(" -- pip install --upgrade certifi")
+    subprocess.check_call([sys.executable,
+        "-E", "-s", "-m", "pip", "install", "--upgrade", "certifi"])
+
+    import certifi
+
+    # change working directory to the default SSL directory
+    os.chdir(openssl_dir)
+    relpath_to_certifi_cafile = os.path.relpath(certifi.where())
+    print(" -- removing any existing file or link")
+    try:
+        os.remove(openssl_cafile)
+    except FileNotFoundError:
+        pass
+    print(" -- creating symlink to certifi certificate bundle")
+    os.symlink(relpath_to_certifi_cafile, openssl_cafile)
+    print(" -- setting permissions")
+    os.chmod(openssl_cafile, STAT_0o775)
+    print(" -- update complete")
+
+if __name__ == '__main__':
+    main()
+EOF
+"$VENV_PATH/bin/python" << "EOF"
+
+# remove self-documented expressions from chrome_cdp.py for python 3.7 compatibility
+import os
+import importlib.util
+
+spec = importlib.util.find_spec('html2image')
+if spec and spec.origin:
+    path = os.path.join(os.path.dirname(spec.origin), "browsers", "chrome_cdp.py")
+    if os.path.exists(path):
+        print(f"html2image found at {path}")
+        linesToRemove = ["print(f'{r.json()=}')", "print(f'cdp_send: {method=} {params=}')", "print(f'{method=}')", "print(f'{message=}')"]
+        with open(path, "r") as f:
+            data = f.read()
+        
+        original_data = data
+        for i in linesToRemove:
+            data = data.replace(i, "")
+        
+        if data != original_data:
+            with open(path, "w") as f:
+                f.write(data)
+            print("Fixed html2image")
+        else:
+            print("html2image already fixed or lines not found")
+    else:
+        print(f"chrome_cdp.py not found at {path}")
+else:
+    print("html2image package not found")
+EOF
+printf "\n\n\n\033[32;1mInstallation complete!\033[0m\n"
 read
