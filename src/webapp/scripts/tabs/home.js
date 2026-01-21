@@ -27,29 +27,31 @@ async function updateStartButtonText() {
 
     if (runState === 2) {
       // Running: show Stop button
-      if (startBtn) startBtn.style.display = "none";
+      if (startBtn) startBtn.classList.add("d-none");
       if (stopBtn) {
-        stopBtn.style.display = "block";
+        stopBtn.classList.remove("d-none");
         stopBtn.textContent = `Stop [${stopKey}]`;
       }
     } else {
       // Stopped or Paused: show Start button only
       if (startBtn) {
-        startBtn.style.display = "block";
+        startBtn.classList.remove("d-none");
         startBtn.classList.remove("active");
         startBtn.disabled = false;
         startBtn.textContent = `Start [${startKey}]`;
       }
-      if (stopBtn) stopBtn.style.display = "none";
+      if (stopBtn) stopBtn.classList.add("d-none");
     }
   } catch (error) {
     // Fallback to just showing start button
     const startBtn = document.getElementById("start-btn");
     if (startBtn) {
-      startBtn.style.display = "block";
+      startBtn.classList.remove("d-none");
       startBtn.disabled = false;
       startBtn.textContent = `Start [${startKey}]`;
     }
+    const stopBtn = document.getElementById("stop-btn");
+    if (stopBtn) stopBtn.classList.add("d-none");
   }
 }
 
@@ -72,20 +74,20 @@ async function toggleStartStop() {
 
     if (runState === 2) {
       // Running: show Stop button
-      if (startBtn) startBtn.style.display = "none";
+      if (startBtn) startBtn.classList.add("d-none");
       if (stopBtn) {
-        stopBtn.style.display = "block";
+        stopBtn.classList.remove("d-none");
         stopBtn.textContent = `Stop [${stopKey}]`;
       }
     } else {
       // Stopped or Paused: show Start button only
       if (startBtn) {
-        startBtn.style.display = "block";
+        startBtn.classList.remove("d-none");
         startBtn.classList.remove("active");
         startBtn.disabled = false;
         startBtn.textContent = `Start [${startKey}]`;
       }
-      if (stopBtn) stopBtn.style.display = "none";
+      if (stopBtn) stopBtn.classList.add("d-none");
     }
 
     return true; // Success
@@ -112,9 +114,8 @@ function taskHTML(title, desc = "") {
   const html = `
     <div style="margin-top: 1rem;">
         <div style="font-size: 1.1rem;">${title}</div>
-        <div style="font-size: 0.9rem; color: #ADB5BD; display:flex; align-items:center;">${
-          desc.includes("<img") ? desc : toTitleCase(desc)
-        }</div>
+        <div style="font-size: 0.9rem; color: #ADB5BD; display:flex; align-items:center;">${desc.includes("<img") ? desc : toTitleCase(desc)
+    }</div>
         <div style="background-color: #949393; height: 1px; width: 95%; margin-top: 0.4rem;"></div>
     </div>
     `;
@@ -491,7 +492,7 @@ async function loadTasks() {
         toImgArray(stickerStackIcon).join("<br>")
       );
     }
-    
+
     //load gather tasks (enabled fields)
     for (let i = 0; i < setdat.fields_enabled.length; i++) {
       if (setdat.fields_enabled[i]) {
@@ -513,15 +514,14 @@ async function loadTasks() {
     return `
             <div class="planter">
                 <img class="planter-img" src="./assets/icons/${planter.replaceAll(
-                  " ",
-                  "_"
-                )}_planter.png">
+      " ",
+      "_"
+    )}_planter.png">
                 <div class="field-row">
                     <span>${toTitleCase(field)}</span>
                 </div>
-                <span class="time ${
-                  timeRemaining == "Ready!" ? "ready" : ""
-                }">${timeRemaining}</span> 
+                <span class="time ${timeRemaining == "Ready!" ? "ready" : ""
+      }">${timeRemaining}</span> 
             </div> 
         `;
   }
@@ -588,20 +588,20 @@ async function checkAndUpdateButtonState() {
 
     if (runState === 2) {
       // Running: show Stop button
-      if (startBtn) startBtn.style.display = "none";
+      if (startBtn) startBtn.classList.add("d-none");
       if (stopBtn) {
-        stopBtn.style.display = "block";
+        stopBtn.classList.remove("d-none");
         stopBtn.textContent = `Stop [${stopKey}]`;
       }
     } else {
       // Stopped or Paused: show Start button only
       if (startBtn) {
-        startBtn.style.display = "block";
+        startBtn.classList.remove("d-none");
         startBtn.classList.remove("active");
         startBtn.disabled = false;
         startBtn.textContent = `Start [${startKey}]`;
       }
-      if (stopBtn) stopBtn.style.display = "none";
+      if (stopBtn) stopBtn.classList.add("d-none");
     }
 
     // Update field-only mode dropdown to match current settings
@@ -672,9 +672,9 @@ $("#home-placeholder")
     const stopKey = settings.stop_keybind || "F3";
     const startBtn = document.getElementById("start-btn");
     const stopBtn = document.getElementById("stop-btn");
-    if (startBtn) startBtn.style.display = "none";
+    if (startBtn) startBtn.classList.add("d-none");
     if (stopBtn) {
-      stopBtn.style.display = "block";
+      stopBtn.classList.remove("d-none");
       stopBtn.textContent = `Stop [${stopKey}]`;
     }
   })
@@ -687,12 +687,12 @@ $("#home-placeholder")
     const startBtn = document.getElementById("start-btn");
     const stopBtn = document.getElementById("stop-btn");
     if (startBtn) {
-      startBtn.style.display = "block";
+      startBtn.classList.remove("d-none");
       startBtn.classList.remove("active");
       startBtn.disabled = false;
       startBtn.textContent = `Start [${startKey}]`;
     }
-    if (stopBtn) stopBtn.style.display = "none";
+    if (stopBtn) stopBtn.classList.add("d-none");
   })
   // .on("click", "#pause-btn", async (event) => {
   //   //pause/resume button - toggle between pause and resume
