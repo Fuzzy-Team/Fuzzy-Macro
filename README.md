@@ -6,10 +6,8 @@
 
 Roblox Bee Swarm Simulator macro for macOS. Free, open source, and actively maintained.
 
-- Docs: https://existance-macro.gitbook.io/existance-macro-docs/
-- Discord: https://discord.gg/3qf8bgqCVu (Original Macro)
-- Original Macro: https://github.com/existancepy/bss-macro-py
-- This Macro: https://github.com/Fuzzy-Team/Fuzzy-Macro
+- Discord: [https://discord.gg/rGRVG8Rpsb](https://discord.gg/rGRVG8Rpsb)
+
 
 ![GUI](https://github.com/LaganYT/Existance-Macro/blob/06dd4987b68053c9bdfa842a17e51db3b7c83d30/src/gui.png)
 
@@ -140,50 +138,13 @@ https://existance-macro.gitbook.io/existance-macro-docs/
       <strong>Macro Inspiration:</strong>
       <a href="https://github.com/NatroTeam/NatroMacro" target="_blank">Natro Macro</a>,
       <a href="https://github.com/alaninnovates/bss-macro" target="_blank">Stumpy Macro</a>
+      <a href="https://github.com/existancepy/bss-macro-py" target="_blank">Existanc Macro</a>
     </li>
     <li>
-      <strong>Developers:</strong> Existance, Sev, Logan
+      <strong>Developers:</strong> Logan
     </li>
     <li>
-      <strong>Pattern Makers:</strong> Existance, NatroTeam, tvojamamkajenic, sev, dully176, chillketchup
+      <strong>Pattern Makers:</strong> Existance, NatroTeam, tvojamamkajenic, sev, dully176, chillketchup, Electro
     </li>
   </ul>
 </div>
-
-<style>
-.credits-container {
-  background-color: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 1.5rem;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  color: var(--text-main);
-  font-family: "Poppins", sans-serif;
-}
-
-.credits-container h2 {
-  font-size: 1.8rem;
-  margin-bottom: 1rem;
-  color: var(--active-text);
-}
-
-.credits {
-  list-style-type: none;
-  padding: 0;
-}
-
-.credits li {
-  margin-bottom: 0.8rem;
-  font-size: 1rem;
-}
-
-.credits a {
-  color: var(--primary);
-  text-decoration: none;
-}
-
-.credits a:hover {
-  color: var(--primary-hover);
-  text-decoration: underline;
-}
-</style>
