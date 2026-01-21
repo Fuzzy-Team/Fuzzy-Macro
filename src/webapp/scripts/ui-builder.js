@@ -57,11 +57,9 @@ function buildInput(id, type) {
                 </label>`;
   } else if (type.name == "dropdown") {
     let html = `
-        <div data-onchange="${
-          type.triggerFunction
-        }" id = ${id} class="custom-select poppins-regular" style="width: ${
-      type.length ? type.length : 10
-    }rem; margin-top: 0.6rem;">
+        <div data-onchange="${type.triggerFunction
+      }" id = ${id} class="custom-select poppins-regular" style="width: ${type.length ? type.length : 10
+      }rem; margin-top: 0.6rem;">
             <div class="select-area">
                 <div class = "value" data-value="none">None</div>
                 <div class = "chevron">></div>
@@ -84,31 +82,22 @@ function buildInput(id, type) {
         </div>`;
     return html;
   } else if (type.name == "textbox") {
-    let html = `<input type="text" id="${id}" style="width: ${
-      type.length ? type.length : 10
-    }rem; margin-top: 0.6rem;" class="poppins-regular textbox" data-input-type="${
-      type.inputType
-    }" data-input-limit="${
-      type.inputLimit ? type.inputLimit : 0
-    }" onkeypress="return textboxRestriction(this, event)" onchange="${
-      type.triggerFunction
-    }">`;
+    let html = `<input type="text" id="${id}" style="width: ${type.length ? type.length : 10
+      }rem; margin-top: 0.6rem;" class="poppins-regular textbox" data-input-type="${type.inputType
+      }" data-input-limit="${type.inputLimit ? type.inputLimit : 0
+      }" onkeypress="return textboxRestriction(this, event)" onchange="${type.triggerFunction
+      }">`;
     return html;
   } else if (type.name == "button") {
-    let html = `<div id = "${id}" class="purple-button" onclick="${
-      type.triggerFunction
-    }" style="width: ${
-      type.length ? type.length : 5
-    }rem; display: flex; justify-content: center; padding: 0.3rem; cursor: pointer;">${
-      type.text
-    }</div>`;
+    let html = `<div id = "${id}" class="purple-button" onclick="${type.triggerFunction
+      }" style="width: ${type.length ? type.length : 5
+      }rem; display: flex; justify-content: center; padding: 0.3rem; cursor: pointer;">${type.text
+      }</div>`;
     return html;
   } else if (type.name == "keybind") {
-    let html = `<div id="${id}" class="keybind-input poppins-regular" style="width: ${
-      type.length ? type.length : 10
-    }rem; margin-top: 0.6rem; padding: 0.5rem; border: 2px solid #7A77BB; border-radius: 4px; background: #2F3136; color: #d2d3d2; cursor: pointer; text-align: center; user-select: none; font-size: 1rem; transition: all 0.2s ease;" onclick="startKeybindRecording('${id}')" data-recording="false" data-trigger-function="${
-      type.triggerFunction
-    }">
+    let html = `<div id="${id}" class="keybind-input poppins-regular" style="width: ${type.length ? type.length : 10
+      }rem; margin-top: 0.6rem; padding: 0.5rem; border: 2px solid #ab8062; border-radius: 4px; background: #2F3136; color: #d2d3d2; cursor: pointer; text-align: center; user-select: none; font-size: 1rem; transition: all 0.2s ease;" onclick="startKeybindRecording('${id}')" data-recording="false" data-trigger-function="${type.triggerFunction
+      }">
             <span class="keybind-display">Click to record</span>
         </div>`;
     return html;
@@ -162,8 +151,7 @@ function buildStandardContainer(parentElement, title, desc, settings) {
     //note: if i > 0, set a margin-top
     //is it better to setup a parent div and use gap instead? yes
     out += `
-      <form style="display: flex; align-items:flex-start; justify-content: space-between; padding-right: ${
-        inputPadding[e.type.name]
+      <form style="display: flex; align-items:flex-start; justify-content: space-between; padding-right: ${inputPadding[e.type.name]
       }; ${i ? "margin-top:1rem" : ""}";>
         <div style="width: 70%;">
           <label>${e.title}</label>
