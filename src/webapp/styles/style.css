@@ -77,14 +77,22 @@
   --surface: #1E1E1E;
   --surface-hover: #2C2C2C;
   --primary: #ab8062;
-  /* Tan theme color */
+  /* Default Brown */
   --primary-hover: #cd9975;
+  --primary-rgb: 171, 128, 98;
   --text-main: #E0E0E0;
   --text-dim: #A0A0A0;
   --border: #333333;
   --active-text: #ffffff;
   --active-img: none;
   /* Reset filter */
+}
+
+/* Purple Theme Overrides */
+.theme-purple {
+  --primary: #9d8ec3;
+  --primary-hover: #b4a6d6;
+  --primary-rgb: 157, 142, 195;
 }
 
 body {
@@ -172,7 +180,7 @@ select:focus {
 }
 
 .sidebar-item.active {
-  background-color: rgba(171, 128, 98, 0.15);
+  background-color: rgba(var(--primary-rgb), 0.15);
   color: var(--primary);
   font-weight: 600;
 }
@@ -218,9 +226,9 @@ select:focus {
 .sub-nav-bar .quests-tab-item.active,
 .sub-nav-bar .config-tab-item.active,
 .sub-nav-bar .planters-tab-item.active {
-  background: rgba(171, 128, 98, 0.12);
+  background: rgba(var(--primary-rgb), 0.12);
   color: var(--primary);
-  border-color: rgba(171, 128, 98, 0.15);
+  border-color: rgba(var(--primary-rgb), 0.15);
 }
 
 /* Subtab panels: controlled by JS by adding/removing .active */

@@ -1,5 +1,5 @@
 // Expose a function to reset the update button from Python
-window.updateButtonReset = function() {
+window.updateButtonReset = function () {
   const updateBtn = document.getElementById("update-btn");
   if (updateBtn) {
     updateBtn.classList.remove("active");
@@ -8,10 +8,10 @@ window.updateButtonReset = function() {
 };
 if (window.eel) eel.expose(window.updateButtonReset, 'updateButtonReset');
 // Ensure sidebar update button always works
-document.addEventListener("DOMContentLoaded", function() {
+document.addEventListener("DOMContentLoaded", function () {
   const updateBtn = document.getElementById("update-btn");
   if (updateBtn) {
-    updateBtn.addEventListener("click", async function(event) {
+    updateBtn.addEventListener("click", async function (event) {
       if (!event.currentTarget.classList.contains("active")) {
         purpleButtonToggle(event.currentTarget, ["Update", "Updating"]);
         if (window.eel && typeof eel.update === "function") {
@@ -237,6 +237,10 @@ function loadDragListOrder(dragListElement, orderArray) {
 eel.expose(loadInputs);
 function loadInputs(obj, save = "") {
   for (const [k, v] of Object.entries(obj)) {
+    // Specific logic for theme switching
+    if (k === "gui_theme") {
+      applyTheme(v);
+    }
     const ele = document.getElementById(k);
     //check if element exists
     if (!ele) continue;
@@ -258,6 +262,15 @@ function loadInputs(obj, save = "") {
   }
   if (save == "profile") {
     eel.saveDictProfileSettings(obj);
+  }
+}
+
+function applyTheme(theme) {
+  if (theme) localStorage.setItem("gui_theme", theme);
+  if (theme && theme.toLowerCase() === "purple") {
+    document.documentElement.classList.add("theme-purple");
+  } else {
+    document.documentElement.classList.remove("theme-purple");
   }
 }
 /*
@@ -434,6 +447,9 @@ function dropdownClicked(event) {
     if (ele.className.includes("option")) {
       updateDropDownDisplay(ele);
       const parentEle = ele.parentElement.parentElement.parentElement;
+      if (parentEle.id === "gui_theme") {
+        applyTheme(getDropdownValue(parentEle));
+      }
       let funcParams = parentEle.dataset.onchange.replace("this", "parentEle");
       eval(funcParams);
       dropdownOpen = false;
@@ -493,9 +509,9 @@ function startKeybindRecording(elementId) {
   keybindRecording = true;
   currentKeybindElement = element;
   element.dataset.recording = "true";
-  element.style.borderColor = "#3E74DF";
+  element.style.borderColor = "var(--primary)";
   element.style.backgroundColor = "#36393F";
-  element.style.boxShadow = "0 0 10px rgba(62, 116, 223, 0.3)";
+  element.style.boxShadow = "0 0 10px rgba(var(--primary-rgb), 0.3)";
   element.querySelector(".keybind-display").textContent =
     "Press key combination...";
 
@@ -570,7 +586,7 @@ function stopKeybindRecording() {
   keybindRecording = false;
   if (currentKeybindElement) {
     currentKeybindElement.dataset.recording = "false";
-    currentKeybindElement.style.borderColor = "#7A77BB";
+    currentKeybindElement.style.borderColor = "var(--primary)";
     currentKeybindElement.style.backgroundColor = "#2F3136";
     currentKeybindElement.style.boxShadow = "none";
   }
@@ -701,7 +717,7 @@ function initializeImageZoom() {
       cursor: zoom-out;
       overflow: hidden;
     `;
-    
+
     imageContainer = document.createElement("div");
     imageContainer.id = "zoom-image-container";
     imageContainer.style.cssText = `
@@ -713,7 +729,7 @@ function initializeImageZoom() {
       position: relative;
       overflow: hidden;
     `;
-    
+
     zoomedImage = document.createElement("img");
     zoomedImage.id = "zoomed-image";
     zoomedImage.style.cssText = `
@@ -723,7 +739,7 @@ function initializeImageZoom() {
       cursor: zoom-in;
       transform-origin: center center;
     `;
-    
+
     const controlsContainer = document.createElement("div");
     controlsContainer.style.cssText = `
       position: fixed;
@@ -733,7 +749,7 @@ function initializeImageZoom() {
       gap: 1rem;
       z-index: 10001;
     `;
-    
+
     const zoomInBtn = document.createElement("button");
     zoomInBtn.textContent = "+";
     zoomInBtn.className = "zoom-control-btn";
@@ -741,7 +757,7 @@ function initializeImageZoom() {
       e.stopPropagation();
       zoomImageCentered(1.2);
     };
-    
+
     const zoomOutBtn = document.createElement("button");
     zoomOutBtn.textContent = "-";
     zoomOutBtn.className = "zoom-control-btn";
@@ -749,7 +765,7 @@ function initializeImageZoom() {
       e.stopPropagation();
       zoomImageCentered(0.8);
     };
-    
+
     const resetBtn = document.createElement("button");
     resetBtn.textContent = "Reset";
     resetBtn.className = "zoom-control-btn";
@@ -757,7 +773,7 @@ function initializeImageZoom() {
       e.stopPropagation();
       resetZoom();
     };
-    
+
     const closeBtn = document.createElement("button");
     closeBtn.textContent = "×";
     closeBtn.className = "zoom-control-btn";
@@ -766,23 +782,23 @@ function initializeImageZoom() {
       e.stopPropagation();
       closeZoomModal();
     };
-    
+
     controlsContainer.appendChild(zoomInBtn);
     controlsContainer.appendChild(zoomOutBtn);
     controlsContainer.appendChild(resetBtn);
     controlsContainer.appendChild(closeBtn);
-    
+
     imageContainer.appendChild(zoomedImage);
     zoomModal.appendChild(imageContainer);
     zoomModal.appendChild(controlsContainer);
-    
+
     // Track mouse position for scroll wheel zoom
     imageContainer.addEventListener("mousemove", (e) => {
       const rect = imageContainer.getBoundingClientRect();
       mouseX = e.clientX - rect.left;
       mouseY = e.clientY - rect.top;
     });
-    
+
     // Scroll wheel zoom (mouse position based)
     imageContainer.addEventListener("wheel", (e) => {
       e.preventDefault();
@@ -790,24 +806,24 @@ function initializeImageZoom() {
       const delta = e.deltaY > 0 ? 0.9 : 1.1;
       zoomImageAtMouse(delta, e.clientX, e.clientY);
     });
-    
+
     // Close on background click
     zoomModal.onclick = (e) => {
       if (e.target === zoomModal) {
         closeZoomModal();
       }
     };
-    
+
     // Close on Escape key
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && zoomModal.style.display === "block") {
         closeZoomModal();
       }
     });
-    
+
     document.body.appendChild(zoomModal);
   }
-  
+
   // Add click handlers to all zoomable images
   document.addEventListener("click", (e) => {
     if (e.target.classList.contains("zoomable-image")) {
@@ -830,7 +846,7 @@ function openZoomModal(imageSrc) {
   zoomedImage.style.transform = `translate(${translateX}px, ${translateY}px) scale(${zoomLevel})`;
   zoomModal.style.display = "block";
   document.body.style.overflow = "hidden";
-  
+
   // Reset transform origin to center
   zoomedImage.style.transformOrigin = "center center";
 }
@@ -849,25 +865,25 @@ function zoomImageAtMouse(factor, clientX, clientY) {
   const rect = imageContainer.getBoundingClientRect();
   const containerCenterX = rect.left + rect.width / 2;
   const containerCenterY = rect.top + rect.height / 2;
-  
+
   // Get mouse position relative to container center
   const mouseOffsetX = clientX - containerCenterX;
   const mouseOffsetY = clientY - containerCenterY;
-  
+
   // Calculate new zoom level
   const newZoomLevel = zoomLevel * factor;
   const clampedZoom = Math.max(0.5, Math.min(newZoomLevel, 5));
-  
+
   if (clampedZoom === zoomLevel) return; // No change if at limits
-  
+
   // Calculate the zoom point relative to the image center
   // We need to adjust translate to keep the point under the mouse fixed
   const zoomRatio = clampedZoom / zoomLevel;
-  
+
   // Adjust translate to zoom towards mouse position
   translateX = translateX * zoomRatio - mouseOffsetX * (zoomRatio - 1);
   translateY = translateY * zoomRatio - mouseOffsetY * (zoomRatio - 1);
-  
+
   zoomLevel = clampedZoom;
   updateImageTransform();
 }
@@ -875,7 +891,7 @@ function zoomImageAtMouse(factor, clientX, clientY) {
 function zoomImageCentered(factor) {
   const newZoomLevel = zoomLevel * factor;
   zoomLevel = Math.max(0.5, Math.min(newZoomLevel, 5));
-  
+
   // For centered zoom, reset translate
   translateX = 0;
   translateY = 0;

@@ -1,69 +1,76 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <title>Fuzzy Macro</title>
-    <link rel="stylesheet" href="styles/style.css" />
-    <link
-      rel="shortcut icon"
-      type="image/x-icon"
-      href="assets/general/icon.png"
-    />
-    <script type="text/javascript" src="./scripts/jquery.js"></script>
-    <script type="text/javascript" src="./scripts/ui-builder.js"></script>
-    <script type="text/javascript" src="./scripts/utilities.js"></script>
-    <script type="text/javascript" src="./scripts/emojis.js"></script>
-  </head>
-  <body>
-    <div class="app-container">
-        <!-- Sidebar -->
-        <div class="sidebar-container">
-          <div class="app-title">
-                Fuzzy Macro
-          </div>
-            <div id="tabs-placeholder">
-                <!-- Tabs loaded via JS -->
-            </div>
-            <div class="credits">
-                <span id="version">Loading version...</span><br>
-                <button id="update-btn" class="purple-button">Check for updates</button>
-            </div>
-        </div>
 
-        <!-- Main Content -->
-        <main class="main-content-container">            
-            <div id="home-placeholder" class="content" style="display: flex;"></div>
-            <div id="gather-placeholder" class="content"></div>
-            <div id="collect-placeholder" class="content"></div>
-            <div id="config-placeholder" class="content"></div>
-            <div id="kill-placeholder" class="content"></div>
-            <div id="planters-placeholder" class="content"></div>
-            <div id="boost-placeholder" class="content"></div>
-            <div id="quests-placeholder" class="content"></div>
-            
-        </main>
+<head>
+  <title>Fuzzy Macro</title>
+  <link rel="stylesheet" href="styles/style.css" />
+  <link rel="shortcut icon" type="image/x-icon" href="assets/general/icon.png" />
+  <script type="text/javascript" src="./scripts/jquery.js"></script>
+  <script type="text/javascript" src="./scripts/ui-builder.js"></script>
+  <script type="text/javascript" src="./scripts/utilities.js"></script>
+  <script type="text/javascript" src="./scripts/emojis.js"></script>
+  <script>
+    (function () {
+      const theme = localStorage.getItem("gui_theme");
+      if (theme && theme.toLowerCase() === "purple") {
+        document.documentElement.classList.add("theme-purple");
+      }
+    })();
+  </script>
+</head>
+
+<body>
+  <div class="app-container">
+    <!-- Sidebar -->
+    <div class="sidebar-container">
+      <div class="app-title">
+        Fuzzy Macro
+      </div>
+      <div id="tabs-placeholder">
+        <!-- Tabs loaded via JS -->
+      </div>
+      <div class="credits">
+        <span id="version">Loading version...</span><br>
+        <button id="update-btn" class="purple-button">Check for updates</button>
+      </div>
     </div>
 
-    <script type="text/javascript" src="/eel.js"></script>
-    <script src="./scripts/script.js"></script>
-    <script src="./scripts/tabs/tab.js"></script>
-    <script src="./scripts/tabs/home.js"></script>
-    <script src="./scripts/tabs/gather.js"></script>
-    <script src="./scripts/tabs/config.js"></script>
-    <script src="./scripts/tabs/collect.js"></script>
-    <script src="./scripts/tabs/kill.js"></script>
-    <script src="./scripts/tabs/planters.js"></script>
-    <script src="./scripts/tabs/boost.js"></script>
-    <script src="./scripts/tabs/quests.js"></script>
-      <script>
-        // Fetch version from version.txt and display it
-        fetch('./version.txt')
-          .then(response => response.text())
-          .then(version => {
-            document.getElementById('version').textContent = 'v' + version.trim();
-          })
-          .catch(() => {
-            document.getElementById('version').textContent = 'v?';
-          });
-      </script>
-  </body>
+    <!-- Main Content -->
+    <main class="main-content-container">
+      <div id="home-placeholder" class="content" style="display: flex;"></div>
+      <div id="gather-placeholder" class="content"></div>
+      <div id="collect-placeholder" class="content"></div>
+      <div id="config-placeholder" class="content"></div>
+      <div id="kill-placeholder" class="content"></div>
+      <div id="planters-placeholder" class="content"></div>
+      <div id="boost-placeholder" class="content"></div>
+      <div id="quests-placeholder" class="content"></div>
+
+    </main>
+  </div>
+
+  <script type="text/javascript" src="/eel.js"></script>
+  <script src="./scripts/script.js"></script>
+  <script src="./scripts/tabs/tab.js"></script>
+  <script src="./scripts/tabs/home.js"></script>
+  <script src="./scripts/tabs/gather.js"></script>
+  <script src="./scripts/tabs/config.js"></script>
+  <script src="./scripts/tabs/collect.js"></script>
+  <script src="./scripts/tabs/kill.js"></script>
+  <script src="./scripts/tabs/planters.js"></script>
+  <script src="./scripts/tabs/boost.js"></script>
+  <script src="./scripts/tabs/quests.js"></script>
+  <script>
+    // Fetch version from version.txt and display it
+    fetch('./version.txt')
+      .then(response => response.text())
+      .then(version => {
+        document.getElementById('version').textContent = 'v' + version.trim();
+      })
+      .catch(() => {
+        document.getElementById('version').textContent = 'v?';
+      });
+  </script>
+</body>
+
 </html>
