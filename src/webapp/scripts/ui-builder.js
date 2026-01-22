@@ -96,7 +96,7 @@ function buildInput(id, type) {
     return html;
   } else if (type.name == "keybind") {
     let html = `<div id="${id}" class="keybind-input poppins-regular" style="width: ${type.length ? type.length : 10
-      }rem; margin-top: 0.6rem; padding: 0.5rem; border: 2px solid var(--primary); border-radius: 4px; background: #2F3136; color: #d2d3d2; cursor: pointer; text-align: center; user-select: none; font-size: 1rem; transition: all 0.2s ease;" onclick="startKeybindRecording('${id}')" data-recording="false" data-trigger-function="${type.triggerFunction
+      }rem; margin-top: 0.6rem; padding: 0.5rem; border: 2px solid var(--primary); border-radius: 4px; background: var(--textbox-bg); color: #d2d3d2; cursor: pointer; text-align: center; user-select: none; font-size: 1rem; transition: all 0.2s ease;" onclick="startKeybindRecording('${id}')" data-recording="false" data-trigger-function="${type.triggerFunction
       }">
             <span class="keybind-display">Click to record</span>
         </div>`;
