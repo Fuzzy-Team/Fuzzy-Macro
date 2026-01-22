@@ -5,6 +5,7 @@ import json
 import zipfile
 import tempfile
 from datetime import datetime
+import re
 
 #returns a dictionary containing the settings
 profileName = "a"
@@ -256,8 +257,13 @@ def readSettingsFile(path):
     #read the file, format it to:
     #[[key, value], [key, value]]
     with open(path) as f:
-        data = [[x.strip() for x in y.split("=", 1)] for y in f.read().split("\n") if y]
-    f.close()
+        raw = f.read()
+
+    # If `max_convert_time=` was accidentally concatenated onto the previous line,
+    # insert a newline before it so it becomes its own setting line.
+    raw = re.sub(r'(?<!\n)max_convert_time=', r'\nmax_convert_time=', raw)
+
+    data = [[x.strip() for x in y.split("=", 1)] for y in raw.split("\n") if y]
     #convert to a dict
     out = {}
     for k,v in data:
