@@ -128,6 +128,27 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
+        {
+          id: "max_convert_time",
+          title: "Max Convert Time (Mins)",
+          desc: "If the macro has been converting for over X minutes, it will trigger the timeout behavior.",
+          type: {
+            name: "textbox",
+            inputType: "int",
+            inputLimit: 2,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "convert_timeout_behavior",
+          title: "Timeout Behavior",
+          desc: "Choose whether to move on to the next task or rejoin the game when the convert timeout is reached.",
+          type: {
+            name: "dropdown",
+            data: ["Move On", "Rejoin"],
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
       ]);
     </script>
   </div>

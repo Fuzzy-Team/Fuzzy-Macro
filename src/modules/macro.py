@@ -1086,8 +1086,17 @@ class macro:
                     if not convertBalloon: break
                     self.logger.webhook("", "Converting Balloon", "light blue")
 
-            if time.time()-st > 30*60: #30mins max
-                self.logger.webhook("","Converting timeout (30mins max)", "brown", "screen")
+            # Check for conversion timeout
+            max_convert_time = self.setdat.get("max_convert_time", 5)
+            if time.time()-st > max_convert_time*60:
+                timeout_msg = f"Converting timeout ({max_convert_time}mins max)"
+                self.logger.webhook("", timeout_msg, "brown", "screen")
+                
+                behavior = self.setdat.get("convert_timeout_behavior", "move on").lower()
+                if behavior == "rejoin":
+                    self.rejoin(rejoinMsg=timeout_msg)
+                
+                # Default behavior is "move on"
                 break
 
             #check for afb
