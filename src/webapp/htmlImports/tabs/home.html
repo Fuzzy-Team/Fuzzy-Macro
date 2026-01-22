@@ -1,51 +1,57 @@
-<div id="home-parent" class="flex-row gap-md">
-  <div class="flex-col flex-1 gap-md">
-    <div class="poppins-semibold standard-container">
+<div id="home-parent" class="flex-col gap-md">
+  <!-- Top Row: Control and Mode -->
+  <div class="flex-row gap-md">
+    <div class="poppins-semibold standard-container flex-1">
       <h2>Macro Control
-      <button class="purple-button ml-auto d-none" id="stop-btn">Stop [F3]</button>
-      <!-- <button class="purple-button active ml-05 d-none" id="pause-btn">Pause [F2]</button> -->
-      <button class="purple-button ml-auto" id="start-btn">Start [F1]</button>
+        <button class="purple-button ml-auto d-none" id="stop-btn">Stop [F3]</button>
+        <button class="purple-button ml-auto" id="start-btn">Start [F1]</button>
       </h2>
     </div>
-    <div class="poppins-medium standard-container flex-grow-1 overflow-y-auto">
-      <h2>Tasks</h2>
-      <div id="task-list" class="task-list-scroll w-100"></div>
-    </div>
-    <div class="flex-col flex-1 gap-md">
-    <div class="poppins-semibold standard-container">
-        <h2 style="margin: 0;">Macro Mode
+    <div class="poppins-semibold standard-container flex-1">
+      <h2 style="margin: 0;">Macro Mode
         <select class="ml-auto" id="macro_mode">
           <option value="normal">Normal Mode</option>
           <option value="field">Field Mode</option>
           <option value="quest">Quest Mode</option>
         </select>
-        </h2>
-      </div>
-      </div>
-    <div class="poppins-medium standard-container flex-col" id="planter-timers-container">
-      <div class="flex-row space-between">
-        <h2>Planter Timers</h2>
-        <button
-          class="purple-button"
-          id="clear-timers-btn"
-        >
-          Reset Timers
-        </button>
-      </div>
-      <div class="planter-timers"></div>
+      </h2>
     </div>
   </div>
-  <div class="flex-col flex-1 gap-md">
-    <div class="poppins-regular standard-container flex-grow-1 overflow-y-auto flex-col gap-xs">
-      <div class="flex-row space-between align-items-center mb-05 border-bottom">
-        <h2 style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">Logs</h2>
-        <div class="flex-row gap-xs">
-          <button class="purple-button" id="export-logs-btn" style="margin-top: 0; padding: 0.3rem 0.6rem; font-size: 0.8rem;">Export</button>
-          <button class="purple-button" id="clear-logs-btn" style="margin-top: 0; padding: 0.3rem 0.6rem; font-size: 0.8rem;">Clear</button>
-        </div>
+
+  <!-- Bottom Row: Tasks/Planters and Logs -->
+  <div class="flex-row gap-md flex-grow-1" style="min-height: 0;">
+    <!-- Left Column: Tasks and Planters -->
+    <div class="flex-col flex-1 gap-md">
+      <div class="poppins-medium standard-container flex-grow-1 overflow-y-auto" style="min-height: 15rem;">
+        <h2>Tasks</h2>
+        <div id="task-list" class="task-list-scroll w-100"></div>
       </div>
-      <div id="logs" class="flex-col gap-xs overflow-y-auto flex-grow-1">
-        <!-- Logs will be appended here -->
+      <div class="poppins-medium standard-container flex-col" id="planter-timers-container">
+        <div class="flex-row space-between">
+          <h2>Planter Timers</h2>
+          <button class="purple-button" id="clear-timers-btn">
+            Reset Timers
+          </button>
+        </div>
+        <div class="planter-timers"></div>
+      </div>
+    </div>
+
+    <!-- Right Column: Logs -->
+    <div class="flex-col flex-1 gap-md">
+      <div class="poppins-regular standard-container flex-grow-1 overflow-y-auto flex-col gap-xs">
+        <div class="flex-row space-between align-items-center mb-05 border-bottom">
+          <h2 style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">Logs</h2>
+          <div class="flex-row gap-xs">
+            <button class="purple-button" id="export-logs-btn"
+              style="margin-top: 0; padding: 0.3rem 0.6rem; font-size: 0.8rem;">Export</button>
+            <button class="purple-button" id="clear-logs-btn"
+              style="margin-top: 0; padding: 0.3rem 0.6rem; font-size: 0.8rem;">Clear</button>
+          </div>
+        </div>
+        <div id="logs" class="flex-col gap-xs overflow-y-auto flex-grow-1">
+          <!-- Logs will be appended here -->
+        </div>
       </div>
     </div>
   </div>

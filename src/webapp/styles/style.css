@@ -546,7 +546,18 @@ select:focus {
 
 
 /* Specific Pages */
+#home-parent {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
 #home-placeholder {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
   gap: 1rem;
 }
 
@@ -722,8 +733,6 @@ select:focus {
 }
 
 .task-list-scroll {
-  max-height: 20rem;
-  /* Adjust this value to fit 5 tasks exactly */
   overflow-y: auto;
 }
 
