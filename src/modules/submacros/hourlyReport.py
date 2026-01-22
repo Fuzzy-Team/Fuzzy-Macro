@@ -1110,10 +1110,12 @@ class HourlyReportDrawer:
         self.draw.rectangle((self.canvasSize[0]-self.sidebarWidth, 0, self.canvasSize[0], self.canvasSize[1]), fill=self.sideBarBackground)
 
         #draw icon
-        macroIcon = Image.open(f"{self.assetPath}/macro_icon.png")
-        # macroIcon = macroIcon.resize((170, 170))
+        macroIcon = Image.open(f"{self.assetPath}/macro_icon.png").convert("RGBA")
+        # Resize icon to a more appropriate size for the top-right header
+        macroIcon = macroIcon.resize((200, 200), Image.LANCZOS)
         self.canvas.paste(macroIcon, (5550, 100), macroIcon)
-        self.draw.text((5750, 120), "Fuzzy Macro", fill=self.bodyColor, font=self.getFont("semibold", 70))
+        # Position the title text to the right of the icon, vertically centered
+        self.draw.text((5550 + 200 + 30, 180), "Fuzzy Macro", fill=self.bodyColor, font=self.getFont("semibold", 80))
 
         #draw title
         self.draw.text((self.leftPadding, 80), "Hourly Report", fill=self.bodyColor, font=self.getFont("bold", 120))
