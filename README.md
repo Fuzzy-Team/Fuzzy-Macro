@@ -32,7 +32,7 @@ Installation guide in our discord server or https://github.com/Fuzzy-Team/macro-
       <a href="https://github.com/existancepy/bss-macro-py" target="_blank">Existance Macro</a>
     </li>
     <li>
-      <strong>Developers:</strong> Logan
+      <strong>Developers:</strong> Logan<br />
       Original Macro code: Existance
     </li>
     <li>
