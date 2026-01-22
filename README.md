@@ -1,6 +1,6 @@
 # Fuzzy Macro
 
-[Discord](https://img.shields.io/discord/1462647649021853912?label=Discord&color=7289da&logo=discord&logoColor=white&link=https://discord.gg/rGRVG8Rpsb)
+<!--[Discord](https://img.shields.io/discord/1462647649021853912?label=Discord&color=7289da&logo=discord&logoColor=white&link=https://discord.gg/rGRVG8Rpsb)-->
 ![GitHub Repo stars](https://img.shields.io/github/stars/LaganYT/Existance-Macro?style=flat&label=Stars&color=fff240&logo=github&logocolor=white&link=https://github.com/LaganYT/Existance-Macro/stargazers)
 ![Repo Size](https://img.shields.io/github/repo-size/LaganYT/Existance-Macro?label=Repo%20Size&logo=github&logoColor=white)
 
