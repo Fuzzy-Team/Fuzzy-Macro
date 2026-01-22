@@ -76,6 +76,7 @@
   --background: #121212;
   --surface: #1E1E1E;
   --surface-hover: #2C2C2C;
+  --surface-dim: #141414;
   --primary: #ab8062;
   /* Default Brown */
   --primary-hover: #cd9975;
@@ -500,6 +501,12 @@ select:focus {
   display: flex;
   align-items: center;
   color: var(--text-main);
+}
+
+.drag-item.disabled {
+  background: var(--surface-dim);
+  color: var(--text-dim);
+  opacity: 0.6;
 }
 
 .drag-item:hover {
