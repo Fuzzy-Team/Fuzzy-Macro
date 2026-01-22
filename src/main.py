@@ -63,7 +63,6 @@ def macro(status, logQueue, updateGUI, run, skipTask):
     questCache = {}
     
     macro.start()
-    macro.logger.webhook("Macro Starting", "Fuzzy Macro process initialized", "blue")
     #macro.useItemInInventory("blueclayplanter")
     #function to run a task
     #makes it easy to do any checks after a task is complete (like stinger hunt, rejoin every, etc)
