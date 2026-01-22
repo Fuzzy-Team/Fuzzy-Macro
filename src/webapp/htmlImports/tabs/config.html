@@ -352,16 +352,6 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
-        {
-          id: "gui_theme",
-          title: "GUI Theme",
-          desc: "Choose between the classic Purple theme or the new Brown theme",
-          type: {
-            name: "dropdown",
-            data: ["Brown", "Purple"],
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
       ]);
 
       buildStandardContainer(parentOther, "Haste Compensation", "", [
@@ -372,6 +362,19 @@
           type: {
             name: "checkbox",
             triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+      ]);
+
+      buildStandardContainer(parentOther, "Macro Theme", "", [
+        {
+          id: "gui_theme",
+          title: "GUI Theme",
+          desc: "Choose between the classic Purple theme or the new Brown theme",
+          type: {
+            name: "dropdown",
+            data: ["Brown", "Purple"],
+            triggerFunction: saveGeneralTriggerFunction,
           },
         },
       ]);
