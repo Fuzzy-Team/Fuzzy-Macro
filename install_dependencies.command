@@ -168,8 +168,9 @@ install_pip_package "numpy<2"
 printf "\033[1;35mInstalling libraries\033[0m\n\n"
 
 if [ "$python_ver" = '3.9' ]; then
-	# Pin opencv-python-headless to a version compatible with numpy<2
-	install_pip_package "opencv-python-headless==4.10.0.84"
+	# Use pip --force-reinstall to ensure a compatible opencv and numpy
+	# This installs the latest opencv-headless below 4.11 and enforces numpy<2
+	install_pip_package "opencv-python-headless<4.11 numpy<2" "--force-reinstall"
 	install_pip_package "ocrmac"
 	install_pip_package "pyobjc-framework-ColorSync<12.0"
 	install_pip_package "pyobjc-framework-ApplicationServices"
