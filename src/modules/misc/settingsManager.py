@@ -273,9 +273,11 @@ def readSettingsFile(path):
 
 def saveDict(path, data):
     out = "\n".join([f"{k}={v}" for k,v in data.items()])
+    # Ensure file ends with a newline to avoid accidental concatenation
+    if not out.endswith("\n"):
+        out = out + "\n"
     with open(path, "w") as f:
-        f.write(str(out))
-    f.close()
+        f.write(out)
 
 #update one property of a setting
 def saveSettingFile(setting,value, path):
