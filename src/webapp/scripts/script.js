@@ -110,7 +110,7 @@ function generateSettingObject(properties) {
   return out;
 }
 
-function loadDragListOrder(dragListElement, orderArray) {
+function loadDragListOrder(dragListElement, orderArray, settings) {
   if (!orderArray || !Array.isArray(orderArray)) return;
 
   const container = dragListElement.querySelector(".drag-list-container");
@@ -118,6 +118,67 @@ function loadDragListOrder(dragListElement, orderArray) {
 
   // Clear existing items
   container.innerHTML = "";
+
+  // Helper function to check if a task is enabled
+  function isTaskEnabled(taskId, settings) {
+    if (taskId.startsWith("gather_")) {
+      const fieldName = taskId.replace("gather_", "").replace("_", " ");
+      // Check if this field is enabled
+      if (settings.fields_enabled && settings.fields) {
+        for (let i = 0; i < settings.fields_enabled.length; i++) {
+          if (settings.fields_enabled[i] && settings.fields[i] === fieldName) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    if (taskId.startsWith("collect_")) {
+      const collectName = taskId.replace("collect_", "");
+      // Handle special cases
+      if (collectName === "sticker_printer") {
+        return settings.sticker_printer || false;
+      }
+      if (collectName === "sticker_stack") {
+        return settings.sticker_stack || false;
+      }
+      // Regular collect items
+      return settings[collectName] || false;
+    }
+
+    if (taskId.startsWith("kill_")) {
+      const killName = taskId.replace("kill_", "");
+      return settings[killName] || false;
+    }
+
+    if (taskId.startsWith("quest_")) {
+      const questName = taskId.replace("quest_", "").replace("_", "_");
+      return settings[questName + "_quest"] || false;
+    }
+
+    // Special tasks
+    if (taskId === "mondo_buff") {
+      return settings.mondo_buff || false;
+    }
+    if (taskId === "stinger_hunt") {
+      return settings.stinger_hunt || false;
+    }
+    if (taskId === "auto_field_boost") {
+      return settings.auto_field_boost || false;
+    }
+    if (taskId === "ant_challenge") {
+      return settings.ant_challenge || false;
+    }
+    if (taskId === "blender") {
+      return settings.blender || false;
+    }
+    if (taskId === "planters") {
+      return settings.planters || false;
+    }
+
+    return false;
+  }
 
   // Helper function to get category
   function getCategory(taskId) {
@@ -214,9 +275,10 @@ function loadDragListOrder(dragListElement, orderArray) {
 
     const category = getCategory(taskId);
     const badge = getCategoryBadge(category);
+    const enabled = isTaskEnabled(taskId, settings);
 
     const itemElement = document.createElement("div");
-    itemElement.className = "drag-item";
+    itemElement.className = `drag-item ${enabled ? '' : 'disabled'}`;
     itemElement.setAttribute("data-id", taskId);
     itemElement.setAttribute("data-category", category);
     itemElement.setAttribute("draggable", "true");
@@ -255,7 +317,7 @@ function loadInputs(obj, save = "") {
       ele.querySelector(".keybind-display").textContent = displayText;
     } else if (ele.className.includes("drag-list")) {
       // Handle drag list elements
-      loadDragListOrder(ele, v);
+      loadDragListOrder(ele, v, obj);
     } else {
       ele.value = v;
     }
