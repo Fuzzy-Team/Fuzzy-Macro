@@ -56,7 +56,9 @@ class FinalReportDrawer(HourlyReportDrawer):
 
         #draw icon
         macroIcon = Image.open(f"{self.assetPath}/macro_icon.png").convert("RGBA")
-        self.canvas.paste(macroIcon, (5550, 100), macroIcon)
+        # Resize icon to a more appropriate size for the top-right header
+        macroIcon = macroIcon.resize((200, 200), Image.LANCZOS)
+        self.canvas.paste(macroIcon, (5550, 100), macroIcon.split()[-1])
         self.draw.text((5750, 120), "Fuzzy Macro", fill=self.bodyColor, font=self.getFont("semibold", 70))
 
         #draw title - FINAL REPORT
