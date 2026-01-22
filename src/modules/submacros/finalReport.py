@@ -55,7 +55,7 @@ class FinalReportDrawer(HourlyReportDrawer):
         self.draw.rectangle((self.canvasSize[0]-self.sidebarWidth, 0, self.canvasSize[0], self.canvasSize[1]), fill=self.sideBarBackground)
 
         #draw icon
-        macroIcon = Image.open(f"{self.assetPath}/macro_icon.png")
+        macroIcon = Image.open(f"{self.assetPath}/macro_icon.png").convert("RGBA")
         self.canvas.paste(macroIcon, (5550, 100), macroIcon)
         self.draw.text((5750, 120), "Fuzzy Macro", fill=self.bodyColor, font=self.getFont("semibold", 70))
 
