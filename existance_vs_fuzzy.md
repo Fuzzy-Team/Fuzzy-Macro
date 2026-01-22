@@ -1,5 +1,7 @@
 # Fuzzy Macro vs Existance Macro
 
+## What's New in Fuzzy Macro
+
 #### Enhanced User Interface
 - **Modern Web GUI**: Complete redesign with tabbed interface and improved navigation
 - **Drag-and-Drop Task Ordering**: Easy task priority configuration
