@@ -254,6 +254,13 @@ def launch():
 
     pass
     
+    # Ensure important functions are exposed to the frontend before eel starts
+    try:
+        eel.expose(getRecentLogs)
+    except Exception:
+        # ignore if already exposed or if exposure fails at import time
+        pass
+    
     try:
         eel.start('index.html', mode = "chrome", app_mode = True, block = False, cmdline_args=["--incognito", "--app=http://localhost:8000"])
     except EnvironmentError:
