@@ -1424,7 +1424,7 @@ if __name__ == "__main__":
     logQueue = manager.Queue()
     initialMessageInfo = manager.dict()  # Shared dict for initial webhook message info
     start_keyboard_listener_fn = watch_for_hotkeys(run)
-    logger = logModule.log(logQueue, False, None, False, blocking=True)
+    logger = logModule.log(logQueue, False, None, False, blocking=False)
 
     disconnectCooldownUntil = 0 #only for running disconnect check on low performance
 
