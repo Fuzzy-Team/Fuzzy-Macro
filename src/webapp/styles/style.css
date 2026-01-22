@@ -85,6 +85,8 @@
   --border: #333333;
   --active-text: #ffffff;
   --active-img: none;
+  --drag-item-bg: #262626;
+  --textbox-bg: #2b2b2b;
   /* Reset filter */
 }
 
@@ -297,6 +299,7 @@ select:focus {
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   display: flex;
   flex-direction: column;
+  margin-bottom: 1rem;
 }
 
 .standard-container h2 {
@@ -357,7 +360,7 @@ select:focus {
 }
 
 .textbox {
-  background-color: #2b2b2b;
+  background-color: var(--textbox-bg);
   /* Slightly lighter than surface */
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -380,7 +383,7 @@ select:focus {
 }
 
 .custom-select .select-area {
-  background-color: #2b2b2b;
+  background-color: var(--textbox-bg);
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 0.5rem;
@@ -395,7 +398,7 @@ select:focus {
   top: 100%;
   left: 0;
   width: 100%;
-  background-color: #2b2b2b;
+  background-color: var(--textbox-bg);
   border: 1px solid var(--border);
   border-radius: 4px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
@@ -447,7 +450,7 @@ select:focus {
   left: 0;
   height: 18px;
   width: 18px;
-  background-color: #2b2b2b;
+  background-color: var(--textbox-bg);
   border: 1px solid var(--border);
   border-radius: 3px;
   transition: all 0.2s;
@@ -489,7 +492,7 @@ select:focus {
 }
 
 .drag-item {
-  background: #262626;
+  background: var(--drag-item-bg);
   border: 1px solid var(--border);
   border-radius: 4px;
   margin: 0.5rem;
@@ -500,7 +503,7 @@ select:focus {
 }
 
 .drag-item:hover {
-  background: #333;
+  background: var(--surface-hover);
   border-color: var(--primary);
 }
 
@@ -662,7 +665,7 @@ select:focus {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: #252525;
+  background: var(--surface);
   padding: 1rem;
   border-radius: 8px;
 }
@@ -740,4 +743,178 @@ select:focus {
   flex: 1 1 0%;
   min-height: 0;
   /* Prevents overflow issues in flex containers */
+}
+
+/* Drag Action Buttons */
+.drag-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+}
+
+.drag-action-btn {
+  background-color: var(--primary);
+  color: #121212;
+  border: none;
+  border-radius: 4px;
+  padding: 0.3rem 0.6rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.1s;
+  font-size: 0.75rem;
+  margin-left: 0.5rem;
+}
+
+.drag-action-btn:hover {
+  background-color: var(--primary-hover);
+}
+
+.drag-action-btn:active {
+  transform: scale(0.98);
+}
+
+/* Profile Management Styles */
+.profile-card {
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.profile-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.8rem;
+}
+
+.profile-card-title {
+  color: var(--text-main);
+  font-size: 1.1rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.profile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 300px;
+  overflow-y: auto;
+  margin-top: 1rem;
+}
+
+.profile-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--textbox-bg);
+  padding: 0.8rem 1rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.profile-item:hover {
+  border-color: var(--primary);
+  background: var(--surface-hover);
+}
+
+.profile-item.active {
+  border-color: var(--primary);
+  background: rgba(var(--primary-rgb), 0.1);
+}
+
+.profile-item-name {
+  color: var(--text-main);
+  font-weight: 500;
+}
+
+/* Profile Inputs */
+.profile-input {
+  background-color: var(--textbox-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.6rem;
+  color: var(--text-main);
+  font-family: inherit;
+  transition: border-color 0.2s;
+  flex-grow: 1;
+}
+
+.profile-input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+/* Profile Buttons */
+.profile-btn {
+  border: none;
+  border-radius: 4px;
+  padding: 0.6rem 1.2rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.current-profile-badge {
+  background-color: var(--primary);
+  color: #121212;
+  border-radius: 4px;
+  padding: 0.2rem 0.4rem;
+  font-size: 0.75rem;
+  margin-left: 0.25rem;
+}
+
+.profile-btn:active {
+  transform: scale(0.98);
+}
+
+.profile-btn-primary {
+  background-color: var(--primary);
+  color: #121212;
+}
+
+.profile-btn-primary:hover {
+  background-color: var(--primary-hover);
+}
+
+.profile-btn-success {
+  background-color: #43b581;
+  color: #fff;
+}
+
+.profile-btn-success:hover {
+  background-color: #3ca374;
+}
+
+.profile-btn-secondary {
+  background-color: #4f545c;
+  color: #fff;
+}
+
+.profile-btn-secondary:hover {
+  background-color: #72767d;
+}
+
+/* Modal styling overrides */
+#import-profile-modal>div {
+  background-color: var(--surface) !important;
+  border-color: var(--border) !important;
+}
+
+#import-profile-modal h3 {
+  color: var(--text-main) !important;
 }

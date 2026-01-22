@@ -1,5 +1,5 @@
 <div class="main-content-container">
-  <div id="config-nav" class="sub-nav-bar poppins-regular">
+  <div id="config-nav" class="sub-nav-bar poppins-regular" style="margin-bottom: 2rem;">
     <div id="setting-bss" class="config-tab-item active">
       Bee Swarm Config
     </div>
@@ -782,7 +782,7 @@
         </div>
         <div style="display: flex; align-items: center; gap: 1rem">
           <span id="current-profile-display"
-            style="color: #77bb7a; font-size: 1.2rem; font-weight: 600">Loading...</span>
+            style="color: var(--primary); font-size: 1.2rem; font-weight: 600">Loading...</span>
         </div>
       </div>
 
@@ -791,11 +791,11 @@
         <div class="profile-card-header">
           <span class="profile-card-title">🔄 Switch Profile</span>
         </div>
-        <p style="color: #b9bbbe; margin-bottom: 1rem; font-size: 0.9rem">
+        <p style="color: var(--text-dim); margin-bottom: 1rem; font-size: 0.9rem">
           Select a profile to switch to. Your current settings will be saved
           automatically.
         </p>
-        <div class="profile-list" id="profile-list">
+        <div class="profile-list" id="profile-list" style="max-height: 400px;">
           <!-- Profile items will be loaded dynamically -->
         </div>
       </div>
