@@ -18,15 +18,28 @@ activate_virtual_env() {
 }
 
 install_pip_package() {
-    local packages="$1"
-    local extra_args="$2"
-    
-    if [ "$chip" = "arm64" ]; then
-        arch -arm64 pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 $extra_args $packages --constraint <(echo "$constraints")
-    else
-        #fallback for other architectures
-        pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 $extra_args $packages --constraint <(echo "$constraints")
-    fi
+	local packages="$1"
+	local extra_args="$2"
+	local tmp_constraint=""
+
+	if [ -n "$constraints" ]; then
+		tmp_constraint=$(mktemp)
+		printf "%s\n" "$constraints" > "$tmp_constraint"
+		constraint_arg="--constraint $tmp_constraint"
+	else
+		constraint_arg=""
+	fi
+
+	if [ "$chip" = "arm64" ]; then
+		arch -arm64 pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 $extra_args $packages $constraint_arg
+	else
+		#fallback for other architectures
+		pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 $extra_args $packages $constraint_arg
+	fi
+
+	if [ -n "$tmp_constraint" ] && [ -f "$tmp_constraint" ]; then
+		rm -f "$tmp_constraint"
+	fi
 }
 
 upgrade_pip_tools() {
@@ -61,7 +74,7 @@ printf "\033[32;1mYour mac is compatible \033[0m\n\n\n"
 
 python_ver="3.9"
 python_link="/www.python.org/ftp/python/3.9.8/python-3.9.8-macos11.pkg"
-constraints=$''
+constraints=''
 if [ "$chip" = 'i386' ]; then
 	if echo -e "$os_ver \n10.15.0" | sort -V | tail -n1 | grep -Fq "10.15.0"; then
 		python_ver="3.8"
@@ -151,6 +164,7 @@ while [ "$attempt" -le 3 ]; do
 done
 
 pip install --upgrade pip setuptools wheel
+install_pip_package "numpy<2"
 printf "\033[1;35mInstalling libraries\033[0m\n\n"
 
 if [ "$python_ver" = '3.9' ]; then
@@ -205,7 +219,6 @@ install_pip_package "pygetwindow"
 install_pip_package "requests" #used to check if this script was ran, should be installed by discord-webhooks
 install_pip_package "aiohttp==3.10.5"
 install_pip_package "pynput"
-install_pip_package "numpy<2"
 
 "$VENV_PATH/bin/python" << "EOF"
 
