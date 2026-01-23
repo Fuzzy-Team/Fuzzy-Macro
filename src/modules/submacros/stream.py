@@ -150,7 +150,7 @@ class cloudflaredStream:
             </script>
         </head>
         <body>
-            <h1>Fuzzy Macroe Stream</h1>
+            <h1>Fuzzy Macro Stream</h1>
             <div class="video-container">
                 {% if streaming %}
                     <img src="/video_feed" alt="Live Stream">

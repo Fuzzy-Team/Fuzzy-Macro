@@ -1,6 +1,6 @@
 # Fuzzy Macro
 
-[Discord](https://img.shields.io/discord/1462647649021853912?label=Discord&color=7289da&logo=discord&logoColor=white&link=https://discord.gg/rGRVG8Rpsb)
+![Discord](https://img.shields.io/discord/1462647649021853912?label=Discord&color=7289da&logo=discord&logoColor=white&link=https://discord.gg/rGRVG8Rpsb)
 ![GitHub Repo stars](https://img.shields.io/github/stars/LaganYT/Existance-Macro?style=flat&label=Stars&color=fff240&logo=github&logocolor=white&link=https://github.com/LaganYT/Existance-Macro/stargazers)
 ![Repo Size](https://img.shields.io/github/repo-size/LaganYT/Existance-Macro?label=Repo%20Size&logo=github&logoColor=white)
 
@@ -11,6 +11,10 @@ Roblox Bee Swarm Simulator macro for macOS. Free, open source, and actively main
 - Gitbook: https://fuzzy-team.gitbook.io/fuzzy-macro
 
 <img width="1312" height="1022" alt="image" src="https://github.com/user-attachments/assets/d5664644-4929-40e0-a048-dd941bffd04d" />
+
+## Getting Started
+
+Installation guide in our discord server or https://github.com/Fuzzy-Team/macro-auto-install/blob/main/README.md
 
 ## Features
 
@@ -98,10 +102,6 @@ Roblox Bee Swarm Simulator macro for macOS. Free, open source, and actively main
 - Webhook notifications with screenshots
 - Discord bot commands for status monitoring
 - Live stream support (optional)
-
-## Getting Started
-
-Installation guide in our discord server or https://github.com/Fuzzy-Team/macro-auto-install/blob/main/README.md
 
 ## Notes
 
