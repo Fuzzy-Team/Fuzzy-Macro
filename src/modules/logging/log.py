@@ -11,6 +11,7 @@ from modules.screen.robloxWindow import RobloxWindowBounds
 colors = {
     "red": "D22B2B",
     "light blue": "89CFF0",
+    "blue": "89CFF0",
     "bright green": "7CFC00",
     "light green": "98FB98",
     "dark brown": "5C4033",
@@ -79,6 +80,11 @@ class log:
         print(f"[{time}] {title} {desc}")
 
         if not self.enableWebhook or self.hourlyReportOnly: return
+        
+        # Check if webhook URL is provided
+        if not self.webhookURL or not self.webhookURL.strip():
+            print(f"Warning: Webhook is enabled but no URL is provided. Skipping webhook message: {title} {desc}")
+            return
 
         webhookImgPath = None
         if self.sendScreenshots:
@@ -137,6 +143,11 @@ class log:
 
     def hourlyReport(self, title, desc, color, time_format=None):
         if not self.enableWebhook: return
+        
+        # Check if webhook URL is provided
+        if not self.webhookURL or not self.webhookURL.strip():
+            print(f"Warning: Webhook is enabled but no URL is provided. Skipping hourly report: {title} {desc}")
+            return
 
         # Use webhook time format if not specified
         if time_format is None:
@@ -151,6 +162,11 @@ class log:
     
     def finalReport(self, title, desc, color, time_format=None):
         if not self.enableWebhook: return
+        
+        # Check if webhook URL is provided
+        if not self.webhookURL or not self.webhookURL.strip():
+            print(f"Warning: Webhook is enabled but no URL is provided. Skipping final report: {title} {desc}")
+            return
 
         # Use webhook time format if not specified
         if time_format is None:

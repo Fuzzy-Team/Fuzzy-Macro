@@ -5,6 +5,7 @@ import json
 import zipfile
 import tempfile
 from datetime import datetime
+import re
 
 #returns a dictionary containing the settings
 profileName = "a"
@@ -66,6 +67,19 @@ def getSettingsDir():
 def getPatternsDir():
     """Get the patterns directory path"""
     return os.path.join(getProjectRoot(), "settings", "patterns")
+
+def getMacroVersion():
+    """Get the macro version from version.txt file"""
+    try:
+        destination = os.getcwd().replace("/src", "")
+        version_file = os.path.join(destination, "src", "webapp", "version.txt")
+        if os.path.exists(version_file):
+            with open(version_file, "r") as f:
+                version = f.read().strip()
+                return version if version else "1.0"
+    except Exception as e:
+        print(f"Warning: Could not read version.txt: {e}")
+    return "1.0"
 
 def listProfiles():
     """List all available profiles"""
@@ -243,8 +257,13 @@ def readSettingsFile(path):
     #read the file, format it to:
     #[[key, value], [key, value]]
     with open(path) as f:
-        data = [[x.strip() for x in y.split("=", 1)] for y in f.read().split("\n") if y]
-    f.close()
+        raw = f.read()
+
+    # If `max_convert_time=` was accidentally concatenated onto the previous line,
+    # insert a newline before it so it becomes its own setting line.
+    raw = re.sub(r'(?<!\n)max_convert_time=', r'\nmax_convert_time=', raw)
+
+    data = [[x.strip() for x in y.split("=", 1)] for y in raw.split("\n") if y]
     #convert to a dict
     out = {}
     for k,v in data:
@@ -261,9 +280,11 @@ def readSettingsFile(path):
 
 def saveDict(path, data):
     out = "\n".join([f"{k}={v}" for k,v in data.items()])
+    # Ensure file ends with a newline to avoid accidental concatenation
+    if not out.endswith("\n"):
+        out = out + "\n"
     with open(path, "w") as f:
-        f.write(str(out))
-    f.close()
+        f.write(out)
 
 #update one property of a setting
 def saveSettingFile(setting,value, path):
@@ -322,6 +343,78 @@ def saveField(field, settings):
     with open(fields_path, "w") as f:
         f.write(str(fieldsData))
     f.close()
+
+def exportFieldSettings(field_name):
+    """Export field settings as JSON string with metadata"""
+    fields_data = loadFields()
+    if field_name in fields_data:
+        # Create export data with metadata
+        export_data = {
+            "metadata": {
+                "field_name": field_name,
+                "macro_version": getMacroVersion(),
+                "export_date": datetime.now().isoformat()
+            },
+            "settings": fields_data[field_name]
+        }
+        return json.dumps(export_data, indent=2)
+    else:
+        raise ValueError(f"Field '{field_name}' not found in current profile")
+
+def importFieldSettings(field_name, json_settings):
+    """Import field settings from JSON string with backward compatibility"""
+    try:
+        data = json.loads(json_settings)
+        
+        # Handle new format with metadata
+        if isinstance(data, dict) and "metadata" in data and "settings" in data:
+            settings = data["settings"]
+            metadata = data.get("metadata", {})
+            exported_field = metadata.get("field_name", "unknown")
+            macro_version = metadata.get("macro_version", "unknown")
+        # Handle old format (direct settings object)
+        else:
+            settings = data
+            exported_field = "unknown"
+            macro_version = "unknown"
+        
+        # Validate that settings is a dictionary
+        if not isinstance(settings, dict):
+            raise ValueError("Invalid JSON format: expected object")
+
+        # Check for missing patterns and replace with defaults
+        missing_patterns = []
+        available_patterns = getAvailablePatterns()
+
+        if "shape" in settings:
+            requested_pattern = settings["shape"]
+            if requested_pattern not in available_patterns:
+                # Replace with first available pattern (default)
+                default_pattern = available_patterns[0] if available_patterns else "cornerxe_lol"
+                settings["shape"] = default_pattern
+                missing_patterns.append(f"'{requested_pattern}' → '{default_pattern}'")
+
+        # Save the imported settings
+        saveField(field_name, settings)
+
+        # Return success with information about any pattern replacements and metadata
+        result = {
+            "success": True,
+            "missing_patterns": missing_patterns,
+            "imported_from_field": exported_field,
+            "macro_version": macro_version
+        }
+        return result
+
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON format: {str(e)}")
+
+def getAvailablePatterns():
+    """Get list of available pattern names"""
+    patterns_dir = getPatternsDir()
+    if os.path.exists(patterns_dir):
+        return [f.replace(".py", "") for f in os.listdir(patterns_dir) if f.endswith(".py")]
+    return []
 
 def syncFieldSettings(setting, value):
     """Synchronize field settings from profile to general settings"""

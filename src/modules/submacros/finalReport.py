@@ -55,9 +55,11 @@ class FinalReportDrawer(HourlyReportDrawer):
         self.draw.rectangle((self.canvasSize[0]-self.sidebarWidth, 0, self.canvasSize[0], self.canvasSize[1]), fill=self.sideBarBackground)
 
         #draw icon
-        macroIcon = Image.open(f"{self.assetPath}/macro_icon.png")
-        self.canvas.paste(macroIcon, (5550, 100), macroIcon)
-        self.draw.text((5750, 120), "Existance Macro", fill=self.bodyColor, font=self.getFont("semibold", 70))
+        macroIcon = Image.open(f"{self.assetPath}/macro_icon.png").convert("RGBA")
+        # Resize icon to a more appropriate size for the top-right header
+        macroIcon = macroIcon.resize((200, 200), Image.LANCZOS)
+        self.canvas.paste(macroIcon, (5550, 100), macroIcon.split()[-1])
+        self.draw.text((5750, 120), "Fuzzy Macro", fill=self.bodyColor, font=self.getFont("semibold", 70))
 
         #draw title - FINAL REPORT
         self.draw.text((self.leftPadding, 80), "Session Summary", fill=self.bodyColor, font=self.getFont("bold", 120))

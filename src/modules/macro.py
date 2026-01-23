@@ -8,13 +8,11 @@ import pyautogui as pag
 # This will be initialized when the macro class is created
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP, benchmarkMSS, mssScreenshotPillowRGBA
 from modules.controls.keyboard import keyboard
-from modules.controls.sleep import sleep, set_run_state, pauseable_sleep, wait_while_paused, is_paused
+from modules.controls.sleep import sleep, set_run_state
 import modules.controls.mouse as mouse
-from modules.screen.screenData import getScreenData
 import modules.logging.log as logModule
 from modules.submacros.fieldDriftCompensation import fieldDriftCompensation as fieldDriftCompensationClass
 from modules.screen.robloxWindow import RobloxWindowBounds
-from operator import itemgetter
 import sys
 import platform
 import os
@@ -23,7 +21,7 @@ import threading
 from modules.submacros.backpack import bpc
 from modules.screen.imageSearch import *
 import webbrowser
-from pynput.keyboard import Key, Controller
+from pynput.keyboard import Controller
 import cv2
 from datetime import timedelta, datetime
 from modules.misc.imageManipulation import *
@@ -505,7 +503,7 @@ class macro:
             "ping_hourly_reports": self.setdat.get("ping_hourly_reports", False)
         }
         
-        self.logger = logModule.log(logQueue, self.setdat["enable_webhook"], self.setdat["webhook_link"], self.setdat["send_screenshot"], blocking=self.setdat["low_performance"], hourlyReportOnly=self.setdat["only_send_hourly_report"], robloxWindow=self.robloxWindow, enableDiscordPing=self.setdat["enable_discord_ping"], discordUserID=self.setdat["discord_user_id"], pingSettings=pingSettings, webhookTimeFormat=self.setdat.get("webhook_time_format", 24))
+        self.logger = logModule.log(logQueue, self.setdat.get("enable_webhook", False), self.setdat.get("webhook_link", ""), self.setdat.get("send_screenshot", True), blocking=self.setdat.get("low_performance", False), hourlyReportOnly=self.setdat.get("only_send_hourly_report", False), robloxWindow=self.robloxWindow, enableDiscordPing=self.setdat.get("enable_discord_ping", False), discordUserID=self.setdat.get("discord_user_id", ""), pingSettings=pingSettings, webhookTimeFormat=self.setdat.get("webhook_time_format", 24))
         self.buffDetector = BuffDetector(self.robloxWindow)
         self.hourlyReport = HourlyReport(self.buffDetector, self.setdat.get("hourly_report_time_format", 24))
         self.memoryMatch = MemoryMatch(self.robloxWindow)
@@ -572,11 +570,11 @@ class macro:
                 "ping_conversion_events": self.setdat.get("ping_conversion_events", False),
                 "ping_hourly_reports": self.setdat.get("ping_hourly_reports", False)
             }
-            self.logger.enableWebhook = self.setdat["enable_webhook"]
-            self.logger.webhookURL = self.setdat["webhook_link"]
-            self.logger.sendScreenshots = self.setdat["send_screenshot"]
-            self.logger.enableDiscordPing = self.setdat["enable_discord_ping"]
-            self.logger.discordUserID = self.setdat["discord_user_id"]
+            self.logger.enableWebhook = self.setdat.get("enable_webhook", False)
+            self.logger.webhookURL = self.setdat.get("webhook_link", "")
+            self.logger.sendScreenshots = self.setdat.get("send_screenshot", True)
+            self.logger.enableDiscordPing = self.setdat.get("enable_discord_ping", False)
+            self.logger.discordUserID = self.setdat.get("discord_user_id", "")
             self.logger.pingSettings = pingSettings
             self.logger.webhookTimeFormat = self.setdat.get("webhook_time_format", 24)
             self.logger.hourlyReportOnly = self.setdat["only_send_hourly_report"]
@@ -1225,8 +1223,17 @@ class macro:
                     if not convertBalloon: break
                     self.logger.webhook("", "Converting Balloon", "light blue")
 
-            if time.time()-st > 30*60: #30mins max
-                self.logger.webhook("","Converting timeout (30mins max)", "brown", "screen")
+            # Check for conversion timeout
+            max_convert_time = self.setdat.get("max_convert_time", 5)
+            if time.time()-st > max_convert_time*60:
+                timeout_msg = f"Converting timeout ({max_convert_time}mins max)"
+                self.logger.webhook("", timeout_msg, "brown", "screen")
+                
+                behavior = self.setdat.get("convert_timeout_behavior", "move on").lower()
+                if behavior == "rejoin":
+                    self.rejoin(rejoinMsg=timeout_msg)
+                
+                # Default behavior is "move on"
                 break
 
             #check for afb
@@ -1511,14 +1518,14 @@ class macro:
     
     def rejoin(self, rejoinMsg = "Rejoining"):
         self.canDetectNight = False
-        psLink = self.setdat["private_server_link"]
+        psLink = self.setdat.get("private_server_link", "")
         self.logger.webhook("",rejoinMsg, "dark brown")
         self.status.value = "rejoining"
         mouse.mouseUp()
         keyboard.releaseMovement()
         for i in range(3):
-            joinPS = bool(psLink) #join private server?
-            rejoinMethod = self.setdat["rejoin_method"]
+            joinPS = bool(psLink and psLink.strip()) #join private server?
+            rejoinMethod = self.setdat.get("rejoin_method", "deeplink")
             browserLink = "https://www.roblox.com/games/4189852503?privateServerLinkCode=87708969133388638466933925137129"
             if i == 2 and joinPS: 
                 self.logger.webhook("", "Failed rejoining too many times, falling back to a public server", "red", "screen", ping_category="ping_disconnects")
@@ -1531,7 +1538,15 @@ class macro:
             if rejoinMethod == "deeplink":
                 deeplink = "roblox://placeID=1537690962"
                 if joinPS:
-                    deeplink += f"&linkCode={psLink.lower().split('code=')[1]}"
+                    try:
+                        if "code=" in psLink.lower():
+                            deeplink += f"&linkCode={psLink.lower().split('code=')[1]}"
+                        else:
+                            self.logger.webhook("", "Invalid private server link format. Expected 'code=' in link. Falling back to public server.", "red", ping_category="ping_critical_errors")
+                            joinPS = False
+                    except (IndexError, AttributeError) as e:
+                        self.logger.webhook("", f"Error parsing private server link: {e}. Falling back to public server.", "red", ping_category="ping_critical_errors")
+                        joinPS = False
                 appManager.openDeeplink(deeplink)
             elif rejoinMethod == "new tab":
                 webbrowser.open(browserLink, new = 2)
@@ -1735,11 +1750,6 @@ class macro:
                     self.keyboard.press("o")
                 self.moveMouseToDefault()
                 time.sleep(1)
-                #say existance so broke
-                if self.setdat["existance_broke"]:
-                    self.keyboard.press("/")
-                    self.keyboard.write(f'Existance so broke :weary: {datetime.now().strftime("%H:%M")}', 0.1)
-                    self.keyboard.press("enter")
                 self.convert()
                 #no need to reset
                 self.canDetectNight = True
@@ -4534,6 +4544,13 @@ class macro:
         return time.time() - timing >= cooldown*mobRespawnBonus
     
     def AFB(self, gatherInterrupt = False, turnOffShiftLock = False):  # Auto Field Boost - WOOHOO
+        
+        def normalize(text):
+            text = text.lower()
+            text = re.sub(r'[^a-z\s]', ' ', text)  # remove symbols
+            text = re.sub(r'\s+', ' ', text).strip()
+            return text
+        
         returnVal = None
         # time limit - :(
         if self.AFBLIMIT: return True
@@ -4545,7 +4562,7 @@ class macro:
         Glitter = threading.Thread(target=self.useItemInInventory, args=("glitter",))
 
         x = self.setdat["AFB_attempts"]
-        field = self.setdat["AFB_field"]
+        field = [f.replace("_", " ") for f in self.setdat["AFB_field"].lower().split(" ")]
         rebuff = self.setdat["AFB_rebuff"]
         dice = self.setdat["AFB_dice"]
         glitter = self.setdat["AFB_glitter"]
@@ -4570,13 +4587,37 @@ class macro:
                 if self.cAFBDice or (self.hasAFBRespawned("AFB_dice_cd", rebuff*60) and not self.AFBglitter):
                     self.cAFBDice = False
                     # get all fields
-                    fields = ["rose", "strawberry", "mushroom", "pepper",  # red
-                            "sunflower", "dandelion", "spider", "coconut", # white
-                            "pine tree", "blue flower", "bamboo", "stump",  # blue
-                            "clover", "pineapple", "pumpkin", "cactus", "mountain top"]  # colored
+                    fields = {
+                        "rose": [["rose"]],
+                        "strawberry": [["strawberry"]],
+                        "mushroom": [["mushroom"]],
+                        "pepper": [["pepper"]],
+                        "sunflower": [["sunflower"]],
+                        "dandelion": [["dandelion"]],
+                        "spider": [["spider"]],
+                        "coconut": [["coconut"]],
+                        "pine tree": [["pine", "tree"]],
+                        "blue flower": [["blue", "flower"]],
+                        "bamboo": [["bamboo"]],
+                        "stump": [["stump"]],
+                        "clover": [["clover"]],
+                        "pineapple": [["pineapple"]],
+                        "pumpkin": [["pumpkin"]],
+                        "cactus": [["cactus"]],
+                        "mountain top": [["mountain", "top"]],
+                    }
                     # ignore detected lines with these words, reduces false positives
                     ignore = {"strawberry", "strawberries", "blueberry", "blueberries", 
                     "seed", "seeds", "pineapple", "pineapples", "honey", "from"}
+
+                    def ignore2(field, text):
+                        for word in ignore:
+                            # allow the word if it is part of the field name
+                            if word in field.replace(" ", ""):
+                                continue
+                            if word in text.split():
+                                return True
+                        return False
 
                     #begin
                     self.logger.webhook("", f"Auto Field Boost", "white")
@@ -4616,39 +4657,48 @@ class macro:
                                 self.saveAFB("AFB_dice_cd")
                                 self.AFBglitter = False
                                 return
-                        for _ in range(4): # detect text
-                            bluetexts += ocr.imToString("blue").lower() + "\n"
-                        bluetexts = " ".join(bluetexts.split())
+                        for _ in range(4):
+                            bluetexts += ocr.imToString("blue") + "\n"
+
+                        bluetexts = normalize(bluetexts)
+                        tokens = set(bluetexts.split())
 
                         # smooth/loaded
-                        clean = bluetexts.lower().replace(" and the ", " ") 
+                        clean = normalize(bluetexts)
                         # "and the" appears when using loaded and smooth
-                        and_the = [line for line in clean.split("\n") if "and the" in line] 
+                        and_the = [line for line in bluetexts.split("\n") if "boosted" in line]
+                        
                         the = bluetexts.split()  # get each line of detected text
                         boostedField = []
 
                         # for field dice only
-                        if "field" in dice: 
+                        if "field" in dice:
                             boostedField = None
-                            for f in fields:  
-                                if f.lower() in bluetexts and not any(word in f.lower() for word in ignore): 
-                                    if f.lower() == field.lower():  # only allow the chosen field
-                                        boostedField = f
-                                        break 
+                            for cf in field:
+                                for pattern in fields[cf]:  
+                                    if set(pattern).issubset(tokens):
+                                        if not ignore2(cf, bluetexts):
+                                            boostedField = cf
+                                            break
+                                if boostedField:
+                                    break
+                            
                         #other die
                         else:
-                            boostedField = None
-                            for sentence in and_the: 
-                                if "boosted" in sentence:
-                                    for f in fields:
-                                        if f.lower() in sentence and not any(word in sentence for word in ignore):
-                                            boostedField = f
-                                    if boostedField: break  
+                            boostedFields = []
+                            for cf in field:
+                                cf_tokens = cf.split()
+                                for sentence in and_the:
+                                    sentence_tokens = set(normalize(sentence).split())
+                                    for pattern in fields[cf]:
+                                        if set(pattern).issubset(sentence_tokens) and not ignore2(cf, sentence):
+                                            if cf not in boostedFields:
+                                                boostedFields.append(cf)
 
                         # field user selected is detected
                         if "field" in dice:
-                            if field == boostedField:
-                                self.logger.webhook("", f"Boosted Field: {field}", "bright green", "blue")
+                            if boostedField is not None:
+                                self.logger.webhook("", f"Boosted Field: {boostedField}", "bright green", "blue")
                                 returnVal = field
                                 self.keyboard.press("pagedown")
                                 for i in range(3):
@@ -4662,8 +4712,8 @@ class macro:
                             else:
                                 continue
                         else:
-                            if field in boostedField:
-                                self.logger.webhook("", f"Boosted Field: {field}", "bright green", "blue")
+                            if field in boostedFields:
+                                self.logger.webhook("", f"Boosted Fields: {', '.join(boostedFields)}", "blue")
                                 returnVal = field
                                 self.keyboard.press("pagedown")
                                 for i in range(3):
@@ -4675,7 +4725,10 @@ class macro:
                                     self.saveAFB("AFB_glitter_cd")
                                 return returnVal
                             else:
-                                self.logger.webhook("", f"Boosted Fields: {', '.join(boostedField)}", "red")
+                                if boostedFields:
+                                    self.logger.webhook("", f"Boosted Fields: {', '.join(boostedFields)}", "red")
+                                else:
+                                    self.logger.webhook("", "Boosted Fields: None", "red")
                                 time.sleep(0.5)
 
                 # glitter    
@@ -4813,7 +4866,8 @@ class macro:
             #     messageBox.msgBox(text='It seems like terminal does not have the accessibility permission. The macro will not work properly.\n\nTo fix it, go to System Settings -> Privacy and Security -> Accessibility -> add and enable Terminal.\n\nVisit #6system-settings in the discord for more detailed instructions\n\n NOTE: This popup might be incorrect. If the macro is able to input keypresses and interact with the game, you can dismiss this popup', title='Accessibility Permission')
             # time.sleep(1)
         
-        if "share" in self.setdat["private_server_link"] and self.setdat["rejoin_method"] == "deeplink":
+        private_server_link = self.setdat.get("private_server_link", "")
+        if private_server_link and "share" in private_server_link and self.setdat.get("rejoin_method") == "deeplink":
             messageBox.msgBox(text="You entered a 'share?code' private server link!\n\nTo fix this:\n1. Paste the link in your browser\n2. Wait for roblox to load in\n3. Copy the link from the top of your browser.  It should now be a 'privateServerLinkCode' link", title='Unsupported private server link')
 
     def start(self):

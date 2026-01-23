@@ -1,114 +1,74 @@
-<div class="poppins-regular standard-container sub-nav-bar">
-  <div id="quests-settings" class="quests-tab-item">Settings</div>
-  <div id="quests-quests" class="quests-tab-item">Quests</div>
-</div>
-<div style="display: flex; justify-content: center; width: 100%">
-  <div
-    style="width: 74%; overflow-y: auto; height: 94vh; display: none"
-    id="quests-settings-tab"
-  >
+<div class="main-content-container">
+  <div class="sub-nav-bar">
+    <div id="quests-settings" class="quests-tab-item">Settings</div>
+    <div id="quests-quests" class="quests-tab-item">Quests</div>
+  </div>
+  <div id="quests-settings-tab" class="standard-container sub-tab-panel active">
     <script>
-      const questsSettingsParent = document.getElementById(
-        "quests-settings-tab"
-      );
-      buildStandardContainer(
-        questsSettingsParent,
-        "Override Gather Settings",
-        "Override the gather settings in the gather tab when gathering for quests",
-        [
-          {
-            id: "quest_gather_mins",
-            title: "Gather Until Mins",
-            desc: "Override the 'Gather Until Mins' option. Set it to 0 to disable overriding",
-            type: {
-              name: "textbox",
-              inputType: "float",
-              inputLimit: 4,
-              triggerFunction: saveProfileTriggerFunction,
-            },
+      const questsSettingsParent = document.getElementById("quests-settings-tab");
+      buildStandardContainer(questsSettingsParent, "Override Gather Settings", "Override the gather settings in the gather tab when gathering for quests", [
+        {
+          id: "quest_gather_mins",
+          title: "Gather Until Mins",
+          desc: "Override the 'Gather Until Mins' option. Set it to 0 to disable overriding",
+          type: {
+            name: "textbox",
+            inputType: "float",
+            inputLimit: 4,
+            triggerFunction: saveProfileTriggerFunction,
           },
-          {
-            id: "quest_gather_return",
-            title: "Return To Hive",
-            desc: "Override the 'Return To Hive' option",
-            type: {
-              name: "dropdown",
-              data: [
-                "No Override",
-                "💀 Reset",
-                "👟 Walk",
-                "🔄 Rejoin",
-                "🌱 Whirligig",
-              ],
-              triggerFunction: saveProfileTriggerFunction,
-            },
+        },
+        {
+          id: "quest_gather_return",
+          title: "Return To Hive",
+          desc: "Override the 'Return To Hive' option",
+          type: {
+            name: "dropdown",
+            data: ["No Override", "💀 Reset", "👟 Walk", "🔄 Rejoin", "🌱 Whirligig"],
+            triggerFunction: saveProfileTriggerFunction,
           },
-        ]
-      );
+        },
+      ]);
 
-      buildStandardContainer(
-        questsSettingsParent,
-        "Goo Settings",
-        "Decide how the macro wants to handle gathering goo",
-        [
-          {
-            id: "quest_use_gumdrops",
-            title: "Use Gumdrops",
-            desc: "Use gumdrops when gathering for goo quests",
-            type: {
-              name: "checkbox",
-              triggerFunction: saveProfileTriggerFunction,
-            },
+      buildStandardContainer(questsSettingsParent, "Goo Settings", "Decide how the macro wants to handle gathering goo", [
+        {
+          id: "quest_use_gumdrops",
+          title: "Use Gumdrops",
+          desc: "Use gumdrops when gathering for goo quests",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
           },
-          {
-            id: "quest_gumdrop_slot",
-            title: "Gumdrop Slot",
-            desc: "The hotbar slot of the gumdrops to use",
-            type: {
-              name: "dropdown",
-              data: [1, 2, 3, 4, 5, 6, 7],
-              triggerFunction: saveProfileTriggerFunction,
-            },
+        },
+        {
+          id: "quest_gumdrop_slot",
+          title: "Gumdrop Slot",
+          desc: "The hotbar slot of the gumdrops to use",
+          type: {
+            name: "dropdown",
+            data: [1, 2, 3, 4, 5, 6, 7],
+            triggerFunction: saveProfileTriggerFunction,
           },
-        ]
-      );
-
-      buildStandardContainer(
-        questsSettingsParent,
-        "Quest Completer (Beta - Made by Logan)",
-        "Automatically detect and complete unsupported quests using image detection. Supports Dapper Bear, Spirit Bear, Science Bear, Mother Bear, and Panda Bear quests.",
-        [
-          {
-            id: "quest_completer_enabled",
-            title: "Enable Quest Completer (Beta)",
-            desc: "Enable automatic detection and completion of quests not supported by the base macro. Runs once per macro loop.",
-            type: {
-              name: "checkbox",
-              triggerFunction: saveProfileTriggerFunction,
-            },
-          },
-          {
-            id: "quest_completer_priority",
-            title: "Quest Completer Priority",
-            desc: "Set the priority for automatically detected quest tasks in the macro's task queue",
-            type: {
-              name: "dropdown",
-              data: ["Low", "Normal", "High"],
-              triggerFunction: saveProfileTriggerFunction,
-            },
-          },
-        ]
-      );
+        },
+      ]);
     </script>
   </div>
 
-  <div
-    style="width: 74%; overflow-y: auto; height: 94vh; display: none"
-    id="quests-quests-tab"
-  >
+  <div id="quests-quests-tab" class="standard-container sub-tab-panel">
     <script>
       const questsQuestsParent = document.getElementById("quests-quests-tab");
-      buildStandardContainer(questsQuestsParent, "Quests", "", [
+      questsQuestsParent.innerHTML += `
+        <div class="quests-broken-notice" style="background-color: #ff444433; border: 1px solid #ff4444; border-radius: 8px; padding: 1rem; margin-top: 1rem; margin-bottom: 1rem; color: #f87171; text-align: center; font-weight: 500;">
+            ⚠️ Quests are currently broken and have been temporarily disabled.
+        </div>
+      `;
+
+      const disabledQuestsContainer = document.createElement("div");
+      disabledQuestsContainer.style.pointerEvents = "none";
+      disabledQuestsContainer.style.opacity = "0.5";
+      questsQuestsParent.appendChild(disabledQuestsContainer);
+
+      buildStandardContainer(disabledQuestsContainer, "Quests", "", [
         {
           id: "polar_bear_quest",
           title: "Polar Bear",

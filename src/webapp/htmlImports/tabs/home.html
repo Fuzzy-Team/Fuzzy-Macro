@@ -1,125 +1,58 @@
-<div
-  style="
-    margin-right: 1rem;
-    width: 40%;
-    display: flex;
-    flex-direction: column;
-    max-height: 93vh;
-  "
-  id="home-parent"
->
-  <div class="poppins-semibold standard-container">
-    <h2>Macro</h2>
-    <button class="purple-button" style="margin-left: auto; display: none" id="stop-btn">
-      Stop [F3]
-    </button>
-    <button class="purple-button active" style="margin-left: 0.5rem; display: none" id="pause-btn">
-      Pause [F2]
-    </button>
-    <button class="purple-button" style="margin-left: auto" id="start-btn">
-      Start [F1]
-    </button>
-  </div>
-  <div class="poppins-semibold standard-container">
-    <h2>Update</h2>
-    <button class="purple-button" style="margin-left: auto" id="update-btn">
-      Update
-    </button>
-  </div>
-  <div
-    class="poppins-medium standard-container"
-    style="display: flex; flex-direction: column; flex-grow: 1; max-height: 35%"
-  >
-    <h2>Tasks</h2>
-    <div class="seperator"></div>
-    <div
-      id="task-list"
-      style="width: 100%; flex-grow: 1; overflow-y: auto"
-    ></div>
-  </div>
-  <div
-    class="poppins-medium standard-container"
-    style="justify-content: space-between"
-  >
-    <h2 style="margin: 0">Macro Mode</h2>
-    <label style="display: flex; margin-top: 0.5rem">
-      <select id="macro_mode">
-        <option value="normal">Normal Mode</option>
-        <option value="field">Field Mode</option>
-        <option value="quest">Quest Mode</option>
-      </select>
-    </label>
-  </div>
-  <div
-    class="poppins-medium standard-container"
-    style="flex-direction: column; height: 22%"
-    id="planter-timers-container"
-  >
-    <div style="display: flex; justify-content: space-between">
-      <h2>Planter Timers</h2>
-      <button
-        class="purple-button"
-        style="margin-left: auto"
-        id="clear-timers-btn"
-      >
-        Reset Timers
-      </button>
+<div id="home-parent" class="flex-col gap-md">
+  <!-- Top Row: Control and Mode -->
+  <div class="flex-row gap-md">
+    <div class="poppins-semibold standard-container flex-1">
+      <h2>Macro Control
+        <button class="purple-button ml-auto d-none" id="stop-btn">Stop [F3]</button>
+        <button class="purple-button ml-auto" id="start-btn">Start [F1]</button>
+      </h2>
     </div>
-    <div class="seperator"></div>
-    <div class="planter-timers"></div>
+    <div class="poppins-semibold standard-container flex-1">
+      <h2 style="margin: 0;">Macro Mode
+        <select class="ml-auto" id="macro_mode">
+          <option value="normal">Normal Mode</option>
+          <option value="field">Field Mode</option>
+          <option value="quest">Quest Mode</option>
+        </select>
+      </h2>
+    </div>
   </div>
-  <div
-    class="poppins-medium standard-container"
-    style="height: 15%; display: flex; flex-direction: column"
-    id="credits-container"
-  >
-    <h2>Credits</h2>
-    <div class="seperator"></div>
-    <ul style="margin-left: 1rem" class="credits">
-      <li>
-        GUI Inspiration:
-        <a onclick="ahref('https://github.com/LmeSzinc/AzurLaneAutoScript')"
-          >AzurLaneAutoScript (ALAS)</a
-        >
-      </li>
-      <li>
-        Macro Inspiration:
-        <a onclick="ahref('https://github.com/NatroTeam/NatroMacro')"
-          >Natro Macro</a
-        >,
-        <a onclick="ahref('https://github.com/alaninnovates/bss-macro')"
-          >Stumpy Macro</a
-        >
-      </li>
-    </ul>
-  </div>
-</div>
 
-<div
-  style="
-    margin-left: auto;
-    flex-grow: 1;
-    display: flex;
-    flex-direction: column;
-    max-width: 60%;
-  "
->
-  <div class="poppins-semibold standard-container">
-    <h2>Logs (<span id="log-type">Simple</span>)</h2>
-    <button class="purple-button active" style="margin-left: auto" id="log-btn">
-      Detailed
-    </button>
+  <!-- Bottom Row: Tasks/Planters and Logs -->
+  <div class="flex-row gap-md flex-grow-1" style="min-height: 0;">
+    <!-- Left Column: Tasks and Planters -->
+    <div class="flex-col flex-1 gap-md">
+      <div class="poppins-medium standard-container flex-grow-1 overflow-y-auto" style="min-height: 15rem;">
+        <h2>Tasks</h2>
+        <div id="task-list" class="task-list-scroll w-100"></div>
+      </div>
+      <div class="poppins-medium standard-container flex-col" id="planter-timers-container">
+        <div class="flex-row space-between">
+          <h2>Planter Timers</h2>
+          <button class="purple-button" id="clear-timers-btn">
+            Reset Timers
+          </button>
+        </div>
+        <div class="planter-timers"></div>
+      </div>
+    </div>
+
+    <!-- Right Column: Logs -->
+    <div class="flex-col flex-1 gap-md">
+      <div class="poppins-regular standard-container flex-grow-1 overflow-y-auto flex-col gap-xs">
+        <div class="flex-row space-between align-items-center mb-05 border-bottom">
+          <h2 style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">Logs</h2>
+          <div class="flex-row gap-xs">
+            <button class="purple-button" id="export-logs-btn"
+              style="margin-top: 0; padding: 0.3rem 0.6rem; font-size: 0.8rem;">Export</button>
+            <button class="purple-button" id="clear-logs-btn"
+              style="margin-top: 0; padding: 0.3rem 0.6rem; font-size: 0.8rem;">Clear</button>
+          </div>
+        </div>
+        <div id="logs" class="flex-col gap-xs overflow-y-auto flex-grow-1">
+          <!-- Logs will be appended here -->
+        </div>
+      </div>
+    </div>
   </div>
-  <div
-    class="poppins-regular standard-container"
-    style="
-      flex-grow: 1;
-      overflow-y: auto;
-      flex-direction: column;
-      gap: 0.2rem;
-      display: flex;
-      height: 0;
-    "
-    id="logs"
-  ></div>
 </div>

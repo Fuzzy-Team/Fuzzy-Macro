@@ -20,7 +20,7 @@ function toEmojiArray(emojiObj){
 function toImgArray(emojiObj, right = false){
     out = []
     for (const [k,v] of Object.entries(emojiObj)) {
-        const imgHTML = v? `<img src="./assets/icons/${v}.png">`: ''
+        const imgHTML = v? `<img src="./assets/icons/${v}.png" class="icon-img">`: ''
         const text = toTitleCase(k.replaceAll("_"," "))
         out.push( right? `${text}${imgHTML}`: `${imgHTML}${text}`)
     }

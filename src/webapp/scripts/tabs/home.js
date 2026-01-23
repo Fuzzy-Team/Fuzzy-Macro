@@ -14,7 +14,7 @@ async function updateStartButtonText() {
   const settings = await loadAllSettings();
   const startKey = settings.start_keybind || "F1";
   const stopKey = settings.stop_keybind || "F3";
-  const pauseKey = settings.pause_keybind || "F2";
+  // const pauseKey = settings.pause_keybind || "F2";
 
   // Check current run state
   try {
@@ -23,51 +23,35 @@ async function updateStartButtonText() {
 
     const startBtn = document.getElementById("start-btn");
     const stopBtn = document.getElementById("stop-btn");
-    const pauseBtn = document.getElementById("pause-btn");
+    // const pauseBtn = document.getElementById("pause-btn");
 
     if (runState === 2) {
-      // Running: show Stop + Pause buttons
-      if (startBtn) startBtn.style.display = "none";
+      // Running: show Stop button
+      if (startBtn) startBtn.classList.add("d-none");
       if (stopBtn) {
-        stopBtn.style.display = "block";
+        stopBtn.classList.remove("d-none");
         stopBtn.textContent = `Stop [${stopKey}]`;
-      }
-      if (pauseBtn) {
-        pauseBtn.style.display = "block";
-        pauseBtn.textContent = `Pause [${pauseKey}]`;
-        pauseBtn.classList.add("active");
-      }
-    } else if (runState === 6) {
-      // Paused: show Stop + Resume buttons
-      if (startBtn) startBtn.style.display = "none";
-      if (stopBtn) {
-        stopBtn.style.display = "block";
-        stopBtn.textContent = `Stop [${stopKey}]`;
-      }
-      if (pauseBtn) {
-        pauseBtn.style.display = "block";
-        pauseBtn.textContent = `Resume [${pauseKey}]`;
-        pauseBtn.classList.remove("active");
       }
     } else {
-      // Stopped: show Start button only
+      // Stopped or Paused: show Start button only
       if (startBtn) {
-        startBtn.style.display = "block";
+        startBtn.classList.remove("d-none");
         startBtn.classList.remove("active");
         startBtn.disabled = false;
         startBtn.textContent = `Start [${startKey}]`;
       }
-      if (stopBtn) stopBtn.style.display = "none";
-      if (pauseBtn) pauseBtn.style.display = "none";
+      if (stopBtn) stopBtn.classList.add("d-none");
     }
   } catch (error) {
     // Fallback to just showing start button
     const startBtn = document.getElementById("start-btn");
     if (startBtn) {
-      startBtn.style.display = "block";
+      startBtn.classList.remove("d-none");
       startBtn.disabled = false;
       startBtn.textContent = `Start [${startKey}]`;
     }
+    const stopBtn = document.getElementById("stop-btn");
+    if (stopBtn) stopBtn.classList.add("d-none");
   }
 }
 
@@ -77,7 +61,7 @@ async function toggleStartStop() {
   const settings = await loadAllSettings();
   const startKey = settings.start_keybind || "F1";
   const stopKey = settings.stop_keybind || "F3";
-  const pauseKey = settings.pause_keybind || "F2";
+  // const pauseKey = settings.pause_keybind || "F2";
 
   // Check current run state
   try {
@@ -86,42 +70,24 @@ async function toggleStartStop() {
 
     const startBtn = document.getElementById("start-btn");
     const stopBtn = document.getElementById("stop-btn");
-    const pauseBtn = document.getElementById("pause-btn");
+    // const pauseBtn = document.getElementById("pause-btn");
 
     if (runState === 2) {
-      // Running: show Stop + Pause buttons
-      if (startBtn) startBtn.style.display = "none";
+      // Running: show Stop button
+      if (startBtn) startBtn.classList.add("d-none");
       if (stopBtn) {
-        stopBtn.style.display = "block";
+        stopBtn.classList.remove("d-none");
         stopBtn.textContent = `Stop [${stopKey}]`;
-      }
-      if (pauseBtn) {
-        pauseBtn.style.display = "block";
-        pauseBtn.textContent = `Pause [${pauseKey}]`;
-        pauseBtn.classList.add("active");
-      }
-    } else if (runState === 6) {
-      // Paused: show Stop + Resume buttons
-      if (startBtn) startBtn.style.display = "none";
-      if (stopBtn) {
-        stopBtn.style.display = "block";
-        stopBtn.textContent = `Stop [${stopKey}]`;
-      }
-      if (pauseBtn) {
-        pauseBtn.style.display = "block";
-        pauseBtn.textContent = `Resume [${pauseKey}]`;
-        pauseBtn.classList.remove("active");
       }
     } else {
-      // Stopped: show Start button only
+      // Stopped or Paused: show Start button only
       if (startBtn) {
-        startBtn.style.display = "block";
+        startBtn.classList.remove("d-none");
         startBtn.classList.remove("active");
         startBtn.disabled = false;
         startBtn.textContent = `Start [${startKey}]`;
       }
-      if (stopBtn) stopBtn.style.display = "none";
-      if (pauseBtn) pauseBtn.style.display = "none";
+      if (stopBtn) stopBtn.classList.add("d-none");
     }
 
     return true; // Success
@@ -148,9 +114,8 @@ function taskHTML(title, desc = "") {
   const html = `
     <div style="margin-top: 1rem;">
         <div style="font-size: 1.1rem;">${title}</div>
-        <div style="font-size: 0.9rem; color: #ADB5BD; display:flex; align-items:center;">${
-          desc.includes("<img") ? desc : toTitleCase(desc)
-        }</div>
+        <div style="font-size: 0.9rem; color: #ADB5BD; display:flex; align-items:center;">${desc.includes("<img") ? desc : toTitleCase(desc)
+    }</div>
         <div style="background-color: #949393; height: 1px; width: 95%; margin-top: 0.4rem;"></div>
     </div>
     `;
@@ -527,6 +492,15 @@ async function loadTasks() {
         toImgArray(stickerStackIcon).join("<br>")
       );
     }
+
+    //load gather tasks (enabled fields)
+    for (let i = 0; i < setdat.fields_enabled.length; i++) {
+      if (setdat.fields_enabled[i]) {
+        const field = setdat.fields[i];
+        const emoji = fieldEmojis[field.replaceAll(" ", "_")] || "";
+        out += taskHTML(`Gather ${i + 1}`, `${emoji} ${field}`);
+      }
+    }
   }
 
   //display the tasks
@@ -540,15 +514,14 @@ async function loadTasks() {
     return `
             <div class="planter">
                 <img class="planter-img" src="./assets/icons/${planter.replaceAll(
-                  " ",
-                  "_"
-                )}_planter.png">
+      " ",
+      "_"
+    )}_planter.png">
                 <div class="field-row">
                     <span>${toTitleCase(field)}</span>
                 </div>
-                <span class="time ${
-                  timeRemaining == "Ready!" ? "ready" : ""
-                }">${timeRemaining}</span> 
+                <span class="time ${timeRemaining == "Ready!" ? "ready" : ""
+      }">${timeRemaining}</span> 
             </div> 
         `;
   }
@@ -607,46 +580,28 @@ async function checkAndUpdateButtonState() {
     const settings = await loadAllSettings();
     const startKey = settings.start_keybind || "F1";
     const stopKey = settings.stop_keybind || "F3";
-    const pauseKey = settings.pause_keybind || "F2";
+    // const pauseKey = settings.pause_keybind || "F2";
 
     const startBtn = document.getElementById("start-btn");
     const stopBtn = document.getElementById("stop-btn");
-    const pauseBtn = document.getElementById("pause-btn");
+    // const pauseBtn = document.getElementById("pause-btn");
 
     if (runState === 2) {
-      // Running: show Stop + Pause buttons
-      if (startBtn) startBtn.style.display = "none";
+      // Running: show Stop button
+      if (startBtn) startBtn.classList.add("d-none");
       if (stopBtn) {
-        stopBtn.style.display = "block";
+        stopBtn.classList.remove("d-none");
         stopBtn.textContent = `Stop [${stopKey}]`;
-      }
-      if (pauseBtn) {
-        pauseBtn.style.display = "block";
-        pauseBtn.textContent = `Pause [${pauseKey}]`;
-        pauseBtn.classList.add("active");
-      }
-    } else if (runState === 6) {
-      // Paused: show Stop + Resume buttons
-      if (startBtn) startBtn.style.display = "none";
-      if (stopBtn) {
-        stopBtn.style.display = "block";
-        stopBtn.textContent = `Stop [${stopKey}]`;
-      }
-      if (pauseBtn) {
-        pauseBtn.style.display = "block";
-        pauseBtn.textContent = `Resume [${pauseKey}]`;
-        pauseBtn.classList.remove("active");
       }
     } else {
-      // Stopped: show Start button only
+      // Stopped or Paused: show Start button only
       if (startBtn) {
-        startBtn.style.display = "block";
+        startBtn.classList.remove("d-none");
         startBtn.classList.remove("active");
         startBtn.disabled = false;
         startBtn.textContent = `Start [${startKey}]`;
       }
-      if (stopBtn) stopBtn.style.display = "none";
-      if (pauseBtn) pauseBtn.style.display = "none";
+      if (stopBtn) stopBtn.classList.add("d-none");
     }
 
     // Update field-only mode dropdown to match current settings
@@ -669,6 +624,19 @@ $("#home-placeholder")
   .load("../htmlImports/tabs/home.html", async () => {
     await loadTasks();
     await updateStartButtonText();
+
+    // Load recent logs from backend
+    try {
+      const recentLogs = await eel.getRecentLogs()();
+      if (recentLogs && recentLogs.length > 0) {
+        recentLogs.forEach((logEntry) => {
+          const msg = `${logEntry.title}<br>${logEntry.desc}`;
+          log(logEntry.time, msg, logEntry.color);
+        });
+      }
+    } catch (error) {
+      console.error("Error loading recent logs:", error);
+    }
 
     // Initialize macro mode dropdown
     const settings = await loadAllSettings();
@@ -696,25 +664,47 @@ $("#home-placeholder")
     ]);
     document.getElementById("log-type").innerText = result;
   })
-  .on("click", "#start-btn", (event) => {
+  .on("click", "#start-btn", async (event) => {
     //start button - only used when macro is stopped
     eel.start();
-  })
-  .on("click", "#stop-btn", (event) => {
-    //stop button - stops the macro completely
-    eel.stop();
-  })
-  .on("click", "#pause-btn", async (event) => {
-    //pause/resume button - toggle between pause and resume
-    const runState = await eel.getRunState()();
-    if (runState === 2) {
-      // Running -> Pause
-      eel.pause();
-    } else if (runState === 6) {
-      // Paused -> Resume
-      eel.resume();
+    // Update button state optimistically (show stop button immediately)
+    const settings = await loadAllSettings();
+    const stopKey = settings.stop_keybind || "F3";
+    const startBtn = document.getElementById("start-btn");
+    const stopBtn = document.getElementById("stop-btn");
+    if (startBtn) startBtn.classList.add("d-none");
+    if (stopBtn) {
+      stopBtn.classList.remove("d-none");
+      stopBtn.textContent = `Stop [${stopKey}]`;
     }
   })
+  .on("click", "#stop-btn", async (event) => {
+    //stop button - stops the macro completely
+    eel.stop();
+    // Update button state optimistically (show start button immediately)
+    const settings = await loadAllSettings();
+    const startKey = settings.start_keybind || "F1";
+    const startBtn = document.getElementById("start-btn");
+    const stopBtn = document.getElementById("stop-btn");
+    if (startBtn) {
+      startBtn.classList.remove("d-none");
+      startBtn.classList.remove("active");
+      startBtn.disabled = false;
+      startBtn.textContent = `Start [${startKey}]`;
+    }
+    if (stopBtn) stopBtn.classList.add("d-none");
+  })
+  // .on("click", "#pause-btn", async (event) => {
+  //   //pause/resume button - toggle between pause and resume
+  //   const runState = await eel.getRunState()();
+  //   if (runState === 2) {
+  //     // Running -> Pause
+  //     eel.pause();
+  //   } else if (runState === 6) {
+  //     // Paused -> Resume
+  //     eel.resume();
+  //   }
+  // })
   .on("click", "#update-btn", async (event) => {
     //start button
     if (!event.currentTarget.classList.contains("active")) {
@@ -759,5 +749,47 @@ $("#home-placeholder")
       setTimeout(() => {
         isUserChangingMode = false;
       }, 100);
+    }
+  })
+  .on("click", "#clear-logs-btn", async (event) => {
+    if (confirm("Are you sure you want to clear all logs?")) {
+      await eel.clearRecentLogs()();
+      const logs = document.getElementById("logs");
+      if (logs) logs.innerHTML = "";
+    }
+  })
+  .on("click", "#export-logs-btn", async (event) => {
+    try {
+      const recentLogs = await eel.getRecentLogs()();
+      if (!recentLogs || recentLogs.length === 0) {
+        alert("No logs to export.");
+        return;
+      }
+
+      let logText = "Fuzzy Macro Logs\n";
+      logText += "================\n\n";
+
+      recentLogs.forEach((logEntry) => {
+        const time = logEntry.time || "";
+        const title = logEntry.title || "";
+        const desc = logEntry.desc ? logEntry.desc.replace(/<br>/g, "\n") : "";
+        logText += `[${time}] ${title}\n${desc}\n\n`;
+      });
+
+      const blob = new Blob([logText], { type: "text/plain" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `fuzzy_macro_logs_${new Date()
+        .toISOString()
+        .slice(0, 19)
+        .replace(/:/g, "-")}.log`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error("Error exporting logs:", error);
+      alert("Failed to export logs.");
     }
   });

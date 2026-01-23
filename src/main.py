@@ -1,4 +1,3 @@
-
 from modules.misc import messageBox
 #check if step 3 installing dependencies was ran
 try:
@@ -25,6 +24,12 @@ import modules.misc.settingsManager as settingsManager
 import modules.macro as macroModule
 import modules.controls.mouse as mouse
 import json
+# delete backup from previous update if pending
+try:
+    from modules.misc.update import delete_backup_if_pending
+    delete_backup_if_pending()
+except Exception:
+    pass
 
 try:
 	from modules.misc.ColorProfile import DisplayColorProfile
@@ -49,7 +54,8 @@ def macro(status, logQueue, updateGUI, run, skipTask):
     #Limit werewolf to just pumpkin 
     regularMobData["werewolf"] = ["pumpkin"]
     
-    if "share" in macro.setdat["private_server_link"] and macro.setdat["rejoin_method"] == "deeplink":
+    private_server_link = macro.setdat.get("private_server_link", "")
+    if private_server_link and "share" in private_server_link and macro.setdat.get("rejoin_method") == "deeplink":
                 messageBox.msgBox(text="You entered a 'share?code' link!\n\nTo fix this:\n1. Paste the link in your browser\n2. Wait for roblox to load in\n3. Copy the link from the top of your browser.  It should now be a 'privateServerLinkCode' link", title='Unsupported private server link')
                 return
 
@@ -100,7 +106,7 @@ def macro(status, logQueue, updateGUI, run, skipTask):
         status.value = ""
         return returnVal
     
-    def handleQuest(questGiver):
+    def handleQuest(questGiver, executeQuest=True):
         nonlocal questCache, taskCompleted
         
         gatherFieldsList = []
@@ -120,11 +126,19 @@ def macro(status, logQueue, updateGUI, run, skipTask):
         else:
             questObjective = questCache[questGiver]
 
-        if questObjective is None:  # Quest does not exist
-            questObjective = macro.getNewQuest(questGiver, False)
-        elif not len(questObjective):  # Quest completed
-            questObjective = macro.getNewQuest(questGiver, True)
-            macro.hourlyReport.addHourlyStat("quests_completed", 1)
+        # Only submit/get quests if executeQuest is True (when quest appears in priority queue)
+        if executeQuest:
+            if questObjective is None:  # Quest does not exist
+                questObjective = macro.getNewQuest(questGiver, False)
+            elif not len(questObjective):  # Quest completed
+                questObjective = macro.getNewQuest(questGiver, True)
+                macro.hourlyReport.addHourlyStat("quests_completed", 1)
+        else:
+            # If not executing, use cached quest or return empty if no quest exists or is completed
+            if questObjective is None or not len(questObjective):
+                # No quest found or quest completed - we're not executing, so we can't determine requirements
+                # Return empty requirements (will be determined when quest executes in priority order)
+                return setdatEnable, gatherFieldsList, gumdropGatherFieldsList, requireRedField, requireBlueField, feedBees, requireRedGumdropField, requireBlueGumdropField, requireField
 
         if questObjective is None: #still not able to find quest
             return setdatEnable, gatherFieldsList, gumdropGatherFieldsList, requireRedField, requireBlueField, feedBees, requireRedGumdropField, requireBlueGumdropField, requireField
@@ -395,7 +409,8 @@ def macro(status, logQueue, updateGUI, run, skipTask):
             # Skip to next iteration
             continue
 
-        #handle quests first (needed for quest-related gathering fields)
+        # Check quest requirements for ALL enabled quests (needed for quest-related gathering fields)
+        # But only feed bees for quests that appear in priority queue order
         questGatherFields = []
         questGumdropGatherFields = []
         redFieldNeeded = False
@@ -404,34 +419,40 @@ def macro(status, logQueue, updateGUI, run, skipTask):
         itemsToFeedBees = []
         redGumdropFieldNeeded = False
         blueGumdropFieldNeeded = False
+        
+        # Track which quests have been executed in priority order (for feeding bees)
+        executedQuests = set()
+        
+        # Store quest feed requirements per quest (to feed only when quest appears in priority)
+        questFeedRequirements = {}
 
+        # Check ALL enabled quests for requirements (to know what fields might be needed)
+        # But don't execute quests (submit/get) - that will happen when quest appears in priority queue
         for questName, enabledKey in [
             ("polar bear", "polar_bear_quest"),
             ("honey bee", "honey_bee_quest"),
             ("bucko bee", "bucko_bee_quest"),
             ("riley bee", "riley_bee_quest")
-            ]:
-
+        ]:
             if macro.setdat.get(enabledKey):
-                setdatEnable, gatherFields, gumdropFields, needsRed, needsBlue, feedBees, needsRedGumdrop, needsBlueGumdrop, needsField = handleQuest(questName)
+                # Check requirements without executing (submit/get) the quest
+                setdatEnable, gatherFields, gumdropFields, needsRed, needsBlue, feedBees, needsRedGumdrop, needsBlueGumdrop, needsField = handleQuest(questName, executeQuest=False)
+                # Enable any required settings
                 for k in setdatEnable:
                     macro.setdat[k] = True
+                # Store gather fields (will be used after priority queue)
                 questGatherFields.extend(gatherFields)
                 questGumdropGatherFields.extend(gumdropFields)
                 redFieldNeeded = redFieldNeeded or needsRed
                 blueFieldNeeded = blueFieldNeeded or needsBlue
-                itemsToFeedBees.extend(feedBees)
                 redGumdropFieldNeeded = redGumdropFieldNeeded or needsRedGumdrop
                 blueGumdropFieldNeeded = blueGumdropFieldNeeded or needsBlueGumdrop
                 fieldNeeded = fieldNeeded or needsField
+                # Store feed requirements (will be used when quest appears in priority queue)
+                questFeedRequirements[questName] = feedBees
         
                     
-        taskCompleted = False 
-
-        #feed bees for quest
-        for item, quantity in itemsToFeedBees:
-            macro.feedBee(item, quantity)
-            taskCompleted = True
+        taskCompleted = False
 
         # Quest Completer - detect and complete unsupported quests
         if macro.setdat.get("quest_completer_enabled", False):
@@ -608,20 +629,31 @@ def macro(status, logQueue, updateGUI, run, skipTask):
         
         # Helper function to execute a task by its ID
         def executeTask(taskId):
-            nonlocal planterDataRaw, executedTasks
+            nonlocal planterDataRaw, executedTasks, taskCompleted
             
             # Skip if already executed
             if taskId in executedTasks:
                 return False
             
-            # Handle quest tasks
+            # Handle quest tasks - execute quest (submit/get) and feed bees when quest appears in priority order
             if taskId.startswith("quest_"):
                 questName = taskId.replace("quest_", "").replace("_", " ")
                 questKey = f"{questName.replace(' ', '_')}_quest"
                 if not macro.setdat.get(questKey):
                     return False
-                # Quest handling is done above, just mark as executed
+                
+                # Actually execute the quest (submit/get) - this will travel to quest giver if needed
+                handleQuest(questName, executeQuest=True)
+                
+                # Feed bees for this quest (requirements were already checked above)
+                if questName in questFeedRequirements:
+                    feedBees = questFeedRequirements[questName]
+                    for item, quantity in feedBees:
+                        macro.feedBee(item, quantity)
+                        taskCompleted = True
+                
                 executedTasks.add(taskId)
+                executedQuests.add(questName)
                 return True
             
             # Handle collect tasks
@@ -1059,8 +1091,6 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                     executedTasks.add(taskId)
                     return True
                 
-                return False
-            
             if taskId == "ant_challenge":
                 if macro.setdat["ant_challenge"]:
                     runTask(macro.antChallenge)
@@ -1488,7 +1518,7 @@ def watch_for_hotkeys(run):
     pressed_keys = set()
     
     # Add debouncing to prevent duplicate triggers
-    last_trigger_time = {"start": 0.0, "stop": 0.0, "pause": 0.0}
+    last_trigger_time = {"start": 0.0, "stop": 0.0}  # , "pause": 0.0}
     debounce_duration = 0.3  # 300ms debounce
     
     # Add threading lock for synchronization
@@ -1510,7 +1540,7 @@ def watch_for_hotkeys(run):
     settings_cache_duration = 1.0  # Reload settings every 1 second max
     
     # Cache Eel recording state to avoid repeated calls
-    recording_cache = {"start": False, "stop": False, "pause": False}
+    recording_cache = {"start": False, "stop": False}  # , "pause": False}
     last_recording_check = 0
     recording_cache_duration = 0.5  # Check recording state every 0.5 seconds max
     
@@ -1530,11 +1560,11 @@ def watch_for_hotkeys(run):
                 import eel
                 recording_cache["start"] = eel.getElementProperty("start_keybind", "dataset.recording")() == "true"
                 recording_cache["stop"] = eel.getElementProperty("stop_keybind", "dataset.recording")() == "true"
-                recording_cache["pause"] = eel.getElementProperty("pause_keybind", "dataset.recording")() == "true"
+                # recording_cache["pause"] = eel.getElementProperty("pause_keybind", "dataset.recording")() == "true"
                 last_recording_check = current_time
             except:
-                recording_cache = {"start": False, "stop": False, "pause": False}
-        return recording_cache["start"] or recording_cache["stop"] or recording_cache["pause"]
+                recording_cache = {"start": False, "stop": False}  # , "pause": False}
+        return recording_cache["start"] or recording_cache["stop"]  # or recording_cache["pause"]
     
     def convert_key_to_string(key):
         """Optimized key conversion with minimal string operations and error handling"""
@@ -1630,7 +1660,7 @@ def watch_for_hotkeys(run):
                 settings = get_cached_settings()
                 start_keybind = settings.get("start_keybind", "F1")
                 stop_keybind = settings.get("stop_keybind", "F3")
-                pause_keybind = settings.get("pause_keybind", "F2")
+                # pause_keybind = settings.get("pause_keybind", "F2")
                 
                 # Convert key to string for comparison
                 key_str = convert_key_to_string(key)
@@ -1638,10 +1668,6 @@ def watch_for_hotkeys(run):
                 
                 # Build current key combination
                 current_combo = build_key_combination()
-                
-                # Debug: print key detection
-                if current_combo in [start_keybind, stop_keybind, pause_keybind]:
-                    print(f"Key combo detected: {current_combo}, start={start_keybind}, stop={stop_keybind}, pause={pause_keybind}")
                 
                 # Don't start/stop macro if we're recording a keybind
                 if is_recording_keybind():
@@ -1651,11 +1677,16 @@ def watch_for_hotkeys(run):
                 if is_stop_keybind_held():
                     if not stop_key_held:
                         stop_key_held = True
-                        print("Stop keybind held - force stopping macro")
                     # Force stop immediately when stop keybind is held
                     if run.value != 0:  # Only if not already stopped
                         run.value = 0
-                        print("Force stop triggered")
+                        # Update GUI immediately (optimistically show stopped state)
+                        try:
+                            import gui
+                            gui.setRunState(3)  # Update GUI state optimistically to stopped
+                            gui.toggleStartStop()  # Update UI immediately
+                        except:
+                            pass  # If gui is not ready, continue
                 else:
                     stop_key_held = False
 
@@ -1674,6 +1705,13 @@ def watch_for_hotkeys(run):
                         last_trigger_time["start"] = 0.0
                     last_trigger_time["start"] = current_time
                     run.value = 1
+                    # Update GUI immediately (optimistically show running state)
+                    try:
+                        import gui
+                        gui.setRunState(2)  # Update GUI state optimistically to running
+                        gui.toggleStartStop()  # Update UI immediately
+                    except:
+                        pass  # If gui is not ready, continue
                 elif current_combo == stop_keybind and not stop_key_held:
                     if run.value == 3: #already stopped
                         return
@@ -1686,26 +1724,33 @@ def watch_for_hotkeys(run):
                         last_trigger_time["stop"] = 0.0
                     last_trigger_time["stop"] = current_time
                     run.value = 0
-                elif current_combo == pause_keybind:
-                    print(f"Pause keybind detected! current_combo={current_combo}, pause_keybind={pause_keybind}, run.value={run.value}")
-                    # Check debounce with error handling
+                    # Update GUI immediately (optimistically show stopped state)
                     try:
-                        if current_time - last_trigger_time["pause"] < debounce_duration:
-                            print("Debounce blocked pause")
-                            return
-                    except (TypeError, ValueError):
-                        # Reset trigger time if there's a comparison error
-                        last_trigger_time["pause"] = 0.0
-                    last_trigger_time["pause"] = current_time
-                    # Toggle between pause and resume
-                    if run.value == 2:  # Running -> Pause
-                        print("Setting run.value to 5 (pause request)")
-                        run.value = 5  # 5 = pause request
-                    elif run.value == 6:  # Paused -> Resume
-                        print("Setting run.value to 2 (resume)")
-                        run.value = 2  # 2 = running (resume)
-                    else:
-                        print(f"run.value is {run.value}, not 2 or 6, so no action taken")
+                        import gui
+                        gui.setRunState(3)  # Update GUI state optimistically to stopped
+                        gui.toggleStartStop()  # Update UI immediately
+                    except:
+                        pass  # If gui is not ready, continue
+                # elif current_combo == pause_keybind:
+                #     print(f"Pause keybind detected! current_combo={current_combo}, pause_keybind={pause_keybind}, run.value={run.value}")
+                #     # Check debounce with error handling
+                #     try:
+                #         if current_time - last_trigger_time["pause"] < debounce_duration:
+                #             print("Debounce blocked pause")
+                #             return
+                #     except (TypeError, ValueError):
+                #         # Reset trigger time if there's a comparison error
+                #         last_trigger_time["pause"] = 0.0
+                #     last_trigger_time["pause"] = current_time
+                #     # Toggle between pause and resume
+                #     if run.value == 2:  # Running -> Pause
+                #         print("Setting run.value to 5 (pause request)")
+                #         run.value = 5  # 5 = pause request
+                #     elif run.value == 6:  # Paused -> Resume
+                #         print("Setting run.value to 2 (resume)")
+                #         run.value = 2  # 2 = running (resume)
+                #     else:
+                #         print(f"run.value is {run.value}, not 2 or 6, so no action taken")
             except Exception as e:
                 # Log error but don't crash the listener
                 print(f"Error in on_press: {e}")
@@ -1728,8 +1773,17 @@ def watch_for_hotkeys(run):
                 return
 
     # Start keyboard listener with error handling and recovery
+    # On macOS, this must be called on the main thread
     def start_keyboard_listener():
         try:
+            # Ensure we're on the main thread on macOS
+            if sys.platform == "darwin":
+                import threading
+                current_thread = threading.current_thread()
+                main_thread = threading.main_thread()
+                if current_thread is not main_thread:
+                    print("Warning: Keyboard listener should be started on main thread on macOS")
+            
             listener = keyboard.Listener(on_press=on_press, on_release=on_release)
             listener.start()
             return listener
@@ -1750,7 +1804,11 @@ def watch_for_hotkeys(run):
             restart_thread.start()
             return None
     
-    start_keyboard_listener()
+    # Don't start the listener here - it will be started after GUI launch on main thread
+    # start_keyboard_listener()
+    
+    # Return the function so it can be called later on the main thread
+    return start_keyboard_listener
 
 if __name__ == "__main__":
     print("Loading gui...")
@@ -1782,14 +1840,15 @@ if __name__ == "__main__":
     manager = multiprocessing.Manager()
     run = multiprocessing.Value('i', 3)
     gui.setRunState(3)  # Initialize the global run state
+    recentLogs = manager.list()  # Shared list to store recent log entries for discord bot
+    gui.setRecentLogs(recentLogs)
     updateGUI = multiprocessing.Value('i', 0)
     skipTask = multiprocessing.Value('i', 0)  # 0 = don't skip, 1 = skip current task
     status = manager.Value(ctypes.c_wchar_p, "none")
     logQueue = manager.Queue()
-    recentLogs = manager.list()  # Shared list to store recent log entries for discord bot
     initialMessageInfo = manager.dict()  # Shared dict for initial webhook message info
-    watch_for_hotkeys(run)
-    logger = logModule.log(logQueue, False, None, False, blocking=True)
+    start_keyboard_listener_fn = watch_for_hotkeys(run)
+    logger = logModule.log(logQueue, False, None, False, blocking=False)
 
     disconnectCooldownUntil = 0 #only for running disconnect check on low performance
 
@@ -1863,6 +1922,16 @@ if __name__ == "__main__":
     #setup and launch gui
     gui.run = run
     gui.launch()
+    
+    # Start keyboard listener after GUI launch to ensure it's on the main thread (required on macOS)
+    # This prevents TIS/TSM errors on macOS
+    if start_keyboard_listener_fn:
+        try:
+            start_keyboard_listener_fn()
+            print("Keyboard listener started successfully")
+        except Exception as e:
+            print(f"Failed to start keyboard listener after GUI launch: {e}")
+    
     #use run.value to control the macro loop
 
     #check color profile
@@ -1924,8 +1993,8 @@ if __name__ == "__main__":
         setdat = gui_settings_cache
 
         #discord bot. Look for changes in the bot token
-        currentDiscordBotToken = setdat["discord_bot_token"]
-        if setdat["discord_bot"] and currentDiscordBotToken and currentDiscordBotToken != prevDiscordBotToken:
+        currentDiscordBotToken = setdat.get("discord_bot_token", "")
+        if setdat.get("discord_bot", False) and currentDiscordBotToken and currentDiscordBotToken.strip() and currentDiscordBotToken != prevDiscordBotToken:
             if discordBotProc is not None and discordBotProc.is_alive():
                 print("Detected change in discord bot token, killing previous bot process")
                 discordBotProc.terminate()
@@ -1938,7 +2007,7 @@ if __name__ == "__main__":
         if run.value != prevRunState:
             # Check for resume (transition from paused to running)
             if prevRunState == 6 and run.value == 2:
-                logger.webhook("Macro Resumed", "Existance Macro", "bright green")
+                logger.webhook("Macro Resumed", "Fuzzy Macro", "bright green")
             gui.setRunState(run.value)
             try:
                 gui.toggleStartStop()  # Update UI
@@ -1948,9 +2017,9 @@ if __name__ == "__main__":
 
         if run.value == 1:
             #create and set webhook obj for the logger
-            logger.enableWebhook = setdat["enable_webhook"]
-            logger.webhookURL = setdat["webhook_link"]
-            logger.sendScreenshots = setdat["send_screenshot"]
+            logger.enableWebhook = setdat.get("enable_webhook", False)
+            logger.webhookURL = setdat.get("webhook_link", "")
+            logger.sendScreenshots = setdat.get("send_screenshot", True)
             stopThreads = False
 
             #reset hourly report data
@@ -1965,7 +2034,7 @@ if __name__ == "__main__":
                         logger.webhook("Stream Started", f'Stream URL: {stream.publicURL}', "purple")
                         
                         # If bot is enabled, populate initial message info for pinning the stream message
-                        if setdat["discord_bot"] and setdat["pin_stream_url"]:
+                        if setdat.get("discord_bot", False) and setdat.get("pin_stream_url", False):
                             import modules.logging.webhook as webhookModule
                             if webhookModule.last_message_id and webhookModule.last_channel_id:
                                 initialMessageInfo['message_id'] = webhookModule.last_message_id
@@ -1976,10 +2045,10 @@ if __name__ == "__main__":
                 logger.webhook("", f'Stream could not start. Check terminal for more info', "red", ping_category="ping_critical_errors")
 
             streamLink = None
-            if setdat["enable_stream"]:
+            if setdat.get("enable_stream", False):
                 if stream.isCloudflaredInstalled():
                     logger.webhook("", "Starting Stream...", "light blue")
-                    streamLink = stream.start(setdat["stream_resolution"])
+                    streamLink = stream.start(setdat.get("stream_resolution", 0.75))
                     Thread(target=waitForStreamURL, daemon=True).start()
                 else:
                     messageBox.msgBox(text='Cloudflared is required for streaming but is not installed. Visit https://existance-macro.gitbook.io/existance-macro-docs/guides/optional-installations/stream-setup-installing-cloudflared for installation instructions', title='Cloudflared not installed')
@@ -2008,7 +2077,8 @@ if __name__ == "__main__":
             macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask), daemon=True)
             macroProc.start()
 
-            logger.webhook("Macro Started", f'Existance Macro v2.13.15\nDisplay: {screenInfo["display_type"]}, {screenInfo["screen_width"]}x{screenInfo["screen_height"]}', "purple")
+            macro_version = settingsManager.getMacroVersion()
+            logger.webhook("Macro Started", f'Fuzzy Macro v{macro_version}\nDisplay: {screenInfo["display_type"]}, {screenInfo["screen_width"]}x{screenInfo["screen_height"]}', "purple")
             run.value = 2
             gui.setRunState(2)  # Update the global run state
             try:
@@ -2022,7 +2092,7 @@ if __name__ == "__main__":
         elif run.value == 0:
             if macroProc:
                 # Stop macro and release all inputs first
-                logger.webhook("Macro Stopped", "Existance Macro", "red")
+                logger.webhook("Macro Stopped", "Fuzzy Macro", "red")
                 
                 # Clear the initial message info for next start
                 initialMessageInfo.clear()
@@ -2165,16 +2235,17 @@ if __name__ == "__main__":
             if logData["type"] == "webhook": #webhook
                 msg = f"{logData['title']}<br>{logData['desc']}"
 
-                # Add to recent logs list (keep last 20 entries)
+                # Add to recent logs list (keep last 100 entries)
                 log_entry = {
                     'time': logData['time'],
                     'title': logData['title'],
-                    'desc': logData['desc']
+                    'desc': logData['desc'],
+                    'color': logData['color']
                 }
                 recentLogs.append(log_entry)
-                # Keep only the last 20 entries
-                if len(recentLogs) > 20:
-                    recentLogs[:] = recentLogs[-20:]
+                # Keep only the last 100 entries
+                if len(recentLogs) > 100:
+                    recentLogs[:] = recentLogs[-100:]
 
             #add it to gui
             gui.log(logData["time"], msg, logData["color"])
