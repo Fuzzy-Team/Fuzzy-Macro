@@ -299,4 +299,7 @@ else:
     print("html2image package not found")
 EOF
 printf "\n\n\n\033[32;1mInstallation complete!\033[0m\n"
-read
+# Only wait for user input when script is run interactively (prevents hanging in non-interactive runs)
+if [ -t 0 ] && [ -t 1 ]; then
+	read -p "Press Enter to close this window..."
+fi
