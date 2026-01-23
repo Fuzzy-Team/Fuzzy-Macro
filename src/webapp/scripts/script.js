@@ -257,6 +257,8 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
       kill_spider: "Kill: Spider",
       kill_werewolf: "Kill: Werewolf",
       kill_coconut_crab: "Kill: Coconut Crab",
+      kill_king_beetle: "Kill: King Beetle",
+      kill_tunnel_bear: "Kill: Tunnel Bear",
       mondo_buff: "Collect: Mondo Buff",
       stinger_hunt: "Stinger Hunt",
       auto_field_boost: "Auto Field Boost",

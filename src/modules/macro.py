@@ -2710,6 +2710,47 @@ class macro:
         self.saveTiming("coconut_crab")
         self.reset()
 
+def kingBeetle(self):
+        st = time.time()
+        for _ in range(2):
+            self.cannon()
+            self.logger.webhook("","Travelling: King Beetle","dark brown")
+            self.goToField("blue_flower")
+            self.died = False
+            self.bossStatus = None
+            self.runPath("boss/king_beetle")
+            if self.died or self.bossStatus is not None: break
+
+        if self.died:
+            self.logger.webhook("", "Died to King Beetle", "dark brown", ping_category="ping_character_deaths")
+            self.reset(convert=False)
+            self.died = False
+        elif self.bossStatus == "defeated":
+            self.logger.webhook("", "Defeated: King Beetle", "bright green", "screen", ping_category="ping_mob_events")
+        self.hourlyReport.addHourlyStat("bug_run_time", time.time()-st)
+        self.saveTiming("king_beetle")
+        self.reset()
+
+    def tunnelBear(self):
+        st = time.time()
+        for _ in range(2):
+            self.cannon()
+            self.logger.webhook("","Travelling: Tunnel Bear","dark brown")
+            self.goToField("pineapple")
+            self.died = False
+            self.bossStatus = None
+            self.runPath("boss/tunnel_bear")
+            if self.died or self.bossStatus is not None: break
+
+        if self.died:
+            self.logger.webhook("", "Died to Tunnel Bear", "dark brown", ping_category="ping_character_deaths")
+            self.reset(convert=False)
+            self.died = False
+        elif self.bossStatus == "defeated":
+            self.logger.webhook("", "Defeated: Tunnel Bear", "bright green", "screen", ping_category="ping_mob_events")
+        self.hourlyReport.addHourlyStat("bug_run_time", time.time()-st)
+        self.saveTiming("tunnel_bear")
+        self.reset()
     
     def goToPlanter(self, planter, field, method):
         global finalKey

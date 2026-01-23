@@ -282,7 +282,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
             killEmojis = {
                 "scorpion": "", "werewolf": "", "ladybug": "", "rhinobeetle": "",
                 "spider": "", "mantis": "", "ant_challenge": "🎯", "coconut_crab": "",
-                "stump_snail": "🐌", "stinger_hunt": ""
+                "king_beetle": "", "tunnel_bear": "", "stump_snail": "🐌", "stinger_hunt": ""
             }
             
             fieldBoosterEmojis = {
@@ -316,7 +316,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
                     current_task_display = "Blender"
             elif current_status == "bugrun":
                 enabled_mobs = []
-                for mob_key in ["ladybug", "rhinobeetle", "scorpion", "mantis", "spider", "werewolf", "coconut_crab", "stump_snail"]:
+                for mob_key in ["ladybug", "rhinobeetle", "scorpion", "mantis", "spider", "werewolf", "coconut_crab", "king_beetle", "tunnel_bear", "stump_snail"]:
                     if settings.get(mob_key, False):
                         emoji = killEmojis.get(mob_key, "")
                         mob_name = mob_key.replace("_", " ").title()
@@ -604,7 +604,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
             killEmojis = {
                 "scorpion": "", "werewolf": "", "ladybug": "", "rhinobeetle": "",
                 "spider": "", "mantis": "", "ant_challenge": "🎯", "coconut_crab": "",
-                "stump_snail": "🐌", "stinger_hunt": ""
+                "king_beetle": "", "tunnel_bear": "", "stump_snail": "🐌", "stinger_hunt": ""
             }
 
             fieldBoosterEmojis = {
@@ -948,7 +948,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
             categories = {
                 "🎯 **Core Settings**": ["fields_enabled", "fields"],
                 "💰 **Collectibles**": ["wealth_clock", "blueberry_dispenser", "strawberry_dispenser", "royal_jelly_dispenser", "treat_dispenser"],
-                "🐛 **Mob Runs**": ["ladybug", "rhinobeetle", "scorpion", "mantis", "spider", "werewolf", "coconut_crab", "stump_snail"],
+                "🐛 **Mob Runs**": ["ladybug", "rhinobeetle", "scorpion", "mantis", "spider", "werewolf", "coconut_crab", "king_beetle", "tunnel_bear", "stump_snail"],
                 "🌱 **Planters**": ["planters_mode", "auto_max_planters", "auto_preset"],
                 "📊 **Quests**": ["polar_bear_quest", "honey_bee_quest", "bucko_bee_quest", "riley_bee_quest"],
                 "🔧 **Advanced**": ["Auto_Field_Boost", "mondo_buff", "stinger_hunt", "blender_enable"]
@@ -1067,7 +1067,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
 
     async def mob_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
         """Auto-complete function for mob names"""
-        mobs = ["ladybug", "rhinobeetle", "scorpion", "mantis", "spider", "werewolf", "coconut_crab", "stump_snail"]
+        mobs = ["ladybug", "rhinobeetle", "scorpion", "mantis", "spider", "werewolf", "coconut_crab", "king_beetle", "tunnel_bear", "stump_snail"]
         choices = []
 
         for mob in mobs:
@@ -1451,6 +1451,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
                 "🕷️ **Spider**": settings.get("spider", False),
                 "🐺 **Werewolf**": settings.get("werewolf", False),
                 "🦀 **Coconut Crab**": settings.get("coconut_crab", False),
+                "🪲 **King Beetle**": settings.get("king_beetle", False),
+                "🐻 **Tunnel Bear**": settings.get("tunnel_bear", False),
                 "🐌 **Stump Snail**": settings.get("stump_snail", False)
             }
 
@@ -1488,6 +1490,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
             "spider": "spider",
             "werewolf": "werewolf",
             "coconut_crab": "coconut_crab",
+            "king_beetle": "king_beetle",
+            "tunnel_bear": "tunnel_bear",
             "stump_snail": "stump_snail"
         }
 
@@ -1512,6 +1516,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
             "spider": "spider",
             "werewolf": "werewolf",
             "coconut_crab": "coconut_crab",
+            "king_beetle": "king_beetle",
+            "tunnel_bear": "tunnel_bear",
             "stump_snail": "stump_snail"
         }
 

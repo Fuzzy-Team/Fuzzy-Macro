@@ -86,6 +86,8 @@ const killEmojis = {
     mantis: "",
     ant_challenge: "🎯",
     coconut_crab: "",
+    king_beetle: "",
+    tunnel_bear: "",
     stump_snail: "🐌",
 }
 
