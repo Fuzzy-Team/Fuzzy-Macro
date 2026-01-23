@@ -2847,7 +2847,7 @@ class macro:
         self.saveTiming("coconut_crab")
         self.reset()
 
-def kingBeetle(self):
+    def kingBeetle(self):
         st = time.time()
         for _ in range(2):
             self.cannon()
