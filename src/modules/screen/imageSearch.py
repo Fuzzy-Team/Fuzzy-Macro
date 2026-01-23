@@ -30,7 +30,10 @@ def templateMatch(smallImg, bigImg):
 def locateImageOnScreen(target, x,y,w,h, threshold = 0):
     screen = mssScreenshot(x,y,w,h)
     screen = cv2.cvtColor(np.array(screen), cv2.COLOR_RGB2BGR)
-    _, max_val, _, max_loc = templateMatch(target, screen)
+    try:
+        _, max_val, _, max_loc = templateMatch(target, screen)
+    except TemplateTooLargeError:
+        return None
     if max_val < threshold: return None
     return (max_val, max_loc)
 
@@ -40,7 +43,10 @@ def locateImageOnScreen(target, x,y,w,h, threshold = 0):
 def locateTransparentImage(target, screen, threshold):
     screen = cv2.cvtColor(screen, cv2.COLOR_BGRA2GRAY)
     target = cv2.cvtColor(target, cv2.COLOR_RGB2GRAY)
-    _, max_val, _, max_loc = templateMatch(target, screen)
+    try:
+        _, max_val, _, max_loc = templateMatch(target, screen)
+    except TemplateTooLargeError:
+        return None
     if max_val < threshold: return None
     return (max_val, max_loc)
     
@@ -55,6 +61,10 @@ def similarHashes(hash1, hash2, threshold):
 def locateImageWithMaskOnScreen(image, mask, x,y,w,h, threshold=0):
     screen = mssScreenshotNP(x,y,w,h)
     screen = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
+
+    # ensure template fits inside the screen to avoid cv2 errors
+    if image.shape[0] > screen.shape[0] or image.shape[1] > screen.shape[1]:
+        return None
 
     # do masked template matching and save correlation image
     res = cv2.matchTemplate(screen, image, cv2.TM_CCORR_NORMED, mask=mask)

@@ -12,6 +12,10 @@ Roblox Bee Swarm Simulator macro for macOS. Free, open source, and actively main
 
 <img width="1312" height="1022" alt="image" src="https://github.com/user-attachments/assets/d5664644-4929-40e0-a048-dd941bffd04d" />
 
+## Getting Started
+
+Installation guide in our discord server or https://github.com/Fuzzy-Team/macro-auto-install/blob/main/README.md
+
 ## Features
 
 ### Field Management & Gathering
@@ -98,10 +102,6 @@ Roblox Bee Swarm Simulator macro for macOS. Free, open source, and actively main
 - Webhook notifications with screenshots
 - Discord bot commands for status monitoring
 - Live stream support (optional)
-
-## Getting Started
-
-Installation guide in our discord server or https://github.com/Fuzzy-Team/macro-auto-install/blob/main/README.md
 
 ## Notes
 
