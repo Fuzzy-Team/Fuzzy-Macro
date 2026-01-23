@@ -4731,22 +4731,40 @@ class macro:
                                     self.logger.webhook("", "Boosted Fields: None", "red")
                                 time.sleep(0.5)
 
-                # glitter    
+                # glitter
                 if glitter and not self.failed:
                     if self.cAFBglitter or (self.hasAFBRespawned("AFB_glitter_cd", rebuff*60) and self.AFBglitter):
                         self.logger.webhook("", "Rebuffing: Glitter", "white")
-                        if glitterslot == 0: 
-                            self.cannon() 
-                            Glitter.start()
-                            goToField.start()
-                            goToField.join()
-                            Glitter.join()
-                            self.clickYes()
-                        else: 
-                            self.cannon() 
+                        # If glitter is set to use inventory slot 0, try to locate it first
+                        glitterCoords = None
+                        if glitterslot == 0:
+                            try:
+                                glitterCoords = self.findItemInInventory("glitter")
+                            except Exception:
+                                glitterCoords = None
+
+                        # Move to cannon first
+                        self.cannon()
+
+                        # If we found glitter in inventory, use it sequentially (avoid concurrent threads)
+                        if glitterslot == 0 and glitterCoords:
+                            self.useItemInInventory(x=glitterCoords[0], y=glitterCoords[1], closeInventoryAfter=False)
                             self.goToField(field)
-                            time.sleep(0.5)
-                            self.keyboard.press(str(glitterslot))
+                            self.clickYes()
+                            self.toggleInventory("close")
+                        else:
+                            # fall back to previous threaded behavior for non-zero slots or if not found
+                            if glitterslot == 0:
+                                Glitter.start()
+                                goToField.start()
+                                goToField.join()
+                                Glitter.join()
+                                self.clickYes()
+                            else:
+                                self.goToField(field)
+                                time.sleep(0.5)
+                                self.keyboard.press(str(glitterslot))
+
                         self.logger.webhook("", "Rebuffed: Glitter", "white")
                         self.saveAFB("AFB_dice_cd")
                         self.saveAFB("AFB_glitter_cd")
