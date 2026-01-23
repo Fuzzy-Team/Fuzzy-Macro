@@ -46,7 +46,15 @@ def _merge_overwrite(src, dst, protected_folders, protected_files):
         if not os.path.exists(dest_root):
             os.makedirs(dest_root, exist_ok=True)
         # filter dirs in-place to avoid descending into protected dirs
-        dirs[:] = [d for d in dirs if d not in protected_folders]
+        # compare using relative paths so nested protected paths like
+        # 'src/data' or 'data/user' are honored
+        norm_protected = [os.path.normpath(p) for p in protected_folders]
+        filtered = []
+        for d in dirs:
+            candidate = os.path.normpath(os.path.join(rel_root, d)) if rel_root != "." else os.path.normpath(d)
+            if candidate not in norm_protected:
+                filtered.append(d)
+        dirs[:] = filtered
         for f in files:
             if f in protected_files:
                 continue
@@ -142,7 +150,7 @@ def delete_backup_if_pending(destination=None):
 def update(t="main"):
     msgBox("Update in progress", "Updating... Do not close terminal")
     # Important: always preserve `settings` and the VCS metadata and user data
-    protected_folders = ["settings", os.path.join("data", "user"), "assets"]
+    protected_folders = ["settings", os.path.join("src", "data")]
     protected_files = [".git"]
     destination = os.getcwd().replace("/src", "")
 
