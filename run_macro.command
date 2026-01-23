@@ -7,7 +7,7 @@ pkill -9 Python3.9
 pkill -9 Python3.8
 pkill -9 Python3.7
 
-VENV_NAME="bss-macro-env"
+VENV_NAME="fuzzy-macro-env"
 VENV_PATH="$HOME/$VENV_NAME"
 
 # force Python to use certifi for SSL (fixes Discord/aiohttp on macOS)

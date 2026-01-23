@@ -1,4 +1,3 @@
-
 from modules.misc import messageBox
 #check if step 3 installing dependencies was ran
 try:
@@ -25,6 +24,12 @@ import modules.misc.settingsManager as settingsManager
 import modules.macro as macroModule
 import modules.controls.mouse as mouse
 import json
+# delete backup from previous update if pending
+try:
+    from modules.misc.update import delete_backup_if_pending
+    delete_backup_if_pending()
+except Exception:
+    pass
 
 try:
 	from modules.misc.ColorProfile import DisplayColorProfile
@@ -1064,8 +1069,6 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                     executedTasks.add(taskId)
                     return True
                 
-                return False
-            
             if taskId == "ant_challenge":
                 if macro.setdat["ant_challenge"]:
                     runTask(macro.antChallenge)
@@ -1542,14 +1545,15 @@ if __name__ == "__main__":
     manager = multiprocessing.Manager()
     run = multiprocessing.Value('i', 3)
     gui.setRunState(3)  # Initialize the global run state
+    recentLogs = manager.list()  # Shared list to store recent log entries for discord bot
+    gui.setRecentLogs(recentLogs)
     updateGUI = multiprocessing.Value('i', 0)
     skipTask = multiprocessing.Value('i', 0)  # 0 = don't skip, 1 = skip current task
     status = manager.Value(ctypes.c_wchar_p, "none")
     logQueue = manager.Queue()
-    recentLogs = manager.list()  # Shared list to store recent log entries for discord bot
     initialMessageInfo = manager.dict()  # Shared dict for initial webhook message info
     start_keyboard_listener_fn = watch_for_hotkeys(run)
-    logger = logModule.log(logQueue, False, None, False, blocking=True)
+    logger = logModule.log(logQueue, False, None, False, blocking=False)
 
     disconnectCooldownUntil = 0 #only for running disconnect check on low performance
 
@@ -1708,7 +1712,7 @@ if __name__ == "__main__":
         if run.value != prevRunState:
             # Check for resume (transition from paused to running)
             if prevRunState == 6 and run.value == 2:
-                logger.webhook("Macro Resumed", "Existance Macro", "bright green")
+                logger.webhook("Macro Resumed", "Fuzzy Macro", "bright green")
             gui.setRunState(run.value)
             try:
                 gui.toggleStartStop()  # Update UI
@@ -1779,7 +1783,7 @@ if __name__ == "__main__":
             macroProc.start()
 
             macro_version = settingsManager.getMacroVersion()
-            logger.webhook("Macro Started", f'Existance Macro v{macro_version}\nDisplay: {screenInfo["display_type"]}, {screenInfo["screen_width"]}x{screenInfo["screen_height"]}', "purple")
+            logger.webhook("Macro Started", f'Fuzzy Macro v{macro_version}\nDisplay: {screenInfo["display_type"]}, {screenInfo["screen_width"]}x{screenInfo["screen_height"]}', "purple")
             run.value = 2
             gui.setRunState(2)  # Update the global run state
             try:
@@ -1793,7 +1797,7 @@ if __name__ == "__main__":
         elif run.value == 0:
             if macroProc:
                 # Stop macro and release all inputs first
-                logger.webhook("Macro Stopped", "Existance Macro", "red")
+                logger.webhook("Macro Stopped", "Fuzzy Macro", "red")
                 
                 # Clear the initial message info for next start
                 initialMessageInfo.clear()
@@ -1936,16 +1940,17 @@ if __name__ == "__main__":
             if logData["type"] == "webhook": #webhook
                 msg = f"{logData['title']}<br>{logData['desc']}"
 
-                # Add to recent logs list (keep last 20 entries)
+                # Add to recent logs list (keep last 100 entries)
                 log_entry = {
                     'time': logData['time'],
                     'title': logData['title'],
-                    'desc': logData['desc']
+                    'desc': logData['desc'],
+                    'color': logData['color']
                 }
                 recentLogs.append(log_entry)
-                # Keep only the last 20 entries
-                if len(recentLogs) > 20:
-                    recentLogs[:] = recentLogs[-20:]
+                # Keep only the last 100 entries
+                if len(recentLogs) > 100:
+                    recentLogs[:] = recentLogs[-100:]
 
             #add it to gui
             gui.log(logData["time"], msg, logData["color"])

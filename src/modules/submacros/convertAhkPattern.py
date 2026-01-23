@@ -160,7 +160,7 @@ def ahkPatternToPython(ahk):
             out[i] = "def " + out[i].replace("{", ":")
             
         
-    out.insert(0, "#Ahk code converted by Existance Macro\n\n")
+    out.insert(0, "#Ahk code converted by Fuzzy Macro\n\n")
     return "\n".join(out).replace("𑑛", "=")
 
 test = '''

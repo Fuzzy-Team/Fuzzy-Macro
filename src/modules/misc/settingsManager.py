@@ -5,6 +5,7 @@ import json
 import zipfile
 import tempfile
 from datetime import datetime
+import re
 
 #returns a dictionary containing the settings
 profileName = "a"
@@ -70,7 +71,8 @@ def getPatternsDir():
 def getMacroVersion():
     """Get the macro version from version.txt file"""
     try:
-        version_file = os.path.join(getProjectRoot(), "version.txt")
+        destination = os.getcwd().replace("/src", "")
+        version_file = os.path.join(destination, "src", "webapp", "version.txt")
         if os.path.exists(version_file):
             with open(version_file, "r") as f:
                 version = f.read().strip()
@@ -255,8 +257,13 @@ def readSettingsFile(path):
     #read the file, format it to:
     #[[key, value], [key, value]]
     with open(path) as f:
-        data = [[x.strip() for x in y.split("=", 1)] for y in f.read().split("\n") if y]
-    f.close()
+        raw = f.read()
+
+    # If `max_convert_time=` was accidentally concatenated onto the previous line,
+    # insert a newline before it so it becomes its own setting line.
+    raw = re.sub(r'(?<!\n)max_convert_time=', r'\nmax_convert_time=', raw)
+
+    data = [[x.strip() for x in y.split("=", 1)] for y in raw.split("\n") if y]
     #convert to a dict
     out = {}
     for k,v in data:
@@ -273,9 +280,11 @@ def readSettingsFile(path):
 
 def saveDict(path, data):
     out = "\n".join([f"{k}={v}" for k,v in data.items()])
+    # Ensure file ends with a newline to avoid accidental concatenation
+    if not out.endswith("\n"):
+        out = out + "\n"
     with open(path, "w") as f:
-        f.write(str(out))
-    f.close()
+        f.write(out)
 
 #update one property of a setting
 def saveSettingFile(setting,value, path):

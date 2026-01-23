@@ -15,3 +15,10 @@ src/hourlyReport.png
 src/finalReport.png
 src/latest-quest.png
 TODO.md
+
+
+src/data/user
+settings/profiles
+.backup_pending
+backup_macro.zip
+backups/

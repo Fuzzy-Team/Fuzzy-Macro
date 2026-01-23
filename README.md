@@ -1,129 +1,127 @@
-# Existance Macro
+# Fuzzy Macro
 
-![Discord](https://img.shields.io/discord/1065032948119769118?label=Discord&color=7289da&logo=discord&logoColor=white&link=https://discord.gg/WdbWgFewqx)
+![Discord](https://img.shields.io/discord/1462647649021853912?label=Discord&color=7289da&logo=discord&logoColor=white&link=https://discord.gg/rGRVG8Rpsb)
 ![GitHub Repo stars](https://img.shields.io/github/stars/LaganYT/Existance-Macro?style=flat&label=Stars&color=fff240&logo=github&logocolor=white&link=https://github.com/LaganYT/Existance-Macro/stargazers)
 ![Repo Size](https://img.shields.io/github/repo-size/LaganYT/Existance-Macro?label=Repo%20Size&logo=github&logoColor=white)
 
 Roblox Bee Swarm Simulator macro for macOS. Free, open source, and actively maintained.
 
-- Docs: https://existance-macro.gitbook.io/existance-macro-docs/
-- Discord: https://discord.gg/3qf8bgqCVu (Original Macro)
-- Original Macro: https://github.com/existancepy/bss-macro-py
+- Discord: [https://discord.gg/rGRVG8Rpsb](https://discord.gg/rGRVG8Rpsb)
+- Existance vs. Fuzzy Macro Comparison: https://fuzzy-team.gitbook.io/fuzzy-macro/getting-started/fuzzy-macro-vs-existance-macro
+- Gitbook: https://fuzzy-team.gitbook.io/fuzzy-macro
 
-![GUI](https://github.com/LaganYT/Existance-Macro/blob/06dd4987b68053c9bdfa842a17e51db3b7c83d30/src/gui.png)
+<img width="1312" height="1022" alt="image" src="https://github.com/user-attachments/assets/d5664644-4929-40e0-a048-dd941bffd04d" />
 
 ## Features
 
-- **Home / Control**
+### Field Management & Gathering
+- Automated field gathering with customizable patterns
+- Multiple pattern support (E_lol, Cornerxe_lol, Diamond, Skillet, Kettle, etc.)
+- Field drift compensation and Haste compensation
+- Shift lock support
+- Customizable gather duration and backpack percentage
 
-  - Start/stop via UI, hotkeys (F1 start, F3 stop; may require Fn), or Discord commands
-  - One-click updater preserves `settings/` (profiles, patterns, paths)
-  - Task list shows enabled tasks and execution order
-  - Field-only mode for gathering-only operation
-  - Planter timer management with visual countdowns
-  - Real-time log monitoring with detailed/simple views
+### Planter System
+- **Manual Planters**: Up to 5 cycles with 3 planters each
+- **Auto Planters**: Smart planter placement based on nectar priorities
+- Glitter support for planters
+- Harvest timing based on planter type or custom intervals
+- Field and nectar-specific planter ranking
+- Auto gather in planter fields
 
-- **Gather**
+### Mob & Boss Combat
+- **Regular Mobs**: Ladybugs, Rhino Beetles, Scorpions, Mantises, Spiders, Werewolf
+- **Boss Mobs**:  Stump Snail, Coconut Crab
+- **Stinger Hunt**: Automated Vicious Bee hunting during night
+- Respawn time tracking with bonuses (Gifted Vicious, Stick Bug Amulet, Icicles Beequip)
+- Automatic looting patterns
+- Mob detection across multiple fields
 
-  - Farm up to 5 fields with Natro-compatible settings
-  - Patterns (shapes), size/width, invert axes, direction and turns
-  - Shift-lock handling and field drift compensation (Saturator tracking)
-  - Time- or backpack%-based stop conditions
-  - Return-to-hive methods: Reset, Walk, Rejoin, Whirligig
-  - Select start location and distance per field
+### Collectibles & Dispensers
+- Wealth Clock
+- Blueberry & Strawberry Dispensers
+- Coconut Dispenser
+- Royal Jelly Dispenser (Free)
+- Treat Dispenser
+- Ant Pass Dispenser (Free)
+- Glue Dispenser
+- Honey Storm summoning
+- Beesmas items (Stockings, Feast, Samovar, Snow Machine, Lid Art, Candles, Wreath)
 
-- **Collect**
+### Quest System (Currently Disabled, Fix in progress)
+- **Supported NPCs**: Polar Bear, Honey Bee, Bucko Bee, Riley Bee
+- Automatic quest detection and completion
+- Quest gathering with override settings
+- Gumdrop support for quest gathering
+- Smart field selection for quest requirements
+- Quest feed bee automation (Broken atm)
 
-  - Regular dispensers (e.g., Wealth Clock, Glue, boosters, etc.)
-  - Sticker Printer with egg availability detection
-  - Beesmas dispensers (seasonal)
-  - Memory Match (regular/mega/extreme/winter) completion
-  - Blender craft/collect up to 3 items with quantity and repeat/inf modes
-  - Remote enable/disable via Discord commands
-  - Comprehensive collectible management system
+### Boost & Buff Management
+- **Auto Field Boost (AFB)**: Maintains glitter and dice boosts automatically
+- Field Dice support (Field Dice, Smooth Dice, Loaded Dice)
+- Glitter automation with rebuff timing
+- Mondo Buff collection with configurable wait time
+- Token collection during Mondo Buff
+- Mondo looting patterns (customizable loops)
+- Blue/Red/Mountain Field Boosters
 
-- **Kill**
+### Additional Features
+- **Sticker Printer**: Automated sticker printing with egg selection
+- **Blender**: Item crafting automation (extracts, wax, items)
+- **Ant Challenge**: Automated ant challenge completion
+- **Memory Match**: Support for all memory match variants
+- **Cannon**: Automated cannon usage from hive (Canon access required to use Macro)
 
-  - Regular mob runs (ladybug, rhino, werewolf, etc.) with respawn modifiers
-  - Bosses: Vicious Bee (Stinger Hunt), Stump Snail, Coconut Crab
-  - Night detection logic for Stinger Hunt field route
-  - Optional Ant Challenge
-  - Remote mob configuration via Discord
-  - Vicious Bee detection with Discord notifications
+### Utility Features
+- Private server support
+- Automatic rejoin with configurable intervals
+- Discord webhook integration
+- Discord bot for remote control
+- Web-based GUI for configuration
+- Profile system for multiple configurations
+- Task priority system with drag-and-drop ordering
+- Pause/Resume functionality (Coming soon)
+- Hourly reports with statistics
+- Night detection for Stinger Hunt
+- Death detection and recovery
+- Haste compensation
+- Screen resolution detection (Retina display support)
+- Repair macro command for restoring missing files
 
-- **Boost**
+### Controls
+- Customizable keybinds (Start, Stop)
+- Multiple camera rotation modes
+- Walk speed configuration (1-31)
 
-  - Hotbar scheduling: when and how often to trigger slots
-  - Buffs: Field Boosters with spacing and gather-in-boosted-field priority
-  - Sticker Stack activation (stickers or tickets) and optional Hive Skins
-
-- **Planters**
-
-  - Tracks placed planters and growth timing across cycles
-  - Harvest by interval or when full; clear timers when needed
-  - Up to 3 planters per cycle, loops cycles automatically
-  - Gather in planter field and optional Glitter usage
-  - Visual timer management in web interface
-  - Auto-planter ranking system with optimal placement
-  - Manual and automatic planter modes
-
-- **Quests**
-
-  - Quest-oriented gathering logic and settings (WIP; see docs)
-
-- **Discord Bot**
-
-  - Remote control via Discord commands (start, stop, pause, resume, skip)
-  - Field management (enable/disable fields, swap fields, field-only mode)
-  - Quest and collectible management
-  - Mob run configuration
-  - Real-time status updates and screenshots
-  - Automatic stream URL pinning when streaming is enabled
-
-- **Live Streaming**
-
-  - Real-time screen streaming through web interface
-  - Cloudflared tunnel integration for public access
-  - Adaptive quality and FPS optimization
-  - Mobile-friendly responsive design
-  - Automatic reconnection and error handling
-
-- **Hourly Reports & Analytics**
-
-  - Detailed performance tracking with honey/minute statistics
-  - Buff detection and uptime monitoring
-  - Planter data integration
-  - Historical data with trend analysis
-  - Visual reports with charts and statistics
-  - Automatic Discord webhook delivery
-
-- **Web Interface**
-
-  - Modern, responsive web-based GUI
-  - Real-time log monitoring with detailed/simple views
-  - Planter timer management
-  - Field-only mode toggle
-  - Task list visualization
-  - Cross-platform accessibility
-
-- **Notifications & Webhooks**
-  - Discord webhook integration for events
-  - Configurable ping notifications for:
-    - Critical errors and disconnects
-    - Character deaths and Vicious Bee spawns
-    - Mondo Chick buffs and Ant Challenges
-    - Sticker events and mob spawns
-    - Conversion events and hourly reports
-  - Screenshot capture and delivery
-  - Stream URL sharing with auto-pinning
+### Reporting & Monitoring
+- Hourly statistics tracking
+- Webhook notifications with screenshots
+- Discord bot commands for status monitoring
+- Live stream support (optional)
 
 ## Getting Started
 
-For requirements, installation, recommended system/Roblox settings, and usage guides, see the docs:
-
-https://existance-macro.gitbook.io/existance-macro-docs/
+Installation guide in our discord server or https://github.com/Fuzzy-Team/macro-auto-install/blob/main/README.md
 
 ## Notes
 
-- Designed for macOS.
-- This project and documentation are a work in progress but actively supported.
+- This Macro is for MacOS only.
+
+<div class="credits-container">
+  <h2>Credits</h2>
+  <ul class="credits">
+    <li>
+      <strong>Macro Inspiration:</strong>
+      <a href="https://github.com/NatroTeam/NatroMacro" target="_blank">Natro Macro</a>,
+      <a href="https://github.com/alaninnovates/bss-macro" target="_blank">Stumpy Macro</a>
+      <a href="https://github.com/existancepy/bss-macro-py" target="_blank">Existance Macro</a>
+    </li>
+    <li>
+      <strong>Developers:</strong> Logan<br />
+      Original Macro code: Existance
+    </li>
+    <li>
+      <strong>Pattern Makers:</strong> Existance, NatroTeam, tvojamamkajenic, sev, dully176, chillketchup, Electro
+    </li>
+  </ul>
+</div>

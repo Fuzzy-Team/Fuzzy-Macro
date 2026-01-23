@@ -8,13 +8,11 @@ import pyautogui as pag
 # This will be initialized when the macro class is created
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP, benchmarkMSS, mssScreenshotPillowRGBA
 from modules.controls.keyboard import keyboard
-from modules.controls.sleep import sleep, set_run_state, pauseable_sleep, wait_while_paused, is_paused
+from modules.controls.sleep import sleep, set_run_state
 import modules.controls.mouse as mouse
-from modules.screen.screenData import getScreenData
 import modules.logging.log as logModule
 from modules.submacros.fieldDriftCompensation import fieldDriftCompensation as fieldDriftCompensationClass
 from modules.screen.robloxWindow import RobloxWindowBounds
-from operator import itemgetter
 import sys
 import platform
 import os
@@ -23,7 +21,7 @@ import threading
 from modules.submacros.backpack import bpc
 from modules.screen.imageSearch import *
 import webbrowser
-from pynput.keyboard import Key, Controller
+from pynput.keyboard import Controller
 import cv2
 from datetime import timedelta, datetime
 from modules.misc.imageManipulation import *
@@ -1088,8 +1086,17 @@ class macro:
                     if not convertBalloon: break
                     self.logger.webhook("", "Converting Balloon", "light blue")
 
-            if time.time()-st > 30*60: #30mins max
-                self.logger.webhook("","Converting timeout (30mins max)", "brown", "screen")
+            # Check for conversion timeout
+            max_convert_time = self.setdat.get("max_convert_time", 5)
+            if time.time()-st > max_convert_time*60:
+                timeout_msg = f"Converting timeout ({max_convert_time}mins max)"
+                self.logger.webhook("", timeout_msg, "brown", "screen")
+                
+                behavior = self.setdat.get("convert_timeout_behavior", "move on").lower()
+                if behavior == "rejoin":
+                    self.rejoin(rejoinMsg=timeout_msg)
+                
+                # Default behavior is "move on"
                 break
 
             #check for afb
@@ -1606,11 +1613,6 @@ class macro:
                     self.keyboard.press("o")
                 self.moveMouseToDefault()
                 time.sleep(1)
-                #say existance so broke
-                if self.setdat["existance_broke"]:
-                    self.keyboard.press("/")
-                    self.keyboard.write(f'Existance so broke :weary: {datetime.now().strftime("%H:%M")}', 0.1)
-                    self.keyboard.press("enter")
                 self.convert()
                 #no need to reset
                 self.canDetectNight = True
@@ -3800,13 +3802,13 @@ class macro:
         return time.time() - timing >= cooldown*mobRespawnBonus
     
     def AFB(self, gatherInterrupt = False, turnOffShiftLock = False):  # Auto Field Boost - WOOHOO
-
+        
         def normalize(text):
             text = text.lower()
             text = re.sub(r'[^a-z\s]', ' ', text)  # remove symbols
             text = re.sub(r'\s+', ' ', text).strip()
             return text
-
+        
         returnVal = None
         # time limit - :(
         if self.AFBLIMIT: return True
@@ -3863,7 +3865,7 @@ class macro:
                         "mountain top": [["mountain", "top"]],
                     }
                     # ignore detected lines with these words, reduces false positives
-                    ignore = {"strawberry", "strawberries", "blueberry", "blueberries",
+                    ignore = {"strawberry", "strawberries", "blueberry", "blueberries", 
                     "seed", "seeds", "pineapple", "pineapples", "honey", "from"}
 
                     def ignore2(field, text):
@@ -3923,14 +3925,7 @@ class macro:
                         clean = normalize(bluetexts)
                         # "and the" appears when using loaded and smooth
                         and_the = [line for line in bluetexts.split("\n") if "boosted" in line]
-
-                        the = bluetexts.split()  # get each line of detected text
-                        boostedField = []
-
-                        # smooth/loaded
-                        clean = bluetexts.lower().replace(" and the ", " ") 
-                        # "and the" appears when using loaded and smooth
-                        and_the = [line for line in clean.split("\n") if "and the" in line] 
+                        
                         the = bluetexts.split()  # get each line of detected text
                         boostedField = []
 
@@ -3938,14 +3933,14 @@ class macro:
                         if "field" in dice:
                             boostedField = None
                             for cf in field:
-                                for pattern in fields[cf]:
+                                for pattern in fields[cf]:  
                                     if set(pattern).issubset(tokens):
                                         if not ignore2(cf, bluetexts):
                                             boostedField = cf
                                             break
                                 if boostedField:
                                     break
-
+                            
                         #other die
                         else:
                             boostedFields = []
@@ -3956,7 +3951,7 @@ class macro:
                                     for pattern in fields[cf]:
                                         if set(pattern).issubset(sentence_tokens) and not ignore2(cf, sentence):
                                             if cf not in boostedFields:
-                                                boostedFields.append(cf)  
+                                                boostedFields.append(cf)
 
                         # field user selected is detected
                         if "field" in dice:
@@ -3968,7 +3963,7 @@ class macro:
                                     self.keyboard.press("o")
                                 if diceslot == 0: self.toggleInventory("close")
                                 self.saveAFB("AFB_dice_cd")
-                                if glitter:
+                                if glitter: 
                                     self.AFBglitter = True
                                     self.saveAFB("AFB_glitter_cd")
                                 return returnVal
@@ -3983,7 +3978,7 @@ class macro:
                                     self.keyboard.press("o")
                                 if diceslot == 0: self.toggleInventory("close")
                                 self.saveAFB("AFB_dice_cd")
-                                if glitter:
+                                if glitter: 
                                     self.AFBglitter = True
                                     self.saveAFB("AFB_glitter_cd")
                                 return returnVal
@@ -3992,7 +3987,6 @@ class macro:
                                     self.logger.webhook("", f"Boosted Fields: {', '.join(boostedFields)}", "red")
                                 else:
                                     self.logger.webhook("", "Boosted Fields: None", "red")
-                                time.sleep(0.5)
                                 time.sleep(0.5)
 
                 # glitter    
