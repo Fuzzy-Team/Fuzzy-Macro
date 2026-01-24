@@ -94,17 +94,25 @@ filename=$(echo "${python_link}" | sed -e 's/\/.*\///g')
 
 if python"${python_ver}" --version; then
 	printf "\033[1;32mPython is already installed\033[0m\n"
-	if [ "$chip" = "arm64" ]; then
-	    python_path=$(which python${python_ver})
-	    arch_output=$(file "$python_path")
-	
-	    if echo "$arch_output" | grep -q "arm64"; then
-	        echo -e "\033[1;32mPython $python_ver has a arm64 binary\033[0m"
-	    else
-	        echo -e "\033[1;31mThere are no arm64 binaries for Python $python_ver!\033[0m"
-	        echo -e "\033[1;33mYou can fix this by uninstalling your current python 3.9 version and rerunning this command. Alternatively, install the arm64 binaries using your package manager (brew, miniforge, etc).\033[0m"
+		if [ "$chip" = "arm64" ]; then
+			# Resolve the real python executable (pyenv shims may point to a shim script)
+			python_exec=$(python"${python_ver}" -c 'import sys; print(sys.executable)' 2>/dev/null || true)
+			if [ -n "$python_exec" ] && [ -x "$python_exec" ]; then
+				arch_output=$(file "$python_exec" 2>/dev/null || true)
+				py_platform=$(python"${python_ver}" -c 'import platform; print(platform.machine())' 2>/dev/null || true)
+			else
+				python_exec=$(which python${python_ver} 2>/dev/null || true)
+				arch_output=$(file "$python_exec" 2>/dev/null || true)
+				py_platform=
+			fi
+
+			if echo "$py_platform" | grep -qi "arm64" || echo "$arch_output" | grep -q "arm64"; then
+				echo -e "\033[1;32mPython $python_ver has an arm64 binary\033[0m"
+			else
+				echo -e "\033[1;31mThere are no arm64 binaries for Python $python_ver!\033[0m"
+				echo -e "\033[1;33mFix: reinstall Python 3.9 with arm64 binaries (brew, miniforge) or use a universal/arm64 build.\033[0m"
+			fi
 		fi
-	fi
 else
 	printf "\033[1;35mPython is not installed, installing python ${python_ver}\nThere should be a popup for the python installer.\n\033[0m"
 	curl -O "https:/${python_link}" && open "${filename}"
