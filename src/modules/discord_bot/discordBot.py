@@ -8,6 +8,7 @@ from modules.screen.screenshot import screenshotRobloxWindow
 import io
 from modules.misc.messageBox import msgBox
 from modules.misc.appManager import closeApp
+from modules.controls.keyboard import keyboard
 import subprocess
 import sys
 import os
@@ -1624,6 +1625,46 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
                 
         except Exception as e:
             await interaction.response.send_message(f"❌ Error changing hive slot: {str(e)}")
+
+    @bot.tree.command(name="usehotbar", description="Use a hotbar slot (1-7)")
+    @app_commands.describe(slot="Hotbar slot number (1-7)")
+    async def use_hotbar(interaction: discord.Interaction, slot: int):
+        """Manually trigger a hotbar slot (updates timings and presses the key)"""
+        try:
+            if slot < 1 or slot > 7:
+                await interaction.response.send_message("❌ Hotbar slot must be between 1 and 7")
+                return
+
+            # Determine path to src and hotbar timings file (same as macro)
+            src_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+            timings_path = os.path.join(src_dir, 'data', 'user', 'hotbar_timings.txt')
+
+            # Read existing timings or initialize
+            try:
+                with open(timings_path, 'r') as f:
+                    hotbarSlotTimings = ast.literal_eval(f.read())
+            except Exception:
+                hotbarSlotTimings = [0] * 8
+
+            # Press the hotbar key twice (same behaviour as macro.backgroundOnce)
+            for _ in range(2):
+                keyboard.pagPress(str(slot))
+                time.sleep(0.4)
+
+            # Update the timing for this slot and save
+            try:
+                hotbarSlotTimings[slot] = time.time()
+            except Exception:
+                # If it's a dict-like structure, set the key
+                hotbarSlotTimings[slot] = time.time()
+
+            with open(timings_path, 'w') as f:
+                f.write(str(hotbarSlotTimings))
+
+            await interaction.response.send_message(f"✅ Activated hotbar slot {slot}")
+
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error using hotbar slot: {str(e)}")
 
     @bot.tree.command(name="macromode", description="Set macro mode (normal, quests, or field)")
     @app_commands.describe(mode="Macro mode to set")
