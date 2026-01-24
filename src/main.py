@@ -1,9 +1,17 @@
 from modules.misc import messageBox
-#check if step 3 installing dependencies was ran
+#check if installing dependencies was ran
 try:
     import requests
 except ModuleNotFoundError:
-    messageBox.msgBox(title="Dependencies not installed", text="It seems like you have not finished step 3 of the installation process. Refer to https://existance-macro.gitbook.io/existance-macro-docs/macro-installation/markdown/2.-installing-dependencies")
+    try:
+        script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "install_dependencies.command"))
+        if os.path.exists(script):
+            subprocess.Popen(["/bin/bash", script])
+        else:
+            messageBox.msgBox(title="Dependencies not installed", text="Dependencies are not installed. Refer to Discord for help.")
+    except Exception:
+        pass
+    sys.exit(0)
 from pynput import keyboard
 import multiprocessing
 import ctypes
@@ -34,8 +42,15 @@ except Exception:
 try:
 	from modules.misc.ColorProfile import DisplayColorProfile
 except ModuleNotFoundError:
-	messageBox.msgBox(title="Dependencies not installed", text="The new update requires new dependencies. Refer to https://existance-macro.gitbook.io/existance-macro-docs/macro-installation/markdown/2.-installing-dependencies.")
-	quit()
+    try:
+        script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "install_dependencies.command"))
+        if os.path.exists(script):
+            subprocess.Popen(["/bin/bash", script])
+        else:
+            messageBox.msgBox(title="Dependencies not installed", text="The new update requires new dependencies. Refer to Discord for help.")
+    except Exception:
+        pass
+    quit()
 from modules.submacros.hourlyReport import HourlyReport
 mw, mh = pag.size()
 
