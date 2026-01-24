@@ -2066,7 +2066,7 @@ if __name__ == "__main__":
                     streamLink = stream.start(setdat.get("stream_resolution", 0.75))
                     Thread(target=waitForStreamURL, daemon=True).start()
                 else:
-                    messageBox.msgBox(text='Cloudflared is required for streaming but is not installed. Visit https://existance-macro.gitbook.io/existance-macro-docs/guides/optional-installations/stream-setup-installing-cloudflared for installation instructions', title='Cloudflared not installed')
+                    messageBox.msgBox(text='Cloudflared is required for streaming but is not installed. Visit https://fuzzy-team.gitbook.io/fuzzy-macro/discord-setup/stream-setup for installation instructions', title='Cloudflared not installed')
 
             print("starting macro proc")
             #check if user enabled field drift compensation but sprinkler is not supreme saturator
