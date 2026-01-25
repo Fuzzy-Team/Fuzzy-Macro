@@ -94,9 +94,41 @@ function saveSetting(ele, type) {
 
   if (type == "profile") {
     eel.saveProfileSetting(id, value);
+    // Refresh priority/drag-list highlights after profile setting changes
+    try {
+      loadAllSettings().then((settings) => {
+        if (typeof refreshPriorityHighlights === "function") {
+          refreshPriorityHighlights(settings);
+        }
+      });
+    } catch (e) {
+      // ignore
+    }
   } else if (type == "general") {
     eel.saveGeneralSetting(id, value);
   }
+}
+
+// Update enabled/disabled state for all drag items based on settings
+function refreshPriorityHighlights(settings) {
+  if (!settings) return;
+  const items = document.querySelectorAll('.drag-item[data-id]');
+  items.forEach((item) => {
+    const taskId = item.dataset.id;
+    let enabled = true;
+    try {
+      if (typeof window._isTaskEnabledForSettings === 'function') {
+        enabled = window._isTaskEnabledForSettings(taskId, settings);
+      }
+    } catch (e) {
+      enabled = true;
+    }
+    if (enabled) {
+      item.classList.remove('disabled');
+    } else {
+      item.classList.add('disabled');
+    }
+  });
 }
 
 //returns a object based on the settings
@@ -200,6 +232,49 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
     };
     return badges[category] || "";
   }
+
+  // Expose a small helper globally so other code can update enabled/disabled states
+  window._isTaskEnabledForSettings = function (taskId, settingsObj) {
+    if (!taskId) return false;
+    // replicate isTaskEnabled logic from above
+    if (taskId.startsWith("gather_")) {
+      const fieldName = taskId.replace("gather_", "").replace("_", " ");
+      if (settingsObj.fields_enabled && settingsObj.fields) {
+        for (let i = 0; i < settingsObj.fields_enabled.length; i++) {
+          if (settingsObj.fields_enabled[i] && settingsObj.fields[i] === fieldName) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    if (taskId.startsWith("collect_")) {
+      const collectName = taskId.replace("collect_", "");
+      if (collectName === "sticker_printer") return settingsObj.sticker_printer || false;
+      if (collectName === "sticker_stack") return settingsObj.sticker_stack || false;
+      return settingsObj[collectName] || false;
+    }
+
+    if (taskId.startsWith("kill_")) {
+      const killName = taskId.replace("kill_", "");
+      return settingsObj[killName] || false;
+    }
+
+    if (taskId.startsWith("quest_")) {
+      const questName = taskId.replace("quest_", "").replace("_", "_");
+      return settingsObj[questName + "_quest"] || false;
+    }
+
+    if (taskId === "mondo_buff") return settingsObj.mondo_buff || false;
+    if (taskId === "stinger_hunt") return settingsObj.stinger_hunt || false;
+    if (taskId === "auto_field_boost") return settingsObj.auto_field_boost || false;
+    if (taskId === "ant_challenge") return settingsObj.ant_challenge || false;
+    if (taskId === "blender") return settingsObj.blender || false;
+    if (taskId === "planters") return settingsObj.planters || false;
+
+    return false;
+  };
 
   // Create items in the specified order
   orderArray.forEach((taskId) => {
