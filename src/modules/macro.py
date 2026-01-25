@@ -4080,6 +4080,8 @@ class macro:
 
         # Define patterns for different action types
         patterns = [
+            # Petal token catch patterns (new for petal quests)
+            (r'.*\b(catch)\b.*\b(red bloom petals?)\b.*\b(in|from)\b.*\b([a-z ]+?)\b field', 'gatherpetal', r'(clover|spider|bamboo|blue flower|cactus|clover|coconut|dandelion|mountain top|mushroom|pepper|pine tree|pineapple|pumpkin|rose|spider|strawberry|stump|sunflower)'),
             # Catch patterns (special catching mechanics)
             (r'.*\b(catch|chase)\b.*', 'catch', r'.*'),
             # Craft patterns (check first - specific crafting actions)
@@ -4246,6 +4248,24 @@ class macro:
         target = parsedObjective['target']
         quantity = parsedObjective['quantity']
         text = originalText  # For checking original text content
+
+        # Special handling for petal quests
+        if action == 'gatherpetal':
+            # Try to extract the field from the text or target
+            field = None
+            # If the regex matched, target should be the field name
+            if target:
+                field = target.replace(' ', '_').lower()
+            else:
+                # Fallback: try to extract from text
+                import re
+                m = re.search(r'in the ([a-z ]+?) field', text)
+                if m:
+                    field = m.group(1).replace(' ', '_').lower()
+            if field:
+                return [f"gatherpetal_{field}"]
+            else:
+                return []
 
         # Filter out specific quest types and completed tasks
         if text.lower().startswith('polar bear:'):
