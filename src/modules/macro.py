@@ -36,7 +36,7 @@ from difflib import SequenceMatcher
 import fuzzywuzzy.process
 import fuzzywuzzy
 import traceback
-import pygetwindow as gw
+import PyWinCtl as gw
 from modules.submacros.hasteCompensation import HasteCompensationRevamped
 from modules import bitmap_matcher
 import json
@@ -737,9 +737,11 @@ class macro:
             windows = gw.getAllTitles()
             for win in windows:
                 if "roblox roblox" in win.lower():
-                    x,y,w,h = gw.getWindowGeometry(win)
-                    return x==0 and y==0 and w==self.robloxWindow.mw and h==self.robloxWindow.mh
-            #can't find the roblox window, most likely fullscreen? Assumes that it exists
+                    window = gw.getWindowsWithTitle(win)[0]
+                    x, y = window.left, window.top
+                    w, h = window.width, window.height
+                    return x == 0 and y == 0 and w == self.robloxWindow.mw and h == self.robloxWindow.mh
+            # can't find the roblox window, most likely fullscreen? Assumes that it exists
             return True
                     
         else:

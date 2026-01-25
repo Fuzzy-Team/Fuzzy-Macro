@@ -225,7 +225,7 @@ install_pip_package "eel"
 install_pip_package "ImageHash"
 install_pip_package "httpx"
 install_pip_package "flask"
-install_pip_package "pygetwindow"
+install_pip_package "PyWinCtl"
 install_pip_package "requests" #used to check if this script was ran, should be installed by discord-webhooks
 install_pip_package "aiohttp==3.10.5"
 install_pip_package "pynput"
