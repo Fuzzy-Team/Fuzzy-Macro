@@ -149,8 +149,13 @@ def delete_backup_if_pending(destination=None):
 
 def update(t="main"):
     msgBox("Update in progress", "Updating... Do not close terminal")
-    # Important: always preserve `settings` and the VCS metadata and user data
-    protected_folders = ["settings", os.path.join("src", "data")]
+    # Important: preserve user data and profiles. Protect pattern folder
+    # during the generic overwrite so we can merge new/old patterns safely.
+    protected_folders = [
+        os.path.join("src", "data", "user"),
+        os.path.join("settings", "profiles"),
+        os.path.join("settings", "patterns"),
+    ]
     protected_files = [".git"]
     destination = os.getcwd().replace("/src", "")
 
@@ -233,6 +238,45 @@ def update(t="main"):
     except Exception:
         msgBox("Update failed", "Error while applying update files.")
         return False
+
+    # Merge patterns: combine files from extracted/settings/patterns with
+    # existing settings/patterns in destination. We protected patterns above
+    # so the generic merge didn't overwrite them. Here we perform a union
+    # copy: copy new files, and if a filename collides, keep the existing
+    # file and write the incoming file with a suffix to avoid data loss.
+    try:
+        src_patterns = os.path.join(extracted, "settings", "patterns")
+        dst_patterns = os.path.join(destination, "settings", "patterns")
+        if os.path.exists(src_patterns):
+            for root, dirs, files in os.walk(src_patterns):
+                rel_root = os.path.relpath(root, src_patterns)
+                dest_root = os.path.join(dst_patterns, rel_root) if rel_root != "." else dst_patterns
+                os.makedirs(dest_root, exist_ok=True)
+                for f in files:
+                    src_file = os.path.join(root, f)
+                    dest_file = os.path.join(dest_root, f)
+                    if not os.path.exists(dest_file):
+                        try:
+                            shutil.copy2(src_file, dest_file)
+                        except Exception:
+                            pass
+                    else:
+                        # create a non-destructive alternative name
+                        base, ext = os.path.splitext(f)
+                        suffix = 1
+                        while True:
+                            new_name = f"{base}.new{suffix}{ext}"
+                            new_path = os.path.join(dest_root, new_name)
+                            if not os.path.exists(new_path):
+                                try:
+                                    shutil.copy2(src_file, new_path)
+                                except Exception:
+                                    pass
+                                break
+                            suffix += 1
+    except Exception:
+        # non-fatal: don't interrupt whole update for pattern merge issues
+        pass
 
     # cleanup the extracted folder
     try:
