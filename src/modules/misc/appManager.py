@@ -3,7 +3,7 @@ import re
 import os
 import subprocess
 from modules.misc.appleScript import runAppleScript
-import PyWinCtl as gw
+import pygetwindow as gw
 import pyautogui as pag
 from ApplicationServices import AXUIElementIsAttributeSettable, AXUIElementCreateApplication, kAXErrorSuccess, AXUIElementSetAttributeValue, AXUIElementCopyAttributeValue, AXValueCreate, kAXValueCGPointType, kAXValueCGSizeType, AXUIElementCopyAttributeNames
 from Quartz import CGPoint, CGSize
@@ -98,14 +98,11 @@ def getWindowSize(windowName):
     windows = gw.getAllTitles()
     for win in windows:
         if windowName.lower() in win.lower():
-            win_objs = gw.getWindowsWithTitle(win)
-            if win_objs:
-                window = win_objs[0]
-                x, y = window.left, window.top
-                w, h = window.width, window.height
-                return x, y, w, h
-    # window not found, most likely also fullscreen (but unfocused)
-    return 0, 0, mw, mh
+            windowGeometry = gw.getWindowGeometry(win)
+            if windowGeometry:
+                return windowGeometry
+    #window not found, most likely also fullscreen (but unfocused)
+    return 0,0,mw,mh
 
 def setAppFullscreenMac(app="Roblox", fullscreen=True):
     workspace = NSWorkspace.sharedWorkspace()
