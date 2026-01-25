@@ -2108,9 +2108,9 @@ class macro:
         self.keyboard.walk("s", 0.4)
         time.sleep(0.5)
 
-        # If the UI indicates we "need" a pass (or mentions passes), try to fetch a free ant pass
+        # If the red box (where E would be) says 'need', fetch a free ant pass
         beside_text = self.getTextBesideE() or ""
-        if any(x in beside_text.lower() for x in ("need","pass","passes")):
+        if "need" in beside_text.lower():
             self.logger.webhook("", "No ant passes detected — fetching free ant pass","dark brown")
             try:
                 self.reset(convert=False)
