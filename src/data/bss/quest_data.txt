@@ -90,6 +90,17 @@ kill_2_werewolf
 -prickly pears
 gather_cactus
 
+-mashed blooms
+gather_pumpkin
+gather_dandelion
+gather_bamboo
+kill_spider
+
+-petal tabbouleh
+gather_clover
+gather_strawberry
+kill_4_rhinobeetle
+
 ==bucko bee==
 
 -abilities
@@ -163,6 +174,11 @@ gather_pine tree
 kill_5_rhinobeetle
 kill_3_mantis
 
+-petals
+gather_blue flower
+gather_clover
+gather_pineapple
+
 ==riley bee==
 
 -abilities	
@@ -233,6 +249,11 @@ gather_strawberry
 gather_rose
 kill_5_ladybug
 kill_3_scorpion
+
+-petals
+gather_mushroom
+gather_clover
+gather_spider
 
 ==honey bee==
 
