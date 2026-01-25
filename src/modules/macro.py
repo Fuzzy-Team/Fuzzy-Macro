@@ -2732,16 +2732,21 @@ class macro:
                 break
             self.logger.webhook("", "Failed to land in stump field", "red", "screen", ping_category="ping_critical_errors")
             self.reset()
-        while True:
-            # Check if paused and wait
-            if self.checkPauseAndWait():
-                # Stop was requested while paused
-                return
-            mouse.click()
-            keepOldData = self.keepOldCheck()
-            if keepOldData is not None:
-                mouse.mouseUp()
-                break
+        # Set status to attacking for hotbar logic
+        self.status.value = "attacking"
+        try:
+            while True:
+                # Check if paused and wait
+                if self.checkPauseAndWait():
+                    # Stop was requested while paused
+                    return
+                mouse.click()
+                keepOldData = self.keepOldCheck()
+                if keepOldData is not None:
+                    mouse.mouseUp()
+                    break
+        finally:
+            self.status.value = ""  # Reset status after attack
         #handle the other stump snail
         self.logger.webhook("","Stump Snail Killed","bright green", "screen", ping_category="ping_mob_events")
         self.saveTiming("stump_snail")
@@ -3403,6 +3408,8 @@ class macro:
             elif self.status.value == "rejoining": continue
             elif slotUseWhen == "gathering" and not "gather_" in self.status.value: continue 
             elif slotUseWhen == "converting" and not self.status.value == "converting": continue 
+            elif slotUseWhen == "attacking" and not self.status.value == "attacking": continue
+            # If 'always', or matches any of the above, allow
             #check cd
             cdSecs = self.setdat[f"hotbar{i}_use_every_value"]
             if self.setdat[f"hotbar{i}_use_every_format"] == "mins": 
