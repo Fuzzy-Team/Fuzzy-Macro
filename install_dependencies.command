@@ -307,4 +307,3 @@ else:
     print("html2image package not found")
 EOF
 printf "\n\n\n\033[32;1mInstallation complete!\033[0m\n"
-read
