@@ -252,22 +252,35 @@ def clearRecentLogs():
 
 def launch():
 
-    pass
-    
+    import socket
+    def get_free_port(start_port=8000, max_tries=100):
+        port = start_port
+        for _ in range(max_tries):
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                try:
+                    s.bind(("localhost", port))
+                    return port
+                except OSError:
+                    port += 1
+        raise RuntimeError(f"No free port found in range {start_port}-{port}")
+
+    port = get_free_port(8000, 100)
+    port_url = f"http://localhost:{port}"
+
     # Ensure important functions are exposed to the frontend before eel starts
     try:
         eel.expose(getRecentLogs)
     except Exception:
         # ignore if already exposed or if exposure fails at import time
         pass
-    
+
     try:
-        eel.start('index.html', mode = "chrome", app_mode = True, block = False, cmdline_args=["--incognito", "--app=http://localhost:8000"])
+        eel.start('index.html', mode = "chrome", app_mode = True, block = False, port=port, cmdline_args=["--incognito", f"--app={port_url}"])
     except EnvironmentError:
         try:
-            eel.start('index.html', mode = "chrome-app", app_mode = True, block = False, cmdline_args=["--incognito", "--app=http://localhost:8000"])
+            eel.start('index.html', mode = "chrome-app", app_mode = True, block = False, port=port, cmdline_args=["--incognito", f"--app={port_url}"])
         except EnvironmentError:
             print("Chrome/Chromium could not be found. Opening in default browser...")
-            eel.start('index.html', block=False, mode=None)
+            eel.start('index.html', block=False, mode=None, port=port)
             time.sleep(2)
-            webbrowser.open("http://localhost:8000/", new=2)
+            webbrowser.open(f"{port_url}/", new=2)
