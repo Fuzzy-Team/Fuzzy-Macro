@@ -2108,6 +2108,18 @@ class macro:
         self.keyboard.walk("s", 0.4)
         time.sleep(0.5)
 
+        # If the UI indicates we "need" a pass (or mentions passes), try to fetch a free ant pass
+        beside_text = self.getTextBesideE() or ""
+        if any(x in beside_text.lower() for x in ("need","pass","passes")):
+            self.logger.webhook("", "No ant passes detected — fetching free ant pass","dark brown")
+            try:
+                self.reset(convert=False)
+                self.collect("ant_pass_dispenser")
+                self.reset(convert=False)
+            except Exception:
+                self.logger.webhook("", "Failed to collect ant pass","red", "screen", ping_category="ping_critical_errors")
+            time.sleep(1)
+
         if self.isBesideE(["spen","play"], ["need"]):
             self.logger.webhook("","Start Ant Challenge","bright green", "screen")
             self.keyboard.press("e")
@@ -2130,6 +2142,7 @@ class macro:
                     mouse.click()
                     break
             return
+
         self.logger.webhook("", "Cant start ant challenge", "red", "screen", ping_category="ping_critical_errors")
 
     def getCurrentMinute(self):
