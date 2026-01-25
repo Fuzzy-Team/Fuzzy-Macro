@@ -95,14 +95,40 @@ def closeApp(app):
         os.system(f"START /wait taskkill /f /im {app}.exe")
 
 def getWindowSize(windowName):
-    windows = gw.getAllTitles()
-    for win in windows:
-        if windowName.lower() in win.lower():
-            windowGeometry = gw.getWindowGeometry(win)
-            if windowGeometry:
-                return windowGeometry
-    #window not found, most likely also fullscreen (but unfocused)
-    return 0,0,mw,mh
+    import Quartz
+    
+    try:
+        # Try the normal way first
+        windows = gw.getAllTitles()
+        for win in windows:
+            if windowName.lower() in win.lower():
+                windowGeometry = gw.getWindowGeometry(win)
+                if windowGeometry:
+                    return windowGeometry
+    except KeyError:
+        # If we get KeyError, manually get window titles safely
+        windowList = Quartz.CGWindowListCopyWindowInfo(
+            Quartz.kCGWindowListExcludeDesktopElements | Quartz.kCGWindowListOptionOnScreenOnly, 
+            Quartz.kCGNullWindowID
+        )
+        
+        for win in windowList:
+            owner = win.get(Quartz.kCGWindowOwnerName, '')
+            name = win.get(Quartz.kCGWindowName, '')
+            title = f'{owner} {name}'.strip()
+            
+            if windowName.lower() in title.lower():
+                # Found the window, get its bounds
+                bounds = win.get('kCGWindowBounds', {})
+                if bounds:
+                    x = int(bounds.get('X', 0))
+                    y = int(bounds.get('Y', 0))
+                    w = int(bounds.get('Width', mw))
+                    h = int(bounds.get('Height', mh))
+                    return x, y, w, h
+    
+    # Window not found, most likely fullscreen (but unfocused)
+    return 0, 0, mw, mh
 
 def setAppFullscreenMac(app="Roblox", fullscreen=True):
     workspace = NSWorkspace.sharedWorkspace()
