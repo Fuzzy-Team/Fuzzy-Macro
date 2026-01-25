@@ -16,6 +16,7 @@ import json
 import ast
 import time
 from datetime import datetime, timedelta
+import queue  # <-- Add this import
 
 # Import settings manager functions
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'misc'))
@@ -80,6 +81,7 @@ def update_profile_setting(setting_key, value):
         return False, f"❌ Error updating profile setting: {str(e)}"
 
 def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_info=None, updateGUI=None):
+    import modules.macro
     bot = commands.Bot(command_prefix="!b", intents=discord.Intents.all())
     
     # Store initial message info for pinning
@@ -347,6 +349,26 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
     async def rejoin(interaction: discord.Interaction):
         run.value = 4
         await interaction.response.send_message("Macro is rejoining")
+
+    @bot.tree.command(name = "reset", description = "Reset the character and return to hive")
+    async def reset(interaction: discord.Interaction):
+        await interaction.response.defer()
+        try:
+            # Request reset in the macro process using a special run value
+            import modules.macro as macroModule
+            # Use a dummy queue if recentLogs is not a queue
+            logQueue = recentLogs if hasattr(recentLogs, "put") else queue.Queue()
+            macro = macroModule.macro(reset, logQueue, updateGUI)
+            macro.status.value = ""
+            if hasattr(macro, 'stopGather'):
+                macro.stopGather()
+            if hasattr(macro, 'logger') and hasattr(macro.logger, 'webhook'):
+                macro.logger.webhook("", "Player died (Reset Command)", "dark brown", "screen", ping_category="ping_character_deaths")
+            time.sleep(0.4)
+            macro.reset(convert=True)
+            await interaction.followup.send("✅ Reset completed.")
+        except Exception as e:
+            await interaction.followup.send(f"❌ Failed to request reset: {str(e)}")
     
     @bot.tree.command(name = "logs", description = "Show the last 10 macro actions from the log")
     async def show_logs(interaction: discord.Interaction):
@@ -1602,7 +1624,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
         except Exception as e:
             await interaction.response.send_message(f"❌ Error deleting profile: {str(e)}")
     
-    @bot.tree.command(name="hiveslot", description="Change the hive slot number (1-6)")
+    @bot.tree.command(name="hiveslot", description = "Change the hive slot number (1-6)")
     @app_commands.describe(slot="Hive slot number (1-6, where 1 is closest to cannon)")
     async def hive_slot(interaction: discord.Interaction, slot: int):
         """Change the hive slot number"""
