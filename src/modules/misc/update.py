@@ -155,7 +155,10 @@ def update(t="main"):
     destination = os.getcwd().replace("/src", "")
 
     # remote version URL and zip link
-    remote_version_url = "https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/src/webapp/version.txt"
+
+    import time
+    # Add cache-busting query param to version URL
+    remote_version_url = f"https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/src/webapp/version.txt?cb={int(time.time())}"
     zip_link = "https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/heads/main.zip"
     backup_path = os.path.join(destination, "backup_macro.zip")
 
@@ -178,9 +181,15 @@ def update(t="main"):
     except Exception:
         local_version = "0.0.0"
 
-    # fetch remote version
+
+    # fetch remote version (disable caching)
     try:
-        r = requests.get(remote_version_url, timeout=15)
+        headers = {
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0"
+        }
+        r = requests.get(remote_version_url, timeout=15, headers=headers)
         r.raise_for_status()
         remote_version = r.text.strip()
     except Exception:
