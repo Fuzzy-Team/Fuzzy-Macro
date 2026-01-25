@@ -1108,7 +1108,7 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                 
             if taskId == "ant_challenge":
                 if macro.setdat["ant_challenge"]:
-                    runTask(macro.antChallenge)
+                    runTask(macro.antChallenge, resetAfter=False)
                     executedTasks.add(taskId)
                     return True
                 return False
@@ -1222,7 +1222,7 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                     elif mob == "ant":
                         # Ant killing via Ant Challenge
                         macro.logger.webhook("Quest Completer", "Executing ant challenge for quest", "light blue")
-                        runTask(macro.antChallenge)
+                        runTask(macro.antChallenge, resetAfter=False)
                         macro.logger.webhook("Quest Completer", "Completed ant challenge", "bright green")
                         # Clear quest cache to force re-detection of updated objectives
                         questCacheKey = "quest_completer_objectives"
