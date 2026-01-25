@@ -3671,20 +3671,7 @@ class macro:
                     #match text with the closest known quest title
                     questTitleYPos = ry
                     print(questTitleYPos)
-                    # Prefer explicit keyword matches when OCR clearly contains them
-                    lower_text = text.lower()
-                    forced_title = None
-                    if "petal" in lower_text or "petals" in lower_text:
-                        if "petals" in quest_data.get(questGiver, {}):
-                            forced_title = "petals"
-                    elif "tango" in lower_text:
-                        if "tango" in quest_data.get(questGiver, {}):
-                            forced_title = "tango"
-
-                    if forced_title:
-                        questTitle = forced_title
-                    else:
-                        questTitle, _ = fuzzywuzzy.process.extractOne(text, quest_data[questGiver].keys())
+                    questTitle, _ = fuzzywuzzy.process.extractOne(text, quest_data[questGiver].keys())
                     self.logger.webhook("", f"Quest Title: {questTitle}", "dark brown")
                     break
                 
