@@ -160,7 +160,38 @@ def update(t="main"):
     destination = os.getcwd().replace("/src", "")
 
     # remote version URL and zip link
+    # Attempt to fetch the latest `update.py` from upstream and replace the
+    # local copy before performing the rest of the update. This allows bug
+    # fixes in the updater itself to take effect immediately for this run.
+    try:
+        update_py_url = "https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/src/modules/misc/update.py"
+        h = {
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        }
+        r_up = requests.get(update_py_url, timeout=20, headers=h)
+        r_up.raise_for_status()
+        upd_code = r_up.text
+        target_update = os.path.join(destination, "src", "modules", "misc", "update.py")
+        target_dir = os.path.dirname(target_update)
+        os.makedirs(target_dir, exist_ok=True)
+        tmp_path = target_update + ".tmp"
+        try:
+            with open(tmp_path, "w", encoding="utf-8") as fh:
+                fh.write(upd_code)
+            os.replace(tmp_path, target_update)
+        except Exception:
+            try:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            except Exception:
+                pass
+    except Exception:
+        # non-fatal: continue with current updater if fetch fails
+        pass
 
+    # remote version URL and zip link
     import time
     # Add cache-busting query param to version URL
     remote_version_url = f"https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/src/webapp/version.txt?cb={int(time.time())}"
