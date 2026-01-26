@@ -175,7 +175,7 @@ kill_5_rhinobeetle
 kill_3_mantis
 
 -petals
-gather_blue flower
+gather_pine tree
 gather_clover
 gather_pineapple
 
