@@ -399,7 +399,28 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
                     log_text += f"`{time_str}` **{title}**\n"
 
             if log_text:
-                embed.add_field(name="Recent Actions", value=log_text.rstrip(), inline=False)
+                # Ensure each embed field value is <= 1024 characters (Discord limit)
+                if len(log_text) > 1024:
+                    # Split by lines into chunks that fit within 1024 chars
+                    lines = log_text.rstrip().splitlines(keepends=True)
+                    chunks = []
+                    current_chunk = ""
+                    for line in lines:
+                        if len(current_chunk) + len(line) > 1024:
+                            if current_chunk:
+                                chunks.append(current_chunk.rstrip())
+                            current_chunk = line
+                        else:
+                            current_chunk += line
+
+                    if current_chunk:
+                        chunks.append(current_chunk.rstrip())
+
+                    for i, chunk in enumerate(chunks):
+                        field_name = f"Recent Actions (Part {i + 1})" if len(chunks) > 1 else "Recent Actions"
+                        embed.add_field(name=field_name, value=chunk, inline=False)
+                else:
+                    embed.add_field(name="Recent Actions", value=log_text.rstrip(), inline=False)
             else:
                 embed.add_field(name="Recent Actions", value="No actions to display", inline=False)
 
