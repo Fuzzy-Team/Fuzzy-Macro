@@ -125,6 +125,7 @@ class MemoryMatch:
         
         # Game loop
         current_attempt = 0
+        matched_indices = set()
         while current_attempt <= attempts:
             print(f"Attempt {current_attempt}")
             
