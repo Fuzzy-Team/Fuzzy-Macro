@@ -94,8 +94,11 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
         try:
             synced = await bot.tree.sync()
             print(f"Synced {len(synced)} commands")
-            for command in synced:
-                print(f"  - {command.name}: {command.description}")
+            # Avoid printing every command by default; enable detailed
+            # output by setting environment variable DISCORD_VERBOSE_SYNC=1
+            if os.getenv("DISCORD_VERBOSE_SYNC", "0") == "1":
+                for command in synced:
+                    print(f"  - {command.name}: {command.description}")
         except Exception as e:
             print(f"Error syncing commands: {e}")
             import traceback
