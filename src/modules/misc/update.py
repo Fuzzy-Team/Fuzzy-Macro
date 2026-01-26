@@ -195,7 +195,7 @@ def update(t="main"):
     import time
     # Add cache-busting query param to version URL
     remote_version_url = f"https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/src/webapp/version.txt?cb={int(time.time())}"
-    zip_link = "https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/heads/main.zip"
+    zip_link = f"https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/tags/{remote_version}.zip"
     backup_path = os.path.join(destination, "backup_macro.zip")
 
     # create a silent backup (overwrite previous backup)
