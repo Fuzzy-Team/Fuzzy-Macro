@@ -808,8 +808,16 @@ class macro:
     #run the path to go to a field
     #faceDir what direction to face after landing in a field (default, north, south)
     def goToField(self, field, faceDir = "default"):
+        # Accept a string or a list/tuple of tokens/words and normalize to a
+        # single field name (e.g. ["blue", "flower"] -> "blue flower").
+        if isinstance(field, (list, tuple)):
+            try:
+                field = " ".join([str(f) for f in field])
+            except Exception:
+                field = str(field)
+
         # Normalize field name to handle both space and underscore formats
-        normalized_field = field.replace('_', ' ')
+        normalized_field = str(field).replace('_', ' ').strip()
         self.location = normalized_field
         self.runPath(f"cannon_to_field/{normalized_field}")
         if faceDir == "default": return
