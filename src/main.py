@@ -81,7 +81,7 @@ def macro(status, logQueue, updateGUI, run, skipTask):
     #macro.useItemInInventory("blueclayplanter")
     #function to run a task
     #makes it easy to do any checks after a task is complete (like stinger hunt, rejoin every, etc)
-    def runTask(func = None, args = (), resetAfter = True, convertAfter = True):
+    def runTask(func = None, args = (), resetAfter = True, convertAfter = True, allowAFB = True):
         nonlocal taskCompleted
         # Check if skip was requested
         if skipTask.value == 1:
@@ -113,8 +113,8 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                 macro.rejoin("Rejoining (Scheduled)")
                 macro.saveTiming("rejoin_every")
         
-        #auto field boost
-        if macro.setdat["Auto_Field_Boost"] and not macro.AFBLIMIT:
+        #auto field boost (can be disabled per-call via allowAFB)
+        if allowAFB and macro.setdat["Auto_Field_Boost"] and not macro.AFBLIMIT:
             if macro.hasAFBRespawned("AFB_dice_cd", macro.setdat["AFB_rebuff"]*60) or macro.hasAFBRespawned("AFB_glitter_cd", macro.setdat["AFB_rebuff"]*60-30):
                 macro.AFB(gatherInterrupt=False)
 
@@ -828,7 +828,7 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                         for i in range(3):
                             if macro.setdat[f"cycle1_{i+1}_planter"] == "none" or macro.setdat[f"cycle1_{i+1}_field"] == "none":
                                 continue
-                            planter = runTask(macro.placePlanterInCycle, args = (i, 1),resetAfter=False)
+                            planter = runTask(macro.placePlanterInCycle, args = (i, 1),resetAfter=False, allowAFB=False)
                             if planter:
                                 planterData["planters"][i] = planter[0]
                                 planterData["fields"][i] = planter[1]
@@ -871,7 +871,7 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                             if fieldToPlace in otherSlotFields:
                                 continue
                             
-                            planter = runTask(macro.placePlanterInCycle, args = (i, nextCycle),resetAfter=False)
+                            planter = runTask(macro.placePlanterInCycle, args = (i, nextCycle),resetAfter=False, allowAFB=False)
                             if planter:
                                 planterData["cycles"][i] = nextCycle
                                 planterData["planters"][i] = planter[0]
@@ -1064,7 +1064,7 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                             planterToPlace = getBestPlanter(nextField)
                             if planterToPlace is None:
                                 break
-                            if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False):
+                            if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False, allowAFB=False):
                                 savePlacedPlanter(j, nextField, planterToPlace, nectar)
                                 plantersPlaced += 1
                     
@@ -1092,7 +1092,7 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                                 planterToPlace = getBestPlanter(nextField)
                                 if planterToPlace is None:
                                     break
-                                if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False):
+                                if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False, allowAFB=False):
                                     savePlacedPlanter(j, nextField, planterToPlace, nectar)
                                     plantersPlaced += 1
                     
@@ -1113,7 +1113,7 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                                 planterToPlace = getBestPlanter(nextField)
                                 if planterToPlace is None:
                                     break
-                                if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False):
+                                if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False, allowAFB=False):
                                     savePlacedPlanter(j, nextField, planterToPlace, nectar)
                                     plantersPlaced += 1
                     
