@@ -1883,27 +1883,46 @@ class macro:
         self.isGathering = True
         firstPattern = True
         lastGooTime = 0  # Track when goo was last used
+        lastGumdropTime = 0  # Track when gumdrop was last used
         gooTimerActive = True  # Flag to control goo timer thread
-        
+        gumdropTimerActive = True  # Flag to control gumdrop timer thread
+
         # Add goo status to webhook message
         gooStatus = " - Goo Enabled" if fieldSetting["goo"] else ""
         self.logger.webhook(f"Gathering: {field.title()}", f"Limit: {gatherTimeLimit} - {fieldSetting['shape']} - Backpack: {fieldSetting['backpack']}%{gooStatus}", "light green")
-        
-        # Start goo timer thread
+
         import threading
+        # Goo timer thread: always 3s interval if goo quest, else field setting
         def gooTimerThread():
             nonlocal lastGooTime, gooTimerActive
             while gooTimerActive:
                 currentTime = time.time()
-                gooInterval = int(fieldSetting["goo_interval"])
+                gooInterval = 3 if questGumdrops else int(fieldSetting["goo_interval"])
                 if fieldSetting["goo"] and (currentTime - lastGooTime) >= gooInterval:
                     self.keyboard.press(str(self.setdat["goo_slot"]))
                     time.sleep(0.05)
                     lastGooTime = currentTime
-                time.sleep(0.5)  # Check every 0.5 seconds
-        
-        gooTimerThread = threading.Thread(target=gooTimerThread, daemon=True)
-        gooTimerThread.start()
+                time.sleep(0.5)
+
+        # Gumdrop timer thread: 3s if questGumdrops, else field setting
+        def gumdropTimerThread():
+            nonlocal lastGumdropTime, gumdropTimerActive
+            while gumdropTimerActive:
+                currentTime = time.time()
+                gumdropInterval = 3 if questGumdrops else int(fieldSetting.get("gumdrop_interval", 3))
+                if (currentTime - lastGumdropTime) >= gumdropInterval:
+                    if questGumdrops:
+                        self.keyboard.press(str(self.setdat["quest_gumdrop_slot"]))
+                    elif fieldSetting.get("gumdrops", False):
+                        self.keyboard.press(str(self.setdat["gumdrop_slot"]))
+                    time.sleep(0.05)
+                    lastGumdropTime = currentTime
+                time.sleep(0.5)
+
+        gooThread = threading.Thread(target=gooTimerThread, daemon=True)
+        gooThread.start()
+        gumdropThread = threading.Thread(target=gumdropTimerThread, daemon=True)
+        gumdropThread.start()
         mouse.moveBy(10,5)
         self.keyboard.releaseMovement()
 
@@ -1911,8 +1930,9 @@ class macro:
             return time.time() - st
         
         def stopGather():
-            nonlocal gooTimerActive
+            nonlocal gooTimerActive, gumdropTimerActive
             gooTimerActive = False  # Stop the goo timer thread
+            gumdropTimerActive = False  # Stop the gumdrop timer thread
             if fieldSetting["shift_lock"]: 
                 self.keyboard.press('shift')
             self.moveMouseToDefault()
@@ -1939,16 +1959,12 @@ class macro:
                 self.reset(convert=False)
                 return
             
-            #goo timer is now handled by background thread
+            # goo and gumdrop timers are now handled by background threads
 
             patternStartTime = time.time()
             mouse.mouseDown()
 
-            #quest gumdrops
-            if questGumdrops:
-                for _ in range(2):
-                    self.keyboard.press(str(self.setdat["quest_gumdrop_slot"]))
-                    time.sleep(0.05)
+            # (No need to press quest gumdrops here, handled by timer)
 
             #ensure that the pattern works
             try:
@@ -4696,7 +4712,7 @@ class macro:
                         timeout = 0 
                         for _ in range(300):
                             if self.blueTextImageSearch("boosted"): # if message contains "boosted", continue
-                                time.sleep(1.25)
+                                time.sleep(2)
                                 break
                             timeout += 1    
                             if timeout == 300: # else try again after other tasks
@@ -4705,7 +4721,7 @@ class macro:
                                 self.saveAFB("AFB_dice_cd")
                                 self.AFBglitter = False
                                 return
-                        for _ in range(4):
+                        for _ in range(8):
                             bluetexts += ocr.imToString("blue") + "\n"
 
                         bluetexts = normalize(bluetexts)
@@ -4755,7 +4771,6 @@ class macro:
                                 self.saveAFB("AFB_dice_cd")
                                 if glitter: 
                                     self.AFBglitter = True
-                                    self.saveAFB("AFB_glitter_cd")
                                 return returnVal
                             else:
                                 continue
@@ -4770,7 +4785,6 @@ class macro:
                                 self.saveAFB("AFB_dice_cd")
                                 if glitter: 
                                     self.AFBglitter = True
-                                    self.saveAFB("AFB_glitter_cd")
                                 return returnVal
                             else:
                                 if boostedFields:
@@ -4780,8 +4794,8 @@ class macro:
                                 time.sleep(0.5)
 
                 # glitter
-                if glitter and not self.failed:
-                    if self.cAFBglitter or (self.hasAFBRespawned("AFB_glitter_cd", rebuff*60) and self.AFBglitter):
+                if glitter and not self.failed and self.hasAFBRespawned("AFB_glitter_cd", rebuff*60):
+                    if self.AFBglitter:
                         self.logger.webhook("", "Rebuffing: Glitter", "white")
                         # If glitter is set to use inventory slot 0, try to locate it first
                         glitterCoords = None
