@@ -1,7 +1,7 @@
 <div align="center">
 
 <!-- logo banner -->
-<img width="200" height="200" src="https://i.imgur.com/yIUuc5W.png" />
+<img width="200" height="200" src="https://i.imgur.com/yIUuc5W.png" style="margin-bottom: -10px;"/>
 <h1>Fuzzy Macro</h1>
 
 <!-- shields and contents -->
@@ -124,10 +124,8 @@ Installation guide in our discord server or https://github.com/Fuzzy-Team/macro-
       Original Macro code: Existance
     </li>
     <li>
-
-      
-<img width="1312" height="1022" alt="image" src="https://github.com/user-attachments/assets/d5664644-4929-40e0-a048-dd941bffd04d" />
       <strong>Pattern Makers:</strong> Existance, NatroTeam, tvojamamkajenic, sev, dully176, chillketchup, Electro
     </li>
   </ul>
+  <img width="1312" height="1022" alt="image" src="https://github.com/user-attachments/assets/d5664644-4929-40e0-a048-dd941bffd04d" />
 </div>
