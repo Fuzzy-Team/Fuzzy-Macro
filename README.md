@@ -1,17 +1,19 @@
-# Fuzzy Macro
+<div align="center">
 
+<!-- logo banner -->
+<img width="200" height="200" src="https://i.imgur.com/yIUuc5W.png" />
+<h1>Fuzzy Macro</h1>
+
+<!-- shields and contents -->
 ![Discord](https://img.shields.io/discord/1462647649021853912?label=Discord&color=7289da&logo=discord&logoColor=white&link=https://discord.gg/rGRVG8Rpsb)
 ![Repo Stars](https://img.shields.io/github/stars/LaganYT/Existance-Macro?style=flat&label=Stars&color=fff240&logo=github&logocolor=white&link=https://github.com/LaganYT/Existance-Macro/stargazers)
 ![Downloads](https://img.shields.io/github/downloads/Fuzzy-Team/Fuzzy-Macro/total?label=downloads&logo=data:image/svg%2bxml;base64,PHN2ZwogICB2aWV3Qm94PSIwIDAgMjQgMjQiCiAgIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgPHBhdGgKICAgICBmaWxsPSIjZmZmIgogICAgIGQ9Ik0gMTIsMC4yMDk2MTUxNSBBIDExLjc5MDM4NSwxMS43OTAzODUgMCAxIDAgMjMuNzkwMzg1LDEyIDExLjc5MDM4NSwxMS43OTAzODUgMCAwIDAgMTIsMC4yMDk2MTUxNSBaIE0gOS4zMDAwMDE5LDkuOTgzODQ0MiAxMC44MjA5NjIsMTEuNTE2NTk0IFYgNC45MjU3NjkxIGggMi4zNTgwNzYgViAxMS41MTY1OTQgTCAxNC42OTk5OTgsOS45OTU2MzQ2IDE2LjM2MjQ0MiwxMS42NTgwNzkgMTIsMTYuMDIwNTIxIDcuNjI1NzY3MiwxMS42NTgwNzkgWiBNIDE2LjcxNjE1NCwxOS4wNzQyMzEgSCA3LjI4Mzg0NjEgdiAtMi4zNTgwNzcgaCA5LjQzMjMwNzkgeiIKICAgICAvPgo8L3N2Zz4K)
 ![Version](https://img.shields.io/github/v/release/Fuzzy-Team/Fuzzy-Macro)
-
-Roblox Bee Swarm Simulator macro for macOS. Free, open source, and actively maintained.
-
-- Discord: [https://discord.gg/rGRVG8Rpsb](https://discord.gg/rGRVG8Rpsb)
-- Existance vs. Fuzzy Macro Comparison: https://fuzzy-team.gitbook.io/fuzzy-macro/getting-started/fuzzy-macro-vs-existance-macro
-- Gitbook: https://fuzzy-team.gitbook.io/fuzzy-macro
-
-<img width="1312" height="1022" alt="image" src="https://github.com/user-attachments/assets/d5664644-4929-40e0-a048-dd941bffd04d" />
+<br>
+Roblox Bee Swarm Simulator macro for macOS. Free, open source, and actively maintained!<br>
+<br>
+[Discord](https://discord.gg/rGRVG8Rpsb) - [Existance vs. Fuzzy Macro Comparison](https://fuzzy-team.gitbook.io/fuzzy-macro/getting-started/fuzzy-macro-vs-existance-macro) - [Gitbook](https://fuzzy-team.gitbook.io/fuzzy-macro)
+</div>
 
 ## Getting Started
 
@@ -122,6 +124,9 @@ Installation guide in our discord server or https://github.com/Fuzzy-Team/macro-
       Original Macro code: Existance
     </li>
     <li>
+
+      
+<img width="1312" height="1022" alt="image" src="https://github.com/user-attachments/assets/d5664644-4929-40e0-a048-dd941bffd04d" />
       <strong>Pattern Makers:</strong> Existance, NatroTeam, tvojamamkajenic, sev, dully176, chillketchup, Electro
     </li>
   </ul>
