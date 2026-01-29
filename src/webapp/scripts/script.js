@@ -400,6 +400,8 @@ function loadInputs(obj, save = "") {
   if (save == "profile") {
     eel.saveDictProfileSettings(obj);
   }
+  // Update visibility of any dependent fields after loading inputs
+  try { updateReturnDependentFields(); } catch (e) { /* ignore */ }
 }
 
 function applyTheme(theme) {
@@ -408,6 +410,22 @@ function applyTheme(theme) {
     document.documentElement.classList.add("theme-purple");
   } else {
     document.documentElement.classList.remove("theme-purple");
+  }
+}
+
+// Show/hide inputs that depend on the 'return' dropdown value
+function updateReturnDependentFields() {
+  const returnEle = document.getElementById("return");
+  if (!returnEle) return;
+  const val = getDropdownValue(returnEle); // normalized lower-case value without emoji
+  const fallbackEle = document.getElementById("use_whirlwig_fallback");
+  if (!fallbackEle) return;
+  const form = fallbackEle.closest("form");
+  if (!form) return;
+  if (val === "walk") {
+    form.style.display = "flex";
+  } else {
+    form.style.display = "none";
   }
 }
 /*
@@ -531,6 +549,8 @@ function updateDropDownDisplay(optionEle) {
   selectEle.dataset.value = optionEle.dataset.value;
   //set the display to match the option
   selectEle.innerHTML = optionEle.innerHTML;
+  // Ensure dependent fields reflect this change
+  try { updateReturnDependentFields(); } catch (e) { /* ignore */ }
 }
 //document click event
 function dropdownClicked(event) {
