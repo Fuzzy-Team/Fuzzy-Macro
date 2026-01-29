@@ -24,6 +24,7 @@ function saveField() {
     "mins",
     "backpack",
     "return",
+    "use_whirlwig_fallback",
     "start_location",
     "distance",
     "goo",

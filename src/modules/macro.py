@@ -2065,8 +2065,20 @@ class macro:
                 self.keyboard.walk("d",0.1)
                 time.sleep(0.2) #add a delay so that the E can popup
             else:
-                self.logger.webhook("","Can't find hive, resetting", "dark brown", "screen")
-                self.reset()
+                # If configured, attempt to use a whirligig before resetting
+                if fieldSetting.get("use_whirlwig_fallback", False):
+                    self.logger.webhook("","Can't find hive, attempting whirligig fallback", "dark brown", "screen")
+                    self.useItemInInventory("whirligig")
+                    time.sleep(1)
+                    if not self.convert():
+                        self.logger.webhook("","Whirligig fallback failed, resetting", "dark brown", "screen")
+                        self.reset()
+                    else:
+                        # whirligig succeeded — perform non-converting reset behavior
+                        self.reset(convert=False)
+                else:
+                    self.logger.webhook("","Can't find hive, resetting", "dark brown", "screen")
+                    self.reset()
 
         if returnType == "reset":
             #goo timer continues via background thread during reset
