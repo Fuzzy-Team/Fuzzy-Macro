@@ -2944,12 +2944,17 @@ class macro:
             return True
     
     def findPlanterInInventory(self, name):
-        for _ in range(2):
+        # Always invalidate cached planter coordinates before searching
+        self.planterCoords = None
+        for attempt in range(2):
             res = self.findItemInInventory(f"{name}planter")
             if res:
                 self.planterCoords = res
                 return
-            time.sleep(1)
+            else:
+                self.logger.webhook("", f"Could not find {name}planter in inventory (attempt {attempt+1}) - invalidating cache and retrying", "red")
+                self.planterCoords = None
+                time.sleep(1)
             
     #place the planter and return true if successfully placed
     def placePlanter(self, planter, field, glitter):
@@ -2959,9 +2964,10 @@ class macro:
         def updateHourlyTime():
             self.hourlyReport.addHourlyStat("misc_time", time.time()-st)
 
-        for _ in range(2):
-            #try to place planter
-            #start finding planter
+        max_attempts = 2
+        cooldown_seconds = 10  # Wait 10 seconds before retrying if planter is missing
+        for attempt in range(max_attempts):
+            # Invalidate cached planter coordinates before each attempt
             self.planterCoords = None
             findPlanterInventoryThread = threading.Thread(target=self.findPlanterInInventory, args=(name,))
             findPlanterInventoryThread.daemon = True
@@ -2972,8 +2978,11 @@ class macro:
             findPlanterInventoryThread.join()
             #Couldn't find planter
             if self.planterCoords is None:
+                self.logger.webhook("", f"[Planter Placement] Could not find {planter.title()} in inventory (attempt {attempt+1}/{max_attempts}). Waiting {cooldown_seconds}s before retry.", "red", "screen", ping_category="ping_critical_errors")
                 updateHourlyTime()
-                return 
+                if attempt < max_attempts - 1:
+                    time.sleep(cooldown_seconds)
+                continue
             #place planter
             self.useItemInInventory(x=self.planterCoords[0], y=self.planterCoords[1])
             
@@ -2985,7 +2994,6 @@ class macro:
                     placedPlanter = False
                     break
                 time.sleep(0.3)
-                
             if placedPlanter: 
                 self.logger.webhook("",f"Placed Planter: {planter.title()}", "dark brown", "screen")          
                 #use glitter
@@ -2995,7 +3003,9 @@ class macro:
                 return True
             self.logger.webhook("",f"Failed to Place Planter: {planter.title()}", "red", "screen", ping_category="ping_critical_errors")
             self.reset()
-            
+            # If failed to place, wait before next attempt
+            if attempt < max_attempts - 1:
+                time.sleep(cooldown_seconds)
         updateHourlyTime()
         return False
 
