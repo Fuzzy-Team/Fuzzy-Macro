@@ -2818,7 +2818,8 @@ class macro:
             y = self.robloxWindow.my
             res = locateImageOnScreen(replaceImg, x, y, 650, self.robloxWindow.mh, 0.8)
             if res is not None:
-                mouse.moveTo(*[j//self.robloxWindow.multi for j in res[1]])
+                ix, iy = [j//self.robloxWindow.multi for j in res[1]]
+                mouse.moveTo(x + ix + 5, y + iy + 5)
                 mouse.click()
         amulet = self.setdat["stump_snail_amulet"]
         if amulet == "keep":
