@@ -94,7 +94,7 @@ gather_cactus
 gather_pumpkin
 gather_dandelion
 gather_bamboo
-kill_spider
+kill_1_spider
 
 -petal tabbouleh
 gather_clover
