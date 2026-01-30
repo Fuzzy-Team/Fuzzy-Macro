@@ -195,7 +195,6 @@ def update(t="main"):
     import time
     # Add cache-busting query param to version URL
     remote_version_url = f"https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/src/webapp/version.txt?cb={int(time.time())}"
-    zip_link = f"https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/tags/{remote_version}.zip"
     backup_path = os.path.join(destination, "backup_macro.zip")
 
     # create a silent backup (overwrite previous backup)
@@ -231,6 +230,9 @@ def update(t="main"):
     except Exception:
         msgBox("Update failed", "Could not fetch remote version. Update aborted.")
         return False
+
+    # Construct zip link using the fetched remote_version
+    zip_link = f"https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/tags/{remote_version}.zip"
 
     if not _is_remote_newer(local_version, remote_version):
         msgBox("Up to date", "No update available. Remote version is not newer.")
