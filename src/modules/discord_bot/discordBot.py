@@ -17,6 +17,7 @@ import ast
 import time
 from datetime import datetime, timedelta
 import queue  # <-- Add this import
+from typing import List
 
 # Import settings manager functions
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'misc'))
@@ -1057,7 +1058,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
         except Exception as e:
             await interaction.followup.send(f"❌ Error retrieving field settings: {str(e)}")
 
-    async def field_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    async def field_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice]:
         """Auto-complete function for currently active field names"""
         settings = get_cached_settings()
         field_list = settings.get("fields", [])
@@ -1069,7 +1070,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
 
         return choices[:25]  # Discord limit is 25 choices
 
-    async def all_fields_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    async def all_fields_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice]:
         """Auto-complete function for all possible field names"""
         # All possible field names in the game
         all_possible_fields = [
@@ -1086,7 +1087,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
 
         return choices[:25]  # Discord limit is 25 choices
 
-    async def quest_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    async def quest_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice]:
         """Auto-complete function for quest names"""
         quests = ["polar_bear", "honey_bee", "bucko_bee", "riley_bee"]
         choices = []
@@ -1097,7 +1098,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
 
         return choices[:25]
 
-    async def collectible_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    async def collectible_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice]:
         """Auto-complete function for collectible names"""
         collectibles = [
             "wealth_clock", "blueberry", "strawberry", "coconut", "royal_jelly", "ant_pass",
@@ -1112,7 +1113,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
 
         return choices[:25]
 
-    async def mob_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    async def mob_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice]:
         """Auto-complete function for mob names"""
         mobs = ["ladybug", "rhinobeetle", "scorpion", "mantis", "spider", "werewolf", "coconut_crab", "stump_snail"]
         choices = []
@@ -1124,7 +1125,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
 
         return choices[:25]
 
-    async def planter_mode_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    async def planter_mode_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice]:
         """Auto-complete function for planter modes"""
         modes = [
             app_commands.Choice(name="Disabled", value="0"),
@@ -1133,7 +1134,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
         ]
         return modes
 
-    async def use_when_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    async def use_when_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice]:
         """Auto-complete function for hotbar use_when options"""
         options = [
             app_commands.Choice(name="Never", value="never"),
@@ -1143,7 +1144,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
         ]
         return options
 
-    async def format_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    async def format_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice]:
         """Auto-complete function for time format options"""
         formats = [
             app_commands.Choice(name="Seconds", value="secs"),
@@ -1152,7 +1153,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
         ]
         return formats
 
-    async def boolean_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    async def boolean_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice]:
         """Auto-complete function for boolean values"""
         booleans = [
             app_commands.Choice(name="True", value="true"),
