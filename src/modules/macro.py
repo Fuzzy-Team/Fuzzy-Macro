@@ -2965,7 +2965,7 @@ class macro:
             self.hourlyReport.addHourlyStat("misc_time", time.time()-st)
 
         max_attempts = 2
-        cooldown_seconds = 10  # Wait 10 seconds before retrying if planter is missing
+        cooldown_seconds = 3  # Wait 3 seconds before retrying if planter is missing
         for attempt in range(max_attempts):
             # Invalidate cached planter coordinates before each attempt
             self.planterCoords = None
@@ -2978,11 +2978,27 @@ class macro:
             findPlanterInventoryThread.join()
             #Couldn't find planter
             if self.planterCoords is None:
-                self.logger.webhook("", f"[Planter Placement] Could not find {planter.title()} in inventory (attempt {attempt+1}/{max_attempts}). Waiting {cooldown_seconds}s before retry.", "red", "screen", ping_category="ping_critical_errors")
-                updateHourlyTime()
+                # If not found: retry only if we haven't exhausted attempts.
                 if attempt < max_attempts - 1:
+                    self.logger.webhook("", f"[Planter Placement] Could not find {planter.title()} in inventory (attempt {attempt+1}/{max_attempts}). Waiting {cooldown_seconds}s before retry.", "red", "screen", ping_category="ping_critical_errors")
+                    updateHourlyTime()
                     time.sleep(cooldown_seconds)
-                continue
+                    continue
+                else:
+                    # Final attempt failed — give up immediately.
+                    self.logger.webhook("", f"[Planter Placement] Could not find {planter.title()} in inventory after {max_attempts} attempts. Giving up.", "red", "screen", ping_category="ping_critical_errors")
+                    # Disable this planter for the rest of the session so the macro won't try it again
+                    setting_key = f"auto_planter_{planter.replace(' ', '_').lower()}"
+                    try:
+                        if setting_key in self.setdat:
+                            self.setdat[setting_key] = False
+                            # Notify the user that we disabled it for the session
+                            self.logger.webhook("", f"[Planter Placement] Disabled {planter.title()} for this session (not in inventory).", "orange", "screen")
+                    except Exception:
+                        # If anything goes wrong setting the flag, still return False
+                        pass
+                    updateHourlyTime()
+                    return False
             #place planter
             self.useItemInInventory(x=self.planterCoords[0], y=self.planterCoords[1])
             
