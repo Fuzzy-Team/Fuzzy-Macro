@@ -972,7 +972,7 @@ class macro:
         else:
             mouse.moveBy(5, 5)
         time.sleep(0.1)
-        for _ in range(1 if clickOnce else 2):
+        for _ in range(1 if clickOnce else 10):
             mouse.click()
         return True
     
