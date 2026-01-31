@@ -136,7 +136,7 @@ class MemoryMatch:
         while current_attempt <= attempts:
             print(f"Attempt {current_attempt}")
 
-                # Check if game is still active
+            # Check if game is still active
             if current_attempt > attempts:
                 self._check_game_active()
             
