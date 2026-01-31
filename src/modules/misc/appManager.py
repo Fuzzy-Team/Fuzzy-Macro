@@ -82,7 +82,10 @@ def openDeeplink(link):
 
 def closeApp(app):
     if sys.platform == "darwin":
-        subprocess.call(["pkill", app])
+        try:
+            subprocess.call(["pkill", app])
+        except Exception:
+            pass
         cmd = """
             osascript -e 'quit application "Roblox"'
         """
@@ -93,6 +96,29 @@ def closeApp(app):
         #taskkill /IM RobloxPlayerBeta.exe
         #app += ".exe"
         os.system(f"START /wait taskkill /f /im {app}.exe")
+
+def forceQuitApp(app):
+    """Forcefully terminate an app/process. More aggressive than closeApp.
+
+    Uses SIGKILL on macOS and taskkill /F on Windows.
+    """
+    if sys.platform == "darwin":
+        try:
+            subprocess.call(["pkill", "-9", app])
+        except Exception:
+            pass
+        # also try killall as a fallback
+        try:
+            os.system(f"killall -9 \"{app}\"")
+        except Exception:
+            pass
+    else:
+        if app.lower() == "roblox":
+            app = "RobloxPlayerBeta"
+        try:
+            os.system(f"START /wait taskkill /f /im {app}.exe")
+        except Exception:
+            pass
 
 def getWindowSize(windowName):
     import Quartz

@@ -1538,7 +1538,14 @@ class macro:
             if i == 2 and joinPS: 
                 self.logger.webhook("", "Failed rejoining too many times, falling back to a public server", "red", "screen", ping_category="ping_disconnects")
                 joinPS = False
-            appManager.closeApp("Roblox") # close roblox
+            # If using the Roblox app deeplink, force quit first to ensure a clean restart
+            if rejoinMethod == "deeplink":
+                try:
+                    appManager.forceQuitApp("Roblox")
+                except Exception:
+                    appManager.closeApp("Roblox")
+            else:
+                appManager.closeApp("Roblox")
             time.sleep(8)
             #execute rejoin method
             if joinPS:
