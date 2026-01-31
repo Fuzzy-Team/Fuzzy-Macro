@@ -54,7 +54,12 @@ function nectarDropDownHTML(id){
 
 async function loadPlanters(){
     const cycleElement = document.getElementById("manual-planters-cycles")
-    for (i=1; i < 6;i++){
+    // reset the container to its original header content to avoid duplicates
+    cycleElement.innerHTML = `
+            <h2>Planter Cycles</h2>
+            <p style = "font-weight:500; font-size:1rem;">The macro can place and collect up to 3 planters at once each cycle. Setting a field or planter as 'none' will make the macro ignore that slot</p>
+        `
+    for (let i=1; i < 6;i++){
         const html = 
         `
         <div class="seperator" style="margin-bottom: 1rem;"></div>
@@ -115,6 +120,8 @@ async function loadPlanters(){
     }
 
     const nectarPriorityElement = document.getElementById("auto-nectar-priority")
+    // clear previous content to prevent duplication when reloading
+    nectarPriorityElement.innerHTML = ""
     //auto planter's nectar priority
     for(let i = 0; i < nectars.length; i++){
         const html = `
@@ -127,6 +134,8 @@ async function loadPlanters(){
     }
 
     const allowedPlantersElement = document.getElementById("auto-allowed-planters")
+    // clear previous content to prevent duplication when reloading
+    allowedPlantersElement.innerHTML = ""
     //auto planter's nectar priority
     for(let i = 0; i < planters.length; i++){
         if (planters[i] == "none") continue
@@ -145,6 +154,8 @@ async function loadPlanters(){
     }
     
     const allowedFieldsElement = document.getElementById("auto-allowed-fields")
+    // clear previous content to prevent duplication when reloading
+    allowedFieldsElement.innerHTML = ""
     //auto planter's nectar priority
     for(let i = 0; i < fields.length; i++){
         if (fields[i] == "none") continue
