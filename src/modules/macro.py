@@ -953,7 +953,7 @@ class macro:
     #click the yes popup
     #if detect is set to true, the macro will check if the yes button is there
     #if detectOnly is set to true, the macro will not click 
-    def clickYes(self, detect = False, detectOnly = False, clickOnce=False):
+    def clickYes(self, detect = False, detectOnly = False, clickOnce=False, leftShift=False):
         yesImg = self.adjustImage("./images/menu", "yes")
         x = self.robloxWindow.mx+self.robloxWindow.mw//2-270
         y = self.robloxWindow.my+self.robloxWindow.mh//2-60
@@ -966,7 +966,11 @@ class macro:
         bestX, bestY = [x//self.robloxWindow.multi for x in res[1]]
         mouse.moveTo(bestX+x, bestY+y)
         time.sleep(0.2)
-        mouse.moveBy(5, 5)
+        # move slightly left when requested (helps with planter placement dialogs)
+        if leftShift:
+            mouse.moveBy(-6, 5)
+        else:
+            mouse.moveBy(5, 5)
         time.sleep(0.1)
         for _ in range(1 if clickOnce else 2):
             mouse.click()
@@ -1137,7 +1141,7 @@ class macro:
     
     #click at the specified coordinates to use an item in the inventory
     #if x/y is not provided, find the item in inventory
-    def useItemInInventory(self, itemName = None, x = None, y = None, closeInventoryAfter=True):
+    def useItemInInventory(self, itemName = None, x = None, y = None, closeInventoryAfter=True, clickYesLeft=False):
         if x is None or y is None:
             if itemName is None: raise Exception("tried searching for item but no item name is provided")
             res = self.findItemInInventory(itemName)
@@ -1151,7 +1155,7 @@ class macro:
             mouse.click()
             mouse.moveBy(0,15, pause=False)
             time.sleep(0.03)
-        self.clickYes()
+        self.clickYes(clickOnce=False, leftShift=clickYesLeft)
         #close inventory
         if closeInventoryAfter:
             self.toggleInventory("close")
