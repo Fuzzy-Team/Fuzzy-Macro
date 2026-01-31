@@ -512,6 +512,39 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
     async def battery(interaction: discord.Interaction):
         closeApp("Roblox")
         os._exit(1)
+
+    def _set_macos_mute(muted: bool) -> None:
+        """Set macOS system audio mute state using AppleScript via osascript."""
+        try:
+            if sys.platform != "darwin":
+                raise OSError("Not running on macOS")
+            state = "true" if muted else "false"
+            # Use osascript to set the output muted state
+            subprocess.check_call(["osascript", "-e", f'set volume output muted {state}' ])
+        except Exception:
+            raise
+
+    @bot.tree.command(name = "mute", description = "Mute system audio (macOS only)")
+    async def mute_audio(interaction: discord.Interaction):
+        try:
+            if sys.platform != "darwin":
+                await interaction.response.send_message("❌ This command only works on macOS.")
+                return
+            _set_macos_mute(True)
+            await interaction.response.send_message("🔇 System audio muted.")
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Failed to mute audio: {e}")
+
+    @bot.tree.command(name = "unmute", description = "Unmute system audio (macOS only)")
+    async def unmute_audio(interaction: discord.Interaction):
+        try:
+            if sys.platform != "darwin":
+                await interaction.response.send_message("❌ This command only works on macOS.")
+                return
+            _set_macos_mute(False)
+            await interaction.response.send_message("🔊 System audio unmuted.")
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Failed to unmute audio: {e}")
     
     @bot.tree.command(name = "disablegoo", description = "Disable goo for a specific field")
     async def disable_goo(interaction: discord.Interaction, field: str):
