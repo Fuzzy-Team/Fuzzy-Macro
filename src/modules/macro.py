@@ -3495,11 +3495,20 @@ class macro:
         for i in range(1,8):
             slotUseWhen = self.setdat[f"hotbar{i}_use_when"]
             #check if use when is correct
-            if slotUseWhen == "never": continue
-            elif self.status.value == "rejoining": continue
-            elif slotUseWhen == "gathering" and not "gather_" in self.status.value: continue 
-            elif slotUseWhen == "converting" and not self.status.value == "converting": continue 
-            elif slotUseWhen == "attacking" and not self.status.value == "attacking": continue
+            if slotUseWhen == "never":
+                continue
+            elif self.status.value == "rejoining":
+                continue
+            # Only use hotbar slots configured for 'Gathering' when the macro
+            # is actively gathering in-field (self.isGathering True). This
+            # prevents hotbar items being used while preparing/traveling to
+            # a field before the gather actually begins.
+            elif slotUseWhen == "gathering" and not getattr(self, "isGathering", False):
+                continue
+            elif slotUseWhen == "converting" and not self.status.value == "converting":
+                continue
+            elif slotUseWhen == "attacking" and not self.status.value == "attacking":
+                continue
             # If 'always', or matches any of the above, allow
             #check cd
             cdSecs = self.setdat[f"hotbar{i}_use_every_value"]
