@@ -40,13 +40,27 @@ const slotArray = [1, 2, 3, 4, 5, 6, 7];
 //id: id of dropdown element
 //data: array of values to set
 function setDropdownData(id, data) {
-  //create the html
-  html = "";
+  //create the html (normalize data-value to match buildInput processing)
+  let html = "";
   data.forEach((x) => {
-    html += `<div class = "option" data-value = "${x}">${x}</div>`;
+    let value = x;
+    if (typeof value === "string") {
+      value = stripHTMLTags(value);
+      try {
+        value = value.replace(/[^\p{L}\p{N}\p{P}\p{Z}^$\n]/gu, "");
+      } catch (e) {
+        // If the unicode regex isn't supported, fall back to a simpler remove-emojis step
+        value = value.replace(/[^\w\s\-\.,]/g, "");
+      }
+      value = value.trim().toLowerCase();
+    }
+    html += `<div class = "option" data-value = "${value}">${x}</div>`;
   });
   //add it to the element
-  document.getElementById(id).children[1].children[0].innerHTML = html;
+  const container = document.getElementById(id);
+  if (container && container.children[1] && container.children[1].children[0]) {
+    container.children[1].children[0].innerHTML = html;
+  }
 }
 
 function buildInput(id, type) {
