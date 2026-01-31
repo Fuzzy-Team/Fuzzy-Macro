@@ -37,7 +37,7 @@ class MemoryMatch:
     MAX_ATTEMPTS = 10
     DEFAULT_ATTEMPTS = 10
     
-    def __init__(self, robloxWindow: RobloxWindowBounds, debug: bool = True):
+    def __init__(self, robloxWindow: RobloxWindowBounds, debug: bool = False):
         self.robloxWindow = robloxWindow
         self.debug = debug
         self.blank_tile_hash = imagehash.average_hash(Image.open("./images/menu/mmempty.png"))
