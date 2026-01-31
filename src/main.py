@@ -182,11 +182,25 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                 else:
                     gatherFieldsList.append(objData[1])
             elif objData[0] == "kill":
-                if "ant" in objData[1] and objData[1] != "mantis":
-                    setdatEnable.append("ant_challenge")
-                    setdatEnable.append("ant_pass_dispenser")
+                # kill objectives can be in the form "kill_<num>_<mob>" or "kill_<mob>"
+                # determine the mob name robustly
+                if len(objData) >= 3:
+                    mob_name = objData[2]
+                elif len(objData) == 2:
+                    mob_name = objData[1]
                 else:
-                    setdatEnable.append(objData[2])
+                    continue
+
+                # ants are handled via the ant challenge flow
+                if "ant" in mob_name and mob_name != "mantis":
+                    if "ant_challenge" not in setdatEnable:
+                        setdatEnable.append("ant_challenge")
+                    if "ant_pass_dispenser" not in setdatEnable:
+                        setdatEnable.append("ant_pass_dispenser")
+                else:
+                    # enable the mob setting (e.g. "rhinobeetle", "werewolf", etc.)
+                    if mob_name not in setdatEnable:
+                        setdatEnable.append(mob_name)
             elif objData[0] == "token":
                 if questGiver == "riley bee":
                     requireRedField = True
