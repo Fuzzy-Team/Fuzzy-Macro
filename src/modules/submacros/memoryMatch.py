@@ -3,6 +3,7 @@ import random
 from typing import List, Tuple, Set, Optional
 import imagehash
 from PIL import Image
+import os
 
 import modules.controls.mouse as mouse
 from modules.screen.screenshot import mssScreenshot
@@ -11,6 +12,7 @@ from modules.misc.imageManipulation import adjustImage
 from modules.screen.imageSearch import locateImageOnScreen
 from modules.screen.robloxWindow import RobloxWindowBounds
 
+# NEEDS IMAGES STILL !!!
 
 class MemoryMatch:
     """Memory Match game solver with lag compensation."""
@@ -41,6 +43,15 @@ class MemoryMatch:
     def __init__(self, robloxWindow: RobloxWindowBounds):
         self.robloxWindow = robloxWindow
         self.blank_tile_hash = imagehash.average_hash(Image.open("./images/menu/mmempty.png"))
+        # Buckets of seen tile hashes for the current memory match game.
+        # Each entry is a tuple: (imagehash.ImageHash, [indices_where_seen])
+        self.seen_buckets = []
+        # Mapping of known reference item name -> hash
+        self.reference_hashes = {}
+        # Mapping of identified item name -> list of indices where seen this game
+        self.seen_items = {}
+        # Load reference images (assume images exist in these folders)
+        self._load_reference_hashes()
 
     def _click_tile(self, x: int, y: int) -> None:
         """Click on a tile at the given coordinates."""
@@ -112,11 +123,16 @@ class MemoryMatch:
         """Solve the memory match game."""
         # Get grid configuration
         grid_coords, grid_size, (offset_x, offset_y) = self._get_grid_configuration(mm_type)
+        # Reset seen buckets for this memory match game
+        self.seen_buckets = []
         
         # Initialize game state
         checked_coords: Set[Tuple[int, int]] = set()
         claimed_coords: Set[int] = set()
         mm_data: List[Optional[imagehash.ImageHash]] = [None] * (grid_size[0] * grid_size[1])
+        mm_items: List[Optional[str]] = [None] * (grid_size[0] * grid_size[1])
+        # Reset per-game seen items
+        self.seen_items = {}
         
         # Get attempts count
         middle_x = self.robloxWindow.mx + self.robloxWindow.mw // 2
@@ -135,7 +151,7 @@ class MemoryMatch:
             
             # First tile
             first_tile_index, first_tile_hash = self._click_first_tile(
-                grid_coords, checked_coords, mm_data, claimed_coords, offset_x, offset_y, middle_x, middle_y
+                grid_coords, checked_coords, mm_data, mm_items, claimed_coords, offset_x, offset_y, middle_x, middle_y
             )
             
             if first_tile_index is None:
@@ -145,7 +161,7 @@ class MemoryMatch:
             
             # Second tile
             self._click_second_tile(
-                grid_coords, checked_coords, mm_data, claimed_coords, 
+                grid_coords, checked_coords, mm_data, mm_items, claimed_coords, 
                 first_tile_index, first_tile_hash, offset_x, offset_y, 
                 middle_x, middle_y, current_attempt
             )
@@ -167,7 +183,7 @@ class MemoryMatch:
             pass  # Game might have ended
 
     def _click_first_tile(self, grid_coords: List[Tuple[int, int]], checked_coords: Set[Tuple[int, int]], 
-                          mm_data: List[Optional[imagehash.ImageHash]], claimed_coords: Set[int], 
+                          mm_data: List[Optional[imagehash.ImageHash]], mm_items: List[Optional[str]], claimed_coords: Set[int], 
                           offset_x: int, offset_y: int, middle_x: int, middle_y: int) -> Tuple[Optional[int], Optional[imagehash.ImageHash]]:
         """Click the first tile and return its index and hash."""
         for i, (x_raw, y_raw) in enumerate(grid_coords):
@@ -184,49 +200,64 @@ class MemoryMatch:
             tile_hash = self._wait_for_tile_flip(x, y)
             checked_coords.add((x_raw, y_raw))
             
-            # Check for matches with existing tiles
-            match_found = self._find_matching_tile(tile_hash, mm_data, claimed_coords)
+            # Identify item by comparing against reference hashes (if available)
+            identified = self._identify_item(tile_hash)
+            if identified:
+                mm_items[i] = identified
+
+            # Check for matches with existing tiles (prefer exact item matches)
+            match_found = self._lookup_seen(tile_hash, claimed_coords, exclude_index=None)
             if match_found is not None:
                 claimed_coords.add(i)
                 claimed_coords.add(match_found)
                 print("Match found on first tile")
             
             mm_data[i] = tile_hash
+            # Record this tile in seen buckets or seen_items so future tiles can find it
+            if identified:
+                self.seen_items.setdefault(identified, []).append(i)
+            else:
+                self._record_seen(tile_hash, i)
             return i, tile_hash
         
         return None, None
 
     def _click_second_tile(self, grid_coords: List[Tuple[int, int]], checked_coords: Set[Tuple[int, int]], 
-                          mm_data: List[Optional[imagehash.ImageHash]], claimed_coords: Set[int], 
+                          mm_data: List[Optional[imagehash.ImageHash]], mm_items: List[Optional[str]], claimed_coords: Set[int], 
                           first_tile_index: int, first_tile_hash: imagehash.ImageHash, 
                           offset_x: int, offset_y: int, middle_x: int, middle_y: int, 
                           current_attempt: int) -> None:
         """Click the second tile and handle matching logic."""
         # If we found a match on first tile, click the matching tile
-        match_found = self._find_matching_tile(first_tile_hash, mm_data, claimed_coords, exclude_index=first_tile_index)
+        match_found = self._lookup_seen(first_tile_hash, claimed_coords, exclude_index=first_tile_index)
         if match_found is not None:
             print("Match found, clicking matching tile")
             x, y = grid_coords[match_found]
             self._click_tile(x - offset_x, y - offset_y)
             return
-        
+
         # Otherwise, click a new tile
         for i, (x_raw, y_raw) in enumerate(grid_coords):
             if (x_raw, y_raw) in checked_coords:
                 continue
-                
+
             x = x_raw - offset_x
             y = y_raw - offset_y
-            
+
             self._click_tile(x, y)
             time.sleep(0.1)
             mouse.moveTo(middle_x, middle_y - self.MOUSE_MOVE_OFFSET)  # Move mouse out of the way
-            
+
             tile_hash = self._wait_for_tile_flip(x, y)
             checked_coords.add((x_raw, y_raw))
-            
-            # Check for matches
-            match_found = self._find_matching_tile(tile_hash, mm_data, claimed_coords, exclude_index=i)
+
+            # Identify the item if possible
+            identified = self._identify_item(tile_hash)
+            if identified:
+                mm_items[i] = identified
+
+            # Check for matches (prefer exact item matches)
+            match_found = self._lookup_seen(tile_hash, claimed_coords, exclude_index=i)
             if match_found is not None:
                 if match_found == first_tile_index:
                     print("Match found, same attempt")
@@ -242,8 +273,12 @@ class MemoryMatch:
                     self._click_tile(x2 - offset_x, y2 - offset_y)  # Click the matching tile
                     claimed_coords.add(i)
                     claimed_coords.add(match_found)
-            
             mm_data[i] = tile_hash
+            # Record seen tile for future matches
+            if identified:
+                self.seen_items.setdefault(identified, []).append(i)
+            else:
+                self._record_seen(tile_hash, i)
             break
 
     def _find_matching_tile(self, tile_hash: imagehash.ImageHash, mm_data: List[Optional[imagehash.ImageHash]], 
@@ -263,4 +298,82 @@ class MemoryMatch:
                 continue
             if self._are_images_similar(tile_hash, existing_hash):
                 return j
+        return None
+
+    def _record_seen(self, tile_hash: imagehash.ImageHash, index: int) -> None:
+        """Record a seen tile hash into buckets for the current game."""
+        for k, (bucket_hash, indices) in enumerate(self.seen_buckets):
+            if self._are_images_similar(tile_hash, bucket_hash):
+                indices.append(index)
+                return
+        # No similar bucket found; add a new one
+        self.seen_buckets.append((tile_hash, [index]))
+
+    def _load_reference_hashes(self) -> None:
+        """Load reference image hashes from the memory-match images folder.
+
+        This assumes item icons exist in `src/images/mm`. Filenames will be
+        normalized by removing common suffixes like `-retina` and `-built-in`.
+        """
+        folders = ["./src/images/mm"]
+        for folder in folders:
+            try:
+                for fn in os.listdir(folder):
+                    path = os.path.join(folder, fn)
+                    if not os.path.isfile(path):
+                        continue
+                    name, ext = os.path.splitext(fn)
+                    if ext.lower() not in (".png", ".jpg", ".jpeg"):
+                        continue
+                    # normalize name
+                    norm = name.replace("-retina", "").replace("-built-in", "").strip()
+                    try:
+                        h = imagehash.average_hash(Image.open(path))
+                        # avoid overwriting existing keys; prefer earlier folders if duplicate
+                        if norm not in self.reference_hashes:
+                            self.reference_hashes[norm] = h
+                    except Exception:
+                        continue
+            except Exception:
+                continue
+
+    def _identify_item(self, tile_hash: imagehash.ImageHash) -> Optional[str]:
+        """Try to map a tile hash to a known reference image name.
+
+        Returns the normalized reference name or None if unknown.
+        """
+        for name, ref_hash in self.reference_hashes.items():
+            try:
+                if self._are_images_similar(tile_hash, ref_hash):
+                    return name
+            except Exception:
+                continue
+        return None
+
+    def _lookup_seen(self, tile_hash: imagehash.ImageHash, claimed_coords: Set[int], exclude_index: Optional[int] = None) -> Optional[int]:
+        """Lookup a previously seen index for a tile hash, excluding claimed indices and optionally an index.
+
+        Prefer returning an index for a previously identified item name (if we can identify this tile),
+        otherwise fall back to hash-based seen buckets.
+        """
+        # Try to identify the tile by comparing against known reference hashes
+        identified = self._identify_item(tile_hash)
+        if identified:
+            indices = self.seen_items.get(identified, [])
+            for idx in indices:
+                if idx in claimed_coords:
+                    continue
+                if exclude_index is not None and idx == exclude_index:
+                    continue
+                return idx
+
+        # Fallback: hash-based buckets
+        for bucket_hash, indices in self.seen_buckets:
+            if self._are_images_similar(tile_hash, bucket_hash):
+                for idx in indices:
+                    if idx in claimed_coords:
+                        continue
+                    if exclude_index is not None and idx == exclude_index:
+                        continue
+                    return idx
         return None
