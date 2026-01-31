@@ -83,7 +83,7 @@ def openDeeplink(link):
 def closeApp(app):
     if sys.platform == "darwin":
         try:
-            subprocess.call(["pkill", app])
+            subprocess.call(["pkill", app], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except Exception:
             pass
         cmd = """
@@ -104,12 +104,12 @@ def forceQuitApp(app):
     """
     if sys.platform == "darwin":
         try:
-            subprocess.call(["pkill", "-9", app])
+            subprocess.call(["pkill", "-9", app], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except Exception:
             pass
-        # also try killall as a fallback
+        # also try killall as a fallback (suppress errors/output)
         try:
-            os.system(f"killall -9 \"{app}\"")
+            subprocess.call(["killall", "-9", app], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except Exception:
             pass
     else:
