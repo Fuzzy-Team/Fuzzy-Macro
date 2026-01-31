@@ -203,7 +203,7 @@ class MemoryMatch:
                           current_attempt: int) -> None:
         """Click the second tile and handle matching logic."""
         # If we found a match on first tile, click the matching tile
-        match_found = self._find_matching_tile(first_tile_hash, mm_data, claimed_coords)
+        match_found = self._find_matching_tile(first_tile_hash, mm_data, claimed_coords, exclude_index=first_tile_index)
         if match_found is not None:
             print("Match found, clicking matching tile")
             x, y = grid_coords[match_found]
@@ -226,7 +226,7 @@ class MemoryMatch:
             checked_coords.add((x_raw, y_raw))
             
             # Check for matches
-            match_found = self._find_matching_tile(tile_hash, mm_data, claimed_coords)
+            match_found = self._find_matching_tile(tile_hash, mm_data, claimed_coords, exclude_index=i)
             if match_found is not None:
                 if match_found == first_tile_index:
                     print("Match found, same attempt")
@@ -247,10 +247,19 @@ class MemoryMatch:
             break
 
     def _find_matching_tile(self, tile_hash: imagehash.ImageHash, mm_data: List[Optional[imagehash.ImageHash]], 
-                           claimed_coords: Set[int]) -> Optional[int]:
-        """Find a matching tile in the existing data."""
+                           claimed_coords: Set[int], exclude_index: Optional[int] = None) -> Optional[int]:
+        """Find a matching tile in the existing data, optionally excluding an index.
+
+        Args:
+            tile_hash: The hash of the tile to find a match for.
+            mm_data: List of hashes for tiles already seen.
+            claimed_coords: Set of indices already claimed/matched.
+            exclude_index: Optional index to skip when searching (prevents matching a tile with itself).
+        """
         for j, existing_hash in enumerate(mm_data):
             if existing_hash is None or j in claimed_coords:
+                continue
+            if exclude_index is not None and j == exclude_index:
                 continue
             if self._are_images_similar(tile_hash, existing_hash):
                 return j
