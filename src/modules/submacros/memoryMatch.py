@@ -3,7 +3,6 @@ import random
 from typing import List, Tuple, Set, Optional
 import imagehash
 from PIL import Image
-import os
 
 import modules.controls.mouse as mouse
 from modules.screen.screenshot import mssScreenshot
@@ -11,8 +10,6 @@ from modules.screen.ocr import ocrRead
 from modules.misc.imageManipulation import adjustImage
 from modules.screen.imageSearch import locateImageOnScreen
 from modules.screen.robloxWindow import RobloxWindowBounds
-
-# NEEDS IMAGES STILL !!!
 
 class MemoryMatch:
     """Memory Match game solver with lag compensation."""
@@ -40,18 +37,14 @@ class MemoryMatch:
     MAX_ATTEMPTS = 10
     DEFAULT_ATTEMPTS = 10
     
-    def __init__(self, robloxWindow: RobloxWindowBounds):
+    def __init__(self, robloxWindow: RobloxWindowBounds, debug: bool = True):
         self.robloxWindow = robloxWindow
+        self.debug = debug
         self.blank_tile_hash = imagehash.average_hash(Image.open("./images/menu/mmempty.png"))
         # Buckets of seen tile hashes for the current memory match game.
         # Each entry is a tuple: (imagehash.ImageHash, [indices_where_seen])
         self.seen_buckets = []
-        # Mapping of known reference item name -> hash
-        self.reference_hashes = {}
-        # Mapping of identified item name -> list of indices where seen this game
-        self.seen_items = {}
-        # Load reference images (assume images exist in these folders)
-        self._load_reference_hashes()
+        # (hash-only mode) no reference images loaded
 
     def _click_tile(self, x: int, y: int) -> None:
         """Click on a tile at the given coordinates."""
@@ -130,9 +123,7 @@ class MemoryMatch:
         checked_coords: Set[Tuple[int, int]] = set()
         claimed_coords: Set[int] = set()
         mm_data: List[Optional[imagehash.ImageHash]] = [None] * (grid_size[0] * grid_size[1])
-        mm_items: List[Optional[str]] = [None] * (grid_size[0] * grid_size[1])
-        # Reset per-game seen items
-        self.seen_items = {}
+        # per-tile item names are not used in hash-only mode
         
         # Get attempts count
         middle_x = self.robloxWindow.mx + self.robloxWindow.mw // 2
@@ -144,14 +135,16 @@ class MemoryMatch:
         matched_indices = set()
         while current_attempt <= attempts:
             print(f"Attempt {current_attempt}")
-            
-            # Check if game is still active
-            if current_attempt > attempts:
-                self._check_game_active()
+
+            # Check if game UI is still open; if not, stop solving
+            if not self._check_game_active():
+                if self.debug:
+                    print("[MM] Memory Match UI no longer detected; stopping solver")
+                break
             
             # First tile
             first_tile_index, first_tile_hash = self._click_first_tile(
-                grid_coords, checked_coords, mm_data, mm_items, claimed_coords, offset_x, offset_y, middle_x, middle_y
+                grid_coords, checked_coords, mm_data, claimed_coords, offset_x, offset_y, middle_x, middle_y
             )
             
             if first_tile_index is None:
@@ -161,10 +154,15 @@ class MemoryMatch:
             
             # Second tile
             self._click_second_tile(
-                grid_coords, checked_coords, mm_data, mm_items, claimed_coords, 
+                grid_coords, checked_coords, mm_data, claimed_coords, 
                 first_tile_index, first_tile_hash, offset_x, offset_y, 
                 middle_x, middle_y, current_attempt
             )
+            # After the turn, check if the UI closed (we may have matched the final pair)
+            if not self._check_game_active():
+                if self.debug:
+                    print("[MM] Memory Match UI closed after turn; exiting")
+                break
             
             current_attempt += 1
             time.sleep(self.TURN_DELAY)
@@ -172,15 +170,17 @@ class MemoryMatch:
     def _check_game_active(self) -> None:
         """Check if the memory match game is still active."""
         mm_img = adjustImage("./images/menu", "mmopen", self.robloxWindow.display_type)
-        if not locateImageOnScreen(
-            mm_img, 
-            self.robloxWindow.mx + self.robloxWindow.mw / 4, 
-            self.robloxWindow.my + self.robloxWindow.mh / 4, 
-            self.robloxWindow.mw / 4, 
-            self.robloxWindow.mh / 3.5, 
-            0.8
-        ):
-            pass  # Game might have ended
+        found = locateImageOnScreen(
+            mm_img,
+            self.robloxWindow.mx + self.robloxWindow.mw / 4,
+            self.robloxWindow.my + self.robloxWindow.mh / 4,
+            self.robloxWindow.mw / 4,
+            self.robloxWindow.mh / 3.5,
+            0.8,
+        )
+        if self.debug:
+            print(f"[MM] _check_game_active -> {found}")
+        return bool(found)
 
     def _click_first_tile(self, grid_coords: List[Tuple[int, int]], checked_coords: Set[Tuple[int, int]], 
                           mm_data: List[Optional[imagehash.ImageHash]], mm_items: List[Optional[str]], claimed_coords: Set[int], 
@@ -210,12 +210,17 @@ class MemoryMatch:
             if match_found is not None:
                 claimed_coords.add(i)
                 claimed_coords.add(match_found)
-                print("Match found on first tile")
+                if self.debug:
+                    print(f"[MM] Match found on first tile: indices {i} & {match_found}")
+                else:
+                    print("Match found on first tile")
             
             mm_data[i] = tile_hash
             # Record this tile in seen buckets or seen_items so future tiles can find it
             if identified:
                 self.seen_items.setdefault(identified, []).append(i)
+                if self.debug:
+                    print(f"[MM] Recorded seen item '{identified}' at index {i}")
             else:
                 self._record_seen(tile_hash, i)
             return i, tile_hash
@@ -260,11 +265,17 @@ class MemoryMatch:
             match_found = self._lookup_seen(tile_hash, claimed_coords, exclude_index=i)
             if match_found is not None:
                 if match_found == first_tile_index:
-                    print("Match found, same attempt")
+                    if self.debug:
+                        print(f"[MM] Match found on second tile, same attempt: indices {i} & {match_found}")
+                    else:
+                        print("Match found, same attempt")
                     claimed_coords.add(i)
                     claimed_coords.add(match_found)
                 else:
-                    print("Match found on second tile")
+                    if self.debug:
+                        print(f"[MM] Match found on second tile: indices {i} & {match_found}")
+                    else:
+                        print("Match found on second tile")
                     # Handle the match in the next turn
                     time.sleep(2)
                     self._click_tile(x, y)  # Click the second tile again
@@ -305,9 +316,13 @@ class MemoryMatch:
         for k, (bucket_hash, indices) in enumerate(self.seen_buckets):
             if self._are_images_similar(tile_hash, bucket_hash):
                 indices.append(index)
+                if self.debug:
+                    print(f"[MM] Recorded hash-bucket index {index} (bucket {k})")
                 return
         # No similar bucket found; add a new one
         self.seen_buckets.append((tile_hash, [index]))
+        if self.debug:
+            print(f"[MM] Created new hash-bucket for index {index}")
 
     def _load_reference_hashes(self) -> None:
         """Load reference image hashes from the memory-match images folder.
@@ -332,7 +347,11 @@ class MemoryMatch:
                         # avoid overwriting existing keys; prefer earlier folders if duplicate
                         if norm not in self.reference_hashes:
                             self.reference_hashes[norm] = h
+                            if self.debug:
+                                print(f"[MM] Loaded reference '{norm}' from {path}")
                     except Exception:
+                        if self.debug:
+                            print(f"[MM] Failed loading reference image: {path}")
                         continue
             except Exception:
                 continue
@@ -345,6 +364,8 @@ class MemoryMatch:
         for name, ref_hash in self.reference_hashes.items():
             try:
                 if self._are_images_similar(tile_hash, ref_hash):
+                    if self.debug:
+                        print(f"[MM] Identified tile as '{name}'")
                     return name
             except Exception:
                 continue
@@ -365,6 +386,8 @@ class MemoryMatch:
                     continue
                 if exclude_index is not None and idx == exclude_index:
                     continue
+                if self.debug:
+                    print(f"[MM] Found name-match '{identified}' at index {idx}")
                 return idx
 
         # Fallback: hash-based buckets
@@ -375,5 +398,7 @@ class MemoryMatch:
                         continue
                     if exclude_index is not None and idx == exclude_index:
                         continue
+                    if self.debug:
+                        print(f"[MM] Found hash-match in bucket for index {idx}")
                     return idx
         return None
