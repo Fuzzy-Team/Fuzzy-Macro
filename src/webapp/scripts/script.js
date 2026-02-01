@@ -402,6 +402,14 @@ function loadInputs(obj, save = "") {
   }
   // Update visibility of any dependent fields after loading inputs
   try { updateReturnDependentFields(); } catch (e) { /* ignore */ }
+
+  // Ensure the beta commit input is never pre-filled from saved settings
+  try {
+    const betaEl = document.getElementById("beta_commit_hash");
+    if (betaEl) betaEl.value = "";
+  } catch (e) {
+    // ignore
+  }
 }
 
 function applyTheme(theme) {
