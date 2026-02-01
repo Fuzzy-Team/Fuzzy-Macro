@@ -352,6 +352,13 @@ def update(t="main"):
             os.chmod(run_macroPath, st.st_mode | stat.S_IEXEC)
         except Exception:
             pass
+    # Remove any leftover commit marker since this was a normal update
+    try:
+        webapp_commit = os.path.join(destination, "src", "webapp", "updated_commit.txt")
+        if os.path.exists(webapp_commit):
+            os.remove(webapp_commit)
+    except Exception:
+        pass
 
     msgBox("Update success", "Update complete. You can now relaunch the macro")
     return True
@@ -484,6 +491,14 @@ def update_from_commit(commit_hash):
             os.chmod(run_macroPath, st.st_mode | stat.S_IEXEC)
         except Exception:
             pass
+
+    # Write a marker file in webapp so the UI can show the commit hash next to version
+    try:
+        webapp_commit = os.path.join(destination, "src", "webapp", "updated_commit.txt")
+        with open(webapp_commit, "w") as fh:
+            fh.write(commit_hash[:7])
+    except Exception:
+        pass
 
     msgBox("Update success", "Update complete. You can now relaunch the macro")
     return True

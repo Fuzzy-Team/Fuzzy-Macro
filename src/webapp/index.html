@@ -61,15 +61,27 @@
   <script src="./scripts/tabs/boost.js"></script>
   <script src="./scripts/tabs/quests.js"></script>
   <script>
-    // Fetch version from version.txt and display it
-    fetch('./version.txt')
-      .then(response => response.text())
-      .then(version => {
-        document.getElementById('version').textContent = 'v' + version.trim();
-      })
-      .catch(() => {
+    // Fetch version from version.txt and optionally append commit hash
+    (async () => {
+      try {
+        const vRes = await fetch('./version.txt');
+        const version = (await vRes.text()).trim();
+        let display = 'v' + (version || '?');
+        // try to fetch optional commit marker written by updater
+        try {
+          const cRes = await fetch('./updated_commit.txt');
+          if (cRes.ok) {
+            const commit = (await cRes.text()).trim();
+            if (commit) display += ' - ' + commit;
+          }
+        } catch (e) {
+          // ignore if marker missing or fetch fails
+        }
+        document.getElementById('version').textContent = display;
+      } catch (e) {
         document.getElementById('version').textContent = 'v?';
-      });
+      }
+    })();
   </script>
 </body>
 
