@@ -277,6 +277,23 @@ def macro(status, logQueue, updateGUI, run, skipTask):
         #this is in case no other settings are selected
         runTask(resetAfter=False)
 
+        # If we recently saw a Vicious Bee defeated message, hold briefly before starting next task
+        try:
+            if getattr(macro, 'vicDefeatedHoldUntil', 0) > time.time():
+                time.sleep(0.5)
+                continue
+        except Exception:
+            pass
+
+        # If an immediate vic was detected by background, go handle it now
+        try:
+            if getattr(macro, 'immediateVic', False):
+                macro.immediateVic = False
+                runTask(macro.stingerHunt)
+                continue
+        except Exception:
+            pass
+
         updateGUI.value = 1
 
         # Check if field-only mode is enabled
@@ -313,6 +330,47 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                         executedTasks.add(taskId)
 
             # Skip to next iteration
+            continue
+
+        # Check if vic hop mode is enabled
+        if macro.setdat.get("macro_mode", "normal") == "vic_hop":
+            # Vic Hop mode: repeatedly run stinger hunt then rejoin to a new server
+            # Ensure the macro enables the same detection features as the stinger hunt
+            macro.setdat["stinger_hunt"] = True
+            macro.enableNightDetection = True
+            macro.canDetectNight = True
+            macro.vicFields = ["pepper", "mountain top", "rose", "cactus", "spider", "clover"]
+            macro.vicFields = [x for x in macro.vicFields if macro.setdat.get(f"stinger_{x.replace(' ', '_')}", False)]
+            macro.logger.webhook("", "Vic Hop Mode: Searching for Vicious Bees", "dark brown")
+            # Loop until stopped or mode changes
+            while run.value != 0 and macro.setdat.get("macro_mode", "normal") == "vic_hop":
+                try:
+                    # If we just rejoined, wait briefly before running night detection
+                    if getattr(macro, "_just_rejoined", False):
+                        time.sleep(2)
+                        try:
+                            macro._just_rejoined = False
+                        except Exception:
+                            pass
+
+                    # Quick night-check: if night detection is enabled and server is not night, skip server
+                    if getattr(macro, "enableNightDetection", False) and not macro.isNightNow():
+                        macro.logger.webhook("", "Vic Hop: No night detected — skipping server", "dark brown")
+                        try:
+                            macro.rejoin("Vic Hop - Skipping (no night)", ignore_private=True)
+                        except Exception:
+                            time.sleep(2)
+                        continue
+                    macro.stingerHunt()
+                except Exception as e:
+                    macro.logger.webhook("", f"Vic Hop encountered an error: {e}", "red", "screen")
+                if run.value == 0:
+                    break
+                time.sleep(1)
+                try:
+                    macro.rejoin("Vic Hop - Rejoining", ignore_private=True)
+                except Exception:
+                    time.sleep(3)
             continue
 
         # Check if quest-only mode is enabled

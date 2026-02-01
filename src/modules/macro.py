@@ -522,6 +522,10 @@ class macro:
         #filter it to only include fields the player has enabled
         self.vicFields = [x for x in self.vicFields if self.setdat["stinger_{}".format(x.replace(" ","_"))]]
 
+        # Immediate vic handling: set when blue text indicates a vic or victory
+        self.immediateVic = False
+        self.vicDefeatedHoldUntil = 0
+        
         self.newUI = False
 
         self.planterCooldowns = {}
@@ -547,6 +551,71 @@ class macro:
 
 
         self.setRobloxWindowInfo(setYOffset=False)
+
+    def detectVicBlueText(self):
+        """Centralized detection for Vicious Bee blue-text events.
+        Returns (spotted, defeated) booleans.
+        Sets `self.vicField`, `self.immediateVic`, and `self.vicDefeatedHoldUntil` as side effects.
+        """
+        spotted = False
+        defeated = False
+        try:
+            # Check for explicit defeat message first
+            if self.blueTextImageSearch("vicdefeat", 0.8) or self.blueTextImageSearch("defeated", 0.8):
+                self.vicDefeatedHoldUntil = time.time() + 10
+                self.logger.webhook("", "Detected Vicious Bee Defeated - holding for 10s", "light blue", "screen")
+                defeated = True
+                return spotted, defeated
+
+            # Check for field-specific 'vic<field>' blue messages
+            if self.setdat.get("stinger_hunt"):
+                # First try explicit 'vic<field>' images
+                for field in self.vicFields:
+                    try:
+                        if self.blueTextImageSearch(f"vic{field}", 0.75):
+                            self.vicField = field
+                            self.immediateVic = True
+                            self.logger.webhook("", f"Detected Vicious Bee spotted ({field})", "light blue", "screen")
+                            spotted = True
+                            return spotted, defeated
+                    except Exception:
+                        continue
+                # Fallback: sometimes the field name or generic foundvic appears without the 'vic' prefix
+                for field in self.vicFields:
+                    try:
+                        # check plain field name (e.g., 'clover') or variants
+                        if self.blueTextImageSearch(field.replace(' ', ''), 0.7) or self.blueTextImageSearch(field, 0.72):
+                            self.vicField = field
+                            self.immediateVic = True
+                            self.logger.webhook("", f"Detected Vicious Bee (by field text) spotted ({field})", "light blue", "screen")
+                            spotted = True
+                            return spotted, defeated
+                    except Exception:
+                        continue
+                # Additionally check generic 'foundvic' or 'vicious' markers
+                if self.blueTextImageSearch("foundvic", 0.75):
+                    self.immediateVic = True
+                    self.logger.webhook("", "Detected Vicious Bee (foundvic) spotted", "light blue", "screen")
+                    spotted = True
+                    return spotted, defeated
+
+            # Fallback: generic 'vicious' text detection (no field info)
+            if self.blueTextImageSearch("vicious", 0.75):
+                self.immediateVic = True
+                self.logger.webhook("", "Detected Vicious Bee (generic) spotted", "light blue", "screen")
+                spotted = True
+                return spotted, defeated
+
+            # Extra generic checks: 'attacking' can indicate vic activity nearby
+            if self.blueTextImageSearch("attacking", 0.75):
+                self.immediateVic = True
+                self.logger.webhook("", "Detected Vicious Bee (attacking) spotted", "light blue", "screen")
+                spotted = True
+                return spotted, defeated
+        except Exception:
+            pass
+
+        return spotted, defeated
 
     def checkAndReloadSettings(self):
         """Check if profile has changed and reload settings if needed"""
@@ -731,6 +800,58 @@ class macro:
             time.sleep(200) #wait for night to end
             self.night = False
             self.nightDetectStreaks = 0
+
+    def isNightNow(self):
+        """Quick, non-blocking night check used by Vic Hop to decide whether to skip a server.
+        Returns True if the current server appears to be night, False otherwise.
+        """
+        try:
+            screen = mssScreenshotNP(self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw, self.robloxWindow.mh)
+            bgr = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
+
+            # Sky-based check (used when converting or in spawn)
+            def isNightSky(bgr_local):
+                y = 30 * self.robloxWindow.multi
+                bgr_crop = bgr_local[0:int(y), 180*self.robloxWindow.multi:int(self.robloxWindow.mw)]
+                w, h = bgr_crop.shape[:2]
+                for x in range(max(0, w-15)):
+                    for yy in range(max(0, h-15)):
+                        area = bgr_crop[x:x+15, yy:yy+15]
+                        if np.all(area == [0, 0, 0]):
+                            return True
+                return False
+
+            # Grass/floor based check (used in fields)
+            def isGrassNight(bgr_local):
+                dayColors = [
+                    [(47, 117, 57), cv2.getStructuringElement(cv2.MORPH_RECT, (6, 6))],
+                    [(46, 117, 58), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))],
+                    [(60, 156, 74), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))],
+                    [(38, 114, 51), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))],
+                    [(66, 123, 40), cv2.getStructuringElement(cv2.MORPH_RECT, (6, 6))],
+                    [(32, 211, 22), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))],
+                ]
+                nightColors = [
+                    [(23, 72, 30), cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))],
+                    [(17, 71, 28), cv2.getStructuringElement(cv2.MORPH_RECT, (6, 6))],
+                ]
+                bgr_crop = bgr_local[0:bgr_local.shape[0] - (100*self.robloxWindow.multi)]
+                dayScreen = bgr_crop[int(bgr_crop.shape[0]*2/5):bgr_crop.shape[0]].copy()
+                for color, kernel in dayColors:
+                    if findColorObjectRGB(dayScreen, color, variance=6, kernel=kernel, mode="box"):
+                        return False
+                nightScreen = bgr_crop[int(bgr_crop.shape[0]/2):bgr_crop.shape[0]].copy()
+                for color, kernel in nightColors:
+                    if findColorObjectRGB(nightScreen, color, variance=6, kernel=kernel, mode="box"):
+                        return True
+                return False
+
+            if self.converting:
+                return isNightSky(bgr)
+            else:
+                return isGrassNight(bgr)
+        except Exception:
+            return False
 
     def isFullScreen(self):
         if sys.platform == "darwin":
@@ -953,7 +1074,7 @@ class macro:
     #click the yes popup
     #if detect is set to true, the macro will check if the yes button is there
     #if detectOnly is set to true, the macro will not click 
-    def clickYes(self, detect = False, detectOnly = False, clickOnce=False):
+    def clickYes(self, detect = False, detectOnly = False, clickOnce=False, leftShift=False):
         yesImg = self.adjustImage("./images/menu", "yes")
         x = self.robloxWindow.mx+self.robloxWindow.mw//2-270
         y = self.robloxWindow.my+self.robloxWindow.mh//2-60
@@ -966,7 +1087,11 @@ class macro:
         bestX, bestY = [x//self.robloxWindow.multi for x in res[1]]
         mouse.moveTo(bestX+x, bestY+y)
         time.sleep(0.2)
-        mouse.moveBy(5, 5)
+        # move slightly left when requested (helps with planter placement dialogs)
+        if leftShift:
+            mouse.moveBy(-6, 5)
+        else:
+            mouse.moveBy(5, 5)
         time.sleep(0.1)
         for _ in range(1 if clickOnce else 2):
             mouse.click()
@@ -1137,7 +1262,7 @@ class macro:
     
     #click at the specified coordinates to use an item in the inventory
     #if x/y is not provided, find the item in inventory
-    def useItemInInventory(self, itemName = None, x = None, y = None, closeInventoryAfter=True):
+    def useItemInInventory(self, itemName = None, x = None, y = None, closeInventoryAfter=True, clickYesLeft=False):
         if x is None or y is None:
             if itemName is None: raise Exception("tried searching for item but no item name is provided")
             res = self.findItemInInventory(itemName)
@@ -1151,7 +1276,7 @@ class macro:
             mouse.click()
             mouse.moveBy(0,15, pause=False)
             time.sleep(0.03)
-        self.clickYes()
+        self.clickYes(clickOnce=False, leftShift=clickYesLeft)
         #close inventory
         if closeInventoryAfter:
             self.toggleInventory("close")
@@ -1524,7 +1649,7 @@ class macro:
             self.logger.webhook("Notice", f"Failed to reach cannon too many times", "red", ping_category="ping_critical_errors")
             self.rejoin()
     
-    def rejoin(self, rejoinMsg = "Rejoining"):
+    def rejoin(self, rejoinMsg = "Rejoining", ignore_private=False):
         self.canDetectNight = False
         psLink = self.setdat.get("private_server_link", "")
         self.logger.webhook("",rejoinMsg, "dark brown")
@@ -1533,6 +1658,8 @@ class macro:
         keyboard.releaseMovement()
         for i in range(3):
             joinPS = bool(psLink and psLink.strip()) #join private server?
+            if ignore_private:
+                joinPS = False
             rejoinMethod = self.setdat.get("rejoin_method", "deeplink")
             browserLink = "https://www.roblox.com/games/4189852503?privateServerLinkCode=87708969133388638466933925137129"
             if i == 2 and joinPS: 
@@ -1611,6 +1738,17 @@ class macro:
             appManager.openApp("Roblox")
             if not rejoinSuccess:
                 continue
+            # mark that we just rejoined so Vic Hop can wait briefly before night checks
+            try:
+                self._just_rejoined = True
+            except Exception:
+                pass
+            # Vic Hop: If night detection is enabled and it's not night, wait briefly then skip this server before claiming hive
+            if getattr(self, "enableNightDetection", False) and hasattr(self, "isNightNow"):
+                time.sleep(2)
+                if not self.isNightNow():
+                    self.logger.webhook("", "Vic Hop: No night detected after rejoin — skipping server before claiming hive", "dark brown")
+                    continue
             #run fullscreen check
             # if self.isFullScreen(): #check if roblox can be found in menu bar
             #     self.logger.webhook("","Roblox is already in fullscreen, not activating fullscreen", "dark brown")
@@ -2681,16 +2819,16 @@ class macro:
     def stingerHuntBackground(self):
         #find vic
         while not self.stopVic:
-            #detect which field the vic is in
-            if self.vicField is None:
-                for field in self.vicFields:
-                    if self.blueTextImageSearch(f"vic{field}", 0.75):
-                        self.vicField = field
-                        break
-            else:
-                if self.blueTextImageSearch("died"): self.died = True
-            
-            if self.blueTextImageSearch("vicdefeat"):
+            # Use centralized detection helper to find spotted/defeated events
+            spotted, defeated = self.detectVicBlueText()
+            if spotted and self.vicField is None:
+                # if detected but no field info, leave vicField None so stingerHunt will search
+                pass
+            if not spotted:
+                # if we already have a vicField, still check for death while walking
+                if self.vicField is not None and self.blueTextImageSearch("died"):
+                    self.died = True
+            if defeated:
                 self.vicStatus = "defeated"
                 
     def stingerHunt(self):
@@ -3516,6 +3654,12 @@ class macro:
             with open("./data/user/hotbar_timings.txt", "w") as f:
                 f.write(str(hotbarSlotTimings))
             f.close()
+
+        # Centralized detection for vicious bee blue-text events
+        try:
+            self.detectVicBlueText()
+        except Exception:
+            pass
     
     def background(self):
         while True:
