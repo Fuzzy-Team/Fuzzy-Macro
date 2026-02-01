@@ -415,14 +415,16 @@ function loadInputs(obj, save = "") {
 function applyTheme(theme) {
   if (theme) localStorage.setItem("gui_theme", theme);
   // remove any known theme classes first
-  document.documentElement.classList.remove("theme-purple", "theme-cream");
+  document.documentElement.classList.remove("theme-purple", "theme-cream", "theme-red");
   if (!theme) return;
   const t = theme.toLowerCase();
   if (t === "purple") {
     document.documentElement.classList.add("theme-purple");
-  } else if (t === "cream" || t === "sunny" || t === "yellow") {
+  } else if (t === "cream") {
     // accept a few possible names for the new pale-yellow theme
     document.documentElement.classList.add("theme-cream");
+  } else if (t === "red") {
+    document.documentElement.classList.add("theme-red");
   }
 }
 
