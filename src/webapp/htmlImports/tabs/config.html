@@ -443,6 +443,31 @@
         //   },
         // },
       ]);
+
+      // Advanced: Beta Testing
+      buildStandardContainer(parentOther, "Advanced", "", [
+        {
+          id: "beta_commit_hash",
+          title: "Beta Testing",
+          desc: "Enter a 7-character code from the Fuzzy Macro Discord server.",
+          type: {
+            name: "textbox",
+            inputType: "string",
+            inputLimit: 7,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "beta_update_button",
+          title: "",
+          desc: "",
+          type: {
+            name: "button",
+            text: "Update from Hash",
+            triggerFunction: "triggerBetaUpdate()",
+          },
+        },
+      ]);
     </script>
   </div>
   <div id="discord" class="standard-container sub-tab-panel" style="display: none">

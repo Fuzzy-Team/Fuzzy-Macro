@@ -2,7 +2,7 @@ import eel
 import webbrowser
 import modules.misc.settingsManager as settingsManager
 import os
-from modules.misc.update import update as updateFunc
+import modules.misc.update as updateModule
 import sys
 import ast
 import json
@@ -166,7 +166,24 @@ def getMacroVersion():
 @eel.expose
 def update():
     try:
-        updated = updateFunc()
+        updated = updateModule.update()
+    except Exception:
+        updated = False
+    if updated:
+        eel.closeWindow()
+        sys.exit()
+    else:
+        try:
+            eel.updateButtonReset()()
+        except Exception:
+            pass
+    return
+
+
+@eel.expose
+def updateFromHash(commit_hash):
+    try:
+        updated = updateModule.update_from_commit(commit_hash)
     except Exception:
         updated = False
     if updated:

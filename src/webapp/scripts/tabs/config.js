@@ -622,3 +622,27 @@ function showProfileStatus(elementId, message, type) {
     }, 5000);
   }
 }
+
+// Trigger beta update from commit hash
+async function triggerBetaUpdate() {
+  const el = document.getElementById("beta_commit_hash");
+  if (!el) return alert("Beta commit input not found.");
+  const hash = el.value.trim();
+  const re = /^[0-9a-fA-F]{7}$/;
+  if (!re.test(hash)) return alert("Please enter a valid 7-character hex commit hash.");
+
+  if (!confirm(`Update macro from commit ${hash}? This will backup and apply files.`)) return;
+
+  try {
+    // call backend updater
+    const res = await eel.updateFromHash(hash)();
+    if (res) {
+      alert("Update started. The app may close to apply the update.");
+    } else {
+      alert("Update failed or was aborted. Check logs for details.");
+    }
+  } catch (e) {
+    console.error(e);
+    alert("Error initiating update: " + e);
+  }
+}

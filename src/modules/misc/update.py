@@ -355,3 +355,107 @@ def update(t="main"):
 
     msgBox("Update success", "Update complete. You can now relaunch the macro")
     return True
+
+
+def update_from_commit(commit_hash):
+    """Update the macro from a specific commit hash (zip at /archive/<hash>.zip)."""
+    msgBox("Update in progress", f"Updating to commit {commit_hash}... Do not close terminal")
+    protected_folders = [
+        os.path.join("src", "data", "user"),
+        os.path.join("settings", "profiles"),
+        os.path.join("settings", "patterns"),
+    ]
+    protected_files = [".git"]
+    destination = os.getcwd().replace("/src", "")
+
+    remote_zip = f"https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/{commit_hash}.zip"
+    backup_path = os.path.join(destination, "backup_macro.zip")
+
+    try:
+        _create_backup(destination, backup_path, protected_folders, protected_files)
+        _mark_backup_pending(destination)
+    except Exception:
+        pass
+
+    # download zip for the commit
+    try:
+        req = requests.get(remote_zip, timeout=60)
+        req.raise_for_status()
+        zipf = zipfile.ZipFile(BytesIO(req.content))
+        zipf.extractall(destination)
+    except Exception:
+        msgBox("Update failed", "Could not download or extract update zip for the specified commit.")
+        return False
+
+    # find extracted folder
+    extracted = None
+    for f in os.listdir(destination):
+        if f.startswith("Fuzzy-Macro") and os.path.isdir(os.path.join(destination, f)):
+            extracted = os.path.join(destination, f)
+            break
+    if not extracted:
+        for f in os.listdir(destination):
+            p = os.path.join(destination, f)
+            if os.path.isdir(p) and os.path.exists(os.path.join(p, "src")):
+                extracted = p
+                break
+    if not extracted:
+        msgBox("Update failed", "Could not locate extracted update folder.")
+        return False
+
+    try:
+        _merge_overwrite(extracted, destination, protected_folders, protected_files)
+    except Exception:
+        msgBox("Update failed", "Error while applying update files.")
+        return False
+
+    # merge patterns similar to update()
+    try:
+        src_patterns = os.path.join(extracted, "settings", "patterns")
+        dst_patterns = os.path.join(destination, "settings", "patterns")
+        if os.path.exists(src_patterns):
+            for root, dirs, files in os.walk(src_patterns):
+                rel_root = os.path.relpath(root, src_patterns)
+                dest_root = os.path.join(dst_patterns, rel_root) if rel_root != "." else dst_patterns
+                os.makedirs(dest_root, exist_ok=True)
+                for f in files:
+                    src_file = os.path.join(root, f)
+                    dest_file = os.path.join(dest_root, f)
+                    if not os.path.exists(dest_file):
+                        try:
+                            shutil.copy2(src_file, dest_file)
+                        except Exception:
+                            pass
+                    else:
+                        base, ext = os.path.splitext(f)
+                        suffix = 1
+                        while True:
+                            new_name = f"{base}.new{suffix}{ext}"
+                            new_path = os.path.join(dest_root, new_name)
+                            if not os.path.exists(new_path):
+                                try:
+                                    shutil.copy2(src_file, new_path)
+                                except Exception:
+                                    pass
+                                break
+                            suffix += 1
+    except Exception:
+        pass
+
+    # cleanup the extracted folder
+    try:
+        shutil.rmtree(extracted)
+    except Exception:
+        pass
+
+    # ensure run_macro.command is executable if present
+    run_macroPath = os.path.join(destination, "run_macro.command")
+    if os.path.exists(run_macroPath):
+        try:
+            st = os.stat(run_macroPath)
+            os.chmod(run_macroPath, st.st_mode | stat.S_IEXEC)
+        except Exception:
+            pass
+
+    msgBox("Update success", "Update complete. You can now relaunch the macro")
+    return True
