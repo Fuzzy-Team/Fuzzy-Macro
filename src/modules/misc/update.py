@@ -442,6 +442,34 @@ def update_from_commit(commit_hash):
     except Exception:
         pass
 
+    # Clean up `.newN` duplicates created during merge: if corresponding
+    # base file exists, remove the `.newN` file; otherwise rename it to
+    # the base name (remove suffix).
+    try:
+        import re as _re
+        if os.path.exists(dst_patterns):
+            for root, dirs, files in os.walk(dst_patterns):
+                for f in files:
+                    m = _re.match(r"^(?P<base>.+?)\.new\d+(?P<ext>\..+)?$", f)
+                    if not m:
+                        continue
+                    base = m.group('base')
+                    ext = m.group('ext') or ''
+                    candidate = base + ext
+                    src_new = os.path.join(root, f)
+                    target = os.path.join(root, candidate)
+                    try:
+                        if os.path.exists(target):
+                            # base exists — remove the .new file
+                            os.remove(src_new)
+                        else:
+                            # rename .newN -> base
+                            os.replace(src_new, target)
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+
     # cleanup the extracted folder
     try:
         shutil.rmtree(extracted)
