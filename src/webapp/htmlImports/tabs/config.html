@@ -370,10 +370,14 @@
         {
           id: "gui_theme",
           title: "GUI Theme",
-          desc: "Choose between Brown, Purple, or the new Cream theme",
+          desc: "Choose between Fuzzy, Mythic, or the new Gifted Fuzzy theme",
           type: {
             name: "dropdown",
-            data: ["Brown", "Purple", "Cream"],
+            data: [
+              { label: "Fuzzy", value: "Brown" },
+              { label: "Mythic", value: "Purple" },
+              { label: "Gifted Fuzzy", value: "Cream" },
+            ],
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
