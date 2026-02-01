@@ -1752,6 +1752,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
         app_commands.Choice(name="normal", value="normal"),
         app_commands.Choice(name="quests", value="quest"),
         app_commands.Choice(name="field", value="field"),
+        app_commands.Choice(name="vic_hop", value="vic_hop"),
     ])
     async def macro_mode(interaction: discord.Interaction, mode: str):
         """Set macro mode"""
@@ -1768,7 +1769,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
             mode_names = {
                 "normal": "Normal",
                 "quest": "Quest",
-                "field": "Field"
+                "field": "Field",
+                "vic_hop": "Vic Hop"
             }
 
             await interaction.response.send_message(f"🔄 Macro mode set to {mode_names[mode]}!\n{message}")
@@ -1786,7 +1788,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
 
         embed.add_field(name="📜 **Quest Management**", value="`/quests` - View quest configuration\n`/enablequest <quest>` - Enable a quest\n`/disablequest <quest>` - Disable a quest", inline=False)
 
-        embed.add_field(name="🔄 **Macro Mode**", value="`/macromode <normal/quests/field>` - Set macro mode (normal = all tasks, quests = quests only, field = fields only)", inline=False)
+        embed.add_field(name="🔄 **Macro Mode**", value="`/macromode <normal/quests/field/vic_hop>` - Set macro mode (normal = all tasks, quests = quests only, field = fields only, vic_hop = hop servers to find Vicious Bees)", inline=False)
 
         embed.add_field(name="🎁 **Collectibles**", value="`/collectibles` - View collectibles\n`/enablecollectible <item>` - Enable collectible\n`/disablecollectible <item>` - Disable collectible", inline=False)
 

@@ -248,6 +248,13 @@ async function loadTasks() {
     return;
   }
 
+  // Check if vic hop mode is enabled
+  if (setdat.macro_mode === "vic_hop") {
+    out += taskHTML("Vic Hop Mode", "🔁 Hopping servers to find Vicious Bees");
+    document.getElementById("task-list").innerHTML = out;
+    return;
+  }
+
   // Get priority order from settings, or use default order if not set
   const priorityOrder = setdat.task_priority_order || [];
 
