@@ -105,6 +105,13 @@
   --primary-rgb: 239, 218, 152;
 }
 
+/* Red Theme Overrides (main color: #840909) */
+.theme-red {
+  --primary: #cb4144;
+  --primary-hover: #9f1a1a;
+  --primary-rgb: 132, 9, 9;
+}
+
 body {
   margin: 0;
   padding: 0;

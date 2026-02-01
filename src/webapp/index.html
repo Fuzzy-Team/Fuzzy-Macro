@@ -12,8 +12,14 @@
   <script>
     (function () {
       const theme = localStorage.getItem("gui_theme");
-      if (theme && theme.toLowerCase() === "purple") {
+      if (!theme) return;
+      const t = theme.toLowerCase();
+      if (t === "purple") {
         document.documentElement.classList.add("theme-purple");
+      } else if (t === "cream") {
+        document.documentElement.classList.add("theme-cream");
+      } else if (t === "red" ) {
+        document.documentElement.classList.add("theme-red");
       }
     })();
   </script>
