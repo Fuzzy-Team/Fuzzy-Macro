@@ -134,8 +134,8 @@ def macro(status, logQueue, updateGUI, run, skipTask):
         feedBees = []
         setdatEnable = []
 
-        #if the macro has completed a task in the last cycle
-        if taskCompleted or not questGiver in questCache:
+        # Refresh quest detection when actually executing the quest or when cache is stale
+        if executeQuest or taskCompleted or not questGiver in questCache:
             questObjective = macro.findQuest(questGiver)
             questCache[questGiver] = questObjective
         else:
