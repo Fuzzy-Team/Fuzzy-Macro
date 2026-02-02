@@ -1,9 +1,4 @@
-import sys
-if sys.platform == "win32":
-    import pydirectinput as pag
-    pag.PAUSE = 0.1
-else:
-    import pyautogui as pag
+import pyautogui as pag
 import time
 from pynput.mouse import Button, Controller
 

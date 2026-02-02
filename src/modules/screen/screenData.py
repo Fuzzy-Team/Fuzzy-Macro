@@ -49,23 +49,22 @@ def setScreenData():
     }
 
     #for macs: check if its reina, set the screen width and height, set multipliers
-    if sys.platform == "darwin":
-        #get a screenshot. The size of the screenshot is the true screen size
-        sct=mss.mss()
-        region={'top':0,'left':0,'width':150,'height':150}
-        shot=sct.grab(region)
-        sw, sh = shot.width, shot.height
-        if sw == 300: #check if retina (screenshot size is twice)
-            screenData["screen_width"] *= 2
-            screenData["screen_height"] *= 2
-            screenData["display_type"] = "retina"
-        ndisplay = "{}x{}".format(sw,sh)
-        #get multipliers
-        if ndisplay in multiplierData:
-            screenData["y_multiplier"] = multiplierData[ndisplay][0]
-            screenData["x_multiplier"] = multiplierData[ndisplay][1]
-            screenData["y_length_multiplier"] = multiplierData[ndisplay][2]
-            screenData["x_length_multiplier"] = multiplierData[ndisplay][3]
+    #get a screenshot. The size of the screenshot is the true screen size
+    sct=mss.mss()
+    region={'top':0,'left':0,'width':150,'height':150}
+    shot=sct.grab(region)
+    sw, sh = shot.width, shot.height
+    if sw == 300: #check if retina (screenshot size is twice)
+        screenData["screen_width"] *= 2
+        screenData["screen_height"] *= 2
+        screenData["display_type"] = "retina"
+    ndisplay = "{}x{}".format(sw,sh)
+    #get multipliers
+    if ndisplay in multiplierData:
+        screenData["y_multiplier"] = multiplierData[ndisplay][0]
+        screenData["x_multiplier"] = multiplierData[ndisplay][1]
+        screenData["y_length_multiplier"] = multiplierData[ndisplay][2]
+        screenData["x_length_multiplier"] = multiplierData[ndisplay][3]
     #save the data
     settingsManager.saveDict(screenPath, screenData)
 

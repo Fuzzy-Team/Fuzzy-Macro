@@ -1867,7 +1867,7 @@ if __name__ == "__main__":
     from modules.submacros.stream import cloudflaredStream
     import os
 
-    if sys.platform == "darwin" and sys.version_info[1] <= 7:
+    if sys.version_info[1] <= 7:
         print("start method set to spawn")
         multiprocessing.set_start_method("spawn")
     macroProc = None
@@ -1978,43 +1978,42 @@ if __name__ == "__main__":
     #use run.value to control the macro loop
 
     #check color profile
-    if sys.platform == "darwin":
-        try:
-            colorProfileManager = DisplayColorProfile()
-            currentProfileColor = colorProfileManager.getCurrentColorProfile()
-            if not "sRGB" in currentProfileColor:
-                try:
-                    if messageBox.msgBoxOkCancel(title="Incorrect Color Profile", text=f"You current display's color profile is {currentProfileColor} but sRGB is required for the macro.\nPress 'Ok' to change color profiles"):
-                        colorProfileManager.resetDisplayProfile()
-                        colorProfileManager.setCustomProfile("/System/Library/ColorSync/Profiles/sRGB Profile.icc")
-                        messageBox.msgBox(title="Color Profile Success", text="Successfully changed the current color profile to sRGB")
+    try:
+        colorProfileManager = DisplayColorProfile()
+        currentProfileColor = colorProfileManager.getCurrentColorProfile()
+        if not "sRGB" in currentProfileColor:
+            try:
+                if messageBox.msgBoxOkCancel(title="Incorrect Color Profile", text=f"You current display's color profile is {currentProfileColor} but sRGB is required for the macro.\nPress 'Ok' to change color profiles"):
+                    colorProfileManager.resetDisplayProfile()
+                    colorProfileManager.setCustomProfile("/System/Library/ColorSync/Profiles/sRGB Profile.icc")
+                    messageBox.msgBox(title="Color Profile Success", text="Successfully changed the current color profile to sRGB")
 
-                except Exception as e:
-                    messageBox.msgBox(title="Failed to change color profile", text=e)
-        except Exception as e:
-            pass
+            except Exception as e:
+                messageBox.msgBox(title="Failed to change color profile", text=e)
+    except Exception as e:
+        pass
     
-        #check screen recording permissions
-        try:
-            cg = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
-            cg.CGRequestScreenCaptureAccess.restype = ctypes.c_bool
-            if not cg.CGRequestScreenCaptureAccess():
-                messageBox.msgBox(title="Screen Recording Permission", text='Terminal does not have the screen recording permission. The macro will not work properly.\n\nTo fix it, go to System Settings -> Privacy and Security -> Screen Recording -> add and enable Terminal. After that, restart the macro')
-        except AttributeError:
-            pass
-        #check full keyboard access
-        try:
-            result = subprocess.run(
-                ["defaults", "read", "com.apple.universalaccess", "KeyboardAccessEnabled"],
-                capture_output=True,
-                text=True
-            )
-            value = result.stdout.strip()
-            if value == "1":
-                messageBox.msgBox(text = f"Full Keyboard Access is enabled. The macro will not work properly\
-                    \nTo disable it, go to System Settings -> Accessibility -> Keyboard -> uncheck 'Full Keyboard Access'")
-        except Exception as e:
-            print("Error reading Full Keyboard Access:", e)
+    #check screen recording permissions
+    try:
+        cg = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
+        cg.CGRequestScreenCaptureAccess.restype = ctypes.c_bool
+        if not cg.CGRequestScreenCaptureAccess():
+            messageBox.msgBox(title="Screen Recording Permission", text='Terminal does not have the screen recording permission. The macro will not work properly.\n\nTo fix it, go to System Settings -> Privacy and Security -> Screen Recording -> add and enable Terminal. After that, restart the macro')
+    except AttributeError:
+        pass
+    #check full keyboard access
+    try:
+        result = subprocess.run(
+            ["defaults", "read", "com.apple.universalaccess", "KeyboardAccessEnabled"],
+            capture_output=True,
+            text=True
+        )
+        value = result.stdout.strip()
+        if value == "1":
+            messageBox.msgBox(text = f"Full Keyboard Access is enabled. The macro will not work properly\
+                \nTo disable it, go to System Settings -> Accessibility -> Keyboard -> uncheck 'Full Keyboard Access'")
+    except Exception as e:
+        print("Error reading Full Keyboard Access:", e)
 
     discordBotProc = None
     prevDiscordBotToken = None

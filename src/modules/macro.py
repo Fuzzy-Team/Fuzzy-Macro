@@ -733,46 +733,29 @@ class macro:
             self.nightDetectStreaks = 0
 
     def isFullScreen(self):
-        if sys.platform == "darwin":
-            windows = gw.getAllTitles()
-            for win in windows:
-                if "roblox roblox" in win.lower():
-                    x,y,w,h = gw.getWindowGeometry(win)
-                    return x==0 and y==0 and w==self.robloxWindow.mw and h==self.robloxWindow.mh
-            #can't find the roblox window, most likely fullscreen? Assumes that it exists
-            return True
-                    
-        else:
-            menubarRaw = ocr.customOCR(0, 0, 300, 60, 0) #get menu bar on mac, window bar on windows
-            menubar = ""
-            try:
-                for x in menubarRaw:
-                    menubar += x[1][0]
-            except:
-                pass
-            menubar = menubar.lower()
-            return not ("rob" in menubar or "lox" in menubar) #check if roblox can be found in menu bar
+        windows = gw.getAllTitles()
+        for win in windows:
+            if "roblox roblox" in win.lower():
+                x,y,w,h = gw.getWindowGeometry(win)
+                return x==0 and y==0 and w==self.robloxWindow.mw and h==self.robloxWindow.mh
+        #can't find the roblox window, most likely fullscreen? Assumes that it exists
+        return True
 
     def toggleFullScreen(self):
-        if sys.platform == "darwin":
-            self.keyboard.keyDown("command")
-            time.sleep(0.05)
-            self.keyboard.keyDown("ctrl")
-            time.sleep(0.05)
-            self.keyboard.keyDown("f")
-            time.sleep(0.1)
-            self.keyboard.keyUp("command")
-            self.keyboard.keyUp("ctrl")
-            self.keyboard.keyUp("f")
-        elif sys.platform == "win32":
-            for _ in range(3):
-                self.keyboard.press("f11")
-                time.sleep(0.4)
+        self.keyboard.keyDown("command")
+        time.sleep(0.05)
+        self.keyboard.keyDown("ctrl")
+        time.sleep(0.05)
+        self.keyboard.keyDown("f")
+        time.sleep(0.1)
+        self.keyboard.keyUp("command")
+        self.keyboard.keyUp("ctrl")
+        self.keyboard.keyUp("f")
 
     def adjustImage(self, path, imageName):
         return adjustImage(path, imageName, self.robloxWindow.display_type)
         
-    #run a path. Choose automater over python if it exists (except on windows)
+    #run a path. Choose automater over python if it exists
     #file must exist: if set to False, will not attempt to run the file if it doesnt exist
     def runPath(self, name, fileMustExist = True):
         ws = self.setdat["movespeed"]
@@ -780,7 +763,7 @@ class macro:
         #try running a automator workflow
         #if it doesnt exist, run the .py file instead
 
-        if os.path.exists(path+".workflow") and sys.platform == "darwin":
+        if os.path.exists(path+".workflow"):
             os.system(f"/usr/bin/automator {path}.workflow")
         else:
             pyPath = f"{path}.py"
@@ -4915,64 +4898,23 @@ class macro:
     def startDetect(self):
         #disable game mode
         self.moveMouseToDefault()
-        if sys.platform == "darwin":
-            time.sleep(1)
-            #check roblox scaling
-            #this is done by checking if all pixels at the top of the screen are black
-            topScreen = mssScreenshot(0, 0, self.robloxWindow.mw, 2)
-            extrema = topScreen.convert("L").getextrema()
-            #all are black
-            if extrema == (0, 0):
-                messageBox.msgBox(text='It seems like you have not enabled roblox scaling. The macro will not work properly.\n1. Close Roblox\n2. Go to finder -> applications -> right click roblox -> get info -> enable "scale to fit below built-in camera"', title='Roblox scaling')
-            #make sure game mode is disabled (macOS 14.0 and above and apple chips)
-            macVersion, _, _ = platform.mac_ver()
-            macVersion = float('.'.join(macVersion.split('.')[:2]))
+        time.sleep(1)
+        #check roblox scaling
+        #this is done by checking if all pixels at the top of the screen are black
+        topScreen = mssScreenshot(0, 0, self.robloxWindow.mw, 2)
+        extrema = topScreen.convert("L").getextrema()
+        #all are black
+        if extrema == (0, 0):
+            messageBox.msgBox(text='It seems like you have not enabled roblox scaling. The macro will not work properly.\n1. Close Roblox\n2. Go to finder -> applications -> right click roblox -> get info -> enable "scale to fit below built-in camera"', title='Roblox scaling')
+        #make sure game mode is disabled (macOS 14.0 and above and apple chips)
+        macVersion, _, _ = platform.mac_ver()
+        macVersion = float('.'.join(macVersion.split('.')[:2]))
 
-            # if 14 <= macVersion <= 15 and platform.processor() == "arm" and self.isFullScreen():
-            #     self.logger.webhook("","Detecting and disabling game mode","dark brown")
-            #     #make sure roblox is not fullscreen
-            #     self.toggleFullScreen()
-
-            #     #find the game mode button
-            #     lightGameMode = self.adjustImage("./images/mac", "gamemodelight")
-            #     darkGameMode = self.adjustImage("./images/mac", "gamemodedark")
-            #     x = self.robloxWindow.mw/2.3
-            #     time.sleep(1.2)
-            #     #find light mode
-            #     res = locateImageOnScreen(lightGameMode, self.robloxWindow.mx+(x), self.robloxWindow.my+(0), self.robloxWindow.mw-x, 60, 0.7)
-            #     if res is None: #cant find light, find dark
-            #         res = locateImageOnScreen(darkGameMode, self.robloxWindow.mx+(x), self.robloxWindow.my+(0), self.robloxWindow.mw-x, 60, 0.7)
-            #     #found either light or dark
-            #     if not res is None:
-            #         gx, gy = [x//self.robloxWindow.multi for x in res[1]]
-            #         mouse.moveTo(self.robloxWindow.mx+(gx+x), self.robloxWindow.my+(gy))
-            #         time.sleep(0.1)
-            #         mouse.fastClick()
-            #         time.sleep(0.5)
-            #         #check if game mode is enabled
-            #         screen = mssScreenshot(x, 0, self.robloxWindow.mw-x, 150)
-            #         ocrRes = ocr.ocrRead(screen)
-            #         for i in ocrRes:
-            #             if "mode off" in i[1][0].lower():
-            #                 #disable game mode
-            #                 bX, bY = ocr.getCenter(i[0])
-            #                 if self.display_type == "retina":
-            #                     bX //= 2
-            #                     bY //= 2
-            #                 mouse.moveTo(self.robloxWindow.mx+(x+bX), self.robloxWindow.my+(bY))
-            #                 mouse.click()                        
-            #                 break
-            #         else: #game mode is already disabled/couldnt be found
-            #             mouse.moveTo(self.robloxWindow.mx+(x+gx), self.robloxWindow.my+(gy))
-            #             mouse.click()
-            #     #fullscreen back roblox
-            #     appManager.openApp("Roblox")
-            #     self.toggleFullScreen()
-            # Removed lines that were un-fullscreening Roblox on startup
-            # appManager.setAppFullscreen(fullscreen=False)
-            # appManager.maximiseAppWindow()
-            time.sleep(1)
-            self.moveMouseToDefault()
+        # Removed lines that were un-fullscreening Roblox on startup
+        # appManager.setAppFullscreen(fullscreen=False)
+        # appManager.maximiseAppWindow()
+        time.sleep(1)
+        self.moveMouseToDefault()
 
         #detect new/old ui and set 
         #also check for screen recording permission 
@@ -4991,23 +4933,22 @@ class macro:
         #check for accessibility
         #this is done by taking 2 different screenshots
         #if they are both the same, we assume that the keypress didnt go through and hence accessibility is not enabled
-        if sys.platform == "darwin":
-            originalX = mouse.getPos()[0]
-            mouse.moveBy(100, 0)
-            time.sleep(0.15)
-            newX = mouse.getPos()[0]
-            if originalX == newX:
-                messageBox.msgBox(text='It seems like terminal does not have the accessibility permission. The macro will not work properly.\n\nTo fix it, go to System Settings -> Privacy and Security -> Accessibility -> add and enable Terminal.\n\nVisit https://fuzzy-team.gitbook.io/fuzzy-macro/common-fixes/terminal-permissions for detailed instructions\n\n NOTE: This popup might be incorrect. If the macro is able to input keypresses and interact with the game, you can dismiss this popup', title='Accessibility Permission')
-            time.sleep(1)
-            # img1 = pillowToHash(mssScreenshot())
-            # self.keyboard.press("esc")
-            # time.sleep(0.1)
-            # time.sleep(0.5)
-            # img2 = pillowToHash(mssScreenshot())
-            # self.keyboard.press("esc")
-            # if similarHashes(img1, img2, 3):
-            #     messageBox.msgBox(text='It seems like terminal does not have the accessibility permission. The macro will not work properly.\n\nTo fix it, go to System Settings -> Privacy and Security -> Accessibility -> add and enable Terminal.\n\nVisit #6system-settings in the discord for more detailed instructions\n\n NOTE: This popup might be incorrect. If the macro is able to input keypresses and interact with the game, you can dismiss this popup', title='Accessibility Permission')
-            # time.sleep(1)
+        originalX = mouse.getPos()[0]
+        mouse.moveBy(100, 0)
+        time.sleep(0.15)
+        newX = mouse.getPos()[0]
+        if originalX == newX:
+            messageBox.msgBox(text='It seems like terminal does not have the accessibility permission. The macro will not work properly.\n\nTo fix it, go to System Settings -> Privacy and Security -> Accessibility -> add and enable Terminal.\n\nVisit https://fuzzy-team.gitbook.io/fuzzy-macro/common-fixes/terminal-permissions for detailed instructions\n\n NOTE: This popup might be incorrect. If the macro is able to input keypresses and interact with the game, you can dismiss this popup', title='Accessibility Permission')
+        time.sleep(1)
+        # img1 = pillowToHash(mssScreenshot())
+        # self.keyboard.press("esc")
+        # time.sleep(0.1)
+        # time.sleep(0.5)
+        # img2 = pillowToHash(mssScreenshot())
+        # self.keyboard.press("esc")
+        # if similarHashes(img1, img2, 3):
+        #     messageBox.msgBox(text='It seems like terminal does not have the accessibility permission. The macro will not work properly.\n\nTo fix it, go to System Settings -> Privacy and Security -> Accessibility -> add and enable Terminal.\n\nVisit #6system-settings in the discord for more detailed instructions\n\n NOTE: This popup might be incorrect. If the macro is able to input keypresses and interact with the game, you can dismiss this popup', title='Accessibility Permission')
+        # time.sleep(1)
         
         private_server_link = self.setdat.get("private_server_link", "")
         if private_server_link and "share" in private_server_link and self.setdat.get("rejoin_method") == "deeplink":

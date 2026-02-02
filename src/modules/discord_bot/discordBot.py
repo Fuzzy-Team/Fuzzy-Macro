@@ -501,25 +501,14 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
     @bot.tree.command(name = "battery", description = "Get your current battery status")
     async def battery(interaction: discord.Interaction):
         try:
-            if sys.platform == "darwin":
-                output = subprocess.check_output(["pmset", "-g", "batt"], text=True)
-                for line in output.split("\n"):
-                    if "InternalBattery" in line:
-                        parts = line.split("\t")[-1].split(";")
-                        percent = parts[0].strip()
-                        status = parts[1].strip()
-                        await interaction.response.send_message(f"Battery is at {percent} and is currently {status}.")
-                        return
-                    
-            elif sys.platform == "win32":
-                output = subprocess.check_output(["wmic", "path", "Win32_Battery", "get", "EstimatedChargeRemaining, BatteryStatus"], text=True)
-                lines = output.strip().split("\n")
-                if len(lines) > 1:
-                    # Parse the output
-                    data = lines[1].split()
-                    percent = data[0]  # First column is the battery percentage
-                    status = "charging" if data[1] == "2" else "not charging"  # Status column
-                    await interaction.response.send_message(f"Battery is at {percent}% and is currently {status}.")
+            output = subprocess.check_output(["pmset", "-g", "batt"], text=True)
+            for line in output.split("\n"):
+                if "InternalBattery" in line:
+                    parts = line.split("\t")[-1].split(";")
+                    percent = parts[0].strip()
+                    status = parts[1].strip()
+                    await interaction.response.send_message(f"Battery is at {percent} and is currently {status}.")
+                    return
             
             await interaction.response.send_message("Battery information not found.")
         except Exception as e:
