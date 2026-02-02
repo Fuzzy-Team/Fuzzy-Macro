@@ -148,6 +148,12 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
   const container = dragListElement.querySelector(".drag-list-container");
   if (!container) return;
 
+  // Reset priority search to avoid cached filters when reloading settings
+  if (dragListElement.id === "task_priority_order") {
+    const searchInput = document.getElementById("priority-search-input");
+    if (searchInput) searchInput.value = "";
+  }
+
   // Clear existing items
   container.innerHTML = "";
 

@@ -122,9 +122,13 @@ function initializePrioritySearch() {
   const searchInput = document.getElementById("priority-search-input");
   if (!searchInput) return;
 
-  searchInput.addEventListener("input", (e) => {
-    const searchTerm = e.target.value.toLowerCase().trim();
-    const container = document.getElementById("task_priority_order-container");
+    // Remove any existing event listener to prevent duplicates
+    const newSearchInput = searchInput.cloneNode(true);
+    searchInput.parentNode.replaceChild(newSearchInput, searchInput);
+  
+    newSearchInput.addEventListener("input", (e) => {
+      const searchTerm = e.target.value.toLowerCase().trim();
+      const container = document.getElementById("task_priority_order-container");
     if (!container) return;
 
     const items = container.querySelectorAll(".drag-item");
@@ -132,9 +136,9 @@ function initializePrioritySearch() {
       const text =
         item.querySelector(".drag-text")?.textContent.toLowerCase() || "";
       if (searchTerm === "" || text.includes(searchTerm)) {
-        item.classList.remove("hidden");
+          item.style.display = "";
       } else {
-        item.classList.add("hidden");
+          item.style.display = "none";
       }
     });
   });
