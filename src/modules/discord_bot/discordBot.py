@@ -153,16 +153,33 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
                 try:
                     pinned_messages = await channel.pins()
                     for pinned_msg in pinned_messages:
-                        # Check if the message is a webhook message with "Stream Started" content
+                        # Check if the message is a webhook message that looks like a Stream Started message
+                        should_unpin = False
+                        # Check embed titles/descriptions for stream indicator
                         if pinned_msg.embeds:
                             for embed in pinned_msg.embeds:
-                                # Check if it's a Stream Started message
-                                if embed.title and "Stream Started" in embed.title:
-                                    try:
-                                        await pinned_msg.unpin()
-                                        print(f"Unpinned old stream message: {pinned_msg.id}")
-                                    except Exception as unpin_error:
-                                        print(f"Error unpinning message {pinned_msg.id}: {unpin_error}")
+                                title = getattr(embed, 'title', '') or ''
+                                desc = getattr(embed, 'description', '') or ''
+                                # If title mentions Stream Started and description contains a URL or Stream URL text
+                                if ("Stream Started" in title) and ("http" in desc or "Stream URL" in desc):
+                                    should_unpin = True
+                                    break
+                                # Fallback: if description itself contains a Stream URL with http
+                                if "http" in desc and ("stream" in desc.lower() or "stream url" in desc.lower()):
+                                    should_unpin = True
+                                    break
+                        # Also check message content for URLs (in case webhook used content instead of embed)
+                        if not should_unpin and pinned_msg.content:
+                            content = pinned_msg.content or ''
+                            if "http" in content and ("stream" in content.lower() or "stream url" in content.lower()):
+                                should_unpin = True
+
+                        if should_unpin:
+                            try:
+                                await pinned_msg.unpin()
+                                print(f"Unpinned old stream message: {pinned_msg.id}")
+                            except Exception as unpin_error:
+                                print(f"Error unpinning message {pinned_msg.id}: {unpin_error}")
                 except Exception as e:
                     print(f"Error checking/unpinning old messages: {e}")
                 
