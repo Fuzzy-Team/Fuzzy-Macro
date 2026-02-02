@@ -81,13 +81,12 @@ def update_profile_setting(setting_key, value):
     except Exception as e:
         return False, f"❌ Error updating profile setting: {str(e)}"
 
-def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_info=None, updateGUI=None):
+def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None, updateGUI=None):
     import modules.macro
     bot = commands.Bot(command_prefix="!b", intents=discord.Intents.all())
     
-    # Store initial message info for pinning
-    _initial_message_info = initial_message_info
-    _last_pinned_message_id = None
+    # Store pin requests queue
+    _pin_requests = pin_requests
 
     @bot.event
     async def on_ready():
@@ -105,55 +104,43 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
             import traceback
             traceback.print_exc()
         
-        # Start background task to watch for initial message to pin
-        if _initial_message_info is not None:
-            bot.loop.create_task(watch_for_initial_message())
+        # Start background task to process pin requests
+        if _pin_requests is not None:
+            bot.loop.create_task(process_pin_requests())
     
-    async def watch_for_initial_message():
-        """Watch the shared dictionary for initial message info and pin it"""
-        nonlocal _last_pinned_message_id
-        
+    async def process_pin_requests():
+        """Process pin requests from the queue"""
         while True:
             try:
-                await discord.utils.sleep_until(datetime.now() + timedelta(seconds=2))
+                await discord.utils.sleep_until(datetime.now() + timedelta(seconds=1))
                 
-                # Check if message info is available
-                if _initial_message_info and _initial_message_info.get('should_pin'):
-                    message_id = _initial_message_info.get('message_id')
-                    channel_id = _initial_message_info.get('channel_id')
-                    
-                    # Only pin if it's a new message (different from last pinned)
-                    if message_id and channel_id and message_id != _last_pinned_message_id:
-                        await pin_initial_message({
-                            'message_id': message_id,
-                            'channel_id': channel_id
-                        })
-                        _last_pinned_message_id = message_id
+                # Check if there are any pin requests
+                if _pin_requests and not _pin_requests.empty():
+                    try:
+                        request = _pin_requests.get_nowait()
+                        channel_id = request.get('channel_id')
+                        search_text = request.get('search_text', 'Stream URL')
+                        
+                        if channel_id:
+                            await pin_message_by_search(channel_id, search_text)
+                    except Exception as e:
+                        print(f"Error processing pin request: {e}")
             except Exception as e:
-                print(f"Error in watch_for_initial_message: {e}")
-                await discord.utils.sleep_until(datetime.now() + timedelta(seconds=2))
+                print(f"Error in process_pin_requests loop: {e}")
+                await discord.utils.sleep_until(datetime.now() + timedelta(seconds=1))
     
-    async def pin_initial_message(info):
-        """Pin the initial webhook message and unpin old stream URLs"""
+    async def pin_message_by_search(channel_id, search_text):
+        """Pin a message in the specified channel that contains the search text"""
         try:
-            channel_id = info.get('channel_id')
-            message_id = info.get('message_id')
-            
-            if not channel_id or not message_id:
-                print("Cannot pin initial message: missing channel_id or message_id")
-                return
-            
             channel = bot.get_channel(int(channel_id))
             if not channel:
-                # Try to fetch the channel if not in cache
                 channel = await bot.fetch_channel(int(channel_id))
             
             if channel:
-                # First, unpin any old "Stream Started" messages
+                # First, unpin any old stream URL messages
                 try:
                     pinned_messages = await channel.pins()
                     for pinned_msg in pinned_messages:
-                        # Check if the message is a webhook message that looks like a Stream Started message
                         should_unpin = False
                         # Check embed titles/descriptions for stream indicator
                         if pinned_msg.embeds:
@@ -168,7 +155,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
                                 if "http" in desc and ("stream" in desc.lower() or "stream url" in desc.lower()):
                                     should_unpin = True
                                     break
-                        # Also check message content for URLs (in case webhook used content instead of embed)
+                        # Also check message content for URLs
                         if not should_unpin and pinned_msg.content:
                             content = pinned_msg.content or ''
                             if "http" in content and ("stream" in content.lower() or "stream url" in content.lower()):
@@ -183,17 +170,41 @@ def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_in
                 except Exception as e:
                     print(f"Error checking/unpinning old messages: {e}")
                 
-                # Now pin the new message
-                message = await channel.fetch_message(int(message_id))
-                if message:
-                    await message.pin()
-                    print(f"Successfully pinned new stream message in channel {channel_id}")
-                else:
-                    print(f"Could not fetch message {message_id} in channel {channel_id}")
+                # Now search for and pin the new message
+                # Get recent messages (last 10)
+                messages = []
+                async for message in channel.history(limit=10):
+                    messages.append(message)
+                
+                # Search for message with the search text
+                for message in messages:
+                    found = False
+                    # Check embeds
+                    if message.embeds:
+                        for embed in message.embeds:
+                            title = getattr(embed, 'title', '') or ''
+                            desc = getattr(embed, 'description', '') or ''
+                            if search_text.lower() in title.lower() or search_text.lower() in desc.lower():
+                                found = True
+                                break
+                    # Check message content
+                    if not found and message.content and search_text.lower() in message.content.lower():
+                        found = True
+                    
+                    if found:
+                        try:
+                            await message.pin()
+                            print(f"Successfully pinned stream message in channel {channel_id}")
+                            return
+                        except Exception as pin_error:
+                            print(f"Error pinning message {message.id}: {pin_error}")
+                            return
+                
+                print(f"Could not find message with '{search_text}' in channel {channel_id}")
             else:
                 print(f"Could not access channel {channel_id}")
         except Exception as e:
-            print(f"Error pinning initial message: {e}")
+            print(f"Error pinning message by search: {e}")
             import traceback
             traceback.print_exc()
     

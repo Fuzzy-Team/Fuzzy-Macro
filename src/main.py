@@ -1889,7 +1889,7 @@ if __name__ == "__main__":
     skipTask = multiprocessing.Value('i', 0)  # 0 = don't skip, 1 = skip current task
     status = manager.Value(ctypes.c_wchar_p, "none")
     logQueue = manager.Queue()
-    initialMessageInfo = manager.dict()  # Shared dict for initial webhook message info
+    pin_requests = manager.Queue()  # Shared queue for pin requests
     start_keyboard_listener_fn = watch_for_hotkeys(run)
     logger = logModule.log(logQueue, False, None, False, blocking=False)
 
@@ -2041,7 +2041,7 @@ if __name__ == "__main__":
                 print("Detected change in discord bot token, killing previous bot process")
                 discordBotProc.terminate()
                 discordBotProc.join()
-            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, initialMessageInfo, updateGUI), daemon=True)
+            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI), daemon=True)
             prevDiscordBotToken = currentDiscordBotToken
             discordBotProc.start()
 
@@ -2075,13 +2075,18 @@ if __name__ == "__main__":
                     if stream.publicURL:
                         logger.webhook("Stream Started", f'Stream URL: {stream.publicURL}', "purple")
                         
-                        # If bot is enabled, populate initial message info for pinning the stream message
+                        # If bot is enabled, request pinning of the stream message
                         if setdat.get("discord_bot", False) and setdat.get("pin_stream_url", False):
                             import modules.logging.webhook as webhookModule
-                            if webhookModule.last_message_id and webhookModule.last_channel_id:
-                                initialMessageInfo['message_id'] = webhookModule.last_message_id
-                                initialMessageInfo['channel_id'] = webhookModule.last_channel_id
-                                initialMessageInfo['should_pin'] = True
+                            if webhookModule.last_channel_id:
+                                try:
+                                    pin_requests.put({
+                                        'channel_id': webhookModule.last_channel_id,
+                                        'search_text': 'Stream URL'
+                                    })
+                                    print("Pin request queued for stream URL message")
+                                except Exception as e:
+                                    print(f"Error queueing pin request: {e}")
                         return
 
                 logger.webhook("", f'Stream could not start. Check terminal for more info', "red", ping_category="ping_critical_errors")
@@ -2135,9 +2140,6 @@ if __name__ == "__main__":
             if macroProc:
                 # Stop macro and release all inputs first
                 logger.webhook("Macro Stopped", "Fuzzy Macro", "red")
-                
-                # Clear the initial message info for next start
-                initialMessageInfo.clear()
                 
                 run.value = 3
                 gui.setRunState(3)  # Update the global run state
