@@ -1,6 +1,6 @@
-display_type=retina
-screen_width=2880
-screen_height=1800
+display_type=built-in
+screen_width=1920
+screen_height=1080
 y_multiplier=1
 x_multiplier=1
 y_length_multiplier=1
