@@ -1,7 +1,14 @@
 <div align="center">
 
 <!-- logo banner -->
-<img width="200" height="200" src="https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/.github/fuzzy.png" style="margin-bottom: -10px;"/>
+<picture>
+  <source width="200" height="200" media="(prefers-color-scheme: dark)"
+          srcset="https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/.github/fuzzy.png">
+  <source width="200" height="200" media="(prefers-color-scheme: light)"
+          srcset="https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/.github/fuzzy-light.png">
+  <img width="200" height="200" alt="Fuzzy Macro logo"
+       src="https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/.github/fuzzy.png">
+</picture>
 
 <!-- shields and contents -->
 ![Discord](https://img.shields.io/discord/1462647649021853912?label=Discord&color=7289da&logo=discord&logoColor=white&link=https://discord.gg/rGRVG8Rpsb)
