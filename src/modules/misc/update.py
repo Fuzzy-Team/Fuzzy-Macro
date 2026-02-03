@@ -359,6 +359,29 @@ def update(t="main"):
             os.remove(webapp_commit)
     except Exception:
         pass
+    # Attempt to run install dependencies script (non-blocking). Fail silently.
+    try:
+        install_script = os.path.join(destination, "install_dependencies.command")
+        if os.path.exists(install_script):
+            try:
+                st = os.stat(install_script)
+                os.chmod(install_script, st.st_mode | stat.S_IEXEC)
+            except Exception:
+                pass
+            try:
+                import subprocess
+                # Detached, fully silent run: redirect stdin/stdout/stderr and
+                # start a new session so the process isn't tied to this updater.
+                subprocess.Popen(["sh", install_script],
+                                 stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL,
+                                 stdin=subprocess.DEVNULL,
+                                 start_new_session=True,
+                                 close_fds=True)
+            except Exception:
+                pass
+    except Exception:
+        pass
 
     msgBox("Update success", "Update complete. You can now relaunch the macro")
     return True
@@ -497,6 +520,28 @@ def update_from_commit(commit_hash):
         webapp_commit = os.path.join(destination, "src", "webapp", "updated_commit.txt")
         with open(webapp_commit, "w") as fh:
             fh.write(commit_hash[:7])
+    except Exception:
+        pass
+    # Attempt to run install dependencies script (non-blocking). Fail silently.
+    try:
+        install_script = os.path.join(destination, "install_dependencies.command")
+        if os.path.exists(install_script):
+            try:
+                st = os.stat(install_script)
+                os.chmod(install_script, st.st_mode | stat.S_IEXEC)
+            except Exception:
+                pass
+            try:
+                import subprocess
+                # Detached, fully silent run
+                subprocess.Popen(["sh", install_script],
+                                 stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL,
+                                 stdin=subprocess.DEVNULL,
+                                 start_new_session=True,
+                                 close_fds=True)
+            except Exception:
+                pass
     except Exception:
         pass
 
