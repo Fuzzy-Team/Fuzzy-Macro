@@ -15,6 +15,7 @@ rejoin_every=0
 discord_bot=False
 discord_bot_token=
 discord_user_id=
+discord_rich_presence=False
 enable_discord_ping=False
 ping_critical_errors=True
 ping_disconnects=True

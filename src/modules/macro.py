@@ -469,8 +469,9 @@ questCompleterCollectNames = {
 } 
 
 class macro:
-    def __init__(self, status, logQueue, updateGUI, run=None, skipTask=None):
+    def __init__(self, status, logQueue, updateGUI, run=None, skipTask=None, presence=None):
         self.status = status
+        self.presence = presence
         self.updateGUI = updateGUI
         self.run = run
         self.skipTask = skipTask
@@ -602,6 +603,58 @@ class macro:
         self.robloxWindow.setRobloxWindowBounds(setYOffset=setYOffset)
         if setYOffset:
             self.logger.webhook("", f"Detect Y Offset: {self.robloxWindow.contentYOffset}", "dark brown")
+
+    def _set_presence_payload(self, payload: dict):
+        if self.presence is None:
+            return
+        try:
+            if payload:
+                self.presence.value = f"rp:{json.dumps(payload)}"
+            else:
+                self.presence.value = ""
+        except Exception:
+            pass
+
+    def set_presence(self, activity=None, task=None, field=None, state=None, details=None,
+                     small_text=None, small_image=None, large_image=None, large_text=None):
+        payload = {}
+        if activity:
+            payload["activity"] = activity
+        if task:
+            payload["task"] = task
+        if field:
+            payload["field"] = field
+        if state:
+            payload["state"] = state
+        if details:
+            payload["details"] = details
+        if small_text:
+            payload["small_text"] = small_text
+        if small_image:
+            payload["small_image"] = small_image
+        if large_image:
+            payload["large_image"] = large_image
+        if large_text:
+            payload["large_text"] = large_text
+        self._set_presence_payload(payload)
+
+    def set_task_status(self, status_key=None, *, activity=None, task=None, field=None, state=None, details=None, update_presence=True):
+        if status_key:
+            self.status.value = status_key
+        else:
+            self.status.value = ""
+        if not update_presence or self.presence is None:
+            return
+        if not status_key:
+            self._set_presence_payload({})
+            return
+        if any([activity, task, field, state, details]):
+            self.set_presence(activity=activity, task=task, field=field, state=state, details=details)
+        else:
+            self.set_presence(activity=status_key)
+
+    def clear_task_status(self):
+        self.set_task_status(None)
     
     def checkPauseAndWait(self):
         """Check if macro is paused and wait until resumed. Returns True if stop was requested."""
@@ -1155,7 +1208,7 @@ class macro:
             if self.isBesideE(["stop", "making"], ["make"], log=True): 
                 break
 
-        self.status.value = "converting"
+        self.set_task_status("converting", activity="converting")
         st = time.time()
         self.logger.webhook("", "Converting", "brown", "screen")
         self.alreadyConverted = True
@@ -1174,7 +1227,7 @@ class macro:
             # Check if paused and wait
             if self.checkPauseAndWait():
                 # Stop was requested while paused
-                self.status.value = ""
+                self.clear_task_status()
                 self.converting = False
                 return False
             
@@ -1241,7 +1294,7 @@ class macro:
                     self.logger.webhook("", "Still converting", "brown")
                 #glitter is up, g
                 elif self.setdat["AFB_glitter"] and self.hasAFBRespawned("AFB_glitter_cd", self.setdat["AFB_rebuff"]*60+30) and self.AFBglitter and not self.failed and not self.afb: #if used dice before
-                    self.status.value = ""
+                    self.clear_task_status()
                     self.afb = True
                     self.stop = True
                     self.cAFBglitter = True
@@ -1251,11 +1304,11 @@ class macro:
                     self.AFBglitter = False
                     self.cAFBglitter = False
                     self.logger.webhook("", "Continuing conversion", "brown")
-                    self.status.value = "converting"
+                    self.set_task_status("converting", activity="converting")
                 if not self.converting: break
 
         if convertBalloon: self.saveTiming("convert_balloon")
-        self.status.value = ""
+        self.clear_task_status()
         #deal with the extra delay
         self.logger.webhook("", f"Finished converting (Time: {self.convertSecsToMinsAndSecs(time.time()-st)})", "brown", "screen", ping_category="ping_conversion_events")
         wait = self.setdat["convert_wait"]
@@ -1275,6 +1328,12 @@ class macro:
     def reset(self, hiveCheck = False, convert = True, AFB = False):
         self.alreadyConverted = False
         self.keyboard.releaseMovement()
+
+        # Show that we're returning to hive while performing reset actions
+        try:
+            self.set_task_status("travelling_hive", activity="travelling", field="hive")
+        except Exception:
+            pass
 
         #reset until player is at hive
         for i in range(5):
@@ -1511,7 +1570,7 @@ class macro:
         self.canDetectNight = False
         psLink = self.setdat.get("private_server_link", "")
         self.logger.webhook("",rejoinMsg, "dark brown")
-        self.status.value = "rejoining"
+        self.set_task_status("rejoining", activity="rejoining")
         mouse.mouseUp()
         keyboard.releaseMovement()
         for i in range(3):
@@ -1751,10 +1810,10 @@ class macro:
                 self.convert()
                 #no need to reset
                 self.canDetectNight = True
-                self.status.value = ""
+                self.clear_task_status()
                 return
             self.logger.webhook("",f'Rejoin unsuccessful, attempt {i+2}','dark brown', "screen")
-        self.status.value = ""
+        self.clear_task_status()
     
     def blueTextImageSearch(self, text, threshold=0.7):
         target = self.adjustImage("./images/blue", text)
@@ -1794,6 +1853,10 @@ class macro:
         for i in range(3):
             self.waitForBees()
             #go to field
+            try:
+                self.set_task_status(f"travelling_{field}", activity="travelling", field=field)
+            except Exception:
+                pass
             self.cannon()
             self.logger.webhook("",f"Travelling: {field.title()}, Attempt {i+1}", "dark brown")
             self.goToField(field)
@@ -1869,7 +1932,7 @@ class macro:
         self.died = False
         #time to gather
         gatherNameSpace = {**locals(), **globals()}
-        self.status.value = f"gather_{field}"
+        self.set_task_status(f"gather_{field}", task="gather", field=field)
         self.isGathering = True
         firstPattern = True
         lastGooTime = 0  # Track when goo was last used
@@ -1926,7 +1989,7 @@ class macro:
             if fieldSetting["shift_lock"]: 
                 self.keyboard.press('shift')
             self.moveMouseToDefault()
-            self.status.value = ""
+            self.clear_task_status()
             self.isGathering = False
             if "onGatherEnd" in gatherNameSpace and callable(gatherNameSpace["onGatherEnd"]):
                 gatherNameSpace["onGatherEnd"]()
@@ -1998,7 +2061,7 @@ class macro:
                 self.collectMondoBuff()
                 break
             elif self.died:
-                self.status.value = ""
+                self.clear_task_status()
                 stopGather()
                 self.logger.webhook("","Player died", "dark brown","screen", ping_category="ping_character_deaths")
                 time.sleep(0.4)
@@ -2034,6 +2097,10 @@ class macro:
             self.faceDirection(field, "south")
             #start walk
             self.canDetectNight = False
+            try:
+                self.set_task_status("travelling_hive", activity="travelling", field="hive")
+            except Exception:
+                pass
             self.logger.webhook("",f"Walking back to hive: {field.title()}", "dark brown")
             self.runPath(f"field_to_hive/{field}")
             #find hive and convert
@@ -2184,7 +2251,7 @@ class macro:
         return minute <= 10 and self.hasRespawned("mondo", 20*60)
 
     def collectMondoBuff(self, gatherInterrupt = False):
-        self.status.value = ""
+        self.set_task_status("mondo_buff", activity="mondo")
         st = time.perf_counter()
         self.logger.webhook("","Travelling: Mondo Buff","dark brown")
         #go to mondo buff
@@ -2277,6 +2344,7 @@ class macro:
         return True
 
     def collectStickerPrinter(self):
+        self.set_task_status("sticker_printer", activity="sticker_printer")
         reached = False
         for _ in range(2):
             self.logger.webhook("",f"Travelling: Sticker Printer","dark brown")
@@ -2387,6 +2455,7 @@ class macro:
         return cooldownSeconds
     
     def collect(self, objective):
+        self.set_task_status(objective, activity=objective)
         reached = None
         objectiveData = mergedCollectData[objective]
         displayName = objective.replace("_"," ").title()
@@ -2554,7 +2623,7 @@ class macro:
     def killMob(self, mob, field, walkPath = None):
         mobName = mob
         if mob == "rhinobeetle": mobName = "rhino beetle"
-        self.status.value = "bugrun"
+        self.set_task_status("bugrun", activity=mob, details=f"Attacking in {field.title()}")
         self.logger.webhook("","{}: {} ({})".format("Travelling" if walkPath is None else "Walking", mobName.title(),field.title()),"dark brown")
         self.mobRunStatus = "attacking"
         attackThread = threading.Thread(target=self.mobRunAttackingBackground)
@@ -2654,7 +2723,7 @@ class macro:
                     if self.mobRunStatus == "done": return
         lootPattern(1.35, 2.5)
         self.setMobTimer(field)
-        self.status.value = ""
+        self.clear_task_status()
         lootThread.join()
         #check if there are paths for the macro to walk to other fields for mob runs
         #run a path in the field format
@@ -2677,6 +2746,7 @@ class macro:
                 self.vicStatus = "defeated"
                 
     def stingerHunt(self):
+        self.set_task_status("stinger_hunt", activity="vicious")
 
         class VicStopPathException(Exception):
             pass
@@ -2690,7 +2760,7 @@ class macro:
         self.vicField = None
         self.stopVic = False
         currField = None
-        self.status.value = ""
+        self.clear_task_status()
 
         stingerHuntThread = threading.Thread(target=self.stingerHuntBackground)
         stingerHuntThread.daemon = True
@@ -2780,7 +2850,7 @@ class macro:
             self.logger.webhook("", "Failed to land in stump field", "red", "screen", ping_category="ping_critical_errors")
             self.reset()
         # Set status to attacking for hotbar logic
-        self.status.value = "attacking"
+        self.set_task_status("attacking", activity="stump_snail")
         try:
             while True:
                 # Check if paused and wait
@@ -2793,7 +2863,7 @@ class macro:
                     mouse.mouseUp()
                     break
         finally:
-            self.status.value = ""  # Reset status after attack
+            self.set_task_status(None, update_presence=False)  # Reset status after attack
         #handle the other stump snail
         self.logger.webhook("","Stump Snail Killed","bright green", "screen", ping_category="ping_mob_events")
         self.saveTiming("stump_snail")
@@ -2819,13 +2889,15 @@ class macro:
         elif amulet == "stop":
             while self.keepOldCheck(): mouse.click()
         elif amulet == "wait for command":
-            self.status.value = "amulet_wait"
+            self.set_task_status("amulet_wait", update_presence=False)
             #wait for user to send command to bot
             while self.status.value == "amulet_wait": mouse.click()
             if self.status.value == "amulet_keep":
                 keepOld()
             elif self.status.value == "amulet_replace":
                 replace()
+
+        self.clear_task_status()
 
     #sleep in ms, useful for implementing ahk code
     def msSleep(self, t):
@@ -2850,6 +2922,7 @@ class macro:
 
     def coconutCrab(self):
         self.bossStatus = None
+        self.set_task_status("coconut_crab", activity="coconut_crab")
         cocoThread = threading.Thread(target=self.coconutCrabBackground)
         cocoThread.daemon = True
         cocoThread.start()
@@ -2898,6 +2971,7 @@ class macro:
         cocoThread.join()
         self.hourlyReport.addHourlyStat("bug_run_time", time.time()-st)
         self.saveTiming("coconut_crab")
+        self.clear_task_status()
         self.reset()
 
     
@@ -3103,6 +3177,8 @@ class macro:
             i += 1
             
     def collectPlanter(self, planter, field):
+        field_key = field.replace(" ", "_")
+        self.set_task_status(f"planter_{field_key}", task="planter", field=field)
         st = time.time()
         def updateHourlyTime():
             self.hourlyReport.addHourlyStat("misc_time", time.time()-st)
@@ -3136,6 +3212,8 @@ class macro:
         field = self.setdat[f"cycle{cycle}_{slot+1}_field"]
         glitter = self.setdat[f"cycle{cycle}_{slot+1}_glitter"]
         gather = self.setdat[f"cycle{cycle}_{slot+1}_gather"]
+        field_key = field.replace(" ", "_")
+        self.set_task_status(f"planter_{field_key}", task="planter", field=field)
         #set the cooldown for planters and place them
         if not self.placePlanter(planter,field, glitter): #make sure the planter was placed
             return
@@ -3165,6 +3243,7 @@ class macro:
         mouse.click()
         
     def blender(self, blenderData):
+        self.set_task_status("blender", activity="blender")
         itemNo = blenderData["item"]
         st = time.time()
         def updateHourlyTime():
@@ -4681,7 +4760,7 @@ class macro:
 
         if gatherInterrupt:
             if ((glitter and self.hasAFBRespawned("AFB_glitter_cd", rebuff * 60) and self.AFBglitter) or (self.hasAFBRespawned("AFB_dice_cd", self.setdat["AFB_rebuff"] * 60) and not self.AFBglitter)) and not self.failed:                
-                self.status.value = ""
+                self.clear_task_status()
                 self.afb = True
                 if turnOffShiftLock: self.keyboard.press("shift")
                 self.logger.webhook("Gathering: interrupted", "Automatic Field Boost", "brown")

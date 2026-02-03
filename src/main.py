@@ -54,9 +54,334 @@ except ModuleNotFoundError:
 from modules.submacros.hourlyReport import HourlyReport
 mw, mh = pag.size()
 
+# Discord Rich Presence Manager
+try:
+    from pypresence import Presence, exceptions as pypresence_exceptions
+    PYPRESENCE_AVAILABLE = True
+except ImportError:
+    PYPRESENCE_AVAILABLE = False
+    print("pypresence not installed - Discord Rich Presence will not be available")
+
+class RichPresenceManager:
+    """Manages Discord Rich Presence updates based on macro status"""
+    
+    # Hardcoded Application ID for Fuzzy Macro
+    DISCORD_APP_ID = "1468035015194710068"
+    
+    def __init__(self, status_value, enabled: bool = False, presence_value=None):
+        """
+        Initialize Rich Presence Manager
+        
+        Args:
+            status_value: Shared multiprocessing.Value containing current macro status
+            enabled: Whether Rich Presence is enabled
+            presence_value: Optional shared Value for rich presence overrides
+        """
+        self.application_id = self.DISCORD_APP_ID
+        self.status = status_value
+        self.presence = presence_value
+        self.enabled = enabled
+        self.rpc = None
+        self.last_activity = ""
+        self.connected = False
+        self.running = False
+        self.thread = None
+        self.start_time = int(time.time())
+        
+        # Load external mapping file for presence (if present)
+        self.map = {}
+        map_candidates = [
+            os.path.join(os.path.dirname(__file__), "modules", "discord_bot", "rich_presence_map.json")
+        ]
+        for mp in map_candidates:
+            try:
+                if os.path.exists(mp):
+                    with open(mp, "r") as f:
+                        self.map = json.load(f)
+                    break
+            except Exception:
+                continue
+
+        # Build asset lookup mapping from provided assets and sensible defaults
+        asset_mapping = {}
+        # Known quest NPCs
+        asset_mapping.update({
+            "polar_bear": "polar_bear",
+            "polar bear": "polar_bear",
+            "honey_bee": "honey_bee",
+            "honey bee": "honey_bee",
+            "bucko_bee": "bucko_bee",
+            "bucko bee": "bucko_bee",
+            "riley_bee": "riley_bee",
+            "riley bee": "riley_bee",
+        })
+        # Add assets lists from the map (if present)
+        assets_section = self.map.get("assets", {})
+        for group, lst in assets_section.items():
+            for name in lst:
+                key = name.replace(" ", "_")
+                asset_mapping[key] = key
+                asset_mapping[name] = key
+
+        # Allow optional explicit lookup section
+        explicit = self.map.get("asset_lookup", {}) or {}
+        for k, v in explicit.items():
+            asset_mapping[k] = v
+
+        self.asset_mapping = asset_mapping
+        
+    def connect(self) -> bool:
+        """Initialize Discord RPC connection"""
+        if not PYPRESENCE_AVAILABLE:
+            return False
+            
+        if not self.application_id or self.application_id == "":
+            return False
+            
+        try:
+            self.rpc = Presence(self.application_id)
+            self.rpc.connect()
+            self.connected = True
+            print(f"Discord Rich Presence connected")
+            return True
+        except Exception as e:
+            # Silently fail if Discord client isn't running
+            self.connected = False
+            return False
+    
+    def disconnect(self):
+        """Close Discord RPC connection"""
+        if self.rpc and self.connected:
+            try:
+                # Try to clear presence first (if supported) to remove lingering status
+                try:
+                    if hasattr(self.rpc, "clear"):
+                        self.rpc.clear()
+                except Exception:
+                    pass
+                # Close the RPC connection
+                try:
+                    self.rpc.close()
+                except Exception:
+                    pass
+            finally:
+                self.connected = False
+                self.rpc = None
+                print("Discord Rich Presence disconnected")
+    
+    def parse_activity(self, status_str: str) -> dict:
+        """Parse status string into Rich Presence data"""
+        payload_overrides = {}
+        if isinstance(status_str, str) and status_str.startswith("rp:"):
+            try:
+                payload = json.loads(status_str[3:])
+            except Exception:
+                payload = {}
+            for key in ("state", "details", "large_image", "large_text", "small_image", "small_text"):
+                if key in payload:
+                    payload_overrides[key] = payload[key]
+            status_str = payload.get("activity") or payload.get("status") or payload.get("key")
+            task = payload.get("task")
+            field = payload.get("field")
+            if not status_str and task:
+                if field:
+                    field_key = str(field).replace(" ", "_").lower()
+                    status_str = f"{task}_{field_key}"
+                else:
+                    status_str = str(task)
+
+        # Treat empty, whitespace-only, or explicit 'none' values as idle
+        if not status_str or (isinstance(status_str, str) and status_str.strip().lower() in ("", "none")):
+            status_str = "idle_main_menu"
+        
+        status_lower = str(status_str).lower()
+
+        # exact matches from map (use lowercase keys for safety)
+        exact = {k.lower(): v for k, v in self.map.get("exact", {}).items()}
+        if status_lower in exact:
+            activity = exact[status_lower]
+            if payload_overrides:
+                merged = dict(activity)
+                merged.update({k: v for k, v in payload_overrides.items() if v is not None})
+                if merged.get("small_image") == "":
+                    merged["small_image"] = None
+                if merged.get("small_text") == "":
+                    merged["small_text"] = None
+                return merged
+            return activity
+
+        # prefix matches
+        prefix_map = self.map.get("prefix", {})
+        for pfx, data in prefix_map.items():
+            if status_lower.startswith(pfx.lower()):
+                key = status_lower[len(pfx):]
+                field = key.replace("_", " ").title()
+                payload = dict(data)
+                # substitute placeholders
+                payload["state"] = payload["state"].replace("{field}", field).replace("{key}", key)
+                payload["details"] = payload.get("details", "").replace("{field}", field).replace("{key}", key)
+                payload["small_text"] = payload.get("small_text", "").replace("{field}", field).replace("{key}", key)
+                # handle small image key patterns
+                small_image = payload.get("small_image") or ""
+                if "{asset}" in small_image:
+                    asset = self.asset_mapping.get(key, None) or key
+                    small_image = small_image.replace("{asset}", asset)
+                if "{key}" in small_image:
+                    small_image = small_image.replace("{key}", key)
+                payload["small_image"] = small_image if small_image else None
+                if payload_overrides:
+                    payload.update({k: v for k, v in payload_overrides.items() if v is not None})
+                    if payload.get("small_image") == "":
+                        payload["small_image"] = None
+                    if payload.get("small_text") == "":
+                        payload["small_text"] = None
+                return payload
+
+        # contains rules - check in order of specificity
+        contains = self.map.get("contains", {})
+        for substring, data in contains.items():
+            if substring in status_lower:
+                activity = data
+                if payload_overrides:
+                    merged = dict(activity)
+                    merged.update({k: v for k, v in payload_overrides.items() if v is not None})
+                    if merged.get("small_image") == "":
+                        merged["small_image"] = None
+                    if merged.get("small_text") == "":
+                        merged["small_text"] = None
+                    return merged
+                return activity
+
+        # fallback to default
+        default = self.map.get("default")
+        if default:
+            activity = default
+            if payload_overrides:
+                merged = dict(activity)
+                merged.update({k: v for k, v in payload_overrides.items() if v is not None})
+                if merged.get("small_image") == "":
+                    merged["small_image"] = None
+                if merged.get("small_text") == "":
+                    merged["small_text"] = None
+                return merged
+            return activity
+
+        # final fallback if no map is loaded
+        activity = {
+            "state": str(status_str).replace("_", " ").title(),
+            "details": "Macro active",
+            "large_image": "fuzzy_macro",
+            "large_text": "Fuzzy Macro",
+            "small_image": None,
+            "small_text": None,
+        }
+        if payload_overrides:
+            activity.update({k: v for k, v in payload_overrides.items() if v is not None})
+            if activity.get("small_image") == "":
+                activity["small_image"] = None
+            if activity.get("small_text") == "":
+                activity["small_text"] = None
+        return activity
+    
+    def update_presence(self, activity_data: dict):
+        """Update Discord Rich Presence with new activity data"""
+        if not self.connected or not self.rpc:
+            return
+        
+        try:
+            # Build presence payload
+            payload = {
+                "state": activity_data["state"],
+                "details": activity_data["details"],
+                "large_image": activity_data["large_image"],
+                "large_text": activity_data["large_text"],
+                "start": self.start_time,
+            }
+            
+            # Add small image if available
+            if activity_data["small_image"]:
+                payload["small_image"] = activity_data["small_image"]
+                payload["small_text"] = activity_data["small_text"]
+            
+            self.rpc.update(**payload)
+        except Exception as e:
+            # Silently handle errors (e.g., Discord closed)
+            self.connected = False
+    
+    def update_loop(self):
+        """Background thread to monitor status and update RPC"""
+        while self.running:
+            try:
+                # Check if enabled
+                if not self.enabled:
+                    if self.connected:
+                        self.disconnect()
+                    time.sleep(2)
+                    continue
+                
+                # Try to connect if not connected
+                if not self.connected:
+                    self.connect()
+                    time.sleep(2)
+                    continue
+                
+                # Get current status (presence overrides status when available)
+                presence_status = ""
+                if self.presence is not None:
+                    try:
+                        presence_status = self.presence.value
+                    except Exception:
+                        presence_status = ""
+
+                if presence_status and str(presence_status).strip().lower() not in ("", "none"):
+                    current_status = presence_status
+                else:
+                    current_status = self.status.value
+                
+                # Update if status changed
+                if current_status != self.last_activity:
+                    activity_data = self.parse_activity(current_status)
+                    self.update_presence(activity_data)
+                    self.last_activity = current_status
+                
+                time.sleep(1)  # Check every second
+            except Exception as e:
+                # Silently handle any errors
+                time.sleep(2)
+    
+    def start(self):
+        """Start the Rich Presence update thread"""
+        if self.running:
+            return
+        
+        if not PYPRESENCE_AVAILABLE:
+            return
+        
+        self.running = True
+        self.thread = Thread(target=self.update_loop, daemon=True)
+        self.thread.start()
+    
+    def stop(self):
+        """Stop the Rich Presence update thread"""
+        self.running = False
+        if self.thread:
+            self.thread.join(timeout=2)
+        # Disconnect and give Discord a moment to clear presence
+        self.disconnect()
+        try:
+            time.sleep(0.2)
+        except Exception:
+            pass
+    
+    def set_enabled(self, enabled: bool):
+        """Enable or disable Rich Presence"""
+        self.enabled = enabled
+        if not enabled and self.connected:
+            self.disconnect()
+
 #controller for the macro
-def macro(status, logQueue, updateGUI, run, skipTask):
-    macro = macroModule.macro(status, logQueue, updateGUI, run, skipTask)
+def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
+    macro = macroModule.macro(status, logQueue, updateGUI, run, skipTask, presence)
     #invert the regularMobsInFields dict
     #instead of storing mobs in field, store the fields associated with each mob
     regularMobData = {}
@@ -87,7 +412,7 @@ def macro(status, logQueue, updateGUI, run, skipTask):
         if skipTask.value == 1:
             skipTask.value = 0  # Reset skip flag
             macro.logger.webhook("Task Skipped", f"Skipped: {status.value.replace('_', ' ').title()}", "orange")
-            status.value = ""
+            macro.clear_task_status()
             taskCompleted = True
             if resetAfter:
                 macro.reset(convert=False)
@@ -118,7 +443,7 @@ def macro(status, logQueue, updateGUI, run, skipTask):
             if macro.hasAFBRespawned("AFB_dice_cd", macro.setdat["AFB_rebuff"]*60) or macro.hasAFBRespawned("AFB_glitter_cd", macro.setdat["AFB_rebuff"]*60-30):
                 macro.AFB(gatherInterrupt=False)
 
-        status.value = ""
+        macro.clear_task_status()
         return returnVal
     
     def handleQuest(questGiver, executeQuest=True):
@@ -1888,6 +2213,7 @@ if __name__ == "__main__":
     updateGUI = multiprocessing.Value('i', 0)
     skipTask = multiprocessing.Value('i', 0)  # 0 = don't skip, 1 = skip current task
     status = manager.Value(ctypes.c_wchar_p, "none")
+    presence = manager.Value(ctypes.c_wchar_p, "")
     logQueue = manager.Queue()
     pin_requests = manager.Queue()  # Shared queue for pin requests
     start_keyboard_listener_fn = watch_for_hotkeys(run)
@@ -1943,6 +2269,11 @@ if __name__ == "__main__":
             if discordBotProc and discordBotProc.is_alive():
                 discordBotProc.terminate()
                 discordBotProc.join()
+        except NameError:
+            pass
+        try:
+            if richPresenceManager:
+                richPresenceManager.stop()
         except NameError:
             pass
         
@@ -2019,6 +2350,9 @@ if __name__ == "__main__":
     prevDiscordBotToken = None
     prevRunState = run.value  # Track previous run state for GUI updates
     
+    # Initialize Rich Presence Manager
+    richPresenceManager = None
+    
     # Cache settings for main GUI loop to avoid reloading every 0.5 seconds
     gui_settings_cache = {}
     last_gui_settings_load = 0
@@ -2044,6 +2378,33 @@ if __name__ == "__main__":
             discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI), daemon=True)
             prevDiscordBotToken = currentDiscordBotToken
             discordBotProc.start()
+
+        # Discord Rich Presence - Initialize and always show status
+        discord_rp_enabled = setdat.get("discord_rich_presence", False)
+        
+        if richPresenceManager is None and discord_rp_enabled:
+            # Initialize Rich Presence Manager
+            richPresenceManager = RichPresenceManager(status, enabled=True, presence_value=presence)
+            richPresenceManager.start()
+            print("Discord Rich Presence started")
+        elif richPresenceManager is not None:
+            # Update settings if they changed
+            richPresenceManager.set_enabled(discord_rp_enabled)
+            
+            # Update status based on macro run state
+            if run.value == 0 or run.value == 3:  # Stopped
+                # Clear any presence override and show "On main menu" when not running
+                try:
+                    if presence is not None:
+                        presence.value = ""
+                except Exception:
+                    pass
+                if status.value != "idle_main_menu":
+                    status.value = "idle_main_menu"
+            elif run.value == 6:  # Paused
+                # Show "Paused" status
+                if status.value != "paused":
+                    status.value = "paused"
 
         # Check if run state changed
         if run.value != prevRunState:
@@ -2121,7 +2482,7 @@ if __name__ == "__main__":
                                     but there are no more items left to craft.\n\
 				                    Check the 'repeat' setting on your blender items and reset blender data.")
             #macro proc
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
             macroProc.start()
 
             macro_version = settingsManager.getMacroVersion()
@@ -2207,7 +2568,7 @@ if __name__ == "__main__":
             appManager.closeApp("Roblox")
             keyboardModule.releaseMovement()
             mouse.mouseUp()
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state
@@ -2281,7 +2642,7 @@ if __name__ == "__main__":
             keyboardModule.releaseMovement()
             mouse.mouseUp()
             # restart macro process
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state

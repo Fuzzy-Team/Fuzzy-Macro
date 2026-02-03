@@ -1,0 +1,466 @@
+{
+  "assets": {
+    "fields": [
+      "sunflower",
+      "mushroom",
+      "dandelion",
+      "blue flower",
+      "clover",
+      "spider",
+      "strawberry",
+      "bamboo",
+      "pineapple",
+      "stump",
+      "cactus",
+      "pumpkin",
+      "pine tree",
+      "rose",
+      "mountain top",
+      "coconut",
+      "pepper"
+    ],
+    "quests": [
+      "polar bear",
+      "honey bee",
+      "bucko bee",
+      "riley bee"
+    ],
+    "mobs": [
+      "ladybug",
+      "rhino beetle",
+      "spider",
+      "scorpion",
+      "mantis",
+      "werewolf"
+    ],
+    "bosses": [
+      "coconut crab",
+      "vicious bee",
+      "mondo chick",
+      "stump snail",
+      "king beetle",
+      "tunnel bear"
+    ],
+    "collectibles": [
+      "wealth clock",
+      "blueberry dispenser",
+      "strawberry dispenser",
+      "coconut dispenser",
+      "royal jelly dispenser",
+      "treat dispenser",
+      "ant pass dispenser",
+      "glue dispenser",
+      "stockings",
+      "wreath",
+      "feast",
+      "samovar",
+      "snow machine",
+      "lid art",
+      "candles",
+      "memory match",
+      "sticker printer",
+      "sticker stack",
+      "blender",
+      "honeystorm"
+    ],
+    "boosters": [
+      "blue booster",
+      "red booster",
+      "mountain booster"
+    ],
+    "other": [
+      "hive",
+      "gathering",
+      "converting",
+      "cannon",
+      "planter",
+      "sprinkler",
+      "ant challenge",
+      "mondo buff"
+    ]
+  },
+  "asset_lookup": {
+    "polar_bear": "polar_bear",
+    "polar bear": "polar_bear",
+    "honey_bee": "honey_bee",
+    "honey bee": "honey_bee",
+    "bucko_bee": "bucko_bee",
+    "bucko bee": "bucko_bee",
+    "riley_bee": "riley_bee",
+    "riley bee": "riley_bee",
+    "sunflower": "sunflower",
+    "mushroom": "mushroom",
+    "dandelion": "dandelion",
+    "blue_flower": "blue_flower",
+    "blue flower": "blue_flower",
+    "clover": "clover",
+    "spider": "spider",
+    "strawberry": "strawberry",
+    "bamboo": "bamboo",
+    "pineapple": "pineapple",
+    "stump": "stump",
+    "cactus": "cactus",
+    "pumpkin": "pumpkin",
+    "pine_tree": "pine_tree",
+    "pine tree": "pine_tree",
+    "rose": "rose",
+    "mountain_top": "mountain_top",
+    "mountain top": "mountain_top",
+    "coconut": "coconut",
+    "pepper": "pepper",
+    "coconut_crab": "coconut_crab",
+    "vicious_bee": "vicious_bee",
+    "mondo_chick": "mondo_chick",
+    "stump_snail": "stump_snail",
+    "ladybug": "ladybug",
+    "rhino_beetle": "rhino_beetle",
+    "rhinobeetle": "rhino_beetle",
+    "werewolf": "werewolf",
+    "scorpion": "scorpion",
+    "mantis": "mantis",
+    "king_beetle": "king_beetle",
+    "tunnel_bear": "tunnel_bear"
+  },
+  "exact": {
+    "idle_main_menu": {
+      "state": "On Main Menu",
+      "details": "Configuring settings",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": null
+    },
+    "paused": {
+      "state": "Paused",
+      "details": "Macro paused",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": null
+    },
+    "converting": {
+      "state": "Converting honey",
+      "details": "At the hive",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Converting"
+    },
+    "rejoining": {
+      "state": "Rejoining server",
+      "details": "Reconnecting",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": null
+    },
+    "bugrun": {
+      "state": "Hunting mobs",
+      "details": "Defeating enemies",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Combat"
+    },
+    "collect": {
+      "state": "Collecting items",
+      "details": "Gathering resources",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Collecting"
+    }
+  },
+  "prefix": {
+    "gather_": {
+      "state": "Gathering in {field} Field",
+      "details": "Collecting pollen",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "{field}"
+    },
+    "quest_": {
+      "state": "Doing {field} Quest",
+      "details": "Completing objectives",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "{field}"
+    },
+    "travelling_": {
+      "state": "Travelling to {field}",
+      "details": "Moving to location",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "{field}"
+    },
+    "collecting_": {
+      "state": "Collecting {field}",
+      "details": "Gathering resources",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "{field}"
+    },
+    "attacking_": {
+      "state": "Attacking {field}",
+      "details": "Fighting enemies",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "{field}"
+    },
+    "planter_": {
+      "state": "Managing {field} Planter",
+      "details": "Placing or harvesting",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "{field}"
+    }
+  },
+  "contains": {
+    "coconut_crab": {
+      "state": "Fighting Coconut Crab",
+      "details": "Boss battle",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Coconut Crab"
+    },
+    "coconut crab": {
+      "state": "Fighting Coconut Crab",
+      "details": "Boss battle",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Coconut Crab"
+    },
+    "vicious": {
+      "state": "Fighting Vicious Bee",
+      "details": "Boss battle",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Vicious Bee"
+    },
+    "mondo": {
+      "state": "Mondo Buff active",
+      "details": "Gathering with buff",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Mondo Chick"
+    },
+    "stump_snail": {
+      "state": "Fighting Stump Snail",
+      "details": "Boss battle",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Stump Snail"
+    },
+    "stump snail": {
+      "state": "Fighting Stump Snail",
+      "details": "Boss battle",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Stump Snail"
+    },
+    "king_beetle": {
+      "state": "Fighting King Beetle",
+      "details": "Boss battle",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "King Beetle"
+    },
+    "king beetle": {
+      "state": "Fighting King Beetle",
+      "details": "Boss battle",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "King Beetle"
+    },
+    "tunnel_bear": {
+      "state": "Fighting Tunnel Bear",
+      "details": "Boss battle",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Tunnel Bear"
+    },
+    "tunnel bear": {
+      "state": "Fighting Tunnel Bear",
+      "details": "Boss battle",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Tunnel Bear"
+    },
+    "planter": {
+      "state": "Managing planters",
+      "details": "Placing or harvesting",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Planters"
+    },
+    "blender": {
+      "state": "Using blender",
+      "details": "Crafting items",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Blender"
+    },
+    "ant": {
+      "state": "Ant Challenge",
+      "details": "Completing challenge",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Ant Challenge"
+    },
+    "memory": {
+      "state": "Playing Memory Match",
+      "details": "Matching tiles",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Memory Match"
+    },
+    "sticker_printer": {
+      "state": "Using Sticker Printer",
+      "details": "Printing stickers",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Sticker Printer"
+    },
+    "sticker_stack": {
+      "state": "Claiming Sticker Stack",
+      "details": "Collecting stickers",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Sticker Stack"
+    },
+    "honeystorm": {
+      "state": "Honeystorm active",
+      "details": "Collecting tokens",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Honeystorm"
+    },
+    "wealth_clock": {
+      "state": "Using Wealth Clock",
+      "details": "Collecting honey",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Wealth Clock"
+    },
+    "dispenser": {
+      "state": "Using dispenser",
+      "details": "Collecting items",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Dispenser"
+    },
+    "booster": {
+      "state": "Field boosted",
+      "details": "Auto Field Boost active",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Boosted"
+    },
+    "cannon": {
+      "state": "Using cannon",
+      "details": "Fast travel",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Cannon"
+    },
+    "sprinkler": {
+      "state": "Placing sprinkler",
+      "details": "Setting up equipment",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Sprinkler"
+    },
+    "feast": {
+      "state": "Using Beesmas Feast",
+      "details": "Collecting items",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Feast"
+    },
+    "samovar": {
+      "state": "Using Samovar",
+      "details": "Collecting items",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Samovar"
+    },
+    "stockings": {
+      "state": "Checking Stockings",
+      "details": "Collecting items",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Stockings"
+    },
+    "wreath": {
+      "state": "Admiring Wreath",
+      "details": "Collecting honey",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Wreath"
+    },
+    "candles": {
+      "state": "Admiring Candles",
+      "details": "Collecting honey",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Candles"
+    },
+    "snow_machine": {
+      "state": "Using Snow Machine",
+      "details": "Collecting snowflakes",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Snow Machine"
+    },
+    "lid_art": {
+      "state": "Viewing Onett's Lid Art",
+      "details": "Collecting items",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Lid Art"
+    }
+  },
+  "default": {
+    "state": "Macro running",
+    "details": "Bee Swarm Simulator",
+    "large_image": "fuzzy_macro",
+    "large_text": "Fuzzy Macro",
+    "small_image": null,
+    "small_text": null
+  }
+}

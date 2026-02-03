@@ -542,6 +542,18 @@
         },
       ]);
 
+      buildStandardContainer(parentDiscord, "Discord Rich Presence", "", [
+        {
+          id: "discord_rich_presence",
+          title: "Enable Discord Rich Presence",
+          desc: "Show macro activity in your Discord status",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+      ]);
+
       buildStandardContainer(parentDiscord, "Discord Pings", "", [
         {
           id: "enable_discord_ping",
