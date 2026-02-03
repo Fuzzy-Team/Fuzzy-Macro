@@ -78,20 +78,20 @@ def setScreenData():
 
     detected_resolution = f"{physical_w}x{physical_h}"
 
-# Force specific resolutions to be non-retina
-if detected_resolution in NON_RETINA_RESOLUTIONS:
-    screenData["screen_width"] = physical_w
-    screenData["screen_height"] = physical_h
-    screenData["display_type"] = "built-in"
+    # Force specific resolutions to be non-retina
+    if detected_resolution in NON_RETINA_RESOLUTIONS:
+        screenData["screen_width"] = physical_w
+        screenData["screen_height"] = physical_h
+        screenData["display_type"] = "built-in"
 
-# Normal retina detection for everything else
-elif physical_w != wwd or physical_h != whd:
-    screenData["screen_width"] = physical_w
-    screenData["screen_height"] = physical_h
-    screenData["display_type"] = "retina"
-else:
-    screenData["screen_width"] = wwd
-    screenData["screen_height"] = whd
+    # Normal retina detection for everything else
+    elif physical_w != wwd or physical_h != whd:
+        screenData["screen_width"] = physical_w
+        screenData["screen_height"] = physical_h
+        screenData["display_type"] = "retina"
+    else:
+        screenData["screen_width"] = wwd
+        screenData["screen_height"] = whd
 
     ndisplay = "{}x{}".format(screenData["screen_width"], screenData["screen_height"])
 
