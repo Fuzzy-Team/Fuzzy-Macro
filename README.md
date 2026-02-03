@@ -1,7 +1,7 @@
 <div align="center">
 
 <!-- logo banner -->
-<img width="200" height="200" src="https://i.imgur.com/yIUuc5W.png" style="margin-bottom: -10px;"/>
+<img width="200" height="200" src="https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/.github/fuzzy.png" style="margin-bottom: -10px;"/>
 <h1>Fuzzy Macro</h1>
 
 <!-- shields and contents -->
