@@ -247,8 +247,8 @@
       "small_text": "Vicious Bee"
     },
     "mondo": {
-      "state": "Mondo Buff active",
-      "details": "Gathering with buff",
+      "state": "Collecting Mondo Buff",
+      "details": "Waiting for buff",
       "large_image": "fuzzy_macro",
       "large_text": "Fuzzy Macro",
       "small_image": null,
