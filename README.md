@@ -2,7 +2,6 @@
 
 <!-- logo banner -->
 <img width="200" height="200" src="https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/.github/fuzzy.png" style="margin-bottom: -10px;"/>
-<h1>Fuzzy Macro</h1>
 
 <!-- shields and contents -->
 ![Discord](https://img.shields.io/discord/1462647649021853912?label=Discord&color=7289da&logo=discord&logoColor=white&link=https://discord.gg/rGRVG8Rpsb)
