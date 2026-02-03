@@ -112,6 +112,13 @@
   --primary-rgb: 132, 9, 9;
 }
 
+/* Blue Theme Overrides (main color: #3fc1c3) */
+.theme-blue {
+  --primary: #3fc1c3;
+  --primary-hover: #3ab0b2;
+  --primary-rgb: 63, 193, 195;
+}
+
 body {
   margin: 0;
   padding: 0;

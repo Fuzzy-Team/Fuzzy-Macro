@@ -421,7 +421,7 @@ function loadInputs(obj, save = "") {
 function applyTheme(theme) {
   if (theme) localStorage.setItem("gui_theme", theme);
   // remove any known theme classes first
-  document.documentElement.classList.remove("theme-purple", "theme-cream", "theme-red");
+  document.documentElement.classList.remove("theme-purple", "theme-cream", "theme-red", "theme-blue");
   if (!theme) return;
   const t = theme.toLowerCase();
   if (t === "purple") {
@@ -431,6 +431,8 @@ function applyTheme(theme) {
     document.documentElement.classList.add("theme-cream");
   } else if (t === "red") {
     document.documentElement.classList.add("theme-red");
+  } else if (t === "blue") {
+    document.documentElement.classList.add("theme-blue");
   }
 }
 
