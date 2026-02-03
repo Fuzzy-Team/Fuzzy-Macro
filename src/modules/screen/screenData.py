@@ -59,7 +59,28 @@ def setScreenData():
         screenData["screen_height"] *= 2
         screenData["display_type"] = "retina"
     ndisplay = "{}x{}".format(sw,sh)
-    #get multipliers
+    # Determine the true (physical) screen resolution using mss monitors
+    sct = mss.mss()
+    try:
+        mon = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
+        physical_w, physical_h = mon['width'], mon['height']
+    except Exception:
+        # fallback: grab a full-screen shot
+        shot = sct.grab({'top': 0, 'left': 0, 'width': wwd, 'height': whd})
+        physical_w, physical_h = shot.width, shot.height
+
+    # If physical differs from pyautogui logical size, it's a HiDPI/Retina display
+    if physical_w != wwd or physical_h != whd:
+        screenData["screen_width"] = physical_w
+        screenData["screen_height"] = physical_h
+        screenData["display_type"] = "retina"
+    else:
+        screenData["screen_width"] = wwd
+        screenData["screen_height"] = whd
+
+    ndisplay = "{}x{}".format(screenData["screen_width"], screenData["screen_height"])
+
+    # get multipliers based on detected physical display resolution
     if ndisplay in multiplierData:
         screenData["y_multiplier"] = multiplierData[ndisplay][0]
         screenData["x_multiplier"] = multiplierData[ndisplay][1]
