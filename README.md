@@ -97,17 +97,13 @@ Follow our [installation guide](https://fuzzy-team.gitbook.io/fuzzy-macro) to ge
 
 - This Macro is for MacOS only. Linux and Windows support are not planned, for Windows use [Natro Macro](https://github.com/NatroTeam/NatroMacro), for Linux use [BeeTuxMacro](https://github.com/painvision/BeeTuxMacro).
 
-  <h2>Credits</h2>
-  <ul>
-    <li>
-      <strong>Macro Inspiration:</strong>
-      <a href="https://github.com/NatroTeam/NatroMacro" target="_blank">Natro Macro</a>,
-      <a href="https://github.com/alaninnovates/bss-macro" target="_blank">Stumpy Macro</a>
-      <a href="https://github.com/existancepy/bss-macro-py" target="_blank">Existance Macro</a>
-    </li>
-    <li>
-      <strong>Developers:</strong> Logan<br />
-      Original Macro code: Existance
+## Credits
+### Macro Inspiration:
+- [Natro Macro](https://github.com/NatroTeam/NatroMacro)
+- <a href="https://github.com/alaninnovates/bss-macro" target="_blank">Stumpy Macro</a>
+- <a href="https://github.com/existancepy/bss-macro-py" target="_blank">Existance Macro</a>
+- Developers: Logan
+  - Original Macro code: Existance
     </li>
     <li>
       <strong>Pattern Makers:</strong> Existance, NatroTeam, tvojamamkajenic, sev, dully176, chillketchup, Electro
