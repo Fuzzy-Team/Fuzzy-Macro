@@ -37,6 +37,13 @@ def setScreenData():
         "3440x1440": [1.6, 0.84, 1.6, 2.3]
     }
 
+    NON_RETINA_RESOLUTIONS = {
+    "1920x1080",
+    "1440x900",
+    "1366x768",
+    "1280x800",
+    }
+
     wwd, whd = pag.size()
     screenData = {
         "display_type": "built-in",
@@ -69,14 +76,22 @@ def setScreenData():
         shot = sct.grab({'top': 0, 'left': 0, 'width': wwd, 'height': whd})
         physical_w, physical_h = shot.width, shot.height
 
-    # If physical differs from pyautogui logical size, it's a HiDPI/Retina display
-    if physical_w != wwd or physical_h != whd:
-        screenData["screen_width"] = physical_w
-        screenData["screen_height"] = physical_h
-        screenData["display_type"] = "retina"
-    else:
-        screenData["screen_width"] = wwd
-        screenData["screen_height"] = whd
+    detected_resolution = f"{physical_w}x{physical_h}"
+
+# Force specific resolutions to be non-retina
+if detected_resolution in NON_RETINA_RESOLUTIONS:
+    screenData["screen_width"] = physical_w
+    screenData["screen_height"] = physical_h
+    screenData["display_type"] = "built-in"
+
+# Normal retina detection for everything else
+elif physical_w != wwd or physical_h != whd:
+    screenData["screen_width"] = physical_w
+    screenData["screen_height"] = physical_h
+    screenData["display_type"] = "retina"
+else:
+    screenData["screen_width"] = wwd
+    screenData["screen_height"] = whd
 
     ndisplay = "{}x{}".format(screenData["screen_width"], screenData["screen_height"])
 
