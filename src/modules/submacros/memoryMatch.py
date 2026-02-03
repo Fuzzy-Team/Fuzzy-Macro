@@ -1,12 +1,15 @@
 import time
 import random
 from typing import List, Tuple, Set, Optional
+
+import cv2
 import imagehash
+import numpy as np
 from PIL import Image
 
 import modules.controls.mouse as mouse
-from modules.screen.screenshot import mssScreenshot
-from modules.screen.ocr import ocrRead
+from modules.screen.screenshot import mssScreenshot, mssScreenshotNP
+from modules.screen.ocr import ocrRead, imToString
 from modules.misc.imageManipulation import adjustImage
 from modules.screen.imageSearch import locateImageOnScreen
 from modules.screen.robloxWindow import RobloxWindowBounds
@@ -160,6 +163,41 @@ class MemoryMatch:
             
             current_attempt += 1
             time.sleep(self.TURN_DELAY)
+
+        self._wait_for_winnings_text()
+
+    def _wait_for_winnings_text(self) -> None:
+        """Wait for winnings text or payout background to appear."""
+        bluetexts = ""
+        found = False
+        for _ in range(6):
+            try:
+                txt = imToString("blue").lower()
+            except Exception:
+                txt = ""
+            bluetexts += txt
+            if "winner" in txt or "better luck" in txt or "next time" in txt:
+                found = True
+                break
+            try:
+                bx = int(self.robloxWindow.mx + self.robloxWindow.mw * 3 / 4)
+                by = int(self.robloxWindow.my + self.robloxWindow.mh * 2 / 3)
+                bw = int(self.robloxWindow.mw // 4)
+                bh = int(self.robloxWindow.mh // 6)
+                screen_np = mssScreenshotNP(bx, by, bw, bh)
+                bgr = cv2.cvtColor(screen_np, cv2.COLOR_BGRA2BGR)
+                hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+                lower_y = np.array([15, 90, 90])
+                upper_y = np.array([40, 255, 255])
+                mask = cv2.inRange(hsv, lower_y, upper_y)
+                ratio = np.count_nonzero(mask) / (mask.size if mask.size else 1)
+                if ratio > 0.03:
+                    found = True
+                    break
+            except Exception:
+                pass
+            time.sleep(0.4)
+        time.sleep(0.2)
 
     def _check_game_active(self) -> None:
         """Check if the memory match game is still active."""
