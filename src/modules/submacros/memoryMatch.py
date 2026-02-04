@@ -163,6 +163,13 @@ class MemoryMatch:
             
             current_attempt += 1
             time.sleep(self.TURN_DELAY)
+            # After each match attempt, do a quick check for winnings/payout UI
+            try:
+                if self._check_for_winnings():
+                    self._wait_for_winnings_text()
+                    return
+            except Exception:
+                pass
 
         self._wait_for_winnings_text()
 
@@ -198,6 +205,35 @@ class MemoryMatch:
                 pass
             time.sleep(0.4)
         time.sleep(0.2)
+
+    def _check_for_winnings(self) -> bool:
+        """Quick non-blocking check for winnings/payout UI.
+
+        Returns True if a winnings message or payout background is detected.
+        """
+        try:
+            txt = imToString("blue").lower()
+            if "winner" in txt or "better luck" in txt or "next time" in txt:
+                return True
+        except Exception:
+            pass
+        try:
+            bx = int(self.robloxWindow.mx + self.robloxWindow.mw * 3 / 4)
+            by = int(self.robloxWindow.my + self.robloxWindow.mh * 2 / 3)
+            bw = int(self.robloxWindow.mw // 4)
+            bh = int(self.robloxWindow.mh // 6)
+            screen_np = mssScreenshotNP(bx, by, bw, bh)
+            bgr = cv2.cvtColor(screen_np, cv2.COLOR_BGRA2BGR)
+            hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+            lower_y = np.array([15, 90, 90])
+            upper_y = np.array([40, 255, 255])
+            mask = cv2.inRange(hsv, lower_y, upper_y)
+            ratio = np.count_nonzero(mask) / (mask.size if mask.size else 1)
+            if ratio > 0.03:
+                return True
+        except Exception:
+            pass
+        return False
 
     def _check_game_active(self) -> None:
         """Check if the memory match game is still active."""
