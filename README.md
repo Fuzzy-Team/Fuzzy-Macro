@@ -102,11 +102,9 @@ Follow our [installation guide](https://fuzzy-team.gitbook.io/fuzzy-macro) to ge
 - [Natro Macro](https://github.com/NatroTeam/NatroMacro)
 - <a href="https://github.com/alaninnovates/bss-macro" target="_blank">Stumpy Macro</a>
 - <a href="https://github.com/existancepy/bss-macro-py" target="_blank">Existance Macro</a>
-- Developers: Logan
-  - Original Macro code: Existance
+- Developers: [Logan](https://github.com/LaganYT)
+  - Based off code written by: [Existance](https://github.com/existancepy/bss-macro-py)
 - Pattern Makers: Existance, NatroTeam, tvojamamkajenic, sev, dully176, chillketchup, Electro
-
 
 ## Preview
 <img width="1312" height="1022" alt="image" src="https://github.com/user-attachments/assets/c966a172-eda4-44c9-9da9-8760f504f808" />
-
