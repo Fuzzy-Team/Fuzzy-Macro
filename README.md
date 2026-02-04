@@ -108,4 +108,5 @@ Follow our [installation guide](https://fuzzy-team.gitbook.io/fuzzy-macro) to ge
 
 
 ## Preview
-<img width="1312" height="1022" alt="image" src="https://github.com/user-attachments/assets/d5664644-4929-40e0-a048-dd941bffd04d" />
+<img width="1312" height="1022" alt="image" src="https://github.com/user-attachments/assets/c966a172-eda4-44c9-9da9-8760f504f808" />
+
