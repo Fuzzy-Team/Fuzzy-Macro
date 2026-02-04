@@ -104,11 +104,8 @@ Follow our [installation guide](https://fuzzy-team.gitbook.io/fuzzy-macro) to ge
 - <a href="https://github.com/existancepy/bss-macro-py" target="_blank">Existance Macro</a>
 - Developers: Logan
   - Original Macro code: Existance
-    </li>
-    <li>
-      <strong>Pattern Makers:</strong> Existance, NatroTeam, tvojamamkajenic, sev, dully176, chillketchup, Electro
-    </li>
-  </ul>
+- Pattern Makers: Existance, NatroTeam, tvojamamkajenic, sev, dully176, chillketchup, Electro
+
 
 ## Preview
 <img width="1312" height="1022" alt="image" src="https://github.com/user-attachments/assets/d5664644-4929-40e0-a048-dd941bffd04d" />
