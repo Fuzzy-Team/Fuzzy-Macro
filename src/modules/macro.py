@@ -1593,6 +1593,8 @@ class macro:
             if joinPS:
                 browserLink = psLink
             if rejoinMethod == "deeplink":
+                appManager.openApp("Roblox")
+                time.sleep(2)
                 deeplink = "roblox://placeID=1537690962"
                 if joinPS:
                     try:
