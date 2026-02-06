@@ -3751,15 +3751,139 @@ class macro:
             "polar bear": "polar",
             "bucko bee": "bucko",
             "riley bee": "riley",
-            "honey bee": "honey"
+            "honey bee": "honey",
+            "brown bear": "brown"
         }
 
         #prevent the macro from false detecting beesmas quests
         questTitleBlacklistedPhrases = {
             "polar bear": ["beesmas", "feast"],
             "bucko bee": ["snow", "machine"],
-            "riley bee": ["snow", "machine"]
+            "riley bee": ["snow", "machine"],
+            "brown bear": []
         }
+
+        def parseBrownBearTitleFields(titleText):
+            import re
+
+            text = self.convertCyrillic(titleText.lower())
+            text = re.sub(r"^.*brown\s+bear[:\-\s]*", "", text).strip()
+
+            abbrevToField = {
+                "sun": "sunflower",
+                "dand": "dandelion",
+                "mush": "mushroom",
+                "bluf": "blue flower",
+                "clove": "clover",
+                "bamb": "bamboo",
+                "spide": "spider",
+                "straw": "strawberry",
+                "pinap": "pineapple",
+                "stump": "stump",
+                "cact": "cactus",
+                "pump": "pumpkin",
+                "pine": "pine tree",
+                "rose": "rose",
+                "mount": "mountain top",
+                "coco": "coconut",
+                "pepp": "pepper"
+            }
+            colorTokens = {"white", "blue", "red"}
+
+            tokens = [t for t in re.split(r"[^a-z]+", text) if t]
+            fields = []
+            colors = []
+
+            for token in tokens:
+                if token in colorTokens and token not in colors:
+                    colors.append(token)
+                    continue
+                field = abbrevToField.get(token)
+                if field and field not in fields:
+                    fields.append(field)
+
+            return fields, colors
+
+        def extractQuestObjectiveChunks(screen, questTitleYPos):
+            screenBgr = cv2.cvtColor(np.array(screen), cv2.COLOR_RGBA2BGR)
+            screenCropped = screenBgr[questTitleYPos:, :]
+
+            cropTargetColor = [247, 240, 229]
+            cropColorTolerance = 3
+            lower = np.array([c - cropColorTolerance for c in cropTargetColor], dtype=np.uint8)
+            upper = np.array([c + cropColorTolerance for c in cropTargetColor], dtype=np.uint8)
+
+            cropMask = cv2.inRange(screenCropped, lower, upper)
+            cropRows = np.any(cropMask > 0, axis=1)
+            startIndex = None
+            endIndex = 0
+
+            maxHeight = 20*self.robloxWindow.multi
+            for i, hasColor in enumerate(cropRows):
+                if i > maxHeight and startIndex is None:
+                    break
+                if hasColor and startIndex is None:
+                    startIndex = i
+                elif not hasColor and startIndex is not None:
+                    endIndex = i
+                    break
+
+            if endIndex:
+                screenCropped = screenCropped[endIndex:, :]
+
+            titleHeight = endIndex if endIndex else int(40*self.robloxWindow.multi)
+            titleScreen = screenBgr[questTitleYPos:questTitleYPos+titleHeight, :]
+
+            cropMask = cv2.inRange(screenCropped, lower, upper)
+            cropRows = np.any(cropMask > 0, axis=1)
+            nextTitleStart = None
+            minNextTitleOffset = 20*self.robloxWindow.multi
+            for i, hasColor in enumerate(cropRows):
+                if i <= minNextTitleOffset:
+                    continue
+                if hasColor:
+                    nextTitleStart = i
+                    break
+
+            parseScreen = screenCropped
+            displayScreen = screenCropped
+            if nextTitleStart:
+                parseScreen = screenCropped[:nextTitleStart, :]
+                extraBottomPixels = int(200*self.robloxWindow.multi)
+                displayEnd = min(nextTitleStart + extraBottomPixels, screenCropped.shape[0])
+                displayScreen = screenCropped[:displayEnd, :]
+
+            screenGray = cv2.cvtColor(parseScreen, cv2.COLOR_BGR2GRAY)
+            img = cv2.inRange(screenGray, 0, 50)
+            img = cv2.GaussianBlur(img, (5, 5), 0)
+
+            kernelSize = 10 if self.robloxWindow.isRetina else 7
+            kernel = np.ones((kernelSize, kernelSize), np.uint8)
+            img = cv2.dilate(img, kernel, iterations=1)
+
+            contours, _ = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+            minArea = 4000*self.robloxWindow.multi
+            maxArea = 40000*self.robloxWindow.multi
+            maxHeight = 75*self.robloxWindow.multi
+
+            chunks = []
+            for contour in contours:
+                x, y, w, h = cv2.boundingRect(contour)
+                area = w*h
+                if area < minArea or area > maxArea or h > maxHeight:
+                    continue
+
+                textImg = Image.fromarray(parseScreen[y:y+h, x:x+w])
+                textChunk = []
+                for line in ocr.ocrRead(textImg):
+                    textChunk.append(self.convertCyrillic(line[1][0].strip().lower()))
+                textChunk = ''.join(textChunk).strip()
+                if textChunk:
+                    chunks.append({"y": y, "text": textChunk, "bbox": (x, y, w, h)})
+
+            chunks.sort(key=lambda item: item["y"])
+            return titleScreen, displayScreen, parseScreen, chunks
 
         #sanity check
         if not questGiver in questGiverShort:
@@ -3813,13 +3937,15 @@ class macro:
                 ocrRes = ocr.ocrRead(img)
                 text = self.convertCyrillic(''.join([x[1][0].strip().lower() for x in ocrRes]))
                 for word in questTitleBlacklistedPhrases.get(questGiver, []):
-                    if word in text: 
+                    if word in text:
                         break
                 else:
-                    #match text with the closest known quest title
                     questTitleYPos = ry
                     print(questTitleYPos)
-                    questTitle, _ = fuzzywuzzy.process.extractOne(text, quest_data[questGiver].keys())
+                    if questGiver == "brown bear":
+                        questTitle = text
+                    else:
+                        questTitle, _ = fuzzywuzzy.process.extractOne(text, quest_data[questGiver].keys())
                     self.logger.webhook("", f"Quest Title: {questTitle}", "dark brown")
                     break
                 
@@ -3835,6 +3961,69 @@ class macro:
             self.moveMouseToDefault()
             return None
         
+        if questGiver == "brown bear":
+            titleScreen, objectiveScreen, parseScreen, objectiveChunks = extractQuestObjectiveChunks(screen, questTitleYPos)
+            incompleteObjectives = []
+            completedObjectives = []
+
+            annotatedScreen = np.copy(objectiveScreen)
+
+            for chunk in objectiveChunks:
+                textChunk = chunk["text"]
+                x, y, w, h = chunk["bbox"]
+                isComplete = "complete" in textChunk
+
+                parsedObjective = self.parseQuestObjective(textChunk)
+                mappedObjectives = self.mapObjectiveToMacroAction(parsedObjective, textChunk)
+
+                if not isComplete:
+                    for objective in mappedObjectives:
+                        if objective not in incompleteObjectives:
+                            incompleteObjectives.append(objective)
+                else:
+                    for objective in mappedObjectives:
+                        if objective not in completedObjectives:
+                            completedObjectives.append(objective)
+
+                label = ", ".join(mappedObjectives) if mappedObjectives else textChunk
+                color = (0, 255, 0) if isComplete else (0, 0, 255)
+                cv2.rectangle(annotatedScreen, (x, y), (x+w, y+h), color, 2)
+                cv2.putText(annotatedScreen, label, (x, max(0, y-5)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+
+            hasGatherObjective = any(obj.startswith("gather_") or obj.startswith("gathergoo_") for obj in incompleteObjectives)
+            hasPollenObjective = any(obj.startswith("pollen_") or obj.startswith("pollengoo_") for obj in incompleteObjectives)
+
+            titleFields, titleColors = parseBrownBearTitleFields(questTitle)
+            if not hasGatherObjective:
+                for field in titleFields:
+                    objective = f"gather_{field}"
+                    if objective not in incompleteObjectives:
+                        incompleteObjectives.append(objective)
+            if not hasPollenObjective:
+                for color in titleColors:
+                    objective = f"pollen_{color}"
+                    if objective not in incompleteObjectives:
+                        incompleteObjectives.append(objective)
+
+            questImgPath = "latest-quest.png"
+            screenshotStack = annotatedScreen
+            if titleScreen is not None and titleScreen.size:
+                screenshotStack = np.vstack([titleScreen, annotatedScreen])
+            cv2.imwrite(questImgPath, screenshotStack)
+
+            self.logger.webhook(
+                f"Detected Brown Bear Quest: {questTitle.title()}",
+                "**Completed Objectives:**\n{}\n\n**Incomplete Objectives:**\n{}".format(
+                    '\n'.join(completedObjectives) if completedObjectives else "None",
+                    '\n'.join(incompleteObjectives) if incompleteObjectives else "None"
+                ),
+                "light blue",
+                imagePath=questImgPath
+            )
+            self.toggleQuest()
+            self.moveMouseToDefault()
+            return incompleteObjectives
+
         #quest title found, now find the objectives
         objectives = quest_data[questGiver][questTitle]
 
@@ -4478,8 +4667,9 @@ class macro:
                 # Add other field-specific goo handling as needed
 
             # Only allow valid field names for gathering
-            validFields = ['pineapple', 'pumpkin', 'rose', 'cactus', 'pepper', 'strawberry', 'blueberry',
-                          'sunflower', 'dandelion', 'mushroom', 'clover', 'bamboo', 'spider', 'stump']
+            validFields = ['pineapple', 'pumpkin', 'rose', 'cactus', 'pepper', 'strawberry', 'blue flower',
+                          'sunflower', 'dandelion', 'mushroom', 'clover', 'bamboo', 'spider', 'stump',
+                          'pine tree', 'mountain top', 'coconut']
             if normalizedTarget in validFields:
                 # These are field names that can be gathered
                 return [f"gather_{normalizedTarget}"]
@@ -4639,6 +4829,7 @@ class macro:
         if not self.goToQuestGiver(questGiver, "Submit Quest" if submitQuest else "Get New Quest"): return
         dialogClickCountForQuestGivers = {
             "polar bear": 25,
+            "brown bear": 25,
             "bucko bee": 40,
             "honey bee": 40,
             "riley bee": 40

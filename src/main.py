@@ -550,6 +550,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 requireBlueField = True
             elif objData[0] == "pollen" and objData[1] == "red":
                 requireRedField = True
+            elif objData[0] == "pollen" and objData[1] == "white":
+                requireField = True
             elif objData[0] == "pollengoo" and objData[1] == "blue":
                 if macro.setdat["quest_use_gumdrops"]:
                     requireBlueGumdropField = True
@@ -560,6 +562,11 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     requireRedGumdropField = True
                 else:
                     requireBlueField = True
+            elif objData[0] == "pollengoo" and objData[1] == "white":
+                if macro.setdat["quest_use_gumdrops"]:
+                    requireBlueGumdropField = True
+                else:
+                    requireField = True
             elif objData[0] == "collect":
                 setdatEnable.append(objData[1].replace("-","_"))
         
@@ -667,6 +674,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             if not questOnlyTasks:
                 questMappings = [
                     ("polar bear", "polar_bear_quest"),
+                    ("brown bear", "brown_bear_quest"),
                     ("honey bee", "honey_bee_quest"),
                     ("bucko bee", "bucko_bee_quest"),
                     ("riley bee", "riley_bee_quest")
@@ -684,6 +692,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         # Handle quest feeding and gathering requirements
                         questMappings = {
                             "polar bear": "polar_bear_quest",
+                            "brown bear": "brown_bear_quest",
                             "honey bee": "honey_bee_quest",
                             "bucko bee": "bucko_bee_quest",
                             "riley bee": "riley_bee_quest"
