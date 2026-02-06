@@ -1020,14 +1020,38 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     return False
                 
                 # Actually execute the quest (submit/get) - this will travel to quest giver if needed
-                handleQuest(questName, executeQuest=True)
-                
-                # Feed bees for this quest (requirements were already checked above)
-                if questName in questFeedRequirements:
-                    feedBees = questFeedRequirements[questName]
+                # For Brown Bear, capture the objectives and gather them immediately
+                if questName == "brown bear":
+                    setdatEnable, gatherFields, gumdropFields, needsRed, needsBlue, feedBees, needsRedGumdrop, needsBlueGumdrop, needsField = handleQuest(questName, executeQuest=True)
+                    
+                    # Gather the fields for this quest
+                    questGatherOverrides = {}
+                    if macro.setdat.get("quest_gather_mins"):
+                        questGatherOverrides["mins"] = macro.setdat["quest_gather_mins"]
+                    if macro.setdat.get("quest_gather_return") != "no override":
+                        questGatherOverrides["return"] = macro.setdat["quest_gather_return"]
+                    
+                    # Gather regular fields
+                    for field in gatherFields:
+                        runTask(macro.gather, args=(field, questGatherOverrides), resetAfter=False)
+                    
+                    # Gather gumdrop fields (if any)
+                    for field in gumdropFields:
+                        runTask(macro.gather, args=(field, questGatherOverrides, True), resetAfter=False)
+                    
+                    # Feed bees if needed
                     for item, quantity in feedBees:
                         macro.feedBee(item, quantity)
                         taskCompleted = True
+                else:
+                    handleQuest(questName, executeQuest=True)
+                    
+                    # Feed bees for this quest (requirements were already checked above)
+                    if questName in questFeedRequirements:
+                        feedBees = questFeedRequirements[questName]
+                        for item, quantity in feedBees:
+                            macro.feedBee(item, quantity)
+                            taskCompleted = True
                 
                 executedTasks.add(taskId)
                 executedQuests.add(questName)
