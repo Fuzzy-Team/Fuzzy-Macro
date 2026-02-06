@@ -60,7 +60,7 @@ gather_rose
 gather_blue flower
 gather_clover
 
-- high protein bug
+-high protein bug bar
 gather_sunflower
 kill_4_mantis
 kill_4_scorpion
@@ -140,6 +140,11 @@ token_blueability
 gathergoo_bamboo
 gather_pine tree
 
+-petals
+gather_pine tree
+gather_clover
+gather_pineapple
+
 -picnic
 gather_blue flower
 fieldtoken_blueberry
@@ -174,11 +179,6 @@ gather_pine tree
 kill_5_rhinobeetle
 kill_3_mantis
 
--petals
-gather_pine tree
-gather_clover
-gather_pineapple
-
 ==riley bee==
 
 -abilities	
@@ -208,6 +208,11 @@ gather_rose
 
 -mushrooms
 gather_mushroom
+
+-petals
+gather_mushroom
+gather_clover
+gather_spider
 
 -picnic
 gather_mushroom
@@ -249,11 +254,6 @@ gather_strawberry
 gather_rose
 kill_5_ladybug
 kill_3_scorpion
-
--petals
-gather_mushroom
-gather_clover
-gather_spider
 
 ==honey bee==
 
