@@ -3808,6 +3808,22 @@ class macro:
             screenBgr = cv2.cvtColor(np.array(screen), cv2.COLOR_RGBA2BGR)
             screenCropped = screenBgr[questTitleYPos:, :]
 
+            def findTitleBarColor(scanScreen, maxHeight):
+                scan = scanScreen[:maxHeight, :]
+                if scan.size == 0:
+                    return None
+                bestStd = None
+                bestMean = None
+                for row in range(scan.shape[0]):
+                    rowPixels = scan[row]
+                    rowStd = float(np.std(rowPixels, axis=0).mean())
+                    if bestStd is None or rowStd < bestStd:
+                        bestStd = rowStd
+                        bestMean = np.mean(rowPixels, axis=0)
+                if bestMean is None:
+                    return None
+                return [int(c) for c in bestMean]
+
             cropTargetColor = [247, 240, 229]
             cropColorTolerance = 3
             lower = np.array([c - cropColorTolerance for c in cropTargetColor], dtype=np.uint8)
@@ -3827,6 +3843,24 @@ class macro:
                 elif not hasColor and startIndex is not None:
                     endIndex = i
                     break
+
+            if startIndex is None:
+                # Fallback to a dynamically sampled title bar color.
+                dynamicColor = findTitleBarColor(screenCropped, int(40*self.robloxWindow.multi))
+                if dynamicColor:
+                    cropColorTolerance = 6
+                    lower = np.array([c - cropColorTolerance for c in dynamicColor], dtype=np.uint8)
+                    upper = np.array([c + cropColorTolerance for c in dynamicColor], dtype=np.uint8)
+                    cropMask = cv2.inRange(screenCropped, lower, upper)
+                    cropRows = np.any(cropMask > 0, axis=1)
+                    for i, hasColor in enumerate(cropRows):
+                        if i > maxHeight and startIndex is None:
+                            break
+                        if hasColor and startIndex is None:
+                            startIndex = i
+                        elif not hasColor and startIndex is not None:
+                            endIndex = i
+                            break
 
             if endIndex:
                 screenCropped = screenCropped[endIndex:, :]
@@ -3973,8 +4007,16 @@ class macro:
                 x, y, w, h = chunk["bbox"]
                 isComplete = "complete" in textChunk
 
-                parsedObjective = self.parseQuestObjective(textChunk)
-                mappedObjectives = self.mapObjectiveToMacroAction(parsedObjective, textChunk)
+                # Skip standalone completion labels so they don't register as objectives.
+                if isComplete and len(textChunk.split()) < 5:
+                    continue
+
+                parseText = textChunk
+                if isComplete:
+                    parseText = textChunk.split("complete")[0].strip()
+
+                parsedObjective = self.parseQuestObjective(parseText)
+                mappedObjectives = self.mapObjectiveToMacroAction(parsedObjective, parseText)
 
                 if not isComplete:
                     for objective in mappedObjectives:
@@ -3990,19 +4032,20 @@ class macro:
                 cv2.rectangle(annotatedScreen, (x, y), (x+w, y+h), color, 2)
                 cv2.putText(annotatedScreen, label, (x, max(0, y-5)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
 
-            hasGatherObjective = any(obj.startswith("gather_") or obj.startswith("gathergoo_") for obj in incompleteObjectives)
-            hasPollenObjective = any(obj.startswith("pollen_") or obj.startswith("pollengoo_") for obj in incompleteObjectives)
+            allObjectives = incompleteObjectives + completedObjectives
+            hasGatherObjective = any(obj.startswith("gather_") or obj.startswith("gathergoo_") for obj in allObjectives)
+            hasPollenObjective = any(obj.startswith("pollen_") or obj.startswith("pollengoo_") for obj in allObjectives)
 
             titleFields, titleColors = parseBrownBearTitleFields(questTitle)
             if not hasGatherObjective:
                 for field in titleFields:
                     objective = f"gather_{field}"
-                    if objective not in incompleteObjectives:
+                    if objective not in incompleteObjectives and objective not in completedObjectives:
                         incompleteObjectives.append(objective)
             if not hasPollenObjective:
                 for color in titleColors:
                     objective = f"pollen_{color}"
-                    if objective not in incompleteObjectives:
+                    if objective not in incompleteObjectives and objective not in completedObjectives:
                         incompleteObjectives.append(objective)
 
             questImgPath = "latest-quest.png"
