@@ -4716,6 +4716,26 @@ class macro:
             validFields = ['pineapple', 'pumpkin', 'rose', 'cactus', 'pepper', 'strawberry', 'blue flower',
                           'sunflower', 'dandelion', 'mushroom', 'clover', 'bamboo', 'spider', 'stump',
                           'pine tree', 'mountain top', 'coconut']
+            # Fallback: extract field from text when target parsing fails (e.g., pollen from field)
+            import re
+            field_match = re.search(
+                r'\b(strawberr\w*|blue\s*flower|pine\s*tree|mushroom|rose|clover|bamboo|cactus|pumpkin|'
+                r'pineappl\w*|pineapple|coconut|dandelion|spider|stump|pepper|mountain\s*top|sunflow\w*)\b',
+                text.lower()
+            )
+            if field_match:
+                field_raw = field_match.group(0).strip()
+                if field_raw.startswith('strawberr'):
+                    field_raw = 'strawberry'
+                elif field_raw.startswith('pineappl'):
+                    field_raw = 'pineapple'
+                elif field_raw.startswith('sunflow'):
+                    field_raw = 'sunflower'
+                normalizedField = questCompleterFieldNames.get(field_raw, field_raw)
+                if normalizedField in validFields:
+                    return [f"gather_{normalizedField}"]
+            if normalizedTarget.endswith('_field'):
+                normalizedTarget = normalizedTarget[:-6]
             if normalizedTarget in validFields:
                 # These are field names that can be gathered
                 return [f"gather_{normalizedTarget}"]
