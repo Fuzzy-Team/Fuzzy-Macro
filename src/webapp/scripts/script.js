@@ -343,6 +343,7 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
       auto_field_boost: "Auto Field Boost",
       ant_challenge: "Ant Challenge",
       quest_polar_bear: "Quest: Polar Bear",
+      quest_brown_bear: "Quest: Brown Bear",
       quest_honey_bee: "Quest: Honey Bee",
       quest_bucko_bee: "Quest: Bucko Bee",
       quest_riley_bee: "Quest: Riley Bee",
