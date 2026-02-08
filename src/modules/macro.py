@@ -4925,7 +4925,8 @@ class macro:
             self.keyboard.press("pagedown")
 
         for _ in range(2):
-            mouse.moveTo(self.robloxWindow.mx+(x), self.robloxWindow.my+(y))
+            # start slightly lower to avoid being barely too high
+            mouse.moveTo(self.robloxWindow.mx+(x), self.robloxWindow.my+(y+25))
             time.sleep(0.3)
             pag.dragTo(self.robloxWindow.mx + self.robloxWindow.mw//2, self.robloxWindow.my + self.robloxWindow.mh//2-80, 0.6, button='left')
 
