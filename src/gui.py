@@ -38,7 +38,56 @@ def resume():
 
 @eel.expose
 def getPatterns():
-    return [x.replace(".py","") for x in os.listdir("../settings/patterns") if ".py" in x]
+    patterns = []
+    try:
+        for x in os.listdir("../settings/patterns"):
+            if x.endswith('.py') or x.endswith('.ahk'):
+                patterns.append(os.path.splitext(x)[0])
+    except Exception:
+        # folder may not exist yet
+        pass
+    return patterns
+
+
+@eel.expose
+def importPatterns(patterns):
+    """Import pattern files sent from the frontend.
+    `patterns` should be a list of dicts: {"name": "filename.py", "content": "..."}
+    Writes files into ../settings/patterns/ and returns a report dict.
+    """
+    results = {"saved": [], "errors": []}
+    target_dir = os.path.join(os.path.dirname(__file__), "..", "settings", "patterns")
+    # normalize path
+    target_dir = os.path.normpath(target_dir)
+    try:
+        os.makedirs(target_dir, exist_ok=True)
+    except Exception as e:
+        results["errors"].append(f"Could not ensure patterns dir: {e}")
+        return results
+
+    for p in patterns:
+        try:
+            name = p.get("name") or p.get("filename")
+            content = p.get("content", "")
+            if not name:
+                results["errors"].append("Missing filename for one of the uploads")
+                continue
+            # sanitize name to avoid directory traversal
+            name = os.path.basename(name)
+            # normalize extension: allow .py and .ahk, default to .py
+            root, ext = os.path.splitext(name)
+            ext = ext.lower() or '.py'
+            if ext not in ('.py', '.ahk'):
+                ext = '.py'
+            name = root + ext
+            dest_path = os.path.join(target_dir, name)
+            with open(dest_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            results["saved"].append(name)
+        except Exception as e:
+            results["errors"].append(f"{name}: {e}")
+
+    return results
 
 @eel.expose
 def clearManualPlanters():
