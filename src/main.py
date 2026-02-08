@@ -459,12 +459,13 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         feedBees = []
         setdatEnable = []
 
-        # Refresh quest detection when actually executing the quest or when cache is stale
-        if executeQuest or taskCompleted or not questGiver in questCache:
+        # Refresh quest detection only when cache is stale to avoid duplicate scans in one cycle
+        cacheFresh = questGiver in questCache and not taskCompleted
+        if cacheFresh and questCache[questGiver] is not None:
+            questObjective = questCache[questGiver]
+        else:
             questObjective = macro.findQuest(questGiver)
             questCache[questGiver] = questObjective
-        else:
-            questObjective = questCache[questGiver]
 
         # Only submit/get quests if executeQuest is True (when quest appears in priority queue)
         if executeQuest:
@@ -473,20 +474,12 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 # Clear cached entry for this quest giver so subsequent checks re-read the UI
                 if questGiver in questCache:
                     del questCache[questGiver]
-            elif not len(questObjective):  # No incomplete objectives reported -> consider submitting
-                # Double-check current quest state to avoid false submits (OCR can be flaky)
-                refreshed = macro.findQuest(questGiver)
-                # Only submit if refreshed detection also shows no incomplete objectives (empty list)
-                if refreshed is not None and len(refreshed) == 0:
-                    questObjective = macro.getNewQuest(questGiver, True)
-                    macro.hourlyReport.addHourlyStat("quests_completed", 1)
-                    # Clear cached entry for this quest giver so we don't reuse stale data
-                    if questGiver in questCache:
-                        del questCache[questGiver]
-                else:
-                    # Update cache with the refreshed data (could be None or have incomplete objectives)
-                    questObjective = refreshed
-                    questCache[questGiver] = questObjective
+            elif not len(questObjective):  # No incomplete objectives reported -> submit and get a new quest
+                questObjective = macro.getNewQuest(questGiver, True)
+                macro.hourlyReport.addHourlyStat("quests_completed", 1)
+                # Clear cached entry for this quest giver so we don't reuse stale data
+                if questGiver in questCache:
+                    del questCache[questGiver]
         else:
             # If not executing, use cached quest or return empty if no quest exists or is completed
             if questObjective is None or not len(questObjective):
