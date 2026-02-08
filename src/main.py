@@ -800,6 +800,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         # But don't execute quests (submit/get) - that will happen when quest appears in priority queue
         for questName, enabledKey in [
             ("polar bear", "polar_bear_quest"),
+            ("brown bear", "brown_bear_quest"),
             ("honey bee", "honey_bee_quest"),
             ("bucko bee", "bucko_bee_quest"),
             ("riley bee", "riley_bee_quest")
