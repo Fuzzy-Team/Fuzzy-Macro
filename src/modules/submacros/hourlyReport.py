@@ -18,7 +18,7 @@ from datetime import datetime
 from modules.screen.robloxWindow import RobloxWindowBounds
 import pickle
 import json
-from modules.misc.settingsManager import getCurrentProfile
+from modules.misc.settingsManager import getCurrentProfile, loadFields
 
 ww, wh = pag.size()
 
@@ -501,10 +501,34 @@ class HourlyReport():
 
         hourlyReportStats = copy.deepcopy(self.hourlyReportStats)
 
+        # determine enabled fields and their patterns from profile settings
+        enabled_fields = []
+        field_patterns = {}
+        try:
+            profile_fields_settings = loadFields()
+        except Exception:
+            profile_fields_settings = {}
+
+        fields_list = setdat.get("fields", []) if isinstance(setdat, dict) else []
+        fields_enabled = setdat.get("fields_enabled", []) if isinstance(setdat, dict) else []
+        # normalize lengths
+        if len(fields_enabled) < len(fields_list):
+            fields_enabled += [False] * (len(fields_list) - len(fields_enabled))
+
+        for i, fname in enumerate(fields_list):
+            try:
+                if fields_enabled[i]:
+                    enabled_fields.append(fname)
+                    pattern = profile_fields_settings.get(fname, {}).get("shape") if isinstance(profile_fields_settings, dict) else None
+                    field_patterns[fname] = pattern or "unknown"
+            except Exception:
+                continue
+
         canvas = self.hourlyReportDrawer.drawHourlyReport(hourlyReportStats, sessionTime, honeyPerMin, 
                                                           sessionHoney, honeyThisHour, onlyValidHourlyHoney, 
                                                           buffQuantity, nectarQuantity, planterData, 
-                                                          self.uptimeBuffsValues, self.buffGatherIntervals)
+                                                          self.uptimeBuffsValues, self.buffGatherIntervals,
+                                                          enabled_fields, field_patterns)
         w, h = canvas.size
         canvas = canvas.resize((int(w*1.2), int(h*1.2))) 
         canvas.save("hourlyReport.png")
@@ -1087,7 +1111,7 @@ class HourlyReportDrawer:
             img = img.resize((imageWidth, imageHeight))
             self.canvas.paste(img, (x + (progressChartSize-imageWidth)//2, y+progressChartSize + 80), img)
 
-    def drawHourlyReport(self, hourlyReportStats, sessionTime, honeyPerMin, sessionHoney, honeyThisHour, onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData, uptimeBuffsValues, buffGatherIntervals):
+    def drawHourlyReport(self, hourlyReportStats, sessionTime, honeyPerMin, sessionHoney, honeyThisHour, onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData, uptimeBuffsValues, buffGatherIntervals, enabled_fields=None, field_patterns=None):
 
         def getAverageBuff(buffValues):
             #get the buff average when gathering, rounded to 2p
@@ -1113,18 +1137,40 @@ class HourlyReportDrawer:
         #draw icon
         macroIcon = Image.open(f"{self.assetPath}/macro_icon.png").convert("RGBA")
         # Resize icon to a more appropriate size for the top-right header
-        macroIcon = macroIcon.resize((200, 200), Image.LANCZOS)
-        self.canvas.paste(macroIcon, (5550, 100), macroIcon)
-        # Position the title text to the right of the icon, vertically centered
-        self.draw.text((5550 + 200 + 30, 180), "Fuzzy Macro", fill=self.bodyColor, font=self.getFont("semibold", 80))
-        # Draw the active profile under the macro title (if available)
+        icon_w, icon_h = (200, 200)
+        macroIcon = macroIcon.resize((icon_w, icon_h), Image.LANCZOS)
+        icon_x = 5550
+        icon_y = 100
+        self.canvas.paste(macroIcon, (icon_x, icon_y), macroIcon)
+
+        # Position the title text to the right of the icon and vertically center
+        title_x = icon_x + icon_w + 30
+        title_text = "Fuzzy Macro"
         try:
             profile_name = getCurrentProfile()
         except Exception:
             profile_name = None
-        if profile_name:
-            profile_text = f"Profile: {profile_name}"
-            self.draw.text((5550 + 200 + 30, 260), profile_text, fill=self.bodyColor, font=self.getFont("medium", 60))
+        profile_text = f"Profile: {profile_name}" if profile_name else None
+
+        title_font = self.getFont("semibold", 80)
+        profile_font = self.getFont("medium", 60)
+
+        title_bbox = self.draw.textbbox((0, 0), title_text, font=title_font)
+        title_h = title_bbox[3] - title_bbox[1]
+        profile_h = 0
+        spacing = 10
+        if profile_text:
+            profile_bbox = self.draw.textbbox((0, 0), profile_text, font=profile_font)
+            profile_h = profile_bbox[3] - profile_bbox[1]
+
+        total_text_h = title_h + (spacing + profile_h if profile_text else 0)
+        text_top = icon_y + (icon_h - total_text_h) // 2
+
+        # draw title
+        self.draw.text((title_x, text_top), title_text, fill=self.bodyColor, font=title_font)
+        # draw profile below title if present
+        if profile_text:
+            self.draw.text((title_x, text_top + title_h + spacing), profile_text, fill=self.bodyColor, font=profile_font)
 
         #draw title
         self.draw.text((self.leftPadding, 80), "Hourly Report", fill=self.bodyColor, font=self.getFont("bold", 120))
@@ -1386,5 +1432,48 @@ class HourlyReportDrawer:
         self.draw.text((self.sidebarX, y2), "Nectars", font=self.getFont("semibold", 85), fill=self.bodyColor)
         y2 += 250
         self.drawNectars(y2, nectarQuantity)
+
+        # Fields: show enabled fields and the pattern used
+        if enabled_fields is None:
+            enabled_fields = []
+        if field_patterns is None:
+            field_patterns = {}
+
+        if enabled_fields:
+            # move section down slightly for spacing
+            y2 += 600
+            # layout metrics
+            padding = 30
+            entry_height = 120
+            header_height = 120
+            total_height = header_height + len(enabled_fields) * entry_height + padding * 2
+
+            container_x = self.sidebarX - 30
+            container_right = self.canvasSize[0] - self.sidebarPadding + 30
+            container_bbox = (container_x, y2, container_right, y2 + total_height)
+
+            # draw container background
+            self.draw.rounded_rectangle(container_bbox, radius=40, fill=(35, 37, 41))
+
+            # header inside container
+            header_y = y2 + padding
+            self.draw.text((self.sidebarX, header_y), "Fields", font=self.getFont("semibold", 85), fill=self.bodyColor)
+
+            cur_y = header_y + header_height
+            field_font = self.getFont("medium", 60)
+            pattern_font = self.getFont("regular", 50) if hasattr(self, 'getFont') else field_font
+
+            for fname in enabled_fields:
+                pattern = field_patterns.get(fname, "unknown")
+                # field name (left)
+                self.draw.text((self.sidebarX + 20, cur_y), fname.title(), font=field_font, fill=self.bodyColor)
+                # pattern (right aligned within container)
+                bbox = self.draw.textbbox((0, 0), pattern, font=pattern_font)
+                textWidth = bbox[2] - bbox[0]
+                self.draw.text((container_right - 20 - textWidth, cur_y), pattern, fill=(205,205,205), font=pattern_font)
+                cur_y += entry_height
+
+            # advance y2 past the container
+            y2 = y2 + total_height
 
         return self.canvas
