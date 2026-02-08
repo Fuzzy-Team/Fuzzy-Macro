@@ -22,4 +22,4 @@ settings/profiles
 .backup_pending
 backup_macro.zip
 backups/
-generate_hourly_dark_theme_test.py
+smoke_hourly_report.py
