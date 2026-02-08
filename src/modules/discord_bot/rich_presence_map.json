@@ -82,6 +82,8 @@
   "asset_lookup": {
     "polar_bear": "polar_bear",
     "polar bear": "polar_bear",
+    "brown_bear": "brown_bear",
+    "brown bear": "brown_bear",
     "honey_bee": "honey_bee",
     "honey bee": "honey_bee",
     "bucko_bee": "bucko_bee",
