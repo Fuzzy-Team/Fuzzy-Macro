@@ -4005,7 +4005,7 @@ class macro:
             for chunk in objectiveChunks:
                 textChunk = chunk["text"]
                 x, y, w, h = chunk["bbox"]
-                isComplete = "complete" in textChunk
+                isComplete = "complete" in textChunk.lower()  # Make case-insensitive
 
                 # Skip standalone completion labels so they don't register as objectives.
                 if isComplete and len(textChunk.split()) < 5:
@@ -4013,7 +4013,9 @@ class macro:
 
                 parseText = textChunk
                 if isComplete:
-                    parseText = textChunk.split("complete")[0].strip()
+                    # Split case-insensitively
+                    import re
+                    parseText = re.split(r'complete', textChunk, maxsplit=1, flags=re.IGNORECASE)[0].strip()
 
                 parsedObjective = self.parseQuestObjective(parseText)
                 mappedObjectives = self.mapObjectiveToMacroAction(parsedObjective, parseText)
@@ -4033,20 +4035,21 @@ class macro:
                 cv2.putText(annotatedScreen, label, (x, max(0, y-5)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
 
             allObjectives = incompleteObjectives + completedObjectives
-            hasGatherObjective = any(obj.startswith("gather_") or obj.startswith("gathergoo_") for obj in allObjectives)
-            hasPollenObjective = any(obj.startswith("pollen_") or obj.startswith("pollengoo_") for obj in allObjectives)
 
+            # Parse title for fields and colors that should be gathered
             titleFields, titleColors = parseBrownBearTitleFields(questTitle)
-            if not hasGatherObjective:
-                for field in titleFields:
-                    objective = f"gather_{field}"
-                    if objective not in incompleteObjectives and objective not in completedObjectives:
-                        incompleteObjectives.append(objective)
-            if not hasPollenObjective:
-                for color in titleColors:
-                    objective = f"pollen_{color}"
-                    if objective not in incompleteObjectives and objective not in completedObjectives:
-                        incompleteObjectives.append(objective)
+            
+            # Add each field from the title if it's not already detected
+            for field in titleFields:
+                objective = f"gather_{field}"
+                if objective not in incompleteObjectives and objective not in completedObjectives:
+                    incompleteObjectives.append(objective)
+            
+            # Add each color from the title if it's not already detected  
+            for color in titleColors:
+                objective = f"pollen_{color}"
+                if objective not in incompleteObjectives and objective not in completedObjectives:
+                    incompleteObjectives.append(objective)
 
             questImgPath = "latest-quest.png"
             screenshotStack = annotatedScreen
