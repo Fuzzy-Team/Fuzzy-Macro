@@ -18,6 +18,7 @@ from datetime import datetime
 from modules.screen.robloxWindow import RobloxWindowBounds
 import pickle
 import json
+from modules.misc.settingsManager import getCurrentProfile
 
 ww, wh = pag.size()
 
@@ -1116,6 +1117,14 @@ class HourlyReportDrawer:
         self.canvas.paste(macroIcon, (5550, 100), macroIcon)
         # Position the title text to the right of the icon, vertically centered
         self.draw.text((5550 + 200 + 30, 180), "Fuzzy Macro", fill=self.bodyColor, font=self.getFont("semibold", 80))
+        # Draw the active profile under the macro title (if available)
+        try:
+            profile_name = getCurrentProfile()
+        except Exception:
+            profile_name = None
+        if profile_name:
+            profile_text = f"Profile: {profile_name}"
+            self.draw.text((5550 + 200 + 30, 260), profile_text, fill=self.bodyColor, font=self.getFont("medium", 60))
 
         #draw title
         self.draw.text((self.leftPadding, 80), "Hourly Report", fill=self.bodyColor, font=self.getFont("bold", 120))
