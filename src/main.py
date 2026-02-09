@@ -1196,9 +1196,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 # Special case: sticker_stack
                 if collectName == "sticker_stack":
                     if macro.setdat["sticker_stack"]:
-                        with open("./data/user/sticker_stack.txt", "r") as f:
-                            stickerStackCD = int(f.read())
-                        f.close()
+                        stickerStackCD = settingsManager.loadStickerStackCooldown()
                         if macro.hasRespawned("sticker_stack", stickerStackCD):
                             runTask(macro.collect, args=("sticker_stack",))
                             executedTasks.add(taskId)
@@ -1305,9 +1303,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             # Handle special tasks
             if taskId == "blender":
                 if macro.setdat["blender_enable"]:
-                    with open("./data/user/blender.txt", "r") as f:
-                        blenderData = ast.literal_eval(f.read())
-                    f.close()
+                    blenderData = settingsManager.loadBlenderData()
                     if blenderData["collectTime"] > -1 and time.time() > blenderData["collectTime"]:
                         runTask(macro.blender, args=(blenderData,))
                         executedTasks.add(taskId)
@@ -1321,11 +1317,9 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 # Manual planters
                 if macro.setdat["planters_mode"] == 1:
                     if planterDataRaw is None:
-                        with open("./data/user/manualplanters.txt", "r") as f:
-                            planterDataRaw = f.read()
-                        f.close()
-                    
-                    if not planterDataRaw.strip():
+                        planterDataRaw = settingsManager.loadManualPlanters()
+
+                    if not planterDataRaw:
                         planterData = {
                             "cycles": [1,1,1],
                             "planters": ["","",""],
@@ -1342,13 +1336,11 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                 planterData["fields"][i] = planter[1]
                                 planterData["harvestTimes"][i] = planter[2]
                                 planterData["gatherFields"][i] = planter[1] if planter[3] else ""
-                                with open("./data/user/manualplanters.txt", "w") as f:
-                                    f.write(str(planterData))
-                                f.close()
+                                settingsManager.saveManualPlanters(planterData)
                         executedTasks.add(taskId)
                         return True
                     else:
-                        planterData = ast.literal_eval(planterDataRaw)
+                        planterData = planterDataRaw
                         for i in range(3):
                             cycle = planterData["cycles"][i]
                             if planterData["planters"][i] and time.time() > planterData["harvestTimes"][i]:
@@ -1356,9 +1348,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                     planterData["harvestTimes"][i] = ""
                                     planterData["planters"][i] = ""
                                     planterData["fields"][i] = ""
-                                    with open("./data/user/manualplanters.txt", "w") as f:
-                                        f.write(str(planterData))
-                                    f.close()
+                                    settingsManager.saveManualPlanters(planterData)
                                     updateGUI.value = 1
                         
                         for i in range(3):
@@ -1386,21 +1376,16 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                 planterData["fields"][i] = planter[1]
                                 planterData["harvestTimes"][i] = planter[2]
                                 planterData["gatherFields"][i] = planter[1] if planter[3] else ""
-                                with open("./data/user/manualplanters.txt", "w") as f:
-                                    f.write(str(planterData))
-                                f.close()
+                                settingsManager.saveManualPlanters(planterData)
                                 updateGUI.value = 1
                         executedTasks.add(taskId)
                         return True
                 
                 # Auto planters
                 elif macro.setdat["planters_mode"] == 2:
-                    with open("./data/user/auto_planters.json", "r") as f:
-                        data = json.load(f)
-                        planterData = data.get("planters", [])
-                        nectarLastFields = data.get("nectar_last_field", {})
-                        gatherFlag = data.get("gather", False)
-                    f.close()
+                    data = settingsManager.loadAutoPlanters()
+                    planterData = data["planters"]
+                    nectarLastFields = data["nectar_last_field"]
 
                     def saveAutoPlanterData():
                         data = {
@@ -1408,9 +1393,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                             "nectar_last_field": nectarLastFields,
                             "gather": gatherFlag
                         }
-                        with open("./data/user/auto_planters.json", "w") as f:
-                            json.dump(data, f, indent=3)
-                        f.close()
+                        settingsManager.saveAutoPlanters(data)
                         updateGUI.value = 1
                     
                     def getCurrentNectarPercent(nectar):
@@ -1915,8 +1898,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 # Handle craft tasks
                 elif taskId == "craft":
                     # Execute blender crafting directly
-                    with open("./data/user/blender.txt", "r") as f:
-                        blenderData = ast.literal_eval(f.read())
+                    blenderData = settingsManager.loadBlenderData()
                     if blenderData["collectTime"] > -1 and time.time() > blenderData["collectTime"]:
                         macro.logger.webhook("Quest Task", "Executing craft (blender)", "light blue")
                         runTask(macro.blender, args=(blenderData,))
@@ -2002,9 +1984,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             
             #blender
             if macro.setdat["blender_enable"]:
-                with open("./data/user/blender.txt", "r") as f:
-                    blenderData = ast.literal_eval(f.read())
-                f.close()
+                blenderData = settingsManager.loadBlenderData()
                 if blenderData["collectTime"] > -1 and time.time() > blenderData["collectTime"]:
                     runTask(macro.blender, args=(blenderData,))
 
@@ -2072,7 +2052,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         # Handle planter gather fields (if not already gathered)
         if planterDataRaw:
             try:
-                planterGatherFields = [x for x in ast.literal_eval(planterDataRaw)["gatherFields"] if x]
+                if isinstance(planterDataRaw, dict):
+                    planterGatherFields = [x for x in planterDataRaw.get("gatherFields", []) if x]
+                else:
+                    planterGatherFields = [x for x in ast.literal_eval(planterDataRaw)["gatherFields"] if x]
                 for field in planterGatherFields:
                     if field not in allGatheredFields:
                         runTask(macro.gather, args=(field,), resetAfter=False)
@@ -2455,23 +2438,8 @@ if __name__ == "__main__":
     disconnectCooldownUntil = 0 #only for running disconnect check on low performance
 
     #update settings for current profile
-    currentProfile = settingsManager.getCurrentProfile()
-    profileSettings = settingsManager.loadSettings()
-    profileSettingsReference = settingsManager.readSettingsFile(os.path.join(settingsManager.getDefaultSettingsPath(), "settings.txt"))
-    settingsManager.saveDict(os.path.join(settingsManager.getProfilePath(currentProfile), "settings.txt"), {**profileSettingsReference, **profileSettings})
-
-    #update general settings for current profile
-    generalsettings_path = os.path.join(settingsManager.getProfilePath(currentProfile), "generalsettings.txt")
-    generalSettingsReference = settingsManager.readSettingsFile(os.path.join(settingsManager.getDefaultSettingsPath(), "generalsettings.txt"))
-    try:
-        generalSettings = settingsManager.readSettingsFile(generalsettings_path)
-    except FileNotFoundError:
-        # If generalsettings.txt doesn't exist, create it from defaults
-        generalSettings = {}
-        # Ensure the profile directory exists
-        profile_dir = settingsManager.getProfilePath(currentProfile)
-        os.makedirs(profile_dir, exist_ok=True)
-    settingsManager.saveDict(generalsettings_path, {**generalSettingsReference, **generalSettings})
+    settingsManager.ensureCurrentProfileDefaults()
+    settingsManager.promptLegacyCleanupIfNeeded()
 
     #convert ahk pattern
     patterns_dir = settingsManager.getPatternsDir()
