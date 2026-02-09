@@ -47,7 +47,7 @@ def _merge_overwrite(src, dst, protected_folders, protected_files):
             os.makedirs(dest_root, exist_ok=True)
         # filter dirs in-place to avoid descending into protected dirs
         # compare using relative paths so nested protected paths like
-        # 'src/data' or 'data/user' are honored
+        # 'src/data', 'usrdata', or 'data/user' are honored
         norm_protected = [os.path.normpath(p) for p in protected_folders]
         filtered = []
         for d in dirs:
@@ -152,6 +152,7 @@ def update(t="main"):
     # Important: preserve user data and profiles. Protect pattern folder
     # during the generic overwrite so we can merge new/old patterns safely.
     protected_folders = [
+        os.path.join("usrdata"),
         os.path.join("src", "data", "user"),
         os.path.join("settings", "profiles"),
         os.path.join("settings", "patterns"),
@@ -391,6 +392,7 @@ def update_from_commit(commit_hash):
     """Update the macro from a specific commit hash (zip at /archive/<hash>.zip)."""
     msgBox("Update in progress", f"Updating to commit {commit_hash}... Do not close terminal")
     protected_folders = [
+        os.path.join("usrdata"),
         os.path.join("src", "data", "user"),
         os.path.join("settings", "profiles"),
         os.path.join("settings", "patterns"),

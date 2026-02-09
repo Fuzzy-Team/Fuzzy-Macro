@@ -91,21 +91,16 @@ def importPatterns(patterns):
 
 @eel.expose
 def clearManualPlanters():
-    settingsManager.clearFile("./data/user/manualplanters.txt")
+    settingsManager.saveManualPlanters("")
 
 @eel.expose
 def getManualPlanterData():
-    with open("./data/user/manualplanters.txt", "r") as f:
-        planterDataRaw = f.read()
-    if planterDataRaw.strip():
-        return ast.literal_eval(planterDataRaw)
-    else: 
-        return ""
+    planterData = settingsManager.loadManualPlanters()
+    return planterData
     
 @eel.expose
 def getAutoPlanterData():
-    with open("./data/user/auto_planters.json", "r") as f:
-        return json.load(f)
+    return settingsManager.loadAutoPlanters()
 
 @eel.expose
 def clearAutoPlanters():
@@ -141,8 +136,7 @@ def clearAutoPlanters():
             "invigorating": ""
         }
     }
-    with open("./data/user/auto_planters.json", "w") as f:
-        json.dump(data, f, indent=3)
+    settingsManager.saveAutoPlanters(data)
     
 @eel.expose
 def clearBlender():
@@ -150,9 +144,7 @@ def clearBlender():
         "item": 1,
         "collectTime": 0
     }
-    with open("data/user/blender.txt", "w") as f:
-        f.write(str(blenderData))
-    f.close()
+    settingsManager.saveBlenderData(blenderData)
 
 @eel.expose
 def clearAFB():
@@ -161,20 +153,14 @@ def clearAFB():
         "AFB_glitter_cd": 0,
         "AFB_limit": 0
     }
-
-    # convert to format like in timings.txt
-    data_str = "\n".join([f"{key}={value}" for key, value in AFBData.items()])
-
-    with open("data/user/AFB.txt", "w") as f:
-        f.write(data_str)
+    settingsManager.saveAFBTimings(AFBData)
 
 @eel.expose
 def resetFieldToDefault(field_name):
     """Reset a field's settings to the default values"""
     try:
         # Load default field settings
-        with open("data/default_settings/fields.txt", "r") as f:
-            default_fields = ast.literal_eval(f.read())
+        default_fields = settingsManager.loadDefaultFieldSettings()
 
         # Get the default settings for the specified field
         if field_name in default_fields:

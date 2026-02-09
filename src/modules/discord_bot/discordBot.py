@@ -1737,16 +1737,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 await interaction.response.send_message("❌ Hotbar slot must be between 1 and 7")
                 return
 
-            # Determine path to src and hotbar timings file (same as macro)
-            src_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-            timings_path = os.path.join(src_dir, 'data', 'user', 'hotbar_timings.txt')
-
             # Read existing timings or initialize
-            try:
-                with open(timings_path, 'r') as f:
-                    hotbarSlotTimings = ast.literal_eval(f.read())
-            except Exception:
-                hotbarSlotTimings = [0] * 8
+            hotbarSlotTimings = settingsManager.loadHotbarTimings()
 
             # Press the hotbar key twice (same behaviour as macro.backgroundOnce)
             for _ in range(2):
@@ -1760,8 +1752,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 # If it's a dict-like structure, set the key
                 hotbarSlotTimings[slot] = time.time()
 
-            with open(timings_path, 'w') as f:
-                f.write(str(hotbarSlotTimings))
+            settingsManager.saveHotbarTimings(hotbarSlotTimings)
 
             await interaction.response.send_message(f"✅ Activated hotbar slot {slot}")
 
