@@ -17,7 +17,7 @@ import ast
 import time
 from datetime import datetime, timedelta
 import queue  # <-- Add this import
-from typing import List
+from typing import List, Optional, Dict, Tuple
 
 # Import settings manager functions
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'misc'))
@@ -207,6 +207,372 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             print(f"Error pinning message by search: {e}")
             import traceback
             traceback.print_exc()
+
+    def _parse_id_list(value: Optional[str]) -> List[int]:
+        if not value:
+            return []
+        parts = [p.strip() for p in value.replace(";", ",").split(",") if p.strip()]
+        ids = []
+        for part in parts:
+            if part.isdigit():
+                ids.append(int(part))
+        return ids
+
+    def _is_authorized_interaction(interaction: discord.Interaction, requester_id: Optional[int]) -> Tuple[bool, Optional[str]]:
+        if requester_id is not None and interaction.user and interaction.user.id != requester_id:
+            return False, "This settings panel is tied to the user who opened it."
+
+        owner_id = os.getenv("DISCORD_OWNER_ID")
+        if owner_id and owner_id.isdigit():
+            if not interaction.user or interaction.user.id != int(owner_id):
+                return False, "You are not authorized to use this settings panel."
+            return True, None
+
+        role_ids = _parse_id_list(os.getenv("DISCORD_ALLOWED_ROLE_IDS"))
+        if role_ids:
+            if not interaction.user or not hasattr(interaction.user, "roles"):
+                return False, "You are not authorized to use this settings panel."
+            for role in interaction.user.roles:
+                if role.id in role_ids:
+                    return True, None
+            return False, "You are not authorized to use this settings panel."
+
+        return True, None
+
+    QUEST_SETTINGS = [
+        ("polar_bear_quest", "Polar Bear"),
+        ("brown_bear_quest", "Brown Bear"),
+        ("honey_bee_quest", "Honey Bee"),
+        ("bucko_bee_quest", "Bucko Bee"),
+        ("riley_bee_quest", "Riley Bee"),
+        ("quest_use_gumdrops", "Use Gumdrops"),
+    ]
+
+    COLLECTIBLE_SETTINGS = [
+        ("wealth_clock", "Wealth Clock"),
+        ("blueberry_dispenser", "Blueberry Dispenser"),
+        ("strawberry_dispenser", "Strawberry Dispenser"),
+        ("coconut_dispenser", "Coconut Dispenser"),
+        ("royal_jelly_dispenser", "Royal Jelly Dispenser"),
+        ("ant_pass_dispenser", "Ant Pass Dispenser"),
+        ("treat_dispenser", "Treat Dispenser"),
+        ("glue_dispenser", "Glue Dispenser"),
+        ("honeystorm", "Honey Storm"),
+    ]
+
+    MOB_SETTINGS = [
+        ("ladybug", "Ladybug"),
+        ("rhinobeetle", "Rhinobeetle"),
+        ("scorpion", "Scorpion"),
+        ("mantis", "Mantis"),
+        ("spider", "Spider"),
+        ("werewolf", "Werewolf"),
+        ("coconut_crab", "Coconut Crab"),
+        ("stump_snail", "Stump Snail"),
+    ]
+
+    MACRO_MODE_OPTIONS = [
+        ("normal", "Normal"),
+        ("quest", "Quests"),
+        ("field", "Field"),
+    ]
+
+    SETTINGS_CATEGORIES = {
+        "fields": "Fields",
+        "macro_mode": "Macro Mode",
+        "quests": "Quests",
+        "collectibles": "Collectibles",
+        "mobs": "Mobs",
+        "hive_slot": "Hive Slot",
+    }
+
+    def _build_status_embed(category_key: str, settings: Dict, status_message: Optional[str] = None) -> discord.Embed:
+        title = f"Settings: {SETTINGS_CATEGORIES.get(category_key, 'Settings')}"
+        embed = discord.Embed(title=title, color=0x00ff00)
+
+        if category_key == "fields":
+            field_list = settings.get("fields", [])
+            fields_enabled = settings.get("fields_enabled", [])
+            enabled = []
+            disabled = []
+            for i, field_name in enumerate(field_list):
+                is_enabled = i < len(fields_enabled) and fields_enabled[i]
+                if is_enabled:
+                    enabled.append(field_name.title())
+                else:
+                    disabled.append(field_name.title())
+            embed.add_field(name="Enabled", value=", ".join(enabled) if enabled else "None", inline=False)
+            embed.add_field(name="Disabled", value=", ".join(disabled) if disabled else "None", inline=False)
+
+        elif category_key == "macro_mode":
+            current_mode = settings.get("macro_mode", "normal")
+            mode_name = dict(MACRO_MODE_OPTIONS).get(current_mode, current_mode)
+            embed.add_field(name="Current", value=mode_name, inline=False)
+
+        elif category_key == "quests":
+            enabled = []
+            disabled = []
+            for key, label in QUEST_SETTINGS:
+                if settings.get(key, False):
+                    enabled.append(label)
+                else:
+                    disabled.append(label)
+            embed.add_field(name="Enabled", value=", ".join(enabled) if enabled else "None", inline=False)
+            embed.add_field(name="Disabled", value=", ".join(disabled) if disabled else "None", inline=False)
+
+        elif category_key == "collectibles":
+            enabled = []
+            disabled = []
+            for key, label in COLLECTIBLE_SETTINGS:
+                if settings.get(key, False):
+                    enabled.append(label)
+                else:
+                    disabled.append(label)
+            embed.add_field(name="Enabled", value=", ".join(enabled) if enabled else "None", inline=False)
+            embed.add_field(name="Disabled", value=", ".join(disabled) if disabled else "None", inline=False)
+
+        elif category_key == "mobs":
+            enabled = []
+            disabled = []
+            for key, label in MOB_SETTINGS:
+                if settings.get(key, False):
+                    enabled.append(label)
+                else:
+                    disabled.append(label)
+            embed.add_field(name="Enabled", value=", ".join(enabled) if enabled else "None", inline=False)
+            embed.add_field(name="Disabled", value=", ".join(disabled) if disabled else "None", inline=False)
+
+        elif category_key == "hive_slot":
+            slot = settings.get("hive_number", "Unknown")
+            embed.add_field(name="Current", value=str(slot), inline=False)
+
+        if status_message:
+            embed.set_footer(text=status_message)
+
+        return embed
+
+    def _build_overview_embed(settings: Dict) -> discord.Embed:
+        embed = discord.Embed(title="Settings Panel", color=0x00ff00)
+        field_list = settings.get("fields", [])
+        fields_enabled = settings.get("fields_enabled", [])
+        enabled_fields = 0
+        for i in range(min(len(field_list), len(fields_enabled))):
+            if fields_enabled[i]:
+                enabled_fields += 1
+        embed.add_field(
+            name="Fields",
+            value=f"Enabled: {enabled_fields}/{len(field_list)}",
+            inline=False,
+        )
+
+        current_mode = settings.get("macro_mode", "normal")
+        embed.add_field(
+            name="Macro Mode",
+            value=dict(MACRO_MODE_OPTIONS).get(current_mode, current_mode),
+            inline=False,
+        )
+
+        quests_enabled = sum(1 for key, _ in QUEST_SETTINGS if settings.get(key, False))
+        embed.add_field(
+            name="Quests",
+            value=f"Enabled: {quests_enabled}/{len(QUEST_SETTINGS)}",
+            inline=False,
+        )
+
+        collectibles_enabled = sum(1 for key, _ in COLLECTIBLE_SETTINGS if settings.get(key, False))
+        embed.add_field(
+            name="Collectibles",
+            value=f"Enabled: {collectibles_enabled}/{len(COLLECTIBLE_SETTINGS)}",
+            inline=False,
+        )
+
+        mobs_enabled = sum(1 for key, _ in MOB_SETTINGS if settings.get(key, False))
+        embed.add_field(
+            name="Mobs",
+            value=f"Enabled: {mobs_enabled}/{len(MOB_SETTINGS)}",
+            inline=False,
+        )
+
+        embed.add_field(
+            name="Hive Slot",
+            value=str(settings.get("hive_number", "Unknown")),
+            inline=False,
+        )
+
+        embed.set_footer(text="Select a category to update settings.")
+        return embed
+
+    async def _update_category_message(interaction: discord.Interaction, category_key: str, status_message: Optional[str] = None):
+        settings = get_cached_settings()
+        view = SettingsCategoryView(category_key, requester_id=interaction.user.id, status_message=status_message)
+        embed = _build_status_embed(category_key, settings, status_message=status_message)
+        await interaction.response.edit_message(embed=embed, view=view)
+
+    class SettingsBaseView(discord.ui.View):
+        def __init__(self, requester_id: Optional[int], timeout: int = 300):
+            super().__init__(timeout=timeout)
+            self.requester_id = requester_id
+
+        async def interaction_check(self, interaction: discord.Interaction) -> bool:
+            allowed, message = _is_authorized_interaction(interaction, self.requester_id)
+            if not allowed:
+                if interaction.response.is_done():
+                    await interaction.followup.send(message, ephemeral=True)
+                else:
+                    await interaction.response.send_message(message, ephemeral=True)
+                return False
+            return True
+
+    class CategorySelect(discord.ui.Select):
+        def __init__(self):
+            options = [
+                discord.SelectOption(label=label, value=key)
+                for key, label in SETTINGS_CATEGORIES.items()
+            ]
+            super().__init__(placeholder="Choose a settings category", min_values=1, max_values=1, options=options)
+
+        async def callback(self, interaction: discord.Interaction):
+            category_key = self.values[0]
+            settings = get_cached_settings()
+            view = SettingsCategoryView(category_key, requester_id=interaction.user.id)
+            embed = _build_status_embed(category_key, settings)
+            await interaction.response.edit_message(embed=embed, view=view)
+
+    class BackButton(discord.ui.Button):
+        def __init__(self):
+            super().__init__(label="Back", style=discord.ButtonStyle.secondary)
+
+        async def callback(self, interaction: discord.Interaction):
+            settings = get_cached_settings()
+            view = SettingsHomeView(requester_id=interaction.user.id)
+            embed = _build_overview_embed(settings)
+            await interaction.response.edit_message(embed=embed, view=view)
+
+    class RefreshButton(discord.ui.Button):
+        def __init__(self, category_key: str):
+            self.category_key = category_key
+            super().__init__(label="Refresh", style=discord.ButtonStyle.secondary)
+
+        async def callback(self, interaction: discord.Interaction):
+            await _update_category_message(interaction, self.category_key, status_message="Refreshed settings.")
+
+    class FieldsSelect(discord.ui.Select):
+        def __init__(self, settings: Dict):
+            field_list = settings.get("fields", [])
+            fields_enabled = settings.get("fields_enabled", [])
+            options = []
+            for i, field_name in enumerate(field_list):
+                value = field_name.lower().replace(" ", "_")
+                is_enabled = i < len(fields_enabled) and fields_enabled[i]
+                options.append(discord.SelectOption(label=field_name.title(), value=value, default=is_enabled))
+            if not options:
+                options.append(discord.SelectOption(label="No fields configured", value="none"))
+            super().__init__(
+                placeholder="Select enabled fields",
+                min_values=0,
+                max_values=len(options),
+                options=options,
+                disabled=(len(options) == 1 and options[0].value == "none"),
+            )
+
+        async def callback(self, interaction: discord.Interaction):
+            settings = get_cached_settings()
+            field_list = settings.get("fields", [])
+            normalized_fields = [f.lower().replace(" ", "_") for f in field_list]
+            selected = set(self.values)
+            fields_enabled = [field in selected for field in normalized_fields]
+            success, message = update_setting("fields_enabled", fields_enabled)
+            status_message = message if success else "Failed to update fields."
+            await _update_category_message(interaction, "fields", status_message=status_message)
+
+    class MacroModeSelect(discord.ui.Select):
+        def __init__(self, settings: Dict):
+            current = settings.get("macro_mode", "normal")
+            options = []
+            for value, label in MACRO_MODE_OPTIONS:
+                options.append(discord.SelectOption(label=label, value=value, default=(value == current)))
+            super().__init__(placeholder="Select macro mode", min_values=1, max_values=1, options=options)
+
+        async def callback(self, interaction: discord.Interaction):
+            mode = self.values[0]
+            success, message = update_setting("macro_mode", mode)
+            if success:
+                try:
+                    import eel
+                    eel.updateMacroMode()
+                except Exception:
+                    pass
+            status_message = message if success else "Failed to update macro mode."
+            await _update_category_message(interaction, "macro_mode", status_message=status_message)
+
+    class ToggleSettingsSelect(discord.ui.Select):
+        def __init__(self, settings: Dict, setting_items: List[Tuple[str, str]], placeholder: str):
+            options = []
+            for key, label in setting_items:
+                is_enabled = settings.get(key, False)
+                options.append(discord.SelectOption(label=label, value=key, default=is_enabled))
+            super().__init__(
+                placeholder=placeholder,
+                min_values=0,
+                max_values=len(options),
+                options=options,
+            )
+            self.setting_items = setting_items
+
+        async def callback(self, interaction: discord.Interaction):
+            selected = set(self.values)
+            failures = []
+            for key, _ in self.setting_items:
+                success, _ = update_setting(key, key in selected)
+                if not success:
+                    failures.append(key)
+            status_message = "Updated settings." if not failures else "Some settings failed to update."
+            category_key = self.view.category_key if hasattr(self.view, "category_key") else "settings"
+            await _update_category_message(interaction, category_key, status_message=status_message)
+
+    class HiveSlotSelect(discord.ui.Select):
+        def __init__(self, settings: Dict):
+            current = settings.get("hive_number", 1)
+            options = []
+            for slot in range(1, 7):
+                options.append(discord.SelectOption(label=str(slot), value=str(slot), default=(slot == current)))
+            super().__init__(placeholder="Select hive slot", min_values=1, max_values=1, options=options)
+
+        async def callback(self, interaction: discord.Interaction):
+            slot = int(self.values[0])
+            success, message = update_setting("hive_number", slot)
+            if success and updateGUI is not None:
+                updateGUI.value = 1
+            status_message = message if success else "Failed to update hive slot."
+            await _update_category_message(interaction, "hive_slot", status_message=status_message)
+
+    class SettingsHomeView(SettingsBaseView):
+        def __init__(self, requester_id: Optional[int]):
+            super().__init__(requester_id=requester_id)
+            self.add_item(CategorySelect())
+
+    class SettingsCategoryView(SettingsBaseView):
+        def __init__(self, category_key: str, requester_id: Optional[int], status_message: Optional[str] = None):
+            super().__init__(requester_id=requester_id)
+            self.category_key = category_key
+            self.status_message = status_message
+            settings = get_cached_settings()
+
+            if category_key == "fields":
+                self.add_item(FieldsSelect(settings))
+            elif category_key == "macro_mode":
+                self.add_item(MacroModeSelect(settings))
+            elif category_key == "quests":
+                self.add_item(ToggleSettingsSelect(settings, QUEST_SETTINGS, "Select enabled quests"))
+            elif category_key == "collectibles":
+                self.add_item(ToggleSettingsSelect(settings, COLLECTIBLE_SETTINGS, "Select enabled collectibles"))
+            elif category_key == "mobs":
+                self.add_item(ToggleSettingsSelect(settings, MOB_SETTINGS, "Select enabled mobs"))
+            elif category_key == "hive_slot":
+                self.add_item(HiveSlotSelect(settings))
+
+            self.add_item(RefreshButton(category_key))
+            self.add_item(BackButton())
     
     @bot.tree.command(name = "ping", description = "Check if the bot is online")
     async def ping(interaction: discord.Interaction):
@@ -535,46 +901,16 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
     # === COMPREHENSIVE SETTINGS MANAGEMENT COMMANDS ===
 
-    @bot.tree.command(name="settings", description="View current macro settings")
+    @bot.tree.command(name="settings", description="Open the settings panel")
     async def view_settings(interaction: discord.Interaction):
-        """View current macro settings"""
-        await interaction.response.defer()
-
+        """Open the interactive settings panel"""
         try:
             settings = get_cached_settings()
-
-            # Create embed for better formatting
-            embed = discord.Embed(title="📋 Current Macro Settings", color=0x00ff00)
-
-            # Group settings by category
-            categories = {
-                "🎯 **Core Settings**": ["fields_enabled", "fields"],
-                "💰 **Collectibles**": ["wealth_clock", "blueberry_dispenser", "strawberry_dispenser", "royal_jelly_dispenser", "treat_dispenser"],
-                "🐛 **Mob Runs**": ["ladybug", "rhinobeetle", "scorpion", "mantis", "spider", "werewolf", "coconut_crab", "stump_snail"],
-                "🌱 **Planters**": ["planters_mode", "auto_max_planters", "auto_preset"],
-                "📊 **Quests**": ["polar_bear_quest", "honey_bee_quest", "bucko_bee_quest", "riley_bee_quest"],
-                "🔧 **Advanced**": ["Auto_Field_Boost", "mondo_buff", "stinger_hunt", "blender_enable"]
-            }
-
-            for category, keys in categories.items():
-                section_content = []
-                for key in keys:
-                    if key in settings:
-                        value = settings[key]
-                        if isinstance(value, list):
-                            value = ", ".join([str(v) for v in value])
-                        elif isinstance(value, bool):
-                            value = "✅" if value else "❌"
-                        section_content.append(f"**{key}:** {value}")
-
-                if section_content:
-                    embed.add_field(name=category, value="\n".join(section_content), inline=False)
-
-            embed.set_footer(text="Use specific commands to modify individual settings")
-            await interaction.followup.send(embed=embed)
-
+            view = SettingsHomeView(requester_id=interaction.user.id if interaction.user else None)
+            embed = _build_overview_embed(settings)
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
         except Exception as e:
-            await interaction.followup.send(f"❌ Error retrieving settings: {str(e)}")
+            await interaction.response.send_message(f"❌ Error opening settings panel: {str(e)}", ephemeral=True)
 
 
     # === FIELD CONFIGURATION COMMANDS ===
@@ -1122,7 +1458,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         """Show available commands"""
         embed = discord.Embed(title="🤖 BSS Macro Discord Bot", description="Available Commands:", color=0x0099ff)
 
-        embed.add_field(name="🔧 **Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/stop` - Stop the macro\n`/status` - Get macro status and current task\n`/rejoin` - Make macro rejoin game\n`/screenshot` - Get screenshot\n`/settings` - View current settings\n`/hiveslot <1-6>` - Change hive slot number", inline=False)
+        embed.add_field(name="🔧 **Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/stop` - Stop the macro\n`/status` - Get macro status and current task\n`/rejoin` - Make macro rejoin game\n`/screenshot` - Get screenshot\n`/settings` - Open settings panel\n`/hiveslot <1-6>` - Change hive slot number", inline=False)
 
         embed.add_field(name="🌾 **Field Management**", value="`/fields` - View field configuration\n`/field <field> <true/false>` - Enable or disable a field\n`/swapfield <current> <new>` - Swap one field for another (new can be any field)", inline=False)
 
