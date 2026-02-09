@@ -9,7 +9,6 @@ import mss.darwin
 mss.darwin.IMAGE_OPTIONS = 0
 from PIL import Image
 from ..misc import settingsManager
-screenPath = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../data/user/screen.txt'))
 def setScreenData():
     #get screen info
     multiplierData = {
@@ -89,7 +88,7 @@ def setScreenData():
         screenData["y_length_multiplier"] = multiplierData[ndisplay][2]
         screenData["x_length_multiplier"] = multiplierData[ndisplay][3]
     #save the data
-    settingsManager.saveDict(screenPath, screenData)
+    settingsManager.saveScreenData(screenData)
 
 def getScreenData():
-    return settingsManager.readSettingsFile(screenPath)
+    return settingsManager.loadScreenData()

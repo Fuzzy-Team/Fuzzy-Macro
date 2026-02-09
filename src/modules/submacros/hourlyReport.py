@@ -19,6 +19,7 @@ from modules.screen.robloxWindow import RobloxWindowBounds
 import pickle
 import json
 from modules.misc.settingsManager import getCurrentProfile, loadFields
+from modules.misc import settingsManager
 
 ww, wh = pag.size()
 
@@ -452,16 +453,9 @@ class HourlyReport():
         planterData = ""
         #get planter data
         if setdat["planters_mode"] == 1:
-            with open("./data/user/manualplanters.txt", "r") as f:
-                planterData = f.read()
-            f.close()
-
-            if planterData:
-                planterData = ast.literal_eval(planterData)
+            planterData = settingsManager.loadManualPlanters()
         elif setdat["planters_mode"] == 2:
-            with open("./data/user/auto_planters.json", "r") as f:
-                planterData = json.load(f)["planters"]
-            f.close()
+            planterData = settingsManager.loadAutoPlanters()["planters"]
             planterData = {
                 "planters": [p["planter"] for p in planterData],
                 "harvestTimes": [p["harvest_time"] for p in planterData],
@@ -472,9 +466,7 @@ class HourlyReport():
 
 
         #get history
-        with open("data/user/hourly_report_history.txt", "r") as f:
-            historyData = ast.literal_eval(f.read())
-        f.close()
+        historyData = settingsManager.loadHourlyReportHistory()
         
         if len(self.hourlyReportStats["honey_per_min"]) < 3:
             self.hourlyReportStats["honey_per_min"] = [0]*3 + self.hourlyReportStats["honey_per_min"]
@@ -572,19 +564,17 @@ class HourlyReport():
         self.saveHourlyReportData()
     
     def saveHourlyReportData(self):
-        with open("data/user/hourly_report_stats.pkl", "wb") as f:
-            pickle.dump({
-                "hourlyReportStats": self.hourlyReportStats,
-                "uptimeBuffsValues": self.uptimeBuffsValues,
-                "buffGatherIntervals": self.buffGatherIntervals,
-            }, f)
+        settingsManager.saveHourlyReportStats({
+            "hourlyReportStats": self.hourlyReportStats,
+            "uptimeBuffsValues": self.uptimeBuffsValues,
+            "buffGatherIntervals": self.buffGatherIntervals,
+        })
     
     def loadHourlyReportData(self):
-        with open("data/user/hourly_report_stats.pkl", "rb") as f:
-            data = pickle.load(f)
-            self.hourlyReportStats = data["hourlyReportStats"]
-            self.uptimeBuffsValues = data["uptimeBuffsValues"]
-            self.buffGatherIntervals = data["buffGatherIntervals"]
+        data = settingsManager.loadHourlyReportStats()
+        self.hourlyReportStats = data.get("hourlyReportStats", self.hourlyReportStats)
+        self.uptimeBuffsValues = data.get("uptimeBuffsValues", self.uptimeBuffsValues)
+        self.buffGatherIntervals = data.get("buffGatherIntervals", self.buffGatherIntervals)
 
 
 class HourlyReportDrawer:

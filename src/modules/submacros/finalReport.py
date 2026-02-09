@@ -5,6 +5,7 @@ import json
 import ast
 import pickle
 from modules.submacros.hourlyReport import HourlyReport, HourlyReportDrawer
+from modules.misc import settingsManager
 
 
 class FinalReportDrawer(HourlyReportDrawer):
@@ -441,16 +442,12 @@ class FinalReport:
         try:
             if setdat.get("planters_mode") == 1:
                 try:
-                    with open("./data/user/manualplanters.txt", "r") as f:
-                        planterData = f.read()
-                    if planterData:
-                        planterData = ast.literal_eval(planterData)
+                    planterData = settingsManager.loadManualPlanters()
                 except (FileNotFoundError, SyntaxError, ValueError):
                     planterData = ""
             elif setdat.get("planters_mode") == 2:
                 try:
-                    with open("./data/user/auto_planters.json", "r") as f:
-                        planterData = json.load(f)["planters"]
+                    planterData = settingsManager.loadAutoPlanters()["planters"]
                     planterData = {
                         "planters": [p["planter"] for p in planterData],
                         "harvestTimes": [p["harvest_time"] for p in planterData],

@@ -907,8 +907,9 @@ class macro:
 
     def getTiming(self,name = None):
         for _ in range(3):
-            data = settingsManager.readSettingsFile("./data/user/timings.txt")
-            if data: break #most likely another process is writing to the file
+            data = settingsManager.loadTimings()
+            if data is not None:
+                break
             time.sleep(0.1)
         if name is not None:
             if not name in data:
@@ -919,7 +920,10 @@ class macro:
         return data
     
     def saveTiming(self, name):
-        return settingsManager.saveSettingFile(name, time.time(), "./data/user/timings.txt")
+        data = settingsManager.loadTimings()
+        data[name] = time.time()
+        settingsManager.saveTimings(data)
+        return data
     #returns true if the cooldown is up
     #note that cooldown is in seconds
     def hasRespawned(self, name, cooldown, applyMobRespawnBonus = False, timing = None):
@@ -2586,7 +2590,7 @@ class macro:
             if self.hasMobRespawned(m, field, timings[timingName]):
                 timings[timingName] = time.time()
                 self.hourlyReport.addHourlyStat("bugs", regularMobQuantitiesInFields[field][m])
-        settingsManager.saveDict("./data/user/timings.txt", timings)
+        settingsManager.saveTimings(timings)
 
     #background thread function to determine if player has defeated the mob
     #time limit of 20s
@@ -3249,9 +3253,7 @@ class macro:
             self.hourlyReport.addHourlyStat("misc_time", time.time()-st)
 
         def saveBlenderData():
-            with open("./data/user/blender.txt", "w") as f:
-                f.write(str(blenderData))
-            f.close()
+            settingsManager.saveBlenderData(blenderData)
             updateHourlyTime()
         
         def getNextItem():
@@ -3503,18 +3505,14 @@ class macro:
             if stickerUsed: finalTime += 10
             self.logger.webhook("", f"Activated Sticker Stack, Buff Duration: {timedelta(seconds=finalTime)}", "bright green")
         else:
-            with open("./data/user/sticker_stack.txt", "r") as f: #get the cooldown from the prev detection
-                stickerStackCD = int(f.read())
-            f.close()
+            stickerStackCD = settingsManager.loadStickerStackCooldown()
             if stickerStackCD > 15*60: #make sure the time is valid
                 finalTime = stickerStackCD + 10
             else:
                 finalTime = 60*60 #default to 1hr
             self.logger.webhook("", f"Activated Sticker Stack, Buff Duration: {timedelta(seconds=finalTime)} (Defaulted to 1hr)", "bright green")
         self.keyboard.press("e")
-        with open("./data/user/sticker_stack.txt", "w") as f:
-            f.write(str(finalTime))
-        f.close()
+        settingsManager.saveStickerStackCooldown(finalTime)
     
     #click the "allow for one month" on the "terminal is requesting to bypass" popup
     #Source: https://github.com/sevmanash/sevs-modified-macro/blob/main/src/modules/macro.py
@@ -3544,9 +3542,7 @@ class macro:
             mouse.click()
 
     def backgroundOnce(self):
-        with open("./data/user/hotbar_timings.txt", "r") as f:
-            hotbarSlotTimings = ast.literal_eval(f.read())
-        f.close()
+        hotbarSlotTimings = settingsManager.loadHotbarTimings()
 
         #night detection
         if self.enableNightDetection:
@@ -3583,9 +3579,7 @@ class macro:
                 time.sleep(0.4)
             #update the time pressed
             hotbarSlotTimings[i] = time.time()
-            with open("./data/user/hotbar_timings.txt", "w") as f:
-                f.write(str(hotbarSlotTimings))
-            f.close()
+            settingsManager.saveHotbarTimings(hotbarSlotTimings)
     
     def background(self):
         while True:
@@ -3620,9 +3614,7 @@ class macro:
                 self.logger.hourlyReport("Hourly Report", "", "purple")
 
                 #add to history
-                with open("data/user/hourly_report_history.txt", "r") as f:
-                    history = ast.literal_eval(f.read())
-                f.close()
+                history = settingsManager.loadHourlyReportHistory()
 
                 historyObj = {
                     "endHour": datetime.now().hour,
@@ -3634,9 +3626,7 @@ class macro:
                     history.pop(-1)
                 history.insert(0,historyObj)
 
-                with open("data/user/hourly_report_history.txt", "w") as f:
-                    f.write(str(history))
-                f.close()
+                settingsManager.saveHourlyReportHistory(history)
 
                 self.lastHourlyReport = time.time()
                 #reset stats
@@ -4962,12 +4952,16 @@ class macro:
         self.moveMouseToDefault()
 
     def saveAFB(self, name):
-        return settingsManager.saveSettingFile(name, time.time(), "./data/user/AFB.txt")
+        data = settingsManager.loadAFBTimings()
+        data[name] = time.time()
+        settingsManager.saveAFBTimings(data)
+        return data
     
     def getAFBtiming(self,name = None):
         for _ in range(3):
-            data = settingsManager.readSettingsFile("./data/user/AFB.txt")
-            if data: break #most likely another process is writing to the file
+            data = settingsManager.loadAFBTimings()
+            if data is not None:
+                break
             time.sleep(0.1)
         if name is not None:
             if not name in data:
