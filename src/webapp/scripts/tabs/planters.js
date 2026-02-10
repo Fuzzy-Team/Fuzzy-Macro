@@ -176,8 +176,26 @@ async function loadPlanters(){
     //load inputs
     const settings = await loadAllSettings()
     loadInputs(settings)
+    // load auto-planter JSON to set the global gather checkbox
+    try{
+        const autoData = await eel.getAutoPlanterData()()
+        const gatherCheckbox = document.getElementById("auto_planters_gather")
+        if (gatherCheckbox && autoData && typeof autoData.gather !== 'undefined'){
+            gatherCheckbox.checked = !!autoData.gather
+        }
+    }catch(e){
+        console.warn('Failed to load auto-planter data for gather flag', e)
+    }
     //show the planter tab
     changePlanterMode()
+}
+
+async function toggleAutoPlantersGather(val){
+    try{
+        await eel.setAutoPlanterGather(!!val)()
+    }catch(e){
+        console.warn('Failed to set auto planter gather flag', e)
+    }
 }
 
 function clearManualPlantersData(){
