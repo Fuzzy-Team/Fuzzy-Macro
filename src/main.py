@@ -893,7 +893,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             if taskId.startswith("quest_"):
                 questName = taskId.replace("quest_", "").replace("_", " ")
                 questKey = f"{questName.replace(' ', '_')}_quest"
-                    # Detect the current quest title (without executing) so we can honor title-level ignores before execution
+                # If the quest setting is disabled, skip any UI scanning for this quest
+                if not macro.setdat.get(questKey):
+                    return False
+                # Detect the current quest title (without executing) so we can honor title-level ignores before execution
                 try:
                     # populate last_quest_title via requirement-only check
                     _ = handleQuest(questName, executeQuest=False)
@@ -909,8 +912,6 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         return False
                 except Exception:
                     pass
-                if not macro.setdat.get(questKey):
-                    return False
                 
                 # Actually execute the quest (submit/get) - this will travel to quest giver if needed
                 # For Brown Bear, capture the objectives and gather them immediately
