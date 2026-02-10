@@ -1718,16 +1718,18 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 pass
         # Auto-planters: if global gather flag enabled, gather each cycle for any planted fields
         try:
-            with open("./data/user/auto_planters.json", "r") as f:
-                auto_data = json.load(f)
-            auto_planters = auto_data.get("planters", [])
-            auto_gather = auto_data.get("gather", False)
-            if auto_gather:
-                for p in auto_planters:
-                    field = p.get("field", "")
-                    if field and field not in allGatheredFields:
-                        runTask(macro.gather, args=(field,), resetAfter=False)
-                        allGatheredFields.append(field)
+            # Only auto-gather when planters mode is auto and auto-harvest is enabled
+            if macro.setdat.get("planters_mode") == 2:
+                with open("./data/user/auto_planters.json", "r") as f:
+                    auto_data = json.load(f)
+                auto_planters = auto_data.get("planters", [])
+                auto_gather = auto_data.get("gather", False)
+                if auto_gather:
+                    for p in auto_planters:
+                        field = p.get("field", "")
+                        if field and field not in allGatheredFields:
+                            runTask(macro.gather, args=(field,), resetAfter=False)
+                            allGatheredFields.append(field)
         except Exception:
             pass
         
