@@ -4066,11 +4066,27 @@ class macro:
                 "light blue",
                 imagePath=questImgPath
             )
+            # record the detected quest title for external callers
+            try:
+                if not hasattr(self, '_last_quest_title'):
+                    self._last_quest_title = {}
+                self._last_quest_title[questGiver] = questTitle
+            except Exception:
+                pass
+
             self.toggleQuest()
             self.moveMouseToDefault()
             return incompleteObjectives
 
         #quest title found, now find the objectives
+        # record the detected quest title for external callers
+        try:
+            if not hasattr(self, '_last_quest_title'):
+                self._last_quest_title = {}
+            self._last_quest_title[questGiver] = questTitle
+        except Exception:
+            pass
+
         objectives = quest_data[questGiver][questTitle]
 
         #merge the texts into chunks. Using those chunks, compare it with the known objectives
