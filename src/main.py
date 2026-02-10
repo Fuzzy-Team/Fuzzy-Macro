@@ -1105,14 +1105,16 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 elif macro.setdat["planters_mode"] == 2:
                     with open("./data/user/auto_planters.json", "r") as f:
                         data = json.load(f)
-                        planterData = data["planters"]
-                        nectarLastFields = data["nectar_last_field"]
+                        planterData = data.get("planters", [])
+                        nectarLastFields = data.get("nectar_last_field", {})
+                        gatherFlag = data.get("gather", False)
                     f.close()
 
                     def saveAutoPlanterData():
                         data = {
                             "planters": planterData,
                             "nectar_last_field": nectarLastFields,
+                            "gather": gatherFlag
                         }
                         with open("./data/user/auto_planters.json", "w") as f:
                             json.dump(data, f, indent=3)
@@ -1282,6 +1284,12 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                 break
                             if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False, allowAFB=False):
                                 savePlacedPlanter(j, nextField, planterToPlace, nectar)
+                                # If global gather is enabled, gather the field immediately so it is harvested while planter grows
+                                try:
+                                    if gatherFlag:
+                                        runTask(macro.gather, args=(nextField,), resetAfter=False)
+                                except NameError:
+                                    pass
                                 plantersPlaced += 1
                     
                     if plantersPlaced < maxAllowedPlanters:
@@ -1310,6 +1318,11 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                     break
                                 if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False, allowAFB=False):
                                     savePlacedPlanter(j, nextField, planterToPlace, nectar)
+                                    try:
+                                        if gatherFlag:
+                                            runTask(macro.gather, args=(nextField,), resetAfter=False)
+                                    except NameError:
+                                        pass
                                     plantersPlaced += 1
                     
                     if plantersPlaced < maxAllowedPlanters:
@@ -1331,6 +1344,11 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                     break
                                 if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False, allowAFB=False):
                                     savePlacedPlanter(j, nextField, planterToPlace, nectar)
+                                    try:
+                                        if gatherFlag:
+                                            runTask(macro.gather, args=(nextField,), resetAfter=False)
+                                    except NameError:
+                                        pass
                                     plantersPlaced += 1
                     
                     executedTasks.add(taskId)
@@ -1698,6 +1716,20 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         allGatheredFields.append(field)
             except:
                 pass
+        # Auto-planters: if global gather flag enabled, gather each cycle for any planted fields
+        try:
+            with open("./data/user/auto_planters.json", "r") as f:
+                auto_data = json.load(f)
+            auto_planters = auto_data.get("planters", [])
+            auto_gather = auto_data.get("gather", False)
+            if auto_gather:
+                for p in auto_planters:
+                    field = p.get("field", "")
+                    if field and field not in allGatheredFields:
+                        runTask(macro.gather, args=(field,), resetAfter=False)
+                        allGatheredFields.append(field)
+        except Exception:
+            pass
         
         # Old code removed - all tasks now execute via priority order
         

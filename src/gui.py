@@ -104,8 +104,26 @@ def getManualPlanterData():
     
 @eel.expose
 def getAutoPlanterData():
-    with open("./data/user/auto_planters.json", "r") as f:
-        return json.load(f)
+    try:
+        with open("./data/user/auto_planters.json", "r") as f:
+            return json.load(f)
+    except Exception:
+        # Return sensible default if file missing or invalid
+        return {
+            "planters": [
+                {"planter": "", "nectar": "", "field": "", "harvest_time": 0, "nectar_est_percent": 0},
+                {"planter": "", "nectar": "", "field": "", "harvest_time": 0, "nectar_est_percent": 0},
+                {"planter": "", "nectar": "", "field": "", "harvest_time": 0, "nectar_est_percent": 0}
+            ],
+            "nectar_last_field": {
+                "comforting": "",
+                "refreshing": "",
+                "satisfying": "",
+                "motivating": "",
+                "invigorating": ""
+            },
+            "gather": False
+        }
 
 @eel.expose
 def clearAutoPlanters():
@@ -140,9 +158,33 @@ def clearAutoPlanters():
             "motivating": "",
             "invigorating": ""
         }
+        ,
+        "gather": False
     }
     with open("./data/user/auto_planters.json", "w") as f:
         json.dump(data, f, indent=3)
+
+
+@eel.expose
+def setAutoPlanterGather(val):
+    """Set the global 'gather' flag in data/user/auto_planters.json"""
+    try:
+        try:
+            with open("./data/user/auto_planters.json", "r") as f:
+                current = json.load(f)
+        except Exception:
+            current = None
+
+        if not current:
+            current = getAutoPlanterData()
+
+        current["gather"] = bool(val)
+
+        with open("./data/user/auto_planters.json", "w") as f:
+            json.dump(current, f, indent=3)
+        return True
+    except Exception:
+        return False
     
 @eel.expose
 def clearBlender():
