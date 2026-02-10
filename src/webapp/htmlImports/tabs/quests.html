@@ -51,6 +51,18 @@
           },
         },
       ]);
+
+      buildStandardContainer(questsSettingsParent, "Ignore Petal Quests", "Ignore specified petal quests when enabled", [
+        {
+          id: "ignore_petal_quests",
+          title: "Ignore Petal Quests",
+          desc: "When enabled, quests listed below will be logged and skipped",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+      ]);
     </script>
   </div>
 
