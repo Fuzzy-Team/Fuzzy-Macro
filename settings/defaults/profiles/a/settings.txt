@@ -155,6 +155,7 @@ hotbar7_use_every_format=secs
 convert_balloon_every=30
 convert_balloon=always
 polar_bear_quest=False
+brown_bear_quest=False
 quest_gather_mins=2
 quest_gather_return=no override
 honey_bee_quest=False

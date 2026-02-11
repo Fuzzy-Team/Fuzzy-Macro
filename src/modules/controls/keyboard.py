@@ -1,10 +1,6 @@
 import sys
 import os
-if sys.platform == "win32":
-    import pydirectinput as pag
-    pag.PAUSE = 0.1
-else:
-    import pyautogui as pag
+import pyautogui as pag
 import time
 from modules.submacros.hasteCompensation import HasteCompensationRevamped
 import threading
@@ -96,8 +92,7 @@ class keyboard:
     @staticmethod
     def keyDown(k, pause = True):
         #for some reason, the function key is sometimes held down, causing it to open the dock or enable dictation
-        if sys.platform == "darwin":
-            keyboard.keyUp('fn', False)
+        keyboard.keyUp('fn', False)
         pag.keyDown(k, _pause = pause)
 
     @staticmethod

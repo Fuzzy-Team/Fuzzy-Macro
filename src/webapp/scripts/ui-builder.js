@@ -40,13 +40,33 @@ const slotArray = [1, 2, 3, 4, 5, 6, 7];
 //id: id of dropdown element
 //data: array of values to set
 function setDropdownData(id, data) {
-  //create the html
-  html = "";
+  //create the html (normalize data-value to match buildInput processing)
+  let html = "";
   data.forEach((x) => {
-    html += `<div class = "option" data-value = "${x}">${x}</div>`;
+    let value = x;
+    let display = x;
+    // support objects of the form { label: "Visible", value: "internal" }
+    if (x && typeof x === "object") {
+      if (x.hasOwnProperty("value")) value = x.value;
+      if (x.hasOwnProperty("label")) display = x.label;
+    }
+    if (typeof value === "string") {
+      value = stripHTMLTags(value);
+      try {
+        value = value.replace(/[^\p{L}\p{N}\p{P}\p{Z}^$\n]/gu, "");
+      } catch (e) {
+        // If the unicode regex isn't supported, fall back to a simpler remove-emojis step
+        value = value.replace(/[^\w\s\-\.,]/g, "");
+      }
+      value = value.trim().toLowerCase();
+    }
+    html += `<div class = "option" data-value = "${value}">${display}</div>`;
   });
   //add it to the element
-  document.getElementById(id).children[1].children[0].innerHTML = html;
+  const container = document.getElementById(id);
+  if (container && container.children[1] && container.children[1].children[0]) {
+    container.children[1].children[0].innerHTML = html;
+  }
 }
 
 function buildInput(id, type) {
@@ -70,12 +90,18 @@ function buildInput(id, type) {
     for (let i = 0; i < type.data.length; i++) {
       const x = type.data[i];
       let value = x;
+      let display = x;
+      // allow {label, value} objects for visual-only label changes
+      if (x && typeof x === "object") {
+        if (x.hasOwnProperty("value")) value = x.value;
+        if (x.hasOwnProperty("label")) display = x.label;
+      }
       if ($.type(value) === "string") {
         value = stripHTMLTags(value);
         value = value.replace(/[^\p{L}\p{N}\p{P}\p{Z}^$\n]/gu, ""); //remove emojis
         value = value.trim().toLowerCase(); //remove leading/trailing white space, also set to lowercase
       }
-      html += `<div class = "option" data-value = "${value}">${x}</div>`;
+      html += `<div class = "option" data-value = "${value}">${display}</div>`;
     }
     html += `</div>
             </div>
