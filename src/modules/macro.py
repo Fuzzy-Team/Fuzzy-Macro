@@ -1194,7 +1194,7 @@ class macro:
         return True
 
 
-    def convert(self, bypass = False):
+    def convert(self, bypass = False, forced_convert_balloon=None):
         self.location = "spawn"
         if not bypass:
             if not self.isBesideEImage("makehoney"): 
@@ -1215,8 +1215,10 @@ class macro:
         self.converting = True
 
         #check if convert balloon
-        convertBalloon = (self.setdat["convert_balloon"] == "always") or \
-                        (self.setdat["convert_balloon"] == "every" and self.hasRespawned("convert_balloon", self.setdat["convert_balloon_every"]*60))
+        conv_setting = str(self.setdat.get("convert_balloon", "")).lower().replace(" ", "_")
+        convertBalloon = (conv_setting == "always") or \
+                (conv_setting == "every" and self.hasRespawned("convert_balloon", int(self.setdat.get("convert_balloon_every", 30))*60)) or \
+                (conv_setting == "every_gather" and forced_convert_balloon is True)
         
         convertedBackpack = False
 
@@ -2116,7 +2118,7 @@ class macro:
             time.sleep(0.4)
             for _ in range(7):
                 #goo timer continues via background thread during conversion attempts
-                if self.convert():
+                if self.convert(forced_convert_balloon=(str(self.setdat.get("convert_balloon","")).lower().replace(" ","_")=="every_gather")):
                     break
                 self.keyboard.walk("d",0.1)
                 time.sleep(0.2) #add a delay so that the E can popup
@@ -2126,7 +2128,7 @@ class macro:
                     self.logger.webhook("","Can't find hive, attempting whirligig fallback", "dark brown", "screen")
                     self.useItemInInventory("whirligig")
                     time.sleep(1)
-                    if not self.convert():
+                    if not self.convert(forced_convert_balloon=(str(self.setdat.get("convert_balloon","")).lower().replace(" ","_")=="every_gather")):
                         self.logger.webhook("","Whirligig fallback failed, resetting", "dark brown", "screen")
                         self.reset()
                     else:
@@ -2146,7 +2148,7 @@ class macro:
             #goo timer continues via background thread during whirligig usage
             self.useItemInInventory("whirligig")
             time.sleep(1)
-            if not self.convert():
+            if not self.convert(forced_convert_balloon=(str(self.setdat.get("convert_balloon","")).lower().replace(" ","_")=="every_gather")):
                 self.logger.webhook("","Whirligigs failed, walking to hive", "dark brown", "screen")
                 walkToHive()
                 return
