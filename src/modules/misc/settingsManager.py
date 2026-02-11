@@ -616,7 +616,7 @@ def exportProfile(profile_name):
         export_data = {
             "profile_name": profile_name,
             "export_date": datetime.now().isoformat(),
-            "version": "1.0",
+            "version": getMacroVersion(),
             "settings": settings_data,
             "fields": fields_data,
             "generalsettings": generalsettings_data
