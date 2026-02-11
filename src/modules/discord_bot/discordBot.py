@@ -1480,13 +1480,13 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         await interaction.response.send_message(embed=embed)
 
-    '''
-    @bot.tree.command(name = "hourly report", description = "Send the hourly report")
+
+    @bot.tree.command(name = "hourlyreport", description = "Send the hourly report")
     async def hourlyReport(interaction: discord.Interaction):
         await interaction.response.defer()
         generateHourlyReport()
         await interaction.followup.send(file = discord.File("hourlyReport.png"))
-    '''
+
         
     #start bot
     try:
