@@ -408,6 +408,8 @@ questCompleterMobNames = {
     "wolves": "werewolf",
     "king_beetle": "king_beetle",
     "king beetle": "king_beetle",
+    "tunnel_bear": "tunnel_bear",
+    "tunnel bear": "tunnel_bear",
     "coconut_crab": "coconut_crab",
     "coconut crab": "coconut_crab",
     "coconut_crabs": "coconut_crab",
@@ -2975,6 +2977,47 @@ class macro:
         self.clear_task_status()
         self.reset()
 
+    def kingBeetle(self):
+        st = time.time()
+        for _ in range(2):
+            self.cannon()
+            self.logger.webhook("","Travelling: King Beetle","dark brown")
+            self.goToField("blue_flower")
+            self.died = False
+            self.bossStatus = None
+            self.runPath("boss/king_beetle")
+            if self.died or self.bossStatus is not None: break
+
+        if self.died:
+            self.logger.webhook("", "Died to King Beetle", "dark brown", ping_category="ping_character_deaths")
+            self.reset(convert=False)
+            self.died = False
+        elif self.bossStatus == "defeated":
+            self.logger.webhook("", "Defeated: King Beetle", "bright green", "screen", ping_category="ping_mob_events")
+        self.hourlyReport.addHourlyStat("bug_run_time", time.time()-st)
+        self.saveTiming("king_beetle")
+        self.reset()
+
+    def tunnelBear(self):
+        st = time.time()
+        for _ in range(2):
+            self.cannon()
+            self.logger.webhook("","Travelling: Tunnel Bear","dark brown")
+            self.goToField("pineapple")
+            self.died = False
+            self.bossStatus = None
+            self.runPath("boss/tunnel_bear")
+            if self.died or self.bossStatus is not None: break
+
+        if self.died:
+            self.logger.webhook("", "Died to Tunnel Bear", "dark brown", ping_category="ping_character_deaths")
+            self.reset(convert=False)
+            self.died = False
+        elif self.bossStatus == "defeated":
+            self.logger.webhook("", "Defeated: Tunnel Bear", "bright green", "screen", ping_category="ping_mob_events")
+        self.hourlyReport.addHourlyStat("bug_run_time", time.time()-st)
+        self.saveTiming("tunnel_bear")
+        self.reset()
     
     def goToPlanter(self, planter, field, method):
         global finalKey
@@ -3973,7 +4016,7 @@ class macro:
             if res:
                 rx, ry = res
                 rw, rh = questGiverImg.size
-                img = cv2.cvtColor(np.array(screen), cv2.COLOR_RGBA2GRAY)
+                img = cv2.cvtColor(np.array(screen), cv2.COLOR_RGBA2BGR)
                 img = img[ry-10:ry+rh+20, rx-5:]
                 img = cv2.threshold(img, 150, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
                 img = cv2.GaussianBlur(img, (5, 5), 0)
@@ -4347,8 +4390,10 @@ class macro:
                 if i > maxHeight and startIndex is None:
                     break
                 if hasColor and startIndex is None:
+                    # Found the starting point of the first quest title area
                     startIndex = i
                 elif not hasColor and startIndex is not None:
+                    # Found the ending point of the quest title area
                     endIndex = i
                     break
 
@@ -4522,12 +4567,12 @@ class macro:
             # Collect patterns (specific collectible items only)
             (r'.*\b(booster|dispenser|machine|printer|stack|clock|stocking|wreath|feast|samovar|snow|art|candle|match|storm)\b.*', 'collect', r'(booster|dispenser|machine|printer|stack|clock|stocking|wreath|feast|samovar|snow|art|candle|match|storm)'),
             # Kill patterns
-            (r'.*\b(kill|defeat|destroy|slay)\b.*', 'kill', r'(giant\s+ants?|army\s+ants?|fire\s+ants?|coconut\s+crabs?|mechsquitos?|scorpions?|mantises?|spiders?|beetles?|ladybugs?|rhinobeetles?|ants?|werewolves?|wolves?|king\s+beetles?)'),
+            (r'.*\b(kill|defeat|destroy|slay)\b.*', 'kill', r'(giant\s+ants?|army\s+ants?|fire\s+ants?|coconut\s+crabs?|mechsquitos?|scorpions?|mantises?|spiders?|beetles?|ladybugs?|rhinobeetles?|ants?|werewolves?|wolves?|king\s+beetles?|tunnel\s+bear)'),
             # Gather patterns (fields/plants) - more flexible to handle OCR errors
             (r'.*\b(gather|collect|get|harvest|pick)\b.*', 'gather', r'(strawberr\w*|blue\s*flower|pine\s*tree|mushroom|rose|clover|bamboo|cactus|pumpkin|pineapple|coconut|dandelion|spider|stump|pepper|mountain\s*top|sunflower|sunflow\w*|pineappl\w*)'),
             # Fallback patterns
             (r'.*\b(blueberr\w*|strawberr\w*)\b.*', 'fieldtoken', r'blueberr\w*|strawberr\w*'),
-            (r'.*\b(coconut\s+crabs?|mechsquitos?|scorpions?|mantises?|spiders?|beetles?|ladybugs?|rhinobeetles?|ants?|werewolves?|wolves?)\b.*', 'kill', r'coconut\s+crabs?|mechsquitos?|scorpions?|mantises?|spiders?|beetles?|ladybugs?|rhinobeetles?|ants?|werewolves?|wolves?'),
+            (r'.*\b(coconut\s+crabs?|mechsquitos?|scorpions?|mantises?|spiders?|beetles?|ladybugs?|rhinobeetles?|ants?|werewolves?|wolves?|tunnel\s+bear)\b.*', 'kill', r'coconut\s+crabs?|mechsquitos?|scorpions?|mantises?|spiders?|beetles?|ladybugs?|rhinobeetles?|ants?|werewolves?|wolves?|tunnel\s+bear'),
             (r'.*', 'unknown', r'.*')  # Default fallback changed from 'gather' to 'unknown'
         ]
 
@@ -4773,9 +4818,9 @@ class macro:
         elif action == 'kill':
             # Filter out unsupported boss mobs
             if 'king' in text.lower() and 'beetle' in normalizedTarget:
-                return []  # Cannot kill king beetles
+                return ['kill_king_beetle']  # Add King Beetle to priority tasks
             if 'tunnel_bear' in normalizedTarget:
-                return []  # Cannot kill tunnel bears
+                return ['kill_tunnel_bear']  # Add Tunnel Bear to priority tasks
             if 'vicious' in text.lower() and 'bee' in normalizedTarget:
                 return ['stinger_hunt']
             else:
