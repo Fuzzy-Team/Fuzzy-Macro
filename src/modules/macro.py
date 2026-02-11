@@ -2986,6 +2986,32 @@ class macro:
             self.died = False
             self.bossStatus = None
             self.runPath("boss/king_beetle")
+
+            # Continue the movement pattern and check for defeat
+            while self.bossStatus is None and not self.died:
+                # Check if defeated
+                if self.blueTextImageSearch("defeated"):
+                    self.bossStatus = "defeated"
+                    break
+                # Check if died
+                if self.blueTextImageSearch("died"):
+                    self.died = True
+                    break
+                # Continue movement
+                self.keyboard.walk("d", 0.25)
+                sleep(0.75)
+
+            # Collect rewards if defeated
+            if self.bossStatus == "defeated":
+                self.keyboard.walk("a", 1)
+                self.keyboard.walk("w", 3)
+                for i in range(3):
+                    self.keyboard.walk("a", 0.25)
+                    self.keyboard.walk("s", 2)
+                    self.keyboard.walk("a", 0.25)
+                    self.keyboard.walk("w", 2)
+                sleep(1)
+
             if self.died or self.bossStatus is not None: break
 
         if self.died:
@@ -3007,6 +3033,26 @@ class macro:
             self.died = False
             self.bossStatus = None
             self.runPath("boss/tunnel_bear")
+            
+            # Continue the movement pattern and check for defeat
+            while self.bossStatus is None and not self.died:
+                # Check if defeated
+                if self.blueTextImageSearch("defeated"):
+                    self.bossStatus = "defeated"
+                    break
+                # Check if died
+                if self.blueTextImageSearch("died"):
+                    self.died = True
+                    break
+            # Continue movement
+            self.keyboard.walk("d", 0.25)
+            sleep(0.75)
+
+            # Collect rewards if defeated
+            if self.bossStatus == "defeated":
+                self.keyboard.walk("d", 1.5)
+                self.keyboard.walk("a", 3)
+                sleep(1)
             if self.died or self.bossStatus is not None: break
 
         if self.died:
