@@ -122,9 +122,13 @@ function initializePrioritySearch() {
   const searchInput = document.getElementById("priority-search-input");
   if (!searchInput) return;
 
-  searchInput.addEventListener("input", (e) => {
-    const searchTerm = e.target.value.toLowerCase().trim();
-    const container = document.getElementById("task_priority_order-container");
+    // Remove any existing event listener to prevent duplicates
+    const newSearchInput = searchInput.cloneNode(true);
+    searchInput.parentNode.replaceChild(newSearchInput, searchInput);
+  
+    newSearchInput.addEventListener("input", (e) => {
+      const searchTerm = e.target.value.toLowerCase().trim();
+      const container = document.getElementById("task_priority_order-container");
     if (!container) return;
 
     const items = container.querySelectorAll(".drag-item");
@@ -132,9 +136,9 @@ function initializePrioritySearch() {
       const text =
         item.querySelector(".drag-text")?.textContent.toLowerCase() || "";
       if (searchTerm === "" || text.includes(searchTerm)) {
-        item.classList.remove("hidden");
+          item.style.display = "";
       } else {
-        item.classList.add("hidden");
+          item.style.display = "none";
       }
     });
   });
@@ -620,5 +624,29 @@ function showProfileStatus(elementId, message, type) {
     setTimeout(() => {
       statusElement.innerHTML = "";
     }, 5000);
+  }
+}
+
+// Trigger beta update from commit hash
+async function triggerBetaUpdate() {
+  const el = document.getElementById("beta_commit_hash");
+  if (!el) return alert("Beta commit input not found.");
+  const hash = el.value.trim();
+  const re = /^[0-9a-fA-F]{7}$/;
+  if (!re.test(hash)) return alert("Please enter a valid 7-character hex commit hash.");
+
+  if (!confirm(`Update macro from commit ${hash}? This will backup and apply files.`)) return;
+
+  try {
+    // call backend updater
+    const res = await eel.updateFromHash(hash)();
+    if (res) {
+      alert("Update started. The app may close to apply the update.");
+    } else {
+      alert("Update failed or was aborted. Check logs for details.");
+    }
+  } catch (e) {
+    console.error(e);
+    alert("Error initiating update: " + e);
   }
 }

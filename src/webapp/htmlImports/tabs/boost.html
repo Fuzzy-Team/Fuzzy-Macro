@@ -10,18 +10,18 @@
       const hotbar = document.getElementById("hotbar").parentElement;
       for (let i = 1; i <= 7; i++) {
         const html = `
-                    ${i > 1 ? '<div class="seperator" style="margin-bottom: 1rem;"></div>' : ""}
-                    <h3 class="poppins-semibold">Slot ${i}</h3>
-                    <table style="width: 70%;">
-                        <tr>
-                            <td>
-                                <h4 class="poppins-regular" style="margin-top:1rem">Use When:</h4>
-                                <div class="poppins-regular" style="font-size:0.9rem; color: #adb4bc">When to use the slot</div>
-                            </td>
-                            <td valign="top" style="padding-top: 0.8rem">
-                                ${buildInput(`hotbar${i}_use_when`, { name: "dropdown", data: ["Never", "Always", "Gathering", "Converting"], triggerFunction: saveProfileTriggerFunction })}
-                            </td>
-                        </tr>
+              ${i > 1 ? '<div class="seperator" style="margin-bottom: 1rem;"></div>' : ""}
+              <h3 class="poppins-semibold">Slot ${i}</h3>
+              <table style="width: 70%;">
+                <tr>
+                  <td>
+                    <h4 class="poppins-regular" style="margin-top:1rem">Use When:</h4>
+                    <div class="poppins-regular" style="font-size:0.9rem; color: #adb4bc">When to use the slot</div>
+                  </td>
+                  <td valign="top" style="padding-top: 0.8rem">
+                    ${buildInput(`hotbar${i}_use_when`, { name: "dropdown", data: ["Never", "Always", "Gathering", "Converting", "Attacking"], triggerFunction: saveProfileTriggerFunction })}
+                  </td>
+                </tr>
                         <tr>
                             <td>
                                 <h4 class="poppins-regular" style="margin-top:1rem">Use every X secs/mins:</h4>

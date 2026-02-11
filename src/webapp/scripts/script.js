@@ -94,9 +94,41 @@ function saveSetting(ele, type) {
 
   if (type == "profile") {
     eel.saveProfileSetting(id, value);
+    // Refresh priority/drag-list highlights after profile setting changes
+    try {
+      loadAllSettings().then((settings) => {
+        if (typeof refreshPriorityHighlights === "function") {
+          refreshPriorityHighlights(settings);
+        }
+      });
+    } catch (e) {
+      // ignore
+    }
   } else if (type == "general") {
     eel.saveGeneralSetting(id, value);
   }
+}
+
+// Update enabled/disabled state for all drag items based on settings
+function refreshPriorityHighlights(settings) {
+  if (!settings) return;
+  const items = document.querySelectorAll('.drag-item[data-id]');
+  items.forEach((item) => {
+    const taskId = item.dataset.id;
+    let enabled = true;
+    try {
+      if (typeof window._isTaskEnabledForSettings === 'function') {
+        enabled = window._isTaskEnabledForSettings(taskId, settings);
+      }
+    } catch (e) {
+      enabled = true;
+    }
+    if (enabled) {
+      item.classList.remove('disabled');
+    } else {
+      item.classList.add('disabled');
+    }
+  });
 }
 
 //returns a object based on the settings
@@ -115,6 +147,12 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
 
   const container = dragListElement.querySelector(".drag-list-container");
   if (!container) return;
+
+  // Reset priority search to avoid cached filters when reloading settings
+  if (dragListElement.id === "task_priority_order") {
+    const searchInput = document.getElementById("priority-search-input");
+    if (searchInput) searchInput.value = "";
+  }
 
   // Clear existing items
   container.innerHTML = "";
@@ -201,6 +239,49 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
     return badges[category] || "";
   }
 
+  // Expose a small helper globally so other code can update enabled/disabled states
+  window._isTaskEnabledForSettings = function (taskId, settingsObj) {
+    if (!taskId) return false;
+    // replicate isTaskEnabled logic from above
+    if (taskId.startsWith("gather_")) {
+      const fieldName = taskId.replace("gather_", "").replace("_", " ");
+      if (settingsObj.fields_enabled && settingsObj.fields) {
+        for (let i = 0; i < settingsObj.fields_enabled.length; i++) {
+          if (settingsObj.fields_enabled[i] && settingsObj.fields[i] === fieldName) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    if (taskId.startsWith("collect_")) {
+      const collectName = taskId.replace("collect_", "");
+      if (collectName === "sticker_printer") return settingsObj.sticker_printer || false;
+      if (collectName === "sticker_stack") return settingsObj.sticker_stack || false;
+      return settingsObj[collectName] || false;
+    }
+
+    if (taskId.startsWith("kill_")) {
+      const killName = taskId.replace("kill_", "");
+      return settingsObj[killName] || false;
+    }
+
+    if (taskId.startsWith("quest_")) {
+      const questName = taskId.replace("quest_", "").replace("_", "_");
+      return settingsObj[questName + "_quest"] || false;
+    }
+
+    if (taskId === "mondo_buff") return settingsObj.mondo_buff || false;
+    if (taskId === "stinger_hunt") return settingsObj.stinger_hunt || false;
+    if (taskId === "auto_field_boost") return settingsObj.auto_field_boost || false;
+    if (taskId === "ant_challenge") return settingsObj.ant_challenge || false;
+    if (taskId === "blender") return settingsObj.blender || false;
+    if (taskId === "planters") return settingsObj.planters || false;
+
+    return false;
+  };
+
   // Create items in the specified order
   orderArray.forEach((taskId) => {
     let taskName = taskId; // Default to taskId if not found in map
@@ -264,6 +345,7 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
       auto_field_boost: "Auto Field Boost",
       ant_challenge: "Ant Challenge",
       quest_polar_bear: "Quest: Polar Bear",
+      quest_brown_bear: "Quest: Brown Bear",
       quest_honey_bee: "Quest: Honey Bee",
       quest_bucko_bee: "Quest: Bucko Bee",
       quest_riley_bee: "Quest: Riley Bee",
@@ -327,14 +409,49 @@ function loadInputs(obj, save = "") {
   if (save == "profile") {
     eel.saveDictProfileSettings(obj);
   }
+  // Update visibility of any dependent fields after loading inputs
+  try { updateReturnDependentFields(); } catch (e) { /* ignore */ }
+
+  // Ensure the beta commit input is never pre-filled from saved settings
+  try {
+    const betaEl = document.getElementById("beta_commit_hash");
+    if (betaEl) betaEl.value = "";
+  } catch (e) {
+    // ignore
+  }
 }
 
 function applyTheme(theme) {
   if (theme) localStorage.setItem("gui_theme", theme);
-  if (theme && theme.toLowerCase() === "purple") {
+  // remove any known theme classes first
+  document.documentElement.classList.remove("theme-purple", "theme-cream", "theme-red", "theme-blue");
+  if (!theme) return;
+  const t = theme.toLowerCase();
+  if (t === "purple") {
     document.documentElement.classList.add("theme-purple");
+  } else if (t === "cream") {
+    // accept a few possible names for the new pale-yellow theme
+    document.documentElement.classList.add("theme-cream");
+  } else if (t === "red") {
+    document.documentElement.classList.add("theme-red");
+  } else if (t === "blue") {
+    document.documentElement.classList.add("theme-blue");
+  }
+}
+
+// Show/hide inputs that depend on the 'return' dropdown value
+function updateReturnDependentFields() {
+  const returnEle = document.getElementById("return");
+  if (!returnEle) return;
+  const val = getDropdownValue(returnEle); // normalized lower-case value without emoji
+  const fallbackEle = document.getElementById("use_whirlwig_fallback");
+  if (!fallbackEle) return;
+  const form = fallbackEle.closest("form");
+  if (!form) return;
+  if (val === "walk") {
+    form.style.display = "flex";
   } else {
-    document.documentElement.classList.remove("theme-purple");
+    form.style.display = "none";
   }
 }
 /*
@@ -458,6 +575,8 @@ function updateDropDownDisplay(optionEle) {
   selectEle.dataset.value = optionEle.dataset.value;
   //set the display to match the option
   selectEle.innerHTML = optionEle.innerHTML;
+  // Ensure dependent fields reflect this change
+  try { updateReturnDependentFields(); } catch (e) { /* ignore */ }
 }
 //document click event
 function dropdownClicked(event) {

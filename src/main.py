@@ -1,9 +1,17 @@
 from modules.misc import messageBox
-#check if step 3 installing dependencies was ran
+#check if installing dependencies was ran
 try:
     import requests
 except ModuleNotFoundError:
-    messageBox.msgBox(title="Dependencies not installed", text="It seems like you have not finished step 3 of the installation process. Refer to https://existance-macro.gitbook.io/existance-macro-docs/macro-installation/markdown/2.-installing-dependencies")
+    try:
+        script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "install_dependencies.command"))
+        if os.path.exists(script):
+            subprocess.Popen(["/bin/bash", script])
+        else:
+            messageBox.msgBox(title="Dependencies not installed", text="Dependencies are not installed. Refer to Discord for help.")
+    except Exception:
+        pass
+    sys.exit(0)
 from pynput import keyboard
 import multiprocessing
 import ctypes
@@ -34,14 +42,349 @@ except Exception:
 try:
 	from modules.misc.ColorProfile import DisplayColorProfile
 except ModuleNotFoundError:
-	messageBox.msgBox(title="Dependencies not installed", text="The new update requires new dependencies. Refer to https://existance-macro.gitbook.io/existance-macro-docs/macro-installation/markdown/2.-installing-dependencies.")
-	quit()
+    try:
+        script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "install_dependencies.command"))
+        if os.path.exists(script):
+            subprocess.Popen(["/bin/bash", script])
+        else:
+            messageBox.msgBox(title="Dependencies not installed", text="The new update requires new dependencies. Refer to Discord for help.")
+    except Exception:
+        pass
+    quit()
 from modules.submacros.hourlyReport import HourlyReport
 mw, mh = pag.size()
 
+# Hardcoded petal quest titles to ignore (lowercase)
+HARDCODED_PETAL_IGNORE_TITLES = {"petal tabbouleh", "petals"}
+
+# Discord Rich Presence Manager
+try:
+    from pypresence import Presence, exceptions as pypresence_exceptions
+    PYPRESENCE_AVAILABLE = True
+except ImportError:
+    PYPRESENCE_AVAILABLE = False
+    print("pypresence not installed - Discord Rich Presence will not be available")
+
+class RichPresenceManager:
+    """Manages Discord Rich Presence updates based on macro status"""
+    
+    # Hardcoded Application ID for Fuzzy Macro
+    DISCORD_APP_ID = "1468035015194710068"
+    
+    def __init__(self, status_value, enabled: bool = False, presence_value=None):
+        """
+        Initialize Rich Presence Manager
+        
+        Args:
+            status_value: Shared multiprocessing.Value containing current macro status
+            enabled: Whether Rich Presence is enabled
+            presence_value: Optional shared Value for rich presence overrides
+        """
+        self.application_id = self.DISCORD_APP_ID
+        self.status = status_value
+        self.presence = presence_value
+        self.enabled = enabled
+        self.rpc = None
+        self.last_activity = ""
+        self.connected = False
+        self.running = False
+        self.thread = None
+        self.start_time = int(time.time())
+        
+        # Load external mapping file for presence (if present)
+        self.map = {}
+        map_candidates = [
+            os.path.join(os.path.dirname(__file__), "modules", "discord_bot", "rich_presence_map.json")
+        ]
+        for mp in map_candidates:
+            try:
+                if os.path.exists(mp):
+                    with open(mp, "r") as f:
+                        self.map = json.load(f)
+                    break
+            except Exception:
+                continue
+
+        # Build asset lookup mapping from provided assets and sensible defaults
+        asset_mapping = {}
+        # Known quest NPCs
+        asset_mapping.update({
+            "polar_bear": "polar_bear",
+            "polar bear": "polar_bear",
+            "honey_bee": "honey_bee",
+            "honey bee": "honey_bee",
+            "bucko_bee": "bucko_bee",
+            "bucko bee": "bucko_bee",
+            "riley_bee": "riley_bee",
+            "riley bee": "riley_bee",
+        })
+        # Add assets lists from the map (if present)
+        assets_section = self.map.get("assets", {})
+        for group, lst in assets_section.items():
+            for name in lst:
+                key = name.replace(" ", "_")
+                asset_mapping[key] = key
+                asset_mapping[name] = key
+
+        # Allow optional explicit lookup section
+        explicit = self.map.get("asset_lookup", {}) or {}
+        for k, v in explicit.items():
+            asset_mapping[k] = v
+
+        self.asset_mapping = asset_mapping
+        
+    def connect(self) -> bool:
+        """Initialize Discord RPC connection"""
+        if not PYPRESENCE_AVAILABLE:
+            return False
+            
+        if not self.application_id or self.application_id == "":
+            return False
+            
+        try:
+            self.rpc = Presence(self.application_id)
+            self.rpc.connect()
+            self.connected = True
+            print(f"Discord Rich Presence connected")
+            return True
+        except Exception as e:
+            # Silently fail if Discord client isn't running
+            self.connected = False
+            return False
+    
+    def disconnect(self):
+        """Close Discord RPC connection"""
+        if self.rpc and self.connected:
+            try:
+                # Try to clear presence first (if supported) to remove lingering status
+                try:
+                    if hasattr(self.rpc, "clear"):
+                        self.rpc.clear()
+                except Exception:
+                    pass
+                # Close the RPC connection
+                try:
+                    self.rpc.close()
+                except Exception:
+                    pass
+            finally:
+                self.connected = False
+                self.rpc = None
+                print("Discord Rich Presence disconnected")
+    
+    def parse_activity(self, status_str: str) -> dict:
+        """Parse status string into Rich Presence data"""
+        payload_overrides = {}
+        if isinstance(status_str, str) and status_str.startswith("rp:"):
+            try:
+                payload = json.loads(status_str[3:])
+            except Exception:
+                payload = {}
+            for key in ("state", "details", "large_image", "large_text", "small_image", "small_text"):
+                if key in payload:
+                    payload_overrides[key] = payload[key]
+            status_str = payload.get("activity") or payload.get("status") or payload.get("key")
+            task = payload.get("task")
+            field = payload.get("field")
+            if not status_str and task:
+                if field:
+                    field_key = str(field).replace(" ", "_").lower()
+                    status_str = f"{task}_{field_key}"
+                else:
+                    status_str = str(task)
+
+        # Treat empty, whitespace-only, or explicit 'none' values as idle
+        if not status_str or (isinstance(status_str, str) and status_str.strip().lower() in ("", "none")):
+            status_str = "idle_main_menu"
+        
+        status_lower = str(status_str).lower()
+
+        # exact matches from map (use lowercase keys for safety)
+        exact = {k.lower(): v for k, v in self.map.get("exact", {}).items()}
+        if status_lower in exact:
+            activity = exact[status_lower]
+            if payload_overrides:
+                merged = dict(activity)
+                merged.update({k: v for k, v in payload_overrides.items() if v is not None})
+                if merged.get("small_image") == "":
+                    merged["small_image"] = None
+                if merged.get("small_text") == "":
+                    merged["small_text"] = None
+                return merged
+            return activity
+
+        # prefix matches
+        prefix_map = self.map.get("prefix", {})
+        for pfx, data in prefix_map.items():
+            if status_lower.startswith(pfx.lower()):
+                key = status_lower[len(pfx):]
+                field = key.replace("_", " ").title()
+                payload = dict(data)
+                # substitute placeholders
+                payload["state"] = payload["state"].replace("{field}", field).replace("{key}", key)
+                payload["details"] = payload.get("details", "").replace("{field}", field).replace("{key}", key)
+                payload["small_text"] = payload.get("small_text", "").replace("{field}", field).replace("{key}", key)
+                # handle small image key patterns
+                small_image = payload.get("small_image") or ""
+                if "{asset}" in small_image:
+                    asset = self.asset_mapping.get(key, None) or key
+                    small_image = small_image.replace("{asset}", asset)
+                if "{key}" in small_image:
+                    small_image = small_image.replace("{key}", key)
+                payload["small_image"] = small_image if small_image else None
+                if payload_overrides:
+                    payload.update({k: v for k, v in payload_overrides.items() if v is not None})
+                    if payload.get("small_image") == "":
+                        payload["small_image"] = None
+                    if payload.get("small_text") == "":
+                        payload["small_text"] = None
+                return payload
+
+        # contains rules - check in order of specificity
+        contains = self.map.get("contains", {})
+        for substring, data in contains.items():
+            if substring in status_lower:
+                activity = data
+                if payload_overrides:
+                    merged = dict(activity)
+                    merged.update({k: v for k, v in payload_overrides.items() if v is not None})
+                    if merged.get("small_image") == "":
+                        merged["small_image"] = None
+                    if merged.get("small_text") == "":
+                        merged["small_text"] = None
+                    return merged
+                return activity
+
+        # fallback to default
+        default = self.map.get("default")
+        if default:
+            activity = default
+            if payload_overrides:
+                merged = dict(activity)
+                merged.update({k: v for k, v in payload_overrides.items() if v is not None})
+                if merged.get("small_image") == "":
+                    merged["small_image"] = None
+                if merged.get("small_text") == "":
+                    merged["small_text"] = None
+                return merged
+            return activity
+
+        # final fallback if no map is loaded
+        activity = {
+            "state": str(status_str).replace("_", " ").title(),
+            "details": "Macro active",
+            "large_image": "fuzzy_macro",
+            "large_text": "Fuzzy Macro",
+            "small_image": None,
+            "small_text": None,
+        }
+        if payload_overrides:
+            activity.update({k: v for k, v in payload_overrides.items() if v is not None})
+            if activity.get("small_image") == "":
+                activity["small_image"] = None
+            if activity.get("small_text") == "":
+                activity["small_text"] = None
+        return activity
+    
+    def update_presence(self, activity_data: dict):
+        """Update Discord Rich Presence with new activity data"""
+        if not self.connected or not self.rpc:
+            return
+        
+        try:
+            # Build presence payload
+            payload = {
+                "state": activity_data["state"],
+                "details": activity_data["details"],
+                "large_image": activity_data["large_image"],
+                "large_text": activity_data["large_text"],
+                "start": self.start_time,
+            }
+            
+            # Add small image if available
+            if activity_data["small_image"]:
+                payload["small_image"] = activity_data["small_image"]
+                payload["small_text"] = activity_data["small_text"]
+            
+            self.rpc.update(**payload)
+        except Exception as e:
+            # Silently handle errors (e.g., Discord closed)
+            self.connected = False
+    
+    def update_loop(self):
+        """Background thread to monitor status and update RPC"""
+        while self.running:
+            try:
+                # Check if enabled
+                if not self.enabled:
+                    if self.connected:
+                        self.disconnect()
+                    time.sleep(2)
+                    continue
+                
+                # Try to connect if not connected
+                if not self.connected:
+                    self.connect()
+                    time.sleep(2)
+                    continue
+                
+                # Get current status (presence overrides status when available)
+                presence_status = ""
+                if self.presence is not None:
+                    try:
+                        presence_status = self.presence.value
+                    except Exception:
+                        presence_status = ""
+
+                if presence_status and str(presence_status).strip().lower() not in ("", "none"):
+                    current_status = presence_status
+                else:
+                    current_status = self.status.value
+                
+                # Update if status changed
+                if current_status != self.last_activity:
+                    activity_data = self.parse_activity(current_status)
+                    self.update_presence(activity_data)
+                    self.last_activity = current_status
+                
+                time.sleep(1)  # Check every second
+            except Exception as e:
+                # Silently handle any errors
+                time.sleep(2)
+    
+    def start(self):
+        """Start the Rich Presence update thread"""
+        if self.running:
+            return
+        
+        if not PYPRESENCE_AVAILABLE:
+            return
+        
+        self.running = True
+        self.thread = Thread(target=self.update_loop, daemon=True)
+        self.thread.start()
+    
+    def stop(self):
+        """Stop the Rich Presence update thread"""
+        self.running = False
+        if self.thread:
+            self.thread.join(timeout=2)
+        # Disconnect and give Discord a moment to clear presence
+        self.disconnect()
+        try:
+            time.sleep(0.2)
+        except Exception:
+            pass
+    
+    def set_enabled(self, enabled: bool):
+        """Enable or disable Rich Presence"""
+        self.enabled = enabled
+        if not enabled and self.connected:
+            self.disconnect()
+
 #controller for the macro
-def macro(status, logQueue, updateGUI, run, skipTask):
-    macro = macroModule.macro(status, logQueue, updateGUI, run, skipTask)
+def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
+    macro = macroModule.macro(status, logQueue, updateGUI, run, skipTask, presence)
     #invert the regularMobsInFields dict
     #instead of storing mobs in field, store the fields associated with each mob
     regularMobData = {}
@@ -66,13 +409,13 @@ def macro(status, logQueue, updateGUI, run, skipTask):
     #macro.useItemInInventory("blueclayplanter")
     #function to run a task
     #makes it easy to do any checks after a task is complete (like stinger hunt, rejoin every, etc)
-    def runTask(func = None, args = (), resetAfter = True, convertAfter = True):
+    def runTask(func = None, args = (), resetAfter = True, convertAfter = True, allowAFB = True):
         nonlocal taskCompleted
         # Check if skip was requested
         if skipTask.value == 1:
             skipTask.value = 0  # Reset skip flag
             macro.logger.webhook("Task Skipped", f"Skipped: {status.value.replace('_', ' ').title()}", "orange")
-            status.value = ""
+            macro.clear_task_status()
             taskCompleted = True
             if resetAfter:
                 macro.reset(convert=False)
@@ -98,12 +441,12 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                 macro.rejoin("Rejoining (Scheduled)")
                 macro.saveTiming("rejoin_every")
         
-        #auto field boost
-        if macro.setdat["Auto_Field_Boost"] and not macro.AFBLIMIT:
+        #auto field boost (can be disabled per-call via allowAFB)
+        if allowAFB and macro.setdat["Auto_Field_Boost"] and not macro.AFBLIMIT:
             if macro.hasAFBRespawned("AFB_dice_cd", macro.setdat["AFB_rebuff"]*60) or macro.hasAFBRespawned("AFB_glitter_cd", macro.setdat["AFB_rebuff"]*60-30):
                 macro.AFB(gatherInterrupt=False)
 
-        status.value = ""
+        macro.clear_task_status()
         return returnVal
     
     def handleQuest(questGiver, executeQuest=True):
@@ -119,20 +462,27 @@ def macro(status, logQueue, updateGUI, run, skipTask):
         feedBees = []
         setdatEnable = []
 
-        #if the macro has completed a task in the last cycle
-        if taskCompleted or not questGiver in questCache:
+        # Refresh quest detection only when cache is stale to avoid duplicate scans in one cycle
+        cacheFresh = questGiver in questCache and not taskCompleted
+        if cacheFresh and questCache[questGiver] is not None:
+            questObjective = questCache[questGiver]
+        else:
             questObjective = macro.findQuest(questGiver)
             questCache[questGiver] = questObjective
-        else:
-            questObjective = questCache[questGiver]
 
         # Only submit/get quests if executeQuest is True (when quest appears in priority queue)
         if executeQuest:
-            if questObjective is None:  # Quest does not exist
+            if questObjective is None:  # Quest does not exist -> try to claim a new quest
                 questObjective = macro.getNewQuest(questGiver, False)
-            elif not len(questObjective):  # Quest completed
+                # Clear cached entry for this quest giver so subsequent checks re-read the UI
+                if questGiver in questCache:
+                    del questCache[questGiver]
+            elif not len(questObjective):  # No incomplete objectives reported -> submit and get a new quest
                 questObjective = macro.getNewQuest(questGiver, True)
                 macro.hourlyReport.addHourlyStat("quests_completed", 1)
+                # Clear cached entry for this quest giver so we don't reuse stale data
+                if questGiver in questCache:
+                    del questCache[questGiver]
         else:
             # If not executing, use cached quest or return empty if no quest exists or is completed
             if questObjective is None or not len(questObjective):
@@ -153,11 +503,25 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                 else:
                     gatherFieldsList.append(objData[1])
             elif objData[0] == "kill":
-                if "ant" in objData[1] and objData[1] != "mantis":
-                    setdatEnable.append("ant_challenge")
-                    setdatEnable.append("ant_pass_dispenser")
+                # kill objectives can be in the form "kill_<num>_<mob>" or "kill_<mob>"
+                # determine the mob name robustly
+                if len(objData) >= 3:
+                    mob_name = objData[2]
+                elif len(objData) == 2:
+                    mob_name = objData[1]
                 else:
-                    setdatEnable.append(objData[2])
+                    continue
+
+                # ants are handled via the ant challenge flow
+                if "ant" in mob_name and mob_name != "mantis":
+                    if "ant_challenge" not in setdatEnable:
+                        setdatEnable.append("ant_challenge")
+                    if "ant_pass_dispenser" not in setdatEnable:
+                        setdatEnable.append("ant_pass_dispenser")
+                else:
+                    # enable the mob setting (e.g. "rhinobeetle", "werewolf", etc.)
+                    if mob_name not in setdatEnable:
+                        setdatEnable.append(mob_name)
             elif objData[0] == "token":
                 if questGiver == "riley bee":
                     requireRedField = True
@@ -182,6 +546,8 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                 requireBlueField = True
             elif objData[0] == "pollen" and objData[1] == "red":
                 requireRedField = True
+            elif objData[0] == "pollen" and objData[1] == "white":
+                requireField = True
             elif objData[0] == "pollengoo" and objData[1] == "blue":
                 if macro.setdat["quest_use_gumdrops"]:
                     requireBlueGumdropField = True
@@ -192,6 +558,11 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                     requireRedGumdropField = True
                 else:
                     requireBlueField = True
+            elif objData[0] == "pollengoo" and objData[1] == "white":
+                if macro.setdat["quest_use_gumdrops"]:
+                    requireBlueGumdropField = True
+                else:
+                    requireField = True
             elif objData[0] == "collect":
                 setdatEnable.append(objData[1].replace("-","_"))
         
@@ -299,6 +670,7 @@ def macro(status, logQueue, updateGUI, run, skipTask):
             if not questOnlyTasks:
                 questMappings = [
                     ("polar bear", "polar_bear_quest"),
+                    ("brown bear", "brown_bear_quest"),
                     ("honey bee", "honey_bee_quest"),
                     ("bucko bee", "bucko_bee_quest"),
                     ("riley bee", "riley_bee_quest")
@@ -313,9 +685,27 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                     questName = taskId.replace("quest_", "").replace("_", " ")
                     questKey = f"{questName.replace(' ', '_')}_quest"
                     if macro.setdat.get(questKey):
+                        # Detect the current quest title (without executing) so we can honor title-level ignores
+                        try:
+                            setdatEnable_tmp, gatherFields_tmp, gumdropFields_tmp, needsRed_tmp, needsBlue_tmp, feedBees_tmp, needsRedGumdrop_tmp, needsBlueGumdrop_tmp, needsField_tmp = handleQuest(questName, executeQuest=False)
+                            last_titles = getattr(macro, '_last_quest_title', {}) or {}
+                            title = last_titles.get(questName, "") or ""
+                        except Exception:
+                            title = ""
+
+                        # Use hardcoded ignore list and skip if title matches
+                        ignore_set = HARDCODED_PETAL_IGNORE_TITLES
+                        if title.lower() in ignore_set:
+                            try:
+                                gui.log(time.strftime("%H:%M:%S"), f"Skipping ignored quest '{title}' for {questName}", "orange")
+                            except Exception:
+                                pass
+                            executedTasks.add(taskId)
+                            continue
                         # Handle quest feeding and gathering requirements
                         questMappings = {
                             "polar bear": "polar_bear_quest",
+                            "brown bear": "brown_bear_quest",
                             "honey bee": "honey_bee_quest",
                             "bucko bee": "bucko_bee_quest",
                             "riley bee": "riley_bee_quest"
@@ -430,6 +820,7 @@ def macro(status, logQueue, updateGUI, run, skipTask):
         # But don't execute quests (submit/get) - that will happen when quest appears in priority queue
         for questName, enabledKey in [
             ("polar bear", "polar_bear_quest"),
+            ("brown bear", "brown_bear_quest"),
             ("honey bee", "honey_bee_quest"),
             ("bucko bee", "bucko_bee_quest"),
             ("riley bee", "riley_bee_quest")
@@ -437,6 +828,19 @@ def macro(status, logQueue, updateGUI, run, skipTask):
             if macro.setdat.get(enabledKey):
                 # Check requirements without executing (submit/get) the quest
                 setdatEnable, gatherFields, gumdropFields, needsRed, needsBlue, feedBees, needsRedGumdrop, needsBlueGumdrop, needsField = handleQuest(questName, executeQuest=False)
+                # Respect title-level ignore list: if the detected quest title is ignored, skip applying requirements
+                try:
+                    last_titles = getattr(macro, '_last_quest_title', {}) or {}
+                    title = last_titles.get(questName, "") or ""
+                    ignore_set = HARDCODED_PETAL_IGNORE_TITLES
+                    if title.lower() in ignore_set:
+                        try:
+                            gui.log(time.strftime("%H:%M:%S"), f"Skipping ignored quest (requirements): '{title}' for {questName}", "orange")
+                        except Exception:
+                            pass
+                        continue
+                except Exception:
+                    pass
                 # Enable any required settings
                 for k in setdatEnable:
                     macro.setdat[k] = True
@@ -454,157 +858,7 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                     
         taskCompleted = False
 
-        # Quest Completer - detect and complete unsupported quests
-        if macro.setdat.get("quest_completer_enabled", False):
-            try:
-                # Only scan for quests when tasks are completed or we haven't scanned yet
-                questCacheKey = "quest_completer_objectives"
-                if taskCompleted or questCacheKey not in questCache:
-                    # Detect quest objectives from screen
-                    detectedObjectives = macro.detectQuestObjectives()
-                    if detectedObjectives:
-                        # Send webhook showing detected quest objectives (similar to normal quests)
-                        objectivesText = '\n'.join(f"• {obj}" for obj in detectedObjectives)
-                        macro.logger.webhook("Quest Completer: Detected Quest Objectives",
-                                           f"**Detected {len(detectedObjectives)} quest objectives:**\n\n{objectivesText}",
-                                           "light blue")
-                        macro.logger.webhook("Quest Completer", f"Detected {len(detectedObjectives)} quest objectives", "light blue")
-
-                        # Filter out non-task objectives (quest titles, quest giver names, etc.)
-                        filteredObjectives = []
-                        for objectiveText in detectedObjectives:
-                            # Skip objectives that are just quest titles or quest giver names
-                            lowerText = objectiveText.lower().strip()
-                            skipKeywords = [
-                                'bear:', 'bee:', 'breath of', 'ultimate ant', 'ladybug poppers',
-                                'honey hunt', 'repairs robo', 'corrupting the', 'blue-stump-rose',
-                                'strawberries', 'ladybug poppers'
-                            ]
-                            if any(keyword in lowerText for keyword in skipKeywords) or len(lowerText.split()) < 3:
-                                print(f"[Quest Parser] ✗ '{objectiveText[:50]}...' → skipped (non-task)")
-                                continue
-                            filteredObjectives.append(objectiveText)
-
-                        # Parse and map each filtered objective
-                        questCompleterTasks = []
-                        for objectiveText in filteredObjectives:
-                            try:
-                                parsedObj = macro.parseQuestObjective(objectiveText)
-                                mappedActions = macro.mapObjectiveToMacroAction(parsedObj, objectiveText)
-
-                                # Filter out empty/invalid actions
-                                validActions = [action for action in mappedActions if action and len(action) > 0]
-                                questCompleterTasks.extend(validActions)
-
-                                if validActions:
-                                    print(f"[Quest Parser] ✓ '{objectiveText[:50]}...' → {validActions}")
-                                else:
-                                    print(f"[Quest Parser] ✗ '{objectiveText[:50]}...' → filtered")
-                            except Exception as e:
-                                print(f"[Quest Parser] Parse error: '{objectiveText[:30]}...' - {str(e)[:50]}")
-
-                        # Remove duplicates while preserving order
-                        seen = set()
-                        questCompleterTasks = [task for task in questCompleterTasks if not (task in seen or seen.add(task))]
-
-                        # Cache the tasks and add to priority order
-                        if questCompleterTasks:
-                            priorityLevel = macro.setdat.get("quest_completer_priority", "Normal").lower()
-                            priorityWeights = {"low": 10, "normal": 50, "high": 90}
-                            priorityWeight = priorityWeights.get(priorityLevel, 50)
-
-                            # Insert quest completer tasks into priority order
-                            existingPriorityOrder = macro.setdat.get("task_priority_order", [])
-                            questCompleterTaskSet = set()  # Track which tasks are from quest completer
-
-                            # Remove old quest tasks from priority order
-                            oldQuestTasks = questCache.get(questCacheKey, {}).get('task_set', set()) if questCacheKey in questCache else set()
-                            existingPriorityOrder = [task for task in existingPriorityOrder if task not in oldQuestTasks]
-
-                            for task in questCompleterTasks:
-                                if task not in existingPriorityOrder:
-                                    # Insert with priority weight (higher weight = higher priority)
-                                    insertIndex = 0
-                                    for i, existingTask in enumerate(existingPriorityOrder):
-                                        # Simple priority insertion - could be enhanced
-                                        if priorityWeight > 50:  # High priority
-                                            insertIndex = 0  # Insert at beginning
-                                            break
-                                        elif priorityWeight < 50:  # Low priority
-                                            insertIndex = len(existingPriorityOrder)  # Insert at end
-                                            break
-                                        else:  # Normal priority
-                                            insertIndex = len(existingPriorityOrder) // 2  # Insert in middle
-                                            break
-
-                                    existingPriorityOrder.insert(insertIndex, task)
-                                questCompleterTaskSet.add(task)
-
-                            # Cache the tasks after building the task set
-                            questCache[questCacheKey] = {
-                                'tasks': questCompleterTasks,
-                                'task_set': questCompleterTaskSet
-                            }
-
-                            macro.logger.webhook("Quest Completer",
-                                               f"Added {len(questCompleterTasks)} quest tasks to priority queue: {questCompleterTasks}",
-                                               "light blue")
-                        else:
-                            questCache[questCacheKey] = {'tasks': [], 'task_set': set()}
-                    else:
-                        questCache[questCacheKey] = {'tasks': [], 'task_set': set()}
-
-                # Check if we have cached quest tasks to work on
-                elif questCacheKey in questCache and questCache[questCacheKey].get('tasks'):
-                    # We have cached tasks, ensure they're still in priority order
-                    cachedData = questCache[questCacheKey]
-                    cachedTasks = cachedData.get('tasks', [])
-                    questTaskSet = cachedData.get('task_set', set())
-                    existingPriorityOrder = macro.setdat.get("task_priority_order", [])
-
-                    # Check if any cached tasks are still active
-                    activeTasks = [task for task in cachedTasks if task in existingPriorityOrder]
-
-                    if not activeTasks:
-                        # All cached tasks have been completed, clear cache for next scan
-                        macro.logger.webhook("Quest Completer",
-                                           f"All {len(cachedTasks)} quest tasks completed! Macro continues with normal operation.",
-                                           "bright green")
-                        del questCache[questCacheKey]
-                    else:
-                        # Re-add any missing tasks to priority order
-                        tasksAdded = 0
-                        for task in cachedTasks:
-                            if task not in existingPriorityOrder:
-                                # Re-insert with same priority logic
-                                priorityLevel = macro.setdat.get("quest_completer_priority", "Normal").lower()
-                                priorityWeights = {"low": 10, "normal": 50, "high": 90}
-                                priorityWeight = priorityWeights.get(priorityLevel, 50)
-
-                                insertIndex = 0
-                                for i, existingTask in enumerate(existingPriorityOrder):
-                                    if priorityWeight > 50:  # High priority
-                                        insertIndex = 0
-                                        break
-                                    elif priorityWeight < 50:  # Low priority
-                                        insertIndex = len(existingPriorityOrder)
-                                        break
-                                    else:  # Normal priority
-                                        insertIndex = len(existingPriorityOrder) // 2
-                                        break
-
-                                existingPriorityOrder.insert(insertIndex, task)
-                                tasksAdded += 1
-
-                        if tasksAdded > 0:
-                            macro.logger.webhook("Quest Completer",
-                                               f"Re-added {tasksAdded} cached tasks to priority queue",
-                                               "light blue")
-
-            except Exception as e:
-                macro.logger.webhook("Quest Completer Error",
-                                   f"Failed to process quests: {str(e)}",
-                                   "red")
+        # Quest completer feature removed. Quest-giver handling and brown bear logic remain.
 
         # Helper function for manual planters
         def goToNextCycle(cycle, slot):
@@ -639,18 +893,59 @@ def macro(status, logQueue, updateGUI, run, skipTask):
             if taskId.startswith("quest_"):
                 questName = taskId.replace("quest_", "").replace("_", " ")
                 questKey = f"{questName.replace(' ', '_')}_quest"
+                # If the quest setting is disabled, skip any UI scanning for this quest
                 if not macro.setdat.get(questKey):
                     return False
+                # Detect the current quest title (without executing) so we can honor title-level ignores before execution
+                try:
+                    # populate last_quest_title via requirement-only check
+                    _ = handleQuest(questName, executeQuest=False)
+                    last_titles = getattr(macro, '_last_quest_title', {}) or {}
+                    title = last_titles.get(questName, "") or ""
+                    ignore_set = HARDCODED_PETAL_IGNORE_TITLES
+                    if title.lower() in ignore_set:
+                        try:
+                            gui.log(time.strftime("%H:%M:%S"), f"Skipping ignored quest (execution): '{title}' for {questName}", "orange")
+                        except Exception:
+                            pass
+                        executedTasks.add(taskId)
+                        return False
+                except Exception:
+                    pass
                 
                 # Actually execute the quest (submit/get) - this will travel to quest giver if needed
-                handleQuest(questName, executeQuest=True)
-                
-                # Feed bees for this quest (requirements were already checked above)
-                if questName in questFeedRequirements:
-                    feedBees = questFeedRequirements[questName]
+                # For Brown Bear, capture the objectives and gather them immediately
+                if questName == "brown bear":
+                    setdatEnable, gatherFields, gumdropFields, needsRed, needsBlue, feedBees, needsRedGumdrop, needsBlueGumdrop, needsField = handleQuest(questName, executeQuest=True)
+                    
+                    # Gather the fields for this quest
+                    questGatherOverrides = {}
+                    if macro.setdat.get("quest_gather_mins"):
+                        questGatherOverrides["mins"] = macro.setdat["quest_gather_mins"]
+                    if macro.setdat.get("quest_gather_return") != "no override":
+                        questGatherOverrides["return"] = macro.setdat["quest_gather_return"]
+                    
+                    # Gather regular fields
+                    for field in gatherFields:
+                        runTask(macro.gather, args=(field, questGatherOverrides), resetAfter=False)
+                    
+                    # Gather gumdrop fields (if any)
+                    for field in gumdropFields:
+                        runTask(macro.gather, args=(field, questGatherOverrides, True), resetAfter=False)
+                    
+                    # Feed bees if needed
                     for item, quantity in feedBees:
                         macro.feedBee(item, quantity)
                         taskCompleted = True
+                else:
+                    handleQuest(questName, executeQuest=True)
+                    
+                    # Feed bees for this quest (requirements were already checked above)
+                    if questName in questFeedRequirements:
+                        feedBees = questFeedRequirements[questName]
+                        for item, quantity in feedBees:
+                            macro.feedBee(item, quantity)
+                            taskCompleted = True
                 
                 executedTasks.add(taskId)
                 executedQuests.add(questName)
@@ -816,7 +1111,7 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                         for i in range(3):
                             if macro.setdat[f"cycle1_{i+1}_planter"] == "none" or macro.setdat[f"cycle1_{i+1}_field"] == "none":
                                 continue
-                            planter = runTask(macro.placePlanterInCycle, args = (i, 1),resetAfter=False)
+                            planter = runTask(macro.placePlanterInCycle, args = (i, 1),resetAfter=False, allowAFB=False)
                             if planter:
                                 planterData["planters"][i] = planter[0]
                                 planterData["fields"][i] = planter[1]
@@ -859,7 +1154,7 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                             if fieldToPlace in otherSlotFields:
                                 continue
                             
-                            planter = runTask(macro.placePlanterInCycle, args = (i, nextCycle),resetAfter=False)
+                            planter = runTask(macro.placePlanterInCycle, args = (i, nextCycle),resetAfter=False, allowAFB=False)
                             if planter:
                                 planterData["cycles"][i] = nextCycle
                                 planterData["planters"][i] = planter[0]
@@ -877,14 +1172,16 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                 elif macro.setdat["planters_mode"] == 2:
                     with open("./data/user/auto_planters.json", "r") as f:
                         data = json.load(f)
-                        planterData = data["planters"]
-                        nectarLastFields = data["nectar_last_field"]
+                        planterData = data.get("planters", [])
+                        nectarLastFields = data.get("nectar_last_field", {})
+                        gatherFlag = data.get("gather", False)
                     f.close()
 
                     def saveAutoPlanterData():
                         data = {
                             "planters": planterData,
                             "nectar_last_field": nectarLastFields,
+                            "gather": gatherFlag
                         }
                         with open("./data/user/auto_planters.json", "w") as f:
                             json.dump(data, f, indent=3)
@@ -1052,8 +1349,14 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                             planterToPlace = getBestPlanter(nextField)
                             if planterToPlace is None:
                                 break
-                            if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False):
+                            if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False, allowAFB=False):
                                 savePlacedPlanter(j, nextField, planterToPlace, nectar)
+                                # If global gather is enabled, gather the field immediately so it is harvested while planter grows
+                                try:
+                                    if gatherFlag:
+                                        runTask(macro.gather, args=(nextField,), resetAfter=False)
+                                except NameError:
+                                    pass
                                 plantersPlaced += 1
                     
                     if plantersPlaced < maxAllowedPlanters:
@@ -1080,8 +1383,13 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                                 planterToPlace = getBestPlanter(nextField)
                                 if planterToPlace is None:
                                     break
-                                if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False):
+                                if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False, allowAFB=False):
                                     savePlacedPlanter(j, nextField, planterToPlace, nectar)
+                                    try:
+                                        if gatherFlag:
+                                            runTask(macro.gather, args=(nextField,), resetAfter=False)
+                                    except NameError:
+                                        pass
                                     plantersPlaced += 1
                     
                     if plantersPlaced < maxAllowedPlanters:
@@ -1101,8 +1409,13 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                                 planterToPlace = getBestPlanter(nextField)
                                 if planterToPlace is None:
                                     break
-                                if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False):
+                                if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False, allowAFB=False):
                                     savePlacedPlanter(j, nextField, planterToPlace, nectar)
+                                    try:
+                                        if gatherFlag:
+                                            runTask(macro.gather, args=(nextField,), resetAfter=False)
+                                    except NameError:
+                                        pass
                                     plantersPlaced += 1
                     
                     executedTasks.add(taskId)
@@ -1110,7 +1423,7 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                 
             if taskId == "ant_challenge":
                 if macro.setdat["ant_challenge"]:
-                    runTask(macro.antChallenge)
+                    runTask(macro.antChallenge, resetAfter=False)
                     executedTasks.add(taskId)
                     return True
                 return False
@@ -1180,13 +1493,9 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                                 macro.setdat["fields_enabled"][i] = True
                             try:
                                 # Execute gather task
-                                macro.logger.webhook("Quest Completer", f"Executing gather in field: {storedFieldName}", "light blue")
+                                macro.logger.webhook("Quest Task", f"Executing gather in field: {storedFieldName}", "light blue")
                                 runTask(macro.gather, args=(storedFieldName,), resetAfter=False)
-                                macro.logger.webhook("Quest Completer", f"Completed gather in field: {storedFieldName}", "bright green")
-                                # Clear quest cache to force re-detection of updated objectives
-                                questCacheKey = "quest_completer_objectives"
-                                if questCacheKey in questCache:
-                                    del questCache[questCacheKey]
+                                macro.logger.webhook("Quest Task", f"Completed gather in field: {storedFieldName}", "bright green")
                                 return True
                             finally:
                                 # Restore original enabled state
@@ -1200,36 +1509,20 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                     if mob == "coconut_crab":
                         if macro.hasRespawned("coconut_crab", 36*60*60, applyMobRespawnBonus=True):
                             runTask(macro.coconutCrab)
-                            # Clear quest cache to force re-detection of updated objectives
-                            questCacheKey = "quest_completer_objectives"
-                            if questCacheKey in questCache:
-                                del questCache[questCacheKey]
                             return True
                     elif mob == "stump_snail":
                         if macro.hasRespawned("stump_snail", 96*60*60, applyMobRespawnBonus=True):
                             runTask(macro.stumpSnail)
-                            # Clear quest cache to force re-detection of updated objectives
-                            questCacheKey = "quest_completer_objectives"
-                            if questCacheKey in questCache:
-                                del questCache[questCacheKey]
                             return True
                     elif mob == "vicious_bee":
                         if macro.hasRespawned("vicious_bee", 36*60*60, applyMobRespawnBonus=True):
                             runTask(macro.viciousBee)
-                            # Clear quest cache to force re-detection of updated objectives
-                            questCacheKey = "quest_completer_objectives"
-                            if questCacheKey in questCache:
-                                del questCache[questCacheKey]
                             return True
                     elif mob == "ant":
                         # Ant killing via Ant Challenge
-                        macro.logger.webhook("Quest Completer", "Executing ant challenge for quest", "light blue")
-                        runTask(macro.antChallenge)
-                        macro.logger.webhook("Quest Completer", "Completed ant challenge", "bright green")
-                        # Clear quest cache to force re-detection of updated objectives
-                        questCacheKey = "quest_completer_objectives"
-                        if questCacheKey in questCache:
-                            del questCache[questCacheKey]
+                        macro.logger.webhook("Quest Task", "Executing ant challenge for quest", "light blue")
+                        runTask(macro.antChallenge, resetAfter=False)
+                        macro.logger.webhook("Quest Task", "Completed ant challenge", "bright green")
                         return True
                     elif mob == "beetle":
                         # Try to find and kill beetles (not king beetles)
@@ -1248,20 +1541,16 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                                     macro.setdat["fields_enabled"][fieldIndex] = True
 
                                 try:
-                                    macro.logger.webhook("Quest Completer", f"Attempting to kill beetle in field: {field}", "light blue")
+                                    macro.logger.webhook("Quest Task", f"Attempting to kill beetle in field: {field}", "light blue")
                                     # Try to kill beetle if available
                                     runTask(macro.killMob, args=(mob, field,), convertAfter=False)
-                                    macro.logger.webhook("Quest Completer", f"Completed beetle kill attempt in field: {field}", "bright green")
-                                    # Clear quest cache to force re-detection of updated objectives
-                                    questCacheKey = "quest_completer_objectives"
-                                    if questCacheKey in questCache:
-                                        del questCache[questCacheKey]
+                                    macro.logger.webhook("Quest Task", f"Completed beetle kill attempt in field: {field}", "bright green")
                                     return True
                                 except Exception as e:
                                     continue  # Try next field
                                 finally:
                                     macro.setdat["fields_enabled"][fieldIndex] = fieldWasEnabled
-                        macro.logger.webhook("Quest Completer", "No beetles found to kill", "orange")
+                        macro.logger.webhook("Quest Task", "No beetles found to kill", "orange")
                         return False
                     else:
                         # For regular mobs, check if mob exists in regularMobData
@@ -1281,16 +1570,12 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                                         macro.setdat["fields_enabled"][fieldIndex] = True
 
                                     try:
-                                        macro.logger.webhook("Quest Completer", f"Executing kill {mob} in field: {field}", "light blue")
+                                        macro.logger.webhook("Quest Task", f"Executing kill {mob} in field: {field}", "light blue")
                                         runTask(macro.killMob, args=(mob, field,), convertAfter=False)
-                                        macro.logger.webhook("Quest Completer", f"Completed kill {mob} in field: {field}", "bright green")
-                                        # Clear quest cache to force re-detection of updated objectives
-                                        questCacheKey = "quest_completer_objectives"
-                                        if questCacheKey in questCache:
-                                            del questCache[questCacheKey]
+                                        macro.logger.webhook("Quest Task", f"Completed kill {mob} in field: {field}", "bright green")
                                         return True  # Successfully attempted to kill
                                     except Exception as e:
-                                        macro.logger.webhook("Quest Completer", f"Failed to kill {mob} in {field}: {str(e)}", "orange")
+                                        macro.logger.webhook("Quest Task", f"Failed to kill {mob} in {field}: {str(e)}", "orange")
                                         continue  # Try next field
                                     finally:
                                         # Restore original enabled state
@@ -1310,13 +1595,10 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                     if collectName in macroModule.collectData:
                         # Execute collect task directly, ignoring enabled/disabled setting
                         if macro.hasRespawned(collectName, macro.collectCooldowns[collectName]):
-                            macro.logger.webhook("Quest Completer", f"Executing collect: {collectName}", "light blue")
+                            macro.logger.webhook("Quest Task", f"Executing collect: {collectName}", "light blue")
                             runTask(macro.collect, args=(collectName,))
-                            macro.logger.webhook("Quest Completer", f"Completed collect: {collectName}", "bright green")
-                            # Clear quest cache to force re-detection of updated objectives
-                            questCacheKey = "quest_completer_objectives"
-                            if questCacheKey in questCache:
-                                del questCache[questCacheKey]
+                            macro.logger.webhook("Quest Task", f"Completed collect: {collectName}", "bright green")
+                            return True
                             return True
                         else:
                             # Calculate time remaining
@@ -1327,9 +1609,9 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                             if timeRemaining > 0:
                                 hours = int(timeRemaining // 3600)
                                 minutes = int((timeRemaining % 3600) // 60)
-                                macro.logger.webhook("Quest Completer", f"Collect {collectName} not ready, time remaining: {hours}h {minutes}m", "orange")
+                                macro.logger.webhook("Quest Task", f"Collect {collectName} not ready, time remaining: {hours}h {minutes}m", "orange")
                             else:
-                                macro.logger.webhook("Quest Completer", f"Collect {collectName} not ready", "orange")
+                                macro.logger.webhook("Quest Task", f"Collect {collectName} not ready", "orange")
                     return False
 
                 # Handle craft tasks
@@ -1338,13 +1620,10 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                     with open("./data/user/blender.txt", "r") as f:
                         blenderData = ast.literal_eval(f.read())
                     if blenderData["collectTime"] > -1 and time.time() > blenderData["collectTime"]:
-                        macro.logger.webhook("Quest Completer", "Executing craft (blender)", "light blue")
+                        macro.logger.webhook("Quest Task", "Executing craft (blender)", "light blue")
                         runTask(macro.blender, args=(blenderData,))
-                        macro.logger.webhook("Quest Completer", "Completed craft (blender)", "bright green")
-                        # Clear quest cache to force re-detection of updated objectives
-                        questCacheKey = "quest_completer_objectives"
-                        if questCacheKey in questCache:
-                            del questCache[questCacheKey]
+                        macro.logger.webhook("Quest Task", "Completed craft (blender)", "bright green")
+                        return True
                         return True
                     else:
                         if blenderData["collectTime"] > -1:
@@ -1352,11 +1631,11 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                             if timeRemaining > 0:
                                 hours = int(timeRemaining // 3600)
                                 minutes = int((timeRemaining % 3600) // 60)
-                                macro.logger.webhook("Quest Completer", f"Craft (blender) not ready, time remaining: {hours}h {minutes}m", "orange")
+                                macro.logger.webhook("Quest Task", f"Craft (blender) not ready, time remaining: {hours}h {minutes}m", "orange")
                             else:
-                                macro.logger.webhook("Quest Completer", "Craft (blender) not ready", "orange")
+                                macro.logger.webhook("Quest Task", "Craft (blender) not ready", "orange")
                         else:
-                            macro.logger.webhook("Quest Completer", "Craft (blender) not ready", "orange")
+                            macro.logger.webhook("Quest Task", "Craft (blender) not ready", "orange")
                     return False
 
                 # Handle feed bee tasks
@@ -1366,7 +1645,7 @@ def macro(status, logQueue, updateGUI, run, skipTask):
 
                 return False
             except Exception as e:
-                macro.logger.webhook("Quest Completer Error",
+                macro.logger.webhook("Quest Task Error",
                                    f"Error executing quest task {taskId}: {str(e)}",
                                    "red")
                 # Still return False to mark as failed, but log the error
@@ -1402,28 +1681,8 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                         # This allows checking all fields for the mob before moving on
                         if not isRegularMobTask:
                             executedTasks.add(taskId)
-                    else:
-                        # Task couldn't be executed - check if it's a quest completer task in the cache
-                        questCacheKey = "quest_completer_objectives"
-                        if questCacheKey in questCache:
-                            cachedData = questCache[questCacheKey]
-                            cachedTasks = cachedData.get('tasks', [])
-                            questTaskSet = cachedData.get('task_set', set())
-                            isQuestTask = taskId in questTaskSet
-                            if isQuestTask and taskId not in executedTasks:
-                                # For quest completer tasks, try to execute them bypassing normal settings restrictions
-                                questTaskExecuted = executeQuestTask(taskId)
-                                if questTaskExecuted:
-                                    anyTaskExecuted = True
-                                    # Don't add quest tasks to executedTasks - they should be re-executable until objectives are complete
-                                    macro.logger.webhook("Quest Completer",
-                                                       f"Executed quest task: {taskId}",
-                                                       "bright green")
-                            else:
-                                # Quest task also couldn't be executed - mark as completed to prevent infinite loop
-                                executedTasks.add(taskId)
                         else:
-                            # Not a quest task and couldn't be executed normally - silently skip
+                            # Task couldn't be executed - mark as executed to avoid repeated attempts
                             executedTasks.add(taskId)
                     # For regular mob tasks, if we killed in any field, break to start next iteration
                     # This ensures we check all fields for the mob before moving to the next task
@@ -1524,6 +1783,22 @@ def macro(status, logQueue, updateGUI, run, skipTask):
                         allGatheredFields.append(field)
             except:
                 pass
+        # Auto-planters: if global gather flag enabled, gather each cycle for any planted fields
+        try:
+            # Only auto-gather when planters mode is auto and auto-harvest is enabled
+            if macro.setdat.get("planters_mode") == 2:
+                with open("./data/user/auto_planters.json", "r") as f:
+                    auto_data = json.load(f)
+                auto_planters = auto_data.get("planters", [])
+                auto_gather = auto_data.get("gather", False)
+                if auto_gather:
+                    for p in auto_planters:
+                        field = p.get("field", "")
+                        if field and field not in allGatheredFields:
+                            runTask(macro.gather, args=(field,), resetAfter=False)
+                            allGatheredFields.append(field)
+        except Exception:
+            pass
         
         # Old code removed - all tasks now execute via priority order
         
@@ -1841,7 +2116,7 @@ if __name__ == "__main__":
     from modules.submacros.stream import cloudflaredStream
     import os
 
-    if sys.platform == "darwin" and sys.version_info[1] <= 7:
+    if sys.version_info[1] <= 7:
         print("start method set to spawn")
         multiprocessing.set_start_method("spawn")
     macroProc = None
@@ -1862,8 +2137,9 @@ if __name__ == "__main__":
     updateGUI = multiprocessing.Value('i', 0)
     skipTask = multiprocessing.Value('i', 0)  # 0 = don't skip, 1 = skip current task
     status = manager.Value(ctypes.c_wchar_p, "none")
+    presence = manager.Value(ctypes.c_wchar_p, "")
     logQueue = manager.Queue()
-    initialMessageInfo = manager.dict()  # Shared dict for initial webhook message info
+    pin_requests = manager.Queue()  # Shared queue for pin requests
     start_keyboard_listener_fn = watch_for_hotkeys(run)
     logger = logModule.log(logQueue, False, None, False, blocking=False)
 
@@ -1919,6 +2195,11 @@ if __name__ == "__main__":
                 discordBotProc.join()
         except NameError:
             pass
+        try:
+            if richPresenceManager:
+                richPresenceManager.stop()
+        except NameError:
+            pass
         
     def stopApp(page= None, sockets = None):
         global stopThreads
@@ -1952,47 +2233,49 @@ if __name__ == "__main__":
     #use run.value to control the macro loop
 
     #check color profile
-    if sys.platform == "darwin":
-        try:
-            colorProfileManager = DisplayColorProfile()
-            currentProfileColor = colorProfileManager.getCurrentColorProfile()
-            if not "sRGB" in currentProfileColor:
-                try:
-                    if messageBox.msgBoxOkCancel(title="Incorrect Color Profile", text=f"You current display's color profile is {currentProfileColor} but sRGB is required for the macro.\nPress 'Ok' to change color profiles"):
-                        colorProfileManager.resetDisplayProfile()
-                        colorProfileManager.setCustomProfile("/System/Library/ColorSync/Profiles/sRGB Profile.icc")
-                        messageBox.msgBox(title="Color Profile Success", text="Successfully changed the current color profile to sRGB")
+    try:
+        colorProfileManager = DisplayColorProfile()
+        currentProfileColor = colorProfileManager.getCurrentColorProfile()
+        if not "sRGB" in currentProfileColor:
+            try:
+                if messageBox.msgBoxOkCancel(title="Incorrect Color Profile", text=f"You current display's color profile is {currentProfileColor} but sRGB is required for the macro.\nPress 'Ok' to change color profiles"):
+                    colorProfileManager.resetDisplayProfile()
+                    colorProfileManager.setCustomProfile("/System/Library/ColorSync/Profiles/sRGB Profile.icc")
+                    messageBox.msgBox(title="Color Profile Success", text="Successfully changed the current color profile to sRGB")
 
-                except Exception as e:
-                    messageBox.msgBox(title="Failed to change color profile", text=e)
-        except Exception as e:
-            pass
+            except Exception as e:
+                messageBox.msgBox(title="Failed to change color profile", text=e)
+    except Exception as e:
+        pass
     
-        #check screen recording permissions
-        try:
-            cg = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
-            cg.CGRequestScreenCaptureAccess.restype = ctypes.c_bool
-            if not cg.CGRequestScreenCaptureAccess():
-                messageBox.msgBox(title="Screen Recording Permission", text='Terminal does not have the screen recording permission. The macro will not work properly.\n\nTo fix it, go to System Settings -> Privacy and Security -> Screen Recording -> add and enable Terminal. After that, restart the macro')
-        except AttributeError:
-            pass
-        #check full keyboard access
-        try:
-            result = subprocess.run(
-                ["defaults", "read", "com.apple.universalaccess", "KeyboardAccessEnabled"],
-                capture_output=True,
-                text=True
-            )
-            value = result.stdout.strip()
-            if value == "1":
-                messageBox.msgBox(text = f"Full Keyboard Access is enabled. The macro will not work properly\
-                    \nTo disable it, go to System Settings -> Accessibility -> Keyboard -> uncheck 'Full Keyboard Access'")
-        except Exception as e:
-            print("Error reading Full Keyboard Access:", e)
+    #check screen recording permissions
+    try:
+        cg = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
+        cg.CGRequestScreenCaptureAccess.restype = ctypes.c_bool
+        if not cg.CGRequestScreenCaptureAccess():
+            messageBox.msgBox(title="Screen Recording Permission", text='Terminal does not have the screen recording permission. The macro will not work properly.\n\nTo fix it, go to System Settings -> Privacy and Security -> Screen Recording -> add and enable Terminal. After that, restart the macro')
+    except AttributeError:
+        pass
+    #check full keyboard access
+    try:
+        result = subprocess.run(
+            ["defaults", "read", "com.apple.universalaccess", "KeyboardAccessEnabled"],
+            capture_output=True,
+            text=True
+        )
+        value = result.stdout.strip()
+        if value == "1":
+            messageBox.msgBox(text = f"Full Keyboard Access is enabled. The macro will not work properly\
+                \nTo disable it, go to System Settings -> Accessibility -> Keyboard -> uncheck 'Full Keyboard Access'")
+    except Exception as e:
+        print("Error reading Full Keyboard Access:", e)
 
     discordBotProc = None
     prevDiscordBotToken = None
     prevRunState = run.value  # Track previous run state for GUI updates
+    
+    # Initialize Rich Presence Manager
+    richPresenceManager = None
     
     # Cache settings for main GUI loop to avoid reloading every 0.5 seconds
     gui_settings_cache = {}
@@ -2016,9 +2299,36 @@ if __name__ == "__main__":
                 print("Detected change in discord bot token, killing previous bot process")
                 discordBotProc.terminate()
                 discordBotProc.join()
-            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, initialMessageInfo, updateGUI), daemon=True)
+            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI), daemon=True)
             prevDiscordBotToken = currentDiscordBotToken
             discordBotProc.start()
+
+        # Discord Rich Presence - Initialize and always show status
+        discord_rp_enabled = setdat.get("discord_rich_presence", False)
+        
+        if richPresenceManager is None and discord_rp_enabled:
+            # Initialize Rich Presence Manager
+            richPresenceManager = RichPresenceManager(status, enabled=True, presence_value=presence)
+            richPresenceManager.start()
+            print("Discord Rich Presence started")
+        elif richPresenceManager is not None:
+            # Update settings if they changed
+            richPresenceManager.set_enabled(discord_rp_enabled)
+            
+            # Update status based on macro run state
+            if run.value == 0 or run.value == 3:  # Stopped
+                # Clear any presence override and show "On main menu" when not running
+                try:
+                    if presence is not None:
+                        presence.value = ""
+                except Exception:
+                    pass
+                if status.value != "idle_main_menu":
+                    status.value = "idle_main_menu"
+            elif run.value == 6:  # Paused
+                # Show "Paused" status
+                if status.value != "paused":
+                    status.value = "paused"
 
         # Check if run state changed
         if run.value != prevRunState:
@@ -2050,13 +2360,18 @@ if __name__ == "__main__":
                     if stream.publicURL:
                         logger.webhook("Stream Started", f'Stream URL: {stream.publicURL}', "purple")
                         
-                        # If bot is enabled, populate initial message info for pinning the stream message
+                        # If bot is enabled, request pinning of the stream message
                         if setdat.get("discord_bot", False) and setdat.get("pin_stream_url", False):
                             import modules.logging.webhook as webhookModule
-                            if webhookModule.last_message_id and webhookModule.last_channel_id:
-                                initialMessageInfo['message_id'] = webhookModule.last_message_id
-                                initialMessageInfo['channel_id'] = webhookModule.last_channel_id
-                                initialMessageInfo['should_pin'] = True
+                            if webhookModule.last_channel_id:
+                                try:
+                                    pin_requests.put({
+                                        'channel_id': webhookModule.last_channel_id,
+                                        'search_text': 'Stream URL'
+                                    })
+                                    print("Pin request queued for stream URL message")
+                                except Exception as e:
+                                    print(f"Error queueing pin request: {e}")
                         return
 
                 logger.webhook("", f'Stream could not start. Check terminal for more info', "red", ping_category="ping_critical_errors")
@@ -2068,7 +2383,7 @@ if __name__ == "__main__":
                     streamLink = stream.start(setdat.get("stream_resolution", 0.75))
                     Thread(target=waitForStreamURL, daemon=True).start()
                 else:
-                    messageBox.msgBox(text='Cloudflared is required for streaming but is not installed. Visit https://existance-macro.gitbook.io/existance-macro-docs/guides/optional-installations/stream-setup-installing-cloudflared for installation instructions', title='Cloudflared not installed')
+                    messageBox.msgBox(text='Cloudflared is required for streaming but is not installed. Visit https://fuzzy-team.gitbook.io/fuzzy-macro/discord-setup/stream-setup for installation instructions', title='Cloudflared not installed')
 
             print("starting macro proc")
             #check if user enabled field drift compensation but sprinkler is not supreme saturator
@@ -2091,7 +2406,7 @@ if __name__ == "__main__":
                                     but there are no more items left to craft.\n\
 				                    Check the 'repeat' setting on your blender items and reset blender data.")
             #macro proc
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
             macroProc.start()
 
             macro_version = settingsManager.getMacroVersion()
@@ -2110,9 +2425,6 @@ if __name__ == "__main__":
             if macroProc:
                 # Stop macro and release all inputs first
                 logger.webhook("Macro Stopped", "Fuzzy Macro", "red")
-                
-                # Clear the initial message info for next start
-                initialMessageInfo.clear()
                 
                 run.value = 3
                 gui.setRunState(3)  # Update the global run state
@@ -2180,7 +2492,7 @@ if __name__ == "__main__":
             appManager.closeApp("Roblox")
             keyboardModule.releaseMovement()
             mouse.mouseUp()
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state
@@ -2230,14 +2542,31 @@ if __name__ == "__main__":
                 pass  # If eel is not ready, continue
         # Note: run.value == 6 (paused) is handled in the macro process loop - it waits for resume
         
-        #Check for crash
-        if macroProc and not macroProc.is_alive() and hasattr(macroProc, "exitcode") and macroProc.exitcode is not None and macroProc.exitcode < 0:
-            logger.webhook("","Macro Crashed", "red", "screen", ping_category="ping_critical_errors")
+        # Check for crash (non-zero exitcodes). Log exit code and signal name to aid diagnosis.
+        if macroProc and not macroProc.is_alive() and hasattr(macroProc, "exitcode") and macroProc.exitcode is not None and macroProc.exitcode != 0:
+            exitcode = macroProc.exitcode
+            try:
+                import signal
+                if exitcode < 0:
+                    signum = -exitcode
+                    try:
+                        signame = signal.Signals(signum).name
+                    except Exception:
+                        signame = str(signum)
+                    extra = f" (terminated by signal {signame})"
+                else:
+                    extra = ""
+            except Exception:
+                extra = ""
+
+            print(f"Macro process exited with exitcode={exitcode}{extra}")
+            logger.webhook("","Macro Crashed: exitcode={0}{1}".format(exitcode, extra), "red", "screen", ping_category="ping_critical_errors")
             macroProc.join()
             appManager.openApp("Roblox")
             keyboardModule.releaseMovement()
             mouse.mouseUp()
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask), daemon=True)
+            # restart macro process
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state

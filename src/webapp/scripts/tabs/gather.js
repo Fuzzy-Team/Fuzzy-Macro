@@ -24,6 +24,7 @@ function saveField() {
     "mins",
     "backpack",
     "return",
+    "use_whirlwig_fallback",
     "start_location",
     "distance",
     "goo",
@@ -96,6 +97,44 @@ $("#gather-placeholder")
   .on("click", ".gather-tab-item", (event) =>
     switchGatherTab(event.currentTarget)
   ) //navigate between fields
+  .on("click", "#import-patterns-button", async (event) => {
+    event.preventDefault();
+
+    // Create a file input to select pattern .py files
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.py,.ahk';
+    input.multiple = true;
+    input.onchange = async (e) => {
+      const files = Array.from(e.target.files || []);
+      if (files.length === 0) return;
+      const patterns = [];
+      for (const file of files) {
+        try {
+          const text = await file.text();
+          patterns.push({ name: file.name, content: text });
+        } catch (err) {
+          console.error('Failed to read file', file.name, err);
+        }
+      }
+
+      try {
+        const result = await eel.importPatterns(patterns)();
+        let msg = '';
+        if (result.saved && result.saved.length) msg += `Saved: ${result.saved.join(', ')}\n`;
+        if (result.errors && result.errors.length) msg += `Errors: ${result.errors.join(', ')}`;
+        if (!msg) msg = 'No files were processed.';
+        alert(msg);
+        // refresh pattern dropdown
+        const patternsList = await eel.getPatterns()();
+        setDropdownData('shape', patternsList);
+      } catch (err) {
+        console.error(err);
+        alert('Failed to import patterns.');
+      }
+    };
+    input.click();
+  })
   .on("click", "#reset-field-button", async (event) => {
     event.preventDefault();
 

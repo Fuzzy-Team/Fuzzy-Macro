@@ -178,7 +178,8 @@ class cloudflaredStream:
         paths = [
             "cloudflared",
             "/opt/homebrew/bin/cloudflared",
-            "/usr/local/Homebrew/bin/cloudflared"
+            "/usr/local/Homebrew/bin/cloudflared",
+            "/usr/local/bin/cloudflared"
         ]
         for path in paths:
             if os.path.isfile(path) and os.access(path, os.X_OK):

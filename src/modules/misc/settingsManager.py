@@ -604,11 +604,19 @@ def exportProfile(profile_name):
         fields_data = loadFields() if profile_name == getCurrentProfile() else ast.literal_eval(open(fields_file).read())
         generalsettings_data = readSettingsFile(generalsettings_file)
 
+        # Ensure sensitive fields are removed from export
+        sensitive_keys = ("discord_bot_token", "webhook_link", "private_server_link")
+        for k in sensitive_keys:
+            if k in settings_data:
+                settings_data[k] = ""
+            if k in generalsettings_data:
+                generalsettings_data[k] = ""
+
         # Create export data structure
         export_data = {
             "profile_name": profile_name,
             "export_date": datetime.now().isoformat(),
-            "version": "1.0",
+            "version": getMacroVersion(),
             "settings": settings_data,
             "fields": fields_data,
             "generalsettings": generalsettings_data
