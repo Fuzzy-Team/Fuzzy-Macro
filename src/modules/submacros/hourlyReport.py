@@ -18,7 +18,7 @@ from datetime import datetime
 from modules.screen.robloxWindow import RobloxWindowBounds
 import pickle
 import json
-from modules.misc.settingsManager import getCurrentProfile, loadFields
+from modules.misc.settingsManager import getCurrentProfile, loadFields, getMacroVersion
 
 ww, wh = pag.size()
 
@@ -1171,6 +1171,17 @@ class HourlyReportDrawer:
         # draw profile below title if present
         if profile_text:
             self.draw.text((title_x, text_top + title_h + spacing), profile_text, fill=self.bodyColor, font=profile_font)
+
+        # draw macro version below profile/title
+        try:
+            macro_version = getMacroVersion()
+            version_text = f"v{macro_version}"
+            version_font = self.getFont("medium", 40)
+            # position version below profile if present, otherwise below title
+            version_y = text_top + title_h + spacing + (profile_h + 10 if profile_text else 10)
+            self.draw.text((title_x, version_y), version_text, fill=self.bodyColor, font=version_font)
+        except Exception:
+            pass
 
         #draw title
         self.draw.text((self.leftPadding, 80), "Hourly Report", fill=self.bodyColor, font=self.getFont("bold", 120))
