@@ -52,8 +52,9 @@ def find_compatible_so():
         f"dist/py{py_version.replace('.', '')}/bitmap_matcher_{arch}.so",
         f"dist/py{py_version.replace('.', '')}/bitmap_matcher.so",
         
-        # Generic fallback
+        # Generic fallbacks
         "bitmap_matcher.so",
+        "bitmap_matcher.pyd",  # Windows
     ]
     
     # Search in current directory and subdirectories

@@ -12,16 +12,8 @@
   <script>
     (function () {
       const theme = localStorage.getItem("gui_theme");
-      if (!theme) return;
-      const t = theme.toLowerCase();
-      if (t === "purple") {
+      if (theme && theme.toLowerCase() === "purple") {
         document.documentElement.classList.add("theme-purple");
-      } else if (t === "cream") {
-        document.documentElement.classList.add("theme-cream");
-      } else if (t === "red" ) {
-        document.documentElement.classList.add("theme-red");
-      } else if (t === "blue") {
-        document.documentElement.classList.add("theme-blue");
       }
     })();
   </script>
@@ -69,27 +61,15 @@
   <script src="./scripts/tabs/boost.js"></script>
   <script src="./scripts/tabs/quests.js"></script>
   <script>
-    // Fetch version from version.txt and optionally append commit hash
-    (async () => {
-      try {
-        const vRes = await fetch('./version.txt');
-        const version = (await vRes.text()).trim();
-        let display = 'v' + (version || '?');
-        // try to fetch optional commit marker written by updater
-        try {
-          const cRes = await fetch('./updated_commit.txt');
-          if (cRes.ok) {
-            const commit = (await cRes.text()).trim();
-            if (commit) display += ' - ' + commit;
-          }
-        } catch (e) {
-          // ignore if marker missing or fetch fails
-        }
-        document.getElementById('version').textContent = display;
-      } catch (e) {
+    // Fetch version from version.txt and display it
+    fetch('./version.txt')
+      .then(response => response.text())
+      .then(version => {
+        document.getElementById('version').textContent = 'v' + version.trim();
+      })
+      .catch(() => {
         document.getElementById('version').textContent = 'v?';
-      }
-    })();
+      });
   </script>
 </body>
 

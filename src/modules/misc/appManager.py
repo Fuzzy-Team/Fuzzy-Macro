@@ -5,11 +5,41 @@ import subprocess
 from modules.misc.appleScript import runAppleScript
 import pygetwindow as gw
 import pyautogui as pag
-from AppKit import NSWorkspace
 from ApplicationServices import AXUIElementIsAttributeSettable, AXUIElementCreateApplication, kAXErrorSuccess, AXUIElementSetAttributeValue, AXUIElementCopyAttributeValue, AXValueCreate, kAXValueCGPointType, kAXValueCGSizeType, AXUIElementCopyAttributeNames
 from Quartz import CGPoint, CGSize
 from CoreFoundation import CFRelease
 mw,mh = pag.size()
+
+class WindowMgr:
+    """Encapsulates some calls to the winapi for window management"""
+
+    def __init__ (self):
+        """Constructor"""
+        self._handle = None
+
+    def find_window(self, class_name, window_name=None):
+        """find a window by its class_name"""
+        self._handle = win32gui.FindWindow(class_name, window_name)
+
+    def _window_enum_callback(self, hwnd, wildcard):
+        """Pass to win32gui.EnumWindows() to check all the opened windows"""
+        if re.match(wildcard, str(win32gui.GetWindowText(hwnd))) is not None:
+            self._handle = hwnd
+
+    def find_window_wildcard(self, wildcard):
+        """find a window whose title matches the wildcard regex"""
+        self._handle = None
+        win32gui.EnumWindows(self._window_enum_callback, wildcard)
+
+    def set_foreground(self):
+        """put the window in the foreground"""
+        #send the alt key. For some reason this is required to make it run consistently
+        shell = win32com.client.Dispatch("WScript.Shell")
+        shell.SendKeys('%')
+        win32gui.SetForegroundWindow(self._handle) #switch to window
+        win32gui.ShowWindow(self._handle, win32con.SW_MINIMIZE)
+        win32gui.ShowWindow(self._handle, win32con.SW_MAXIMIZE)
+    
 
 def isAppOpenMac(app="roblox"):
     tmp = os.popen("ps -Af").read()
@@ -26,59 +56,53 @@ def openAppMac(app="Roblox"):
             break
     return True
 
+def isAppOpenWindows(name):
+    w = WindowMgr()
+    w.find_window(None, "Roblox")
+    try:
+        return True
+    except:
+        return False
+    
+def openAppWindows(name):
+    w = WindowMgr()
+    w.find_window(None, "Roblox")
+    try:
+        w.set_foreground()
+        return True
+    except:
+        return False
+        
+
 def openDeeplink(link):
-    subprocess.call(["open", link])
+    if sys.platform == "darwin":
+        subprocess.call(["open", link])
+    else:
+        os.system(f'start "" "{link}"')
 
 def closeApp(app):
-    try:
-        subprocess.call(["pkill", app], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except Exception:
-        pass
-    cmd = """
-        osascript -e 'quit application "Roblox"'
-    """
-    os.system(cmd)
-
-def forceQuitApp(app):
-    """Forcefully terminate an app/process. More aggressive than closeApp.
-
-    Uses SIGKILL on macOS.
-    """
-    try:
-        subprocess.call(["pkill", "-9", app], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except Exception:
-        pass
-    # also try killall as a fallback (suppress errors/output)
-    try:
-        subprocess.call(["killall", "-9", app], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except Exception:
-        pass
+    if sys.platform == "darwin":
+        subprocess.call(["pkill", app])
+        cmd = """
+            osascript -e 'quit application "Roblox"'
+        """
+        os.system(cmd)
+    else:
+        if app.lower() == "roblox":
+            app = "RobloxPlayerBeta"
+        #taskkill /IM RobloxPlayerBeta.exe
+        #app += ".exe"
+        os.system(f"START /wait taskkill /f /im {app}.exe")
 
 def getWindowSize(windowName):
-    import Quartz
-    
-    windowList = Quartz.CGWindowListCopyWindowInfo(
-        Quartz.kCGWindowListExcludeDesktopElements | Quartz.kCGWindowListOptionOnScreenOnly, 
-        Quartz.kCGNullWindowID
-    )
-    
-    for win in windowList:
-        owner = win.get(Quartz.kCGWindowOwnerName, '')
-        name = win.get(Quartz.kCGWindowName, '')
-        title = f'{owner} {name}'.strip()
-        
-        if windowName.lower() in title.lower():
-            bounds = win.get('kCGWindowBounds', {})
-            if bounds:
-                x = int(bounds.get('X', 0))
-                y = int(bounds.get('Y', 0))
-                w = int(bounds.get('Width', mw))
-                h = int(bounds.get('Height', mh))
-                return x, y, w, h
-    
-    # Window not found, most likely fullscreen (but unfocused)
-    return 0, 0, mw, mh
-
+    windows = gw.getAllTitles()
+    for win in windows:
+        if windowName.lower() in win.lower():
+            windowGeometry = gw.getWindowGeometry(win)
+            if windowGeometry:
+                return windowGeometry
+    #window not found, most likely also fullscreen (but unfocused)
+    return 0,0,mw,mh
 
 def setAppFullscreenMac(app="Roblox", fullscreen=True):
     workspace = NSWorkspace.sharedWorkspace()
@@ -110,8 +134,39 @@ def maximiseAppWindowMac(app="Roblox"):
     AXUIElementSetAttributeValue(windowRef, "AXPosition", pos)
     AXUIElementSetAttributeValue(windowRef, "AXSize", size)
 
-# Set the functions to use macOS implementations
-openApp = openAppMac
-isAppOpen = isAppOpenMac
-maximiseAppWindow = maximiseAppWindowMac
-setAppFullscreen = setAppFullscreenMac
+if sys.platform == "darwin":
+    from AppKit import NSWorkspace
+    openApp = openAppMac
+    isAppOpen = isAppOpenMac
+    maximiseAppWindow = maximiseAppWindowMac
+    setAppFullscreen = setAppFullscreenMac
+else:
+    import win32gui, win32con,  win32com.client
+    openApp = openAppWindows
+    isAppOpen = isAppOpenWindows
+    
+    def maximiseAppWindowWindows(app="Roblox"):
+        """Windows implementation for maximizing app window"""
+        w = WindowMgr()
+        w.find_window(None, app)
+        try:
+            w.set_foreground()
+        except:
+            pass
+    
+    def setAppFullscreenWindows(app="Roblox", fullscreen=True):
+        """Windows implementation for setting app fullscreen"""
+        # Windows fullscreen handling is typically done through window state
+        # This is a placeholder implementation
+        w = WindowMgr()
+        w.find_window(None, app)
+        try:
+            if fullscreen:
+                win32gui.ShowWindow(w._handle, win32con.SW_MAXIMIZE)
+            else:
+                win32gui.ShowWindow(w._handle, win32con.SW_RESTORE)
+        except:
+            pass
+    
+    maximiseAppWindow = maximiseAppWindowWindows
+    setAppFullscreen = setAppFullscreenWindows

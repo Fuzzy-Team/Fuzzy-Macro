@@ -2,7 +2,7 @@ import eel
 import webbrowser
 import modules.misc.settingsManager as settingsManager
 import os
-import modules.misc.update as updateModule
+from modules.misc.update import update as updateFunc
 import sys
 import ast
 import json
@@ -38,56 +38,7 @@ def resume():
 
 @eel.expose
 def getPatterns():
-    patterns = []
-    try:
-        for x in os.listdir("../settings/patterns"):
-            if x.endswith('.py') or x.endswith('.ahk'):
-                patterns.append(os.path.splitext(x)[0])
-    except Exception:
-        # folder may not exist yet
-        pass
-    return patterns
-
-
-@eel.expose
-def importPatterns(patterns):
-    """Import pattern files sent from the frontend.
-    `patterns` should be a list of dicts: {"name": "filename.py", "content": "..."}
-    Writes files into ../settings/patterns/ and returns a report dict.
-    """
-    results = {"saved": [], "errors": []}
-    target_dir = os.path.join(os.path.dirname(__file__), "..", "settings", "patterns")
-    # normalize path
-    target_dir = os.path.normpath(target_dir)
-    try:
-        os.makedirs(target_dir, exist_ok=True)
-    except Exception as e:
-        results["errors"].append(f"Could not ensure patterns dir: {e}")
-        return results
-
-    for p in patterns:
-        try:
-            name = p.get("name") or p.get("filename")
-            content = p.get("content", "")
-            if not name:
-                results["errors"].append("Missing filename for one of the uploads")
-                continue
-            # sanitize name to avoid directory traversal
-            name = os.path.basename(name)
-            # normalize extension: allow .py and .ahk, default to .py
-            root, ext = os.path.splitext(name)
-            ext = ext.lower() or '.py'
-            if ext not in ('.py', '.ahk'):
-                ext = '.py'
-            name = root + ext
-            dest_path = os.path.join(target_dir, name)
-            with open(dest_path, "w", encoding="utf-8") as f:
-                f.write(content)
-            results["saved"].append(name)
-        except Exception as e:
-            results["errors"].append(f"{name}: {e}")
-
-    return results
+    return [x.replace(".py","") for x in os.listdir("../settings/patterns") if ".py" in x]
 
 @eel.expose
 def clearManualPlanters():
@@ -104,26 +55,8 @@ def getManualPlanterData():
     
 @eel.expose
 def getAutoPlanterData():
-    try:
-        with open("./data/user/auto_planters.json", "r") as f:
-            return json.load(f)
-    except Exception:
-        # Return sensible default if file missing or invalid
-        return {
-            "planters": [
-                {"planter": "", "nectar": "", "field": "", "harvest_time": 0, "nectar_est_percent": 0},
-                {"planter": "", "nectar": "", "field": "", "harvest_time": 0, "nectar_est_percent": 0},
-                {"planter": "", "nectar": "", "field": "", "harvest_time": 0, "nectar_est_percent": 0}
-            ],
-            "nectar_last_field": {
-                "comforting": "",
-                "refreshing": "",
-                "satisfying": "",
-                "motivating": "",
-                "invigorating": ""
-            },
-            "gather": False
-        }
+    with open("./data/user/auto_planters.json", "r") as f:
+        return json.load(f)
 
 @eel.expose
 def clearAutoPlanters():
@@ -158,33 +91,9 @@ def clearAutoPlanters():
             "motivating": "",
             "invigorating": ""
         }
-        ,
-        "gather": False
     }
     with open("./data/user/auto_planters.json", "w") as f:
         json.dump(data, f, indent=3)
-
-
-@eel.expose
-def setAutoPlanterGather(val):
-    """Set the global 'gather' flag in data/user/auto_planters.json"""
-    try:
-        try:
-            with open("./data/user/auto_planters.json", "r") as f:
-                current = json.load(f)
-        except Exception:
-            current = None
-
-        if not current:
-            current = getAutoPlanterData()
-
-        current["gather"] = bool(val)
-
-        with open("./data/user/auto_planters.json", "w") as f:
-            json.dump(current, f, indent=3)
-        return True
-    except Exception:
-        return False
     
 @eel.expose
 def clearBlender():
@@ -257,24 +166,7 @@ def getMacroVersion():
 @eel.expose
 def update():
     try:
-        updated = updateModule.update()
-    except Exception:
-        updated = False
-    if updated:
-        eel.closeWindow()
-        sys.exit()
-    else:
-        try:
-            eel.updateButtonReset()()
-        except Exception:
-            pass
-    return
-
-
-@eel.expose
-def updateFromHash(commit_hash):
-    try:
-        updated = updateModule.update_from_commit(commit_hash)
+        updated = updateFunc()
     except Exception:
         updated = False
     if updated:
@@ -360,35 +252,22 @@ def clearRecentLogs():
 
 def launch():
 
-    import socket
-    def get_free_port(start_port=8000, max_tries=100):
-        port = start_port
-        for _ in range(max_tries):
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                try:
-                    s.bind(("localhost", port))
-                    return port
-                except OSError:
-                    port += 1
-        raise RuntimeError(f"No free port found in range {start_port}-{port}")
-
-    port = get_free_port(8000, 100)
-    port_url = f"http://localhost:{port}"
-
+    pass
+    
     # Ensure important functions are exposed to the frontend before eel starts
     try:
         eel.expose(getRecentLogs)
     except Exception:
         # ignore if already exposed or if exposure fails at import time
         pass
-
+    
     try:
-        eel.start('index.html', mode = "chrome", app_mode = True, block = False, port=port, cmdline_args=["--incognito", f"--app={port_url}"])
+        eel.start('index.html', mode = "chrome", app_mode = True, block = False, cmdline_args=["--incognito", "--app=http://localhost:8000"])
     except EnvironmentError:
         try:
-            eel.start('index.html', mode = "chrome-app", app_mode = True, block = False, port=port, cmdline_args=["--incognito", f"--app={port_url}"])
+            eel.start('index.html', mode = "chrome-app", app_mode = True, block = False, cmdline_args=["--incognito", "--app=http://localhost:8000"])
         except EnvironmentError:
             print("Chrome/Chromium could not be found. Opening in default browser...")
-            eel.start('index.html', block=False, mode=None, port=port)
+            eel.start('index.html', block=False, mode=None)
             time.sleep(2)
-            webbrowser.open(f"{port_url}/", new=2)
+            webbrowser.open("http://localhost:8000/", new=2)

@@ -49,45 +49,23 @@ def setScreenData():
     }
 
     #for macs: check if its reina, set the screen width and height, set multipliers
-    #get a screenshot. The size of the screenshot is the true screen size
-    sct=mss.mss()
-    region={'top':0,'left':0,'width':150,'height':150}
-    shot=sct.grab(region)
-    sw, sh = shot.width, shot.height
-    if sw == 300: #check if retina (screenshot size is twice)
-        screenData["screen_width"] *= 2
-        screenData["screen_height"] *= 2
-        screenData["display_type"] = "retina"
-    ndisplay = "{}x{}".format(sw,sh)
-    # Determine the true (physical) screen resolution using mss monitors
-    sct = mss.mss()
-    try:
-        mon = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
-        physical_w, physical_h = mon['width'], mon['height']
-    except Exception:
-        # fallback: grab a full-screen shot
-        shot = sct.grab({'top': 0, 'left': 0, 'width': wwd, 'height': whd})
-        physical_w, physical_h = shot.width, shot.height
-
-    detected_resolution = f"{physical_w}x{physical_h}"
-
-    # Normal retina detection for everything else
-    if physical_w != wwd or physical_h != whd:
-        screenData["screen_width"] = physical_w
-        screenData["screen_height"] = physical_h
-        screenData["display_type"] = "retina"
-    else:
-        screenData["screen_width"] = wwd
-        screenData["screen_height"] = whd
-
-    ndisplay = "{}x{}".format(screenData["screen_width"], screenData["screen_height"])
-
-    # get multipliers based on detected physical display resolution
-    if ndisplay in multiplierData:
-        screenData["y_multiplier"] = multiplierData[ndisplay][0]
-        screenData["x_multiplier"] = multiplierData[ndisplay][1]
-        screenData["y_length_multiplier"] = multiplierData[ndisplay][2]
-        screenData["x_length_multiplier"] = multiplierData[ndisplay][3]
+    if sys.platform == "darwin":
+        #get a screenshot. The size of the screenshot is the true screen size
+        sct=mss.mss()
+        region={'top':0,'left':0,'width':150,'height':150}
+        shot=sct.grab(region)
+        sw, sh = shot.width, shot.height
+        if sw == 300: #check if retina (screenshot size is twice)
+            screenData["screen_width"] *= 2
+            screenData["screen_height"] *= 2
+            screenData["display_type"] = "retina"
+        ndisplay = "{}x{}".format(sw,sh)
+        #get multipliers
+        if ndisplay in multiplierData:
+            screenData["y_multiplier"] = multiplierData[ndisplay][0]
+            screenData["x_multiplier"] = multiplierData[ndisplay][1]
+            screenData["y_length_multiplier"] = multiplierData[ndisplay][2]
+            screenData["x_length_multiplier"] = multiplierData[ndisplay][3]
     #save the data
     settingsManager.saveDict(screenPath, screenData)
 

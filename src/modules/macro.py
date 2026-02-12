@@ -392,16 +392,16 @@ questCompleterMobNames = {
     "giant ant": "ant",
     "giant_ants": "ant",
     "giant ants": "ant",
-    "army_ant": "ant",
-    "army ant": "ant",
-    "armyant": "ant",
-    "army_ants": "ant",
-    "army ants": "ant",
-    "fire_ant": "ant",
-    "fire ant": "ant",
-    "fireant": "ant",
-    "fire_ants": "ant",
-    "fire ants": "ant",
+    "army_ant": "armyant",
+    "army ant": "armyant",
+    "armyant": "armyant",
+    "army_ants": "armyant",
+    "army ants": "armyant",
+    "fire_ant": "fireant",
+    "fire ant": "fireant",
+    "fireant": "fireant",
+    "fire_ants": "fireant",
+    "fire ants": "fireant",
     "werewolf": "werewolf",
     "werewolves": "werewolf",
     "wolf": "werewolf",
@@ -471,9 +471,8 @@ questCompleterCollectNames = {
 } 
 
 class macro:
-    def __init__(self, status, logQueue, updateGUI, run=None, skipTask=None, presence=None):
+    def __init__(self, status, logQueue, updateGUI, run=None, skipTask=None):
         self.status = status
-        self.presence = presence
         self.updateGUI = updateGUI
         self.run = run
         self.skipTask = skipTask
@@ -605,58 +604,6 @@ class macro:
         self.robloxWindow.setRobloxWindowBounds(setYOffset=setYOffset)
         if setYOffset:
             self.logger.webhook("", f"Detect Y Offset: {self.robloxWindow.contentYOffset}", "dark brown")
-
-    def _set_presence_payload(self, payload: dict):
-        if self.presence is None:
-            return
-        try:
-            if payload:
-                self.presence.value = f"rp:{json.dumps(payload)}"
-            else:
-                self.presence.value = ""
-        except Exception:
-            pass
-
-    def set_presence(self, activity=None, task=None, field=None, state=None, details=None,
-                     small_text=None, small_image=None, large_image=None, large_text=None):
-        payload = {}
-        if activity:
-            payload["activity"] = activity
-        if task:
-            payload["task"] = task
-        if field:
-            payload["field"] = field
-        if state:
-            payload["state"] = state
-        if details:
-            payload["details"] = details
-        if small_text:
-            payload["small_text"] = small_text
-        if small_image:
-            payload["small_image"] = small_image
-        if large_image:
-            payload["large_image"] = large_image
-        if large_text:
-            payload["large_text"] = large_text
-        self._set_presence_payload(payload)
-
-    def set_task_status(self, status_key=None, *, activity=None, task=None, field=None, state=None, details=None, update_presence=True):
-        if status_key:
-            self.status.value = status_key
-        else:
-            self.status.value = ""
-        if not update_presence or self.presence is None:
-            return
-        if not status_key:
-            self._set_presence_payload({})
-            return
-        if any([activity, task, field, state, details]):
-            self.set_presence(activity=activity, task=task, field=field, state=state, details=details)
-        else:
-            self.set_presence(activity=status_key)
-
-    def clear_task_status(self):
-        self.set_task_status(None)
     
     def checkPauseAndWait(self):
         """Check if macro is paused and wait until resumed. Returns True if stop was requested."""
@@ -788,29 +735,46 @@ class macro:
             self.nightDetectStreaks = 0
 
     def isFullScreen(self):
-        windows = gw.getAllTitles()
-        for win in windows:
-            if "roblox roblox" in win.lower():
-                x,y,w,h = gw.getWindowGeometry(win)
-                return x==0 and y==0 and w==self.robloxWindow.mw and h==self.robloxWindow.mh
-        #can't find the roblox window, most likely fullscreen? Assumes that it exists
-        return True
+        if sys.platform == "darwin":
+            windows = gw.getAllTitles()
+            for win in windows:
+                if "roblox roblox" in win.lower():
+                    x,y,w,h = gw.getWindowGeometry(win)
+                    return x==0 and y==0 and w==self.robloxWindow.mw and h==self.robloxWindow.mh
+            #can't find the roblox window, most likely fullscreen? Assumes that it exists
+            return True
+                    
+        else:
+            menubarRaw = ocr.customOCR(0, 0, 300, 60, 0) #get menu bar on mac, window bar on windows
+            menubar = ""
+            try:
+                for x in menubarRaw:
+                    menubar += x[1][0]
+            except:
+                pass
+            menubar = menubar.lower()
+            return not ("rob" in menubar or "lox" in menubar) #check if roblox can be found in menu bar
 
     def toggleFullScreen(self):
-        self.keyboard.keyDown("command")
-        time.sleep(0.05)
-        self.keyboard.keyDown("ctrl")
-        time.sleep(0.05)
-        self.keyboard.keyDown("f")
-        time.sleep(0.1)
-        self.keyboard.keyUp("command")
-        self.keyboard.keyUp("ctrl")
-        self.keyboard.keyUp("f")
+        if sys.platform == "darwin":
+            self.keyboard.keyDown("command")
+            time.sleep(0.05)
+            self.keyboard.keyDown("ctrl")
+            time.sleep(0.05)
+            self.keyboard.keyDown("f")
+            time.sleep(0.1)
+            self.keyboard.keyUp("command")
+            self.keyboard.keyUp("ctrl")
+            self.keyboard.keyUp("f")
+        elif sys.platform == "win32":
+            for _ in range(3):
+                self.keyboard.press("f11")
+                time.sleep(0.4)
 
     def adjustImage(self, path, imageName):
         return adjustImage(path, imageName, self.robloxWindow.display_type)
         
-    #run a path. Choose automater over python if it exists
+    #run a path. Choose automater over python if it exists (except on windows)
     #file must exist: if set to False, will not attempt to run the file if it doesnt exist
     def runPath(self, name, fileMustExist = True):
         ws = self.setdat["movespeed"]
@@ -818,7 +782,7 @@ class macro:
         #try running a automator workflow
         #if it doesnt exist, run the .py file instead
 
-        if os.path.exists(path+".workflow"):
+        if os.path.exists(path+".workflow") and sys.platform == "darwin":
             os.system(f"/usr/bin/automator {path}.workflow")
         else:
             pyPath = f"{path}.py"
@@ -846,16 +810,8 @@ class macro:
     #run the path to go to a field
     #faceDir what direction to face after landing in a field (default, north, south)
     def goToField(self, field, faceDir = "default"):
-        # Accept a string or a list/tuple of tokens/words and normalize to a
-        # single field name (e.g. ["blue", "flower"] -> "blue flower").
-        if isinstance(field, (list, tuple)):
-            try:
-                field = " ".join([str(f) for f in field])
-            except Exception:
-                field = str(field)
-
         # Normalize field name to handle both space and underscore formats
-        normalized_field = str(field).replace('_', ' ').strip()
+        normalized_field = field.replace('_', ' ')
         self.location = normalized_field
         self.runPath(f"cannon_to_field/{normalized_field}")
         if faceDir == "default": return
@@ -1196,7 +1152,7 @@ class macro:
         return True
 
 
-    def convert(self, bypass = False, forced_convert_balloon=None):
+    def convert(self, bypass = False):
         self.location = "spawn"
         if not bypass:
             if not self.isBesideEImage("makehoney"): 
@@ -1210,17 +1166,15 @@ class macro:
             if self.isBesideE(["stop", "making"], ["make"], log=True): 
                 break
 
-        self.set_task_status("converting", activity="converting")
+        self.status.value = "converting"
         st = time.time()
         self.logger.webhook("", "Converting", "brown", "screen")
         self.alreadyConverted = True
         self.converting = True
 
         #check if convert balloon
-        conv_setting = str(self.setdat.get("convert_balloon", "")).lower().replace(" ", "_")
-        convertBalloon = (conv_setting == "always") or \
-                (conv_setting == "every" and self.hasRespawned("convert_balloon", int(self.setdat.get("convert_balloon_every", 30))*60)) or \
-                (conv_setting == "every_gather" and forced_convert_balloon is True)
+        convertBalloon = (self.setdat["convert_balloon"] == "always") or \
+                        (self.setdat["convert_balloon"] == "every" and self.hasRespawned("convert_balloon", self.setdat["convert_balloon_every"]*60))
         
         convertedBackpack = False
 
@@ -1231,7 +1185,7 @@ class macro:
             # Check if paused and wait
             if self.checkPauseAndWait():
                 # Stop was requested while paused
-                self.clear_task_status()
+                self.status.value = ""
                 self.converting = False
                 return False
             
@@ -1298,7 +1252,7 @@ class macro:
                     self.logger.webhook("", "Still converting", "brown")
                 #glitter is up, g
                 elif self.setdat["AFB_glitter"] and self.hasAFBRespawned("AFB_glitter_cd", self.setdat["AFB_rebuff"]*60+30) and self.AFBglitter and not self.failed and not self.afb: #if used dice before
-                    self.clear_task_status()
+                    self.status.value = ""
                     self.afb = True
                     self.stop = True
                     self.cAFBglitter = True
@@ -1308,11 +1262,11 @@ class macro:
                     self.AFBglitter = False
                     self.cAFBglitter = False
                     self.logger.webhook("", "Continuing conversion", "brown")
-                    self.set_task_status("converting", activity="converting")
+                    self.status.value = "converting"
                 if not self.converting: break
 
         if convertBalloon: self.saveTiming("convert_balloon")
-        self.clear_task_status()
+        self.status.value = ""
         #deal with the extra delay
         self.logger.webhook("", f"Finished converting (Time: {self.convertSecsToMinsAndSecs(time.time()-st)})", "brown", "screen", ping_category="ping_conversion_events")
         wait = self.setdat["convert_wait"]
@@ -1332,12 +1286,6 @@ class macro:
     def reset(self, hiveCheck = False, convert = True, AFB = False):
         self.alreadyConverted = False
         self.keyboard.releaseMovement()
-
-        # Show that we're returning to hive while performing reset actions
-        try:
-            self.set_task_status("travelling_hive", activity="travelling", field="hive")
-        except Exception:
-            pass
 
         #reset until player is at hive
         for i in range(5):
@@ -1574,7 +1522,7 @@ class macro:
         self.canDetectNight = False
         psLink = self.setdat.get("private_server_link", "")
         self.logger.webhook("",rejoinMsg, "dark brown")
-        self.set_task_status("rejoining", activity="rejoining")
+        self.status.value = "rejoining"
         mouse.mouseUp()
         keyboard.releaseMovement()
         for i in range(3):
@@ -1584,18 +1532,12 @@ class macro:
             if i == 2 and joinPS: 
                 self.logger.webhook("", "Failed rejoining too many times, falling back to a public server", "red", "screen", ping_category="ping_disconnects")
                 joinPS = False
-            
+            appManager.closeApp("Roblox") # close roblox
             time.sleep(8)
             #execute rejoin method
             if joinPS:
                 browserLink = psLink
             if rejoinMethod == "deeplink":
-                try:
-                    appManager.forceCloseApp("Roblox")
-                except Exception:
-                    appManager.closeApp("Roblox")
-                appManager.openApp("Roblox")
-                time.sleep(2)
                 deeplink = "roblox://placeID=1537690962"
                 if joinPS:
                     try:
@@ -1813,10 +1755,10 @@ class macro:
                 self.convert()
                 #no need to reset
                 self.canDetectNight = True
-                self.clear_task_status()
+                self.status.value = ""
                 return
             self.logger.webhook("",f'Rejoin unsuccessful, attempt {i+2}','dark brown', "screen")
-        self.clear_task_status()
+        self.status.value = ""
     
     def blueTextImageSearch(self, text, threshold=0.7):
         target = self.adjustImage("./images/blue", text)
@@ -1856,10 +1798,6 @@ class macro:
         for i in range(3):
             self.waitForBees()
             #go to field
-            try:
-                self.set_task_status(f"travelling_{field}", activity="travelling", field=field)
-            except Exception:
-                pass
             self.cannon()
             self.logger.webhook("",f"Travelling: {field.title()}, Attempt {i+1}", "dark brown")
             self.goToField(field)
@@ -1935,50 +1873,31 @@ class macro:
         self.died = False
         #time to gather
         gatherNameSpace = {**locals(), **globals()}
-        self.set_task_status(f"gather_{field}", task="gather", field=field)
+        self.status.value = f"gather_{field}"
         self.isGathering = True
         firstPattern = True
         lastGooTime = 0  # Track when goo was last used
-        lastGumdropTime = 0  # Track when gumdrop was last used
         gooTimerActive = True  # Flag to control goo timer thread
-        gumdropTimerActive = True  # Flag to control gumdrop timer thread
-
+        
         # Add goo status to webhook message
         gooStatus = " - Goo Enabled" if fieldSetting["goo"] else ""
         self.logger.webhook(f"Gathering: {field.title()}", f"Limit: {gatherTimeLimit} - {fieldSetting['shape']} - Backpack: {fieldSetting['backpack']}%{gooStatus}", "light green")
-
+        
+        # Start goo timer thread
         import threading
-        # Goo timer thread: always 3s interval if goo quest, else field setting
         def gooTimerThread():
             nonlocal lastGooTime, gooTimerActive
             while gooTimerActive:
                 currentTime = time.time()
-                gooInterval = 3 if questGumdrops else int(fieldSetting["goo_interval"])
+                gooInterval = int(fieldSetting["goo_interval"])
                 if fieldSetting["goo"] and (currentTime - lastGooTime) >= gooInterval:
                     self.keyboard.press(str(self.setdat["goo_slot"]))
                     time.sleep(0.05)
                     lastGooTime = currentTime
-                time.sleep(0.5)
-
-        # Gumdrop timer thread: 3s if questGumdrops, else field setting
-        def gumdropTimerThread():
-            nonlocal lastGumdropTime, gumdropTimerActive
-            while gumdropTimerActive:
-                currentTime = time.time()
-                gumdropInterval = 3 if questGumdrops else int(fieldSetting.get("gumdrop_interval", 3))
-                if (currentTime - lastGumdropTime) >= gumdropInterval:
-                    if questGumdrops:
-                        self.keyboard.press(str(self.setdat["quest_gumdrop_slot"]))
-                    elif fieldSetting.get("gumdrops", False):
-                        self.keyboard.press(str(self.setdat["gumdrop_slot"]))
-                    time.sleep(0.05)
-                    lastGumdropTime = currentTime
-                time.sleep(0.5)
-
-        gooThread = threading.Thread(target=gooTimerThread, daemon=True)
-        gooThread.start()
-        gumdropThread = threading.Thread(target=gumdropTimerThread, daemon=True)
-        gumdropThread.start()
+                time.sleep(0.5)  # Check every 0.5 seconds
+        
+        gooTimerThread = threading.Thread(target=gooTimerThread, daemon=True)
+        gooTimerThread.start()
         mouse.moveBy(10,5)
         self.keyboard.releaseMovement()
 
@@ -1986,13 +1905,12 @@ class macro:
             return time.time() - st
         
         def stopGather():
-            nonlocal gooTimerActive, gumdropTimerActive
+            nonlocal gooTimerActive
             gooTimerActive = False  # Stop the goo timer thread
-            gumdropTimerActive = False  # Stop the gumdrop timer thread
             if fieldSetting["shift_lock"]: 
                 self.keyboard.press('shift')
             self.moveMouseToDefault()
-            self.clear_task_status()
+            self.status.value = ""
             self.isGathering = False
             if "onGatherEnd" in gatherNameSpace and callable(gatherNameSpace["onGatherEnd"]):
                 gatherNameSpace["onGatherEnd"]()
@@ -2015,12 +1933,16 @@ class macro:
                 self.reset(convert=False)
                 return
             
-            # goo and gumdrop timers are now handled by background threads
+            #goo timer is now handled by background thread
 
             patternStartTime = time.time()
             mouse.mouseDown()
 
-            # (No need to press quest gumdrops here, handled by timer)
+            #quest gumdrops
+            if questGumdrops:
+                for _ in range(2):
+                    self.keyboard.press(str(self.setdat["quest_gumdrop_slot"]))
+                    time.sleep(0.05)
 
             #ensure that the pattern works
             try:
@@ -2064,7 +1986,7 @@ class macro:
                 self.collectMondoBuff()
                 break
             elif self.died:
-                self.clear_task_status()
+                self.status.value = ""
                 stopGather()
                 self.logger.webhook("","Player died", "dark brown","screen", ping_category="ping_character_deaths")
                 time.sleep(0.4)
@@ -2100,10 +2022,6 @@ class macro:
             self.faceDirection(field, "south")
             #start walk
             self.canDetectNight = False
-            try:
-                self.set_task_status("travelling_hive", activity="travelling", field="hive")
-            except Exception:
-                pass
             self.logger.webhook("",f"Walking back to hive: {field.title()}", "dark brown")
             self.runPath(f"field_to_hive/{field}")
             #find hive and convert
@@ -2120,25 +2038,13 @@ class macro:
             time.sleep(0.4)
             for _ in range(7):
                 #goo timer continues via background thread during conversion attempts
-                if self.convert(forced_convert_balloon=(str(self.setdat.get("convert_balloon","")).lower().replace(" ","_")=="every_gather")):
+                if self.convert():
                     break
                 self.keyboard.walk("d",0.1)
                 time.sleep(0.2) #add a delay so that the E can popup
             else:
-                # If configured, attempt to use a whirligig before resetting
-                if fieldSetting.get("use_whirlwig_fallback", False):
-                    self.logger.webhook("","Can't find hive, attempting whirligig fallback", "dark brown", "screen")
-                    self.useItemInInventory("whirligig")
-                    time.sleep(1)
-                    if not self.convert(forced_convert_balloon=(str(self.setdat.get("convert_balloon","")).lower().replace(" ","_")=="every_gather")):
-                        self.logger.webhook("","Whirligig fallback failed, resetting", "dark brown", "screen")
-                        self.reset()
-                    else:
-                        # whirligig succeeded — perform non-converting reset behavior
-                        self.reset(convert=False)
-                else:
-                    self.logger.webhook("","Can't find hive, resetting", "dark brown", "screen")
-                    self.reset()
+                self.logger.webhook("","Can't find hive, resetting", "dark brown", "screen")
+                self.reset()
 
         if returnType == "reset":
             #goo timer continues via background thread during reset
@@ -2150,7 +2056,7 @@ class macro:
             #goo timer continues via background thread during whirligig usage
             self.useItemInInventory("whirligig")
             time.sleep(1)
-            if not self.convert(forced_convert_balloon=(str(self.setdat.get("convert_balloon","")).lower().replace(" ","_")=="every_gather")):
+            if not self.convert():
                 self.logger.webhook("","Whirligigs failed, walking to hive", "dark brown", "screen")
                 walkToHive()
                 return
@@ -2204,18 +2110,6 @@ class macro:
         self.keyboard.walk("s", 0.4)
         time.sleep(0.5)
 
-        # If the red box (where E would be) says 'need', fetch a free ant pass
-        beside_text = self.getTextBesideE() or ""
-        if "need" in beside_text.lower():
-            self.logger.webhook("", "No ant passes detected — fetching free ant pass","dark brown")
-            try:
-                self.reset(convert=False)
-                self.collect("ant_pass_dispenser")
-                self.reset(convert=False)
-            except Exception:
-                self.logger.webhook("", "Failed to collect ant pass","red", "screen", ping_category="ping_critical_errors")
-            time.sleep(1)
-
         if self.isBesideE(["spen","play"], ["need"]):
             self.logger.webhook("","Start Ant Challenge","bright green", "screen")
             self.keyboard.press("e")
@@ -2238,7 +2132,6 @@ class macro:
                     mouse.click()
                     break
             return
-
         self.logger.webhook("", "Cant start ant challenge", "red", "screen", ping_category="ping_critical_errors")
 
     def getCurrentMinute(self):
@@ -2254,7 +2147,7 @@ class macro:
         return minute <= 10 and self.hasRespawned("mondo", 20*60)
 
     def collectMondoBuff(self, gatherInterrupt = False):
-        self.set_task_status("mondo_buff", activity="mondo")
+        self.status.value = ""
         st = time.perf_counter()
         self.logger.webhook("","Travelling: Mondo Buff","dark brown")
         #go to mondo buff
@@ -2347,7 +2240,6 @@ class macro:
         return True
 
     def collectStickerPrinter(self):
-        self.set_task_status("sticker_printer", activity="sticker_printer")
         reached = False
         for _ in range(2):
             self.logger.webhook("",f"Travelling: Sticker Printer","dark brown")
@@ -2458,7 +2350,6 @@ class macro:
         return cooldownSeconds
     
     def collect(self, objective):
-        self.set_task_status(objective, activity=objective)
         reached = None
         objectiveData = mergedCollectData[objective]
         displayName = objective.replace("_"," ").title()
@@ -2539,14 +2430,6 @@ class macro:
                     self.logger.webhook("", "Sticker Stack on cooldown", "dark brown", "screen")
                     return
                 self.claimStickerStack()
-            elif objective == "honeystorm":
-                self.runPath("collect/honeystorm")
-                
-                self.saveTiming("honeystorm")
-                self.logger.webhook("", "Honey storm collected", "bright green", "screen")
-                self.reset(convert=True)
-                return
-                #credit to laganyt for the path
             else:
                 time.sleep(0.1)
                 self.logger.webhook("", f"Collected: {displayName}", "bright green", "screen")
@@ -2626,7 +2509,7 @@ class macro:
     def killMob(self, mob, field, walkPath = None):
         mobName = mob
         if mob == "rhinobeetle": mobName = "rhino beetle"
-        self.set_task_status("bugrun", activity=mob, details=f"Attacking in {field.title()}")
+        self.status.value = "bugrun"
         self.logger.webhook("","{}: {} ({})".format("Travelling" if walkPath is None else "Walking", mobName.title(),field.title()),"dark brown")
         self.mobRunStatus = "attacking"
         attackThread = threading.Thread(target=self.mobRunAttackingBackground)
@@ -2726,7 +2609,7 @@ class macro:
                     if self.mobRunStatus == "done": return
         lootPattern(1.35, 2.5)
         self.setMobTimer(field)
-        self.clear_task_status()
+        self.status.value = ""
         lootThread.join()
         #check if there are paths for the macro to walk to other fields for mob runs
         #run a path in the field format
@@ -2749,7 +2632,6 @@ class macro:
                 self.vicStatus = "defeated"
                 
     def stingerHunt(self):
-        self.set_task_status("stinger_hunt", activity="vicious")
 
         class VicStopPathException(Exception):
             pass
@@ -2763,7 +2645,7 @@ class macro:
         self.vicField = None
         self.stopVic = False
         currField = None
-        self.clear_task_status()
+        self.status.value = ""
 
         stingerHuntThread = threading.Thread(target=self.stingerHuntBackground)
         stingerHuntThread.daemon = True
@@ -2852,21 +2734,16 @@ class macro:
                 break
             self.logger.webhook("", "Failed to land in stump field", "red", "screen", ping_category="ping_critical_errors")
             self.reset()
-        # Set status to attacking for hotbar logic
-        self.set_task_status("attacking", activity="stump_snail")
-        try:
-            while True:
-                # Check if paused and wait
-                if self.checkPauseAndWait():
-                    # Stop was requested while paused
-                    return
-                mouse.click()
-                keepOldData = self.keepOldCheck()
-                if keepOldData is not None:
-                    mouse.mouseUp()
-                    break
-        finally:
-            self.set_task_status(None, update_presence=False)  # Reset status after attack
+        while True:
+            # Check if paused and wait
+            if self.checkPauseAndWait():
+                # Stop was requested while paused
+                return
+            mouse.click()
+            keepOldData = self.keepOldCheck()
+            if keepOldData is not None:
+                mouse.mouseUp()
+                break
         #handle the other stump snail
         self.logger.webhook("","Stump Snail Killed","bright green", "screen", ping_category="ping_mob_events")
         self.saveTiming("stump_snail")
@@ -2881,8 +2758,7 @@ class macro:
             y = self.robloxWindow.my
             res = locateImageOnScreen(replaceImg, x, y, 650, self.robloxWindow.mh, 0.8)
             if res is not None:
-                ix, iy = [j//self.robloxWindow.multi for j in res[1]]
-                mouse.moveTo(x + ix + 5, y + iy + 5)
+                mouse.moveTo(*[j//self.robloxWindow.multi for j in res[1]])
                 mouse.click()
         amulet = self.setdat["stump_snail_amulet"]
         if amulet == "keep":
@@ -2892,15 +2768,13 @@ class macro:
         elif amulet == "stop":
             while self.keepOldCheck(): mouse.click()
         elif amulet == "wait for command":
-            self.set_task_status("amulet_wait", update_presence=False)
+            self.status.value = "amulet_wait"
             #wait for user to send command to bot
             while self.status.value == "amulet_wait": mouse.click()
             if self.status.value == "amulet_keep":
                 keepOld()
             elif self.status.value == "amulet_replace":
                 replace()
-
-        self.clear_task_status()
 
     #sleep in ms, useful for implementing ahk code
     def msSleep(self, t):
@@ -2925,7 +2799,6 @@ class macro:
 
     def coconutCrab(self):
         self.bossStatus = None
-        self.set_task_status("coconut_crab", activity="coconut_crab")
         cocoThread = threading.Thread(target=self.coconutCrabBackground)
         cocoThread.daemon = True
         cocoThread.start()
@@ -2974,7 +2847,6 @@ class macro:
         cocoThread.join()
         self.hourlyReport.addHourlyStat("bug_run_time", time.time()-st)
         self.saveTiming("coconut_crab")
-        self.clear_task_status()
         self.reset()
 
     def kingBeetle(self):
@@ -3099,17 +2971,12 @@ class macro:
             return True
     
     def findPlanterInInventory(self, name):
-        # Always invalidate cached planter coordinates before searching
-        self.planterCoords = None
-        for attempt in range(2):
+        for _ in range(2):
             res = self.findItemInInventory(f"{name}planter")
             if res:
                 self.planterCoords = res
                 return
-            else:
-                self.logger.webhook("", f"Could not find {name}planter in inventory (attempt {attempt+1}) - invalidating cache and retrying", "red")
-                self.planterCoords = None
-                time.sleep(1)
+            time.sleep(1)
             
     #place the planter and return true if successfully placed
     def placePlanter(self, planter, field, glitter):
@@ -3119,10 +2986,9 @@ class macro:
         def updateHourlyTime():
             self.hourlyReport.addHourlyStat("misc_time", time.time()-st)
 
-        max_attempts = 2
-        cooldown_seconds = 3  # Wait 3 seconds before retrying if planter is missing
-        for attempt in range(max_attempts):
-            # Invalidate cached planter coordinates before each attempt
+        for _ in range(2):
+            #try to place planter
+            #start finding planter
             self.planterCoords = None
             findPlanterInventoryThread = threading.Thread(target=self.findPlanterInInventory, args=(name,))
             findPlanterInventoryThread.daemon = True
@@ -3133,27 +2999,8 @@ class macro:
             findPlanterInventoryThread.join()
             #Couldn't find planter
             if self.planterCoords is None:
-                # If not found: retry only if we haven't exhausted attempts.
-                if attempt < max_attempts - 1:
-                    self.logger.webhook("", f"[Planter Placement] Could not find {planter.title()} in inventory (attempt {attempt+1}/{max_attempts}). Waiting {cooldown_seconds}s before retry.", "red", "screen", ping_category="ping_critical_errors")
-                    updateHourlyTime()
-                    time.sleep(cooldown_seconds)
-                    continue
-                else:
-                    # Final attempt failed — give up immediately.
-                    self.logger.webhook("", f"[Planter Placement] Could not find {planter.title()} in inventory after {max_attempts} attempts. Giving up.", "red", "screen", ping_category="ping_critical_errors")
-                    # Disable this planter for the rest of the session so the macro won't try it again
-                    setting_key = f"auto_planter_{planter.replace(' ', '_').lower()}"
-                    try:
-                        if setting_key in self.setdat:
-                            self.setdat[setting_key] = False
-                            # Notify the user that we disabled it for the session
-                            self.logger.webhook("", f"[Planter Placement] Disabled {planter.title()} for this session (not in inventory).", "orange", "screen")
-                    except Exception:
-                        # If anything goes wrong setting the flag, still return False
-                        pass
-                    updateHourlyTime()
-                    return False
+                updateHourlyTime()
+                return 
             #place planter
             self.useItemInInventory(x=self.planterCoords[0], y=self.planterCoords[1])
             
@@ -3165,6 +3012,7 @@ class macro:
                     placedPlanter = False
                     break
                 time.sleep(0.3)
+                
             if placedPlanter: 
                 self.logger.webhook("",f"Placed Planter: {planter.title()}", "dark brown", "screen")          
                 #use glitter
@@ -3174,9 +3022,7 @@ class macro:
                 return True
             self.logger.webhook("",f"Failed to Place Planter: {planter.title()}", "red", "screen", ping_category="ping_critical_errors")
             self.reset()
-            # If failed to place, wait before next attempt
-            if attempt < max_attempts - 1:
-                time.sleep(cooldown_seconds)
+            
         updateHourlyTime()
         return False
 
@@ -3267,8 +3113,6 @@ class macro:
             i += 1
             
     def collectPlanter(self, planter, field):
-        field_key = field.replace(" ", "_")
-        self.set_task_status(f"planter_{field_key}", task="planter", field=field)
         st = time.time()
         def updateHourlyTime():
             self.hourlyReport.addHourlyStat("misc_time", time.time()-st)
@@ -3302,8 +3146,6 @@ class macro:
         field = self.setdat[f"cycle{cycle}_{slot+1}_field"]
         glitter = self.setdat[f"cycle{cycle}_{slot+1}_glitter"]
         gather = self.setdat[f"cycle{cycle}_{slot+1}_gather"]
-        field_key = field.replace(" ", "_")
-        self.set_task_status(f"planter_{field_key}", task="planter", field=field)
         #set the cooldown for planters and place them
         if not self.placePlanter(planter,field, glitter): #make sure the planter was placed
             return
@@ -3333,7 +3175,6 @@ class macro:
         mouse.click()
         
     def blender(self, blenderData):
-        self.set_task_status("blender", activity="blender")
         itemNo = blenderData["item"]
         st = time.time()
         def updateHourlyTime():
@@ -3647,21 +3488,10 @@ class macro:
         for i in range(1,8):
             slotUseWhen = self.setdat[f"hotbar{i}_use_when"]
             #check if use when is correct
-            if slotUseWhen == "never":
-                continue
-            elif self.status.value == "rejoining":
-                continue
-            # Only use hotbar slots configured for 'Gathering' when the macro
-            # is actively gathering in-field (self.isGathering True). This
-            # prevents hotbar items being used while preparing/traveling to
-            # a field before the gather actually begins.
-            elif slotUseWhen == "gathering" and not getattr(self, "isGathering", False):
-                continue
-            elif slotUseWhen == "converting" and not self.status.value == "converting":
-                continue
-            elif slotUseWhen == "attacking" and not self.status.value == "attacking":
-                continue
-            # If 'always', or matches any of the above, allow
+            if slotUseWhen == "never": continue
+            elif self.status.value == "rejoining": continue
+            elif slotUseWhen == "gathering" and not "gather_" in self.status.value: continue 
+            elif slotUseWhen == "converting" and not self.status.value == "converting": continue 
             #check cd
             cdSecs = self.setdat[f"hotbar{i}_use_every_value"]
             if self.setdat[f"hotbar{i}_use_every_format"] == "mins": 
@@ -3842,173 +3672,15 @@ class macro:
             "polar bear": "polar",
             "bucko bee": "bucko",
             "riley bee": "riley",
-            "honey bee": "honey",
-            "brown bear": "brown"
+            "honey bee": "honey"
         }
 
         #prevent the macro from false detecting beesmas quests
         questTitleBlacklistedPhrases = {
             "polar bear": ["beesmas", "feast"],
             "bucko bee": ["snow", "machine"],
-            "riley bee": ["snow", "machine"],
-            "brown bear": []
+            "riley bee": ["snow", "machine"]
         }
-
-        def parseBrownBearTitleFields(titleText):
-            import re
-
-            text = self.convertCyrillic(titleText.lower())
-            text = re.sub(r"^.*brown\s+bear[:\-\s]*", "", text).strip()
-
-            abbrevToField = {
-                "sun": "sunflower",
-                "dand": "dandelion",
-                "mush": "mushroom",
-                "bluf": "blue flower",
-                "clove": "clover",
-                "bamb": "bamboo",
-                "spide": "spider",
-                "straw": "strawberry",
-                "pinap": "pineapple",
-                "stump": "stump",
-                "cact": "cactus",
-                "pump": "pumpkin",
-                "pine": "pine tree",
-                "rose": "rose",
-                "mount": "mountain top",
-                "coco": "coconut",
-                "pepp": "pepper"
-            }
-            colorTokens = {"white", "blue", "red"}
-
-            tokens = [t for t in re.split(r"[^a-z]+", text) if t]
-            fields = []
-            colors = []
-
-            for token in tokens:
-                if token in colorTokens and token not in colors:
-                    colors.append(token)
-                    continue
-                field = abbrevToField.get(token)
-                if field and field not in fields:
-                    fields.append(field)
-
-            return fields, colors
-
-        def extractQuestObjectiveChunks(screen, questTitleYPos):
-            screenBgr = cv2.cvtColor(np.array(screen), cv2.COLOR_RGBA2BGR)
-            screenCropped = screenBgr[questTitleYPos:, :]
-
-            def findTitleBarColor(scanScreen, maxHeight):
-                scan = scanScreen[:maxHeight, :]
-                if scan.size == 0:
-                    return None
-                bestStd = None
-                bestMean = None
-                for row in range(scan.shape[0]):
-                    rowPixels = scan[row]
-                    rowStd = float(np.std(rowPixels, axis=0).mean())
-                    if bestStd is None or rowStd < bestStd:
-                        bestStd = rowStd
-                        bestMean = np.mean(rowPixels, axis=0)
-                if bestMean is None:
-                    return None
-                return [int(c) for c in bestMean]
-
-            cropTargetColor = [247, 240, 229]
-            cropColorTolerance = 3
-            lower = np.array([c - cropColorTolerance for c in cropTargetColor], dtype=np.uint8)
-            upper = np.array([c + cropColorTolerance for c in cropTargetColor], dtype=np.uint8)
-
-            cropMask = cv2.inRange(screenCropped, lower, upper)
-            cropRows = np.any(cropMask > 0, axis=1)
-            startIndex = None
-            endIndex = 0
-
-            maxHeight = 20*self.robloxWindow.multi
-            for i, hasColor in enumerate(cropRows):
-                if i > maxHeight and startIndex is None:
-                    break
-                if hasColor and startIndex is None:
-                    startIndex = i
-                elif not hasColor and startIndex is not None:
-                    endIndex = i
-                    break
-
-            if startIndex is None:
-                # Fallback to a dynamically sampled title bar color.
-                dynamicColor = findTitleBarColor(screenCropped, int(40*self.robloxWindow.multi))
-                if dynamicColor:
-                    cropColorTolerance = 6
-                    lower = np.array([c - cropColorTolerance for c in dynamicColor], dtype=np.uint8)
-                    upper = np.array([c + cropColorTolerance for c in dynamicColor], dtype=np.uint8)
-                    cropMask = cv2.inRange(screenCropped, lower, upper)
-                    cropRows = np.any(cropMask > 0, axis=1)
-                    for i, hasColor in enumerate(cropRows):
-                        if i > maxHeight and startIndex is None:
-                            break
-                        if hasColor and startIndex is None:
-                            startIndex = i
-                        elif not hasColor and startIndex is not None:
-                            endIndex = i
-                            break
-
-            if endIndex:
-                screenCropped = screenCropped[endIndex:, :]
-
-            titleHeight = endIndex if endIndex else int(40*self.robloxWindow.multi)
-            titleScreen = screenBgr[questTitleYPos:questTitleYPos+titleHeight, :]
-
-            cropMask = cv2.inRange(screenCropped, lower, upper)
-            cropRows = np.any(cropMask > 0, axis=1)
-            nextTitleStart = None
-            minNextTitleOffset = 20*self.robloxWindow.multi
-            for i, hasColor in enumerate(cropRows):
-                if i <= minNextTitleOffset:
-                    continue
-                if hasColor:
-                    nextTitleStart = i
-                    break
-
-            parseScreen = screenCropped
-            displayScreen = screenCropped
-            if nextTitleStart:
-                parseScreen = screenCropped[:nextTitleStart, :]
-                extraBottomPixels = int(200*self.robloxWindow.multi)
-                displayEnd = min(nextTitleStart + extraBottomPixels, screenCropped.shape[0])
-                displayScreen = screenCropped[:displayEnd, :]
-
-            screenGray = cv2.cvtColor(parseScreen, cv2.COLOR_BGR2GRAY)
-            img = cv2.inRange(screenGray, 0, 50)
-            img = cv2.GaussianBlur(img, (5, 5), 0)
-
-            kernelSize = 10 if self.robloxWindow.isRetina else 7
-            kernel = np.ones((kernelSize, kernelSize), np.uint8)
-            img = cv2.dilate(img, kernel, iterations=1)
-
-            contours, _ = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-            minArea = 4000*self.robloxWindow.multi
-            maxArea = 40000*self.robloxWindow.multi
-            maxHeight = 75*self.robloxWindow.multi
-
-            chunks = []
-            for contour in contours:
-                x, y, w, h = cv2.boundingRect(contour)
-                area = w*h
-                if area < minArea or area > maxArea or h > maxHeight:
-                    continue
-
-                textImg = Image.fromarray(parseScreen[y:y+h, x:x+w])
-                textChunk = []
-                for line in ocr.ocrRead(textImg):
-                    textChunk.append(self.convertCyrillic(line[1][0].strip().lower()))
-                textChunk = ''.join(textChunk).strip()
-                if textChunk:
-                    chunks.append({"y": y, "text": textChunk, "bbox": (x, y, w, h)})
-
-            chunks.sort(key=lambda item: item["y"])
-            return titleScreen, displayScreen, parseScreen, chunks
 
         #sanity check
         if not questGiver in questGiverShort:
@@ -4045,15 +3717,6 @@ class macro:
         questTitleYPos = None
 
         questGiverImg = Image.open(f"./images/quest/{questGiver}-{self.robloxWindow.display_type}.png").convert('RGBA')
-        # Scale the template to match the UI/display scale so matcher sees correct size
-        try:
-            scale = float(getattr(self.robloxWindow, 'multi', 1))
-        except Exception:
-            scale = 1.0
-        if scale != 1.0:
-            ow, oh = questGiverImg.size
-            new_size = (max(1, int(ow * scale)), max(1, int(oh * scale)))
-            questGiverImg = questGiverImg.resize(new_size, Image.LANCZOS)
         prevHash = None
         for i in range(150):
             screen = screenshotQuest(800, mode="RGBA")
@@ -4071,15 +3734,13 @@ class macro:
                 ocrRes = ocr.ocrRead(img)
                 text = self.convertCyrillic(''.join([x[1][0].strip().lower() for x in ocrRes]))
                 for word in questTitleBlacklistedPhrases.get(questGiver, []):
-                    if word in text:
+                    if word in text: 
                         break
                 else:
+                    #match text with the closest known quest title
                     questTitleYPos = ry
                     print(questTitleYPos)
-                    if questGiver == "brown bear":
-                        questTitle = text
-                    else:
-                        questTitle, _ = fuzzywuzzy.process.extractOne(text, quest_data[questGiver].keys())
+                    questTitle, _ = fuzzywuzzy.process.extractOne(text, quest_data[questGiver].keys())
                     self.logger.webhook("", f"Quest Title: {questTitle}", "dark brown")
                     break
                 
@@ -4095,98 +3756,7 @@ class macro:
             self.moveMouseToDefault()
             return None
         
-        if questGiver == "brown bear":
-            titleScreen, objectiveScreen, parseScreen, objectiveChunks = extractQuestObjectiveChunks(screen, questTitleYPos)
-            incompleteObjectives = []
-            completedObjectives = []
-
-            annotatedScreen = np.copy(objectiveScreen)
-
-            for chunk in objectiveChunks:
-                textChunk = chunk["text"]
-                x, y, w, h = chunk["bbox"]
-                isComplete = "complete" in textChunk.lower()  # Make case-insensitive
-
-                # Skip standalone completion labels so they don't register as objectives.
-                if isComplete and len(textChunk.split()) < 5:
-                    continue
-
-                parseText = textChunk
-                if isComplete:
-                    # Split case-insensitively
-                    import re
-                    parseText = re.split(r'complete', textChunk, maxsplit=1, flags=re.IGNORECASE)[0].strip()
-
-                parsedObjective = self.parseQuestObjective(parseText)
-                mappedObjectives = self.mapObjectiveToMacroAction(parsedObjective, parseText)
-
-                if not isComplete:
-                    for objective in mappedObjectives:
-                        if objective not in incompleteObjectives:
-                            incompleteObjectives.append(objective)
-                else:
-                    for objective in mappedObjectives:
-                        if objective not in completedObjectives:
-                            completedObjectives.append(objective)
-
-                label = ", ".join(mappedObjectives) if mappedObjectives else textChunk
-                color = (0, 255, 0) if isComplete else (0, 0, 255)
-                cv2.rectangle(annotatedScreen, (x, y), (x+w, y+h), color, 2)
-                cv2.putText(annotatedScreen, label, (x, max(0, y-5)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
-
-            allObjectives = incompleteObjectives + completedObjectives
-
-            # Parse title for fields and colors that should be gathered
-            titleFields, titleColors = parseBrownBearTitleFields(questTitle)
-            
-            # Add each field from the title if it's not already detected
-            for field in titleFields:
-                objective = f"gather_{field}"
-                if objective not in incompleteObjectives and objective not in completedObjectives:
-                    incompleteObjectives.append(objective)
-            
-            # Add each color from the title if it's not already detected  
-            for color in titleColors:
-                objective = f"pollen_{color}"
-                if objective not in incompleteObjectives and objective not in completedObjectives:
-                    incompleteObjectives.append(objective)
-
-            questImgPath = "latest-quest.png"
-            screenshotStack = annotatedScreen
-            if titleScreen is not None and titleScreen.size:
-                screenshotStack = np.vstack([titleScreen, annotatedScreen])
-            cv2.imwrite(questImgPath, screenshotStack)
-
-            self.logger.webhook(
-                f"Detected Brown Bear Quest: {questTitle.title()}",
-                "**Completed Objectives:**\n{}\n\n**Incomplete Objectives:**\n{}".format(
-                    '\n'.join(completedObjectives) if completedObjectives else "None",
-                    '\n'.join(incompleteObjectives) if incompleteObjectives else "None"
-                ),
-                "light blue",
-                imagePath=questImgPath
-            )
-            # record the detected quest title for external callers
-            try:
-                if not hasattr(self, '_last_quest_title'):
-                    self._last_quest_title = {}
-                self._last_quest_title[questGiver] = questTitle
-            except Exception:
-                pass
-
-            self.toggleQuest()
-            self.moveMouseToDefault()
-            return incompleteObjectives
-
         #quest title found, now find the objectives
-        # record the detected quest title for external callers
-        try:
-            if not hasattr(self, '_last_quest_title'):
-                self._last_quest_title = {}
-            self._last_quest_title[questGiver] = questTitle
-        except Exception:
-            pass
-
         objectives = quest_data[questGiver][questTitle]
 
         #merge the texts into chunks. Using those chunks, compare it with the known objectives
@@ -4594,8 +4164,6 @@ class macro:
 
         # Define patterns for different action types
         patterns = [
-            # Petal token catch patterns (new for petal quests)
-            (r'.*\b(catch)\b.*\b(red bloom petals?)\b.*\b(in|from)\b.*\b([a-z ]+?)\b field', 'gatherpetal', r'(clover|spider|bamboo|blue flower|cactus|clover|coconut|dandelion|mountain top|mushroom|pepper|pine tree|pineapple|pumpkin|rose|spider|strawberry|stump|sunflower)'),
             # Catch patterns (special catching mechanics)
             (r'.*\b(catch|chase)\b.*', 'catch', r'.*'),
             # Craft patterns (check first - specific crafting actions)
@@ -4763,24 +4331,6 @@ class macro:
         quantity = parsedObjective['quantity']
         text = originalText  # For checking original text content
 
-        # Special handling for petal quests
-        if action == 'gatherpetal':
-            # Try to extract the field from the text or target
-            field = None
-            # If the regex matched, target should be the field name
-            if target:
-                field = target.replace(' ', '_').lower()
-            else:
-                # Fallback: try to extract from text
-                import re
-                m = re.search(r'in the ([a-z ]+?) field', text)
-                if m:
-                    field = m.group(1).replace(' ', '_').lower()
-            if field:
-                return [f"gatherpetal_{field}"]
-            else:
-                return []
-
         # Filter out specific quest types and completed tasks
         if text.lower().startswith('polar bear:'):
             return []  # Skip Polar Bear quest titles
@@ -4831,29 +4381,8 @@ class macro:
                 # Add other field-specific goo handling as needed
 
             # Only allow valid field names for gathering
-            validFields = ['pineapple', 'pumpkin', 'rose', 'cactus', 'pepper', 'strawberry', 'blue flower',
-                          'sunflower', 'dandelion', 'mushroom', 'clover', 'bamboo', 'spider', 'stump',
-                          'pine tree', 'mountain top', 'coconut']
-            # Fallback: extract field from text when target parsing fails (e.g., pollen from field)
-            import re
-            field_match = re.search(
-                r'\b(strawberr\w*|blue\s*flower|pine\s*tree|mushroom|rose|clover|bamboo|cactus|pumpkin|'
-                r'pineappl\w*|pineapple|coconut|dandelion|spider|stump|pepper|mountain\s*top|sunflow\w*)\b',
-                text.lower()
-            )
-            if field_match:
-                field_raw = field_match.group(0).strip()
-                if field_raw.startswith('strawberr'):
-                    field_raw = 'strawberry'
-                elif field_raw.startswith('pineappl'):
-                    field_raw = 'pineapple'
-                elif field_raw.startswith('sunflow'):
-                    field_raw = 'sunflower'
-                normalizedField = questCompleterFieldNames.get(field_raw, field_raw)
-                if normalizedField in validFields:
-                    return [f"gather_{normalizedField}"]
-            if normalizedTarget.endswith('_field'):
-                normalizedTarget = normalizedTarget[:-6]
+            validFields = ['pineapple', 'pumpkin', 'rose', 'cactus', 'pepper', 'strawberry', 'blueberry',
+                          'sunflower', 'dandelion', 'mushroom', 'clover', 'bamboo', 'spider', 'stump']
             if normalizedTarget in validFields:
                 # These are field names that can be gathered
                 return [f"gather_{normalizedTarget}"]
@@ -5013,7 +4542,6 @@ class macro:
         if not self.goToQuestGiver(questGiver, "Submit Quest" if submitQuest else "Get New Quest"): return
         dialogClickCountForQuestGivers = {
             "polar bear": 25,
-            "brown bear": 25,
             "bucko bee": 40,
             "honey bee": 40,
             "riley bee": 40
@@ -5043,8 +4571,7 @@ class macro:
             self.keyboard.press("pagedown")
 
         for _ in range(2):
-            # start slightly lower to avoid being barely too high
-            mouse.moveTo(self.robloxWindow.mx+(x), self.robloxWindow.my+(y+25))
+            mouse.moveTo(self.robloxWindow.mx+(x), self.robloxWindow.my+(y))
             time.sleep(0.3)
             pag.dragTo(self.robloxWindow.mx + self.robloxWindow.mw//2, self.robloxWindow.my + self.robloxWindow.mh//2-80, 0.6, button='left')
 
@@ -5135,7 +4662,7 @@ class macro:
 
         if gatherInterrupt:
             if ((glitter and self.hasAFBRespawned("AFB_glitter_cd", rebuff * 60) and self.AFBglitter) or (self.hasAFBRespawned("AFB_dice_cd", self.setdat["AFB_rebuff"] * 60) and not self.AFBglitter)) and not self.failed:                
-                self.clear_task_status()
+                self.status.value = ""
                 self.afb = True
                 if turnOffShiftLock: self.keyboard.press("shift")
                 self.logger.webhook("Gathering: interrupted", "Automatic Field Boost", "brown")
@@ -5212,7 +4739,7 @@ class macro:
                         timeout = 0 
                         for _ in range(300):
                             if self.blueTextImageSearch("boosted"): # if message contains "boosted", continue
-                                time.sleep(2)
+                                time.sleep(1.25)
                                 break
                             timeout += 1    
                             if timeout == 300: # else try again after other tasks
@@ -5221,7 +4748,7 @@ class macro:
                                 self.saveAFB("AFB_dice_cd")
                                 self.AFBglitter = False
                                 return
-                        for _ in range(8):
+                        for _ in range(4):
                             bluetexts += ocr.imToString("blue") + "\n"
 
                         bluetexts = normalize(bluetexts)
@@ -5271,6 +4798,7 @@ class macro:
                                 self.saveAFB("AFB_dice_cd")
                                 if glitter: 
                                     self.AFBglitter = True
+                                    self.saveAFB("AFB_glitter_cd")
                                 return returnVal
                             else:
                                 continue
@@ -5285,6 +4813,7 @@ class macro:
                                 self.saveAFB("AFB_dice_cd")
                                 if glitter: 
                                     self.AFBglitter = True
+                                    self.saveAFB("AFB_glitter_cd")
                                 return returnVal
                             else:
                                 if boostedFields:
@@ -5294,8 +4823,8 @@ class macro:
                                 time.sleep(0.5)
 
                 # glitter
-                if glitter and not self.failed and self.hasAFBRespawned("AFB_glitter_cd", rebuff*60):
-                    if self.AFBglitter:
+                if glitter and not self.failed:
+                    if self.cAFBglitter or (self.hasAFBRespawned("AFB_glitter_cd", rebuff*60) and self.AFBglitter):
                         self.logger.webhook("", "Rebuffing: Glitter", "white")
                         # If glitter is set to use inventory slot 0, try to locate it first
                         glitterCoords = None
@@ -5352,23 +4881,64 @@ class macro:
     def startDetect(self):
         #disable game mode
         self.moveMouseToDefault()
-        time.sleep(1)
-        #check roblox scaling
-        #this is done by checking if all pixels at the top of the screen are black
-        topScreen = mssScreenshot(0, 0, self.robloxWindow.mw, 2)
-        extrema = topScreen.convert("L").getextrema()
-        #all are black
-        if extrema == (0, 0):
-            messageBox.msgBox(text='It seems like you have not enabled roblox scaling. The macro will not work properly.\n1. Close Roblox\n2. Go to finder -> applications -> right click roblox -> get info -> enable "scale to fit below built-in camera"', title='Roblox scaling')
-        #make sure game mode is disabled (macOS 14.0 and above and apple chips)
-        macVersion, _, _ = platform.mac_ver()
-        macVersion = float('.'.join(macVersion.split('.')[:2]))
+        if sys.platform == "darwin":
+            time.sleep(1)
+            #check roblox scaling
+            #this is done by checking if all pixels at the top of the screen are black
+            topScreen = mssScreenshot(0, 0, self.robloxWindow.mw, 2)
+            extrema = topScreen.convert("L").getextrema()
+            #all are black
+            if extrema == (0, 0):
+                messageBox.msgBox(text='It seems like you have not enabled roblox scaling. The macro will not work properly.\n1. Close Roblox\n2. Go to finder -> applications -> right click roblox -> get info -> enable "scale to fit below built-in camera"', title='Roblox scaling')
+            #make sure game mode is disabled (macOS 14.0 and above and apple chips)
+            macVersion, _, _ = platform.mac_ver()
+            macVersion = float('.'.join(macVersion.split('.')[:2]))
 
-        # Removed lines that were un-fullscreening Roblox on startup
-        # appManager.setAppFullscreen(fullscreen=False)
-        # appManager.maximiseAppWindow()
-        time.sleep(1)
-        self.moveMouseToDefault()
+            # if 14 <= macVersion <= 15 and platform.processor() == "arm" and self.isFullScreen():
+            #     self.logger.webhook("","Detecting and disabling game mode","dark brown")
+            #     #make sure roblox is not fullscreen
+            #     self.toggleFullScreen()
+
+            #     #find the game mode button
+            #     lightGameMode = self.adjustImage("./images/mac", "gamemodelight")
+            #     darkGameMode = self.adjustImage("./images/mac", "gamemodedark")
+            #     x = self.robloxWindow.mw/2.3
+            #     time.sleep(1.2)
+            #     #find light mode
+            #     res = locateImageOnScreen(lightGameMode, self.robloxWindow.mx+(x), self.robloxWindow.my+(0), self.robloxWindow.mw-x, 60, 0.7)
+            #     if res is None: #cant find light, find dark
+            #         res = locateImageOnScreen(darkGameMode, self.robloxWindow.mx+(x), self.robloxWindow.my+(0), self.robloxWindow.mw-x, 60, 0.7)
+            #     #found either light or dark
+            #     if not res is None:
+            #         gx, gy = [x//self.robloxWindow.multi for x in res[1]]
+            #         mouse.moveTo(self.robloxWindow.mx+(gx+x), self.robloxWindow.my+(gy))
+            #         time.sleep(0.1)
+            #         mouse.fastClick()
+            #         time.sleep(0.5)
+            #         #check if game mode is enabled
+            #         screen = mssScreenshot(x, 0, self.robloxWindow.mw-x, 150)
+            #         ocrRes = ocr.ocrRead(screen)
+            #         for i in ocrRes:
+            #             if "mode off" in i[1][0].lower():
+            #                 #disable game mode
+            #                 bX, bY = ocr.getCenter(i[0])
+            #                 if self.display_type == "retina":
+            #                     bX //= 2
+            #                     bY //= 2
+            #                 mouse.moveTo(self.robloxWindow.mx+(x+bX), self.robloxWindow.my+(bY))
+            #                 mouse.click()                        
+            #                 break
+            #         else: #game mode is already disabled/couldnt be found
+            #             mouse.moveTo(self.robloxWindow.mx+(x+gx), self.robloxWindow.my+(gy))
+            #             mouse.click()
+            #     #fullscreen back roblox
+            #     appManager.openApp("Roblox")
+            #     self.toggleFullScreen()
+            # Removed lines that were un-fullscreening Roblox on startup
+            # appManager.setAppFullscreen(fullscreen=False)
+            # appManager.maximiseAppWindow()
+            time.sleep(1)
+            self.moveMouseToDefault()
 
         #detect new/old ui and set 
         #also check for screen recording permission 
@@ -5387,22 +4957,23 @@ class macro:
         #check for accessibility
         #this is done by taking 2 different screenshots
         #if they are both the same, we assume that the keypress didnt go through and hence accessibility is not enabled
-        originalX = mouse.getPos()[0]
-        mouse.moveBy(100, 0)
-        time.sleep(0.15)
-        newX = mouse.getPos()[0]
-        if originalX == newX:
-            messageBox.msgBox(text='It seems like terminal does not have the accessibility permission. The macro will not work properly.\n\nTo fix it, go to System Settings -> Privacy and Security -> Accessibility -> add and enable Terminal.\n\nVisit https://fuzzy-team.gitbook.io/fuzzy-macro/common-fixes/terminal-permissions for detailed instructions\n\n NOTE: This popup might be incorrect. If the macro is able to input keypresses and interact with the game, you can dismiss this popup', title='Accessibility Permission')
-        time.sleep(1)
-        # img1 = pillowToHash(mssScreenshot())
-        # self.keyboard.press("esc")
-        # time.sleep(0.1)
-        # time.sleep(0.5)
-        # img2 = pillowToHash(mssScreenshot())
-        # self.keyboard.press("esc")
-        # if similarHashes(img1, img2, 3):
-        #     messageBox.msgBox(text='It seems like terminal does not have the accessibility permission. The macro will not work properly.\n\nTo fix it, go to System Settings -> Privacy and Security -> Accessibility -> add and enable Terminal.\n\nVisit #6system-settings in the discord for more detailed instructions\n\n NOTE: This popup might be incorrect. If the macro is able to input keypresses and interact with the game, you can dismiss this popup', title='Accessibility Permission')
-        # time.sleep(1)
+        if sys.platform == "darwin":
+            originalX = mouse.getPos()[0]
+            mouse.moveBy(100, 0)
+            time.sleep(0.15)
+            newX = mouse.getPos()[0]
+            if originalX == newX:
+                messageBox.msgBox(text='It seems like terminal does not have the accessibility permission. The macro will not work properly.\n\nTo fix it, go to System Settings -> Privacy and Security -> Accessibility -> add and enable Terminal.\n\nVisit https://existance-macro.gitbook.io/existance-macro-docs/macro-installation/images-and-media/1.-terminal-permissions for detailed instructions\n\n NOTE: This popup might be incorrect. If the macro is able to input keypresses and interact with the game, you can dismiss this popup', title='Accessibility Permission')
+            time.sleep(1)
+            # img1 = pillowToHash(mssScreenshot())
+            # self.keyboard.press("esc")
+            # time.sleep(0.1)
+            # time.sleep(0.5)
+            # img2 = pillowToHash(mssScreenshot())
+            # self.keyboard.press("esc")
+            # if similarHashes(img1, img2, 3):
+            #     messageBox.msgBox(text='It seems like terminal does not have the accessibility permission. The macro will not work properly.\n\nTo fix it, go to System Settings -> Privacy and Security -> Accessibility -> add and enable Terminal.\n\nVisit #6system-settings in the discord for more detailed instructions\n\n NOTE: This popup might be incorrect. If the macro is able to input keypresses and interact with the game, you can dismiss this popup', title='Accessibility Permission')
+            # time.sleep(1)
         
         private_server_link = self.setdat.get("private_server_link", "")
         if private_server_link and "share" in private_server_link and self.setdat.get("rejoin_method") == "deeplink":

@@ -98,27 +98,6 @@
   --primary-rgb: 157, 142, 195;
 }
 
-/* Cream/Sunny Theme Overrides (main color: #efda98) */
-.theme-cream {
-  --primary: #efda98;
-  --primary-hover: #f4e3b2;
-  --primary-rgb: 239, 218, 152;
-}
-
-/* Red Theme Overrides (main color: #840909) */
-.theme-red {
-  --primary: #cb4144;
-  --primary-hover: #9f1a1a;
-  --primary-rgb: 132, 9, 9;
-}
-
-/* Blue Theme Overrides (main color: #3fc1c3) */
-.theme-blue {
-  --primary: #3fc1c3;
-  --primary-hover: #3ab0b2;
-  --primary-rgb: 63, 193, 195;
-}
-
 body {
   margin: 0;
   padding: 0;
@@ -255,25 +234,6 @@ select:focus {
   color: var(--primary);
   border-color: rgba(var(--primary-rgb), 0.15);
 }
-
-.import-export-button {
-  padding: 0.45rem 0.75rem;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 600;
-  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
-  border: 1px solid transparent;
-  background: rgba(var(--primary-rgb), 0.12);
-  color: var(--text-main);
-  border-color: rgba(var(--primary-rgb), 0.15);
-}
-
-.import-export-button:hover {
-  background-color: rgba(var(--primary-rgb), 0.15);
-  color: var(--primary);
-  border-color: rgba(var(--primary-rgb), 0.2);
-}
-
 
 /* Subtab panels: controlled by JS by adding/removing .active */
 .sub-tab-panel {
@@ -463,89 +423,6 @@ select:focus {
   font-size: 0.8rem;
   transition: transform 0.2s;
 }
-
-/* Modal (Import/Export) Styling */
-.modal-overlay {
-  display: none;
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.6);
-  z-index: 1000;
-  justify-content: center;
-  align-items: center;
-}
-
-.modal-dialog {
-  background: var(--surface);
-  padding: 1.5rem;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  max-width: 700px;
-  width: 92%;
-  max-height: 80vh;
-  overflow-y: auto;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.6);
-}
-
-.modal-dialog h3 {
-  margin: 0 0 0.5rem 0;
-  font-size: 1.2rem;
-  color: var(--text-main);
-  font-weight: 600;
-}
-
-.modal-dialog p {
-  color: var(--text-dim);
-  margin: 0 0 1rem 0;
-}
-
-.modal-textarea {
-  width: 100%;
-  min-height: 260px;
-  font-family: 'Courier New', monospace;
-  padding: 0.75rem;
-  border: 1px solid var(--border);
-  background-color: var(--textbox-bg);
-  color: var(--text-main);
-  border-radius: 6px;
-  resize: vertical;
-  box-sizing: border-box;
-  font-size: 0.95rem;
-}
-
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.75rem;
-  margin-top: 1.25rem;
-}
-
-.btn-cancel {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-main);
-  padding: 0.5rem 0.9rem;
-  border-radius: 6px;
-  font-weight: 600;
-}
-
-.btn-cancel:hover {
-  background: var(--surface-hover);
-}
-
-.btn-confirm {
-  background: var(--primary);
-  color: #121212;
-  border: 1px solid var(--primary);
-  padding: 0.5rem 0.9rem;
-  border-radius: 6px;
-  font-weight: 600;
-}
-
-.btn-confirm:hover { background: var(--primary-hover); }
 
 /* Checkbox */
 .checkbox-container {

@@ -8,7 +8,6 @@ from modules.screen.screenshot import screenshotRobloxWindow
 import io
 from modules.misc.messageBox import msgBox
 from modules.misc.appManager import closeApp
-from modules.controls.keyboard import keyboard
 import subprocess
 import sys
 import os
@@ -16,8 +15,6 @@ import json
 import ast
 import time
 from datetime import datetime, timedelta
-import queue  # <-- Add this import
-from typing import List, Optional, Dict, Tuple
 
 # Import settings manager functions
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'misc'))
@@ -81,12 +78,12 @@ def update_profile_setting(setting_key, value):
     except Exception as e:
         return False, f"❌ Error updating profile setting: {str(e)}"
 
-def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None, updateGUI=None):
-    import modules.macro
-    bot = commands.Bot(command_prefix="fuzz!", intents=discord.Intents.all())
+def discordBot(token, run, status, skipTask, recentLogs=None, initial_message_info=None, updateGUI=None):
+    bot = commands.Bot(command_prefix="!b", intents=discord.Intents.all())
     
-    # Store pin requests queue
-    _pin_requests = pin_requests
+    # Store initial message info for pinning
+    _initial_message_info = initial_message_info
+    _last_pinned_message_id = None
 
     @bot.event
     async def on_ready():
@@ -94,485 +91,87 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         try:
             synced = await bot.tree.sync()
             print(f"Synced {len(synced)} commands")
-            # Avoid printing every command by default; enable detailed
-            # output by setting environment variable DISCORD_VERBOSE_SYNC=1
-            if os.getenv("DISCORD_VERBOSE_SYNC", "0") == "1":
-                for command in synced:
-                    print(f"  - {command.name}: {command.description}")
+            for command in synced:
+                print(f"  - {command.name}: {command.description}")
         except Exception as e:
             print(f"Error syncing commands: {e}")
             import traceback
             traceback.print_exc()
         
-        # Start background task to process pin requests
-        if _pin_requests is not None:
-            bot.loop.create_task(process_pin_requests())
+        # Start background task to watch for initial message to pin
+        if _initial_message_info is not None:
+            bot.loop.create_task(watch_for_initial_message())
     
-    async def process_pin_requests():
-        """Process pin requests from the queue"""
+    async def watch_for_initial_message():
+        """Watch the shared dictionary for initial message info and pin it"""
+        nonlocal _last_pinned_message_id
+        
         while True:
             try:
-                await discord.utils.sleep_until(datetime.now() + timedelta(seconds=1))
+                await discord.utils.sleep_until(datetime.now() + timedelta(seconds=2))
                 
-                # Check if there are any pin requests
-                if _pin_requests and not _pin_requests.empty():
-                    try:
-                        request = _pin_requests.get_nowait()
-                        channel_id = request.get('channel_id')
-                        search_text = request.get('search_text', 'Stream URL')
-                        
-                        if channel_id:
-                            await pin_message_by_search(channel_id, search_text)
-                    except Exception as e:
-                        print(f"Error processing pin request: {e}")
+                # Check if message info is available
+                if _initial_message_info and _initial_message_info.get('should_pin'):
+                    message_id = _initial_message_info.get('message_id')
+                    channel_id = _initial_message_info.get('channel_id')
+                    
+                    # Only pin if it's a new message (different from last pinned)
+                    if message_id and channel_id and message_id != _last_pinned_message_id:
+                        await pin_initial_message({
+                            'message_id': message_id,
+                            'channel_id': channel_id
+                        })
+                        _last_pinned_message_id = message_id
             except Exception as e:
-                print(f"Error in process_pin_requests loop: {e}")
-                await discord.utils.sleep_until(datetime.now() + timedelta(seconds=1))
+                print(f"Error in watch_for_initial_message: {e}")
+                await discord.utils.sleep_until(datetime.now() + timedelta(seconds=2))
     
-    async def pin_message_by_search(channel_id, search_text):
-        """Pin a message in the specified channel that contains the search text"""
+    async def pin_initial_message(info):
+        """Pin the initial webhook message and unpin old stream URLs"""
         try:
+            channel_id = info.get('channel_id')
+            message_id = info.get('message_id')
+            
+            if not channel_id or not message_id:
+                print("Cannot pin initial message: missing channel_id or message_id")
+                return
+            
             channel = bot.get_channel(int(channel_id))
             if not channel:
+                # Try to fetch the channel if not in cache
                 channel = await bot.fetch_channel(int(channel_id))
             
             if channel:
-                # First, unpin any old stream URL messages
+                # First, unpin any old "Stream Started" messages
                 try:
                     pinned_messages = await channel.pins()
                     for pinned_msg in pinned_messages:
-                        should_unpin = False
-                        # Check embed titles/descriptions for stream indicator
+                        # Check if the message is a webhook message with "Stream Started" content
                         if pinned_msg.embeds:
                             for embed in pinned_msg.embeds:
-                                title = getattr(embed, 'title', '') or ''
-                                desc = getattr(embed, 'description', '') or ''
-                                # If title mentions Stream Started and description contains a URL or Stream URL text
-                                if ("Stream Started" in title) and ("http" in desc or "Stream URL" in desc):
-                                    should_unpin = True
-                                    break
-                                # Fallback: if description itself contains a Stream URL with http
-                                if "http" in desc and ("stream" in desc.lower() or "stream url" in desc.lower()):
-                                    should_unpin = True
-                                    break
-                        # Also check message content for URLs
-                        if not should_unpin and pinned_msg.content:
-                            content = pinned_msg.content or ''
-                            if "http" in content and ("stream" in content.lower() or "stream url" in content.lower()):
-                                should_unpin = True
-
-                        if should_unpin:
-                            try:
-                                await pinned_msg.unpin()
-                                print(f"Unpinned old stream message: {pinned_msg.id}")
-                            except Exception as unpin_error:
-                                print(f"Error unpinning message {pinned_msg.id}: {unpin_error}")
+                                # Check if it's a Stream Started message
+                                if embed.title and "Stream Started" in embed.title:
+                                    try:
+                                        await pinned_msg.unpin()
+                                        print(f"Unpinned old stream message: {pinned_msg.id}")
+                                    except Exception as unpin_error:
+                                        print(f"Error unpinning message {pinned_msg.id}: {unpin_error}")
                 except Exception as e:
                     print(f"Error checking/unpinning old messages: {e}")
                 
-                # Now search for and pin the new message
-                # Get recent messages (last 10)
-                messages = []
-                async for message in channel.history(limit=10):
-                    messages.append(message)
-                
-                # Search for message with the search text
-                for message in messages:
-                    found = False
-                    # Check embeds
-                    if message.embeds:
-                        for embed in message.embeds:
-                            title = getattr(embed, 'title', '') or ''
-                            desc = getattr(embed, 'description', '') or ''
-                            if search_text.lower() in title.lower() or search_text.lower() in desc.lower():
-                                found = True
-                                break
-                    # Check message content
-                    if not found and message.content and search_text.lower() in message.content.lower():
-                        found = True
-                    
-                    if found:
-                        try:
-                            await message.pin()
-                            print(f"Successfully pinned stream message in channel {channel_id}")
-                            return
-                        except Exception as pin_error:
-                            print(f"Error pinning message {message.id}: {pin_error}")
-                            return
-                
-                print(f"Could not find message with '{search_text}' in channel {channel_id}")
+                # Now pin the new message
+                message = await channel.fetch_message(int(message_id))
+                if message:
+                    await message.pin()
+                    print(f"Successfully pinned new stream message in channel {channel_id}")
+                else:
+                    print(f"Could not fetch message {message_id} in channel {channel_id}")
             else:
                 print(f"Could not access channel {channel_id}")
         except Exception as e:
-            print(f"Error pinning message by search: {e}")
+            print(f"Error pinning initial message: {e}")
             import traceback
             traceback.print_exc()
-
-    def _parse_id_list(value: Optional[str]) -> List[int]:
-        if not value:
-            return []
-        parts = [p.strip() for p in value.replace(";", ",").split(",") if p.strip()]
-        ids = []
-        for part in parts:
-            if part.isdigit():
-                ids.append(int(part))
-        return ids
-
-    def _is_authorized_interaction(interaction: discord.Interaction, requester_id: Optional[int]) -> Tuple[bool, Optional[str]]:
-        if requester_id is not None and interaction.user and interaction.user.id != requester_id:
-            return False, "This settings panel is tied to the user who opened it."
-
-        owner_id = os.getenv("DISCORD_OWNER_ID")
-        if owner_id and owner_id.isdigit():
-            if not interaction.user or interaction.user.id != int(owner_id):
-                return False, "You are not authorized to use this settings panel."
-            return True, None
-
-        role_ids = _parse_id_list(os.getenv("DISCORD_ALLOWED_ROLE_IDS"))
-        if role_ids:
-            if not interaction.user or not hasattr(interaction.user, "roles"):
-                return False, "You are not authorized to use this settings panel."
-            for role in interaction.user.roles:
-                if role.id in role_ids:
-                    return True, None
-            return False, "You are not authorized to use this settings panel."
-
-        return True, None
-
-    QUEST_SETTINGS = [
-        ("polar_bear_quest", "Polar Bear"),
-        ("brown_bear_quest", "Brown Bear"),
-        ("honey_bee_quest", "Honey Bee"),
-        ("bucko_bee_quest", "Bucko Bee"),
-        ("riley_bee_quest", "Riley Bee"),
-        ("quest_use_gumdrops", "Use Gumdrops"),
-    ]
-
-    COLLECTIBLE_SETTINGS = [
-        ("wealth_clock", "Wealth Clock"),
-        ("blueberry_dispenser", "Blueberry Dispenser"),
-        ("strawberry_dispenser", "Strawberry Dispenser"),
-        ("coconut_dispenser", "Coconut Dispenser"),
-        ("royal_jelly_dispenser", "Royal Jelly Dispenser"),
-        ("ant_pass_dispenser", "Ant Pass Dispenser"),
-        ("treat_dispenser", "Treat Dispenser"),
-        ("glue_dispenser", "Glue Dispenser"),
-        ("honeystorm", "Honey Storm"),
-    ]
-
-    MOB_SETTINGS = [
-        ("ladybug", "Ladybug"),
-        ("rhinobeetle", "Rhinobeetle"),
-        ("scorpion", "Scorpion"),
-        ("mantis", "Mantis"),
-        ("spider", "Spider"),
-        ("werewolf", "Werewolf"),
-        ("coconut_crab", "Coconut Crab"),
-        ("stump_snail", "Stump Snail"),
-    ]
-
-    MACRO_MODE_OPTIONS = [
-        ("normal", "Normal"),
-        ("quest", "Quests"),
-        ("field", "Field"),
-    ]
-
-    SETTINGS_CATEGORIES = {
-        "fields": "Fields",
-        "macro_mode": "Macro Mode",
-        "quests": "Quests",
-        "collectibles": "Collectibles",
-        "mobs": "Mobs",
-        "hive_slot": "Hive Slot",
-    }
-
-    def _build_status_embed(category_key: str, settings: Dict, status_message: Optional[str] = None) -> discord.Embed:
-        title = f"Settings: {SETTINGS_CATEGORIES.get(category_key, 'Settings')}"
-        embed = discord.Embed(title=title, color=0x00ff00)
-
-        if category_key == "fields":
-            field_list = settings.get("fields", [])
-            fields_enabled = settings.get("fields_enabled", [])
-            enabled = []
-            disabled = []
-            for i, field_name in enumerate(field_list):
-                is_enabled = i < len(fields_enabled) and fields_enabled[i]
-                if is_enabled:
-                    enabled.append(field_name.title())
-                else:
-                    disabled.append(field_name.title())
-            embed.add_field(name="Enabled", value=", ".join(enabled) if enabled else "None", inline=False)
-            embed.add_field(name="Disabled", value=", ".join(disabled) if disabled else "None", inline=False)
-
-        elif category_key == "macro_mode":
-            current_mode = settings.get("macro_mode", "normal")
-            mode_name = dict(MACRO_MODE_OPTIONS).get(current_mode, current_mode)
-            embed.add_field(name="Current", value=mode_name, inline=False)
-
-        elif category_key == "quests":
-            enabled = []
-            disabled = []
-            for key, label in QUEST_SETTINGS:
-                if settings.get(key, False):
-                    enabled.append(label)
-                else:
-                    disabled.append(label)
-            embed.add_field(name="Enabled", value=", ".join(enabled) if enabled else "None", inline=False)
-            embed.add_field(name="Disabled", value=", ".join(disabled) if disabled else "None", inline=False)
-
-        elif category_key == "collectibles":
-            enabled = []
-            disabled = []
-            for key, label in COLLECTIBLE_SETTINGS:
-                if settings.get(key, False):
-                    enabled.append(label)
-                else:
-                    disabled.append(label)
-            embed.add_field(name="Enabled", value=", ".join(enabled) if enabled else "None", inline=False)
-            embed.add_field(name="Disabled", value=", ".join(disabled) if disabled else "None", inline=False)
-
-        elif category_key == "mobs":
-            enabled = []
-            disabled = []
-            for key, label in MOB_SETTINGS:
-                if settings.get(key, False):
-                    enabled.append(label)
-                else:
-                    disabled.append(label)
-            embed.add_field(name="Enabled", value=", ".join(enabled) if enabled else "None", inline=False)
-            embed.add_field(name="Disabled", value=", ".join(disabled) if disabled else "None", inline=False)
-
-        elif category_key == "hive_slot":
-            slot = settings.get("hive_number", "Unknown")
-            embed.add_field(name="Current", value=str(slot), inline=False)
-
-        if status_message:
-            embed.set_footer(text=status_message)
-
-        return embed
-
-    def _build_overview_embed(settings: Dict) -> discord.Embed:
-        embed = discord.Embed(title="Settings Panel", color=0x00ff00)
-        field_list = settings.get("fields", [])
-        fields_enabled = settings.get("fields_enabled", [])
-        enabled_fields = 0
-        for i in range(min(len(field_list), len(fields_enabled))):
-            if fields_enabled[i]:
-                enabled_fields += 1
-        embed.add_field(
-            name="Fields",
-            value=f"Enabled: {enabled_fields}/{len(field_list)}",
-            inline=False,
-        )
-
-        current_mode = settings.get("macro_mode", "normal")
-        embed.add_field(
-            name="Macro Mode",
-            value=dict(MACRO_MODE_OPTIONS).get(current_mode, current_mode),
-            inline=False,
-        )
-
-        quests_enabled = sum(1 for key, _ in QUEST_SETTINGS if settings.get(key, False))
-        embed.add_field(
-            name="Quests",
-            value=f"Enabled: {quests_enabled}/{len(QUEST_SETTINGS)}",
-            inline=False,
-        )
-
-        collectibles_enabled = sum(1 for key, _ in COLLECTIBLE_SETTINGS if settings.get(key, False))
-        embed.add_field(
-            name="Collectibles",
-            value=f"Enabled: {collectibles_enabled}/{len(COLLECTIBLE_SETTINGS)}",
-            inline=False,
-        )
-
-        mobs_enabled = sum(1 for key, _ in MOB_SETTINGS if settings.get(key, False))
-        embed.add_field(
-            name="Mobs",
-            value=f"Enabled: {mobs_enabled}/{len(MOB_SETTINGS)}",
-            inline=False,
-        )
-
-        embed.add_field(
-            name="Hive Slot",
-            value=str(settings.get("hive_number", "Unknown")),
-            inline=False,
-        )
-
-        embed.set_footer(text="Select a category to update settings.")
-        return embed
-
-    async def _update_category_message(interaction: discord.Interaction, category_key: str, status_message: Optional[str] = None):
-        settings = get_cached_settings()
-        view = SettingsCategoryView(category_key, requester_id=interaction.user.id, status_message=status_message)
-        embed = _build_status_embed(category_key, settings, status_message=status_message)
-        await interaction.response.edit_message(embed=embed, view=view)
-
-    class SettingsBaseView(discord.ui.View):
-        def __init__(self, requester_id: Optional[int], timeout: int = 300):
-            super().__init__(timeout=timeout)
-            self.requester_id = requester_id
-
-        async def interaction_check(self, interaction: discord.Interaction) -> bool:
-            allowed, message = _is_authorized_interaction(interaction, self.requester_id)
-            if not allowed:
-                if interaction.response.is_done():
-                    await interaction.followup.send(message, ephemeral=True)
-                else:
-                    await interaction.response.send_message(message, ephemeral=True)
-                return False
-            return True
-
-    class CategorySelect(discord.ui.Select):
-        def __init__(self):
-            options = [
-                discord.SelectOption(label=label, value=key)
-                for key, label in SETTINGS_CATEGORIES.items()
-            ]
-            super().__init__(placeholder="Choose a settings category", min_values=1, max_values=1, options=options)
-
-        async def callback(self, interaction: discord.Interaction):
-            category_key = self.values[0]
-            settings = get_cached_settings()
-            view = SettingsCategoryView(category_key, requester_id=interaction.user.id)
-            embed = _build_status_embed(category_key, settings)
-            await interaction.response.edit_message(embed=embed, view=view)
-
-    class BackButton(discord.ui.Button):
-        def __init__(self):
-            super().__init__(label="Back", style=discord.ButtonStyle.secondary)
-
-        async def callback(self, interaction: discord.Interaction):
-            settings = get_cached_settings()
-            view = SettingsHomeView(requester_id=interaction.user.id)
-            embed = _build_overview_embed(settings)
-            await interaction.response.edit_message(embed=embed, view=view)
-
-    class RefreshButton(discord.ui.Button):
-        def __init__(self, category_key: str):
-            self.category_key = category_key
-            super().__init__(label="Refresh", style=discord.ButtonStyle.secondary)
-
-        async def callback(self, interaction: discord.Interaction):
-            await _update_category_message(interaction, self.category_key, status_message="Refreshed settings.")
-
-    class FieldsSelect(discord.ui.Select):
-        def __init__(self, settings: Dict):
-            field_list = settings.get("fields", [])
-            fields_enabled = settings.get("fields_enabled", [])
-            options = []
-            for i, field_name in enumerate(field_list):
-                value = field_name.lower().replace(" ", "_")
-                is_enabled = i < len(fields_enabled) and fields_enabled[i]
-                options.append(discord.SelectOption(label=field_name.title(), value=value, default=is_enabled))
-            if not options:
-                options.append(discord.SelectOption(label="No fields configured", value="none"))
-            super().__init__(
-                placeholder="Select enabled fields",
-                min_values=0,
-                max_values=len(options),
-                options=options,
-                disabled=(len(options) == 1 and options[0].value == "none"),
-            )
-
-        async def callback(self, interaction: discord.Interaction):
-            settings = get_cached_settings()
-            field_list = settings.get("fields", [])
-            normalized_fields = [f.lower().replace(" ", "_") for f in field_list]
-            selected = set(self.values)
-            fields_enabled = [field in selected for field in normalized_fields]
-            success, message = update_setting("fields_enabled", fields_enabled)
-            status_message = message if success else "Failed to update fields."
-            await _update_category_message(interaction, "fields", status_message=status_message)
-
-    class MacroModeSelect(discord.ui.Select):
-        def __init__(self, settings: Dict):
-            current = settings.get("macro_mode", "normal")
-            options = []
-            for value, label in MACRO_MODE_OPTIONS:
-                options.append(discord.SelectOption(label=label, value=value, default=(value == current)))
-            super().__init__(placeholder="Select macro mode", min_values=1, max_values=1, options=options)
-
-        async def callback(self, interaction: discord.Interaction):
-            mode = self.values[0]
-            success, message = update_setting("macro_mode", mode)
-            if success:
-                try:
-                    import eel
-                    eel.updateMacroMode()
-                except Exception:
-                    pass
-            status_message = message if success else "Failed to update macro mode."
-            await _update_category_message(interaction, "macro_mode", status_message=status_message)
-
-    class ToggleSettingsSelect(discord.ui.Select):
-        def __init__(self, settings: Dict, setting_items: List[Tuple[str, str]], placeholder: str):
-            options = []
-            for key, label in setting_items:
-                is_enabled = settings.get(key, False)
-                options.append(discord.SelectOption(label=label, value=key, default=is_enabled))
-            super().__init__(
-                placeholder=placeholder,
-                min_values=0,
-                max_values=len(options),
-                options=options,
-            )
-            self.setting_items = setting_items
-
-        async def callback(self, interaction: discord.Interaction):
-            selected = set(self.values)
-            failures = []
-            for key, _ in self.setting_items:
-                success, _ = update_setting(key, key in selected)
-                if not success:
-                    failures.append(key)
-            status_message = "Updated settings." if not failures else "Some settings failed to update."
-            category_key = self.view.category_key if hasattr(self.view, "category_key") else "settings"
-            await _update_category_message(interaction, category_key, status_message=status_message)
-
-    class HiveSlotSelect(discord.ui.Select):
-        def __init__(self, settings: Dict):
-            current = settings.get("hive_number", 1)
-            options = []
-            for slot in range(1, 7):
-                options.append(discord.SelectOption(label=str(slot), value=str(slot), default=(slot == current)))
-            super().__init__(placeholder="Select hive slot", min_values=1, max_values=1, options=options)
-
-        async def callback(self, interaction: discord.Interaction):
-            slot = int(self.values[0])
-            success, message = update_setting("hive_number", slot)
-            if success and updateGUI is not None:
-                updateGUI.value = 1
-            status_message = message if success else "Failed to update hive slot."
-            await _update_category_message(interaction, "hive_slot", status_message=status_message)
-
-    class SettingsHomeView(SettingsBaseView):
-        def __init__(self, requester_id: Optional[int]):
-            super().__init__(requester_id=requester_id)
-            self.add_item(CategorySelect())
-
-    class SettingsCategoryView(SettingsBaseView):
-        def __init__(self, category_key: str, requester_id: Optional[int], status_message: Optional[str] = None):
-            super().__init__(requester_id=requester_id)
-            self.category_key = category_key
-            self.status_message = status_message
-            settings = get_cached_settings()
-
-            if category_key == "fields":
-                self.add_item(FieldsSelect(settings))
-            elif category_key == "macro_mode":
-                self.add_item(MacroModeSelect(settings))
-            elif category_key == "quests":
-                self.add_item(ToggleSettingsSelect(settings, QUEST_SETTINGS, "Select enabled quests"))
-            elif category_key == "collectibles":
-                self.add_item(ToggleSettingsSelect(settings, COLLECTIBLE_SETTINGS, "Select enabled collectibles"))
-            elif category_key == "mobs":
-                self.add_item(ToggleSettingsSelect(settings, MOB_SETTINGS, "Select enabled mobs"))
-            elif category_key == "hive_slot":
-                self.add_item(HiveSlotSelect(settings))
-
-            self.add_item(RefreshButton(category_key))
-            self.add_item(BackButton())
     
     @bot.tree.command(name = "ping", description = "Check if the bot is online")
     async def ping(interaction: discord.Interaction):
@@ -603,30 +202,150 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         run.value = 0
         await interaction.response.send_message("Stopping Macro")
 
+    @bot.tree.command(name = "pause", description = "Pause the macro temporarily")
+    async def pause(interaction: discord.Interaction):
+        if run.value != 2:
+            if run.value == 6:
+                await interaction.response.send_message("⏸️ Macro is already paused. Use `/resume` to continue.")
+            elif run.value == 3:
+                await interaction.response.send_message("❌ Macro is not running. Use `/start` to start it first.")
+            else:
+                await interaction.response.send_message("❌ Macro is not in a state that can be paused.")
+            return
+        
+        await interaction.response.send_message("⏸️ Attempting to pause macro...")
+        run.value = 5  # 5 = pause request
+        
+        # Wait for macro to acknowledge pause (up to 5 seconds for quick response)
+        import asyncio
+        for _ in range(50):  # 50 * 0.1 = 5 seconds max
+            await asyncio.sleep(0.1)
+            if run.value == 6:  # 6 = paused
+                await interaction.followup.send("✅ Macro paused successfully! Use `/resume` to continue.")
+                return
+        
+        await interaction.followup.send("⚠️ Pause request sent. Macro will pause at the next checkpoint.")
+        
+        # Continue waiting in background for up to 60 more seconds
+        for _ in range(600):  # 600 * 0.1 = 60 seconds max
+            await asyncio.sleep(0.1)
+            if run.value == 6:  # 6 = paused
+                await interaction.followup.send("✅ Macro has now paused! Use `/resume` to continue.")
+                return
+            elif run.value not in [5, 6]:  # State changed to something else (stopped, etc.)
+                return  # Don't send anything, state changed
+
+    @bot.tree.command(name = "resume", description = "Resume a paused macro")
+    async def resume(interaction: discord.Interaction):
+        if run.value != 6:
+            if run.value == 2:
+                await interaction.response.send_message("▶️ Macro is already running.")
+            elif run.value == 3:
+                await interaction.response.send_message("❌ Macro is stopped. Use `/start` to start it.")
+            else:
+                await interaction.response.send_message("❌ Macro is not paused.")
+            return
+        
+        run.value = 2  # 2 = running (resume)
+        await interaction.response.send_message("▶️ Macro resumed!")
+
+    @bot.tree.command(name = "skip", description = "Skip the current task")
+    async def skip(interaction: discord.Interaction):
+        if run.value != 2:
+            await interaction.response.send_message("❌ Macro is not running. Cannot skip task.")
+            return
+        
+        await interaction.response.defer()
+        
+        try:
+            settings = get_cached_settings()
+            current_status = status.value if hasattr(status, 'value') else ""
+            
+            # Define emojis (same as task queue)
+            fieldEmojis = {
+                "sunflower": "🌻", "dandelion": "🌼", "mushroom": "🍄", "blue flower": "🔷",
+                "clover": "🍀", "strawberry": "🍓", "spider": "🕸️", "bamboo": "🐼",
+                "pineapple": "🍍", "stump": "🐌", "cactus": "🌵", "pumpkin": "🎃",
+                "pine tree": "🌲", "rose": "🌹", "mountain top": "⛰️", "pepper": "🌶️", "coconut": "🥥"
+            }
+            
+            collectEmojis = {
+                "wealth_clock": "🕒", "blueberry_dispenser": "🔵", "strawberry_dispenser": "🍓",
+                "coconut_dispenser": "🥥", "royal_jelly_dispenser": "💎", "treat_dispenser": "🦴",
+                "ant_pass_dispenser": "🎫", "glue_dispenser": "🧴", "stockings": "🧦",
+                "feast": "🍽️", "samovar": "🏺", "snow_machine": "❄️", "lid_art": "🖼️",
+                "candles": "🕯️", "wreath": "🎄", "sticker_printer": "🖨️", "mondo_buff": "🐣",
+                "memory_match": "🍍", "mega_memory_match": "🌟", "extreme_memory_match": "🌶️",
+                "winter_memory_match": "❄️", "honeystorm": "🟧", "Auto_Field_Boost": "🎲"
+            }
+            
+            killEmojis = {
+                "scorpion": "", "werewolf": "", "ladybug": "", "rhinobeetle": "",
+                "spider": "", "mantis": "", "ant_challenge": "🎯", "coconut_crab": "",
+                "king_beetle": "", "tunnel_bear": "", "stump_snail": "🐌", "stinger_hunt": ""
+            }
+            
+            fieldBoosterEmojis = {
+                "blue_booster": "🔵", "red_booster": "🔴", "mountain_booster": "⚪"
+            }
+            
+            questGiverEmojis = {
+                "polar_bear_quest": "🐻‍❄️", "honey_bee_quest": "🐝",
+                "bucko_bee_quest": "💙", "riley_bee_quest": "❤️"
+            }
+            
+            def to_title_case(text):
+                """Convert text to title case"""
+                return text.replace("_", " ").title()
+            
+            # Get current task display name
+            current_task_display = "Unknown Task"
+            if current_status.startswith("gather_"):
+                field_name = current_status.replace("gather_", "").replace("_", " ")
+                emoji = fieldEmojis.get(field_name.replace(" ", "_"), "")
+                current_task_display = f"{emoji} {field_name.title()}" if emoji else field_name.title()
+            elif current_status == "converting":
+                blender_items = []
+                for i in range(1, 4):
+                    item = settings.get(f"blender_item_{i}", "none")
+                    if item != "none":
+                        blender_items.append(to_title_case(item.replace(" ", "_")))
+                if blender_items:
+                    current_task_display = f"Blender: {', '.join(blender_items)}"
+                else:
+                    current_task_display = "Blender"
+            elif current_status == "bugrun":
+                enabled_mobs = []
+                for mob_key in ["ladybug", "rhinobeetle", "scorpion", "mantis", "spider", "werewolf", "coconut_crab", "king_beetle", "tunnel_bear", "stump_snail"]:
+                    if settings.get(mob_key, False):
+                        emoji = killEmojis.get(mob_key, "")
+                        mob_name = mob_key.replace("_", " ").title()
+                        enabled_mobs.append(f"{emoji} {mob_name}" if emoji else mob_name)
+                if enabled_mobs:
+                    current_task_display = f"Kill: {', '.join(enabled_mobs[:3])}"  # Limit to 3 for display
+                else:
+                    current_task_display = "Mob Run"
+            elif current_status:
+                current_task_display = to_title_case(current_status)
+            
+            # Set skip flag
+            skipTask.value = 1
+            
+            # Create embed showing what will be skipped
+            embed = discord.Embed(title="⏭️ Skipping Task", color=0xffa500)
+            embed.add_field(name="Current Task", value=f"**{current_task_display}**", inline=False)
+            embed.add_field(name="Status", value="Task will be skipped on next check.", inline=False)
+            
+            await interaction.followup.send(embed=embed)
+            
+        except Exception as e:
+            skipTask.value = 1  # Still set skip flag even if display fails
+            await interaction.followup.send(f"⏭️ Skipping Task\n❌ Error displaying task info: {str(e)}")
+        
     @bot.tree.command(name = "rejoin", description = "Make the macro rejoin the game.")
     async def rejoin(interaction: discord.Interaction):
         run.value = 4
         await interaction.response.send_message("Macro is rejoining")
-
-    @bot.tree.command(name = "reset", description = "Reset the character and return to hive")
-    async def reset(interaction: discord.Interaction):
-        await interaction.response.defer()
-        try:
-            # Request reset in the macro process using a special run value
-            import modules.macro as macroModule
-            # Use a dummy queue if recentLogs is not a queue
-            logQueue = recentLogs if hasattr(recentLogs, "put") else queue.Queue()
-            macro = macroModule.macro(reset, logQueue, updateGUI)
-            macro.status.value = ""
-            if hasattr(macro, 'stopGather'):
-                macro.stopGather()
-            if hasattr(macro, 'logger') and hasattr(macro.logger, 'webhook'):
-                macro.logger.webhook("", "Player died (Reset Command)", "dark brown", "screen", ping_category="ping_character_deaths")
-            time.sleep(0.4)
-            macro.reset(convert=True)
-            await interaction.followup.send("✅ Reset completed.")
-        except Exception as e:
-            await interaction.followup.send(f"❌ Failed to request reset: {str(e)}")
     
     @bot.tree.command(name = "logs", description = "Show the last 10 macro actions from the log")
     async def show_logs(interaction: discord.Interaction):
@@ -654,28 +373,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                     log_text += f"`{time_str}` **{title}**\n"
 
             if log_text:
-                # Ensure each embed field value is <= 1024 characters (Discord limit)
-                if len(log_text) > 1024:
-                    # Split by lines into chunks that fit within 1024 chars
-                    lines = log_text.rstrip().splitlines(keepends=True)
-                    chunks = []
-                    current_chunk = ""
-                    for line in lines:
-                        if len(current_chunk) + len(line) > 1024:
-                            if current_chunk:
-                                chunks.append(current_chunk.rstrip())
-                            current_chunk = line
-                        else:
-                            current_chunk += line
-
-                    if current_chunk:
-                        chunks.append(current_chunk.rstrip())
-
-                    for i, chunk in enumerate(chunks):
-                        field_name = f"Recent Actions (Part {i + 1})" if len(chunks) > 1 else "Recent Actions"
-                        embed.add_field(name=field_name, value=chunk, inline=False)
-                else:
-                    embed.add_field(name="Recent Actions", value=log_text.rstrip(), inline=False)
+                embed.add_field(name="Recent Actions", value=log_text.rstrip(), inline=False)
             else:
                 embed.add_field(name="Recent Actions", value="No actions to display", inline=False)
 
@@ -738,14 +436,25 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     @bot.tree.command(name = "battery", description = "Get your current battery status")
     async def battery(interaction: discord.Interaction):
         try:
-            output = subprocess.check_output(["pmset", "-g", "batt"], text=True)
-            for line in output.split("\n"):
-                if "InternalBattery" in line:
-                    parts = line.split("\t")[-1].split(";")
-                    percent = parts[0].strip()
-                    status = parts[1].strip()
-                    await interaction.response.send_message(f"Battery is at {percent} and is currently {status}.")
-                    return
+            if sys.platform == "darwin":
+                output = subprocess.check_output(["pmset", "-g", "batt"], text=True)
+                for line in output.split("\n"):
+                    if "InternalBattery" in line:
+                        parts = line.split("\t")[-1].split(";")
+                        percent = parts[0].strip()
+                        status = parts[1].strip()
+                        await interaction.response.send_message(f"Battery is at {percent} and is currently {status}.")
+                        return
+                    
+            elif sys.platform == "win32":
+                output = subprocess.check_output(["wmic", "path", "Win32_Battery", "get", "EstimatedChargeRemaining, BatteryStatus"], text=True)
+                lines = output.strip().split("\n")
+                if len(lines) > 1:
+                    # Parse the output
+                    data = lines[1].split()
+                    percent = data[0]  # First column is the battery percentage
+                    status = "charging" if data[1] == "2" else "not charging"  # Status column
+                    await interaction.response.send_message(f"Battery is at {percent}% and is currently {status}.")
             
             await interaction.response.send_message("Battery information not found.")
         except Exception as e:
@@ -755,39 +464,6 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     async def battery(interaction: discord.Interaction):
         closeApp("Roblox")
         os._exit(1)
-
-    def _set_macos_mute(muted: bool) -> None:
-        """Set macOS system audio mute state using AppleScript via osascript."""
-        try:
-            if sys.platform != "darwin":
-                raise OSError("Not running on macOS")
-            state = "true" if muted else "false"
-            # Use osascript to set the output muted state
-            subprocess.check_call(["osascript", "-e", f'set volume output muted {state}' ])
-        except Exception:
-            raise
-
-    @bot.tree.command(name = "mute", description = "Mute system audio (macOS only)")
-    async def mute_audio(interaction: discord.Interaction):
-        try:
-            if sys.platform != "darwin":
-                await interaction.response.send_message("❌ This command only works on macOS.")
-                return
-            _set_macos_mute(True)
-            await interaction.response.send_message("🔇 System audio muted.")
-        except Exception as e:
-            await interaction.response.send_message(f"❌ Failed to mute audio: {e}")
-
-    @bot.tree.command(name = "unmute", description = "Unmute system audio (macOS only)")
-    async def unmute_audio(interaction: discord.Interaction):
-        try:
-            if sys.platform != "darwin":
-                await interaction.response.send_message("❌ This command only works on macOS.")
-                return
-            _set_macos_mute(False)
-            await interaction.response.send_message("🔊 System audio unmuted.")
-        except Exception as e:
-            await interaction.response.send_message(f"❌ Failed to unmute audio: {e}")
     
     @bot.tree.command(name = "disablegoo", description = "Disable goo for a specific field")
     async def disable_goo(interaction: discord.Interaction, field: str):
@@ -898,19 +574,405 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         except Exception as e:
             await interaction.response.send_message(f"❌ Error getting stream URL: {str(e)}")
 
+    @bot.tree.command(name="taskqueue", description = "Show the current task queue with current task highlighted")
+    async def task_queue(interaction: discord.Interaction):
+        """Show the current task queue similar to the GUI"""
+        await interaction.response.defer()
+
+        try:
+            settings = get_cached_settings()
+            current_status = status.value if hasattr(status, 'value') else ""
+
+            # Define emojis and icons for different tasks (same as GUI)
+            fieldEmojis = {
+                "sunflower": "🌻", "dandelion": "🌼", "mushroom": "🍄", "blue flower": "🔷",
+                "clover": "🍀", "strawberry": "🍓", "spider": "🕸️", "bamboo": "🐼",
+                "pineapple": "🍍", "stump": "🐌", "cactus": "🌵", "pumpkin": "🎃",
+                "pine tree": "🌲", "rose": "🌹", "mountain top": "⛰️", "pepper": "🌶️", "coconut": "🥥"
+            }
+
+            collectEmojis = {
+                "wealth_clock": "🕒", "blueberry_dispenser": "🔵", "strawberry_dispenser": "🍓",
+                "coconut_dispenser": "🥥", "royal_jelly_dispenser": "💎", "treat_dispenser": "🦴",
+                "ant_pass_dispenser": "🎫", "glue_dispenser": "🧴", "stockings": "🧦",
+                "feast": "🍽️", "samovar": "🏺", "snow_machine": "❄️", "lid_art": "🖼️",
+                "candles": "🕯️", "wreath": "🎄", "sticker_printer": "🖨️", "mondo_buff": "🐣",
+                "memory_match": "🍍", "mega_memory_match": "🌟", "extreme_memory_match": "🌶️",
+                "winter_memory_match": "❄️", "honeystorm": "🟧", "Auto_Field_Boost": "🎲"
+            }
+
+            killEmojis = {
+                "scorpion": "", "werewolf": "", "ladybug": "", "rhinobeetle": "",
+                "spider": "", "mantis": "", "ant_challenge": "🎯", "coconut_crab": "",
+                "king_beetle": "", "tunnel_bear": "", "stump_snail": "🐌", "stinger_hunt": ""
+            }
+
+            fieldBoosterEmojis = {
+                "blue_booster": "🔵", "red_booster": "🔴", "mountain_booster": "⚪"
+            }
+
+            questGiverEmojis = {
+                "polar_bear_quest": "🐻‍❄️", "honey_bee_quest": "🐝",
+                "bucko_bee_quest": "💙", "riley_bee_quest": "❤️"
+            }
+
+            def to_title_case(text):
+                """Convert text to title case"""
+                return text.replace("_", " ").title()
+
+            # Helper function to check if a task is enabled and get its display info (matches GUI exactly)
+            def get_task_display_info(task_id):
+                """Get task display info matching GUI's getTaskDisplayInfo"""
+                # Handle gather tasks
+                if task_id.startswith("gather_"):
+                    field_name = task_id.replace("gather_", "").replace("_", " ")
+                    # Check if this field is enabled
+                    field_list = settings.get("fields", [])
+                    fields_enabled = settings.get("fields_enabled", [])
+                    for i in range(len(fields_enabled)):
+                        if i < len(field_list) and fields_enabled[i] and field_list[i] == field_name:
+                            emoji = fieldEmojis.get(field_name.replace(" ", "_"), "")
+                            is_current = current_status == f"gather_{field_name.replace(' ', '_')}"
+                            desc = f"{emoji} {field_name}" if emoji else field_name
+                            if is_current:
+                                return {"enabled": True, "title": f"Gather {i + 1}", "desc": desc, "is_current": True}
+                            return {"enabled": True, "title": f"Gather {i + 1}", "desc": desc, "is_current": False}
+                    return {"enabled": False}
+                
+                # Handle collect tasks
+                if task_id.startswith("collect_"):
+                    collect_name = task_id.replace("collect_", "")
+                    
+                    # Special case: sticker_printer
+                    if collect_name == "sticker_printer":
+                        if not settings.get("sticker_printer"):
+                            return {"enabled": False}
+                        emoji = collectEmojis.get("sticker_printer", "")
+                        desc = f"{emoji} {to_title_case('sticker printer')}" if emoji else to_title_case("sticker printer")
+                        return {"enabled": True, "title": "Collect", "desc": desc, "is_current": False}
+                    
+                    # Special case: sticker_stack
+                    if collect_name == "sticker_stack":
+                        if not settings.get("sticker_stack"):
+                            return {"enabled": False}
+                        return {"enabled": True, "title": "Collect Buff", "desc": "Sticker Stack", "is_current": False}
+                    
+                    # Regular collect items
+                    if not settings.get(collect_name):
+                        return {"enabled": False}
+                    emoji = collectEmojis.get(collect_name, "")
+                    desc = f"{emoji} {to_title_case(collect_name)}" if emoji else to_title_case(collect_name)
+                    return {"enabled": True, "title": "Collect", "desc": desc, "is_current": False}
+                
+                # Handle kill tasks
+                if task_id.startswith("kill_"):
+                    mob = task_id.replace("kill_", "")
+                    if not settings.get(mob):
+                        return {"enabled": False}
+                    display_name = mob if mob != "rhinobeetle" else "rhino beetle"
+                    emoji = killEmojis.get(mob, "")
+                    desc = f"{emoji} {to_title_case(display_name)}" if emoji else to_title_case(display_name)
+                    is_current = current_status == "bugrun"
+                    return {"enabled": True, "title": "Kill", "desc": desc, "is_current": is_current}
+                
+                # Handle quest tasks
+                if task_id.startswith("quest_"):
+                    quest_name = task_id.replace("quest_", "")
+                    quest_key = f"{quest_name}_quest"
+                    if not settings.get(quest_key):
+                        return {"enabled": False}
+                    emoji = questGiverEmojis.get(quest_key, "")
+                    desc = f"{emoji} {to_title_case(quest_name)}" if emoji else to_title_case(quest_name)
+                    return {"enabled": True, "title": "Quest", "desc": desc, "is_current": False}
+                
+                # Handle special tasks
+                if task_id == "blender":
+                    if not settings.get("blender_enable"):
+                        return {"enabled": False}
+                    selected_blender_items = {}
+                    for i in range(1, 4):
+                        item = settings.get(f"blender_item_{i}", "none")
+                        if item != "none" and item:
+                            selected_blender_items[to_title_case(item.replace(" ", "_"))] = item
+                    if selected_blender_items:
+                        desc = ", ".join(selected_blender_items.keys())
+                    else:
+                        desc = "Blender"
+                    is_current = current_status == "converting"
+                    return {"enabled": True, "title": "Blender", "desc": desc, "is_current": is_current}
+                
+                if task_id == "planters":
+                    if not settings.get("planters_mode"):
+                        return {"enabled": False}
+                    mode_text = "Manual" if settings.get("planters_mode") == 1 else "Auto"
+                    return {"enabled": True, "title": "Planters", "desc": mode_text, "is_current": False}
+                
+                if task_id == "mondo_buff":
+                    if not settings.get("mondo_buff"):
+                        return {"enabled": False}
+                    emoji = collectEmojis.get("mondo_buff", "")
+                    desc = f"{emoji} {to_title_case('mondo buff')}" if emoji else to_title_case("mondo buff")
+                    return {"enabled": True, "title": "Collect", "desc": desc, "is_current": False}
+                
+                if task_id == "stinger_hunt":
+                    if not settings.get("stinger_hunt"):
+                        return {"enabled": False}
+                    emoji = killEmojis.get("stinger_hunt", "")
+                    desc = f"{emoji} {to_title_case('stinger hunt')}" if emoji else to_title_case("stinger hunt")
+                    return {"enabled": True, "title": "Kill", "desc": desc, "is_current": False}
+                
+                if task_id == "auto_field_boost":
+                    if not settings.get("Auto_Field_Boost"):
+                        return {"enabled": False}
+                    emoji = collectEmojis.get("Auto_Field_Boost", "")
+                    desc = f"{emoji} {to_title_case('auto field boost')}" if emoji else to_title_case("auto field boost")
+                    return {"enabled": True, "title": "Collect Buff", "desc": desc, "is_current": False}
+                
+                if task_id == "ant_challenge":
+                    if not settings.get("ant_challenge"):
+                        return {"enabled": False}
+                    emoji = killEmojis.get("ant_challenge", "")
+                    desc = f"{emoji} {to_title_case('ant challenge')}" if emoji else to_title_case("ant challenge")
+                    return {"enabled": True, "title": "Kill", "desc": desc, "is_current": False}
+                
+                # Field boosters (blue_booster, red_booster, mountain_booster)
+                if task_id in ["collect_blue_booster", "collect_red_booster", "collect_mountain_booster"]:
+                    booster_name = task_id.replace("collect_", "")
+                    if not settings.get(booster_name):
+                        return {"enabled": False}
+                    emoji = fieldBoosterEmojis.get(booster_name, "")
+                    desc = f"{emoji} {to_title_case(booster_name)}" if emoji else to_title_case(booster_name)
+                    return {"enabled": True, "title": "Collect Buff", "desc": desc, "is_current": False}
+                
+                return {"enabled": False}
+            
+            # Get priority order from settings
+            priority_order = settings.get("task_priority_order", [])
+            
+            # Build task list similar to GUI (simple list format)
+            task_list = []
+            
+            # Check for field-only mode
+            if settings.get("macro_mode", "normal") == "field":
+                task_list.append({"title": "Field Only Mode", "desc": "🌾 Gathering in fields only", "is_current": False})
+                field_list = settings.get("fields", [])
+                fields_enabled = settings.get("fields_enabled", [])
+                
+                # Filter priority order to only include gather tasks for enabled fields
+                field_only_tasks = []
+                for task_id in priority_order:
+                    if task_id.startswith("gather_"):
+                        field_name = task_id.replace("gather_", "").replace("_", " ")
+                        # Check if this field is enabled
+                        for i in range(len(fields_enabled)):
+                            if i < len(field_list) and fields_enabled[i] and field_list[i] == field_name:
+                                field_only_tasks.append(task_id)
+                                break
+                
+                # If no gather tasks are in priority order, fall back to sequential order of enabled fields
+                if not field_only_tasks:
+                    for i in range(len(fields_enabled)):
+                        if i < len(field_list) and fields_enabled[i]:
+                            field = field_list[i]
+                            field_only_tasks.append(f"gather_{field.replace(' ', '_')}")
+                
+                # Display gather tasks in priority order
+                gather_index = 1
+                for task_id in field_only_tasks:
+                    field_name = task_id.replace("gather_", "").replace("_", " ")
+                    emoji = fieldEmojis.get(field_name.replace(" ", "_"), "")
+                    desc = f"{emoji} {field_name}" if emoji else field_name
+                    is_current = current_status == f"gather_{field_name.replace(' ', '_')}"
+                    task_list.append({"title": f"Gather {gather_index}", "desc": desc, "is_current": is_current})
+                    gather_index += 1
+            # Check for quest mode
+            elif settings.get("macro_mode", "normal") == "quest":
+                task_list.append({"title": "Quest Mode", "desc": "📜 Doing quests only", "is_current": False})
+
+                # Add quest tasks that are enabled
+                quest_tasks = [
+                    ("honey_bee_quest", "🐝 Honey Bee Quest"),
+                    ("bucko_bee_quest", "🏴‍☠️ Bucko Bee Quest"),
+                    ("riley_bee_quest", "🎸 Riley Bee Quest"),
+                    ("polar_bear_quest", "🐻 Polar Bear Quest")
+                ]
+
+                for quest_key, desc in quest_tasks:
+                    if settings.get(quest_key):
+                        task_list.append({"title": "Quest", "desc": desc, "is_current": False})
+            else:
+                # If priority order exists, use it; otherwise fall back to old order
+                if priority_order and len(priority_order) > 0:
+                    # Display tasks in priority order
+                    for task_id in priority_order:
+                        task_info = get_task_display_info(task_id)
+                        if task_info.get("enabled"):
+                            task_list.append({
+                                "title": task_info.get("title", "Task"),
+                                "desc": task_info.get("desc", ""),
+                                "is_current": task_info.get("is_current", False)
+                            })
+                else:
+                    # Fallback to old order if no priority order is set
+                    # Quests
+                    for quest_key, emoji in questGiverEmojis.items():
+                        if settings.get(quest_key):
+                            quest_name = quest_key.replace("_quest", "").replace("_", " ")
+                            desc = f"{emoji} {to_title_case(quest_name)}" if emoji else to_title_case(quest_name)
+                            task_list.append({"title": "Quest", "desc": desc, "is_current": False})
+                    
+                    # Collectibles
+                    for collect_key, emoji in collectEmojis.items():
+                        if settings.get(collect_key):
+                            desc = f"{emoji} {to_title_case(collect_key)}" if emoji else to_title_case(collect_key)
+                            task_list.append({"title": "Collect", "desc": desc, "is_current": False})
+                    
+                    # Blender
+                    if settings.get("blender_enable"):
+                        blender_items = {}
+                        for i in range(1, 4):
+                            item = settings.get(f"blender_item_{i}", "none")
+                            if item != "none":
+                                blender_items[to_title_case(item.replace(" ", "_"))] = item
+                        if blender_items:
+                            desc = ", ".join(blender_items.keys())
+                        else:
+                            desc = "Blender"
+                        is_current = current_status == "converting"
+                        task_list.append({"title": "Blender", "desc": desc, "is_current": is_current})
+                    
+                    # Planters
+                    if settings.get("planters_mode"):
+                        mode_text = "Manual" if settings.get("planters_mode") == 1 else "Auto"
+                        task_list.append({"title": "Planters", "desc": mode_text, "is_current": False})
+                    
+                    # Kill tasks
+                    for mob_key, emoji in killEmojis.items():
+                        if settings.get(mob_key):
+                            mob_name = mob_key if mob_key != "rhinobeetle" else "rhino beetle"
+                            desc = f"{emoji} {to_title_case(mob_name)}" if emoji else to_title_case(mob_name)
+                            is_current = current_status == "bugrun"
+                            task_list.append({"title": "Kill", "desc": desc, "is_current": is_current})
+                    
+                    # Field boosters
+                    for booster_key, emoji in fieldBoosterEmojis.items():
+                        if settings.get(booster_key):
+                            desc = f"{emoji} {to_title_case(booster_key)}"
+                            task_list.append({"title": "Collect Buff", "desc": desc, "is_current": False})
+                    
+                    # Sticker stack
+                    if settings.get("sticker_stack"):
+                        task_list.append({"title": "Collect Buff", "desc": "Sticker Stack", "is_current": False})
+                    
+                    # Gather fields
+                    field_list = settings.get("fields", [])
+                    fields_enabled = settings.get("fields_enabled", [])
+                    for i in range(len(fields_enabled)):
+                        if i < len(field_list) and fields_enabled[i]:
+                            field = field_list[i]
+                            emoji = fieldEmojis.get(field.replace(" ", "_"), "")
+                            desc = f"{emoji} {field}" if emoji else field
+                            is_current = current_status == f"gather_{field.replace(' ', '_')}"
+                            task_list.append({"title": f"Gather {i + 1}", "desc": desc, "is_current": is_current})
+            
+            # Build embed with tasks displayed like GUI (simple list format)
+            embed = discord.Embed(title="📋 Current Task Queue", color=0x00ff00)
+            
+            if not task_list:
+                embed.add_field(name="📭 No Tasks", value="No tasks are currently enabled.", inline=False)
+            else:
+                # Format tasks: only show description (no category titles)
+                task_text = ""
+                for i, task in enumerate(task_list):
+                    desc = task["desc"]
+                    is_current = task["is_current"]
+                    
+                    # Bold the current task
+                    if is_current:
+                        task_text += f"**{desc}**\n"
+                    else:
+                        task_text += f"{desc}\n"
+                
+                # Discord embed field value limit is 1024 characters
+                if len(task_text) > 1024:
+                    # Split into multiple fields if needed
+                    chunks = []
+                    current_chunk = ""
+                    for i, task in enumerate(task_list):
+                        desc = task["desc"]
+                        is_current = task["is_current"]
+                        
+                        # Format the task line
+                        if is_current:
+                            task_line = f"**{desc}**\n"
+                        else:
+                            task_line = f"{desc}\n"
+                        
+                        # Check if adding this line would exceed the limit
+                        if len(current_chunk) + len(task_line) > 1024:
+                            # Save current chunk and start a new one
+                            if current_chunk:
+                                chunks.append(current_chunk.rstrip())
+                            current_chunk = task_line
+                        else:
+                            current_chunk += task_line
+                    
+                    # Add the last chunk if it exists
+                    if current_chunk:
+                        chunks.append(current_chunk.rstrip())
+                    
+                    for i, chunk in enumerate(chunks):
+                        embed.add_field(name=f"Tasks (Part {i + 1})" if len(chunks) > 1 else "Tasks", value=chunk, inline=False)
+                else:
+                    embed.add_field(name="Tasks", value=task_text.rstrip(), inline=False)
+
+            await interaction.followup.send(embed=embed)
+
+        except Exception as e:
+            await interaction.followup.send(f"❌ Error retrieving task queue: {str(e)}")
 
     # === COMPREHENSIVE SETTINGS MANAGEMENT COMMANDS ===
 
-    @bot.tree.command(name="settings", description="Open the settings panel")
+    @bot.tree.command(name="settings", description="View current macro settings")
     async def view_settings(interaction: discord.Interaction):
-        """Open the interactive settings panel"""
+        """View current macro settings"""
+        await interaction.response.defer()
+
         try:
             settings = get_cached_settings()
-            view = SettingsHomeView(requester_id=interaction.user.id if interaction.user else None)
-            embed = _build_overview_embed(settings)
-            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+            # Create embed for better formatting
+            embed = discord.Embed(title="📋 Current Macro Settings", color=0x00ff00)
+
+            # Group settings by category
+            categories = {
+                "🎯 **Core Settings**": ["fields_enabled", "fields"],
+                "💰 **Collectibles**": ["wealth_clock", "blueberry_dispenser", "strawberry_dispenser", "royal_jelly_dispenser", "treat_dispenser"],
+                "🐛 **Mob Runs**": ["ladybug", "rhinobeetle", "scorpion", "mantis", "spider", "werewolf", "coconut_crab", "king_beetle", "tunnel_bear", "stump_snail"],
+                "🌱 **Planters**": ["planters_mode", "auto_max_planters", "auto_preset"],
+                "📊 **Quests**": ["polar_bear_quest", "honey_bee_quest", "bucko_bee_quest", "riley_bee_quest"],
+                "🔧 **Advanced**": ["Auto_Field_Boost", "mondo_buff", "stinger_hunt", "blender_enable"]
+            }
+
+            for category, keys in categories.items():
+                section_content = []
+                for key in keys:
+                    if key in settings:
+                        value = settings[key]
+                        if isinstance(value, list):
+                            value = ", ".join([str(v) for v in value])
+                        elif isinstance(value, bool):
+                            value = "✅" if value else "❌"
+                        section_content.append(f"**{key}:** {value}")
+
+                if section_content:
+                    embed.add_field(name=category, value="\n".join(section_content), inline=False)
+
+            embed.set_footer(text="Use specific commands to modify individual settings")
+            await interaction.followup.send(embed=embed)
+
         except Exception as e:
-            await interaction.response.send_message(f"❌ Error opening settings panel: {str(e)}", ephemeral=True)
+            await interaction.followup.send(f"❌ Error retrieving settings: {str(e)}")
 
 
     # === FIELD CONFIGURATION COMMANDS ===
@@ -948,7 +1010,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         except Exception as e:
             await interaction.followup.send(f"❌ Error retrieving field settings: {str(e)}")
 
-    async def field_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice]:
+    async def field_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
         """Auto-complete function for currently active field names"""
         settings = get_cached_settings()
         field_list = settings.get("fields", [])
@@ -960,7 +1022,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         return choices[:25]  # Discord limit is 25 choices
 
-    async def all_fields_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice]:
+    async def all_fields_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
         """Auto-complete function for all possible field names"""
         # All possible field names in the game
         all_possible_fields = [
@@ -977,9 +1039,9 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         return choices[:25]  # Discord limit is 25 choices
 
-    async def quest_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice]:
+    async def quest_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
         """Auto-complete function for quest names"""
-        quests = ["polar_bear", "brown_bear", "honey_bee", "bucko_bee", "riley_bee"]
+        quests = ["polar_bear", "honey_bee", "bucko_bee", "riley_bee"]
         choices = []
 
         for quest in quests:
@@ -988,7 +1050,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         return choices[:25]
 
-    async def collectible_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice]:
+    async def collectible_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
         """Auto-complete function for collectible names"""
         collectibles = [
             "wealth_clock", "blueberry", "strawberry", "coconut", "royal_jelly", "ant_pass",
@@ -1003,7 +1065,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         return choices[:25]
 
-    async def mob_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice]:
+    async def mob_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
         """Auto-complete function for mob names"""
         mobs = ["ladybug", "rhinobeetle", "scorpion", "mantis", "spider", "werewolf", "coconut_crab", "king_beetle", "tunnel_bear", "stump_snail"]
         choices = []
@@ -1015,7 +1077,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         return choices[:25]
 
-    async def planter_mode_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice]:
+    async def planter_mode_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
         """Auto-complete function for planter modes"""
         modes = [
             app_commands.Choice(name="Disabled", value="0"),
@@ -1024,7 +1086,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         ]
         return modes
 
-    async def use_when_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice]:
+    async def use_when_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
         """Auto-complete function for hotbar use_when options"""
         options = [
             app_commands.Choice(name="Never", value="never"),
@@ -1034,7 +1096,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         ]
         return options
 
-    async def format_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice]:
+    async def format_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
         """Auto-complete function for time format options"""
         formats = [
             app_commands.Choice(name="Seconds", value="secs"),
@@ -1043,7 +1105,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         ]
         return formats
 
-    async def boolean_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice]:
+    async def boolean_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
         """Auto-complete function for boolean values"""
         booleans = [
             app_commands.Choice(name="True", value="true"),
@@ -1051,38 +1113,72 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         ]
         return booleans
 
-    @bot.tree.command(name="field", description="Enable or disable a specific field")
-    @app_commands.describe(field="Field name", enabled="Enable or disable")
-    @app_commands.autocomplete(field=field_autocomplete, enabled=boolean_autocomplete)
-    async def set_field(interaction: discord.Interaction, field: str, enabled: str):
-        """Enable or disable a specific field"""
+    @bot.tree.command(name="enablefield", description="Enable a specific field")
+    @app_commands.describe(field="Field name to enable")
+    @app_commands.autocomplete(field=field_autocomplete)
+    async def enable_field(interaction: discord.Interaction, field: str):
+        """Enable a specific field"""
         try:
             field = field.lower().replace(" ", "_")
-            enabled = enabled.lower() == "true"
             settings = get_cached_settings()
 
+            # Get the fields list and fields_enabled array
             field_list = settings.get("fields", [])
             fields_enabled = settings.get("fields_enabled", [])
+
+            # Normalize field names for comparison
             normalized_fields = [f.lower().replace(" ", "_") for f in field_list]
 
             if field not in normalized_fields:
-                await interaction.response.send_message(
-                    f"❌ Field '{field}' not found. Available fields: {', '.join([f.replace('_', ' ').title() for f in normalized_fields])}"
-                )
+                await interaction.response.send_message(f"❌ Field '{field}' not found. Available fields: {', '.join([f.replace('_', ' ').title() for f in normalized_fields])}")
                 return
 
+            # Find the field index
             field_index = normalized_fields.index(field)
 
+            # Update fields_enabled list
             if field_index < len(fields_enabled):
-                fields_enabled[field_index] = enabled
+                fields_enabled[field_index] = True
                 update_setting("fields_enabled", fields_enabled)
-                state = "Enabled" if enabled else "Disabled"
-                await interaction.response.send_message(f"✅ {state} field: {field_list[field_index].title()}")
+                await interaction.response.send_message(f"✅ Enabled field: {field_list[field_index].title()}")
             else:
-                await interaction.response.send_message("❌ Field index out of range")
+                await interaction.response.send_message(f"❌ Field index out of range")
 
         except Exception as e:
-            await interaction.response.send_message(f"❌ Error updating field: {str(e)}")
+            await interaction.response.send_message(f"❌ Error enabling field: {str(e)}")
+
+    @bot.tree.command(name="disablefield", description="Disable a specific field")
+    @app_commands.describe(field="Field name to disable")
+    async def disable_field(interaction: discord.Interaction, field: str):
+        """Disable a specific field"""
+        try:
+            field = field.lower().replace(" ", "_")
+            settings = get_cached_settings()
+
+            # Get the fields list and fields_enabled array
+            field_list = settings.get("fields", [])
+            fields_enabled = settings.get("fields_enabled", [])
+
+            # Normalize field names for comparison
+            normalized_fields = [f.lower().replace(" ", "_") for f in field_list]
+
+            if field not in normalized_fields:
+                await interaction.response.send_message(f"❌ Field '{field}' not found. Available fields: {', '.join([f.replace('_', ' ').title() for f in normalized_fields])}")
+                return
+
+            # Find the field index
+            field_index = normalized_fields.index(field)
+
+            # Update fields_enabled list
+            if field_index < len(fields_enabled):
+                fields_enabled[field_index] = False
+                update_setting("fields_enabled", fields_enabled)
+                await interaction.response.send_message(f"✅ Disabled field: {field_list[field_index].title()}")
+            else:
+                await interaction.response.send_message(f"❌ Field index out of range")
+
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error disabling field: {str(e)}")
 
     @bot.tree.command(name="swapfield", description="Swap one field for another")
     @app_commands.describe(current="Current field to replace (e.g., pine_tree)", new="New field to use (e.g., rose)")
@@ -1133,7 +1229,6 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
             quest_settings = {
                 "🐻 **Polar Bear**": settings.get("polar_bear_quest", False),
-                "🐻 **Brown Bear**": settings.get("brown_bear_quest", False),
                 "🍯 **Honey Bee**": settings.get("honey_bee_quest", False),
                 "🐝 **Bucko Bee**": settings.get("bucko_bee_quest", False),
                 "🎯 **Riley Bee**": settings.get("riley_bee_quest", False),
@@ -1151,14 +1246,13 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         except Exception as e:
             await interaction.response.send_message(f"❌ Error retrieving quest settings: {str(e)}")
 
-    @bot.tree.command(name="quest", description="Enable or disable a specific quest")
-    @app_commands.describe(quest="Quest name (polar_bear, brown_bear, honey_bee, bucko_bee, riley_bee)", enabled="Enable or disable")
-    @app_commands.autocomplete(quest=quest_autocomplete, enabled=boolean_autocomplete)
-    async def set_quest(interaction: discord.Interaction, quest: str, enabled: str):
-        """Enable or disable a specific quest"""
+    @bot.tree.command(name="enablequest", description="Enable a specific quest")
+    @app_commands.describe(quest="Quest name to enable (polar_bear, honey_bee, bucko_bee, riley_bee)")
+    @app_commands.autocomplete(quest=quest_autocomplete)
+    async def enable_quest(interaction: discord.Interaction, quest: str):
+        """Enable a specific quest"""
         quest_mapping = {
             "polar_bear": "polar_bear_quest",
-            "brown_bear": "brown_bear_quest",
             "honey_bee": "honey_bee_quest",
             "bucko_bee": "bucko_bee_quest",
             "riley_bee": "riley_bee_quest"
@@ -1166,10 +1260,30 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         quest_key = quest_mapping.get(quest.lower())
         if not quest_key:
-            await interaction.response.send_message("❌ Invalid quest name. Use: polar_bear, brown_bear, honey_bee, bucko_bee, or riley_bee")
+            await interaction.response.send_message("❌ Invalid quest name. Use: polar_bear, honey_bee, bucko_bee, or riley_bee")
             return
 
-        success, message = update_setting(quest_key, enabled.lower() == "true")
+        success, message = update_setting(quest_key, True)
+        await interaction.response.send_message(message)
+
+    @bot.tree.command(name="disablequest", description="Disable a specific quest")
+    @app_commands.describe(quest="Quest name to disable (polar_bear, honey_bee, bucko_bee, riley_bee)")
+    @app_commands.autocomplete(quest=quest_autocomplete)
+    async def disable_quest(interaction: discord.Interaction, quest: str):
+        """Disable a specific quest"""
+        quest_mapping = {
+            "polar_bear": "polar_bear_quest",
+            "honey_bee": "honey_bee_quest",
+            "bucko_bee": "bucko_bee_quest",
+            "riley_bee": "riley_bee_quest"
+        }
+
+        quest_key = quest_mapping.get(quest.lower())
+        if not quest_key:
+            await interaction.response.send_message("❌ Invalid quest name. Use: polar_bear, honey_bee, bucko_bee, or riley_bee")
+            return
+
+        success, message = update_setting(quest_key, False)
         await interaction.response.send_message(message)
 
     # === COLLECTIBLES MANAGEMENT COMMANDS ===
@@ -1213,11 +1327,11 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         except Exception as e:
             await interaction.response.send_message(f"❌ Error retrieving collectible settings: {str(e)}")
 
-    @bot.tree.command(name="collectible", description="Enable or disable a specific collectible")
-    @app_commands.describe(collectible="Collectible name", enabled="Enable or disable")
-    @app_commands.autocomplete(collectible=collectible_autocomplete, enabled=boolean_autocomplete)
-    async def set_collectible(interaction: discord.Interaction, collectible: str, enabled: str):
-        """Enable or disable a specific collectible"""
+    @bot.tree.command(name="enablecollectible", description="Enable a specific collectible")
+    @app_commands.describe(collectible="Collectible name to enable")
+    @app_commands.autocomplete(collectible=collectible_autocomplete)
+    async def enable_collectible(interaction: discord.Interaction, collectible: str):
+        """Enable a specific collectible"""
         collectible_mapping = {
             "wealth_clock": "wealth_clock",
             "blueberry": "blueberry_dispenser",
@@ -1235,7 +1349,32 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message("❌ Invalid collectible name")
             return
 
-        success, message = update_setting(collectible_key, enabled.lower() == "true")
+        success, message = update_setting(collectible_key, True)
+        await interaction.response.send_message(message)
+
+    @bot.tree.command(name="disablecollectible", description="Disable a specific collectible")
+    @app_commands.describe(collectible="Collectible name to disable")
+    @app_commands.autocomplete(collectible=collectible_autocomplete)
+    async def disable_collectible(interaction: discord.Interaction, collectible: str):
+        """Disable a specific collectible"""
+        collectible_mapping = {
+            "wealth_clock": "wealth_clock",
+            "blueberry": "blueberry_dispenser",
+            "strawberry": "strawberry_dispenser",
+            "coconut": "coconut_dispenser",
+            "royal_jelly": "royal_jelly_dispenser",
+            "ant_pass": "ant_pass_dispenser",
+            "treat": "treat_dispenser",
+            "glue": "glue_dispenser",
+            "honeystorm": "honeystorm"
+        }
+
+        collectible_key = collectible_mapping.get(collectible.lower().replace(" ", "_"))
+        if not collectible_key:
+            await interaction.response.send_message("❌ Invalid collectible name")
+            return
+
+        success, message = update_setting(collectible_key, False)
         await interaction.response.send_message(message)
 
     # === PLANTER MANAGEMENT COMMANDS ===
@@ -1338,11 +1477,11 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         except Exception as e:
             await interaction.response.send_message(f"❌ Error retrieving mob settings: {str(e)}")
 
-    @bot.tree.command(name="mob", description="Enable or disable a specific mob run")
-    @app_commands.describe(mob="Mob name", enabled="Enable or disable")
-    @app_commands.autocomplete(mob=mob_autocomplete, enabled=boolean_autocomplete)
-    async def set_mob(interaction: discord.Interaction, mob: str, enabled: str):
-        """Enable or disable a specific mob run"""
+    @bot.tree.command(name="enablemob", description="Enable a specific mob run")
+    @app_commands.describe(mob="Mob name to enable")
+    @app_commands.autocomplete(mob=mob_autocomplete)
+    async def enable_mob(interaction: discord.Interaction, mob: str):
+        """Enable a specific mob run"""
         mob_mapping = {
             "ladybug": "ladybug",
             "rhinobeetle": "rhinobeetle",
@@ -1361,10 +1500,114 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message("❌ Invalid mob name")
             return
 
-        success, message = update_setting(mob_key, enabled.lower() == "true")
+        success, message = update_setting(mob_key, True)
         await interaction.response.send_message(message)
+
+    @bot.tree.command(name="disablemob", description="Disable a specific mob run")
+    @app_commands.describe(mob="Mob name to disable")
+    @app_commands.autocomplete(mob=mob_autocomplete)
+    async def disable_mob(interaction: discord.Interaction, mob: str):
+        """Disable a specific mob run"""
+        mob_mapping = {
+            "ladybug": "ladybug",
+            "rhinobeetle": "rhinobeetle",
+            "scorpion": "scorpion",
+            "mantis": "mantis",
+            "spider": "spider",
+            "werewolf": "werewolf",
+            "coconut_crab": "coconut_crab",
+            "king_beetle": "king_beetle",
+            "tunnel_bear": "tunnel_bear",
+            "stump_snail": "stump_snail"
+        }
+
+        mob_key = mob_mapping.get(mob.lower().replace(" ", "_"))
+        if not mob_key:
+            await interaction.response.send_message("❌ Invalid mob name")
+            return
+
+        success, message = update_setting(mob_key, False)
+        await interaction.response.send_message(message)
+
+    # === PROFILE MANAGEMENT COMMANDS ===
+
+    @bot.tree.command(name="profiles", description="List available profiles")
+    async def list_profiles(interaction: discord.Interaction):
+        """List available profiles"""
+        try:
+            profiles = settingsManager.listProfiles()
+            current = settingsManager.getCurrentProfile()
+            if profiles:
+                profile_lines = []
+                for p in profiles:
+                    if p == current:
+                        profile_lines.append(f"• `{p}` ✅ (active)")
+                    else:
+                        profile_lines.append(f"• `{p}`")
+                embed = discord.Embed(title="📁 Available Profiles", color=0x00ff00)
+                embed.add_field(name="Profiles", value="\n".join(profile_lines), inline=False)
+                embed.set_footer(text="Use /switchprofile <name> to switch profiles")
+                await interaction.response.send_message(embed=embed)
+            else:
+                await interaction.response.send_message("❌ No profiles found")
+
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error listing profiles: {str(e)}")
+
+    @bot.tree.command(name="currentprofile", description="Show current profile")
+    async def current_profile(interaction: discord.Interaction):
+        """Show current profile"""
+        try:
+            current = settingsManager.getCurrentProfile()
+            await interaction.response.send_message(f"📁 **Current Profile:** `{current}`")
+
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error getting current profile: {str(e)}")
+
+    @bot.tree.command(name="switchprofile", description="Switch to a different profile")
+    @app_commands.describe(profile="Profile name to switch to")
+    async def switch_profile(interaction: discord.Interaction, profile: str):
+        """Switch to a different profile"""
+        try:
+            success, message = settingsManager.switchProfile(profile)
+            if success:
+                clear_settings_cache()
+                await interaction.response.send_message(f"✅ {message}")
+            else:
+                await interaction.response.send_message(f"❌ {message}")
+
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error switching profile: {str(e)}")
+
+    @bot.tree.command(name="createprofile", description="Create a new profile based on current settings")
+    @app_commands.describe(name="Name for the new profile")
+    async def create_profile(interaction: discord.Interaction, name: str):
+        """Create a new profile"""
+        try:
+            success, message = settingsManager.createProfile(name)
+            if success:
+                await interaction.response.send_message(f"✅ {message}")
+            else:
+                await interaction.response.send_message(f"❌ {message}")
+
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error creating profile: {str(e)}")
+
+    @bot.tree.command(name="deleteprofile", description="Delete a profile (cannot delete active profile)")
+    @app_commands.describe(name="Name of the profile to delete")
+    async def delete_profile(interaction: discord.Interaction, name: str):
+        """Delete a profile"""
+        try:
+            success, message = settingsManager.deleteProfile(name)
+            if success:
+                await interaction.response.send_message(f"✅ {message}")
+            else:
+                await interaction.response.send_message(f"❌ {message}")
+
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error deleting profile: {str(e)}")
     
-    @bot.tree.command(name="hiveslot", description = "Change the hive slot number (1-6)")
+    @bot.tree.command(name="hiveslot", description="Change the hive slot number (1-6)")
     @app_commands.describe(slot="Hive slot number (1-6, where 1 is closest to cannon)")
     async def hive_slot(interaction: discord.Interaction, slot: int):
         """Change the hive slot number"""
@@ -1387,46 +1630,6 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 
         except Exception as e:
             await interaction.response.send_message(f"❌ Error changing hive slot: {str(e)}")
-
-    @bot.tree.command(name="usehotbar", description="Use a hotbar slot (1-7)")
-    @app_commands.describe(slot="Hotbar slot number (1-7)")
-    async def use_hotbar(interaction: discord.Interaction, slot: int):
-        """Manually trigger a hotbar slot (updates timings and presses the key)"""
-        try:
-            if slot < 1 or slot > 7:
-                await interaction.response.send_message("❌ Hotbar slot must be between 1 and 7")
-                return
-
-            # Determine path to src and hotbar timings file (same as macro)
-            src_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-            timings_path = os.path.join(src_dir, 'data', 'user', 'hotbar_timings.txt')
-
-            # Read existing timings or initialize
-            try:
-                with open(timings_path, 'r') as f:
-                    hotbarSlotTimings = ast.literal_eval(f.read())
-            except Exception:
-                hotbarSlotTimings = [0] * 8
-
-            # Press the hotbar key twice (same behaviour as macro.backgroundOnce)
-            for _ in range(2):
-                keyboard.pagPress(str(slot))
-                time.sleep(0.4)
-
-            # Update the timing for this slot and save
-            try:
-                hotbarSlotTimings[slot] = time.time()
-            except Exception:
-                # If it's a dict-like structure, set the key
-                hotbarSlotTimings[slot] = time.time()
-
-            with open(timings_path, 'w') as f:
-                f.write(str(hotbarSlotTimings))
-
-            await interaction.response.send_message(f"✅ Activated hotbar slot {slot}")
-
-        except Exception as e:
-            await interaction.response.send_message(f"❌ Error using hotbar slot: {str(e)}")
 
     @bot.tree.command(name="macromode", description="Set macro mode (normal, quests, or field)")
     @app_commands.describe(mode="Macro mode to set")
@@ -1462,35 +1665,35 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         """Show available commands"""
         embed = discord.Embed(title="🤖 BSS Macro Discord Bot", description="Available Commands:", color=0x0099ff)
 
-        embed.add_field(name="🔧 **Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/stop` - Stop the macro\n`/status` - Get macro status and current task\n`/rejoin` - Make macro rejoin game\n`/screenshot` - Get screenshot\n`/settings` - Open settings panel\n`/hiveslot <1-6>` - Change hive slot number", inline=False)
+        embed.add_field(name="🔧 **Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/skip` - Skip the current task\n`/stop` - Stop the macro\n`/status` - Get macro status and current task\n`/rejoin` - Make macro rejoin game\n`/screenshot` - Get screenshot\n`/settings` - View current settings\n`/hiveslot <1-6>` - Change hive slot number", inline=False)
 
-        embed.add_field(name="🌾 **Field Management**", value="`/fields` - View field configuration\n`/field <field> <true/false>` - Enable or disable a field\n`/swapfield <current> <new>` - Swap one field for another (new can be any field)", inline=False)
+        embed.add_field(name="🌾 **Field Management**", value="`/fields` - View field configuration\n`/enablefield <field>` - Enable a field\n`/disablefield <field>` - Disable a field\n`/swapfield <current> <new>` - Swap one field for another (new can be any field)", inline=False)
 
-        embed.add_field(name="📜 **Quest Management**", value="`/quests` - View quest configuration\n`/quest <quest> <true/false>` - Enable or disable a quest", inline=False)
+        embed.add_field(name="📜 **Quest Management**", value="`/quests` - View quest configuration\n`/enablequest <quest>` - Enable a quest\n`/disablequest <quest>` - Disable a quest", inline=False)
 
         embed.add_field(name="🔄 **Macro Mode**", value="`/macromode <normal/quests/field>` - Set macro mode (normal = all tasks, quests = quests only, field = fields only)", inline=False)
 
-        embed.add_field(name="🎁 **Collectibles**", value="`/collectibles` - View collectibles\n`/collectible <item> <true/false>` - Enable or disable collectible", inline=False)
+        embed.add_field(name="🎁 **Collectibles**", value="`/collectibles` - View collectibles\n`/enablecollectible <item>` - Enable collectible\n`/disablecollectible <item>` - Disable collectible", inline=False)
 
         # embed.add_field(name="🌱 **Planters**", value="`/planters` - View planter config\n`/setplantermode <mode>` - Set planter mode\n`/setmaxplanters <count>` - Set max planters", inline=False)
 
-        embed.add_field(name="🐛 **Mob Runs**", value="`/mobs` - View mob configuration\n`/mob <mob> <true/false>` - Enable or disable mob run", inline=False)
+        embed.add_field(name="🐛 **Mob Runs**", value="`/mobs` - View mob configuration\n`/enablemob <mob>` - Enable mob run\n`/disablemob <mob>` - Disable mob run", inline=False)
 
         # embed.add_field(name="📁 **Profile Management**", value="`/profiles` - List available profiles\n`/currentprofile` - Show current profile\n`/switchprofile <name>` - Switch profile", inline=False)
 
-        embed.add_field(name="📊 **Status & Monitoring**", value="`/status` - Get macro status and current task\n`/logs` - Show recent macro actions\n`/battery` - Check battery status\n`/streamurl` - Get stream URL", inline=False)
+        embed.add_field(name="📊 **Status & Monitoring**", value="`/status` - Get macro status and current task\n`/logs` - Show recent macro actions\n`/taskqueue` - Show current task queue\n`/battery` - Check battery status\n`/streamurl` - Get stream URL", inline=False)
         
         embed.add_field(name="⚙️ **Advanced**", value="`/amulet <keep/replace>` - Choose amulet action\n`/close` - Close macro and Roblox", inline=False)
 
         await interaction.response.send_message(embed=embed)
 
-
-    @bot.tree.command(name = "hourlyreport", description = "Send the hourly report")
+    '''
+    @bot.tree.command(name = "hourly report", description = "Send the hourly report")
     async def hourlyReport(interaction: discord.Interaction):
         await interaction.response.defer()
         generateHourlyReport()
         await interaction.followup.send(file = discord.File("hourlyReport.png"))
-
+    '''
         
     #start bot
     try:

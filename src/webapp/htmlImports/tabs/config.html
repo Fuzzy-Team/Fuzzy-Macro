@@ -100,7 +100,7 @@
           desc: "How often the macro should convert the balloon",
           type: {
             name: "dropdown",
-            data: ["Always", "Every", "Every Gather", "Never"],
+            data: ["Always", "Every", "Never"],
             triggerFunction: saveProfileTriggerFunction,
           },
         },
@@ -209,7 +209,7 @@
           @media (max-width:600px) { .priority-search { max-width:100%; } }
         </style>
         <div class="priority-search-wrapper">
-          <input type="text" id="priority-search-input" class="priority-search" placeholder="🔍 Search tasks... (e.g., 'pine', 'collect', 'kill')" autocomplete="off" />
+          <input type="text" id="priority-search-input" class="priority-search" placeholder="🔍 Search tasks... (e.g., 'pine', 'collect', 'kill')" />
         </div>
         <div id="task_priority_order" class="drag-list" data-onchange="saveSetting(this, 'profile')">
           <div class="drag-list-container" id="task_priority_order-container">
@@ -271,7 +271,6 @@
             <div class="drag-item" data-id="auto_field_boost" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Auto Field Boost</span></div>
             <div class="drag-item" data-id="ant_challenge" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Ant Challenge</span></div>
             <div class="drag-item" data-id="quest_polar_bear" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Quest: Polar Bear</span></div>
-            <div class="drag-item" data-id="quest_brown_bear" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Quest: Brown Bear</span></div>
             <div class="drag-item" data-id="quest_honey_bee" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Quest: Honey Bee</span></div>
             <div class="drag-item" data-id="quest_bucko_bee" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Quest: Bucko Bee</span></div>
             <div class="drag-item" data-id="quest_riley_bee" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Quest: Riley Bee</span></div>
@@ -373,16 +372,10 @@
         {
           id: "gui_theme",
           title: "GUI Theme",
-          desc: "Choose between Fuzzy, Mythic, or the new Gifted Fuzzy theme",
+          desc: "Choose between the classic Purple theme or the new Brown theme",
           type: {
             name: "dropdown",
-            data: [
-              { label: "Fuzzy Bee", value: "Brown" },
-              { label: "Gifted Fuzzy Bee", value: "Cream" },
-              { label: "Precise Bee", value: "Red" },
-              { label: "Bouyant Bee", value: "blue" },
-              { label: "Mythic Theme", value: "Purple" },
-            ],
+            data: ["Brown", "Purple"],
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
@@ -452,31 +445,6 @@
         //   },
         // },
       ]);
-
-      // Advanced: Beta Testing
-      buildStandardContainer(parentOther, "Advanced", "", [
-        {
-          id: "beta_commit_hash",
-          title: "Beta Testing",
-          desc: "Enter a 7-character code from the Fuzzy Macro Discord server.",
-          type: {
-            name: "textbox",
-            inputType: "string",
-            inputLimit: 7,
-            triggerFunction: "",
-          },
-        },
-        {
-          id: "beta_update_button",
-          title: "",
-          desc: "",
-          type: {
-            name: "button",
-            text: "Test Update",
-            triggerFunction: "triggerBetaUpdate()",
-          },
-        },
-      ]);
     </script>
   </div>
   <div id="discord" class="standard-container sub-tab-panel" style="display: none">
@@ -541,18 +509,6 @@
             name: "textbox",
             inputType: "string",
             length: 13,
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-      ]);
-
-      buildStandardContainer(parentDiscord, "Discord Rich Presence", "", [
-        {
-          id: "discord_rich_presence",
-          title: "Enable Discord Rich Presence",
-          desc: "Show macro activity in your Discord status",
-          type: {
-            name: "checkbox",
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
@@ -856,7 +812,7 @@
         </p>
         <div style="display: flex; gap: 0.75rem; align-items: center">
           <input type="text" id="new-profile-name" class="profile-input" placeholder="Enter profile name..." />
-          <button class="purple-button" onclick="createNewProfile()">
+          <button class="profile-btn profile-btn-success" onclick="createNewProfile()">
             Create Profile
           </button>
         </div>
@@ -882,7 +838,7 @@
           </select>
           <span style="color: #b9bbbe">→</span>
           <input type="text" id="duplicate-new-name" class="profile-input" placeholder="New profile name..." />
-          <button class="purple-button" onclick="duplicateExistingProfile()">
+          <button class="profile-btn profile-btn-primary" onclick="duplicateExistingProfile()">
             Duplicate
           </button>
         </div>
@@ -906,7 +862,7 @@
           <select id="export-profile-select" class="profile-input" style="width: 200px">
             <!-- Options will be loaded dynamically -->
           </select>
-          <button class="purple-button" onclick="exportProfile()">
+          <button class="profile-btn profile-btn-success" onclick="exportProfile()">
             Export Profile
           </button>
         </div>

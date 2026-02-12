@@ -60,7 +60,7 @@ gather_rose
 gather_blue flower
 gather_clover
 
--high protein bug bar
+- high protein bug
 gather_sunflower
 kill_4_mantis
 kill_4_scorpion
@@ -89,17 +89,6 @@ kill_2_werewolf
 
 -prickly pears
 gather_cactus
-
--mashed blooms
-gather_pumpkin
-gather_dandelion
-gather_bamboo
-kill_1_spider
-
--petal tabbouleh
-gather_clover
-gather_strawberry
-kill_4_rhinobeetle
 
 ==bucko bee==
 
@@ -139,11 +128,6 @@ pollengoo_blue
 token_blueability
 gathergoo_bamboo
 gather_pine tree
-
--petals
-gather_pine tree
-gather_clover
-gather_pineapple
 
 -picnic
 gather_blue flower
@@ -199,7 +183,7 @@ gather_cactus
 gather_pumpkin
 
 -goo
-gathergoo_rose
+pollengoo_red
 
 -medley
 token_redability
@@ -208,11 +192,6 @@ gather_rose
 
 -mushrooms
 gather_mushroom
-
--petals
-gather_mushroom
-gather_clover
-gather_spider
 
 -picnic
 gather_mushroom

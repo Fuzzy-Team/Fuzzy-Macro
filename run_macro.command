@@ -39,8 +39,8 @@ cd src
 if [ -d "$VENV_PATH" ]; then
     source "$VENV_PATH/bin/activate"
     printf "activating virtual environment\n"
-    "$VENV_PATH/bin/python" --version
-    "$VENV_PATH/bin/python" main.py
+    python --version
+    runPython python
 else
     runPython python3.7
     runPython python3.8

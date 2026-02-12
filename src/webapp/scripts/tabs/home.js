@@ -235,7 +235,6 @@ async function loadTasks() {
       { key: "bucko_bee_quest", name: "Bucko Bee Quest", emoji: "🏴‍☠️" },
       { key: "riley_bee_quest", name: "Riley Bee Quest", emoji: "🎸" },
       { key: "polar_bear_quest", name: "Polar Bear Quest", emoji: "🐻" },
-      { key: "brown_bear_quest", name: "Brown Bear Quest", emoji: "🐻" },
     ];
 
     for (const quest of questTasks) {

@@ -149,52 +149,14 @@ def delete_backup_if_pending(destination=None):
 
 def update(t="main"):
     msgBox("Update in progress", "Updating... Do not close terminal")
-    # Important: preserve user data and profiles. Protect pattern folder
-    # during the generic overwrite so we can merge new/old patterns safely.
-    protected_folders = [
-        os.path.join("src", "data", "user"),
-        os.path.join("settings", "profiles"),
-        os.path.join("settings", "patterns"),
-    ]
+    # Important: always preserve `settings` and the VCS metadata and user data
+    protected_folders = ["settings", os.path.join("src", "data")]
     protected_files = [".git"]
     destination = os.getcwd().replace("/src", "")
 
     # remote version URL and zip link
-    # Attempt to fetch the latest `update.py` from upstream and replace the
-    # local copy before performing the rest of the update. This allows bug
-    # fixes in the updater itself to take effect immediately for this run.
-    try:
-        update_py_url = "https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/src/modules/misc/update.py"
-        h = {
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0",
-        }
-        r_up = requests.get(update_py_url, timeout=20, headers=h)
-        r_up.raise_for_status()
-        upd_code = r_up.text
-        target_update = os.path.join(destination, "src", "modules", "misc", "update.py")
-        target_dir = os.path.dirname(target_update)
-        os.makedirs(target_dir, exist_ok=True)
-        tmp_path = target_update + ".tmp"
-        try:
-            with open(tmp_path, "w", encoding="utf-8") as fh:
-                fh.write(upd_code)
-            os.replace(tmp_path, target_update)
-        except Exception:
-            try:
-                if os.path.exists(tmp_path):
-                    os.remove(tmp_path)
-            except Exception:
-                pass
-    except Exception:
-        # non-fatal: continue with current updater if fetch fails
-        pass
-
-    # remote version URL and zip link
-    import time
-    # Add cache-busting query param to version URL
-    remote_version_url = f"https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/src/webapp/version.txt?cb={int(time.time())}"
+    remote_version_url = "https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/src/webapp/version.txt"
+    zip_link = "https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/heads/main.zip"
     backup_path = os.path.join(destination, "backup_macro.zip")
 
     # create a silent backup (overwrite previous backup)
@@ -216,23 +178,14 @@ def update(t="main"):
     except Exception:
         local_version = "0.0.0"
 
-
-    # fetch remote version (disable caching)
+    # fetch remote version
     try:
-        headers = {
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0"
-        }
-        r = requests.get(remote_version_url, timeout=15, headers=headers)
+        r = requests.get(remote_version_url, timeout=15)
         r.raise_for_status()
         remote_version = r.text.strip()
     except Exception:
         msgBox("Update failed", "Could not fetch remote version. Update aborted.")
         return False
-
-    # Construct zip link using the fetched remote_version
-    zip_link = f"https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/tags/{remote_version}.zip"
 
     if not _is_remote_newer(local_version, remote_version):
         msgBox("Up to date", "No update available. Remote version is not newer.")
@@ -272,72 +225,6 @@ def update(t="main"):
         msgBox("Update failed", "Error while applying update files.")
         return False
 
-    # Merge patterns: combine files from extracted/settings/patterns with
-    # existing settings/patterns in destination. We protected patterns above
-    # so the generic merge didn't overwrite them. Here we perform a union
-    # copy: copy new files, and if a filename collides, keep the existing
-    # file and write the incoming file with a suffix to avoid data loss.
-    try:
-        src_patterns = os.path.join(extracted, "settings", "patterns")
-        dst_patterns = os.path.join(destination, "settings", "patterns")
-        if os.path.exists(src_patterns):
-            for root, dirs, files in os.walk(src_patterns):
-                rel_root = os.path.relpath(root, src_patterns)
-                dest_root = os.path.join(dst_patterns, rel_root) if rel_root != "." else dst_patterns
-                os.makedirs(dest_root, exist_ok=True)
-                for f in files:
-                    src_file = os.path.join(root, f)
-                    dest_file = os.path.join(dest_root, f)
-                    if not os.path.exists(dest_file):
-                        try:
-                            shutil.copy2(src_file, dest_file)
-                        except Exception:
-                            pass
-                    else:
-                        # create a non-destructive alternative name
-                        base, ext = os.path.splitext(f)
-                        suffix = 1
-                        while True:
-                            new_name = f"{base}.new{suffix}{ext}"
-                            new_path = os.path.join(dest_root, new_name)
-                            if not os.path.exists(new_path):
-                                try:
-                                    shutil.copy2(src_file, new_path)
-                                except Exception:
-                                    pass
-                                break
-                            suffix += 1
-    except Exception:
-        # non-fatal: don't interrupt whole update for pattern merge issues
-        pass
-
-    # Clean up `.newN` duplicates: if corresponding base file exists, remove
-    # the `.newN` file; otherwise rename it to the base name (remove suffix).
-    try:
-        import re as _re
-        if os.path.exists(dst_patterns):
-            for root, dirs, files in os.walk(dst_patterns):
-                for f in files:
-                    m = _re.match(r"^(?P<base>.+?)\.new\d+(?P<ext>\..+)?$", f)
-                    if not m:
-                        continue
-                    base = m.group('base')
-                    ext = m.group('ext') or ''
-                    candidate = base + ext
-                    src_new = os.path.join(root, f)
-                    target = os.path.join(root, candidate)
-                    try:
-                        if os.path.exists(target):
-                            # base exists — remove the .new file
-                            os.remove(src_new)
-                        else:
-                            # rename .newN -> base
-                            os.replace(src_new, target)
-                    except Exception:
-                        pass
-    except Exception:
-        pass
-
     # cleanup the extracted folder
     try:
         shutil.rmtree(extracted)
@@ -352,198 +239,6 @@ def update(t="main"):
             os.chmod(run_macroPath, st.st_mode | stat.S_IEXEC)
         except Exception:
             pass
-    # Remove any leftover commit marker since this was a normal update
-    try:
-        webapp_commit = os.path.join(destination, "src", "webapp", "updated_commit.txt")
-        if os.path.exists(webapp_commit):
-            os.remove(webapp_commit)
-    except Exception:
-        pass
-    # Attempt to run install dependencies script (non-blocking). Fail silently.
-    try:
-        install_script = os.path.join(destination, "install_dependencies.command")
-        if os.path.exists(install_script):
-            try:
-                st = os.stat(install_script)
-                os.chmod(install_script, st.st_mode | stat.S_IEXEC)
-            except Exception:
-                pass
-            try:
-                import subprocess
-                # Detached, fully silent run: redirect stdin/stdout/stderr and
-                # start a new session so the process isn't tied to this updater.
-                subprocess.Popen(["sh", install_script],
-                                 stdout=subprocess.DEVNULL,
-                                 stderr=subprocess.DEVNULL,
-                                 stdin=subprocess.DEVNULL,
-                                 start_new_session=True,
-                                 close_fds=True)
-            except Exception:
-                pass
-    except Exception:
-        pass
-
-    msgBox("Update success", "Update complete. You can now relaunch the macro")
-    return True
-
-
-def update_from_commit(commit_hash):
-    """Update the macro from a specific commit hash (zip at /archive/<hash>.zip)."""
-    msgBox("Update in progress", f"Updating to commit {commit_hash}... Do not close terminal")
-    protected_folders = [
-        os.path.join("src", "data", "user"),
-        os.path.join("settings", "profiles"),
-        os.path.join("settings", "patterns"),
-    ]
-    protected_files = [".git"]
-    destination = os.getcwd().replace("/src", "")
-
-    remote_zip = f"https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/{commit_hash}.zip"
-    backup_path = os.path.join(destination, "backup_macro.zip")
-
-    try:
-        _create_backup(destination, backup_path, protected_folders, protected_files)
-        _mark_backup_pending(destination)
-    except Exception:
-        pass
-
-    # download zip for the commit
-    try:
-        req = requests.get(remote_zip, timeout=60)
-        req.raise_for_status()
-        zipf = zipfile.ZipFile(BytesIO(req.content))
-        zipf.extractall(destination)
-    except Exception:
-        msgBox("Update failed", "Could not download or extract update zip for the specified commit.")
-        return False
-
-    # find extracted folder
-    extracted = None
-    for f in os.listdir(destination):
-        if f.startswith("Fuzzy-Macro") and os.path.isdir(os.path.join(destination, f)):
-            extracted = os.path.join(destination, f)
-            break
-    if not extracted:
-        for f in os.listdir(destination):
-            p = os.path.join(destination, f)
-            if os.path.isdir(p) and os.path.exists(os.path.join(p, "src")):
-                extracted = p
-                break
-    if not extracted:
-        msgBox("Update failed", "Could not locate extracted update folder.")
-        return False
-
-    try:
-        _merge_overwrite(extracted, destination, protected_folders, protected_files)
-    except Exception:
-        msgBox("Update failed", "Error while applying update files.")
-        return False
-
-    # merge patterns similar to update()
-    try:
-        src_patterns = os.path.join(extracted, "settings", "patterns")
-        dst_patterns = os.path.join(destination, "settings", "patterns")
-        if os.path.exists(src_patterns):
-            for root, dirs, files in os.walk(src_patterns):
-                rel_root = os.path.relpath(root, src_patterns)
-                dest_root = os.path.join(dst_patterns, rel_root) if rel_root != "." else dst_patterns
-                os.makedirs(dest_root, exist_ok=True)
-                for f in files:
-                    src_file = os.path.join(root, f)
-                    dest_file = os.path.join(dest_root, f)
-                    if not os.path.exists(dest_file):
-                        try:
-                            shutil.copy2(src_file, dest_file)
-                        except Exception:
-                            pass
-                    else:
-                        base, ext = os.path.splitext(f)
-                        suffix = 1
-                        while True:
-                            new_name = f"{base}.new{suffix}{ext}"
-                            new_path = os.path.join(dest_root, new_name)
-                            if not os.path.exists(new_path):
-                                try:
-                                    shutil.copy2(src_file, new_path)
-                                except Exception:
-                                    pass
-                                break
-                            suffix += 1
-    except Exception:
-        pass
-
-    # Clean up `.newN` duplicates created during merge: if corresponding
-    # base file exists, remove the `.newN` file; otherwise rename it to
-    # the base name (remove suffix).
-    try:
-        import re as _re
-        if os.path.exists(dst_patterns):
-            for root, dirs, files in os.walk(dst_patterns):
-                for f in files:
-                    m = _re.match(r"^(?P<base>.+?)\.new\d+(?P<ext>\..+)?$", f)
-                    if not m:
-                        continue
-                    base = m.group('base')
-                    ext = m.group('ext') or ''
-                    candidate = base + ext
-                    src_new = os.path.join(root, f)
-                    target = os.path.join(root, candidate)
-                    try:
-                        if os.path.exists(target):
-                            # base exists — remove the .new file
-                            os.remove(src_new)
-                        else:
-                            # rename .newN -> base
-                            os.replace(src_new, target)
-                    except Exception:
-                        pass
-    except Exception:
-        pass
-
-    # cleanup the extracted folder
-    try:
-        shutil.rmtree(extracted)
-    except Exception:
-        pass
-
-    # ensure run_macro.command is executable if present
-    run_macroPath = os.path.join(destination, "run_macro.command")
-    if os.path.exists(run_macroPath):
-        try:
-            st = os.stat(run_macroPath)
-            os.chmod(run_macroPath, st.st_mode | stat.S_IEXEC)
-        except Exception:
-            pass
-
-    # Write a marker file in webapp so the UI can show the commit hash next to version
-    try:
-        webapp_commit = os.path.join(destination, "src", "webapp", "updated_commit.txt")
-        with open(webapp_commit, "w") as fh:
-            fh.write(commit_hash[:7])
-    except Exception:
-        pass
-    # Attempt to run install dependencies script (non-blocking). Fail silently.
-    try:
-        install_script = os.path.join(destination, "install_dependencies.command")
-        if os.path.exists(install_script):
-            try:
-                st = os.stat(install_script)
-                os.chmod(install_script, st.st_mode | stat.S_IEXEC)
-            except Exception:
-                pass
-            try:
-                import subprocess
-                # Detached, fully silent run
-                subprocess.Popen(["sh", install_script],
-                                 stdout=subprocess.DEVNULL,
-                                 stderr=subprocess.DEVNULL,
-                                 stdin=subprocess.DEVNULL,
-                                 start_new_session=True,
-                                 close_fds=True)
-            except Exception:
-                pass
-    except Exception:
-        pass
 
     msgBox("Update success", "Update complete. You can now relaunch the macro")
     return True
