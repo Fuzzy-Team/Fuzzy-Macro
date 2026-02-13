@@ -1208,7 +1208,15 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         for planterObj in macroModule.autoPlanterRankings[field]:
                             planter = planterObj["name"]
                             settingPlanter = planter.replace(" ", "_")
-                            if not planter in occupiedPlanters and macro.setdat[f"auto_planter_{settingPlanter}"]:
+                            # Check if this planter is allowed globally and for this specific field.
+                            # New per-planter field restriction settings use keys of the form:
+                            #   auto_planter_<planter_name>_field_<field_name>
+                            # If the per-planter-field key is missing, default to True (allow).
+                            global_key = f"auto_planter_{settingPlanter}"
+                            field_key = f"auto_planter_{settingPlanter}_field_{field.replace(' ', '_')}"
+                            allowed_globally = macro.setdat.get(global_key, False)
+                            allowed_for_field = macro.setdat.get(field_key, True)
+                            if not planter in occupiedPlanters and allowed_globally and allowed_for_field:
                                 bestPlanterObj = planterObj
                                 return bestPlanterObj
                     
