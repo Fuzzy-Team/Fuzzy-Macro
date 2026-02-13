@@ -312,7 +312,41 @@ eel.expose(settingsManager.importProfile)
 eel.expose(settingsManager.importProfileContent)
 
 def updateGUI():
+    # Load settings, ensure Brown Bear keys exist, then load into frontend
     settings = settingsManager.loadAllSettings()
+
+    # Ensure any missing default settings are present in the profile.
+    try:
+        default_path = os.path.join(settingsManager.getDefaultSettingsPath(), "settings.txt")
+        defaults = settingsManager.readSettingsFile(default_path)
+
+        # Add any top-level default keys missing from the loaded settings
+        for k, v in defaults.items():
+            if k not in settings:
+                try:
+                    settingsManager.saveProfileSetting(k, v)
+                    settings[k] = v
+                except Exception:
+                    # ignore individual save failures
+                    pass
+
+        # Ensure task_priority_order contains all default priority entries
+        try:
+            default_order = defaults.get("task_priority_order", []) or []
+            tlist = settings.get("task_priority_order", []) or []
+            changed = False
+            for item in default_order:
+                if item not in tlist:
+                    tlist.append(item)
+                    changed = True
+            if changed:
+                settingsManager.saveProfileSetting("task_priority_order", tlist)
+                settings["task_priority_order"] = tlist
+        except Exception:
+            pass
+    except Exception:
+        pass
+
     eel.loadInputs(settings)
     eel.loadTasks()
 
