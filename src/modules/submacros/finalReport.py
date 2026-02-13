@@ -5,6 +5,7 @@ import json
 import ast
 import pickle
 from modules.submacros.hourlyReport import HourlyReport, HourlyReportDrawer
+from modules.misc.settingsManager import getCurrentProfile, getMacroVersion
 
 
 class FinalReportDrawer(HourlyReportDrawer):
@@ -54,12 +55,52 @@ class FinalReportDrawer(HourlyReportDrawer):
         #draw aside bar
         self.draw.rectangle((self.canvasSize[0]-self.sidebarWidth, 0, self.canvasSize[0], self.canvasSize[1]), fill=self.sideBarBackground)
 
-        #draw icon
+        #draw icon and title (matches hourly report styling)
         macroIcon = Image.open(f"{self.assetPath}/macro_icon.png").convert("RGBA")
         # Resize icon to a more appropriate size for the top-right header
-        macroIcon = macroIcon.resize((200, 200), Image.LANCZOS)
-        self.canvas.paste(macroIcon, (5550, 100), macroIcon.split()[-1])
-        self.draw.text((5750, 120), "Fuzzy Macro", fill=self.bodyColor, font=self.getFont("semibold", 70))
+        icon_w, icon_h = (200, 200)
+        macroIcon = macroIcon.resize((icon_w, icon_h), Image.LANCZOS)
+        icon_x = 5550
+        icon_y = 100
+        self.canvas.paste(macroIcon, (icon_x, icon_y), macroIcon)
+
+        # Position the title text to the right of the icon and vertically center
+        title_x = icon_x + icon_w + 30
+        title_text = "Fuzzy Macro"
+        try:
+            profile_name = getCurrentProfile()
+        except Exception:
+            profile_name = None
+        profile_text = f"Profile: {profile_name}" if profile_name else None
+
+        title_font = self.getFont("semibold", 80)
+        profile_font = self.getFont("medium", 60)
+
+        title_bbox = self.draw.textbbox((0, 0), title_text, font=title_font)
+        title_h = title_bbox[3] - title_bbox[1]
+        profile_h = 0
+        spacing = 10
+        if profile_text:
+            profile_bbox = self.draw.textbbox((0, 0), profile_text, font=profile_font)
+            profile_h = profile_bbox[3] - profile_bbox[1]
+
+        total_text_h = title_h + (spacing + profile_h if profile_text else 0)
+        text_top = icon_y + (icon_h - total_text_h) // 2
+
+        # draw title and optional profile
+        self.draw.text((title_x, text_top), title_text, fill=self.bodyColor, font=title_font)
+        if profile_text:
+            self.draw.text((title_x, text_top + title_h + spacing), profile_text, fill=self.bodyColor, font=profile_font)
+
+        # draw macro version below profile/title if available
+        try:
+            macro_version = getMacroVersion()
+            version_text = f"v{macro_version}"
+            version_font = self.getFont("medium", 40)
+            version_y = text_top + title_h + spacing + (profile_h + 10 if profile_text else 10)
+            self.draw.text((title_x, version_y), version_text, fill=self.bodyColor, font=version_font)
+        except Exception:
+            pass
 
         #draw title - FINAL REPORT
         self.draw.text((self.leftPadding, 80), "Session Summary", fill=self.bodyColor, font=self.getFont("bold", 120))
