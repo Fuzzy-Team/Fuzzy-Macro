@@ -1275,6 +1275,38 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         macro.logger.webhook("", f"Planter will be ready in: {planterReady}", "light blue")
                         nectarLastFields[nectar] = field
                         saveAutoPlanterData()
+                        # Send a nectar percentage menu so users don't have to wait for the hourly report
+                        try:
+                            nectar_percentages = []
+                            for nectar_name in macroModule.nectarNames:
+                                try:
+                                    total_percent = getTotalNectarPercent(nectar_name)
+                                except Exception:
+                                    total_percent = getCurrentNectarPercent(nectar_name)
+                                nectar_percentages.append((nectar_name, total_percent))
+
+                            # Format the menu
+                            menu_lines = [f"**{name.title()}**: {round(percent,1)}%" for name, percent in nectar_percentages]
+                            menu_text = "\n".join(menu_lines)
+
+                            # Try to attach a screenshot of the game for context
+                            try:
+                                from modules.screen.screenshot import screenshotRobloxWindow
+                                img = screenshotRobloxWindow()
+                                img_path = "webhook_nectar.png"
+                                try:
+                                    img.save(img_path)
+                                    macro.logger.webhook("Nectar Percentages", menu_text, "white", imagePath=img_path)
+                                except Exception:
+                                    # if saving fails, fall back to webhook without image
+                                    macro.logger.webhook("Nectar Percentages", menu_text, "white")
+                            except Exception:
+                                # If screenshotting fails, just send the webhook text
+                                macro.logger.webhook("Nectar Percentages", menu_text, "white")
+
+                        except Exception:
+                            # Non-fatal: don't block planter placement on failures
+                            pass
 
                     planterSlotsToHarvest = []
                     for i in range(5):
