@@ -2243,6 +2243,11 @@ if __name__ == "__main__":
     #setup and launch gui
     gui.run = run
     gui.launch()
+    # Ensure GUI loads current settings immediately on open (adds Brown Bear if missing)
+    try:
+        gui.updateGUI()
+    except Exception:
+        pass
     
     # Start keyboard listener after GUI launch to ensure it's on the main thread (required on macOS)
     # This prevents TIS/TSM errors on macOS
