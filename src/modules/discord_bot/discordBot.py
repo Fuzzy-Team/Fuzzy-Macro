@@ -752,8 +752,10 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"An error occurred: {e}")
     
     @bot.tree.command(name = "close", description = "Close the macro and roblox")
-    async def battery(interaction: discord.Interaction):
+    async def close(interaction: discord.Interaction):
+        run.value = 0
         closeApp("Roblox")
+        await interaction.response.send_message("Closing macro and Roblox...")
         os._exit(1)
 
     def _set_macos_mute(muted: bool) -> None:
