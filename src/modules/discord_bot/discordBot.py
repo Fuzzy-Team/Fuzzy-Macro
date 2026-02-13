@@ -714,6 +714,75 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         
         await interaction.response.send_message(embed=embed)
 
+    @bot.tree.command(name="nectar", description="Show current nectar percentages (current + estimated)")
+    async def show_nectar(interaction: discord.Interaction):
+        await interaction.response.defer()
+        try:
+            # Create a buff detector to read nectar values from screen
+            from modules.screen.robloxWindow import RobloxWindowBounds
+            from modules.submacros.hourlyReport import BuffDetector
+            import json as _json
+
+            robloxWindow = RobloxWindowBounds()
+            try:
+                robloxWindow.setRobloxWindowBounds()
+            except Exception:
+                # proceed — setRobloxWindowBounds may fail if window not found
+                pass
+
+            bd = BuffDetector(robloxWindow)
+
+            # Get current nectar values
+            import modules.macro as macroModule
+            nectar_names = getattr(macroModule, 'nectarNames', ["comforting","refreshing","satisfying","motivating","invigorating"])
+            current_vals = {}
+            for n in nectar_names:
+                try:
+                    current_vals[n] = round(float(bd.getNectar(n)), 1)
+                except Exception:
+                    current_vals[n] = 0.0
+
+            # Get estimated nectar percents from auto_planters.json
+            estimates = {n: 0.0 for n in nectar_names}
+            try:
+                with open("./data/user/auto_planters.json","r") as f:
+                    ap = _json.load(f)
+                    planters = ap.get('planters', [])
+                for p in planters:
+                    nectar = p.get('nectar')
+                    if nectar in estimates:
+                        try:
+                            estimates[nectar] += float(p.get('nectar_est_percent', 0))
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
+            # Build embed
+            desc_lines = []
+            for n in nectar_names:
+                cur = current_vals.get(n, 0.0)
+                est = estimates.get(n, 0.0)
+                total = round(cur + est, 1)
+                desc_lines.append(f"**{n.title()}**: {cur}% (est +{est}%) → Total: {total}%")
+
+            embed = discord.Embed(title="🍯 Nectar Percentages", description="\n".join(desc_lines), color=0x00ff00)
+
+            # Attach a screenshot of the game window if possible
+            try:
+                from modules.screen.screenshot import screenshotRobloxWindow
+                img = screenshotRobloxWindow()
+                with io.BytesIO() as imageBinary:
+                    img.save(imageBinary, "PNG")
+                    imageBinary.seek(0)
+                    await interaction.followup.send(embed=embed, file=discord.File(fp=imageBinary, filename="nectar.png"))
+            except Exception:
+                # Fallback to sending without image
+                await interaction.followup.send(embed=embed)
+
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error reading nectar: {str(e)}")
+
     @bot.tree.command(name = "amulet", description = "Choose to keep or replace an amulet")
     @app_commands.describe(option = "keep or replace an amulet")
     async def amulet(interaction: discord.Interaction, option: str):
