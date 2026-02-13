@@ -3986,12 +3986,12 @@ class macro:
         for i in range(150):
             screen = screenshotQuest(800, mode="RGBA")
 
-            res = bitmap_matcher.find_bitmap_cython(screen, questGiverImg, variance=5, h=250)
+            res = bitmap_matcher.find_bitmap_cython(screen, questGiverImg, variance=5, h=250) #searching only the top 250 pixels to avoid false matches in the quest description, since the quest giver is always above that. variance is set to 5 to allow for some minor color differences but not too much to cause false positives, since the template is a solid color image of the quest giver's name.
             if res:
                 rx, ry = res
                 rw, rh = questGiverImg.size
-                img = cv2.cvtColor(np.array(screen), cv2.COLOR_RGBA2GRAY)
-                img = img[ry-10:ry+rh+20, rx-5:]
+                img = cv2.cvtColor(np.array(screen), cv2.COLOR_RGBA2GRAY) 
+                img = img[ry-10:ry+rh+20, rx-5:] 
                 img = cv2.threshold(img, 150, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
                 img = cv2.GaussianBlur(img, (5, 5), 0)
                 img = Image.fromarray(img)
@@ -4707,9 +4707,6 @@ class macro:
             else:
                 return []
 
-        # Filter out specific quest types and completed tasks
-        if text.lower().startswith('polar bear:'):
-            return []  # Skip Polar Bear quest titles
         if 'sticker stack badge' in text.lower():
             return []  # Sticker stack badges are not collect_stack
         if 'ultimate ant annihilation' in text.lower():
