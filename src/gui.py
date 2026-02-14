@@ -240,6 +240,90 @@ def exportFieldSettings(field_name):
         print(f"Error exporting field settings: {e}")
         return None
 
+
+@eel.expose
+def exportDebugZip(profile_name=None):
+    """Create a zip containing the exported profile, recent logs, and system info. Returns (True, base64zip, filename) or (False, error)."""
+    try:
+        import base64
+        import io
+        import zipfile
+        import platform
+
+        # Decide profile to export
+        if not profile_name:
+            profile_name = settingsManager.getCurrentProfile()
+
+        # Try to get exported profile JSON
+        try:
+            exported = settingsManager.exportProfile(profile_name)
+        except Exception as e:
+            exported = (False, f"Export profile error: {e}")
+
+        mem = io.BytesIO()
+        with zipfile.ZipFile(mem, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            # Add profile export
+            try:
+                if isinstance(exported, (list, tuple)) and exported and exported[0] is True:
+                    _, json_content, json_fname = exported
+                    zf.writestr(json_fname, json_content.encode("utf-8"))
+                else:
+                    # include error text
+                    err = exported[1] if isinstance(exported, (list, tuple)) and len(exported) > 1 else str(exported)
+                    zf.writestr("profile_export_error.txt", str(err).encode("utf-8"))
+            except Exception as e:
+                zf.writestr("profile_export_error.txt", f"Failed to include profile: {e}".encode("utf-8"))
+
+            # Add recent logs from in-memory store
+            try:
+                logs = list(_recent_logs) if _recent_logs else []
+                log_lines = []
+                for entry in logs:
+                    try:
+                        # entries may be dicts
+                        if isinstance(entry, dict):
+                            log_lines.append(json.dumps(entry, ensure_ascii=False))
+                        else:
+                            log_lines.append(str(entry))
+                    except Exception:
+                        log_lines.append(str(entry))
+                zf.writestr("logs.txt", ("\n".join(log_lines)).encode("utf-8"))
+            except Exception as e:
+                zf.writestr("logs.txt", f"Failed to collect logs: {e}".encode("utf-8"))
+
+            # Add system info
+            try:
+                machine = platform.machine() or "unknown"
+                plat = platform.platform() or "unknown"
+                pyv = platform.python_version()
+                macrov = settingsManager.getMacroVersion()
+                # Determine chip label
+                mlow = machine.lower()
+                if "x86" in mlow or "amd64" in mlow:
+                    chip = "Intel"
+                elif "arm" in mlow or "aarch" in mlow:
+                    chip = "Apple Silicon"
+                else:
+                    chip = machine
+
+                sysinfo = (
+                    f"platform={plat}\n"
+                    f"machine={machine}\n"
+                    f"chip={chip}\n"
+                    f"python={pyv}\n"
+                    f"macro_version={macrov}\n"
+                )
+                zf.writestr("system_info.txt", sysinfo.encode("utf-8"))
+            except Exception as e:
+                zf.writestr("system_info.txt", f"Failed to gather system info: {e}".encode("utf-8"))
+
+        mem.seek(0)
+        b64 = base64.b64encode(mem.read()).decode("ascii")
+        filename = f"fuzzy_debug_{int(time.time())}.zip"
+        return True, b64, filename
+    except Exception as e:
+        return False, str(e)
+
 @eel.expose
 def importFieldSettings(field_name, json_settings):
     """Import field settings from JSON string"""
