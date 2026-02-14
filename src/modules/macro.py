@@ -3973,15 +3973,6 @@ class macro:
         questTitleYPos = None
 
         questGiverImg = Image.open(f"./images/quest/{questGiver}-{self.robloxWindow.display_type}.png").convert('RGBA')
-        # Scale the template to match the UI/display scale so matcher sees correct size
-        #try:
-        #    scale = float(getattr(self.robloxWindow, 'multi', 1))
-        #except Exception:
-        #    scale = 1.0
-        #if scale != 1.0:
-        #    ow, oh = questGiverImg.size
-        #    new_size = (max(1, int(ow * scale)), max(1, int(oh * scale)))
-        #    questGiverImg = questGiverImg.resize(new_size, Image.LANCZOS)
         prevHash = None
         for i in range(150):
             screen = screenshotQuest(800, mode="RGBA")
