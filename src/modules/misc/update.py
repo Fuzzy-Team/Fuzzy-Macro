@@ -27,13 +27,20 @@ def _is_remote_newer(local_v, remote_v):
     for i in range(3):
         if rv[i] != lv[i]:
             return rv[i] > lv[i]
-    # numeric parts equal, compare letter where empty < any letter
+    # numeric parts equal, compare letter: a suffix (letter) denotes
+    # a prerelease and is considered older than the same version
+    # without a letter. Examples:
+    #   1.1.0  > 1.1.0a
+    #   1.1.0b > 1.1.0a
     if lv[3] == rv[3]:
         return False
-    if lv[3] == "":
+    # local has a letter and remote does not -> remote is newer
+    if lv[3] != "" and rv[3] == "":
         return True
-    if rv[3] == "":
+    # local has no letter and remote does -> remote is older
+    if lv[3] == "" and rv[3] != "":
         return False
+    # both have letters: compare lexicographically
     return rv[3] > lv[3]
 
 
