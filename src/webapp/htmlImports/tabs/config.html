@@ -451,27 +451,36 @@
         // },
       ]);
 
-      // Advanced: Beta Testing
+      // Standalone Export Debug container
+      buildStandardContainer(parentOther, "Export Debug", "Create a zip with your exported profile, recent logs, macOS + macro version and chip info.", [
+        {
+          id: "export_debug_button",
+          title: "Export Debug Folder",
+          desc: "Downloads a zip containing your profile export, recent logs, and system info.",
+          type: {
+            name: "button",
+            text: "Export Debug Folder",
+            triggerFunction: "exportDebugFolder()",
+          },
+        },
+      ]);
+      
+      // Advanced: Beta Testing (input + button on same row)
       buildStandardContainer(parentOther, "Advanced", "", [
         {
-          id: "beta_commit_hash",
+          id: "beta_update_row",
           title: "Beta Testing",
           desc: "Enter a 7-character code from the Fuzzy Macro Discord server.",
           type: {
-            name: "textbox",
+            name: "textbox_with_button",
+            inputId: "beta_commit_hash",
             inputType: "string",
             inputLimit: 7,
-            triggerFunction: "",
-          },
-        },
-        {
-          id: "beta_update_button",
-          title: "",
-          desc: "",
-          type: {
-            name: "button",
-            text: "Test Update",
-            triggerFunction: "triggerBetaUpdate()",
+            inputWidth: 12,
+            buttonId: "beta_update_button",
+            buttonText: "Test Update",
+            buttonWidth: 7,
+            buttonFunction: "triggerBetaUpdate()",
           },
         },
       ]);
@@ -704,50 +713,6 @@
               triggerFunction: saveGeneralTriggerFunction,
             },
           },
-          // {
-          //     id: "ngrok_auth",
-          //     title: "Ngrok Authentication Token",
-          //     desc: "Instructions for finding your ngrok auth token can be found in #guides",
-          //     type: {
-          //         name: "textbox",
-          //         inputType: "string",
-          //         length: 13,
-          //         triggerFunction: saveGeneralTriggerFunction
-          //     }
-          // },
-
-          // {
-          //     id: "stream_resolution",
-          //     title: "Stream Quality",
-          //     desc: "The resolution of the stream. ",
-          //     type: {
-          //         name: "dropdown",
-          //         data: [1.0, 0.75, 0.5, 0.25],
-          //         triggerFunction: saveGeneralTriggerFunction
-          //     }
-          // },
-          // {
-          //     id: "stream_fps",
-          //     title: "Stream Frame Rate",
-          //     desc: "The frames per second (fps) of the stream. 30 is recommended, 60 max.",
-          //     type: {
-          //         name: "textbox",
-          //         inputType: "integer",
-          //         inputLimit: 2,
-          //         triggerFunction: saveGeneralTriggerFunction
-          //     }
-          // },
-          // {
-          //     id: "stream_preset",
-          //     title: "FFMPEG Preset",
-          //     desc: "Encoding quality. Choose ultrafast if your device is unable to keep up with the stream",
-          //     type: {
-          //         name: "dropdown",
-          //         data: ["veryfast", "ultrafast"],
-          //         triggerFunction: saveGeneralTriggerFunction
-          //     }
-
-          // }
         ]
       );
     </script>

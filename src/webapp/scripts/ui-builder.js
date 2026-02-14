@@ -114,10 +114,33 @@ function buildInput(id, type) {
       }" onkeypress="return textboxRestriction(this, event)" onchange="${type.triggerFunction
       }">`;
     return html;
+  } else if (type.name == "textbox_with_button") {
+    // composite control: an input plus a button on the same line
+    const inputId = type.inputId ? type.inputId : `${id}_input`;
+    const inputWidth = type.inputWidth ? type.inputWidth : (type.length ? type.length : 12);
+    const btnId = type.buttonId ? type.buttonId : `${id}_btn`;
+    const btnText = type.buttonText ? type.buttonText : "Action";
+    const btnFunc = type.buttonFunction ? type.buttonFunction : "";
+    const inputOnchange = type.inputOnchange ? type.inputOnchange : (type.triggerFunction ? type.triggerFunction : "");
+
+    // ensure button text doesn't wrap and has sensible padding
+    const btnWidthStyle = type.buttonWidth ? `${type.buttonWidth}rem` : "auto";
+    // set a consistent height for input and button so they align
+    const controlHeight = type.controlHeight ? type.controlHeight : '2.2rem';
+    const inputPadding = type.inputPadding ? type.inputPadding : '0.35rem 0.5rem';
+    const buttonPadding = type.buttonPadding ? type.buttonPadding : '0.35rem 0.6rem';
+    // remove extra top margin so the control lines up with the label text
+    let html = `<div style="display:flex; align-items:center; gap:0.5rem; margin:0;">
+            <input type="text" id="${inputId}" style="width: ${inputWidth}rem; height: ${controlHeight}; padding: ${inputPadding}; box-sizing: border-box; margin:0;" class="poppins-regular textbox" data-input-type="${type.inputType || 'string'}" data-input-limit="${type.inputLimit ? type.inputLimit : 0}" onkeypress="return textboxRestriction(this, event)" onchange="${inputOnchange}">
+            <div id="${btnId}" class="purple-button" onclick="${btnFunc}" style="width: ${btnWidthStyle}; height: ${controlHeight}; display: inline-flex; white-space: nowrap; align-items: center; justify-content: center; padding: ${buttonPadding}; box-sizing: border-box; margin:0; cursor: pointer;">${btnText}</div>
+          </div>`;
+    return html;
   } else if (type.name == "button") {
+    // fixed control height for buttons to align with inputs
+    const singleBtnHeight = type.buttonHeight ? type.buttonHeight : '2.2rem';
+    const singleBtnPadding = type.buttonPadding ? type.buttonPadding : '0 0.6rem';
     let html = `<div id = "${id}" class="purple-button" onclick="${type.triggerFunction
-      }" style="width: ${type.length ? type.length : 5
-      }rem; display: flex; justify-content: center; padding: 0.3rem; cursor: pointer;">${type.text
+      }" style="width: ${type.length ? type.length : 'auto'}rem; display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; height: ${singleBtnHeight}; padding: ${singleBtnPadding}; box-sizing: border-box; cursor: pointer;">${type.text
       }</div>`;
     return html;
   } else if (type.name == "keybind") {
@@ -175,11 +198,14 @@ function buildStandardContainer(parentElement, title, desc, settings) {
   //add each setting
   settings.forEach((e, i) => {
     //note: if i > 0, set a margin-top
-    //is it better to setup a parent div and use gap instead? yes
+    //if the control is a standalone button, vertically center the left text block
+    const isSingleButton = e.type && e.type.name === 'button';
+    const alignItems = isSingleButton ? 'center' : 'flex-start';
+    const leftDivStyle = isSingleButton ? 'display:flex; flex-direction:column; justify-content:center;' : '';
     out += `
-      <form style="display: flex; align-items:flex-start; justify-content: space-between; padding-right: ${inputPadding[e.type.name]
-      }; ${i ? "margin-top:1rem" : ""}";>
-        <div style="width: 70%;">
+      <form style="display: flex; align-items:${alignItems}; justify-content: space-between; padding-right: ${inputPadding[e.type.name]
+      }; ${i ? "margin-top:1rem" : ""};">
+        <div style="width: 70%; ${leftDivStyle}">
           <label>${e.title}</label>
           <p>${e.desc}</p>
         </div>
