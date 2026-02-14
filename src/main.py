@@ -693,16 +693,15 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         except Exception:
                             title = ""
 
-                        # Title-level ignore disabled — previously used HARDCODED_PETAL_IGNORE_TITLES
-                        # (kept commented for reference)
-                        # ignore_set = HARDCODED_PETAL_IGNORE_TITLES
-                        # if title.lower() in ignore_set:
-                        #     try:
-                        #         gui.log(time.strftime("%H:%M:%S"), f"Skipping ignored quest '{title}' for {questName}", "orange")
-                        #     except Exception:
-                        #         pass
-                        #     executedTasks.add(taskId)
-                        #     continue
+                        # Use hardcoded ignore list and skip if title matches
+                        ignore_set = HARDCODED_PETAL_IGNORE_TITLES
+                        if title.lower() in ignore_set:
+                            try:
+                                gui.log(time.strftime("%H:%M:%S"), f"Skipping ignored quest '{title}' for {questName}", "orange")
+                            except Exception:
+                                pass
+                            executedTasks.add(taskId)
+                            continue
                         # Handle quest feeding and gathering requirements
                         questMappings = {
                             "polar bear": "polar_bear_quest",
@@ -833,15 +832,13 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 try:
                     last_titles = getattr(macro, '_last_quest_title', {}) or {}
                     title = last_titles.get(questName, "") or ""
-                    # Title-level ignore (requirements) disabled — previously used HARDCODED_PETAL_IGNORE_TITLES
-                    # (kept commented for reference)
-                    # ignore_set = HARDCODED_PETAL_IGNORE_TITLES
-                    # if title.lower() in ignore_set:
-                    #     try:
-                    #         gui.log(time.strftime("%H:%M:%S"), f"Skipping ignored quest (requirements): '{title}' for {questName}", "orange")
-                    #     except Exception:
-                    #         pass
-                    #     continue
+                    ignore_set = HARDCODED_PETAL_IGNORE_TITLES
+                    if title.lower() in ignore_set:
+                        try:
+                            gui.log(time.strftime("%H:%M:%S"), f"Skipping ignored quest (requirements): '{title}' for {questName}", "orange")
+                        except Exception:
+                            pass
+                        continue
                 except Exception:
                     pass
                 # Enable any required settings
@@ -900,23 +897,21 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 if not macro.setdat.get(questKey):
                     return False
                 # Detect the current quest title (without executing) so we can honor title-level ignores before execution
-                    try:
-                        # populate last_quest_title via requirement-only check
-                        _ = handleQuest(questName, executeQuest=False)
-                        last_titles = getattr(macro, '_last_quest_title', {}) or {}
-                        title = last_titles.get(questName, "") or ""
-                        # Title-level ignore (execution) disabled — previously used HARDCODED_PETAL_IGNORE_TITLES
-                        # (kept commented for reference)
-                        # ignore_set = HARDCODED_PETAL_IGNORE_TITLES
-                        # if title.lower() in ignore_set:
-                        #     try:
-                        #         gui.log(time.strftime("%H:%M:%S"), f"Skipping ignored quest (execution): '{title}' for {questName}", "orange")
-                        #     except Exception:
-                        #         pass
-                        #     executedTasks.add(taskId)
-                        #     return False
-                    except Exception:
-                        pass
+                try:
+                    # populate last_quest_title via requirement-only check
+                    _ = handleQuest(questName, executeQuest=False)
+                    last_titles = getattr(macro, '_last_quest_title', {}) or {}
+                    title = last_titles.get(questName, "") or ""
+                    ignore_set = HARDCODED_PETAL_IGNORE_TITLES
+                    if title.lower() in ignore_set:
+                        try:
+                            gui.log(time.strftime("%H:%M:%S"), f"Skipping ignored quest (execution): '{title}' for {questName}", "orange")
+                        except Exception:
+                            pass
+                        executedTasks.add(taskId)
+                        return False
+                except Exception:
+                    pass
                 
                 # Actually execute the quest (submit/get) - this will travel to quest giver if needed
                 # For Brown Bear, capture the objectives and gather them immediately
