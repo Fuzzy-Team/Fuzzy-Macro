@@ -1295,6 +1295,23 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                 img = screenshotRobloxWindow()
                                 img_path = "webhook_nectar.png"
                                 try:
+                                    # overlay nectar percentages on screenshot
+                                    from PIL import ImageDraw, ImageFont
+                                    draw = ImageDraw.Draw(img)
+                                    try:
+                                        font = ImageFont.truetype("/Library/Fonts/Arial.ttf", 20)
+                                    except Exception:
+                                        font = ImageFont.load_default()
+
+                                    lines = [f"{name.title()}: {round(percent,1)}%" for name, percent in nectar_percentages]
+                                    padding = 8
+                                    line_h = font.getsize("Tg")[1] + 4
+                                    box_w = max(font.getsize(l)[0] for l in lines) + padding*2
+                                    box_h = line_h * len(lines) + padding*2
+                                    draw.rectangle([(10,10),(10+box_w,10+box_h)], fill=(0,0,0,180))
+                                    for idx, l in enumerate(lines):
+                                        draw.text((10+padding, 10+padding + idx*line_h), l, font=font, fill=(255,255,255))
+
                                     img.save(img_path)
                                     macro.logger.webhook("Nectar Percentages", menu_text, "white", imagePath=img_path)
                                 except Exception:

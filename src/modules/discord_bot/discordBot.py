@@ -771,11 +771,56 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             # Attach a screenshot of the game window if possible
             try:
                 from modules.screen.screenshot import screenshotRobloxWindow
+                # Take screenshot and overlay nectar percentages for clarity
                 img = screenshotRobloxWindow()
-                with io.BytesIO() as imageBinary:
-                    img.save(imageBinary, "PNG")
-                    imageBinary.seek(0)
-                    await interaction.followup.send(embed=embed, file=discord.File(fp=imageBinary, filename="nectar.png"))
+                try:
+                    from PIL import ImageDraw, ImageFont
+                    import io as _io
+                    # Build text overlay
+                    draw = ImageDraw.Draw(img)
+                    try:
+                        font = ImageFont.truetype("/Library/Fonts/Arial.ttf", 20)
+                    except Exception:
+                        font = ImageFont.load_default()
+
+                    # collect nectar values (use BuffDetector logic)
+                    from modules.screen.robloxWindow import RobloxWindowBounds
+                    from modules.submacros.hourlyReport import BuffDetector
+                    robloxWindow = RobloxWindowBounds()
+                    try:
+                        robloxWindow.setRobloxWindowBounds()
+                    except Exception:
+                        pass
+                    bd = BuffDetector(robloxWindow)
+
+                    nectar_names = getattr(__import__("modules.macro", fromlist=["nectarNames"]), 'nectarNames', ["comforting","refreshing","satisfying","motivating","invigorating"])
+                    lines = []
+                    for i, n in enumerate(nectar_names):
+                        try:
+                            val = round(float(bd.getNectar(n)), 1)
+                        except Exception:
+                            val = 0.0
+                        lines.append(f"{n.title()}: {val}%")
+
+                    # Draw background rectangle
+                    padding = 8
+                    line_h = font.getsize("Tg")[1] + 4
+                    box_w = max(font.getsize(l)[0] for l in lines) + padding*2
+                    box_h = line_h * len(lines) + padding*2
+                    draw.rectangle([(10,10),(10+box_w,10+box_h)], fill=(0,0,0,180))
+                    for idx, l in enumerate(lines):
+                        draw.text((10+padding, 10+padding + idx*line_h), l, font=font, fill=(255,255,255))
+
+                    with _io.BytesIO() as imageBinary:
+                        img.save(imageBinary, "PNG")
+                        imageBinary.seek(0)
+                        await interaction.followup.send(embed=embed, file=discord.File(fp=imageBinary, filename="nectar.png"))
+                except Exception:
+                    # Fallback to sending raw screenshot if overlay fails
+                    with io.BytesIO() as imageBinary:
+                        img.save(imageBinary, "PNG")
+                        imageBinary.seek(0)
+                        await interaction.followup.send(embed=embed, file=discord.File(fp=imageBinary, filename="nectar.png"))
             except Exception:
                 # Fallback to sending without image
                 await interaction.followup.send(embed=embed)
