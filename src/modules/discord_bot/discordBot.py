@@ -23,6 +23,16 @@ from typing import List, Optional, Dict, Tuple
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'misc'))
 import settingsManager
 
+# Hourly report dependencies
+try:
+    from modules.submacros.hourlyReport import HourlyReport, BuffDetector
+    from modules.screen.robloxWindow import RobloxWindowBounds
+except Exception:
+    # Defensive: if these imports fail, the hourly report command will handle it at runtime
+    HourlyReport = None
+    BuffDetector = None
+    RobloxWindowBounds = None
+
 # Global settings cache to avoid frequent file reads
 _settings_cache = {}
 _cache_timestamp = 0
@@ -1600,8 +1610,49 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     @bot.tree.command(name = "hourlyreport", description = "Send the hourly report")
     async def hourlyReport(interaction: discord.Interaction):
         await interaction.response.defer()
-        generateHourlyReport()
-        await interaction.followup.send(file = discord.File("hourlyReport.png"))
+        try:
+            if HourlyReport is None or BuffDetector is None or RobloxWindowBounds is None:
+                raise ImportError("Hourly report modules are not available")
+
+            # Load settings and prepare report objects
+            setdat = get_cached_settings()
+
+            rw = RobloxWindowBounds()
+            try:
+                rw.setRobloxWindowBounds()
+            except Exception:
+                # Non-fatal: continue with default bounds
+                pass
+
+            bd = BuffDetector(rw)
+            hr = HourlyReport(buffDetector=bd, time_format=setdat.get("hourly_report_time_format", 24))
+
+            # Try loading previously saved hourly data; if missing, initialize defaults
+            try:
+                hr.loadHourlyReportData()
+            except Exception:
+                hr.hourlyReportStats = {
+                    "honey_per_min": [],
+                    "backpack_per_min": [],
+                    "bugs": 0,
+                    "quests_completed": 0,
+                    "vicious_bees": 0,
+                    "gathering_time": 0,
+                    "converting_time": 0,
+                    "bug_run_time": 0,
+                    "misc_time": 0,
+                    "start_time": int(time.time()),
+                    "start_honey": 0,
+                }
+                hr.uptimeBuffsValues = {k: [0] * 600 for k in getattr(hr, "uptimeBuffsColors", {}).keys()}
+                hr.buffGatherIntervals = [0] * 600
+
+            # Generate the image (saves to hourlyReport.png)
+            hr.generateHourlyReport(setdat)
+            await interaction.followup.send(file = discord.File("hourlyReport.png"))
+
+        except Exception as e:
+            await interaction.followup.send(f"❌ Error generating hourly report: {str(e)}")
 
         
     #start bot
