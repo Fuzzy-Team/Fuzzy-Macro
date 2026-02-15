@@ -3044,14 +3044,14 @@ class macro:
                 if self.blueTextImageSearch("died"):
                     self.died = True
                     break
-            # Continue movement
-            self.keyboard.walk("d", 0.25)
-            sleep(0.75)
+                # Continue movement
+                self.keyboard.walk("d", 0.25)
+                sleep(0.75)
 
             # Collect rewards if defeated
             if self.bossStatus == "defeated":
-                self.keyboard.walk("d", 1.5)
-                self.keyboard.walk("a", 3)
+                self.keyboard.walk("d", 2.5)
+                self.keyboard.walk("a", 5)
                 sleep(1)
             if self.died or self.bossStatus is not None: break
 
