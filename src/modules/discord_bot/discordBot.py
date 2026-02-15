@@ -114,6 +114,11 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             print(f"Error syncing commands: {e}")
             import traceback
             traceback.print_exc()
+        # Set bot presence/status
+        try:
+            await bot.change_presence(activity=discord.Game(name="Fuzzy Macro!"))
+        except Exception as e:
+            print(f"Failed to set Discord status: {e}")
         
         # Start background task to process pin requests
         if _pin_requests is not None:
