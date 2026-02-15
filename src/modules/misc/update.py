@@ -27,13 +27,20 @@ def _is_remote_newer(local_v, remote_v):
     for i in range(3):
         if rv[i] != lv[i]:
             return rv[i] > lv[i]
-    # numeric parts equal, compare letter where empty < any letter
+    # numeric parts equal, compare letter: a suffix (letter) denotes
+    # a prerelease and is considered older than the same version
+    # without a letter. Examples:
+    #   1.1.0  > 1.1.0a
+    #   1.1.0b > 1.1.0a
     if lv[3] == rv[3]:
         return False
-    if lv[3] == "":
+    # local has a letter and remote does not -> remote is newer
+    if lv[3] != "" and rv[3] == "":
         return True
-    if rv[3] == "":
+    # local has no letter and remote does -> remote is older
+    if lv[3] == "" and rv[3] != "":
         return False
+    # both have letters: compare lexicographically
     return rv[3] > lv[3]
 
 
@@ -147,6 +154,48 @@ def delete_backup_if_pending(destination=None):
             pass
 
 
+def _discover_remote_version(remote_version_url, timeout=15):
+    """Discover the latest non-prerelease tag from GitHub, falling back to
+    the tags endpoint and finally to `remote_version_url` if all else fails.
+    Returns the version string (without a leading 'v') or None on failure.
+    """
+    github_releases_api = "https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/releases?per_page=100"
+    github_tags_api = "https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/tags?per_page=100"
+    try:
+        headers = {
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            "Accept": "application/vnd.github.v3+json",
+        }
+        r = requests.get(github_releases_api, timeout=timeout, headers=headers)
+        r.raise_for_status()
+        releases = r.json()
+        for rel in releases:
+            if not rel.get("prerelease") and rel.get("tag_name"):
+                return rel.get("tag_name").lstrip("v")
+        # fallback to tags endpoint
+        rt = requests.get(github_tags_api, timeout=timeout, headers=headers)
+        rt.raise_for_status()
+        tags = rt.json()
+        if tags:
+            return tags[0].get("name", "").lstrip("v")
+    except Exception:
+        pass
+    # final fallback: read provided remote_version_url
+    try:
+        r = requests.get(remote_version_url, timeout=timeout, headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        })
+        r.raise_for_status()
+        rv = r.text.strip()
+        return rv
+    except Exception:
+        return None
+
+
 def update(t="main"):
     msgBox("Update in progress", "Updating... Do not close terminal")
     # Important: preserve user data and profiles. Protect pattern folder
@@ -193,7 +242,11 @@ def update(t="main"):
 
     # remote version URL and zip link
     import time
-    # Add cache-busting query param to version URL
+    # Attempt to discover the latest non-prerelease tag using the GitHub API.
+    # Fall back to reading `version.txt` on the main branch if API lookup fails.
+    github_releases_api = "https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/releases?per_page=100"
+    github_tags_api = "https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/tags?per_page=100"
+    # Add cache-busting query param to version URL for fallback
     remote_version_url = f"https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/src/webapp/version.txt?cb={int(time.time())}"
     backup_path = os.path.join(destination, "backup_macro.zip")
 
@@ -217,17 +270,9 @@ def update(t="main"):
         local_version = "0.0.0"
 
 
-    # fetch remote version (disable caching)
-    try:
-        headers = {
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0"
-        }
-        r = requests.get(remote_version_url, timeout=15, headers=headers)
-        r.raise_for_status()
-        remote_version = r.text.strip()
-    except Exception:
+    # Discover remote version (GitHub API preferred, fallback to version.txt)
+    remote_version = _discover_remote_version(remote_version_url)
+    if not remote_version:
         msgBox("Update failed", "Could not fetch remote version. Update aborted.")
         return False
 

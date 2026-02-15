@@ -1430,6 +1430,9 @@ class macro:
             # mouse.moveTo(self.robloxWindow.mx+37, self.robloxWindow.my+34)
             # time.sleep(0.1)
             # mouse.click()
+            # ensure movement is released immediately before pressing reset keys
+            self.keyboard.releaseMovement()
+            time.sleep(0.15)
             for _ in range(2):
                 self.keyboard.press('esc')
                 time.sleep(0.3)
@@ -1440,7 +1443,6 @@ class macro:
                 self.keyboard.press('enter')
                 time.sleep(0.4)
             self.moveMouseToDefault()
-            print(f"pressed reset keys: {time.time()-st}")
             
             if self.newUI:
                 emptyHealth = self.adjustImage("./images/menu", "emptyhealth_new")
@@ -2541,7 +2543,24 @@ class macro:
                 self.claimStickerStack()
             elif objective == "honeystorm":
                 self.runPath("collect/honeystorm")
-                
+                reached = self.isBesideE(objectiveData[0])
+                if not reached:
+                    self.logger.webhook("", "Failed to reach Honey Storm summon point", "dark brown", "screen")
+                elif "(" in reached and ":" in reached:
+                    cd = self.cdTextToSecs(reached, True, cooldownSeconds)
+                    if cd:
+                        cooldownFormat = timedelta(seconds=cd)
+                        self.logger.webhook("", f"Honey Storm is on cooldown ({cooldownFormat} remaining)", "dark brown", "screen")
+                # Execute honey storm actions
+                self.keyboard.press("e")
+                time.sleep(0.5)
+                self.keyboard.walk("s", 3)
+                self.keyboard.walk("d", 2)
+                for i in range(5):
+                    self.keyboard.walk("w", 2.25)
+                    self.keyboard.walk("d", 0.25)
+                    self.keyboard.walk("s", 2.25)
+                    self.keyboard.walk("d", 0.25)
                 self.saveTiming("honeystorm")
                 self.logger.webhook("", "Honey storm collected", "bright green", "screen")
                 self.reset(convert=True)
@@ -4045,25 +4064,16 @@ class macro:
         questTitleYPos = None
 
         questGiverImg = Image.open(f"./images/quest/{questGiver}-{self.robloxWindow.display_type}.png").convert('RGBA')
-        # Scale the template to match the UI/display scale so matcher sees correct size
-        try:
-            scale = float(getattr(self.robloxWindow, 'multi', 1))
-        except Exception:
-            scale = 1.0
-        if scale != 1.0:
-            ow, oh = questGiverImg.size
-            new_size = (max(1, int(ow * scale)), max(1, int(oh * scale)))
-            questGiverImg = questGiverImg.resize(new_size, Image.LANCZOS)
         prevHash = None
         for i in range(150):
             screen = screenshotQuest(800, mode="RGBA")
 
-            res = bitmap_matcher.find_bitmap_cython(screen, questGiverImg, variance=5, h=250)
+            res = bitmap_matcher.find_bitmap_cython(screen, questGiverImg, variance=5, h=250) #searching only the top 250 pixels to avoid false matches in the quest description, since the quest giver is always above that. variance is set to 5 to allow for some minor color differences but not too much to cause false positives, since the template is a solid color image of the quest giver's name.
             if res:
                 rx, ry = res
                 rw, rh = questGiverImg.size
-                img = cv2.cvtColor(np.array(screen), cv2.COLOR_RGBA2BGR)
-                img = img[ry-10:ry+rh+20, rx-5:]
+                img = cv2.cvtColor(np.array(screen), cv2.COLOR_RGBA2GRAY) 
+                img = img[ry-10:ry+rh+20, rx-5:] 
                 img = cv2.threshold(img, 150, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
                 img = cv2.GaussianBlur(img, (5, 5), 0)
                 img = Image.fromarray(img)
@@ -4781,9 +4791,6 @@ class macro:
             else:
                 return []
 
-        # Filter out specific quest types and completed tasks
-        if text.lower().startswith('polar bear:'):
-            return []  # Skip Polar Bear quest titles
         if 'sticker stack badge' in text.lower():
             return []  # Sticker stack badges are not collect_stack
         if 'ultimate ant annihilation' in text.lower():

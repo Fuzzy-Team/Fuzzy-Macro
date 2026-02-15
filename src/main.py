@@ -1225,7 +1225,15 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         for planterObj in macroModule.autoPlanterRankings[field]:
                             planter = planterObj["name"]
                             settingPlanter = planter.replace(" ", "_")
-                            if not planter in occupiedPlanters and macro.setdat[f"auto_planter_{settingPlanter}"]:
+                            # Check if this planter is allowed globally and for this specific field.
+                            # New per-planter field restriction settings use keys of the form:
+                            #   auto_planter_<planter_name>_field_<field_name>
+                            # If the per-planter-field key is missing, default to True (allow).
+                            global_key = f"auto_planter_{settingPlanter}"
+                            field_key = f"auto_planter_{settingPlanter}_field_{field.replace(' ', '_')}"
+                            allowed_globally = macro.setdat.get(global_key, False)
+                            allowed_for_field = macro.setdat.get(field_key, True)
+                            if not planter in occupiedPlanters and allowed_globally and allowed_for_field:
                                 bestPlanterObj = planterObj
                                 return bestPlanterObj
                     
@@ -1284,6 +1292,55 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         macro.logger.webhook("", f"Planter will be ready in: {planterReady}", "light blue")
                         nectarLastFields[nectar] = field
                         saveAutoPlanterData()
+                        # Send a nectar percentage menu so users don't have to wait for the hourly report
+                        try:
+                            nectar_percentages = []
+                            for nectar_name in macroModule.nectarNames:
+                                try:
+                                    total_percent = getTotalNectarPercent(nectar_name)
+                                except Exception:
+                                    total_percent = getCurrentNectarPercent(nectar_name)
+                                nectar_percentages.append((nectar_name, total_percent))
+
+                            # Format the menu
+                            menu_lines = [f"**{name.title()}**: {round(percent,1)}%" for name, percent in nectar_percentages]
+                            menu_text = "\n".join(menu_lines)
+
+                            # Try to attach a screenshot of the game for context
+                            try:
+                                from modules.screen.screenshot import screenshotRobloxWindow
+                                img = screenshotRobloxWindow()
+                                img_path = "webhook_nectar.png"
+                                try:
+                                    # overlay nectar percentages on screenshot
+                                    from PIL import ImageDraw, ImageFont
+                                    draw = ImageDraw.Draw(img)
+                                    try:
+                                        font = ImageFont.truetype("/Library/Fonts/Arial.ttf", 20)
+                                    except Exception:
+                                        font = ImageFont.load_default()
+
+                                    lines = [f"{name.title()}: {round(percent,1)}%" for name, percent in nectar_percentages]
+                                    padding = 8
+                                    line_h = font.getsize("Tg")[1] + 4
+                                    box_w = max(font.getsize(l)[0] for l in lines) + padding*2
+                                    box_h = line_h * len(lines) + padding*2
+                                    draw.rectangle([(10,10),(10+box_w,10+box_h)], fill=(0,0,0,180))
+                                    for idx, l in enumerate(lines):
+                                        draw.text((10+padding, 10+padding + idx*line_h), l, font=font, fill=(255,255,255))
+
+                                    img.save(img_path)
+                                    macro.logger.webhook("Nectar Percentages", menu_text, "white", imagePath=img_path)
+                                except Exception:
+                                    # if saving fails, fall back to webhook without image
+                                    macro.logger.webhook("Nectar Percentages", menu_text, "white")
+                            except Exception:
+                                # If screenshotting fails, just send the webhook text
+                                macro.logger.webhook("Nectar Percentages", menu_text, "white")
+
+                        except Exception:
+                            # Non-fatal: don't block planter placement on failures
+                            pass
 
                     planterSlotsToHarvest = []
                     for i in range(5):
@@ -2188,6 +2245,44 @@ if __name__ == "__main__":
     stream = cloudflaredStream()
 
     def onExit():
+        # Ensure GUI/profile settings are persisted before shutting down
+        try:
+            try:
+                all_settings = settingsManager.loadAllSettings()
+            except Exception:
+                all_settings = {}
+
+            try:
+                # Save profile-side settings (settings.txt)
+                if all_settings:
+                    settingsManager.saveDictProfileSettings(all_settings)
+            except Exception:
+                pass
+
+            try:
+                # Save general settings file for the current profile
+                profile_path = settingsManager.getProfilePath()
+                generalsettings_path = os.path.join(profile_path, "generalsettings.txt")
+                try:
+                    existing_general = settingsManager.readSettingsFile(generalsettings_path)
+                except Exception:
+                    existing_general = {}
+                # Merge and persist
+                merged_general = {**existing_general, **(all_settings or {})}
+                settingsManager.saveDict(generalsettings_path, merged_general)
+            except Exception:
+                pass
+
+            # Persist current profile selection
+            try:
+                settingsManager.saveCurrentProfile()
+            except Exception:
+                pass
+
+        except Exception:
+            # Fallthrough to ensure stopApp still runs
+            pass
+
         stopApp()
         try:
             if discordBotProc and discordBotProc.is_alive():
@@ -2220,6 +2315,11 @@ if __name__ == "__main__":
     #setup and launch gui
     gui.run = run
     gui.launch()
+    # Ensure GUI loads current settings immediately on open (adds Brown Bear if missing)
+    try:
+        gui.updateGUI()
+    except Exception:
+        pass
     
     # Start keyboard listener after GUI launch to ensure it's on the main thread (required on macOS)
     # This prevents TIS/TSM errors on macOS
