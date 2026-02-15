@@ -1052,18 +1052,36 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error getting stream URL: {str(e)}")
 
 
-    @bot.tree.command(name="privateserver", description="Get the configured private server link")
-    async def private_server(interaction: discord.Interaction):
-        """Return the private server link stored in settings (if any)."""
+    @bot.tree.command(name="privateserver", description="Get or set the configured private server link")
+    @app_commands.describe(link="Private server link to save (optional)")
+    async def private_server(interaction: discord.Interaction, link: Optional[str] = None):
+        """Get the private server link or set it when `link` is provided."""
         try:
             settings = get_cached_settings()
-            link = settings.get("private_server_link", "")
-            if link and str(link).strip():
-                await interaction.response.send_message(f"🔗 **Private Server Link:**\n{link}")
+            # If no link argument provided, just display current setting
+            if link is None:
+                stored = settings.get("private_server_link", "")
+                if stored and str(stored).strip():
+                    await interaction.response.send_message(f"🔗 **Private Server Link:**\n{stored}")
+                else:
+                    await interaction.response.send_message("❌ No private server link is configured.")
+                return
+
+            # Validate 'share?code' style links when using deeplink rejoin method
+            if "share" in link and settings.get("rejoin_method") == "deeplink":
+                await interaction.response.send_message(
+                    "❌ You entered a 'share?code' private server link!\n\nTo fix this:\n1. Paste the link in your browser\n2. Wait for roblox to load in\n3. Copy the link from the top of your browser.  It should now be a 'privateServerLinkCode' link",
+                    ephemeral=True,
+                )
+                return
+
+            success, message = update_setting("private_server_link", link)
+            if success:
+                await interaction.response.send_message(f"✅ Private server link updated.\n🔗 {link}")
             else:
-                await interaction.response.send_message("❌ No private server link is configured.")
+                await interaction.response.send_message(message)
         except Exception as e:
-            await interaction.response.send_message(f"❌ Error retrieving private server link: {str(e)}")
+            await interaction.response.send_message(f"❌ Error retrieving/updating private server link: {str(e)}")
 
     # === COMPREHENSIVE SETTINGS MANAGEMENT COMMANDS ===
 
