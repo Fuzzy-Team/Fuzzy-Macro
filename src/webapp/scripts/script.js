@@ -209,10 +209,11 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
       return settings.ant_challenge || false;
     }
     if (taskId === "blender") {
-      return settings.blender || false;
+      return settings.blender_enable || settings.blender || false;
     }
     if (taskId === "planters") {
-      return settings.planters || false;
+      const mode = Number(settings.planters_mode);
+      return settings.planters || (Number.isFinite(mode) && mode > 0);
     }
 
     return false;
@@ -276,8 +277,11 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
     if (taskId === "stinger_hunt") return settingsObj.stinger_hunt || false;
     if (taskId === "auto_field_boost") return settingsObj.auto_field_boost || false;
     if (taskId === "ant_challenge") return settingsObj.ant_challenge || false;
-    if (taskId === "blender") return settingsObj.blender || false;
-    if (taskId === "planters") return settingsObj.planters || false;
+    if (taskId === "blender") return settingsObj.blender_enable || settingsObj.blender || false;
+    if (taskId === "planters") {
+      const mode = Number(settingsObj.planters_mode);
+      return settingsObj.planters || (Number.isFinite(mode) && mode > 0);
+    }
 
     return false;
   };

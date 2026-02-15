@@ -23,6 +23,16 @@ from typing import List, Optional, Dict, Tuple
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'misc'))
 import settingsManager
 
+# Hourly report dependencies
+try:
+    from modules.submacros.hourlyReport import HourlyReport, BuffDetector
+    from modules.screen.robloxWindow import RobloxWindowBounds
+except Exception:
+    # Defensive: if these imports fail, the hourly report command will handle it at runtime
+    HourlyReport = None
+    BuffDetector = None
+    RobloxWindowBounds = None
+
 # Global settings cache to avoid frequent file reads
 _settings_cache = {}
 _cache_timestamp = 0
@@ -714,6 +724,120 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         
         await interaction.response.send_message(embed=embed)
 
+    @bot.tree.command(name="nectar", description="Show current nectar percentages (current + estimated)")
+    async def show_nectar(interaction: discord.Interaction):
+        await interaction.response.defer()
+        try:
+            # Create a buff detector to read nectar values from screen
+            from modules.screen.robloxWindow import RobloxWindowBounds
+            from modules.submacros.hourlyReport import BuffDetector
+            import json as _json
+
+            robloxWindow = RobloxWindowBounds()
+            try:
+                robloxWindow.setRobloxWindowBounds()
+            except Exception:
+                # proceed — setRobloxWindowBounds may fail if window not found
+                pass
+
+            bd = BuffDetector(robloxWindow)
+
+            # Get current nectar values
+            import modules.macro as macroModule
+            nectar_names = getattr(macroModule, 'nectarNames', ["comforting","refreshing","satisfying","motivating","invigorating"])
+            current_vals = {}
+            for n in nectar_names:
+                try:
+                    current_vals[n] = round(float(bd.getNectar(n)), 1)
+                except Exception:
+                    current_vals[n] = 0.0
+
+            # Get estimated nectar percents from auto_planters.json
+            estimates = {n: 0.0 for n in nectar_names}
+            try:
+                with open("./data/user/auto_planters.json","r") as f:
+                    ap = _json.load(f)
+                    planters = ap.get('planters', [])
+                for p in planters:
+                    nectar = p.get('nectar')
+                    if nectar in estimates:
+                        try:
+                            estimates[nectar] += float(p.get('nectar_est_percent', 0))
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
+            # Build embed
+            desc_lines = []
+            for n in nectar_names:
+                cur = current_vals.get(n, 0.0)
+                est = estimates.get(n, 0.0)
+                total = round(cur + est, 1)
+                desc_lines.append(f"**{n.title()}**: {cur}% (est +{est}%) → Total: {total}%")
+
+            embed = discord.Embed(title="🍯 Nectar Percentages", description="\n".join(desc_lines), color=0x00ff00)
+
+            # Attach a screenshot of the game window if possible
+            try:
+                from modules.screen.screenshot import screenshotRobloxWindow
+                # Take screenshot and overlay nectar percentages for clarity
+                img = screenshotRobloxWindow()
+                try:
+                    from PIL import ImageDraw, ImageFont
+                    import io as _io
+                    # Build text overlay
+                    draw = ImageDraw.Draw(img)
+                    try:
+                        font = ImageFont.truetype("/Library/Fonts/Arial.ttf", 20)
+                    except Exception:
+                        font = ImageFont.load_default()
+
+                    # collect nectar values (use BuffDetector logic)
+                    from modules.screen.robloxWindow import RobloxWindowBounds
+                    from modules.submacros.hourlyReport import BuffDetector
+                    robloxWindow = RobloxWindowBounds()
+                    try:
+                        robloxWindow.setRobloxWindowBounds()
+                    except Exception:
+                        pass
+                    bd = BuffDetector(robloxWindow)
+
+                    nectar_names = getattr(__import__("modules.macro", fromlist=["nectarNames"]), 'nectarNames', ["comforting","refreshing","satisfying","motivating","invigorating"])
+                    lines = []
+                    for i, n in enumerate(nectar_names):
+                        try:
+                            val = round(float(bd.getNectar(n)), 1)
+                        except Exception:
+                            val = 0.0
+                        lines.append(f"{n.title()}: {val}%")
+
+                    # Draw background rectangle
+                    padding = 8
+                    line_h = font.getsize("Tg")[1] + 4
+                    box_w = max(font.getsize(l)[0] for l in lines) + padding*2
+                    box_h = line_h * len(lines) + padding*2
+                    draw.rectangle([(10,10),(10+box_w,10+box_h)], fill=(0,0,0,180))
+                    for idx, l in enumerate(lines):
+                        draw.text((10+padding, 10+padding + idx*line_h), l, font=font, fill=(255,255,255))
+
+                    with _io.BytesIO() as imageBinary:
+                        img.save(imageBinary, "PNG")
+                        imageBinary.seek(0)
+                        await interaction.followup.send(embed=embed, file=discord.File(fp=imageBinary, filename="nectar.png"))
+                except Exception:
+                    # Fallback to sending raw screenshot if overlay fails
+                    with io.BytesIO() as imageBinary:
+                        img.save(imageBinary, "PNG")
+                        imageBinary.seek(0)
+                        await interaction.followup.send(embed=embed, file=discord.File(fp=imageBinary, filename="nectar.png"))
+            except Exception:
+                # Fallback to sending without image
+                await interaction.followup.send(embed=embed)
+
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error reading nectar: {str(e)}")
+
     @bot.tree.command(name = "amulet", description = "Choose to keep or replace an amulet")
     @app_commands.describe(option = "keep or replace an amulet")
     async def amulet(interaction: discord.Interaction, option: str):
@@ -752,8 +876,10 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"An error occurred: {e}")
     
     @bot.tree.command(name = "close", description = "Close the macro and roblox")
-    async def battery(interaction: discord.Interaction):
+    async def close(interaction: discord.Interaction):
+        run.value = 0
         closeApp("Roblox")
+        await interaction.response.send_message("Closing macro and Roblox...")
         os._exit(1)
 
     def _set_macos_mute(muted: bool) -> None:
@@ -1488,8 +1614,49 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     @bot.tree.command(name = "hourlyreport", description = "Send the hourly report")
     async def hourlyReport(interaction: discord.Interaction):
         await interaction.response.defer()
-        generateHourlyReport()
-        await interaction.followup.send(file = discord.File("hourlyReport.png"))
+        try:
+            if HourlyReport is None or BuffDetector is None or RobloxWindowBounds is None:
+                raise ImportError("Hourly report modules are not available")
+
+            # Load settings and prepare report objects
+            setdat = get_cached_settings()
+
+            rw = RobloxWindowBounds()
+            try:
+                rw.setRobloxWindowBounds()
+            except Exception:
+                # Non-fatal: continue with default bounds
+                pass
+
+            bd = BuffDetector(rw)
+            hr = HourlyReport(buffDetector=bd, time_format=setdat.get("hourly_report_time_format", 24))
+
+            # Try loading previously saved hourly data; if missing, initialize defaults
+            try:
+                hr.loadHourlyReportData()
+            except Exception:
+                hr.hourlyReportStats = {
+                    "honey_per_min": [],
+                    "backpack_per_min": [],
+                    "bugs": 0,
+                    "quests_completed": 0,
+                    "vicious_bees": 0,
+                    "gathering_time": 0,
+                    "converting_time": 0,
+                    "bug_run_time": 0,
+                    "misc_time": 0,
+                    "start_time": int(time.time()),
+                    "start_honey": 0,
+                }
+                hr.uptimeBuffsValues = {k: [0] * 600 for k in getattr(hr, "uptimeBuffsColors", {}).keys()}
+                hr.buffGatherIntervals = [0] * 600
+
+            # Generate the image (saves to hourlyReport.png)
+            hr.generateHourlyReport(setdat)
+            await interaction.followup.send(file = discord.File("hourlyReport.png"))
+
+        except Exception as e:
+            await interaction.followup.send(f"❌ Error generating hourly report: {str(e)}")
 
         
     #start bot

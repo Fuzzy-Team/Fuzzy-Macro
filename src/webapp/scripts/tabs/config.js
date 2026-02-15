@@ -650,3 +650,33 @@ async function triggerBetaUpdate() {
     alert("Error initiating update: " + e);
   }
 }
+
+// Export debug folder (profile, logs, system info)
+async function exportDebugFolder() {
+  try {
+    const current = await eel.getCurrentProfile()();
+    const res = await eel.exportDebugZip(current)();
+    if (!res) return alert("Failed to export debug folder.");
+    if (res[0] !== true) return alert("Export failed: " + res[1]);
+
+    const b64 = res[1];
+    const filename = res[2] || `fuzzy_debug.zip`;
+
+    const byteCharacters = atob(b64);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray], { type: "application/zip" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } catch (e) {
+    console.error(e);
+    alert("Failed to export debug folder: " + e);
+  }
+}

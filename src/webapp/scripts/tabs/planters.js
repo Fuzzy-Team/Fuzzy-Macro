@@ -133,26 +133,50 @@ async function loadPlanters(){
         nectarPriorityElement.innerHTML += html
     }
 
-    const allowedPlantersElement = document.getElementById("auto-allowed-planters")
+    // Note: Allowed-planters is merged into per-planter panels (enable toggle embedded in each panel)
+    
+    const planterFieldRestrictionsElement = document.getElementById("auto-planter-field-restrictions")
     // clear previous content to prevent duplication when reloading
-    allowedPlantersElement.innerHTML = ""
-    //auto planter's nectar priority
+    planterFieldRestrictionsElement.innerHTML = ""
+    // For each planter, create a collapsible section that shows allowed fields when expanded
     for(let i = 0; i < planters.length; i++){
         if (planters[i] == "none") continue
+        let fieldsHTML = ""
+        for(let j = 0; j < fields.length; j++){
+            if (fields[j] == "none") continue
+            const fieldId = `auto_planter_${planters[i]}_field_${fields[j]}`
+            fieldsHTML += `
+                <div style="display:flex; align-items:center; gap:0.4rem; width: 220px;">
+                    <label style="white-space:nowrap; flex:1">${fieldNectarArray[j]}</label>
+                    <label class="checkbox-container" style="margin-top: 0;">
+                        <input type="checkbox" id="${fieldId}" onchange="saveSetting(this, 'profile'); updatePlanterRestrictionSummaries()">
+                        <span class="checkmark"></span>
+                    </label>
+                </div>
+            `
+        }
+        const summaryId = `planter_restriction_summary_${planters[i]}`
+        const enableId = `auto_planter_${planters[i]}`
         const html = `
-        <form style="display: flex; align-items:flex-start; justify-content: space-between; padding-right: 10%; margin-top:1rem" ;="">
-            <div style="width: 70%;">
-                <label>${planterArray[i]}</label>
+        <details style="margin-top:0.6rem; transition: box-shadow 0.15s;">
+            <summary title="Click to expand and view allowed fields" style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;">
+                <div style="display:flex; align-items:center; gap:0.6rem;">
+                    <label class="checkbox-container" style="margin:0;">
+                        <input type="checkbox" id="${enableId}" onchange="saveSetting(this, 'profile'); updatePlanterRestrictionSummaries(); togglePlanterEnabledStyle('${planters[i]}')">
+                        <span class="checkmark"></span>
+                    </label>
+                    <div>${planterArray[i]}</div>
+                </div>
+                <div style="font-size:0.9rem; color:#6b7280" id="${summaryId}">Allowed fields: 0</div>
+            </summary>
+            <div style="display:flex; flex-wrap:wrap; gap:0.6rem; padding-top:0.8rem;">
+                ${fieldsHTML}
             </div>
-            <label class="checkbox-container" style="margin-top: 0.6rem;">
-                    <input type="checkbox" id="auto_planter_${planters[i]}" onchange="saveSetting(this, 'profile')">
-                    <span class="checkmark"></span>
-                </label>
-        </form>
+        </details>
         `
-        allowedPlantersElement.innerHTML += html
+        planterFieldRestrictionsElement.innerHTML += html
     }
-    
+
     const allowedFieldsElement = document.getElementById("auto-allowed-fields")
     // clear previous content to prevent duplication when reloading
     allowedFieldsElement.innerHTML = ""
@@ -176,6 +200,27 @@ async function loadPlanters(){
     //load inputs
     const settings = await loadAllSettings()
     loadInputs(settings)
+    // Ensure per-planter field keys default to allowed
+    try{
+        // For each per-planter-field checkbox, if the setting is not present in the profile,
+        // default it to checked (allowed) and persist to profile so it behaves as a default.
+        const pfInputs = document.querySelectorAll('input[id^="auto_planter_"][id*="_field_"]')
+        pfInputs.forEach(inp => {
+            if (!settings.hasOwnProperty(inp.id)){
+                inp.checked = true
+                try{ eel.saveProfileSetting(inp.id, true) }catch(e){}
+            }
+        })
+    }catch(e){
+        // ignore if DOM not ready or eel not available
+    }
+
+    // Update the planter restriction summaries after inputs have loaded
+    try{
+        updatePlanterRestrictionSummaries()
+    }catch(e){
+        // ignore if function not available yet
+    }
     // load auto-planter JSON to set the global gather checkbox
     try{
         const autoData = await eel.getAutoPlanterData()()
@@ -216,6 +261,40 @@ function clearAutoPlantersData(){
     setTimeout(() => {
         btn.classList.remove("active")
       }, 700)
+}
+
+// Update the displayed "Allowed fields: X" summary for each planter
+function updatePlanterRestrictionSummaries(){
+    for(let i = 0; i < planters.length; i++){
+        if (planters[i] == "none") continue
+        const inputs = document.querySelectorAll(`input[id^="auto_planter_${planters[i]}_field_"]`)
+        let count = 0
+        inputs.forEach(x => { if (x.checked) count++ })
+        const summary = document.getElementById(`planter_restriction_summary_${planters[i]}`)
+        if (summary) summary.innerText = `Allowed fields: ${count}`
+        // Update visual style for enabled state
+        try{
+            togglePlanterEnabledStyle(planters[i])
+        }catch(e){ }
+    }
+}
+
+// Toggle visual highlight for a planter panel when globally enabled
+function togglePlanterEnabledStyle(planterName){
+    const summaryId = `planter_restriction_summary_${planterName}`
+    const enableCheckbox = document.getElementById(`auto_planter_${planterName}`)
+    const summaryElem = document.getElementById(summaryId)
+    if (!summaryElem) return
+    const detailsElem = summaryElem.closest('details')
+    if (!detailsElem) return
+    if (enableCheckbox && enableCheckbox.checked){
+        detailsElem.style.boxShadow = '0 0 0 2px rgba(96,165,250,0.12)'
+        detailsElem.style.borderRadius = '6px'
+        detailsElem.style.border = '1px solid rgba(96,165,250,0.25)'
+    } else {
+        detailsElem.style.boxShadow = ''
+        detailsElem.style.border = 'none'
+    }
 }
 
 function changePreset(ele){
