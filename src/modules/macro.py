@@ -3862,7 +3862,8 @@ class macro:
             "bucko bee": "bucko",
             "riley bee": "riley",
             "honey bee": "honey",
-            "brown bear": "brown"
+            "brown bear": "brown",
+            "black bear": "black"
         }
 
         #prevent the macro from false detecting beesmas quests
@@ -3870,7 +3871,8 @@ class macro:
             "polar bear": ["beesmas", "feast"],
             "bucko bee": ["snow", "machine"],
             "riley bee": ["snow", "machine"],
-            "brown bear": []
+            "brown bear": [],
+            "black bear": []
         }
 
         def parseBrownBearTitleFields(titleText):
