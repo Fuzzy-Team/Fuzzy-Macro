@@ -1428,6 +1428,9 @@ class macro:
             # mouse.moveTo(self.robloxWindow.mx+37, self.robloxWindow.my+34)
             # time.sleep(0.1)
             # mouse.click()
+            # ensure movement is released immediately before pressing reset keys
+            self.keyboard.releaseMovement()
+            time.sleep(0.15)
             for _ in range(2):
                 self.keyboard.press('esc')
                 time.sleep(0.3)
@@ -1438,7 +1441,6 @@ class macro:
                 self.keyboard.press('enter')
                 time.sleep(0.4)
             self.moveMouseToDefault()
-            print(f"pressed reset keys: {time.time()-st}")
             
             if self.newUI:
                 emptyHealth = self.adjustImage("./images/menu", "emptyhealth_new")
