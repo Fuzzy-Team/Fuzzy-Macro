@@ -12,6 +12,7 @@ from modules.controls.keyboard import keyboard
 import subprocess
 import sys
 import os
+import signal
 import json
 import ast
 import time
@@ -875,12 +876,33 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         except Exception as e:
             await interaction.response.send_message(f"An error occurred: {e}")
     
-    @bot.tree.command(name = "close", description = "Close the macro and roblox")
-    async def close(interaction: discord.Interaction):
-        run.value = 0
-        closeApp("Roblox")
-        await interaction.response.send_message("Closing macro and Roblox...")
-        os._exit(1)
+    @bot.tree.command(name = "close", description = "Close the macro and/or Roblox")
+    @app_commands.describe(action="What to close: both, roblox, macro")
+    @app_commands.choices(action=[
+        app_commands.Choice(name="Both", value="both"),
+        app_commands.Choice(name="Roblox only", value="roblox"),
+        app_commands.Choice(name="Macro only", value="macro"),
+    ])
+    async def close(interaction: discord.Interaction, action: str = "both"):
+        """Close macro and/or Roblox depending on chosen action."""
+        try:
+            if action == "both":
+                run.value = 0
+                closeApp("Roblox")
+                await interaction.response.send_message("Closing macro and Roblox...")
+                os.kill(os.getppid(), signal.SIGTERM)
+            elif action == "roblox":
+                closeApp("Roblox")
+                await interaction.response.send_message("Closing Roblox...")
+            elif action == "macro":
+                # stop the macro loop but keep the bot running
+                run.value = 0
+                await interaction.response.send_message("Stopping macro (Roblox will remain open).")
+                os.kill(os.getppid(), signal.SIGTERM)
+            else:
+                await interaction.response.send_message("❌ Unknown action. Use: both, roblox, or macro")
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error performing close action: {str(e)}")
 
     def _set_macos_mute(muted: bool) -> None:
         """Set macOS system audio mute state using AppleScript via osascript."""
@@ -1024,6 +1046,19 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         except Exception as e:
             await interaction.response.send_message(f"❌ Error getting stream URL: {str(e)}")
 
+
+    @bot.tree.command(name="privateserver", description="Get the configured private server link")
+    async def private_server(interaction: discord.Interaction):
+        """Return the private server link stored in settings (if any)."""
+        try:
+            settings = get_cached_settings()
+            link = settings.get("private_server_link", "")
+            if link and str(link).strip():
+                await interaction.response.send_message(f"🔗 **Private Server Link:**\n{link}")
+            else:
+                await interaction.response.send_message("❌ No private server link is configured.")
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error retrieving private server link: {str(e)}")
 
     # === COMPREHENSIVE SETTINGS MANAGEMENT COMMANDS ===
 
@@ -1606,7 +1641,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         embed.add_field(name="📊 **Status & Monitoring**", value="`/status` - Get macro status and current task\n`/logs` - Show recent macro actions\n`/battery` - Check battery status\n`/streamurl` - Get stream URL", inline=False)
         
-        embed.add_field(name="⚙️ **Advanced**", value="`/amulet <keep/replace>` - Choose amulet action\n`/close` - Close macro and Roblox", inline=False)
+        embed.add_field(name="⚙️ **Advanced**", value="`/amulet <keep/replace>` - Choose amulet action\n`/close <both/roblox/macro>` - Close both, Roblox only, or macro only", inline=False)
 
         await interaction.response.send_message(embed=embed)
 
