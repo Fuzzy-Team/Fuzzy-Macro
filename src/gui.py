@@ -296,6 +296,9 @@ def exportDebugZip(profile_name=None):
                 machine = platform.machine() or "unknown"
                 plat = platform.platform() or "unknown"
                 pyv = platform.python_version()
+                # include fuller python info (version string and executable path)
+                py_full = sys.version.replace('\n', ' ')
+                py_exec = sys.executable or "unknown"
                 macrov = settingsManager.getMacroVersion()
                 # Determine chip label
                 mlow = machine.lower()
@@ -310,7 +313,9 @@ def exportDebugZip(profile_name=None):
                     f"platform={plat}\n"
                     f"machine={machine}\n"
                     f"chip={chip}\n"
-                    f"python={pyv}\n"
+                    f"python_version={pyv}\n"
+                    f"python_full_version={py_full}\n"
+                    f"python_executable={py_exec}\n"
                     f"macro_version={macrov}\n"
                 )
                 zf.writestr("system_info.txt", sysinfo.encode("utf-8"))
