@@ -212,6 +212,7 @@ auto_planter_heat-treated=False
 auto_planter_hydroponic=False
 auto_planter_petal=False
 auto_planter_planter_of_plenty=False
+skip_petal_quests=False
 auto_field_sunflower=False
 auto_field_dandelion=False
 auto_field_mushroom=False
