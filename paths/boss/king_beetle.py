@@ -1,0 +1,23 @@
+# get into area
+self.keyboard.keyDown("a")
+sleep(1)
+self.keyboard.keyUp("a")
+self.keyboard.keyDown("w")
+sleep(4)
+self.keyboard.keyUp("w")
+self.keyboard.keyDown("s")
+sleep(0.95)
+self.keyboard.keyUp("s")
+self.keyboard.keyDown("d")
+sleep(1.8)
+self.keyboard.press("space")
+self.keyboard.keyDown("s")
+sleep(1)
+self.keyboard.keyUp("s")
+sleep(6)
+self.keyboard.keyUp("d")
+#back right corner
+self.keyboard.keyDown("s")
+sleep(5)
+self.keyboard.keyUp("s")
+#credit to rubicorb.v2 for the path

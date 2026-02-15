@@ -1001,10 +1001,27 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             if taskId.startswith("kill_"):
                 mob = taskId.replace("kill_", "")
                 
-                # Special cases: coconut_crab and stump_snail
+                # Special cases: coconut_crab, king_beetle, tunnel_bear, and stump_snail
                 if mob == "coconut_crab":
                     if macro.setdat["coconut_crab"] and macro.hasRespawned("coconut_crab", 36*60*60, applyMobRespawnBonus=True):
                         macro.coconutCrab()
+                        executedTasks.add(taskId)
+                        return True
+                    return False
+                
+
+                # King Beetle respawns every 24 hours (20 hours 24 minutes with Gifted Vicious Bee)
+                if mob == "king_beetle":
+                    if macro.setdat["king_beetle"] and macro.hasRespawned("king_beetle", 24*60*60, applyMobRespawnBonus=True):
+                        macro.kingBeetle()
+                        executedTasks.add(taskId)
+                        return True
+                    return False
+
+                # Tunnel Bear respawns every 48 hours (40 hours 48 minutes with Gifted Vicious Bee)
+                if mob == "tunnel_bear":
+                    if macro.setdat["tunnel_bear"] and macro.hasRespawned("tunnel_bear", 48*60*60, applyMobRespawnBonus=True):
+                        macro.tunnelBear()
                         executedTasks.add(taskId)
                         return True
                     return False

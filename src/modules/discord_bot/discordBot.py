@@ -1131,7 +1131,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
     async def mob_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice]:
         """Auto-complete function for mob names"""
-        mobs = ["ladybug", "rhinobeetle", "scorpion", "mantis", "spider", "werewolf", "coconut_crab", "stump_snail"]
+        mobs = ["ladybug", "rhinobeetle", "scorpion", "mantis", "spider", "werewolf", "coconut_crab", "king_beetle", "tunnel_bear", "stump_snail"]
         choices = []
 
         for mob in mobs:
@@ -1438,6 +1438,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 "🕷️ **Spider**": settings.get("spider", False),
                 "🐺 **Werewolf**": settings.get("werewolf", False),
                 "🦀 **Coconut Crab**": settings.get("coconut_crab", False),
+                "🪲 **King Beetle**": settings.get("king_beetle", False),
+                "🐻 **Tunnel Bear**": settings.get("tunnel_bear", False),
                 "🐌 **Stump Snail**": settings.get("stump_snail", False)
             }
 
@@ -1475,6 +1477,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             "spider": "spider",
             "werewolf": "werewolf",
             "coconut_crab": "coconut_crab",
+            "king_beetle": "king_beetle",
+            "tunnel_bear": "tunnel_bear",
             "stump_snail": "stump_snail"
         }
 
