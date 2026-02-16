@@ -5023,7 +5023,7 @@ class macro:
         dialogClickCountForQuestGivers = {
             "polar bear": 25,
             "brown bear": 25,
-            "black bear": 25,
+            "black bear": 30,
             "bucko bee": 40,
             "honey bee": 40,
             "riley bee": 40
