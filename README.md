@@ -60,7 +60,7 @@ Follow our [installation guide](https://fuzzy-team.gitbook.io/fuzzy-macro) to ge
 - Beesmas items (Stockings, Feast, Samovar, Snow Machine, Lid Art, Candles, Wreath)
 
 ### Quest System
-- **Supported NPCs**: Polar Bear, Honey Bee, Bucko Bee, Riley Bee (More to come)
+- **Supported NPCs**: Polar Bear, Honey Bee, Bucko Bee, Riley Bee, Brown Bear, Black Bear (More to come)
 - Automatic quest detection and completion
 - Quest gathering with override settings
 - Gumdrop support for goo gathering

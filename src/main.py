@@ -111,6 +111,10 @@ class RichPresenceManager:
         asset_mapping.update({
             "polar_bear": "polar_bear",
             "polar bear": "polar_bear",
+            "brown_bear": "brown_bear",
+            "brown bear": "brown_bear",
+            "black_bear": "black_bear",
+            "black bear": "black_bear",
             "honey_bee": "honey_bee",
             "honey bee": "honey_bee",
             "bucko_bee": "bucko_bee",
