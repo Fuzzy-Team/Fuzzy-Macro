@@ -262,417 +262,70 @@ token_honey
 
 ==black bear==
 
--sunflower start
-gather_sunflower
-
--dandelion deed
-gather_dandelion
-
--pollen fetcher
-gather_pine tree
-
--red request
-pollen_red
-
--into the blue
-pollen_blue
-
--variety fetcher
-gather_mushroom
-gather_blue flower
-gather_clover
-
--bamboo boogie
-gather_bamboo
-
--red request 2
-pollen_red
-
--cobweb sweeper
-gather_spider
-
--leisure loot
-gather_dandelion
-gather_sunflower
-gather_mushroom
-gather_blue flower
-
--white pollen wrangler
+-just white
 pollen_white
 
--pineapple picking
-gather_pineapple
-
--pollen fetcher 2
-gather_pine tree
-
--weed wacker
-gather_strawberry
-gather_bamboo
-gather_clover
-
--red + blue = gold
-pollen_blue
+-just red
 pollen_red
 
--colorless collection
+-just blue
+pollen_blue
+
+-a bit of both
+pollen_red
+pollen_blue
+
+-any pollen
+gather_pine tree
+
+-the whole lot
+pollen_red
+pollen_blue
 pollen_white
 
--spirit of springtime
-gather_strawberry
-gather_sunflower
-
--weed wacker 2
-gather_dandelion
+-between the bamboo
+pollen_blue
 gather_bamboo
 
--pollen fetcher 3
-gather_pine tree
-
--lucky landscaping
-gather_clover
-
--azure adventure
-pollen_blue
-
--pink pineapples
-pollen_red
-gather_pineapple
-
--blue mushrooms
-gather_blue flower
-gather_mushroom
-
--cobweb sweeper 2
-gather_spider
-
--rojo-a-go-go
-pollen_red
-gather_cactus
-
--pumpkin plower
+-play in the pumpkins
+pollen_white
 gather_pumpkin
 
--pollen fetcher 4
-gather_pine tree
-
--bouncing around biomes
-gather_pine tree
-gather_cactus
-
--blue pineapples
-pollen_blue
+-plundering pineapples
+pollen_white
 gather_pineapple
 
--rose request
-gather_rose
+-stroll in the strawberries
+pollen_red
+gather_strawberry
 
--search for the white clover
-pollen_white
-gather_clover
+-mid-level mission
+gather_spider
+gather_strawberry
+gather_bamboo
 
--stomping grounds
-gather_sunflower
-gather_dandelion
-gather_mushroom
+-blue flower bliss
 gather_blue flower
 
--collecting cliffside
-gather_strawberry
-gather_spider
-gather_bamboo
-
--mountain meandering
-gather_rose
-gather_pine tree
-gather_pumpkin
-gather_cactus
-gather_pineapple
-
--quest of legends
-pollen_white
-pollen_red
-pollen_blue
-
--high altitude
-gather_clover
-gather_mountain top
-
--blissfully blue
-pollen_blue
-gather_bamboo
-gather_blue flower
-gather_pineapple
-
--rouge round-up
-pollen_red
-gather_rose
-gather_strawberry
-gather_cactus
-
--white as snow
-pollen_white
-gather_pineapple
-gather_spider
+-delve into dandelions
 gather_dandelion
 
--solo on the stump
-gather_stump
-
--colorful craving
-pollen_red
-pollen_blue
-gather_pine tree
-gather_mushroom
-
--pumpkins, please!
-gather_pumpkin
-
--smorgasbord
-gather_sunflower
-gather_clover
-gather_bamboo
-gather_pineapple
-gather_cactus
-gather_rose
-gather_mountain top
-
--pollen fetcher 5
-gather_pine tree
-
--white clover redux
-pollen_white
-gather_clover
-
--strawberry field forever
-gather_strawberry
-
--tasting the sky
-pollen_blue
-gather_mountain top
+-fun in the sunflowers
 gather_sunflower
 
--whispy and crispy
-gather_cactus
-gather_dandelion
-
--walk through the woods
-gather_pine tree
-gather_bamboo
-
--get red-y
-pollen_red
-gather_clover
-gather_stump
-
--one stop on the tip top
-gather_mountain top
-
--blue mushrooms 2
-gather_blue flower
+-mission for mushrooms
 gather_mushroom
 
--pretty pumpkins
-gather_pumpkin
-gather_rose
-
--black bear, why?
-pollen_red
-pollen_blue
-gather_cactus
-gather_spider
-gather_clover
-
--bee a star
-pollen_white
-gather_mountain top
-gather_pine tree
-gather_rose
-gather_stump
-gather_pineapple
+-leisurely lowlands
 gather_sunflower
-
--bamboo boogie 2: bamboo boogaloo
-gather_bamboo
-
--rocky red mountain
-pollen_red
-gather_mountain top
-gather_dandelion
-
--can't without ants
-gather_pine tree
-kill_ant
-
--the 15 bee zone
-gather_cactus
-gather_pumpkin
-gather_pine tree
-gather_rose
-
--bubble trouble
-pollen_blue
-gather_stump
-gather_blue flower
-
--sweet and sour
-gather_pineapple
-gather_mushroom
-
--rare red clover
-pollen_red
-gather_clover
-
--low tier treck
-gather_strawberry
-gather_spider
-gather_bamboo
-gather_clover
-gather_blue flower
 gather_mushroom
 gather_dandelion
-gather_sunflower
-
--okey-pokey
-pollen_white
-gather_rose
-gather_cactus
-
--pollen fetcher 6
-gather_pine tree
-
--capsaicin collector
-gather_pepper
-gather_spider
-gather_dandelion
-
--mountain mix
-pollen_red
-pollen_blue
-gather_mountain top
-
--you blue it
-pollen_blue
 gather_blue flower
-kill_ant
 
--variety fetcher 2
-gather_pepper
-gather_pineapple
-gather_strawberry
-gather_pine tree
-
--getting stumped
-gather_pine tree
-gather_stump
-
--weed wacker 3
-gather_pepper
-gather_bamboo
-gather_clover
-
--all-whitey then
-pollen_white
-gather_spider
-gather_dandelion
-gather_cactus
-
--red delicacy
-pollen_red
-gather_strawberry
-gather_pumpkin
-gather_coconut
-
--boss battles
-gather_coconut
-gather_stump
-kill_ant
-
--myth in the making
-pollen_red
-pollen_blue
-gather_sunflower
-gather_dandelion
-gather_mushroom
-gather_blue flower
-gather_clover
-gather_strawberry
-gather_spider
-gather_bamboo
-gather_pineapple
-gather_stump
-gather_cactus
-gather_pumpkin
-gather_pine tree
-gather_rose
+-triple treck
 gather_mountain top
 gather_pepper
 gather_coconut
 
--black bear: just white
-pollen_white
-
--black bear: just red
-pollen_red
-
--black bear: just blue
-pollen_blue
-
--black bear: a bit of both
-pollen_red
-pollen_blue
-
--black bear: any pollen
-gather_pine tree
-
--black bear: the whole lot
-pollen_red
-pollen_blue
-pollen_white
-
--black bear: between the bamboo
-pollen_blue
-gather_bamboo
-
--black bear: play in the pumpkins
-pollen_white
-gather_pumpkin
-
--black bear: plundering pineapples
-pollen_white
-gather_pineapple
-
--black bear: stroll in the strawberries
-pollen_red
-gather_strawberry
-
--black bear: mid-level mission
-gather_spider
-gather_strawberry
-gather_bamboo
-
--black bear: blue flower bliss
-gather_blue flower
-
--black bear: delve into dandelions
-gather_dandelion
-
--black bear: fun in the sunflowers
-gather_sunflower
-
--black bear: mission for mushrooms
-gather_mushroom
-
--black bear: leisurely lowlands
-gather_sunflower
-gather_mushroom
-gather_dandelion
-gather_blue flower
-
--black bear: triple treck
-gather_mountain top
-gather_pepper
-gather_coconut
-
--black bear: pepper patrol
+-pepper patrol
 gather_pepper
