@@ -258,6 +258,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     QUEST_SETTINGS = [
         ("polar_bear_quest", "Polar Bear"),
         ("brown_bear_quest", "Brown Bear"),
+        ("black_bear_quest", "Black Bear"),
         ("honey_bee_quest", "Honey Bee"),
         ("bucko_bee_quest", "Bucko Bee"),
         ("riley_bee_quest", "Riley Bee"),

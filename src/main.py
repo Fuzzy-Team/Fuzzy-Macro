@@ -671,6 +671,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 questMappings = [
                     ("polar bear", "polar_bear_quest"),
                     ("brown bear", "brown_bear_quest"),
+                    ("black bear", "black_bear_quest"),
                     ("honey bee", "honey_bee_quest"),
                     ("bucko bee", "bucko_bee_quest"),
                     ("riley bee", "riley_bee_quest")
@@ -709,6 +710,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         questMappings = {
                             "polar bear": "polar_bear_quest",
                             "brown bear": "brown_bear_quest",
+                            "black bear": "black_bear_quest",
                             "honey bee": "honey_bee_quest",
                             "bucko bee": "bucko_bee_quest",
                             "riley bee": "riley_bee_quest"
@@ -824,6 +826,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         for questName, enabledKey in [
             ("polar bear", "polar_bear_quest"),
             ("brown bear", "brown_bear_quest"),
+            ("black bear", "black_bear_quest"),
             ("honey bee", "honey_bee_quest"),
             ("bucko bee", "bucko_bee_quest"),
             ("riley bee", "riley_bee_quest")
