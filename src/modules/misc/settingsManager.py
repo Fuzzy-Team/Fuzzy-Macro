@@ -481,8 +481,15 @@ def loadSettings():
         # Fall back to default settings if profile file is missing
         settings = readSettingsFile(default_settings_path)
 
-    # Ensure fields and fields_enabled arrays have 5 elements
+    # Read default settings and ensure profile contains any missing keys
     defaultSettings = readSettingsFile(default_settings_path)
+    merged_new_keys = False
+    for k, v in defaultSettings.items():
+        if k not in settings:
+            settings[k] = v
+            merged_new_keys = True
+
+    # Ensure fields and fields_enabled arrays have 5 elements
     defaultFields = defaultSettings.get("fields", ['pine tree', 'sunflower', 'dandelion', 'pine tree', 'sunflower'])
     defaultFieldsEnabled = defaultSettings.get("fields_enabled", [True, False, False, False, False])
     
@@ -497,12 +504,18 @@ def loadSettings():
     while len(fieldsEnabled) < 5:
         fieldsEnabled.append(defaultFieldsEnabled[len(fieldsEnabled)] if len(fieldsEnabled) < len(defaultFieldsEnabled) else False)
         updated = True
-    
+
     if updated:
         settings["fields"] = fields
         settings["fields_enabled"] = fieldsEnabled
-        saveDict(settings_path, settings)
-    
+
+    # Persist settings if we added default keys or extended arrays
+    if merged_new_keys or updated:
+        try:
+            saveDict(settings_path, settings)
+        except Exception:
+            pass
+
     return settings
 
 #return a dict containing all settings except field (general, profile, planters)
