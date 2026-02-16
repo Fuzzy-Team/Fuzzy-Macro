@@ -350,6 +350,7 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
       ant_challenge: "Ant Challenge",
       quest_polar_bear: "Quest: Polar Bear",
       quest_brown_bear: "Quest: Brown Bear",
+      quest_black_bear: "Quest: Black Bear",
       quest_honey_bee: "Quest: Honey Bee",
       quest_bucko_bee: "Quest: Bucko Bee",
       quest_riley_bee: "Quest: Riley Bee",
