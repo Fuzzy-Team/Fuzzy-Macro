@@ -1164,7 +1164,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
     async def quest_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice]:
         """Auto-complete function for quest names"""
-        quests = ["polar_bear", "brown_bear", "honey_bee", "bucko_bee", "riley_bee"]
+        quests = ["polar_bear", "brown_bear", "honey_bee", "bucko_bee", "riley_bee", "black_bear"]
         choices = []
 
         for quest in quests:
@@ -1319,6 +1319,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             quest_settings = {
                 "🐻 **Polar Bear**": settings.get("polar_bear_quest", False),
                 "🐻 **Brown Bear**": settings.get("brown_bear_quest", False),
+                "🐻 **Black Bear**": settings.get("black_bear_quest", False),
                 "🍯 **Honey Bee**": settings.get("honey_bee_quest", False),
                 "🐝 **Bucko Bee**": settings.get("bucko_bee_quest", False),
                 "🎯 **Riley Bee**": settings.get("riley_bee_quest", False),
@@ -1337,13 +1338,14 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error retrieving quest settings: {str(e)}")
 
     @bot.tree.command(name="quest", description="Enable or disable a specific quest")
-    @app_commands.describe(quest="Quest name (polar_bear, brown_bear, honey_bee, bucko_bee, riley_bee)", enabled="Enable or disable")
+    @app_commands.describe(quest="Quest name (polar_bear, brown_bear, black_bear, honey_bee, bucko_bee, riley_bee)", enabled="Enable or disable")
     @app_commands.autocomplete(quest=quest_autocomplete, enabled=boolean_autocomplete)
     async def set_quest(interaction: discord.Interaction, quest: str, enabled: str):
         """Enable or disable a specific quest"""
         quest_mapping = {
             "polar_bear": "polar_bear_quest",
             "brown_bear": "brown_bear_quest",
+            "black_bear": "black_bear_quest",
             "honey_bee": "honey_bee_quest",
             "bucko_bee": "bucko_bee_quest",
             "riley_bee": "riley_bee_quest"
@@ -1351,7 +1353,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         quest_key = quest_mapping.get(quest.lower())
         if not quest_key:
-            await interaction.response.send_message("❌ Invalid quest name. Use: polar_bear, brown_bear, honey_bee, bucko_bee, or riley_bee")
+            await interaction.response.send_message("❌ Invalid quest name. Use: polar_bear, brown_bear, black_bear, honey_bee, bucko_bee, or riley_bee")
             return
 
         success, message = update_setting(quest_key, enabled.lower() == "true")
