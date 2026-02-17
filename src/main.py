@@ -2261,44 +2261,6 @@ if __name__ == "__main__":
     stream = cloudflaredStream()
 
     def onExit():
-        # Ensure GUI/profile settings are persisted before shutting down
-        try:
-            try:
-                all_settings = settingsManager.loadAllSettings()
-            except Exception:
-                all_settings = {}
-
-            try:
-                # Save profile-side settings (settings.txt)
-                if all_settings:
-                    settingsManager.saveDictProfileSettings(all_settings)
-            except Exception:
-                pass
-
-            try:
-                # Save general settings file for the current profile
-                profile_path = settingsManager.getProfilePath()
-                generalsettings_path = os.path.join(profile_path, "generalsettings.txt")
-                try:
-                    existing_general = settingsManager.readSettingsFile(generalsettings_path)
-                except Exception:
-                    existing_general = {}
-                # Merge and persist
-                merged_general = {**existing_general, **(all_settings or {})}
-                settingsManager.saveDict(generalsettings_path, merged_general)
-            except Exception:
-                pass
-
-            # Persist current profile selection
-            try:
-                settingsManager.saveCurrentProfile()
-            except Exception:
-                pass
-
-        except Exception:
-            # Fallthrough to ensure stopApp still runs
-            pass
-
         stopApp()
         try:
             if discordBotProc and discordBotProc.is_alive():
