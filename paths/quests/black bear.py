@@ -10,10 +10,4 @@ self.keyboard.press("w", 1)
 for _ in range(10):
     self.keyboard.press("a", 0.1)
     if self.isBesideE(["talk", "black"]):
-        for _ in range(2):
-            self.keyboard.press("e")
-            sleep(0.2)
-            self.keyboard.press("e")
-            sleep(0.5)
-            self.clickdialog(self, mustFindDialog=False)
         break
