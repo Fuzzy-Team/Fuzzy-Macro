@@ -4994,31 +4994,62 @@ class macro:
         return False
 
     def clickdialog(self, mustFindDialog=False):
-        dialogImg = self.adjustImage("./images/menu", "dialog")
-        x = self.robloxWindow.mw/2
-        y = self.robloxWindow.mh*2/3
-        a =  locateImageOnScreen(dialogImg, self.robloxWindow.mx+(x), self.robloxWindow.my+(y), 300, self.robloxWindow.mh/3, 0.8 if mustFindDialog else 0.5)
+        # Find dialog image and compute a click/sample location
+        dialogImgRef = self.adjustImage("./images/menu", "dialog")
+        x = self.robloxWindow.mw // 2
+        y = int(self.robloxWindow.mh * 2 / 3)
+        a = locateImageOnScreen(dialogImgRef, self.robloxWindow.mx + (x), self.robloxWindow.my + (y), 300, self.robloxWindow.mh // 3, 0.8 if mustFindDialog else 0.5)
         if a:
             _, loc = a
-            xr, yr = [j//self.robloxWindow.multi for j in loc]
+            xr, yr = [j // self.robloxWindow.multi for j in loc]
         else:
             xr = 0
             yr = 0
-            if mustFindDialog: return
+            if mustFindDialog:
+                return
             print("unable to locate dialog position")
 
+        # Adaptive sample size based on window size (try both small and larger samples)
+        sample_w = max(40, min(160, int(self.robloxWindow.mw * 0.06)))
+        sample_h = max(40, min(160, int(self.robloxWindow.mh * 0.06)))
+
+        sx = self.robloxWindow.mx + x + xr - sample_w // 2
+        sy = self.robloxWindow.my + y + yr - sample_h // 2
+
+        def clamp_region(px, py, w, h):
+            px = max(self.robloxWindow.mx, min(px, self.robloxWindow.mx + self.robloxWindow.mw - w))
+            py = max(self.robloxWindow.my, min(py, self.robloxWindow.my + self.robloxWindow.mh - h))
+            return px, py, w, h
+
         def screenshotDialog():
-            return imagehash.average_hash(mssScreenshot(self.robloxWindow.mx+x+xr-40, self.robloxWindow.my+y+yr-40, 40, 40))
-        
-        dialogImg = screenshotDialog()
-        mouse.moveTo(self.robloxWindow.mx+(self.robloxWindow.mw/2), self.robloxWindow.my+(y+yr-20))
+            px, py, w, h = clamp_region(sx, sy, sample_w, sample_h)
+            try:
+                return imagehash.average_hash(mssScreenshot(px, py, w, h))
+            except Exception:
+                # fallback to a very small safe capture
+                try:
+                    return imagehash.average_hash(mssScreenshot(self.robloxWindow.mx + self.robloxWindow.mw // 2, self.robloxWindow.my + self.robloxWindow.mh // 2, 10, 10))
+                except Exception:
+                    return imagehash.average_hash(mssScreenshot(self.robloxWindow.mx, self.robloxWindow.my, 1, 1))
+
+        # Move cursor away before taking baseline to avoid cursor overlay affecting the hash
+        mouse.moveTo(self.robloxWindow.mx + 10, self.robloxWindow.my + 10)
+        time.sleep(0.12)
+        baseline = screenshotDialog()
+
+        # Move to dialog click point and click repeatedly until a stable visible change is detected
+        mouse.moveTo(self.robloxWindow.mx + (self.robloxWindow.mw // 2), self.robloxWindow.my + (y + yr - 20))
+        change_threshold = 30
         for _ in range(80):
             mouse.click()
-            time.sleep(0.1)
-            #check if the dialog is still there
+            time.sleep(0.12)
             img = screenshotDialog()
-            if abs(img - dialogImg) > 15:
-                break
+            diff = abs(img - baseline)
+            if diff > change_threshold:
+                # confirm the change with a second sample to avoid transient false positives
+                time.sleep(0.05)
+                if abs(screenshotDialog() - baseline) > change_threshold:
+                    break
 
     def getNewQuest(self, questGiver, submitQuest):
         if not self.goToQuestGiver(questGiver, "Submit Quest" if submitQuest else "Get New Quest"): return
