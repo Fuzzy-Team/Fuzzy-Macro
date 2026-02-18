@@ -111,6 +111,10 @@ class RichPresenceManager:
         asset_mapping.update({
             "polar_bear": "polar_bear",
             "polar bear": "polar_bear",
+            "brown_bear": "brown_bear",
+            "brown bear": "brown_bear",
+            "black_bear": "black_bear",
+            "black bear": "black_bear",
             "honey_bee": "honey_bee",
             "honey bee": "honey_bee",
             "bucko_bee": "bucko_bee",
@@ -473,6 +477,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         # Only submit/get quests if executeQuest is True (when quest appears in priority queue)
         if executeQuest:
             if questObjective is None:  # Quest does not exist -> try to claim a new quest
+                if not canClaimTimedBearQuest(questGiver):
+                    return setdatEnable, gatherFieldsList, gumdropGatherFieldsList, requireRedField, requireBlueField, feedBees, requireRedGumdropField, requireBlueGumdropField, requireField
                 questObjective = macro.getNewQuest(questGiver, False)
                 # Clear cached entry for this quest giver so subsequent checks re-read the UI
                 if questGiver in questCache:
@@ -671,6 +677,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 questMappings = [
                     ("polar bear", "polar_bear_quest"),
                     ("brown bear", "brown_bear_quest"),
+                    ("black bear", "black_bear_quest"),
                     ("honey bee", "honey_bee_quest"),
                     ("bucko bee", "bucko_bee_quest"),
                     ("riley bee", "riley_bee_quest")
@@ -685,6 +692,16 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     questName = taskId.replace("quest_", "").replace("_", " ")
                     questKey = f"{questName.replace(' ', '_')}_quest"
                     if macro.setdat.get(questKey):
+                        # If this is a timed bear quest, skip checking while on cooldown
+                        if questName in ["brown bear", "black bear"]:
+                            try:
+                                timing = macro.getTiming(f"{questName.replace(' ', '_')}_quest_cd")
+                            except Exception:
+                                timing = None
+                            if isinstance(timing, (float, int)) and time.time() - timing < 60*60:
+                                executedTasks.add(taskId)
+                                continue
+
                         # Detect the current quest title (without executing) so we can honor title-level ignores
                         try:
                             setdatEnable_tmp, gatherFields_tmp, gumdropFields_tmp, needsRed_tmp, needsBlue_tmp, feedBees_tmp, needsRedGumdrop_tmp, needsBlueGumdrop_tmp, needsField_tmp = handleQuest(questName, executeQuest=False)
@@ -709,6 +726,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         questMappings = {
                             "polar bear": "polar_bear_quest",
                             "brown bear": "brown_bear_quest",
+                            "black bear": "black_bear_quest",
                             "honey bee": "honey_bee_quest",
                             "bucko bee": "bucko_bee_quest",
                             "riley bee": "riley_bee_quest"
@@ -717,7 +735,19 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         if questName in questMappings:
                             enabledKey = questMappings[questName]
                             if macro.setdat.get(enabledKey):
-                                setdatEnable, gatherFields, gumdropFields, needsRed, needsBlue, feedBees, needsRedGumdrop, needsBlueGumdrop, needsField = handleQuest(questName)
+                                # For timed bears, ensure we don't attempt to claim/check while on cooldown
+                                if questName in ["brown bear", "black bear"]:
+                                    try:
+                                        timing = macro.getTiming(f"{questName.replace(' ', '_')}_quest_cd")
+                                    except Exception:
+                                        timing = None
+                                    if isinstance(timing, (float, int)) and time.time() - timing < 60*60:
+                                        # still on cooldown; skip applying requirements this cycle
+                                        pass
+                                    else:
+                                        setdatEnable, gatherFields, gumdropFields, needsRed, needsBlue, feedBees, needsRedGumdrop, needsBlueGumdrop, needsField = handleQuest(questName)
+                                else:
+                                    setdatEnable, gatherFields, gumdropFields, needsRed, needsBlue, feedBees, needsRedGumdrop, needsBlueGumdrop, needsField = handleQuest(questName)
                                 for k in setdatEnable:
                                     macro.setdat[k] = True
                                 questGatherFields.extend(gatherFields)
@@ -824,11 +854,21 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         for questName, enabledKey in [
             ("polar bear", "polar_bear_quest"),
             ("brown bear", "brown_bear_quest"),
+            ("black bear", "black_bear_quest"),
             ("honey bee", "honey_bee_quest"),
             ("bucko bee", "bucko_bee_quest"),
             ("riley bee", "riley_bee_quest")
         ]:
             if macro.setdat.get(enabledKey):
+                # If this is a timed bear quest, skip requirement check while on cooldown
+                if questName in ["brown bear", "black bear"]:
+                    try:
+                        timing = macro.getTiming(f"{questName.replace(' ', '_')}_quest_cd")
+                    except Exception:
+                        timing = None
+                    if isinstance(timing, (float, int)) and time.time() - timing < 60*60:
+                        continue
+
                 # Check requirements without executing (submit/get) the quest
                 setdatEnable, gatherFields, gumdropFields, needsRed, needsBlue, feedBees, needsRedGumdrop, needsBlueGumdrop, needsField = handleQuest(questName, executeQuest=False)
                 # Respect title-level ignore list: if the detected quest title is ignored, skip applying requirements
@@ -903,24 +943,33 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 # If the quest setting is disabled, skip any UI scanning for this quest
                 if not macro.setdat.get(questKey):
                     return False
-                # Detect the current quest title (without executing) so we can honor title-level ignores before execution
+                # If this is a timed bear quest, skip while on cooldown
+                if questName in ["brown bear", "black bear"]:
                     try:
-                        # populate last_quest_title via requirement-only check
-                        _ = handleQuest(questName, executeQuest=False)
-                        last_titles = getattr(macro, '_last_quest_title', {}) or {}
-                        title = last_titles.get(questName, "") or ""
-                        # Only skip based on hardcoded petal titles when the profile setting is enabled
-                        if macro.setdat.get("skip_petal_quests", True):
-                            ignore_set = HARDCODED_PETAL_IGNORE_TITLES
-                            if title.lower() in ignore_set:
-                                try:
-                                    gui.log(time.strftime("%H:%M:%S"), f"Skipping ignored quest (execution): '{title}' for {questName}", "orange")
-                                except Exception:
-                                    pass
-                                executedTasks.add(taskId)
-                                return False
+                        timing = macro.getTiming(f"{questName.replace(' ', '_')}_quest_cd")
                     except Exception:
-                        pass
+                        timing = None
+                    if isinstance(timing, (float, int)) and time.time() - timing < 60*60:
+                        executedTasks.add(taskId)
+                        return False
+                # Detect the current quest title (without executing) so we can honor title-level ignores before execution
+                try:
+                    # populate last_quest_title via requirement-only check
+                    _ = handleQuest(questName, executeQuest=False)
+                    last_titles = getattr(macro, '_last_quest_title', {}) or {}
+                    title = last_titles.get(questName, "") or ""
+                    # Only skip based on hardcoded petal titles when the profile setting is enabled
+                    if macro.setdat.get("skip_petal_quests", True):
+                        ignore_set = HARDCODED_PETAL_IGNORE_TITLES
+                        if title.lower() in ignore_set:
+                            try:
+                                gui.log(time.strftime("%H:%M:%S"), f"Skipping ignored quest (execution): '{title}' for {questName}", "orange")
+                            except Exception:
+                                pass
+                            executedTasks.add(taskId)
+                            return False
+                except Exception:
+                    pass
                 
                 # Actually execute the quest (submit/get) - this will travel to quest giver if needed
                 # For Brown Bear, capture the objectives and gather them immediately

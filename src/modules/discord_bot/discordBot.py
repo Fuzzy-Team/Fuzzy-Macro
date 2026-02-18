@@ -258,6 +258,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     QUEST_SETTINGS = [
         ("polar_bear_quest", "Polar Bear"),
         ("brown_bear_quest", "Brown Bear"),
+        ("black_bear_quest", "Black Bear"),
         ("honey_bee_quest", "Honey Bee"),
         ("bucko_bee_quest", "Bucko Bee"),
         ("riley_bee_quest", "Riley Bee"),
@@ -644,9 +645,10 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         except Exception as e:
             await interaction.followup.send(f"❌ Failed to request reset: {str(e)}")
     
-    @bot.tree.command(name = "logs", description = "Show the last 10 macro actions from the log")
-    async def show_logs(interaction: discord.Interaction):
-        """Show the last 10 actions from the macro log"""
+    @bot.tree.command(name = "logs", description = "Show recent macro actions (optionally specify count)")
+    @app_commands.describe(count="Number of recent log entries to show (1-50)")
+    async def show_logs(interaction: discord.Interaction, count: int = 10):
+        """Show recent actions from the macro log (limit by `count`)"""
         try:
             if recentLogs is None or len(recentLogs) == 0:
                 await interaction.response.send_message("📝 No recent macro logs available.")
@@ -654,8 +656,19 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
             embed = discord.Embed(title="📋 Recent Macro Actions", color=0x00ff00)
 
-            # Get the last 10 logs (or fewer if not available)
-            recent_actions = list(recentLogs)[-20:] if len(recentLogs) > 20 else list(recentLogs)
+            # Validate and clamp requested count
+            try:
+                count = int(count)
+            except Exception:
+                count = 10
+
+            if count < 1:
+                count = 1
+            if count > 50:
+                count = 50
+
+            # Get the last `count` logs (or fewer if not available)
+            recent_actions = list(recentLogs)[-count:] if len(recentLogs) > count else list(recentLogs)
 
             log_text = ""
             for log_entry in recent_actions:
@@ -1163,7 +1176,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
     async def quest_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice]:
         """Auto-complete function for quest names"""
-        quests = ["polar_bear", "brown_bear", "honey_bee", "bucko_bee", "riley_bee"]
+        quests = ["polar_bear", "brown_bear", "honey_bee", "bucko_bee", "riley_bee", "black_bear"]
         choices = []
 
         for quest in quests:
@@ -1318,6 +1331,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             quest_settings = {
                 "🐻 **Polar Bear**": settings.get("polar_bear_quest", False),
                 "🐻 **Brown Bear**": settings.get("brown_bear_quest", False),
+                "🐻 **Black Bear**": settings.get("black_bear_quest", False),
                 "🍯 **Honey Bee**": settings.get("honey_bee_quest", False),
                 "🐝 **Bucko Bee**": settings.get("bucko_bee_quest", False),
                 "🎯 **Riley Bee**": settings.get("riley_bee_quest", False),
@@ -1336,13 +1350,14 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error retrieving quest settings: {str(e)}")
 
     @bot.tree.command(name="quest", description="Enable or disable a specific quest")
-    @app_commands.describe(quest="Quest name (polar_bear, brown_bear, honey_bee, bucko_bee, riley_bee)", enabled="Enable or disable")
+    @app_commands.describe(quest="Quest name (polar_bear, brown_bear, black_bear, honey_bee, bucko_bee, riley_bee)", enabled="Enable or disable")
     @app_commands.autocomplete(quest=quest_autocomplete, enabled=boolean_autocomplete)
     async def set_quest(interaction: discord.Interaction, quest: str, enabled: str):
         """Enable or disable a specific quest"""
         quest_mapping = {
             "polar_bear": "polar_bear_quest",
             "brown_bear": "brown_bear_quest",
+            "black_bear": "black_bear_quest",
             "honey_bee": "honey_bee_quest",
             "bucko_bee": "bucko_bee_quest",
             "riley_bee": "riley_bee_quest"
@@ -1350,7 +1365,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         quest_key = quest_mapping.get(quest.lower())
         if not quest_key:
-            await interaction.response.send_message("❌ Invalid quest name. Use: polar_bear, brown_bear, honey_bee, bucko_bee, or riley_bee")
+            await interaction.response.send_message("❌ Invalid quest name. Use: polar_bear, brown_bear, black_bear, honey_bee, bucko_bee, or riley_bee")
             return
 
         success, message = update_setting(quest_key, enabled.lower() == "true")
