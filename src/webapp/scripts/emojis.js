@@ -176,7 +176,8 @@ const questGiverEmojis = {
     brown_bear_quest: "🐻",
     honey_bee_quest: "🐝",
     bucko_bee_quest: "💙",
-    riley_bee_quest: "❤️"
+    riley_bee_quest: "❤️",
+    black_bear_quest: "🐻"
 }
 
 const diceIcons = {

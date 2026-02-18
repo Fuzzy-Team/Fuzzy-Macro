@@ -79,21 +79,21 @@ async function loadAllSettings() {
 //save the setting
 //element
 //type: setting type, eg: profile, general
-function saveSetting(ele, type) {
+async function saveSetting(ele, type) {
   //apply element binding (only for checkboxes)
   if (ele.dataset && ele.dataset.inputBind) {
     const bindTargetId = ele.dataset.inputBind;
     const bindTarget = document.getElementById(bindTargetId);
     if (ele.checked) {
       bindTarget.checked = false;
-      eel.saveProfileSetting(bindTargetId, false);
+      try { await eel.saveProfileSetting(bindTargetId, false)(); } catch (e) { /* ignore */ }
     }
   }
   const id = ele.id;
   const value = getInputValue(id);
 
   if (type == "profile") {
-    eel.saveProfileSetting(id, value);
+    try { await eel.saveProfileSetting(id, value)(); } catch (e) { /* ignore */ }
     // Refresh priority/drag-list highlights after profile setting changes
     try {
       loadAllSettings().then((settings) => {
@@ -105,7 +105,7 @@ function saveSetting(ele, type) {
       // ignore
     }
   } else if (type == "general") {
-    eel.saveGeneralSetting(id, value);
+    try { await eel.saveGeneralSetting(id, value)(); } catch (e) { /* ignore */ }
   }
 }
 
@@ -209,11 +209,10 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
       return settings.ant_challenge || false;
     }
     if (taskId === "blender") {
-      return settings.blender_enable || settings.blender || false;
+      return settings.blender || false;
     }
     if (taskId === "planters") {
-      const mode = Number(settings.planters_mode);
-      return settings.planters || (Number.isFinite(mode) && mode > 0);
+      return settings.planters || false;
     }
 
     return false;
@@ -350,6 +349,7 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
       ant_challenge: "Ant Challenge",
       quest_polar_bear: "Quest: Polar Bear",
       quest_brown_bear: "Quest: Brown Bear",
+      quest_black_bear: "Quest: Black Bear",
       quest_honey_bee: "Quest: Honey Bee",
       quest_bucko_bee: "Quest: Bucko Bee",
       quest_riley_bee: "Quest: Riley Bee",

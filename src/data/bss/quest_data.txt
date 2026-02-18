@@ -259,3 +259,73 @@ kill_3_scorpion
 
 -honey hunt
 token_honey
+
+==black bear==
+
+-just white
+pollen_white
+
+-just red
+pollen_red
+
+-just blue
+pollen_blue
+
+-a bit of both
+pollen_red
+pollen_blue
+
+-any pollen
+pollen_red
+pollen_blue
+pollen_white
+
+-the whole lot
+pollen_blue
+
+-between the bamboo
+pollen_blue
+gather_bamboo
+
+-play in the pumpkins
+pollen_white
+gather_pumpkin
+
+-plundering pineapples
+pollen_white
+gather_pineapple
+
+-stroll in the strawberries
+pollen_red
+gather_strawberry
+
+-mid-level mission
+gather_spider
+gather_strawberry
+gather_bamboo
+
+-blue flower bliss
+gather_blue flower
+
+-delve into dandelions
+gather_dandelion
+
+-fun in the sunflowers
+gather_sunflower
+
+-mission for mushrooms
+gather_mushroom
+
+-leisurely lowlands
+gather_sunflower
+gather_mushroom
+gather_dandelion
+gather_blue flower
+
+-triple treck
+gather_mountain top
+gather_pepper
+gather_coconut
+
+-pepper patrol
+gather_pepper
