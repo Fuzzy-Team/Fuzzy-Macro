@@ -5137,7 +5137,10 @@ class macro:
             self.keyboard.press("e")
             self.clickdialog()
         self.reset()
-        return self.findQuest(questGiver)
+        questObjective = self.findQuest(questGiver)
+        if questGiver in ["brown bear", "black bear"] and questObjective is not None:
+            self.saveTiming(f"{questGiver.replace(' ', '_')}_quest_cd")
+        return questObjective
 
     def feedBee(self, item, quantity):
         res = self.findItemInInventory(item)
