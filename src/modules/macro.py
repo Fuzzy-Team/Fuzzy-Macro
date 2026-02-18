@@ -3869,11 +3869,12 @@ class macro:
 
         #prevent the macro from false detecting beesmas quests
         questTitleBlacklistedPhrases = {
-            "polar bear": ["beesmas", "feast"],
-            "bucko bee": ["snow", "machine"],
-            "riley bee": ["snow", "machine"],
-            "brown bear": [],
-            "black bear": []
+            "polar bear": ["beesmas", "feast", "beesmas feast"],
+            "bucko bee": ["snow machine"],
+            "riley bee": ["honeyday", "honeyday candles"],
+            "honey bee": ["honey wreath"],
+            "brown bear": ["stockings"],
+            "black bear": ["honey wreath"]
         }
 
         def parseBrownBearTitleFields(titleText):
@@ -4047,6 +4048,30 @@ class macro:
             if mode == "gray":
                 screen = cv2.cvtColor(screen, cv2.COLOR_BGRA2GRAY)
             return screen
+
+        def ocrQuestTitleFromScreen(screen):
+            cropHeight = min(300, screen.height)
+            crop = screen.crop((0, 0, screen.width, cropHeight))
+            bestMatch = None
+            questTitleNoise = ["talk to", "complete", "collect", "field", "pollen", "tokens", "defeat", "catch"]
+            for bbox, (text, _conf) in ocr.ocrRead(crop):
+                line = self.convertCyrillic(text.lower().strip())
+                if not line:
+                    continue
+                if any(phrase in line for phrase in questTitleBlacklistedPhrases.get(questGiver, [])):
+                    continue
+                if any(noise in line for noise in questTitleNoise) and ":" not in line:
+                    continue
+                if questGiver in line:
+                    score = 1.0 if ":" in line else 0.7
+                else:
+                    score = SequenceMatcher(None, questGiver, line).ratio()
+                if score < 0.65:
+                    continue
+                yPos = int(min(point[1] for point in bbox))
+                if bestMatch is None or score > bestMatch[0]:
+                    bestMatch = (score, line, yPos)
+            return bestMatch
         
         #open inventory to ensure quest page is closed
         self.toggleInventory("close")
@@ -4066,15 +4091,56 @@ class macro:
         questTitle = None
         questTitleYPos = None
 
+        def buildScaledTemplates(image, scales, label):
+            templates = []
+            for scale in scales:
+                if scale == 1.0:
+                    templates.append((scale, image, label))
+                    continue
+                width = max(1, int(image.size[0] * scale))
+                height = max(1, int(image.size[1] * scale))
+                templates.append((scale, image.resize((width, height), Image.LANCZOS), label))
+            return templates
+
+        primaryScales = [1.0, 1.2, 1.1, 0.9, 0.8, 0.7, 1.3]
+
+        questGiverTemplates = []
         questGiverImg = Image.open(f"./images/quest/{questGiver}-{self.robloxWindow.display_type}.png").convert('RGBA')
+        questGiverTemplates.extend(buildScaledTemplates(questGiverImg, primaryScales, self.robloxWindow.display_type))
+
+        fallbackDisplayType = "built-in" if self.robloxWindow.display_type == "retina" else "retina"
+        fallbackScales = primaryScales if fallbackDisplayType == "built-in" else [0.7]
+        try:
+            fallbackImg = Image.open(f"./images/quest/{questGiver}-{fallbackDisplayType}.png").convert('RGBA')
+            questGiverTemplates.extend(buildScaledTemplates(fallbackImg, fallbackScales, fallbackDisplayType))
+        except Exception:
+            pass
         prevHash = None
         for i in range(150):
             screen = screenshotQuest(800, mode="RGBA")
 
-            res = bitmap_matcher.find_bitmap_cython(screen, questGiverImg, variance=7, h=300, w=questGiverImg.size[0]) #searching only the top 250 pixels to avoid false matches in the quest description, since the quest giver is always above that. variance is set to 5 to allow for some minor color differences but not too much to cause false positives, since the template is a solid color image of the quest giver's name.
+            ocrMatch = ocrQuestTitleFromScreen(screen)
+            if ocrMatch:
+                _score, questTitleRaw, questTitleYPos = ocrMatch
+                if ":" in questTitleRaw:
+                    questTitleRaw = questTitleRaw.split(":", 1)[1].strip()
+                if questGiver == "brown bear":
+                    questTitle = questTitleRaw
+                else:
+                    questTitle, _ = fuzzywuzzy.process.extractOne(questTitleRaw, quest_data[questGiver].keys())
+                self.logger.webhook("", f"Quest Title: {questTitle}", "dark brown")
+                break
+
+            res = None
+            matchedTemplate = None
+            for scale, template, label in questGiverTemplates:
+                res = bitmap_matcher.find_bitmap_cython(screen, template, variance=7, h=300, w=template.size[0]) #searching only the top 250 pixels to avoid false matches in the quest description, since the quest giver is always above that. variance is set to 5 to allow for some minor color differences but not too much to cause false positives, since the template is a solid color image of the quest giver's name.
+                if res:
+                    matchedTemplate = template
+                    break
             if res:
                 rx, ry = res
-                rw, rh = questGiverImg.size
+                rw, rh = matchedTemplate.size
                 img = cv2.cvtColor(np.array(screen), cv2.COLOR_RGBA2GRAY) 
                 img = img[ry-10:ry+rh+20, rx-5:] 
                 img = cv2.threshold(img, 150, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
