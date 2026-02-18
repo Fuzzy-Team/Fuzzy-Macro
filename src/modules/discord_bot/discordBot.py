@@ -645,9 +645,10 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         except Exception as e:
             await interaction.followup.send(f"❌ Failed to request reset: {str(e)}")
     
-    @bot.tree.command(name = "logs", description = "Show the last 10 macro actions from the log")
-    async def show_logs(interaction: discord.Interaction):
-        """Show the last 10 actions from the macro log"""
+    @bot.tree.command(name = "logs", description = "Show recent macro actions (optionally specify count)")
+    @app_commands.describe(count="Number of recent log entries to show (1-50)")
+    async def show_logs(interaction: discord.Interaction, count: int = 10):
+        """Show recent actions from the macro log (limit by `count`)"""
         try:
             if recentLogs is None or len(recentLogs) == 0:
                 await interaction.response.send_message("📝 No recent macro logs available.")
@@ -655,8 +656,19 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
             embed = discord.Embed(title="📋 Recent Macro Actions", color=0x00ff00)
 
-            # Get the last 10 logs (or fewer if not available)
-            recent_actions = list(recentLogs)[-20:] if len(recentLogs) > 20 else list(recentLogs)
+            # Validate and clamp requested count
+            try:
+                count = int(count)
+            except Exception:
+                count = 10
+
+            if count < 1:
+                count = 1
+            if count > 50:
+                count = 50
+
+            # Get the last `count` logs (or fewer if not available)
+            recent_actions = list(recentLogs)[-count:] if len(recentLogs) > count else list(recentLogs)
 
             log_text = ""
             for log_entry in recent_actions:
