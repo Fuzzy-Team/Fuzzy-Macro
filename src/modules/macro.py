@@ -1721,42 +1721,32 @@ class macro:
             def isHiveAvailable():
                 return self.isBesideE(["claim", "hive"], ["send", "trade"], log=True)
 
-            #go to the selected hive. Note down any available hives on the way
-            self.logger.webhook("",f'Claiming hive {hiveNumber}', "dark brown")
-            for j in range(1, hiveNumber+1):
-                if j > 1:
-                    #self.keyboard.tileWalk("a", 9.2)
-                    self.keyboard.walk("a", self.hiveDistance)
-                time.sleep(0.4)
-                if isHiveAvailable():
-                    availableSlots.append(j)
-            
-            #selected hive claimed
-            if hiveNumber in availableSlots:
+            # Go directly to the selected hive first. If that fails, scan all hives as a fallback.
+            self.logger.webhook("", f'Claiming hive {hiveNumber}', "dark brown")
+            # Move directly to the selected hive (slot 1 is nearest cannon)
+            if hiveNumber > 1:
+                self.keyboard.walk("a", self.hiveDistance * (hiveNumber - 1))
+            time.sleep(0.4)
+            # Check selected hive first
+            if isHiveAvailable():
                 newHiveNumber = hiveNumber
                 rejoinSuccess = True
-            
             else:
-                self.logger.webhook("",f'Hive {hiveNumber} is already claimed, finding new hive','dark brown', "screen")
-                #backtrack and claim the hive closest to cannon
-                if availableSlots:
-                    targetSlot = min(availableSlots)
-                    #self.keyboard.tileWalk("d", 9.2*(hiveNumber - targetSlot))
-                    self.keyboard.walk("d", self.hiveDistance*(hiveNumber - targetSlot))
+                # Selected hive unavailable — fallback to scanning all hive slots.
+                self.logger.webhook("", f'Hive {hiveNumber} is already claimed, scanning all hives','dark brown', "screen")
+                # Backtrack to slot 1 before scanning
+                if hiveNumber > 1:
+                    self.keyboard.walk("d", self.hiveDistance * (hiveNumber - 1))
+                    time.sleep(0.4)
+                # Scan slots 1..6 sequentially
+                for j in range(1, 7):
+                    if j > 1:
+                        self.keyboard.walk("a", self.hiveDistance)
                     time.sleep(0.4)
                     if isHiveAvailable():
-                        newHiveNumber = targetSlot
+                        newHiveNumber = j
                         rejoinSuccess = True
-
-                #no available hive slots found previously, continue finding new ones ahead
-                else:
-                    for j in range(hiveNumber+1, 7):
-                        self.keyboard.walk("a", self.hiveDistance)
-                        time.sleep(0.4)
-                        if isHiveAvailable():
-                            newHiveNumber = j
-                            rejoinSuccess = True
-                            break
+                        break
 
             # #find the hive in hive number
             # self.logger.webhook("",f'Claiming hive {hiveNumber} (guessing hive location)', "dark brown")
