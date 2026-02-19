@@ -380,6 +380,11 @@ class RichPresenceManager:
         except Exception:
             pass
 
+    def set_enabled(self, enabled: bool):
+        """Enable or disable Rich Presence"""
+        self.enabled = enabled
+        if not enabled and self.connected:
+            self.disconnect()
 
 def canClaimTimedBearQuest(name):
     """Return True if the given quest giver can be claimed for timed bear quests.
@@ -428,12 +433,7 @@ def canClaimTimedBearQuest(name):
     # state == 0 -> allow claiming
     return True
     
-    def set_enabled(self, enabled: bool):
-        """Enable or disable Rich Presence"""
-        self.enabled = enabled
-        if not enabled and self.connected:
-            self.disconnect()
-
+# (set_enabled moved into RichPresenceManager class)
 #controller for the macro
 def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
     macro = macroModule.macro(status, logQueue, updateGUI, run, skipTask, presence)
