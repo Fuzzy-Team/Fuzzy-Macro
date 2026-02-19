@@ -276,12 +276,12 @@ pollen_red
 pollen_blue
 
 -any pollen
+pollen_blue
+
+-the whole lot
 pollen_red
 pollen_blue
 pollen_white
-
--the whole lot
-pollen_blue
 
 -between the bamboo
 pollen_blue
