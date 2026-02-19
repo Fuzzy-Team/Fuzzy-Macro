@@ -396,6 +396,17 @@ def canClaimTimedBearQuest(name):
         timings = settingsManager.readSettingsFile("./data/user/timings.txt") or {}
     except Exception:
         timings = {}
+    # Ensure both bear quest state keys exist in the timings file with a default of 0
+    try:
+        for required_state in ("brown_bear_quest_state", "black_bear_quest_state"):
+            if required_state not in timings:
+                try:
+                    settingsManager.saveSettingFile(required_state, 0, "./data/user/timings.txt")
+                except Exception:
+                    pass
+                timings[required_state] = 0
+    except Exception:
+        pass
     state = timings.get(state_key, 0)
     timing = timings.get(timing_key)
     # Debug info to help diagnose state issues
