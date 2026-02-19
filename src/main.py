@@ -379,6 +379,43 @@ class RichPresenceManager:
             time.sleep(0.2)
         except Exception:
             pass
+
+
+def canClaimTimedBearQuest(name):
+    """Return True if the given quest giver can be claimed for timed bear quests.
+
+    Brown and black bear quests are limited to one claim per hour. This checks
+    the timestamp stored in `src/data/user/timings.txt` under the key
+    `<bear>_quest_cd`. If no valid timestamp exists, allow claiming.
+    """
+    if name not in ["brown bear", "black bear"]:
+        return True
+    timing_key = f"{name.replace(' ', '_')}_quest_cd"
+    state_key = f"{name.replace(' ', '_')}_quest_state"
+    try:
+        timings = settingsManager.readSettingsFile("./data/user/timings.txt") or {}
+    except Exception:
+        timings = {}
+    state = timings.get(state_key, 0)
+    timing = timings.get(timing_key)
+    # Debug info to help diagnose state issues
+    try:
+        print(f"canClaimTimedBearQuest: name={name}, state={state}, timing={timing}")
+    except Exception:
+        pass
+    # If state is 1, we should not check until timer expires
+    if state == 1:
+        if not isinstance(timing, (float, int)):
+            # Missing timestamp -> reset state to 0 to recover
+            settingsManager.saveSettingFile(state_key, 0, "./data/user/timings.txt")
+            return True
+        # If timer expired, reset state and allow claiming
+        if time.time() - timing >= 60 * 60:
+            settingsManager.saveSettingFile(state_key, 0, "./data/user/timings.txt")
+            return True
+        return False
+    # state == 0 -> allow claiming
+    return True
     
     def set_enabled(self, enabled: bool):
         """Enable or disable Rich Presence"""
@@ -455,6 +492,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
     
     def handleQuest(questGiver, executeQuest=True):
         nonlocal questCache, taskCompleted
+        
+        
         
         gatherFieldsList = []
         gumdropGatherFieldsList = []
@@ -694,11 +733,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     if macro.setdat.get(questKey):
                         # If this is a timed bear quest, skip checking while on cooldown
                         if questName in ["brown bear", "black bear"]:
-                            try:
-                                timing = macro.getTiming(f"{questName.replace(' ', '_')}_quest_cd")
-                            except Exception:
-                                timing = None
-                            if isinstance(timing, (float, int)) and time.time() - timing < 60*60:
+                            if not canClaimTimedBearQuest(questName):
                                 executedTasks.add(taskId)
                                 continue
 
@@ -737,11 +772,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                             if macro.setdat.get(enabledKey):
                                 # For timed bears, ensure we don't attempt to claim/check while on cooldown
                                 if questName in ["brown bear", "black bear"]:
-                                    try:
-                                        timing = macro.getTiming(f"{questName.replace(' ', '_')}_quest_cd")
-                                    except Exception:
-                                        timing = None
-                                    if isinstance(timing, (float, int)) and time.time() - timing < 60*60:
+                                    if not canClaimTimedBearQuest(questName):
                                         # still on cooldown; skip applying requirements this cycle
                                         pass
                                     else:
@@ -862,11 +893,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             if macro.setdat.get(enabledKey):
                 # If this is a timed bear quest, skip requirement check while on cooldown
                 if questName in ["brown bear", "black bear"]:
-                    try:
-                        timing = macro.getTiming(f"{questName.replace(' ', '_')}_quest_cd")
-                    except Exception:
-                        timing = None
-                    if isinstance(timing, (float, int)) and time.time() - timing < 60*60:
+                    if not canClaimTimedBearQuest(questName):
                         continue
 
                 # Check requirements without executing (submit/get) the quest
@@ -945,11 +972,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     return False
                 # If this is a timed bear quest, skip while on cooldown
                 if questName in ["brown bear", "black bear"]:
-                    try:
-                        timing = macro.getTiming(f"{questName.replace(' ', '_')}_quest_cd")
-                    except Exception:
-                        timing = None
-                    if isinstance(timing, (float, int)) and time.time() - timing < 60*60:
+                    if not canClaimTimedBearQuest(questName):
                         executedTasks.add(taskId)
                         return False
                 # Detect the current quest title (without executing) so we can honor title-level ignores before execution
@@ -2304,6 +2327,15 @@ if __name__ == "__main__":
 
     def onExit():
         stopApp()
+        # Reset timed bear quest states on exit so macro resumes checking next run
+        try:
+            settingsManager.saveSettingFile("brown_bear_quest_state", 0, "./data/user/timings.txt")
+        except Exception:
+            pass
+        try:
+            settingsManager.saveSettingFile("black_bear_quest_state", 0, "./data/user/timings.txt")
+        except Exception:
+            pass
         try:
             if discordBotProc and discordBotProc.is_alive():
                 discordBotProc.terminate()
