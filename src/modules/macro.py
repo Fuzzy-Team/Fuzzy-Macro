@@ -916,8 +916,13 @@ class macro:
         if name is not None:
             if not name in data:
                 print(f"could not find timing for {name}, setting a new one")
-                self.saveTiming(name)
-                return time.time()
+                # For bear quest cooldown keys, initialize to 0 instead of current time
+                if name in ("brown_bear_quest_cd", "black_bear_quest_cd"):
+                    settingsManager.saveSettingFile(name, 0, "./data/user/timings.txt")
+                    return 0
+                else:
+                    self.saveTiming(name)
+                    return time.time()
             return data[name]
         return data
     
