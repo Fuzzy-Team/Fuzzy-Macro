@@ -294,6 +294,10 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         ("field", "Field"),
     ]
 
+    REPORT_SETTINGS = [
+        ("hourly_report_inventory_screenshots", "Include Inventory Screenshots in Hourly Report"),
+    ]
+
     SETTINGS_CATEGORIES = {
         "fields": "Fields",
         "macro_mode": "Macro Mode",
@@ -301,6 +305,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         "collectibles": "Collectibles",
         "mobs": "Mobs",
         "hive_slot": "Hive Slot",
+        "reports": "Reports",
     }
 
     def _build_status_embed(category_key: str, settings: Dict, status_message: Optional[str] = None) -> discord.Embed:
@@ -363,6 +368,17 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             slot = settings.get("hive_number", "Unknown")
             embed.add_field(name="Current", value=str(slot), inline=False)
 
+        elif category_key == "reports":
+            enabled = []
+            disabled = []
+            for key, label in REPORT_SETTINGS:
+                if settings.get(key, False):
+                    enabled.append(label)
+                else:
+                    disabled.append(label)
+            embed.add_field(name="Enabled", value=", ".join(enabled) if enabled else "None", inline=False)
+            embed.add_field(name="Disabled", value=", ".join(disabled) if disabled else "None", inline=False)
+
         if status_message:
             embed.set_footer(text=status_message)
 
@@ -413,6 +429,13 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         embed.add_field(
             name="Hive Slot",
             value=str(settings.get("hive_number", "Unknown")),
+            inline=False,
+        )
+
+        reports_enabled = sum(1 for key, _ in REPORT_SETTINGS if settings.get(key, False))
+        embed.add_field(
+            name="Reports",
+            value=f"Enabled: {reports_enabled}/{len(REPORT_SETTINGS)}",
             inline=False,
         )
 
@@ -587,6 +610,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 self.add_item(ToggleSettingsSelect(settings, MOB_SETTINGS, "Select enabled mobs"))
             elif category_key == "hive_slot":
                 self.add_item(HiveSlotSelect(settings))
+            elif category_key == "reports":
+                self.add_item(ToggleSettingsSelect(settings, REPORT_SETTINGS, "Select report options"))
 
             self.add_item(RefreshButton(category_key))
             self.add_item(BackButton())
@@ -1727,6 +1752,18 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             # Generate the image (saves to hourlyReport.png)
             hr.generateHourlyReport(setdat)
             await interaction.followup.send(file = discord.File("hourlyReport.png"))
+
+            if setdat.get("hourly_report_inventory_screenshots", False):
+                import modules.macro as macroModule
+                logQueue = recentLogs if hasattr(recentLogs, "put") else queue.Queue()
+                macro = macroModule.macro(status, logQueue, updateGUI, run, skipTask)
+                imagePaths = macro.captureInventoryScreenshots()
+                if imagePaths:
+                    chunkSize = 10
+                    for i in range(0, len(imagePaths), chunkSize):
+                        chunk = imagePaths[i:i+chunkSize]
+                        files = [discord.File(path) for path in chunk]
+                        await interaction.followup.send(files=files)
 
         except Exception as e:
             await interaction.followup.send(f"❌ Error generating hourly report: {str(e)}")

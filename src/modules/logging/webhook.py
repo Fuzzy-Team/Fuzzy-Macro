@@ -1,5 +1,6 @@
 from discord_webhook import DiscordEmbed, DiscordWebhook
 from requests.exceptions import SSLError, ConnectionError
+import os
 
 # Global variable to store message ID for pinning
 last_message_id = None
@@ -35,12 +36,21 @@ def webhook(url, title, desc, time, color, imagePath = None, ping_user_id = None
         embed = DiscordEmbed(title="[{}] {}".format(formatted_time,title), description=desc, color=color)
     else:
         embed = DiscordEmbed(title="", description="[{}] {}".format(formatted_time,desc), color=color)
-    #if to add image
+    #if to add image(s)
     if imagePath:
-        with open(imagePath, "rb") as f:
-            webhook.add_file(file=f.read(), filename= "screenshot.png")
-        f.close()
-        embed.set_image(url='attachment://screenshot.png')
+        imagePaths = imagePath if isinstance(imagePath, (list, tuple)) else [imagePath]
+        attachedNames = []
+        for idx, imgPath in enumerate(imagePaths):
+            if not imgPath:
+                continue
+            filename = os.path.basename(imgPath) or f"screenshot_{idx+1}.png"
+            with open(imgPath, "rb") as f:
+                webhook.add_file(file=f.read(), filename=filename)
+            attachedNames.append(filename)
+
+        # For single-image messages, render inline as before.
+        if len(attachedNames) == 1:
+            embed.set_image(url=f"attachment://{attachedNames[0]}")
     # add embed object to webhook
     webhook.add_embed(embed)
     try:

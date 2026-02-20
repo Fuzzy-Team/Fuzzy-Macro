@@ -531,6 +531,15 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
+        {
+          id: "hourly_report_inventory_screenshots",
+          title: "Include Inventory Screenshots in Hourly Reports",
+          desc: "Capture and attach inventory screenshots whenever an hourly report is sent",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
       ]);
 
       buildStandardContainer(parentDiscord, "Discord Bot", "", [

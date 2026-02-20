@@ -141,7 +141,7 @@ class log:
         else:
             self.webhookQueue.add_to_queue(webhookData)
 
-    def hourlyReport(self, title, desc, color, time_format=None):
+    def hourlyReport(self, title, desc, color, time_format=None, imagePath="hourlyReport.png", ping=True):
         if not self.enableWebhook: return
         
         # Check if webhook URL is provided
@@ -155,10 +155,10 @@ class log:
 
         # Determine if we should ping for hourly reports
         ping_user_id = None
-        if self.enableDiscordPing and self.discordUserID and self.pingSettings.get("ping_hourly_reports", False):
+        if ping and self.enableDiscordPing and self.discordUserID and self.pingSettings.get("ping_hourly_reports", False):
             ping_user_id = self.discordUserID
 
-        logWebhook.webhook(self.webhookURL, title, desc, timeModule.strftime("%H:%M:%S", timeModule.localtime()), colors[color], "hourlyReport.png", ping_user_id, time_format)
+        logWebhook.webhook(self.webhookURL, title, desc, timeModule.strftime("%H:%M:%S", timeModule.localtime()), colors[color], imagePath, ping_user_id, time_format)
     
     def finalReport(self, title, desc, color, time_format=None):
         if not self.enableWebhook: return

@@ -16,6 +16,7 @@ from modules.screen.robloxWindow import RobloxWindowBounds
 import sys
 import platform
 import os
+import shutil
 import numpy as np
 import threading
 from modules.submacros.backpack import bpc
@@ -537,6 +538,7 @@ class macro:
         self.converting = False
         self.alreadyConverted = False
         self.cannonFromHive = False
+        self.pendingHourlyInventoryCapture = False
 
         #auto field boost
         self.failed = False
@@ -1063,7 +1065,7 @@ class macro:
             self.keyboard.press("enter")
         '''
 
-    def captureInventoryScreenshots(self, maxScrollSteps=120):
+    def captureInventoryScreenshots(self):
         """
         Capture screenshots of the full inventory list by scrolling from top to bottom.
         Returns a list of saved image paths.
@@ -1092,47 +1094,101 @@ class macro:
                 mouse.click()
                 time.sleep(0.05)
 
-        outDir = os.path.join("./data/user/inventory_screenshots", datetime.now().strftime("%Y%m%d_%H%M%S"))
+        def getScrollChangeScore(beforeScreen, afterScreen):
+            beforeNp = np.array(beforeScreen)
+            afterNp = np.array(afterScreen)
+            h = min(beforeNp.shape[0], afterNp.shape[0])
+            w = min(beforeNp.shape[1], afterNp.shape[1])
+            if h <= 0 or w <= 0:
+                return 0.0
+
+            # Use center region to avoid edge noise.
+            y1 = int(h * 0.1)
+            y2 = int(h * 0.9)
+            x1 = int(w * 0.1)
+            x2 = int(w * 0.9)
+
+            beforeCrop = beforeNp[y1:y2, x1:x2]
+            afterCrop = afterNp[y1:y2, x1:x2]
+
+            diff = cv2.absdiff(beforeCrop, afterCrop)
+            return float(np.mean(diff))
+
+        outDir = "./data/user/inventory_screenshots"
         os.makedirs(outDir, exist_ok=True)
+
+        # Keep one folder only: clear previous batch before capturing a new one.
+        for entry in os.listdir(outDir):
+            entryPath = os.path.join(outDir, entry)
+            try:
+                if os.path.isdir(entryPath):
+                    shutil.rmtree(entryPath)
+                else:
+                    os.remove(entryPath)
+            except Exception:
+                pass
 
         savedPaths = []
         try:
             # Open inventory (first menu), not quest menu.
             self.toggleInventory("open")
-            time.sleep(0.4)
+            time.sleep(0.45)
             focusInventoryScrollArea(click=True)
 
             # Scroll to top first.
             prevHash = None
             for _ in range(200):
                 focusInventoryScrollArea()
-                mouse.scroll(100)
-                sleep(0.08)
+                mouse.scroll(50)
+                sleep(0.14)
                 currHash = imagehash.average_hash(screenshotInventory(120, mode="RGBA"))
                 if prevHash is not None and prevHash == currHash:
                     break
                 prevHash = currHash
 
-            time.sleep(0.25)
+            time.sleep(0.35)
 
-            # Capture and scroll until no more movement.
-            prevTopHash = None
-            for step in range(maxScrollSteps):
+            # Capture and scroll until the inventory no longer changes.
+            unchangedAfterScrollCount = 0
+            maxConsecutiveUnchanged = 4
+            # Safety fallback to avoid infinite loops if scrolling fails unexpectedly.
+            maxAttempts = 900
+
+            for step in range(maxAttempts):
                 inventoryScreen = screenshotInventory(900, mode="RGBA")
                 imagePath = os.path.join(outDir, f"inventory_{step+1:03d}.png")
                 inventoryScreen.save(imagePath, "PNG")
                 savedPaths.append(imagePath)
 
                 focusInventoryScrollArea()
-                mouse.scroll(-40)
-                sleep(0.15)
+                mouse.scroll(-12)
+                sleep(0.35)
 
-                currentTopHash = imagehash.average_hash(screenshotInventory(120, mode="RGBA"))
-                if prevTopHash is not None and currentTopHash == prevTopHash:
+                afterScrollScreen = screenshotInventory(900, mode="RGBA")
+                changeScore = getScrollChangeScore(inventoryScreen, afterScrollScreen)
+                if changeScore < 0.75:
+                    unchangedAfterScrollCount += 1
+                else:
+                    unchangedAfterScrollCount = 0
+
+                if unchangedAfterScrollCount >= maxConsecutiveUnchanged:
                     break
-                prevTopHash = currentTopHash
 
-            return savedPaths
+            # Filter duplicate screenshots before sending/returning.
+            uniquePaths = []
+            seenHashes = []
+            for path in savedPaths:
+                try:
+                    with Image.open(path) as img:
+                        h = imagehash.average_hash(img)
+                    isDuplicate = any(abs(h - existingHash) <= 1 for existingHash in seenHashes)
+                    if not isDuplicate:
+                        uniquePaths.append(path)
+                        seenHashes.append(h)
+                except Exception:
+                    uniquePaths.append(path)
+
+            return uniquePaths
         finally:
             self.toggleInventory("close")
             self.moveMouseToDefault()
@@ -3796,10 +3852,23 @@ class macro:
             currMin = datetime.now().minute
             currSec = datetime.now().second
 
+            def isReadyForHourlyInventoryCapture():
+                # Ensure we are done converting and currently at hive.
+                if self.converting:
+                    return False
+                if self.status.value == "converting":
+                    return False
+                if self.location != "spawn":
+                    return False
+                return self.isBesideEImage("makehoney")
+
             #check if its time to send hourly report
             if currMin == 0 and time.time() - self.lastHourlyReport > 120:
                 hourlyReportData = self.hourlyReport.generateHourlyReport(self.setdat)
                 self.logger.hourlyReport("Hourly Report", "", "purple")
+
+                if self.setdat.get("hourly_report_inventory_screenshots", False):
+                    self.pendingHourlyInventoryCapture = True
 
                 #add to history
                 with open("data/user/hourly_report_history.txt", "r") as f:
@@ -3823,6 +3892,31 @@ class macro:
                 self.lastHourlyReport = time.time()
                 #reset stats
                 self.hourlyReport.resetHourlyStats()
+
+            # Capture hourly inventory screenshots only after converting and when at hive.
+            if self.pendingHourlyInventoryCapture and self.setdat.get("hourly_report_inventory_screenshots", False):
+                if isReadyForHourlyInventoryCapture():
+                    try:
+                        inventoryImages = self.captureInventoryScreenshots()
+                        totalImages = len(inventoryImages)
+
+                        chunkSize = 10
+                        totalBatches = (totalImages + chunkSize - 1) // chunkSize if totalImages else 0
+                        for batchIndex, start in enumerate(range(0, totalImages, chunkSize), start=1):
+                            chunk = inventoryImages[start:start+chunkSize]
+                            self.logger.hourlyReport(
+                                f"Hourly Report Inventory (Batch {batchIndex}/{totalBatches})",
+                                "",
+                                "purple",
+                                imagePath=chunk,
+                                ping=False
+                            )
+                        self.pendingHourlyInventoryCapture = False
+                    except Exception:
+                        self.logger.webhook("Hourly Report", "Failed to capture inventory screenshots", "orange")
+                        self.pendingHourlyInventoryCapture = False
+            elif not self.setdat.get("hourly_report_inventory_screenshots", False):
+                self.pendingHourlyInventoryCapture = False
 
             #Hourly report
             if self.status.value != "rejoining":
