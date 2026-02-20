@@ -2554,7 +2554,7 @@ class macro:
                 time.sleep(0.5)
                 self.keyboard.walk("s", 3)
                 self.keyboard.walk("d", 2)
-                for i in range(5):
+                for i in range(4):
                     self.keyboard.walk("w", 2.25)
                     self.keyboard.walk("d", 0.25)
                     self.keyboard.walk("s", 2.25)
