@@ -604,6 +604,31 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             imageBinary.seek(0)
             await interaction.followup.send(file = discord.File(fp=imageBinary, filename="screenshot.png"))
 
+#    @bot.tree.command(name="inventoryscreenshots", description="Capture screenshots of the full inventory list")
+#    async def inventory_screenshots(interaction: discord.Interaction):
+#        await interaction.response.defer()
+#        try:
+#            import modules.macro as macroModule
+#            logQueue = recentLogs if hasattr(recentLogs, "put") else queue.Queue()
+#            macro = macroModule.macro(status, logQueue, updateGUI, run, skipTask)
+#
+#            imagePaths = macro.captureInventoryScreenshots()
+#            if not imagePaths:
+#                await interaction.followup.send("❌ No inventory screenshots were captured.")
+#                return
+#
+#            await interaction.followup.send(f"📦 Captured {len(imagePaths)} inventory screenshots. Uploading...")
+#
+#            # Discord allows up to 10 attachments per message.
+#            chunkSize = 10
+#            for i in range(0, len(imagePaths), chunkSize):
+#                chunk = imagePaths[i:i+chunkSize]
+#                files = [discord.File(path) for path in chunk]
+#                await interaction.followup.send(files=files)
+#
+#        except Exception as e:
+#            await interaction.followup.send(f"❌ Error capturing inventory screenshots: {str(e)}")
+
     @bot.tree.command(name = "start", description = "Start")
     async def start(interaction: discord.Interaction):
         if run.value == 2: 
@@ -633,9 +658,10 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             import modules.macro as macroModule
             # Use a dummy queue if recentLogs is not a queue
             logQueue = recentLogs if hasattr(recentLogs, "put") else queue.Queue()
-            macro = macroModule.macro(reset, logQueue, updateGUI, stopGather)
+            macro = macroModule.macro(reset, logQueue, updateGUI)
             macro.status.value = ""
-            macro.stopGather()
+            if hasattr(macro, 'stopGather'):
+                macro.stopGather()
             if hasattr(macro, 'logger') and hasattr(macro.logger, 'webhook'):
                 macro.logger.webhook("", "Player died (Reset Command)", "dark brown", "screen", ping_category="ping_character_deaths")
             time.sleep(0.4)
@@ -1660,7 +1686,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         """Show available commands"""
         embed = discord.Embed(title="🤖 BSS Macro Discord Bot", description="Available Commands:", color=0x0099ff)
 
-        embed.add_field(name="🔧 **Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/stop` - Stop the macro\n`/status` - Get macro status and current task\n`/rejoin` - Make macro rejoin game\n`/screenshot` - Get screenshot\n`/settings` - Open settings panel\n`/hiveslot <1-6>` - Change hive slot number", inline=False)
+        embed.add_field(name="🔧 **Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/stop` - Stop the macro\n`/status` - Get macro status and current task\n`/rejoin` - Make macro rejoin game\n`/screenshot` - Get screenshot\n`/inventoryscreenshots` - Capture full inventory screenshots\n`/settings` - Open settings panel\n`/hiveslot <1-6>` - Change hive slot number", inline=False)
 
         embed.add_field(name="🌾 **Field Management**", value="`/fields` - View field configuration\n`/field <field> <true/false>` - Enable or disable a field\n`/swapfield <current> <new>` - Swap one field for another (new can be any field)", inline=False)
 
