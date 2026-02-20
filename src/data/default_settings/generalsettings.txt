@@ -33,6 +33,7 @@ enable_stream=False
 pin_stream_url=True
 low_performance=False
 only_send_hourly_report=False
+hourly_report_inventory_screenshots=False
 bees=50
 goo_slot=3
 start_keybind=F1
