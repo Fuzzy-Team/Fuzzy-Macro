@@ -1063,6 +1063,80 @@ class macro:
             self.keyboard.press("enter")
         '''
 
+    def captureInventoryScreenshots(self, maxScrollSteps=120):
+        """
+        Capture screenshots of the full inventory list by scrolling from top to bottom.
+        Returns a list of saved image paths.
+        """
+        def screenshotInventory(screenshotHeight, mode="RGBA"):
+            mode = mode.lower()
+            if mode == "rgba":
+                screenshotFunction = mssScreenshotPillowRGBA
+            else:
+                screenshotFunction = mssScreenshotNP
+            screen = screenshotFunction(
+                self.robloxWindow.mx,
+                self.robloxWindow.my+150,
+                300,
+                min(screenshotHeight, self.robloxWindow.mh-(self.robloxWindow.my+150))
+            )
+            if mode == "gray":
+                screen = cv2.cvtColor(screen, cv2.COLOR_BGRA2GRAY)
+            return screen
+
+        def focusInventoryScrollArea(click=False):
+            # Keep cursor inside the inventory list so scroll events target the right panel.
+            mouse.moveTo(self.robloxWindow.mx+150, self.robloxWindow.my+300)
+            time.sleep(0.03)
+            if click:
+                mouse.click()
+                time.sleep(0.05)
+
+        outDir = os.path.join("./data/user/inventory_screenshots", datetime.now().strftime("%Y%m%d_%H%M%S"))
+        os.makedirs(outDir, exist_ok=True)
+
+        savedPaths = []
+        try:
+            # Open inventory (first menu), not quest menu.
+            self.toggleInventory("open")
+            time.sleep(0.4)
+            focusInventoryScrollArea(click=True)
+
+            # Scroll to top first.
+            prevHash = None
+            for _ in range(200):
+                focusInventoryScrollArea()
+                mouse.scroll(100)
+                sleep(0.08)
+                currHash = imagehash.average_hash(screenshotInventory(120, mode="RGBA"))
+                if prevHash is not None and prevHash == currHash:
+                    break
+                prevHash = currHash
+
+            time.sleep(0.25)
+
+            # Capture and scroll until no more movement.
+            prevTopHash = None
+            for step in range(maxScrollSteps):
+                inventoryScreen = screenshotInventory(900, mode="RGBA")
+                imagePath = os.path.join(outDir, f"inventory_{step+1:03d}.png")
+                inventoryScreen.save(imagePath, "PNG")
+                savedPaths.append(imagePath)
+
+                focusInventoryScrollArea()
+                mouse.scroll(-40)
+                sleep(0.15)
+
+                currentTopHash = imagehash.average_hash(screenshotInventory(120, mode="RGBA"))
+                if prevTopHash is not None and currentTopHash == prevTopHash:
+                    break
+                prevTopHash = currentTopHash
+
+            return savedPaths
+        finally:
+            self.toggleInventory("close")
+            self.moveMouseToDefault()
+
     #scroll to an item in the inventory and return the x,y coordinates
     def getStringSimilarity(self, str1, str2):
         return SequenceMatcher(None, str1, str2).ratio()
