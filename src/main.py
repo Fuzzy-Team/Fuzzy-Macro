@@ -766,6 +766,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                     gui.log(time.strftime("%H:%M:%S"), f"Skipping ignored quest '{title}' for {questName}", "orange")
                                 except Exception:
                                     pass
+                                macro.logger.webhook("Skipping ignored petal quest", f"Quest: {title}", "orange")
                                 executedTasks.add(taskId)
                                 continue
                         # Handle quest feeding and gathering requirements
@@ -921,6 +922,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                 gui.log(time.strftime("%H:%M:%S"), f"Skipping ignored quest (requirements): '{title}' for {questName}", "orange")
                             except Exception:
                                 pass
+                            macro.logger.webhook("Skipping ignored petal quest", f"Quest: {title}", "orange")
                             continue
                 except Exception:
                     pass
@@ -1000,6 +1002,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                 gui.log(time.strftime("%H:%M:%S"), f"Skipping ignored quest (execution): '{title}' for {questName}", "orange")
                             except Exception:
                                 pass
+                            macro.logger.webhook("Skipping ignored petal quest", f"Quest: {title}", "orange")
                             executedTasks.add(taskId)
                             return False
                 except Exception:
