@@ -55,7 +55,7 @@ from modules.submacros.hourlyReport import HourlyReport
 mw, mh = pag.size()
 
 # Hardcoded petal quest titles to ignore (lowercase)
-HARDCODED_PETAL_IGNORE_TITLES = {"petal tabbouleh", "petals"}
+HARDCODED_PETAL_IGNORE_TITLES = {"petal tabbouleh", "petals", "mashed blooms"}
 
 # Discord Rich Presence Manager
 try:
