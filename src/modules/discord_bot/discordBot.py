@@ -633,7 +633,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             import modules.macro as macroModule
             # Use a dummy queue if recentLogs is not a queue
             logQueue = recentLogs if hasattr(recentLogs, "put") else queue.Queue()
-            macro = macroModule.macro(reset, logQueue, updateGUI)
+            macro = macroModule.macro(reset, logQueue, updateGUI, stopGather)
             macro.status.value = ""
             macro.stopGather()
             if hasattr(macro, 'logger') and hasattr(macro.logger, 'webhook'):
