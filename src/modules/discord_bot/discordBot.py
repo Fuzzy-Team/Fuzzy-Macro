@@ -635,8 +635,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             logQueue = recentLogs if hasattr(recentLogs, "put") else queue.Queue()
             macro = macroModule.macro(reset, logQueue, updateGUI)
             macro.status.value = ""
-            if hasattr(macro, 'stopGather'):
-                macro.stopGather()
+            macro.stopGather()
             if hasattr(macro, 'logger') and hasattr(macro.logger, 'webhook'):
                 macro.logger.webhook("", "Player died (Reset Command)", "dark brown", "screen", ping_category="ping_character_deaths")
             time.sleep(0.4)
