@@ -800,9 +800,24 @@ select:focus {
   border-radius: 8px;
 }
 
+.planter-timers .planter-img-wrap {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 0.5rem;
+}
+
 .planter-timers .planter-img {
   width: 40px;
-  margin-bottom: 0.5rem;
+  display: block;
+}
+
+.planter-timers .planter-nectar-overlay {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
 }
 
 .planter-timers .planter span {
