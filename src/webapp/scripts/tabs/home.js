@@ -513,12 +513,19 @@ async function loadTasks() {
   function getPlanterHTML(planter, field, harvestTime) {
     const currTime = Date.now() / 1000;
     const timeRemaining = secondsToMinsAndHours(harvestTime - currTime);
+    // Normalize field to fieldNectarIcons key format (lowercase, spaces -> underscores)
+    const fieldKey = (field || "").toLowerCase().replace(/\s+/g, "_");
+    const nectarIcon = fieldNectarIcons[fieldKey]
+      ? `<img src="./assets/icons/${fieldNectarIcons[fieldKey]}.png" class="planter-nectar-overlay">`
+      : "";
     return `
             <div class="planter">
-                <img class="planter-img" src="./assets/icons/${planter.replaceAll(
+                <div class="planter-img-wrap">
+                    <img class="planter-img" src="./assets/icons/${planter.replaceAll(
       " ",
       "_"
-    )}_planter.png">
+    )}_planter.png">${nectarIcon}
+                </div>
                 <div class="field-row">
                     <span>${toTitleCase(field)}</span>
                 </div>
