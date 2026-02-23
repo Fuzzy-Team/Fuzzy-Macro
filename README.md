@@ -38,7 +38,7 @@ Follow our [installation guide](https://fuzzy-team.gitbook.io/fuzzy-macro) to ge
 - **Auto Planters**: Smart planter placement based on nectar priorities
 - Harvest timing based on planter type or custom intervals
 - Field and nectar-specific planter ranking
-- Auto gather in planter fields (Manual Planters Mode)
+- Auto gather in planter fields (Both Auto and Manual Planters Mode)
 
 ### Mob & Boss Combat
 - **Regular Mobs**: Ladybugs, Rhino Beetles, Scorpions, Mantises, Spiders, Werewolf
@@ -88,14 +88,10 @@ Follow our [installation guide](https://fuzzy-team.gitbook.io/fuzzy-macro) to ge
 - Web-based GUI for configuration
 - Profile system for multiple configurations
 - Task priority system with drag-and-drop ordering
-- Pause/Resume functionality (Coming soon)
+- Pause/Resume functionality (Coming back soon)
 - Hourly reports with statistics
 - Death detection and recovery
 - Screen resolution detection (See [Display Settings](https://fuzzy-team.gitbook.io/fuzzy-macro/system-settings/display-settings))
-
-## Notes
-
-- This Macro is for MacOS only. Linux and Windows support are not planned, for Windows use [Natro Macro](https://github.com/NatroTeam/NatroMacro), for Linux use [BeeTuxMacro](https://github.com/painvision/BeeTuxMacro).
 
 ## Credits
 ### Macro Inspiration:
@@ -108,3 +104,10 @@ Follow our [installation guide](https://fuzzy-team.gitbook.io/fuzzy-macro) to ge
 
 ## Preview
 <img width="1312" height="1022" alt="image" src="https://github.com/user-attachments/assets/c966a172-eda4-44c9-9da9-8760f504f808" />
+
+## Notes
+
+- This Macro is for MacOS only. Linux and Windows support are not planned, for Windows use [Natro Macro](https://github.com/NatroTeam/NatroMacro), for Linux use [BeeTuxMacro](https://github.com/painvision/BeeTuxMacro).
+- Fuzzy Macro is built on top of Existance Macro, meaning you can easily transitition to Fuzzy Macro. The settings and config works the same, think of Fuzzy Macro as a continuation project of Existance Macro.
+- The macro backend is written in Python while the frontend uses HTML/CSS/JS with eel as a communication layer.
+- Version system uses the format Major.Minor.Bugfix, with an optional letter at the end for test versions. (Ex: 1.1.0 is newer than 1.1.0a - 1.1.0a is a beta version in this case)
