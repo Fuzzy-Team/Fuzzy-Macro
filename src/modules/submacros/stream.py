@@ -417,21 +417,20 @@ class cloudflaredStream:
         
         #extract the cloudflare link
         for line in self.cfProc.stdout:
-            if "trycloudflare.com" in line and "https://" in line:
-                match = re.search(r"https://[a-zA-Z0-9\-]+\.trycloudflare\.com", line)
-                if match:
-                    url = match.group()
-                    print("Cloudflare URL:", url)
-                    self.publicURL = url
-                    # Write stream URL to file for Discord bot
-                    try:
-                        import os
-                        stream_url_file = os.path.join(os.path.dirname(__file__), '..', '..', 'stream_url.txt')
-                        with open(stream_url_file, 'w') as f:
-                            f.write(url)
-                    except Exception as e:
-                        print(f"Failed to write stream URL to file: {e}")
-                    break
+            match = re.search(r"https://[a-zA-Z0-9\-]+\.trycloudflare\.com", line)
+            if match:
+                url = match.group()
+                print("Cloudflare URL:", url)
+                self.publicURL = url
+                # Write stream URL to file for Discord bot
+                try:
+                    import os
+                    stream_url_file = os.path.join(os.path.dirname(__file__), '..', '..', 'stream_url.txt')
+                    with open(stream_url_file, 'w') as f:
+                        f.write(url)
+                except Exception as e:
+                    print(f"Failed to write stream URL to file: {e}")
+                break
 
     def start(self, resolution=1.0):
         self.resolution = resolution
