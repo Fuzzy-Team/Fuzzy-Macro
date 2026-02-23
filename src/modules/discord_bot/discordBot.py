@@ -92,7 +92,7 @@ def update_profile_setting(setting_key, value):
     except Exception as e:
         return False, f"❌ Error updating profile setting: {str(e)}"
 
-def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None, updateGUI=None):
+def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None, updateGUI=None, planter_reset_request=None):
     import modules.macro
     bot = commands.Bot(command_prefix="fuzz!", intents=discord.Intents.all())
     
@@ -645,6 +645,23 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         except Exception as e:
             await interaction.followup.send(f"❌ Failed to request reset: {str(e)}")
     
+    @bot.tree.command(name="hardresetplanters", description="Collect known planters and reset planter timers")
+    async def hard_reset_planters(interaction: discord.Interaction):
+        if run.value != 2:
+            await interaction.response.send_message("❌ Macro must be running to use this command.")
+            return
+
+        if planter_reset_request is None:
+            await interaction.response.send_message("❌ Hard planter reset is unavailable in this build.")
+            return
+
+        if planter_reset_request.value == 1:
+            await interaction.response.send_message("⏳ Hard planter reset is already queued.")
+            return
+
+        planter_reset_request.value = 1
+        await interaction.response.send_message("✅ Hard planter reset queued. Macro will sweep planter locations and reset planter timers.")
+
     @bot.tree.command(name = "logs", description = "Show recent macro actions (optionally specify count)")
     @app_commands.describe(count="Number of recent log entries to show (1-50)")
     async def show_logs(interaction: discord.Interaction, count: int = 10):

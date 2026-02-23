@@ -435,7 +435,7 @@ def canClaimTimedBearQuest(name):
     
 # (set_enabled moved into RichPresenceManager class)
 #controller for the macro
-def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
+def macro(status, logQueue, updateGUI, run, skipTask, presence=None, planter_reset_request=None):
     macro = macroModule.macro(status, logQueue, updateGUI, run, skipTask, presence)
     #invert the regularMobsInFields dict
     #instead of storing mobs in field, store the fields associated with each mob
@@ -637,6 +637,92 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             settings_cache = settingsManager.loadAllSettings()
             last_settings_load = current_time
         return settings_cache
+
+    def clear_planter_tracking_files():
+        settingsManager.clearFile("./data/user/manualplanters.txt")
+        auto_default = {
+            "planters": [
+                {"planter": "", "nectar": "", "field": "", "harvest_time": 0, "nectar_est_percent": 0},
+                {"planter": "", "nectar": "", "field": "", "harvest_time": 0, "nectar_est_percent": 0},
+                {"planter": "", "nectar": "", "field": "", "harvest_time": 0, "nectar_est_percent": 0}
+            ],
+            "nectar_last_field": {
+                "comforting": "",
+                "refreshing": "",
+                "satisfying": "",
+                "motivating": "",
+                "invigorating": ""
+            },
+            "gather": False
+        }
+        with open("./data/user/auto_planters.json", "w") as f:
+            json.dump(auto_default, f, indent=3)
+
+    def run_hard_planter_reset():
+        candidates = []
+        seen = set()
+
+        def normalize_planter(planter_name):
+            return str(planter_name).strip().lower().replace("_", " ").replace("-", "")
+
+        def normalize_field(field_name):
+            return str(field_name).strip().lower().replace("_", " ")
+
+        def add_candidate(planter_name, field_name):
+            if not planter_name or not field_name:
+                return
+            planter = normalize_planter(planter_name)
+            field = normalize_field(field_name)
+            if planter in ("", "none") or field in ("", "none"):
+                return
+            key = (planter, field)
+            if key in seen:
+                return
+            seen.add(key)
+            candidates.append(key)
+
+        try:
+            with open("./data/user/manualplanters.txt", "r") as f:
+                manual_raw = f.read().strip()
+            if manual_raw:
+                manual_data = ast.literal_eval(manual_raw)
+                for planter_name, field_name in zip(manual_data.get("planters", []), manual_data.get("fields", [])):
+                    add_candidate(planter_name, field_name)
+        except Exception:
+            pass
+
+        try:
+            with open("./data/user/auto_planters.json", "r") as f:
+                auto_data = json.load(f)
+            for planter_slot in auto_data.get("planters", []):
+                add_candidate(planter_slot.get("planter", ""), planter_slot.get("field", ""))
+        except Exception:
+            pass
+
+        for cycle in range(1, 4):
+            for slot in range(1, 4):
+                add_candidate(
+                    macro.setdat.get(f"cycle{cycle}_{slot}_planter", ""),
+                    macro.setdat.get(f"cycle{cycle}_{slot}_field", "")
+                )
+
+        macro.logger.webhook("Hard Reset Planters", f"Starting hard reset sweep ({len(candidates)} locations)", "yellow")
+        collected_count = 0
+        failed_count = 0
+        for planter_name, field_name in candidates:
+            collected = runTask(macro.collectPlanter, args=(planter_name, field_name), allowAFB=False)
+            if collected:
+                collected_count += 1
+            else:
+                failed_count += 1
+
+        clear_planter_tracking_files()
+        updateGUI.value = 1
+        macro.logger.webhook(
+            "Hard Reset Planters",
+            f"Finished. Attempts: {len(candidates)} | Collected: {collected_count} | Failed: {failed_count}. Planter timers reset.",
+            "bright green"
+        )
     
     while True:
         # Check for pause request (state 5) - release inputs and transition to paused
@@ -654,6 +740,15 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         macro.setdat = get_cached_settings()
         # Check if profile has changed and reload settings if needed
         macro.checkAndReloadSettings()
+
+        if planter_reset_request is not None and planter_reset_request.value == 1:
+            try:
+                run_hard_planter_reset()
+            except Exception as e:
+                macro.logger.webhook("Hard Reset Planters", f"Failed: {e}", "red", ping_category="ping_critical_errors")
+            finally:
+                planter_reset_request.value = 0
+            continue
 
         # Migration from old boolean flags to macro_mode is now handled in settings loader
 
@@ -2288,6 +2383,7 @@ if __name__ == "__main__":
     gui.setRecentLogs(recentLogs)
     updateGUI = multiprocessing.Value('i', 0)
     skipTask = multiprocessing.Value('i', 0)  # 0 = don't skip, 1 = skip current task
+    planterResetRequest = multiprocessing.Value('i', 0)  # 0 = idle, 1 = run hard planter reset
     status = manager.Value(ctypes.c_wchar_p, "none")
     presence = manager.Value(ctypes.c_wchar_p, "")
     logQueue = manager.Queue()
@@ -2465,7 +2561,7 @@ if __name__ == "__main__":
                 print("Detected change in discord bot token, killing previous bot process")
                 discordBotProc.terminate()
                 discordBotProc.join()
-            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI), daemon=True)
+            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI, planterResetRequest), daemon=True)
             prevDiscordBotToken = currentDiscordBotToken
             discordBotProc.start()
 
@@ -2572,7 +2668,8 @@ if __name__ == "__main__":
                                     but there are no more items left to craft.\n\
 				                    Check the 'repeat' setting on your blender items and reset blender data.")
             #macro proc
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
+            planterResetRequest.value = 0
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, planterResetRequest), daemon=True)
             macroProc.start()
 
             macro_version = settingsManager.getMacroVersion()
@@ -2601,6 +2698,7 @@ if __name__ == "__main__":
                 
                 # Stop all inputs and processes
                 stopApp()
+                planterResetRequest.value = 0
                 
                 # Generate and send final report AFTER stopping inputs
                 try:
@@ -2658,7 +2756,7 @@ if __name__ == "__main__":
             appManager.closeApp("Roblox")
             keyboardModule.releaseMovement()
             mouse.mouseUp()
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, planterResetRequest), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state
@@ -2732,7 +2830,7 @@ if __name__ == "__main__":
             keyboardModule.releaseMovement()
             mouse.mouseUp()
             # restart macro process
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, planterResetRequest), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state
