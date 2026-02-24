@@ -5,19 +5,22 @@ self.keyboard.keyUp("a")
 self.keyboard.keyDown("w")
 sleep(4)
 self.keyboard.keyUp("w")
-self.keyboard.keyDown("s")
-sleep(0.95)
-self.keyboard.keyUp("s")
-self.keyboard.keyDown("d")
-sleep(1.8)
+
+sleep(0.5)
+self.keyboard.walk("d", 1)
+self.keyboard.walk("s", 0.05)
+self.keyboard.walk("d", 4)
+self.keyboard.walk("w", 0.05)
+
+self.keyboard.walk("a", 0.1)
+self.keyboard.walk("s", 0.75)
+
 self.keyboard.press("space")
-self.keyboard.keyDown("s")
-sleep(1)
-self.keyboard.keyUp("s")
-sleep(6)
-self.keyboard.keyUp("d")
+self.keyboard.walk("s", 0.175)
+self.keyboard.walk("d", 0.3)
+
 #back right corner
-self.keyboard.keyDown("s")
-sleep(5)
-self.keyboard.keyUp("s")
-#credit to rubicorb.v2 for the path
+self.keyboard.walk("s", 5.5)
+self.keyboard.walk("d", 6)
+self.keyboard.walk("s", 0.7)
+#credit to rubicorb.v2 & laganyt for the path
