@@ -2542,7 +2542,43 @@ class macro:
         for i in range(3):
             self.logger.webhook("",f"Travelling: {displayName}","dark brown")
             self.cannon()
-            self.runPath(f"collect/{objective}")
+            # Special-case: run a bespoke sequence for Honey Storm instead of the
+            # default path/walk system.
+            if objective == "honeystorm":
+                self.runPath("collect/stockings")
+                self.keyboard.walk("a",1.25, False)
+                self.keyboard.walk("s",1.5)
+                self.keyboard.walk("d",0.45)
+                while not self.isBesideE(objectiveData[0]):
+                    self.keyboard.walk("s", 0.4)
+                reached = self.isBesideE(objectiveData[0])
+                if not reached:
+                    self.logger.webhook("", "Failed to reach Honey Storm summon point", "dark brown", "screen")
+                    return
+                if "(" in reached and ":" in reached:
+                    cooldownSeconds = objectiveData[2]
+                    cd = self.cdTextToSecs(reached, True, cooldownSeconds)
+                    if cd:
+                        cooldownFormat = timedelta(seconds=cd)
+                        self.logger.webhook("", f"Honey Storm is on cooldown ({cooldownFormat} remaining)", "dark brown", "screen")
+                        return
+                # Execute honey storm actions
+                self.keyboard.press("e")
+                time.sleep(0.5)
+                self.keyboard.walk("s", 3)
+                self.keyboard.walk("d", 2)
+                for i in range(4):
+                    self.keyboard.walk("w", 2.25)
+                    self.keyboard.walk("d", 0.25)
+                    self.keyboard.walk("s", 2.25)
+                    self.keyboard.walk("d", 0.25)
+                self.saveTiming("honeystorm")
+                self.logger.webhook("", "Honey storm collected", "bright green", "screen")
+                self.reset(convert=True)
+                return
+            # Some collects (memory_match variants, sticker_stack) don't have
+            # a path file — allow missing files and continue to per-objective handling.
+            self.runPath(f"collect/{objective}", fileMustExist=False)
             if objectiveData[1] is None:
                 reached = self.isBesideE(objectiveData[0])
             else:
@@ -2611,33 +2647,6 @@ class macro:
                     self.logger.webhook("", "Sticker Stack on cooldown", "dark brown", "screen")
                     return
                 self.claimStickerStack()
-            elif objective == "honeystorm":
-                self.runPath("collect/honeystorm")
-                reached = self.isBesideE(objectiveData[0])
-                if not reached:
-                    self.logger.webhook("", "Failed to reach Honey Storm summon point", "dark brown", "screen")
-                    return
-                if "(" in reached and ":" in reached:
-                    cd = self.cdTextToSecs(reached, True, cooldownSeconds)
-                    if cd:
-                        cooldownFormat = timedelta(seconds=cd)
-                        self.logger.webhook("", f"Honey Storm is on cooldown ({cooldownFormat} remaining)", "dark brown", "screen")
-                        return
-                # Execute honey storm actions
-                self.keyboard.press("e")
-                time.sleep(0.5)
-                self.keyboard.walk("s", 3)
-                self.keyboard.walk("d", 2)
-                for i in range(4):
-                    self.keyboard.walk("w", 2.25)
-                    self.keyboard.walk("d", 0.25)
-                    self.keyboard.walk("s", 2.25)
-                    self.keyboard.walk("d", 0.25)
-                self.saveTiming("honeystorm")
-                self.logger.webhook("", "Honey storm collected", "bright green", "screen")
-                self.reset(convert=True)
-                return
-                #credit to laganyt for the path
             else:
                 time.sleep(0.1)
                 self.logger.webhook("", f"Collected: {displayName}", "bright green", "screen")
