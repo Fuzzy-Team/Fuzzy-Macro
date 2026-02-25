@@ -27,11 +27,13 @@ import settingsManager
 # Hourly report dependencies
 try:
     from modules.submacros.hourlyReport import HourlyReport, BuffDetector
+    from modules.submacros.finalReport import FinalReport
     from modules.screen.robloxWindow import RobloxWindowBounds
 except Exception:
     # Defensive: if these imports fail, the hourly report command will handle it at runtime
     HourlyReport = None
     BuffDetector = None
+    FinalReport = None
     RobloxWindowBounds = None
 
 # Global settings cache to avoid frequent file reads
@@ -1919,7 +1921,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         embed.add_field(name="📁 **Profile Management**", value="`/swapprofile <name>` - Switch to a different profile (macro must be stopped)", inline=False)
 
-        embed.add_field(name="📊 **Status & Monitoring**", value="`/status` - Get macro status and current task\n`/tasklist` - Show enabled task order, current task, and next task\n`/logs` - Show recent macro actions\n`/battery` - Check battery status\n`/streamurl` - Get stream URL", inline=False)
+        embed.add_field(name="📊 **Status & Monitoring**", value="`/status` - Get macro status and current task\n`/tasklist` - Show enabled task order, current task, and next task\n`/logs` - Show recent macro actions\n`/battery` - Check battery status\n`/streamurl` - Get stream URL\n`/hourlyreport` - Generate and send the hourly report\n`/session` - Generate and send the final session report", inline=False)
         
         embed.add_field(name="⚙️ **Advanced**", value="`/amulet <keep/replace>` - Choose amulet action\n`/close <both/roblox/macro>` - Close both, Roblox only, or macro only", inline=False)
 
@@ -1972,6 +1974,25 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         except Exception as e:
             await interaction.followup.send(f"❌ Error generating hourly report: {str(e)}")
+
+    @bot.tree.command(name = "session", description = "Generate and send the final session report")
+    async def sessionReport(interaction: discord.Interaction):
+        await interaction.response.defer()
+        try:
+            if FinalReport is None:
+                raise ImportError("Final report modules are not available")
+
+            setdat = get_cached_settings()
+            finalReportObj = FinalReport()
+            sessionStats = finalReportObj.generateFinalReport(setdat)
+
+            if sessionStats and os.path.exists("finalReport.png"):
+                await interaction.followup.send(file=discord.File("finalReport.png"))
+            else:
+                await interaction.followup.send("❌ Failed to generate final session report - no data available.")
+
+        except Exception as e:
+            await interaction.followup.send(f"❌ Error generating final session report: {str(e)}")
 
         
     #start bot
