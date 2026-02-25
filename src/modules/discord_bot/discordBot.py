@@ -609,16 +609,34 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         if run.value == 2: 
             await interaction.response.send_message("Macro is already running")
             return 
-        run.value = 1
-        await interaction.response.send_message("Starting Macro")
+        try:
+            # Press F1 to start the macro (simulating keyboard input)
+            from pynput.keyboard import Controller, Key
+            controller = Controller()
+            controller.press(Key.f1)
+            controller.release(Key.f1)
+            await interaction.response.send_message("Starting Macro (pressed F1)")
+        except Exception as e:
+            # Fallback to setting run.value if key press fails
+            run.value = 1
+            await interaction.response.send_message(f"Starting Macro (direct method). Error: {str(e)}")
 
     @bot.tree.command(name = "stop", description = "Stop the macro")
     async def stop(interaction: discord.Interaction):
         if run.value == 3:
             await interaction.response.send_message("Macro is already stopped")
             return
-        run.value = 0
-        await interaction.response.send_message("Stopping Macro")
+        try:
+            # Press F3 to stop the macro (simulating keyboard input)
+            from pynput.keyboard import Controller, Key
+            controller = Controller()
+            controller.press(Key.f3)
+            controller.release(Key.f3)
+            await interaction.response.send_message("Stopping Macro (pressed F3)")
+        except Exception as e:
+            # Fallback to setting run.value if key press fails
+            run.value = 0
+            await interaction.response.send_message(f"Stopping Macro (direct method). Error: {str(e)}")
 
     @bot.tree.command(name = "rejoin", description = "Make the macro rejoin the game.")
     async def rejoin(interaction: discord.Interaction):
@@ -1043,6 +1061,56 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         except Exception as e:
             await interaction.response.send_message(f"❌ Error checking goo status: {str(e)}")
+
+    async def profile_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice]:
+        """Auto-complete function for profile names"""
+        try:
+            profiles = settingsManager.listProfiles()
+            choices = []
+            for profile in profiles:
+                if current.lower() in profile.lower():
+                    choices.append(app_commands.Choice(name=profile.title(), value=profile))
+            return choices[:25]  # Discord limit is 25 choices
+        except Exception:
+            return []
+
+    @bot.tree.command(name="swapprofile", description="Swap to a different profile (macro must be stopped)")
+    @app_commands.describe(profile="Profile name to switch to")
+    @app_commands.autocomplete(profile=profile_autocomplete)
+    async def swap_profile(interaction: discord.Interaction, profile: str):
+        """Swap to a different profile. Only works when macro is stopped."""
+        try:
+            # Check if macro is stopped
+            if run.value != 3:
+                status_map = {
+                    0: "Stopping",
+                    1: "Starting",
+                    2: "Running",
+                    4: "Disconnected/Rejoining",
+                    5: "Pausing",
+                    6: "Paused"
+                }
+                current_status = status_map.get(run.value, "Unknown")
+                await interaction.response.send_message(
+                    f"❌ Cannot swap profiles while macro is {current_status.lower()}. "
+                    f"Please stop the macro first using `/stop` or pressing F3."
+                )
+                return
+
+            # Attempt profile switch
+            success, message = settingsManager.switchProfile(profile)
+            if success:
+                # Clear settings cache to reload new profile settings
+                clear_settings_cache()
+                # Update the GUI to reflect the new profile's settings
+                if updateGUI is not None:
+                    updateGUI.value = 1
+                await interaction.response.send_message(f"✅ {message}")
+            else:
+                await interaction.response.send_message(f"❌ {message}")
+
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error swapping profile: {str(e)}")
 
     @bot.tree.command(name = "streamurl", description = "Get the current stream URL")
     async def stream_url(interaction: discord.Interaction):
@@ -1675,7 +1743,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         embed.add_field(name="🐛 **Mob Runs**", value="`/mobs` - View mob configuration\n`/mob <mob> <true/false>` - Enable or disable mob run", inline=False)
 
-        # embed.add_field(name="📁 **Profile Management**", value="`/profiles` - List available profiles\n`/currentprofile` - Show current profile\n`/switchprofile <name>` - Switch profile", inline=False)
+        embed.add_field(name="📁 **Profile Management**", value="`/swapprofile <name>` - Switch to a different profile (macro must be stopped)", inline=False)
 
         embed.add_field(name="📊 **Status & Monitoring**", value="`/status` - Get macro status and current task\n`/logs` - Show recent macro actions\n`/battery` - Check battery status\n`/streamurl` - Get stream URL", inline=False)
         

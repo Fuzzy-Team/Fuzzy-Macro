@@ -76,6 +76,100 @@ async function loadSettings() {
 async function loadAllSettings() {
   return await eel.loadAllSettings()();
 }
+
+// Refresh the currently visible tab content after backend-triggered profile swaps
+window.refreshCurrentTabContent = async function () {
+  try {
+    const activeSidebarTab = document.querySelector(".sidebar-item.active");
+    const activeMainTab = activeSidebarTab
+      ? activeSidebarTab.id.split("-")[0]
+      : "home";
+
+    if (activeMainTab === "home" && typeof loadTasks === "function") {
+      await loadTasks();
+      return true;
+    }
+
+    if (activeMainTab === "gather" && typeof switchGatherTab === "function") {
+      const activeGatherTab = document.querySelector(".gather-tab-item.active");
+      if (activeGatherTab) {
+        await switchGatherTab(activeGatherTab);
+      } else {
+        const defaultGatherTab = document.getElementById("field-1");
+        if (defaultGatherTab) await switchGatherTab(defaultGatherTab);
+      }
+      return true;
+    }
+
+    if (activeMainTab === "collect" && typeof loadCollect === "function") {
+      await loadCollect();
+      return true;
+    }
+
+    if (activeMainTab === "boost" && typeof switchBoostTab === "function") {
+      const activeBoostTab = document.querySelector(".boost-tab-item.active");
+      if (activeBoostTab) {
+        switchBoostTab(activeBoostTab);
+      } else {
+        const defaultBoostTab = document.getElementById("boost-hotbar");
+        if (defaultBoostTab) switchBoostTab(defaultBoostTab);
+      }
+      return true;
+    }
+
+    if (activeMainTab === "kill" && typeof switchKillTab === "function") {
+      const activeKillTab = document.querySelector(".kill-tab-item.active");
+      if (activeKillTab) {
+        switchKillTab(activeKillTab);
+      } else {
+        const defaultKillTab = document.getElementById("kill-settings");
+        if (defaultKillTab) switchKillTab(defaultKillTab);
+      }
+      return true;
+    }
+
+    if (activeMainTab === "quests" && typeof switchQuestsTab === "function") {
+      const activeQuestsTab = document.querySelector(".quests-tab-item.active");
+      if (activeQuestsTab) {
+        switchQuestsTab(activeQuestsTab);
+      } else {
+        const defaultQuestsTab = document.getElementById("quests-settings");
+        if (defaultQuestsTab) switchQuestsTab(defaultQuestsTab);
+      }
+      return true;
+    }
+
+    if (activeMainTab === "planters" && typeof loadPlanters === "function") {
+      await loadPlanters();
+      return true;
+    }
+
+    if (activeMainTab === "config") {
+      if (typeof switchConfigTab === "function") {
+        const activeConfigTab = document.querySelector(".config-tab-item.active");
+        if (activeConfigTab) {
+          await switchConfigTab(activeConfigTab);
+          return true;
+        }
+      }
+      if (typeof loadConfig === "function") {
+        await loadConfig();
+        return true;
+      }
+    }
+
+    if (typeof loadTasks === "function") {
+      await loadTasks();
+      return true;
+    }
+
+    return false;
+  } catch (error) {
+    console.error("Error refreshing active tab content:", error);
+    return false;
+  }
+};
+if (window.eel) eel.expose(window.refreshCurrentTabContent, "refreshCurrentTabContent");
 //save the setting
 //element
 //type: setting type, eg: profile, general
