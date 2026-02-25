@@ -425,6 +425,119 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         embed = _build_status_embed(category_key, settings, status_message=status_message)
         await interaction.response.edit_message(embed=embed, view=view)
 
+    def _format_task_name(task_id: str) -> str:
+        if task_id.startswith("quest_"):
+            return f"Quest: {task_id.replace('quest_', '').replace('_', ' ').title()}"
+        if task_id.startswith("collect_"):
+            return f"Collect: {task_id.replace('collect_', '').replace('_', ' ').title()}"
+        if task_id.startswith("kill_"):
+            return f"Kill: {task_id.replace('kill_', '').replace('_', ' ').title()}"
+        if task_id.startswith("gather_"):
+            return f"Gather: {task_id.replace('gather_', '').replace('_', ' ').title()}"
+        if task_id.startswith("feed_bee_"):
+            return f"Feed Bee: {task_id.replace('feed_bee_', '').replace('_', ' ').title()}"
+
+        special_names = {
+            "blender": "Blender",
+            "planters": "Planters",
+            "ant_challenge": "Ant Challenge",
+            "stinger_hunt": "Stinger Hunt",
+            "mondo_buff": "Mondo Buff",
+            "auto_field_boost": "Auto Field Boost",
+        }
+        return special_names.get(task_id, task_id.replace("_", " ").title())
+
+    def _is_task_enabled(task_id: str, settings: Dict) -> bool:
+        macro_mode = settings.get("macro_mode", "normal")
+
+        if macro_mode == "field" and not task_id.startswith("gather_"):
+            return False
+        if macro_mode == "quest" and not task_id.startswith("quest_"):
+            return False
+
+        if task_id.startswith("quest_"):
+            quest_key = f"{task_id.replace('quest_', '')}_quest"
+            return bool(settings.get(quest_key, False))
+
+        if task_id.startswith("collect_"):
+            collect_key = task_id.replace("collect_", "")
+            return bool(settings.get(collect_key, False))
+
+        if task_id.startswith("kill_"):
+            mob_key = task_id.replace("kill_", "")
+            return bool(settings.get(mob_key, False))
+
+        if task_id.startswith("gather_"):
+            field_name = task_id.replace("gather_", "").replace("_", " ")
+            fields = settings.get("fields", [])
+            fields_enabled = settings.get("fields_enabled", [])
+            for i, configured_field in enumerate(fields):
+                if configured_field == field_name:
+                    return i < len(fields_enabled) and bool(fields_enabled[i])
+            return False
+
+        if task_id == "blender":
+            return bool(settings.get("blender_enable", False))
+        if task_id == "planters":
+            return bool(settings.get("planters_mode", 0))
+        if task_id == "ant_challenge":
+            return bool(settings.get("ant_challenge", False))
+        if task_id == "stinger_hunt":
+            return bool(settings.get("stinger_hunt", False))
+        if task_id == "mondo_buff":
+            return bool(settings.get("mondo_buff", False))
+        if task_id == "auto_field_boost":
+            return bool(settings.get("Auto_Field_Boost", settings.get("auto_field_boost", False)))
+
+        return bool(settings.get(task_id, False))
+
+    def _get_enabled_task_order(settings: Dict) -> List[str]:
+        priority_order = settings.get("task_priority_order", []) or []
+        enabled_tasks = [task_id for task_id in priority_order if _is_task_enabled(task_id, settings)]
+
+        macro_mode = settings.get("macro_mode", "normal")
+
+        if macro_mode == "field" and not enabled_tasks:
+            fields = settings.get("fields", [])
+            fields_enabled = settings.get("fields_enabled", [])
+            for i, field_name in enumerate(fields):
+                if i < len(fields_enabled) and fields_enabled[i]:
+                    enabled_tasks.append(f"gather_{field_name.replace(' ', '_')}")
+
+        if macro_mode == "quest" and not enabled_tasks:
+            for quest_key, _ in QUEST_SETTINGS:
+                if quest_key.endswith("_quest") and settings.get(quest_key, False):
+                    quest_name = quest_key.replace("_quest", "")
+                    enabled_tasks.append(f"quest_{quest_name}")
+
+        return enabled_tasks
+
+    def _normalize_current_task_to_priority_task(current_task: str, settings: Dict, priority_order: List[str]) -> Optional[str]:
+        if not current_task:
+            return None
+
+        if current_task in priority_order:
+            return current_task
+
+        if current_task.startswith("planter_") and "planters" in priority_order:
+            return "planters"
+
+        if current_task.startswith("travelling_"):
+            travelling_target = current_task.replace("travelling_", "")
+            gather_candidate = f"gather_{travelling_target}"
+            if gather_candidate in priority_order:
+                return gather_candidate
+
+        kill_candidate = f"kill_{current_task}"
+        if kill_candidate in priority_order:
+            return kill_candidate
+
+        collect_candidate = f"collect_{current_task}"
+        if collect_candidate in priority_order:
+            return collect_candidate
+
+        return None
+
     class SettingsBaseView(discord.ui.View):
         def __init__(self, requester_id: Optional[int], timeout: int = 300):
             super().__init__(timeout=timeout)
@@ -760,6 +873,67 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         embed.add_field(name="Current Task", value=current_task.replace('_', ' ').title(), inline=True)
         
         await interaction.response.send_message(embed=embed)
+
+    @bot.tree.command(name="tasklist", description="Show enabled task order with current and next task")
+    async def tasklist(interaction: discord.Interaction):
+        try:
+            settings = get_cached_settings()
+            priority_order = settings.get("task_priority_order", []) or []
+            enabled_tasks = _get_enabled_task_order(settings)
+
+            current_task_raw = status.value if hasattr(status, 'value') and status.value else ""
+            current_task_id = _normalize_current_task_to_priority_task(current_task_raw, settings, priority_order)
+
+            next_task_id = None
+            if enabled_tasks:
+                if current_task_id in enabled_tasks:
+                    current_index = enabled_tasks.index(current_task_id)
+                    next_task_id = enabled_tasks[(current_index + 1) % len(enabled_tasks)]
+                else:
+                    next_task_id = enabled_tasks[0]
+
+            mode_label = {
+                "normal": "Normal",
+                "quest": "Quests",
+                "field": "Field",
+            }.get(settings.get("macro_mode", "normal"), settings.get("macro_mode", "normal"))
+
+            if not enabled_tasks:
+                embed = discord.Embed(
+                    title="📋 Macro Task List",
+                    description="No enabled tasks found for the current configuration.",
+                    color=0xffa500,
+                )
+                embed.add_field(name="Macro Mode", value=mode_label, inline=True)
+                embed.add_field(name="Current Task", value=current_task_raw.replace('_', ' ').title() or "None", inline=True)
+                await interaction.response.send_message(embed=embed)
+                return
+
+            task_lines = []
+            for i, task_id in enumerate(enabled_tasks, start=1):
+                marker = "•"
+                if task_id == current_task_id and task_id == next_task_id:
+                    marker = "🟢⏭️"
+                elif task_id == current_task_id:
+                    marker = "🟢"
+                elif task_id == next_task_id:
+                    marker = "⏭️"
+                task_lines.append(f"{marker} {i}. {_format_task_name(task_id)}")
+
+            embed = discord.Embed(
+                title="📋 Macro Task List",
+                description="\n".join(task_lines),
+                color=0x00ff00,
+            )
+            embed.add_field(name="Macro Mode", value=mode_label, inline=True)
+            embed.add_field(name="Enabled Tasks", value=str(len(enabled_tasks)), inline=True)
+            embed.add_field(name="Current", value=_format_task_name(current_task_id) if current_task_id else (current_task_raw.replace('_', ' ').title() or "None"), inline=False)
+            embed.add_field(name="Next", value=_format_task_name(next_task_id) if next_task_id else "None", inline=False)
+            embed.set_footer(text="Legend: 🟢 current task, ⏭️ next task")
+
+            await interaction.response.send_message(embed=embed)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error retrieving task list: {str(e)}")
 
     @bot.tree.command(name="nectar", description="Show current nectar percentages (current + estimated)")
     async def show_nectar(interaction: discord.Interaction):
@@ -1745,7 +1919,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         embed.add_field(name="📁 **Profile Management**", value="`/swapprofile <name>` - Switch to a different profile (macro must be stopped)", inline=False)
 
-        embed.add_field(name="📊 **Status & Monitoring**", value="`/status` - Get macro status and current task\n`/logs` - Show recent macro actions\n`/battery` - Check battery status\n`/streamurl` - Get stream URL", inline=False)
+        embed.add_field(name="📊 **Status & Monitoring**", value="`/status` - Get macro status and current task\n`/tasklist` - Show enabled task order, current task, and next task\n`/logs` - Show recent macro actions\n`/battery` - Check battery status\n`/streamurl` - Get stream URL", inline=False)
         
         embed.add_field(name="⚙️ **Advanced**", value="`/amulet <keep/replace>` - Choose amulet action\n`/close <both/roblox/macro>` - Close both, Roblox only, or macro only", inline=False)
 
