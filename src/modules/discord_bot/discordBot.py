@@ -786,6 +786,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     async def reset(interaction: discord.Interaction):
         await interaction.response.defer()
         try:
+            keyboard.releaseMovement()
             # Request reset in the macro process using a special run value
             import modules.macro as macroModule
             # Use a dummy queue if recentLogs is not a queue
