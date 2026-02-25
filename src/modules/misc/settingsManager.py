@@ -520,6 +520,14 @@ def loadSettings():
 
 #return a dict containing all settings except field (general, profile, planters)
 def loadAllSettings():
+    # Ensure current profile is reloaded from persistent storage so other processes
+    # (like the Discord bot) can change the active profile and have the main
+    # GUI process pick it up immediately.
+    try:
+        loadCurrentProfile()
+    except Exception:
+        pass
+
     # Auto-migrate profiles to have their own generalsettings.txt files
     migrateProfilesToGeneralSettings()
 

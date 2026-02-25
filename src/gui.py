@@ -438,6 +438,10 @@ def updateGUI():
 
     eel.loadInputs(settings)
     eel.loadTasks()
+    try:
+        eel.refreshCurrentTabContent()()
+    except Exception:
+        pass
 
 def toggleStartStop():
     eel.toggleStartStop()
