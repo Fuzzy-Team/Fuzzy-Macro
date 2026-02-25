@@ -615,11 +615,11 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             controller = Controller()
             controller.press(Key.f1)
             controller.release(Key.f1)
-            await interaction.response.send_message("Starting Macro (pressed F1)")
+            await interaction.response.send_message("Starting Macro")
         except Exception as e:
             # Fallback to setting run.value if key press fails
             run.value = 1
-            await interaction.response.send_message(f"Starting Macro (direct method). Error: {str(e)}")
+            await interaction.response.send_message(f"Starting Macro. Error: {str(e)}")
 
     @bot.tree.command(name = "stop", description = "Stop the macro")
     async def stop(interaction: discord.Interaction):
@@ -632,11 +632,11 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             controller = Controller()
             controller.press(Key.f3)
             controller.release(Key.f3)
-            await interaction.response.send_message("Stopping Macro (pressed F3)")
+            await interaction.response.send_message("Stopping Macro")
         except Exception as e:
             # Fallback to setting run.value if key press fails
             run.value = 0
-            await interaction.response.send_message(f"Stopping Macro (direct method). Error: {str(e)}")
+            await interaction.response.send_message(f"Stopping Macro. Error: {str(e)}")
 
     @bot.tree.command(name = "rejoin", description = "Make the macro rejoin the game.")
     async def rejoin(interaction: discord.Interaction):
