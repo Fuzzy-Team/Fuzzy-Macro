@@ -753,6 +753,30 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             run.value = 0
             await interaction.response.send_message(f"Stopping Macro. Error: {str(e)}")
 
+    @bot.tree.command(name = "pause", description = "Pause the macro")
+    async def pause(interaction: discord.Interaction):
+        if run.value == 6:
+            await interaction.response.send_message("Macro is already paused")
+            return
+        if run.value in (0, 3):
+            await interaction.response.send_message("Macro is not running")
+            return
+
+        run.value = 6
+        await interaction.response.send_message("Macro Paused")
+
+    @bot.tree.command(name = "resume", description = "Resume the macro")
+    async def resume(interaction: discord.Interaction):
+        if run.value == 2:
+            await interaction.response.send_message("Macro is already running")
+            return
+        if run.value != 6:
+            await interaction.response.send_message("Macro is not paused")
+            return
+
+        run.value = 2
+        await interaction.response.send_message("Macro Resumed")
+
     @bot.tree.command(name = "rejoin", description = "Make the macro rejoin the game.")
     async def rejoin(interaction: discord.Interaction):
         run.value = 4
@@ -855,7 +879,6 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             2: "✅ Running",
             3: "⏹️ Stopped",
             4: "🔄 Disconnected/Rejoining",
-            5: "⏸️ Pausing...",
             6: "⏸️ Paused"
         }
 
@@ -865,7 +888,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         # Color: green for running, orange for paused, red for stopped/other
         if run.value == 2:
             embed_color = 0x00ff00  # Green
-        elif run.value in [5, 6]:
+        elif run.value == 6:
             embed_color = 0xffa500  # Orange for paused
         else:
             embed_color = 0xff0000  # Red
@@ -1263,7 +1286,6 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                     1: "Starting",
                     2: "Running",
                     4: "Disconnected/Rejoining",
-                    5: "Pausing",
                     6: "Paused"
                 }
                 current_status = status_map.get(run.value, "Unknown")
@@ -1905,7 +1927,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         """Show available commands"""
         embed = discord.Embed(title="🤖 BSS Macro Discord Bot", description="Available Commands:", color=0x0099ff)
 
-        embed.add_field(name="🔧 **Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/stop` - Stop the macro\n`/status` - Get macro status and current task\n`/rejoin` - Make macro rejoin game\n`/screenshot` - Get screenshot\n`/settings` - Open settings panel\n`/hiveslot <1-6>` - Change hive slot number", inline=False)
+        embed.add_field(name="🔧 **Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/stop` - Stop the macro\n`/pause` - Pause the macro\n`/resume` - Resume the macro\n`/status` - Get macro status and current task\n`/rejoin` - Make macro rejoin game\n`/screenshot` - Get screenshot\n`/settings` - Open settings panel\n`/hiveslot <1-6>` - Change hive slot number", inline=False)
 
         embed.add_field(name="🌾 **Field Management**", value="`/fields` - View field configuration\n`/field <field> <true/false>` - Enable or disable a field\n`/swapfield <current> <new>` - Swap one field for another (new can be any field)", inline=False)
 

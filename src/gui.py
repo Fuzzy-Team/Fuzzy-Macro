@@ -29,7 +29,7 @@ def stop():
 @eel.expose
 def pause():
     if run.value != 2: return #only pause if running
-    run.value = 5  # 5 = pause request
+    run.value = 6  # 6 = paused
 
 @eel.expose
 def resume():
@@ -447,7 +447,7 @@ def toggleStartStop():
     eel.toggleStartStop()
 
 # Global variable to store run state
-# 0=stop request, 1=start request, 2=running, 3=stopped, 4=disconnected, 5=pause request, 6=paused
+# 0=stop request, 1=start request, 2=running, 3=stopped, 4=disconnected, 6=paused
 _run_state = 3
 
 def setRunState(state):

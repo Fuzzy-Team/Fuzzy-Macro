@@ -13,8 +13,8 @@ function ahref(link) {
 async function updateStartButtonText() {
   const settings = await loadAllSettings();
   const startKey = settings.start_keybind || "F1";
+  const pauseKey = settings.pause_keybind || "F2";
   const stopKey = settings.stop_keybind || "F3";
-  // const pauseKey = settings.pause_keybind || "F2";
 
   // Check current run state
   try {
@@ -32,8 +32,17 @@ async function updateStartButtonText() {
         stopBtn.classList.remove("d-none");
         stopBtn.textContent = `Stop [${stopKey}]`;
       }
+    } else if (runState === 6) {
+      // Paused: show Unpause button
+      if (startBtn) {
+        startBtn.classList.remove("d-none");
+        startBtn.classList.remove("active");
+        startBtn.disabled = false;
+        startBtn.textContent = `Unpause [${pauseKey}]`;
+      }
+      if (stopBtn) stopBtn.classList.add("d-none");
     } else {
-      // Stopped or Paused: show Start button only
+      // Stopped: show Start button only
       if (startBtn) {
         startBtn.classList.remove("d-none");
         startBtn.classList.remove("active");
@@ -60,8 +69,8 @@ eel.expose(toggleStartStop);
 async function toggleStartStop() {
   const settings = await loadAllSettings();
   const startKey = settings.start_keybind || "F1";
+  const pauseKey = settings.pause_keybind || "F2";
   const stopKey = settings.stop_keybind || "F3";
-  // const pauseKey = settings.pause_keybind || "F2";
 
   // Check current run state
   try {
@@ -79,8 +88,17 @@ async function toggleStartStop() {
         stopBtn.classList.remove("d-none");
         stopBtn.textContent = `Stop [${stopKey}]`;
       }
+    } else if (runState === 6) {
+      // Paused: show Unpause button
+      if (startBtn) {
+        startBtn.classList.remove("d-none");
+        startBtn.classList.remove("active");
+        startBtn.disabled = false;
+        startBtn.textContent = `Unpause [${pauseKey}]`;
+      }
+      if (stopBtn) stopBtn.classList.add("d-none");
     } else {
-      // Stopped or Paused: show Start button only
+      // Stopped: show Start button only
       if (startBtn) {
         startBtn.classList.remove("d-none");
         startBtn.classList.remove("active");
@@ -588,8 +606,8 @@ async function checkAndUpdateButtonState() {
 
     const settings = await loadAllSettings();
     const startKey = settings.start_keybind || "F1";
+    const pauseKey = settings.pause_keybind || "F2";
     const stopKey = settings.stop_keybind || "F3";
-    // const pauseKey = settings.pause_keybind || "F2";
 
     const startBtn = document.getElementById("start-btn");
     const stopBtn = document.getElementById("stop-btn");
@@ -602,8 +620,17 @@ async function checkAndUpdateButtonState() {
         stopBtn.classList.remove("d-none");
         stopBtn.textContent = `Stop [${stopKey}]`;
       }
+    } else if (runState === 6) {
+      // Paused: show Unpause button
+      if (startBtn) {
+        startBtn.classList.remove("d-none");
+        startBtn.classList.remove("active");
+        startBtn.disabled = false;
+        startBtn.textContent = `Unpause [${pauseKey}]`;
+      }
+      if (stopBtn) stopBtn.classList.add("d-none");
     } else {
-      // Stopped or Paused: show Start button only
+      // Stopped: show Start button only
       if (startBtn) {
         startBtn.classList.remove("d-none");
         startBtn.classList.remove("active");
@@ -674,17 +701,31 @@ $("#home-placeholder")
     document.getElementById("log-type").innerText = result;
   })
   .on("click", "#start-btn", async (event) => {
-    //start button - only used when macro is stopped
-    eel.start();
-    // Update button state optimistically (show stop button immediately)
     const settings = await loadAllSettings();
+    const pauseKey = settings.pause_keybind || "F2";
     const stopKey = settings.stop_keybind || "F3";
+    const runState = await eel.getRunState()();
     const startBtn = document.getElementById("start-btn");
     const stopBtn = document.getElementById("stop-btn");
-    if (startBtn) startBtn.classList.add("d-none");
-    if (stopBtn) {
-      stopBtn.classList.remove("d-none");
-      stopBtn.textContent = `Stop [${stopKey}]`;
+
+    if (runState === 6) {
+      // Paused -> resume
+      eel.resume();
+      // Update button state optimistically (show stop button immediately)
+      if (startBtn) startBtn.classList.add("d-none");
+      if (stopBtn) {
+        stopBtn.classList.remove("d-none");
+        stopBtn.textContent = `Stop [${stopKey}]`;
+      }
+    } else {
+      // Stopped -> start
+      eel.start();
+      // Update button state optimistically (show stop button immediately)
+      if (startBtn) startBtn.classList.add("d-none");
+      if (stopBtn) {
+        stopBtn.classList.remove("d-none");
+        stopBtn.textContent = `Stop [${stopKey}]`;
+      }
     }
   })
   .on("click", "#stop-btn", async (event) => {

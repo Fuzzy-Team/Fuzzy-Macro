@@ -435,6 +435,15 @@
           },
         },
         {
+          id: "pause_keybind",
+          title: "Pause/Resume Macro Keybind",
+          desc: "Click to record a new keybind for pausing and resuming the macro",
+          type: {
+            name: "keybind",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
           id: "stop_keybind",
           title: "Stop Macro Keybind",
           desc: "Click to record a new keybind for stopping the macro",
@@ -443,15 +452,6 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
-        // {
-        //   id: "pause_keybind",
-        //   title: "Pause/Resume Macro Keybind",
-        //   desc: "Click to record a new keybind for pausing and resuming the macro",
-        //   type: {
-        //     name: "keybind",
-        //     triggerFunction: saveGeneralTriggerFunction,
-        //   },
-        // },
       ]);
 
       // Standalone Export Debug container

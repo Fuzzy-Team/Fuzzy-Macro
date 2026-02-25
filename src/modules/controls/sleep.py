@@ -10,10 +10,10 @@ def set_run_state(run):
     _run_state = run
 
 def is_paused():
-    """Check if macro is currently paused (state 5 or 6)"""
+    """Check if macro is currently paused (state 6)"""
     if _run_state is None:
         return False
-    return _run_state.value in [5, 6]
+    return _run_state.value == 6
 
 def is_stopped():
     """Check if macro stop was requested (state 0)"""
@@ -29,17 +29,25 @@ def wait_while_paused():
 
 def sleep(duration, get_now=time.perf_counter):
     """Pause-aware sleep function"""
+    if duration <= 0:
+        return
+
     # Check for pause before sleeping
     if wait_while_paused():
         return  # Stop was requested
-    
+
     now = get_now()
     end = now + duration
     while now < end:
-        # Periodically check for pause during long sleeps
-        if duration > 0.1 and is_paused():
-            if wait_while_paused():
-                return  # Stop was requested
+        if is_stopped():
+            return
+        if is_paused() and wait_while_paused():
+            return
+
+        remaining = end - now
+        chunk = min(0.05, remaining)
+        if chunk > 0:
+            time.sleep(chunk)
         now = get_now()
 
 def high_precision_sleep(duration):
@@ -65,24 +73,23 @@ def high_precision_sleep(duration):
 
 def pauseable_sleep(duration):
     """A time.sleep replacement that respects pause state"""
+    if duration <= 0:
+        return
+
     # Check for pause before sleeping
     if wait_while_paused():
         return  # Stop was requested
-    
-    # For short sleeps, just sleep normally
-    if duration <= 0.2:
-        time.sleep(duration)
-        return
-    
-    # For longer sleeps, check for pause periodically
+
+    # Sleep in short chunks so pause interrupts quickly
     start = time.perf_counter()
     while time.perf_counter() - start < duration:
+        if is_stopped():
+            return
+        if is_paused() and wait_while_paused():
+            return
+
         # Sleep in small chunks
         remaining = duration - (time.perf_counter() - start)
-        chunk = min(0.1, remaining)
+        chunk = min(0.05, remaining)
         if chunk > 0:
             time.sleep(chunk)
-        # Check for pause
-        if is_paused():
-            if wait_while_paused():
-                return  # Stop was requested

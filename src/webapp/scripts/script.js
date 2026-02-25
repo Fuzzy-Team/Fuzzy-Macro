@@ -595,9 +595,11 @@ function isConfiguredKeybind(event) {
   // Get current keybinds from settings
   const startKeybind =
     document.getElementById("start_keybind")?.dataset.keybind;
+  const pauseKeybind =
+    document.getElementById("pause_keybind")?.dataset.keybind;
   const stopKeybind = document.getElementById("stop_keybind")?.dataset.keybind;
 
-  if (!startKeybind && !stopKeybind) return false;
+  if (!startKeybind && !pauseKeybind && !stopKeybind) return false;
 
   // Build current key combination
   let currentCombo = [];
@@ -626,7 +628,9 @@ function isConfiguredKeybind(event) {
 
   // Check if it matches either configured keybind
   return (
-    currentComboString === startKeybind || currentComboString === stopKeybind
+    currentComboString === startKeybind ||
+    currentComboString === pauseKeybind ||
+    currentComboString === stopKeybind
   );
 }
 
@@ -830,6 +834,7 @@ async function updateKeybindDisplay() {
     // Also update the button text directly as fallback
     const settings = await loadAllSettings();
     const startKey = settings.start_keybind || "F1";
+    const pauseKey = settings.pause_keybind || "F2";
     const stopKey = settings.stop_keybind || "F3";
 
     const startButton = document.getElementById("start-btn");
@@ -839,6 +844,7 @@ async function updateKeybindDisplay() {
 
     // Update keybind input field displays
     const startKeybindElement = document.getElementById("start_keybind");
+    const pauseKeybindElement = document.getElementById("pause_keybind");
     const stopKeybindElement = document.getElementById("stop_keybind");
 
     if (
@@ -847,6 +853,14 @@ async function updateKeybindDisplay() {
     ) {
       startKeybindElement.querySelector(".keybind-display").textContent =
         startKey.replace(/\+/g, " + ");
+    }
+
+    if (
+      pauseKeybindElement &&
+      pauseKeybindElement.querySelector(".keybind-display")
+    ) {
+      pauseKeybindElement.querySelector(".keybind-display").textContent =
+        pauseKey.replace(/\+/g, " + ");
     }
 
     if (

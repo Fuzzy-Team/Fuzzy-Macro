@@ -8,7 +8,7 @@ import pyautogui as pag
 # This will be initialized when the macro class is created
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP, benchmarkMSS, mssScreenshotPillowRGBA
 from modules.controls.keyboard import keyboard
-from modules.controls.sleep import sleep, set_run_state
+from modules.controls.sleep import sleep, set_run_state, pauseable_sleep
 import modules.controls.mouse as mouse
 import modules.logging.log as logModule
 from modules.submacros.fieldDriftCompensation import fieldDriftCompensation as fieldDriftCompensationClass
@@ -40,6 +40,20 @@ import pygetwindow as gw
 from modules.submacros.hasteCompensation import HasteCompensationRevamped
 from modules import bitmap_matcher
 import json
+
+
+class _PauseAwareTimeModule:
+    def __init__(self, time_module):
+        self._time = time_module
+
+    def sleep(self, duration):
+        return pauseable_sleep(duration)
+
+    def __getattr__(self, name):
+        return getattr(self._time, name)
+
+
+time = _PauseAwareTimeModule(time)
 
 pynputKeyboard = Controller()
 #data for collectable objectives
@@ -663,13 +677,6 @@ class macro:
         """Check if macro is paused and wait until resumed. Returns True if stop was requested."""
         if self.run is None:
             return False
-        # Check for pause request (state 5) - transition to paused (state 6)
-        if self.run.value == 5:
-            # Release all movement keys and mouse
-            self.keyboard.releaseMovement()
-            mouse.mouseUp()
-            # Transition to paused state - this signals the main loop that we've stopped
-            self.run.value = 6
         # Wait while paused (state 6)
         while self.run.value == 6:
             # Keep inputs released while paused
