@@ -1,12 +1,18 @@
 from modules.misc import messageBox
+import platform as _platform
+_IS_WINDOWS = _platform.system() == "Windows"
 #check if installing dependencies was ran
 try:
     import requests
 except ModuleNotFoundError:
     try:
-        script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "install_dependencies.command"))
+        _script_name = "install_dependencies.bat" if _IS_WINDOWS else "install_dependencies.command"
+        script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", _script_name))
         if os.path.exists(script):
-            subprocess.Popen(["/bin/bash", script])
+            if _IS_WINDOWS:
+                subprocess.Popen(["cmd", "/c", script], shell=False)
+            else:
+                subprocess.Popen(["/bin/bash", script])
         else:
             messageBox.msgBox(title="Dependencies not installed", text="Dependencies are not installed. Refer to Discord for help.")
     except Exception:
@@ -43,9 +49,13 @@ try:
 	from modules.misc.ColorProfile import DisplayColorProfile
 except ModuleNotFoundError:
     try:
-        script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "install_dependencies.command"))
+        _script_name = "install_dependencies.bat" if _IS_WINDOWS else "install_dependencies.command"
+        script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", _script_name))
         if os.path.exists(script):
-            subprocess.Popen(["/bin/bash", script])
+            if _IS_WINDOWS:
+                subprocess.Popen(["cmd", "/c", script], shell=False)
+            else:
+                subprocess.Popen(["/bin/bash", script])
         else:
             messageBox.msgBox(title="Dependencies not installed", text="The new update requires new dependencies. Refer to Discord for help.")
     except Exception:
