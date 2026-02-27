@@ -4,8 +4,11 @@ import re
 import requests
 import zipfile
 import shutil
+import platform
 from io import BytesIO
 from modules.misc.messageBox import msgBox
+
+_IS_WINDOWS = platform.system() == "Windows"
 
 
 PATTERN_OVERWRITE_EXCEPTIONS = {"fuzzy_ai_gather.py"}
@@ -59,6 +62,13 @@ def _report_update_progress(progress_callback, percent, message):
             progress_callback(percent, message)
         except Exception:
             pass
+
+
+def _get_macro_root():
+    cwd = os.getcwd()
+    if cwd.endswith(os.sep + "src") or cwd.endswith("/src"):
+        return os.path.dirname(cwd)
+    return cwd
 
 
 def _download_update_zip(zip_link, progress_callback, start_percent=35, end_percent=65):
@@ -195,12 +205,15 @@ def _mark_backup_pending(destination):
 def delete_backup_if_pending(destination=None):
     import sys
     from modules.misc.messageBox import msgBoxOkCancel
-    # Try both root and /src for marker and backup
+    # Try both root and /src (or \src) for marker and backup
     paths_to_check = []
     if destination is not None:
         paths_to_check.append(destination)
     cwd = os.getcwd()
-    root = cwd.replace("/src", "")
+    if cwd.endswith(os.sep + "src") or cwd.endswith("/src"):
+        root = os.path.dirname(cwd)
+    else:
+        root = cwd
     paths_to_check.extend([cwd, root])
     checked = set()
     for base in paths_to_check:
@@ -298,7 +311,7 @@ def update(t="main", update_channel="stable", progress_callback=None):
     ]
     protected_files = [".git"]
     pattern_overwrite_exceptions = PATTERN_OVERWRITE_EXCEPTIONS
-    destination = os.getcwd().replace("/src", "")
+    destination = _get_macro_root()
 
     try:
         _refresh_updater(destination, progress_callback)
@@ -507,7 +520,7 @@ def update(t="main", update_channel="stable", progress_callback=None):
     except Exception:
         pass
 
-    # ensure run_macro.command is executable if present
+    # ensure run scripts are executable/accessible if present
     run_macroPath = os.path.join(destination, "run_macro.command")
     if os.path.exists(run_macroPath):
         try:
@@ -525,23 +538,34 @@ def update(t="main", update_channel="stable", progress_callback=None):
     # Attempt to run install dependencies script (non-blocking). Fail silently.
     try:
         _report_update_progress(progress_callback, 96, "Finishing update")
-        install_script = os.path.join(destination, "install_dependencies.command")
+        if _IS_WINDOWS:
+            install_script = os.path.join(destination, "install_dependencies.bat")
+        else:
+            install_script = os.path.join(destination, "install_dependencies.command")
         if os.path.exists(install_script):
-            try:
-                st = os.stat(install_script)
-                os.chmod(install_script, st.st_mode | stat.S_IEXEC)
-            except Exception:
-                pass
+            if not _IS_WINDOWS:
+                try:
+                    st = os.stat(install_script)
+                    os.chmod(install_script, st.st_mode | stat.S_IEXEC)
+                except Exception:
+                    pass
             try:
                 import subprocess
-                # Detached, fully silent run: redirect stdin/stdout/stderr and
-                # start a new session so the process isn't tied to this updater.
-                subprocess.Popen(["sh", install_script],
-                                 stdout=subprocess.DEVNULL,
-                                 stderr=subprocess.DEVNULL,
-                                 stdin=subprocess.DEVNULL,
-                                 start_new_session=True,
-                                 close_fds=True)
+                if _IS_WINDOWS:
+                    subprocess.Popen(["cmd", "/c", install_script],
+                                     stdout=subprocess.DEVNULL,
+                                     stderr=subprocess.DEVNULL,
+                                     stdin=subprocess.DEVNULL,
+                                     shell=False)
+                else:
+                    # Detached, fully silent run: redirect stdin/stdout/stderr and
+                    # start a new session so the process isn't tied to this updater.
+                    subprocess.Popen(["sh", install_script],
+                                     stdout=subprocess.DEVNULL,
+                                     stderr=subprocess.DEVNULL,
+                                     stdin=subprocess.DEVNULL,
+                                     start_new_session=True,
+                                     close_fds=True)
             except Exception:
                 pass
     except Exception:
@@ -564,7 +588,7 @@ def update_from_commit(commit_hash, progress_callback=None):
     ]
     protected_files = [".git"]
     pattern_overwrite_exceptions = PATTERN_OVERWRITE_EXCEPTIONS
-    destination = os.getcwd().replace("/src", "")
+    destination = _get_macro_root()
 
     try:
         _refresh_updater(destination, progress_callback)
@@ -719,22 +743,33 @@ def update_from_commit(commit_hash, progress_callback=None):
     # Attempt to run install dependencies script (non-blocking). Fail silently.
     try:
         _report_update_progress(progress_callback, 96, "Finishing update")
-        install_script = os.path.join(destination, "install_dependencies.command")
+        if _IS_WINDOWS:
+            install_script = os.path.join(destination, "install_dependencies.bat")
+        else:
+            install_script = os.path.join(destination, "install_dependencies.command")
         if os.path.exists(install_script):
-            try:
-                st = os.stat(install_script)
-                os.chmod(install_script, st.st_mode | stat.S_IEXEC)
-            except Exception:
-                pass
+            if not _IS_WINDOWS:
+                try:
+                    st = os.stat(install_script)
+                    os.chmod(install_script, st.st_mode | stat.S_IEXEC)
+                except Exception:
+                    pass
             try:
                 import subprocess
-                # Detached, fully silent run
-                subprocess.Popen(["sh", install_script],
-                                 stdout=subprocess.DEVNULL,
-                                 stderr=subprocess.DEVNULL,
-                                 stdin=subprocess.DEVNULL,
-                                 start_new_session=True,
-                                 close_fds=True)
+                if _IS_WINDOWS:
+                    subprocess.Popen(["cmd", "/c", install_script],
+                                     stdout=subprocess.DEVNULL,
+                                     stderr=subprocess.DEVNULL,
+                                     stdin=subprocess.DEVNULL,
+                                     shell=False)
+                else:
+                    # Detached, fully silent run
+                    subprocess.Popen(["sh", install_script],
+                                     stdout=subprocess.DEVNULL,
+                                     stderr=subprocess.DEVNULL,
+                                     stdin=subprocess.DEVNULL,
+                                     start_new_session=True,
+                                     close_fds=True)
             except Exception:
                 pass
     except Exception:
