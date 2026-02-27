@@ -221,8 +221,4 @@ else:
         AXUIElementSetAttributeValue(windowRef, "AXPosition", pos)
         AXUIElementSetAttributeValue(windowRef, "AXSize", size)
 
-    # Set the functions to use macOS implementations
-    isAppOpen = isAppOpen
-    openApp = openApp
-    maximiseAppWindow = maximiseAppWindow
     setAppFullscreen = setAppFullscreenMac
