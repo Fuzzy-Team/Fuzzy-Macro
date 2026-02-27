@@ -4,33 +4,45 @@ import numpy as np
 from PIL import Image
 import os
 import time
+import platform
 import mss
-import mss.darwin
-mss.darwin.IMAGE_OPTIONS = 0
 from modules.screen.screenData import getScreenData, scaleRegion, scaleX, scaleY
 import io
 
 BASE_SCREEN_WIDTH = 2880
 BASE_SCREEN_HEIGHT = 1800
 
+_IS_WINDOWS = platform.system() == "Windows"
+
+if not _IS_WINDOWS:
+    import mss.darwin
+    mss.darwin.IMAGE_OPTIONS = 0
+
 ocrLib = None
 useLangPref = True
-try:
-    from ocrmac import ocrmac #see if ocr mac is installed
-    ocrLib = "ocrmac"
-except:
+if not _IS_WINDOWS:
+    try:
+        from ocrmac import ocrmac #see if ocr mac is installed
+        ocrLib = "ocrmac"
+    except:
+        pass
+
+if ocrLib is None:
     try:
         from paddleocr import PaddleOCR
         ocrP = PaddleOCR(lang='en', show_log = False, use_angle_cls=False)
         print("Imported paddleocr")
         ocrLib = "paddleocr"
     except:
-        import easyocr
-        import ssl
-        ssl._create_default_https_context = ssl._create_unverified_context
-        print("Imported easyocr")
-        easyocrReader = easyocr.Reader(['en'])
-        ocrLib = "easyocr"
+        try:
+            import easyocr
+            import ssl
+            ssl._create_default_https_context = ssl._create_unverified_context
+            print("Imported easyocr")
+            easyocrReader = easyocr.Reader(['en'])
+            ocrLib = "easyocr"
+        except Exception as e:
+            print(f"Failed to import any OCR library: {e}")
 
 mw, mh = pag.size()
 screenInfo = getScreenData()
@@ -174,4 +186,7 @@ elif ocrLib == "paddleocr":
     ocrFunc = ocrPaddle
 elif ocrLib == "easyocr":
     ocrFunc = ocrEasy
-
+else:
+    # Fallback: return empty results if no OCR library is available
+    def ocrFunc(img):
+        return []
