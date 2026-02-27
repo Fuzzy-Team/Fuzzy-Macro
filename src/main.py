@@ -637,6 +637,15 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             settings_cache = settingsManager.loadAllSettings()
             last_settings_load = current_time
         return settings_cache
+
+    def get_task_list_order(settings):
+        task_list = settings.get("task_list", None)
+        if isinstance(task_list, list):
+            return task_list
+        task_queue = settings.get("task_queue", None)
+        if isinstance(task_queue, list):
+            return task_queue
+        return settings.get("task_priority_order", [])
     
     while True:
         # Check for pause - wait while paused
@@ -662,7 +671,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         if macro.setdat.get("macro_mode", "normal") == "field":
             # Field-only mode: skip all tasks except field gathering
             # Get priority order and filter to only include enabled field gathering tasks
-            priorityOrder = macro.setdat.get("task_priority_order", [])
+            priorityOrder = get_task_list_order(macro.setdat)
             executedTasks = set()
 
             # Filter priority order to only include gather tasks for enabled fields
@@ -708,7 +717,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             blueGumdropFieldNeeded = False
 
             # Get priority order and filter to only include quest tasks
-            priorityOrder = macro.setdat.get("task_priority_order", [])
+            priorityOrder = get_task_list_order(macro.setdat)
             executedTasks = set()
 
             # Filter priority order to only include quest tasks
@@ -955,7 +964,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 return False
         
         # Get priority order from settings, or use empty list if not set
-        priorityOrder = macro.setdat.get("task_priority_order", [])
+        priorityOrder = get_task_list_order(macro.setdat)
         
         # Track which tasks have been executed to avoid duplicates
         executedTasks = set()
