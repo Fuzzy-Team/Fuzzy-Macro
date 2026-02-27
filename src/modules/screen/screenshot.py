@@ -1,6 +1,5 @@
 import mss
-import mss.darwin
-mss.darwin.IMAGE_OPTIONS = 0
+import platform
 from PIL import Image
 import mss.tools
 import time
@@ -11,9 +10,14 @@ import time
 import os
 import tempfile
 import subprocess
-import Quartz.CoreGraphics as CG
 from modules.screen.screenData import getScreenData
 from modules.misc.appManager import getWindowSize
+
+_IS_WINDOWS = platform.system() == "Windows"
+
+if not _IS_WINDOWS:
+    import mss.darwin
+    mss.darwin.IMAGE_OPTIONS = 0
 
 mw, mh = pag.size()
 multi = 2 if getScreenData()["display_type"] == "retina" else 1
@@ -24,51 +28,72 @@ This seems to affect any screenshots taken with quartz, but not those taken with
 usePillow = False
 
 def pillowGrab(x,y,w,h):
-    fh, filepath = tempfile.mkstemp(".png")
-    os.close(fh)
-    args = ["screencapture"]
-    subprocess.call(args + ["-x", filepath])
-    im = Image.open(filepath)
-    im.load()
-    os.unlink(filepath)
-    bbox = (x, y, x + w, y + h)
-    im_cropped = im.crop(bbox)
-    im.close()
-    return im_cropped
+    if _IS_WINDOWS:
+        # On Windows use mss for screenshots
+        with mss.mss() as sct:
+            monitor = {"left": int(x), "top": int(y), "width": int(w), "height": int(h)}
+            sct_img = sct.grab(monitor)
+            img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
+            return img
+    else:
+        fh, filepath = tempfile.mkstemp(".png")
+        os.close(fh)
+        args = ["screencapture"]
+        subprocess.call(args + ["-x", filepath])
+        im = Image.open(filepath)
+        im.load()
+        os.unlink(filepath)
+        bbox = (x, y, x + w, y + h)
+        im_cropped = im.crop(bbox)
+        im.close()
+        return im_cropped
 
 def cgGrab(region=None):
-    # Set up the screen capture rectangle
-    if region:
-        left, top, width, height = region
+    if _IS_WINDOWS:
+        # Fallback to mss on Windows
+        with mss.mss() as sct:
+            if region:
+                left, top, width, height = region
+                monitor = {"left": int(left), "top": int(top), "width": int(width), "height": int(height)}
+            else:
+                monitor = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
+            sct_img = sct.grab(monitor)
+            img = np.array(sct_img)
+            return img
     else:
-        main_display_id = CG.CGMainDisplayID()
-        width = CG.CGDisplayPixelsWide(main_display_id)
-        height = CG.CGDisplayPixelsHigh(main_display_id)
-        left, top = 0, 0
+        import Quartz.CoreGraphics as CG
+        # Set up the screen capture rectangle
+        if region:
+            left, top, width, height = region
+        else:
+            main_display_id = CG.CGMainDisplayID()
+            width = CG.CGDisplayPixelsWide(main_display_id)
+            height = CG.CGDisplayPixelsHigh(main_display_id)
+            left, top = 0, 0
 
-    rect = CG.CGRectMake(left, top, width, height)
+        rect = CG.CGRectMake(left, top, width, height)
 
-    # Capture the screen region as an image
-    image_ref = CG.CGWindowListCreateImage(
-        rect,
-        CG.kCGWindowListOptionOnScreenOnly,
-        CG.kCGNullWindowID,
-        CG.kCGWindowImageDefault
-    )
+        # Capture the screen region as an image
+        image_ref = CG.CGWindowListCreateImage(
+            rect,
+            CG.kCGWindowListOptionOnScreenOnly,
+            CG.kCGNullWindowID,
+            CG.kCGWindowImageDefault
+        )
 
-    # Get image width/height and raw pixel data
-    width = CG.CGImageGetWidth(image_ref)
-    height = CG.CGImageGetHeight(image_ref)
-    bytes_per_row = CG.CGImageGetBytesPerRow(image_ref)
-    data_provider = CG.CGImageGetDataProvider(image_ref)
-    data = CG.CGDataProviderCopyData(data_provider)
+        # Get image width/height and raw pixel data
+        width = CG.CGImageGetWidth(image_ref)
+        height = CG.CGImageGetHeight(image_ref)
+        bytes_per_row = CG.CGImageGetBytesPerRow(image_ref)
+        data_provider = CG.CGImageGetDataProvider(image_ref)
+        data = CG.CGDataProviderCopyData(data_provider)
 
-    # Convert to NumPy array
-    img = np.frombuffer(data, dtype=np.uint8).reshape((height, bytes_per_row // 4, 4))
-    img = img[:, :width, :]  # Trim padding if needed
+        # Convert to NumPy array
+        img = np.frombuffer(data, dtype=np.uint8).reshape((height, bytes_per_row // 4, 4))
+        img = img[:, :width, :]  # Trim padding if needed
 
-    # Convert to PIL Image (in BGRA format)
-    return img
+        # Convert to PIL Image (in BGRA format)
+        return img
  
 #returns an NP array, useful for cv2
 def mssScreenshotNP(x,y,w,h, save = False):
@@ -90,10 +115,6 @@ def mssScreenshotNP(x,y,w,h, save = False):
 
 
 def mssScreenshot(x=0,y=0,w=mw,h=mh, save = False, filename=None):
-    # img = cgGrab((x,y,w,h))
-    # img = img[:, :, [2, 1, 0]]
-    # img = Image.fromarray(img, 'RGB')
-    # return img
     if usePillow:
         return pillowGrab(int(x*multi),int(y*multi),int(w*multi),int(h*multi))
     else:
