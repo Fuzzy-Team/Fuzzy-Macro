@@ -108,7 +108,7 @@ def setScreenData():
         screenData["screen_height"] = physical_h
         screenData["display_type"] = "built-in"
     else:
-        #for macs: check if its reina, set the screen width and height, set multipliers
+        #for macs: check if its retina, set the screen width and height, set multipliers
         #get a screenshot. The size of the screenshot is the true screen size
         sct=mss.mss()
         region={'top':0,'left':0,'width':150,'height':150}
