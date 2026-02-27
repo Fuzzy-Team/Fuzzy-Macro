@@ -33,28 +33,55 @@ def find_compatible_so():
     arch = get_architecture()
     current_dir = Path(__file__).parent
     
-    # Search patterns in order of preference
-    search_patterns = [
-        # Exact match: Python version + architecture
-        f"bitmap_matcher_py{py_version.replace('.', '')}_{arch}.so",
-        f"bitmap_matcher_{arch}_py{py_version.replace('.', '')}.so",
-        
-        # Python version specific (any architecture)
-        f"bitmap_matcher_py{py_version.replace('.', '')}.so",
-        f"bitmap_matcher.cpython-{py_version.replace('.', '')}.so",
-        
-        # Architecture specific (any Python version)
-        f"bitmap_matcher_{arch}.so",
-        
-        # Version-specific directories
-        f"py{py_version.replace('.', '')}/bitmap_matcher_{arch}.so",
-        f"py{py_version.replace('.', '')}/bitmap_matcher.so",
-        f"dist/py{py_version.replace('.', '')}/bitmap_matcher_{arch}.so",
-        f"dist/py{py_version.replace('.', '')}/bitmap_matcher.so",
-        
-        # Generic fallback
-        "bitmap_matcher.so",
-    ]
+    # Search patterns in order of preference. Prefer .pyd on Windows, .so otherwise.
+    is_windows = platform.system() == "Windows"
+    py_ver_nodot = py_version.replace('.', '')
+    if is_windows:
+        search_patterns = [
+            f"bitmap_matcher_py{py_ver_nodot}_{arch}.pyd",
+            f"bitmap_matcher_{arch}_py{py_ver_nodot}.pyd",
+            f"bitmap_matcher_py{py_ver_nodot}.pyd",
+            f"bitmap_matcher_{arch}.pyd",
+            f"py{py_ver_nodot}/bitmap_matcher_{arch}.pyd",
+            f"py{py_ver_nodot}/bitmap_matcher.pyd",
+            f"dist/py{py_ver_nodot}/bitmap_matcher_{arch}.pyd",
+            f"dist/py{py_ver_nodot}/bitmap_matcher.pyd",
+            "bitmap_matcher.pyd",
+            # fallback to .so if present
+            f"bitmap_matcher_py{py_ver_nodot}_{arch}.so",
+            f"bitmap_matcher_{arch}_py{py_ver_nodot}.so",
+            f"bitmap_matcher_py{py_ver_nodot}.so",
+            f"bitmap_matcher.cpython-{py_ver_nodot}.so",
+            f"bitmap_matcher_{arch}.so",
+            f"py{py_ver_nodot}/bitmap_matcher_{arch}.so",
+            f"py{py_ver_nodot}/bitmap_matcher.so",
+            f"dist/py{py_ver_nodot}/bitmap_matcher_{arch}.so",
+            f"dist/py{py_ver_nodot}/bitmap_matcher.so",
+            "bitmap_matcher.so",
+        ]
+    else:
+        search_patterns = [
+            f"bitmap_matcher_py{py_ver_nodot}_{arch}.so",
+            f"bitmap_matcher_{arch}_py{py_ver_nodot}.so",
+            f"bitmap_matcher_py{py_ver_nodot}.so",
+            f"bitmap_matcher.cpython-{py_ver_nodot}.so",
+            f"bitmap_matcher_{arch}.so",
+            f"py{py_ver_nodot}/bitmap_matcher_{arch}.so",
+            f"py{py_ver_nodot}/bitmap_matcher.so",
+            f"dist/py{py_ver_nodot}/bitmap_matcher_{arch}.so",
+            f"dist/py{py_ver_nodot}/bitmap_matcher.so",
+            "bitmap_matcher.so",
+            # fallback to .pyd
+            f"bitmap_matcher_py{py_ver_nodot}_{arch}.pyd",
+            f"bitmap_matcher_{arch}_py{py_ver_nodot}.pyd",
+            f"bitmap_matcher_py{py_ver_nodot}.pyd",
+            f"bitmap_matcher_{arch}.pyd",
+            f"py{py_ver_nodot}/bitmap_matcher_{arch}.pyd",
+            f"py{py_ver_nodot}/bitmap_matcher.pyd",
+            f"dist/py{py_ver_nodot}/bitmap_matcher_{arch}.pyd",
+            f"dist/py{py_ver_nodot}/bitmap_matcher.pyd",
+            "bitmap_matcher.pyd",
+        ]
     
     # Search in current directory and subdirectories
     search_dirs = [
@@ -88,7 +115,13 @@ def load_bitmap_matcher():
             f"\n\nTry building with: python{get_python_version()} build_universal.py"
         )
     
-    subprocess.run(["xattr", "-cr", so_path])
+    # On macOS, remove quarantine attributes; skip on other platforms.
+    try:
+        if platform.system() == "Darwin":
+            subprocess.run(["xattr", "-cr", str(so_path)], check=False)
+    except Exception:
+        # Non-fatal if xattr not available or fails
+        pass
 
     #load the module from the .so file
     spec = importlib.util.spec_from_file_location("bitmap_matcher", so_path)
