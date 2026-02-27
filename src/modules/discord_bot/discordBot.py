@@ -276,7 +276,23 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         ("ant_pass_dispenser", "Ant Pass Dispenser"),
         ("treat_dispenser", "Treat Dispenser"),
         ("glue_dispenser", "Glue Dispenser"),
+        ("stockings", "Stockings"),
+        ("wreath", "Wreath"),
+        ("feast", "Feast"),
+        ("samovar", "Samovar"),
+        ("snow_machine", "Snow Machine"),
+        ("lid_art", "Lid Art"),
+        ("candles", "Candles"),
+        ("memory_match", "Memory Match"),
+        ("mega_memory_match", "Mega Memory Match"),
+        ("extreme_memory_match", "Extreme Memory Match"),
+        ("winter_memory_match", "Winter Memory Match"),
         ("honeystorm", "Honey Storm"),
+        ("sticker_printer", "Sticker Printer"),
+        ("sticker_stack", "Sticker Stack"),
+        ("blue_booster", "Blue Booster"),
+        ("red_booster", "Red Booster"),
+        ("mountain_booster", "Mountain Booster"),
     ]
 
     MOB_SETTINGS = [
@@ -287,6 +303,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         ("spider", "Spider"),
         ("werewolf", "Werewolf"),
         ("coconut_crab", "Coconut Crab"),
+        ("king_beetle", "King Beetle"),
+        ("tunnel_bear", "Tunnel Bear"),
         ("stump_snail", "Stump Snail"),
     ]
 
@@ -297,31 +315,159 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     ]
 
     SETTINGS_CATEGORIES = {
-        "fields": "Fields",
+        "fields": "Fields (Gather 1-5)",
         "macro_mode": "Macro Mode",
         "quests": "Quests",
         "collectibles": "Collectibles",
         "mobs": "Mobs",
+        "utility": "Utility",
         "hive_slot": "Hive Slot",
     }
+
+    UTILITY_TASK_SETTINGS = [
+        ("blender", "Blender"),
+        ("planters", "Planters"),
+        ("ant_challenge", "Ant Challenge"),
+        ("stinger_hunt", "Stinger Hunt"),
+        ("mondo_buff", "Mondo Buff"),
+        ("auto_field_boost", "Auto Field Boost"),
+    ]
+
+    FIELD_SECTION_OPTIONS = [
+        ("basic", "Basic"),
+        ("pattern", "Pattern"),
+        ("until", "Gather Until"),
+        ("goo", "Goo"),
+        ("start", "Start"),
+    ]
+
+    RETURN_OPTIONS = [
+        ("reset", "Reset"),
+        ("walk", "Walk"),
+        ("rejoin", "Rejoin"),
+        ("whirligig", "Whirligig"),
+    ]
+
+    START_LOCATION_OPTIONS = [
+        ("center", "Center"),
+        ("upper right", "Upper Right"),
+        ("right", "Right"),
+        ("lower right", "Lower Right"),
+        ("bottom", "Bottom"),
+        ("lower left", "Lower Left"),
+        ("left", "Left"),
+        ("upper left", "Upper Left"),
+        ("top", "Top"),
+    ]
+
+    def _get_task_list_order(settings: Dict) -> List[str]:
+        task_list = settings.get("task_list", None)
+        if isinstance(task_list, list):
+            return task_list
+        task_queue = settings.get("task_queue", None)
+        if isinstance(task_queue, list):
+            return task_queue
+        return settings.get("task_priority_order", []) or []
+
+    def _is_task_toggle_enabled(task_id: str, settings: Dict) -> bool:
+        if task_id.startswith("quest_"):
+            quest_key = f"{task_id.replace('quest_', '')}_quest"
+            return bool(settings.get(quest_key, False))
+
+        if task_id.startswith("collect_"):
+            collect_key = task_id.replace("collect_", "")
+            return bool(settings.get(collect_key, False))
+
+        if task_id.startswith("kill_"):
+            mob_key = task_id.replace("kill_", "")
+            return bool(settings.get(mob_key, False))
+
+        if task_id.startswith("gather_"):
+            field_name = task_id.replace("gather_", "").replace("_", " ")
+            fields = settings.get("fields", [])
+            fields_enabled = settings.get("fields_enabled", [])
+            for i, configured_field in enumerate(fields):
+                if configured_field == field_name:
+                    return i < len(fields_enabled) and bool(fields_enabled[i])
+            return False
+
+        if task_id == "blender":
+            return bool(settings.get("blender_enable", False))
+        if task_id == "planters":
+            return bool(settings.get("planters_mode", 0))
+        if task_id == "ant_challenge":
+            return bool(settings.get("ant_challenge", False))
+        if task_id == "stinger_hunt":
+            return bool(settings.get("stinger_hunt", False))
+        if task_id == "mondo_buff":
+            return bool(settings.get("mondo_buff", False))
+        if task_id == "auto_field_boost":
+            return bool(settings.get("Auto_Field_Boost", settings.get("auto_field_boost", False)))
+
+        return bool(settings.get(task_id, False))
+
+    def _set_task_toggle_enabled(task_id: str, enabled: bool, settings: Dict) -> Tuple[bool, str]:
+        if task_id.startswith("quest_"):
+            quest_key = f"{task_id.replace('quest_', '')}_quest"
+            return update_setting(quest_key, enabled)
+
+        if task_id.startswith("collect_"):
+            collect_key = task_id.replace("collect_", "")
+            return update_setting(collect_key, enabled)
+
+        if task_id.startswith("kill_"):
+            mob_key = task_id.replace("kill_", "")
+            return update_setting(mob_key, enabled)
+
+        if task_id.startswith("gather_"):
+            field_name = task_id.replace("gather_", "").replace("_", " ")
+            fields = settings.get("fields", [])
+            fields_enabled = list(settings.get("fields_enabled", []))
+            for i, configured_field in enumerate(fields):
+                if configured_field == field_name:
+                    while i >= len(fields_enabled):
+                        fields_enabled.append(False)
+                    fields_enabled[i] = enabled
+                    return update_setting("fields_enabled", fields_enabled)
+            return False, f"Field not found for task {task_id}"
+
+        if task_id == "blender":
+            return update_setting("blender_enable", enabled)
+        if task_id == "planters":
+            if enabled:
+                current_mode = settings.get("planters_mode", 0)
+                return update_setting("planters_mode", current_mode if current_mode else 1)
+            return update_setting("planters_mode", 0)
+        if task_id == "ant_challenge":
+            return update_setting("ant_challenge", enabled)
+        if task_id == "stinger_hunt":
+            return update_setting("stinger_hunt", enabled)
+        if task_id == "mondo_buff":
+            return update_setting("mondo_buff", enabled)
+        if task_id == "auto_field_boost":
+            return update_setting("Auto_Field_Boost", enabled)
+
+        return update_setting(task_id, enabled)
 
     def _build_status_embed(category_key: str, settings: Dict, status_message: Optional[str] = None) -> discord.Embed:
         title = f"Settings: {SETTINGS_CATEGORIES.get(category_key, 'Settings')}"
         embed = discord.Embed(title=title, color=0x00ff00)
 
+        def _add_enabled_disabled(enabled_items: List[str], disabled_items: List[str]):
+            embed.add_field(
+                name="Enabled",
+                value="\n".join([f"• {item}" for item in enabled_items]) if enabled_items else "None",
+                inline=False,
+            )
+            embed.add_field(
+                name="Disabled",
+                value="\n".join([f"• {item}" for item in disabled_items]) if disabled_items else "None",
+                inline=False,
+            )
+
         if category_key == "fields":
-            field_list = settings.get("fields", [])
-            fields_enabled = settings.get("fields_enabled", [])
-            enabled = []
-            disabled = []
-            for i, field_name in enumerate(field_list):
-                is_enabled = i < len(fields_enabled) and fields_enabled[i]
-                if is_enabled:
-                    enabled.append(field_name.title())
-                else:
-                    disabled.append(field_name.title())
-            embed.add_field(name="Enabled", value=", ".join(enabled) if enabled else "None", inline=False)
-            embed.add_field(name="Disabled", value=", ".join(disabled) if disabled else "None", inline=False)
+            embed.add_field(name="Gather Slots", value="Use Gather 1-5 slot panel", inline=False)
+            embed.add_field(name="Controls", value="Basic, Pattern, Gather Until, Goo, Start", inline=False)
 
         elif category_key == "macro_mode":
             current_mode = settings.get("macro_mode", "normal")
@@ -336,8 +482,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                     enabled.append(label)
                 else:
                     disabled.append(label)
-            embed.add_field(name="Enabled", value=", ".join(enabled) if enabled else "None", inline=False)
-            embed.add_field(name="Disabled", value=", ".join(disabled) if disabled else "None", inline=False)
+            _add_enabled_disabled(enabled, disabled)
 
         elif category_key == "collectibles":
             enabled = []
@@ -347,8 +492,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                     enabled.append(label)
                 else:
                     disabled.append(label)
-            embed.add_field(name="Enabled", value=", ".join(enabled) if enabled else "None", inline=False)
-            embed.add_field(name="Disabled", value=", ".join(disabled) if disabled else "None", inline=False)
+            _add_enabled_disabled(enabled, disabled)
 
         elif category_key == "mobs":
             enabled = []
@@ -358,8 +502,17 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                     enabled.append(label)
                 else:
                     disabled.append(label)
-            embed.add_field(name="Enabled", value=", ".join(enabled) if enabled else "None", inline=False)
-            embed.add_field(name="Disabled", value=", ".join(disabled) if disabled else "None", inline=False)
+            _add_enabled_disabled(enabled, disabled)
+
+        elif category_key == "utility":
+            enabled = []
+            disabled = []
+            for task_id, label in UTILITY_TASK_SETTINGS:
+                if _is_task_toggle_enabled(task_id, settings):
+                    enabled.append(label)
+                else:
+                    disabled.append(label)
+            _add_enabled_disabled(enabled, disabled)
 
         elif category_key == "hive_slot":
             slot = settings.get("hive_number", "Unknown")
@@ -412,6 +565,13 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             inline=False,
         )
 
+        utility_enabled = sum(1 for task_id, _ in UTILITY_TASK_SETTINGS if _is_task_toggle_enabled(task_id, settings))
+        embed.add_field(
+            name="Utility",
+            value=f"Enabled: {utility_enabled}/{len(UTILITY_TASK_SETTINGS)}",
+            inline=False,
+        )
+
         embed.add_field(
             name="Hive Slot",
             value=str(settings.get("hive_number", "Unknown")),
@@ -421,7 +581,205 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         embed.set_footer(text="Select a category to update settings.")
         return embed
 
+    def _get_field_slots(settings: Dict) -> Tuple[List[str], List[bool]]:
+        fields = list(settings.get("fields", []))
+        fields_enabled = list(settings.get("fields_enabled", []))
+        while len(fields) < 5:
+            fields.append("sunflower")
+        while len(fields_enabled) < 5:
+            fields_enabled.append(False)
+        return fields, fields_enabled
+
+    def _load_field_map() -> Dict:
+        try:
+            return settingsManager.loadFields()
+        except Exception:
+            return {}
+
+    def _get_available_patterns(current_shape: Optional[str] = None) -> List[str]:
+        try:
+            patterns_dir = settingsManager.getPatternsDir()
+            pattern_names = []
+            for entry in os.listdir(patterns_dir):
+                if entry.endswith(".py"):
+                    pattern_names.append(entry[:-3])
+            pattern_names = sorted(set(pattern_names))
+            if current_shape and current_shape not in pattern_names:
+                pattern_names.insert(0, current_shape)
+            if not pattern_names:
+                return ["e_lol"]
+            if len(pattern_names) > 25:
+                kept = pattern_names[:25]
+                if current_shape and current_shape not in kept:
+                    kept[-1] = current_shape
+                return kept
+            return pattern_names
+        except Exception:
+            return [current_shape] if current_shape else ["e_lol"]
+
+    def _normalize_return_value(value: str) -> str:
+        if not value:
+            return "walk"
+        normalized = str(value).lower().strip()
+        if "reset" in normalized:
+            return "reset"
+        if "rejoin" in normalized:
+            return "rejoin"
+        if "whirligig" in normalized or "whirl" in normalized:
+            return "whirligig"
+        return "walk"
+
+    def _normalize_start_location(value: str) -> str:
+        if not value:
+            return "center"
+        normalized = str(value).lower().strip()
+        valid_values = {option_value for option_value, _ in START_LOCATION_OPTIONS}
+        return normalized if normalized in valid_values else "center"
+
+    def _save_slot_field_setting(slot_index: int, setting_key: str, setting_value) -> Tuple[bool, str]:
+        settings = get_cached_settings()
+        fields, _ = _get_field_slots(settings)
+        if slot_index < 0 or slot_index >= len(fields):
+            return False, "Invalid gather slot."
+        field_name = fields[slot_index]
+        field_map = _load_field_map()
+        field_data = dict(field_map.get(field_name, {}))
+        field_data[setting_key] = setting_value
+        try:
+            settingsManager.saveField(field_name, field_data)
+            clear_settings_cache()
+            return True, f"Updated {setting_key} for Gather {slot_index + 1}."
+        except Exception as e:
+            return False, f"Failed to update field setting: {str(e)}"
+
+    def _parse_bool_input(value: str, default: bool = False) -> bool:
+        if value is None:
+            return default
+        normalized = str(value).strip().lower()
+        if normalized in {"1", "true", "yes", "y", "on", "enabled"}:
+            return True
+        if normalized in {"0", "false", "no", "n", "off", "disabled"}:
+            return False
+        return default
+
+    def _parse_required_bool(value: str, field_label: str) -> Tuple[Optional[bool], Optional[str]]:
+        normalized = str(value).strip().lower()
+        if normalized in {"1", "true", "yes", "y", "on", "enabled"}:
+            return True, None
+        if normalized in {"0", "false", "no", "n", "off", "disabled"}:
+            return False, None
+        return None, f"Invalid value for {field_label}. Use one of: true, false, yes, no, on, off, 1, 0."
+
+    def _parse_required_int(value: str, field_label: str, min_value: Optional[int] = None, max_value: Optional[int] = None) -> Tuple[Optional[int], Optional[str]]:
+        try:
+            parsed = int(float(str(value).strip()))
+        except Exception:
+            return None, f"Invalid value for {field_label}. Enter a number."
+
+        if min_value is not None and parsed < min_value:
+            return None, f"Invalid value for {field_label}. Must be >= {min_value}."
+        if max_value is not None and parsed > max_value:
+            return None, f"Invalid value for {field_label}. Must be <= {max_value}."
+
+        return parsed, None
+
+    def _build_fields_slot_embed(slot_index: int, section_key: str, settings: Dict, status_message: Optional[str] = None) -> discord.Embed:
+        fields, fields_enabled = _get_field_slots(settings)
+        field_map = _load_field_map()
+        field_name = fields[slot_index] if slot_index < len(fields) else "sunflower"
+        field_data = dict(field_map.get(field_name, {}))
+        section_label = dict(FIELD_SECTION_OPTIONS).get(section_key, section_key.title())
+
+        embed = discord.Embed(title=f"Fields: Gather {slot_index + 1} · {section_label}", color=0x00ff00)
+        embed.add_field(name="Task Enabled", value="Yes" if fields_enabled[slot_index] else "No", inline=True)
+        embed.add_field(name="Field", value=field_name.title(), inline=True)
+
+        if section_key == "basic":
+            embed.add_field(name="Shift Lock", value="Yes" if field_data.get("shift_lock", False) else "No", inline=True)
+            embed.add_field(name="Drift Compensation", value="Yes" if field_data.get("field_drift_compensation", False) else "No", inline=True)
+        elif section_key == "pattern":
+            embed.add_field(name="Shape", value=str(field_data.get("shape", "e_lol")), inline=True)
+            embed.add_field(name="Size", value=str(field_data.get("size", "m")).upper(), inline=True)
+            embed.add_field(name="Width", value=str(field_data.get("width", 3)), inline=True)
+            embed.add_field(name="Invert L/R", value="Yes" if field_data.get("invert_lr", False) else "No", inline=True)
+            embed.add_field(name="Invert F/B", value="Yes" if field_data.get("invert_fb", False) else "No", inline=True)
+            embed.add_field(name="Turn", value=str(field_data.get("turn", "none")).title(), inline=True)
+            embed.add_field(name="Turn Times", value=str(field_data.get("turn_times", 1)), inline=True)
+        elif section_key == "until":
+            embed.add_field(name="Mins", value=str(field_data.get("mins", 8)), inline=True)
+            embed.add_field(name="Backpack %", value=str(field_data.get("backpack", 95)), inline=True)
+            embed.add_field(name="Return", value=_normalize_return_value(str(field_data.get("return", "walk"))).title(), inline=True)
+            embed.add_field(name="Whirligig Fallback", value="Yes" if field_data.get("use_whirlwig_fallback", False) else "No", inline=True)
+        elif section_key == "goo":
+            embed.add_field(name="Use Goo", value="Yes" if field_data.get("goo", False) else "No", inline=True)
+            embed.add_field(name="Goo Interval", value=f"{field_data.get('goo_interval', 3)}s", inline=True)
+        elif section_key == "start":
+            start_location = _normalize_start_location(str(field_data.get("start_location", "center")))
+            embed.add_field(name="Start Location", value=start_location.title(), inline=True)
+            embed.add_field(name="Distance", value=str(field_data.get("distance", 1)), inline=True)
+
+        embed.set_footer(text=status_message or "Gather tabs: 1-5. Choose a section to control more settings.")
+        return embed
+
+    async def _update_fields_message(
+        interaction: discord.Interaction,
+        slot_index: int,
+        section_key: str,
+        status_message: Optional[str] = None,
+        dropdown_key: Optional[str] = None,
+        source_channel_id: Optional[int] = None,
+        source_message_id: Optional[int] = None,
+    ):
+        settings = get_cached_settings()
+        view = FieldsPanelView(
+            slot_index=slot_index,
+            section_key=section_key,
+            requester_id=interaction.user.id,
+            status_message=status_message,
+            dropdown_key=dropdown_key,
+        )
+        embed = _build_fields_slot_embed(slot_index, section_key, settings, status_message=status_message)
+
+        if source_channel_id and source_message_id:
+            try:
+                channel = interaction.client.get_channel(source_channel_id)
+                if channel is None:
+                    channel = await interaction.client.fetch_channel(source_channel_id)
+                message = await channel.fetch_message(source_message_id)
+                await message.edit(embed=embed, view=view)
+                ack_text = status_message or "Updated fields settings."
+                if interaction.response.is_done():
+                    await interaction.followup.send(ack_text, ephemeral=True)
+                else:
+                    await interaction.response.send_message(ack_text, ephemeral=True)
+                return
+            except Exception:
+                pass
+
+        try:
+            await interaction.response.edit_message(embed=embed, view=view)
+            return
+        except Exception:
+            pass
+
+        try:
+            if getattr(interaction, "message", None):
+                await interaction.message.edit(embed=embed, view=view)
+                if not interaction.response.is_done() and status_message:
+                    await interaction.response.send_message(status_message, ephemeral=True)
+                return
+        except Exception:
+            pass
+
+        if interaction.response.is_done():
+            await interaction.followup.send(status_message or "Updated fields settings.", ephemeral=True)
+        else:
+            await interaction.response.send_message(status_message or "Updated fields settings.", ephemeral=True)
+
     async def _update_category_message(interaction: discord.Interaction, category_key: str, status_message: Optional[str] = None):
+        if category_key == "fields":
+            await _update_fields_message(interaction, slot_index=0, section_key="basic", status_message=status_message)
+            return
         settings = get_cached_settings()
         view = SettingsCategoryView(category_key, requester_id=interaction.user.id, status_message=status_message)
         embed = _build_status_embed(category_key, settings, status_message=status_message)
@@ -494,8 +852,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         return bool(settings.get(task_id, False))
 
     def _get_enabled_task_order(settings: Dict) -> List[str]:
-        priority_order = settings.get("task_priority_order", []) or []
-        enabled_tasks = [task_id for task_id in priority_order if _is_task_enabled(task_id, settings)]
+        task_list_order = _get_task_list_order(settings)
+        enabled_tasks = [task_id for task_id in task_list_order if _is_task_enabled(task_id, settings)]
 
         macro_mode = settings.get("macro_mode", "normal")
 
@@ -514,28 +872,28 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         return enabled_tasks
 
-    def _normalize_current_task_to_priority_task(current_task: str, settings: Dict, priority_order: List[str]) -> Optional[str]:
+    def _normalize_current_task_to_priority_task(current_task: str, settings: Dict, queue_order: List[str]) -> Optional[str]:
         if not current_task:
             return None
 
-        if current_task in priority_order:
+        if current_task in queue_order:
             return current_task
 
-        if current_task.startswith("planter_") and "planters" in priority_order:
+        if current_task.startswith("planter_") and "planters" in queue_order:
             return "planters"
 
         if current_task.startswith("travelling_"):
             travelling_target = current_task.replace("travelling_", "")
             gather_candidate = f"gather_{travelling_target}"
-            if gather_candidate in priority_order:
+            if gather_candidate in queue_order:
                 return gather_candidate
 
         kill_candidate = f"kill_{current_task}"
-        if kill_candidate in priority_order:
+        if kill_candidate in queue_order:
             return kill_candidate
 
         collect_candidate = f"collect_{current_task}"
-        if collect_candidate in priority_order:
+        if collect_candidate in queue_order:
             return collect_candidate
 
         return None
@@ -565,6 +923,9 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         async def callback(self, interaction: discord.Interaction):
             category_key = self.values[0]
+            if category_key == "fields":
+                await _update_fields_message(interaction, slot_index=0, section_key="basic")
+                return
             settings = get_cached_settings()
             view = SettingsCategoryView(category_key, requester_id=interaction.user.id)
             embed = _build_status_embed(category_key, settings)
@@ -580,6 +941,17 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             embed = _build_overview_embed(settings)
             await interaction.response.edit_message(embed=embed, view=view)
 
+    class CategoryBackButton(discord.ui.Button):
+        def __init__(self, category_key: str):
+            self.category_key = category_key
+            super().__init__(label="Back to Category", style=discord.ButtonStyle.secondary)
+
+        async def callback(self, interaction: discord.Interaction):
+            settings = get_cached_settings()
+            view = SettingsCategoryView(self.category_key, requester_id=interaction.user.id)
+            embed = _build_status_embed(self.category_key, settings)
+            await interaction.response.edit_message(embed=embed, view=view)
+
     class RefreshButton(discord.ui.Button):
         def __init__(self, category_key: str):
             self.category_key = category_key
@@ -588,34 +960,678 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         async def callback(self, interaction: discord.Interaction):
             await _update_category_message(interaction, self.category_key, status_message="Refreshed settings.")
 
-    class FieldsSelect(discord.ui.Select):
-        def __init__(self, settings: Dict):
-            field_list = settings.get("fields", [])
-            fields_enabled = settings.get("fields_enabled", [])
+    class OpenFieldsPanelButton(discord.ui.Button):
+        def __init__(self):
+            super().__init__(label="Open Gather 1-5 Panel", style=discord.ButtonStyle.primary)
+
+        async def callback(self, interaction: discord.Interaction):
+            await _update_fields_message(interaction, slot_index=0, section_key="basic")
+
+    class FieldsSlotSelect(discord.ui.Select):
+        def __init__(self, current_slot: int):
             options = []
-            for i, field_name in enumerate(field_list):
-                value = field_name.lower().replace(" ", "_")
-                is_enabled = i < len(fields_enabled) and fields_enabled[i]
-                options.append(discord.SelectOption(label=field_name.title(), value=value, default=is_enabled))
-            if not options:
-                options.append(discord.SelectOption(label="No fields configured", value="none"))
-            super().__init__(
-                placeholder="Select enabled fields",
-                min_values=0,
-                max_values=len(options),
-                options=options,
-                disabled=(len(options) == 1 and options[0].value == "none"),
+            for slot_index in range(5):
+                options.append(
+                    discord.SelectOption(
+                        label=f"Gather {slot_index + 1}",
+                        value=str(slot_index),
+                        default=(slot_index == current_slot),
+                    )
+                )
+            super().__init__(placeholder="Choose gather slot", min_values=1, max_values=1, options=options)
+
+        async def callback(self, interaction: discord.Interaction):
+            slot_index = int(self.values[0])
+            section_key = self.view.section_key if hasattr(self.view, "section_key") else "basic"
+            dropdown_key = self.view.dropdown_key if hasattr(self.view, "dropdown_key") else None
+            await _update_fields_message(interaction, slot_index=slot_index, section_key=section_key, dropdown_key=dropdown_key)
+
+    class FieldsSectionSelect(discord.ui.Select):
+        def __init__(self, current_section: str):
+            options = []
+            for section_key, section_label in FIELD_SECTION_OPTIONS:
+                options.append(
+                    discord.SelectOption(
+                        label=section_label,
+                        value=section_key,
+                        default=(section_key == current_section),
+                    )
+                )
+            super().__init__(placeholder="Choose field section", min_values=1, max_values=1, options=options)
+
+        async def callback(self, interaction: discord.Interaction):
+            section_key = self.values[0]
+            slot_index = self.view.slot_index if hasattr(self.view, "slot_index") else 0
+            dropdown_key = "shape" if section_key == "pattern" else None
+            await _update_fields_message(interaction, slot_index=slot_index, section_key=section_key, dropdown_key=dropdown_key)
+
+    class FieldNameSelect(discord.ui.Select):
+        def __init__(self, current_field: str):
+            field_map = _load_field_map()
+            field_names = sorted(field_map.keys()) or [current_field]
+            if current_field not in field_names:
+                field_names.insert(0, current_field)
+            options = [
+                discord.SelectOption(label=name.title(), value=name, default=(name == current_field))
+                for name in field_names[:25]
+            ]
+            super().__init__(placeholder="Set field", min_values=1, max_values=1, options=options)
+
+        async def callback(self, interaction: discord.Interaction):
+            slot_index = self.view.slot_index
+            settings = get_cached_settings()
+            fields, _ = _get_field_slots(settings)
+            fields[slot_index] = self.values[0]
+            success, message = update_setting("fields", fields)
+            status_message = message if success else "Failed to update slot field."
+            await _update_fields_message(interaction, slot_index=slot_index, section_key=self.view.section_key, status_message=status_message, dropdown_key=self.view.dropdown_key if hasattr(self.view, "dropdown_key") else None)
+
+    class FieldBasicToggleSelect(discord.ui.Select):
+        def __init__(self, task_enabled: bool, shift_lock: bool, drift: bool):
+            options = [
+                discord.SelectOption(label="Enable Task", value="task_enabled", default=task_enabled),
+                discord.SelectOption(label="Shift Lock", value="shift_lock", default=shift_lock),
+                discord.SelectOption(label="Drift Compensation", value="field_drift_compensation", default=drift),
+            ]
+            super().__init__(placeholder="Basic toggles", min_values=0, max_values=3, options=options)
+
+        async def callback(self, interaction: discord.Interaction):
+            slot_index = self.view.slot_index
+            selected = set(self.values)
+            settings = get_cached_settings()
+            fields, fields_enabled = _get_field_slots(settings)
+
+            fields_enabled[slot_index] = "task_enabled" in selected
+            success_enabled, _ = update_setting("fields_enabled", fields_enabled)
+
+            failures = [] if success_enabled else ["task_enabled"]
+            for key in ("shift_lock", "field_drift_compensation"):
+                success, _ = _save_slot_field_setting(slot_index, key, key in selected)
+                if not success:
+                    failures.append(key)
+
+            status_message = "Updated basic settings." if not failures else "Some basic settings failed to update."
+            await _update_fields_message(interaction, slot_index=slot_index, section_key=self.view.section_key, status_message=status_message)
+
+    class FieldShapeSelect(discord.ui.Select):
+        def __init__(self, current_shape: str):
+            patterns = _get_available_patterns(current_shape=current_shape)
+            options = [discord.SelectOption(label=p, value=p, default=(p == current_shape)) for p in patterns]
+            super().__init__(placeholder="Pattern shape", min_values=1, max_values=1, options=options)
+
+        async def callback(self, interaction: discord.Interaction):
+            success, message = _save_slot_field_setting(self.view.slot_index, "shape", self.values[0])
+            await _update_fields_message(interaction, slot_index=self.view.slot_index, section_key=self.view.section_key, status_message=(message if success else "Failed to update shape."))
+
+    class FieldSizeSelect(discord.ui.Select):
+        def __init__(self, current_size: str):
+            options = [
+                discord.SelectOption(label=size.upper(), value=size.lower(), default=(size.lower() == str(current_size).lower()))
+                for size in ["xs", "s", "m", "l", "xl"]
+            ]
+            super().__init__(placeholder="Pattern size", min_values=1, max_values=1, options=options)
+
+        async def callback(self, interaction: discord.Interaction):
+            success, message = _save_slot_field_setting(self.view.slot_index, "size", self.values[0])
+            await _update_fields_message(interaction, slot_index=self.view.slot_index, section_key=self.view.section_key, status_message=(message if success else "Failed to update size."))
+
+    class FieldWidthSelect(discord.ui.Select):
+        def __init__(self, current_width):
+            width_str = str(current_width)
+            options = [
+                discord.SelectOption(label=str(width), value=str(width), default=(str(width) == width_str))
+                for width in range(1, 9)
+            ]
+            super().__init__(placeholder="Pattern width", min_values=1, max_values=1, options=options)
+
+        async def callback(self, interaction: discord.Interaction):
+            success, message = _save_slot_field_setting(self.view.slot_index, "width", int(self.values[0]))
+            await _update_fields_message(interaction, slot_index=self.view.slot_index, section_key=self.view.section_key, status_message=(message if success else "Failed to update width."))
+
+    class FieldPatternToggleSelect(discord.ui.Select):
+        def __init__(self, invert_lr: bool, invert_fb: bool):
+            options = [
+                discord.SelectOption(label="Invert Left/Right", value="invert_lr", default=invert_lr),
+                discord.SelectOption(label="Invert Forward/Back", value="invert_fb", default=invert_fb),
+            ]
+            super().__init__(placeholder="Pattern invert toggles", min_values=0, max_values=2, options=options)
+
+        async def callback(self, interaction: discord.Interaction):
+            selected = set(self.values)
+            failures = []
+            for key in ("invert_lr", "invert_fb"):
+                success, _ = _save_slot_field_setting(self.view.slot_index, key, key in selected)
+                if not success:
+                    failures.append(key)
+            status_message = "Updated invert settings." if not failures else "Some invert settings failed to update."
+            await _update_fields_message(interaction, slot_index=self.view.slot_index, section_key=self.view.section_key, status_message=status_message)
+
+    class FieldTurnDirectionSelect(discord.ui.Select):
+        def __init__(self, current_turn: str):
+            turn_value = str(current_turn).lower()
+            options = [
+                discord.SelectOption(label="None", value="none", default=(turn_value == "none")),
+                discord.SelectOption(label="Left", value="left", default=(turn_value == "left")),
+                discord.SelectOption(label="Right", value="right", default=(turn_value == "right")),
+            ]
+            super().__init__(placeholder="Turn direction", min_values=1, max_values=1, options=options)
+
+        async def callback(self, interaction: discord.Interaction):
+            success, message = _save_slot_field_setting(self.view.slot_index, "turn", self.values[0])
+            await _update_fields_message(interaction, slot_index=self.view.slot_index, section_key=self.view.section_key, status_message=(message if success else "Failed to update turn direction."))
+
+    class FieldTurnTimesSelect(discord.ui.Select):
+        def __init__(self, current_turn_times):
+            current = str(current_turn_times)
+            options = [
+                discord.SelectOption(label=str(count), value=str(count), default=(str(count) == current))
+                for count in [1, 2, 3, 4]
+            ]
+            super().__init__(placeholder="Turn times", min_values=1, max_values=1, options=options)
+
+        async def callback(self, interaction: discord.Interaction):
+            success, message = _save_slot_field_setting(self.view.slot_index, "turn_times", int(self.values[0]))
+            await _update_fields_message(interaction, slot_index=self.view.slot_index, section_key=self.view.section_key, status_message=(message if success else "Failed to update turn count."))
+
+    class FieldMinsSelect(discord.ui.Select):
+        def __init__(self, current_mins):
+            values = [1, 2, 3, 5, 8, 10, 12, 15, 20, 30]
+            current = str(int(float(current_mins))) if str(current_mins).replace('.', '', 1).isdigit() else str(current_mins)
+            options = [
+                discord.SelectOption(label=str(v), value=str(v), default=(str(v) == current))
+                for v in values
+            ]
+            super().__init__(placeholder="Gather mins", min_values=1, max_values=1, options=options)
+
+        async def callback(self, interaction: discord.Interaction):
+            success, message = _save_slot_field_setting(self.view.slot_index, "mins", int(self.values[0]))
+            await _update_fields_message(interaction, slot_index=self.view.slot_index, section_key=self.view.section_key, status_message=(message if success else "Failed to update mins."))
+
+    class FieldBackpackSelect(discord.ui.Select):
+        def __init__(self, current_backpack):
+            values = [70, 80, 85, 90, 95, 98, 100]
+            current = str(int(float(current_backpack))) if str(current_backpack).replace('.', '', 1).isdigit() else str(current_backpack)
+            options = [
+                discord.SelectOption(label=f"{v}%", value=str(v), default=(str(v) == current))
+                for v in values
+            ]
+            super().__init__(placeholder="Backpack percent", min_values=1, max_values=1, options=options)
+
+        async def callback(self, interaction: discord.Interaction):
+            success, message = _save_slot_field_setting(self.view.slot_index, "backpack", int(self.values[0]))
+            await _update_fields_message(interaction, slot_index=self.view.slot_index, section_key=self.view.section_key, status_message=(message if success else "Failed to update backpack percent."))
+
+    class FieldReturnSelect(discord.ui.Select):
+        def __init__(self, current_return: str):
+            normalized = _normalize_return_value(current_return)
+            options = [
+                discord.SelectOption(label=label, value=value, default=(value == normalized))
+                for value, label in RETURN_OPTIONS
+            ]
+            super().__init__(placeholder="Return method", min_values=1, max_values=1, options=options)
+
+        async def callback(self, interaction: discord.Interaction):
+            success, message = _save_slot_field_setting(self.view.slot_index, "return", self.values[0])
+            await _update_fields_message(interaction, slot_index=self.view.slot_index, section_key=self.view.section_key, status_message=(message if success else "Failed to update return method."), dropdown_key=self.view.dropdown_key if hasattr(self.view, "dropdown_key") else None)
+
+    class FieldWhirligigFallbackSelect(discord.ui.Select):
+        def __init__(self, enabled: bool):
+            options = [discord.SelectOption(label="Use Whirligig Fallback", value="enabled", default=enabled)]
+            super().__init__(placeholder="Whirligig fallback", min_values=0, max_values=1, options=options)
+
+        async def callback(self, interaction: discord.Interaction):
+            success, message = _save_slot_field_setting(self.view.slot_index, "use_whirlwig_fallback", "enabled" in self.values)
+            await _update_fields_message(interaction, slot_index=self.view.slot_index, section_key=self.view.section_key, status_message=(message if success else "Failed to update whirligig fallback."))
+
+    class FieldGooToggleSelect(discord.ui.Select):
+        def __init__(self, enabled: bool):
+            options = [discord.SelectOption(label="Use Goo", value="goo", default=enabled)]
+            super().__init__(placeholder="Goo toggle", min_values=0, max_values=1, options=options)
+
+        async def callback(self, interaction: discord.Interaction):
+            success, message = _save_slot_field_setting(self.view.slot_index, "goo", "goo" in self.values)
+            await _update_fields_message(interaction, slot_index=self.view.slot_index, section_key=self.view.section_key, status_message=(message if success else "Failed to update goo toggle."))
+
+    class FieldGooIntervalSelect(discord.ui.Select):
+        def __init__(self, current_interval):
+            values = [3, 5, 8, 10, 12, 15, 20, 30, 45, 60]
+            current = str(int(float(current_interval))) if str(current_interval).replace('.', '', 1).isdigit() else str(current_interval)
+            options = [
+                discord.SelectOption(label=f"{v}s", value=str(v), default=(str(v) == current))
+                for v in values
+            ]
+            super().__init__(placeholder="Goo interval", min_values=1, max_values=1, options=options)
+
+        async def callback(self, interaction: discord.Interaction):
+            success, message = _save_slot_field_setting(self.view.slot_index, "goo_interval", int(self.values[0]))
+            await _update_fields_message(interaction, slot_index=self.view.slot_index, section_key=self.view.section_key, status_message=(message if success else "Failed to update goo interval."))
+
+    class FieldStartLocationSelect(discord.ui.Select):
+        def __init__(self, current_location: str):
+            normalized = _normalize_start_location(current_location)
+            options = [
+                discord.SelectOption(label=label, value=value, default=(value == normalized))
+                for value, label in START_LOCATION_OPTIONS
+            ]
+            super().__init__(placeholder="Start location", min_values=1, max_values=1, options=options)
+
+        async def callback(self, interaction: discord.Interaction):
+            success, message = _save_slot_field_setting(self.view.slot_index, "start_location", self.values[0])
+            await _update_fields_message(interaction, slot_index=self.view.slot_index, section_key=self.view.section_key, status_message=(message if success else "Failed to update start location."), dropdown_key=self.view.dropdown_key if hasattr(self.view, "dropdown_key") else None)
+
+    class FieldDistanceSelect(discord.ui.Select):
+        def __init__(self, current_distance):
+            current = str(int(float(current_distance))) if str(current_distance).replace('.', '', 1).isdigit() else str(current_distance)
+            options = [
+                discord.SelectOption(label=str(v), value=str(v), default=(str(v) == current))
+                for v in range(1, 11)
+            ]
+            super().__init__(placeholder="Start distance", min_values=1, max_values=1, options=options)
+
+        async def callback(self, interaction: discord.Interaction):
+            success, message = _save_slot_field_setting(self.view.slot_index, "distance", int(self.values[0]))
+            await _update_fields_message(interaction, slot_index=self.view.slot_index, section_key=self.view.section_key, status_message=(message if success else "Failed to update start distance."), dropdown_key=self.view.dropdown_key if hasattr(self.view, "dropdown_key") else None)
+
+    class RefreshFieldsButton(discord.ui.Button):
+        def __init__(self, slot_index: int, section_key: str):
+            self.slot_index = slot_index
+            self.section_key = section_key
+            super().__init__(label="Refresh", style=discord.ButtonStyle.secondary)
+
+        async def callback(self, interaction: discord.Interaction):
+            await _update_fields_message(interaction, self.slot_index, self.section_key, status_message="Refreshed fields settings.")
+
+    class BasicFieldModal(discord.ui.Modal, title="Edit Basic Field Settings"):
+        def __init__(self, slot_index: int, section_key: str, field_name: str, task_enabled: bool, shift_lock: bool, drift: bool, source_channel_id: Optional[int] = None, source_message_id: Optional[int] = None):
+            super().__init__()
+            self.slot_index = slot_index
+            self.section_key = section_key
+            self.source_channel_id = source_channel_id
+            self.source_message_id = source_message_id
+            self.field_name_input = discord.ui.TextInput(label="Field Name", default=field_name, required=True, max_length=32)
+            self.task_enabled_input = discord.ui.TextInput(label="Enable Task (true/false)", default=str(task_enabled), required=True, max_length=8)
+            self.shift_lock_input = discord.ui.TextInput(label="Shift Lock (true/false)", default=str(shift_lock), required=True, max_length=8)
+            self.drift_input = discord.ui.TextInput(label="Drift Compensation (true/false)", default=str(drift), required=True, max_length=8)
+            self.add_item(self.field_name_input)
+            self.add_item(self.task_enabled_input)
+            self.add_item(self.shift_lock_input)
+            self.add_item(self.drift_input)
+
+        async def on_submit(self, interaction: discord.Interaction):
+            settings = get_cached_settings()
+            fields, fields_enabled = _get_field_slots(settings)
+            field_map = _load_field_map()
+            requested_field = str(self.field_name_input.value).strip().lower()
+
+            if requested_field not in field_map:
+                await interaction.response.send_message(f"Unknown field '{requested_field}'.", ephemeral=True)
+                return
+
+            task_enabled_value, task_enabled_error = _parse_required_bool(self.task_enabled_input.value, "Enable Task")
+            shift_lock_value, shift_lock_error = _parse_required_bool(self.shift_lock_input.value, "Shift Lock")
+            drift_value, drift_error = _parse_required_bool(self.drift_input.value, "Drift Compensation")
+
+            validation_errors = [e for e in [task_enabled_error, shift_lock_error, drift_error] if e]
+            if validation_errors:
+                await interaction.response.send_message("\n".join(validation_errors), ephemeral=True)
+                return
+
+            fields[self.slot_index] = requested_field
+            fields_enabled[self.slot_index] = bool(task_enabled_value)
+            success_fields, _ = update_setting("fields", fields)
+            success_enabled, _ = update_setting("fields_enabled", fields_enabled)
+
+            success_shift, _ = _save_slot_field_setting(self.slot_index, "shift_lock", bool(shift_lock_value))
+            success_drift, _ = _save_slot_field_setting(self.slot_index, "field_drift_compensation", bool(drift_value))
+
+            failures = []
+            if not success_fields:
+                failures.append("fields")
+            if not success_enabled:
+                failures.append("fields_enabled")
+            if not success_shift:
+                failures.append("shift_lock")
+            if not success_drift:
+                failures.append("field_drift_compensation")
+
+            status_message = "Updated basic settings." if not failures else "Some basic settings failed to update."
+            await _update_fields_message(
+                interaction,
+                slot_index=self.slot_index,
+                section_key=self.section_key,
+                status_message=status_message,
+                source_channel_id=self.source_channel_id,
+                source_message_id=self.source_message_id,
             )
+
+    class PatternFlagsModal(discord.ui.Modal, title="Edit Pattern Flags"):
+        def __init__(self, slot_index: int, section_key: str, field_data: Dict, source_channel_id: Optional[int] = None, source_message_id: Optional[int] = None):
+            super().__init__()
+            self.slot_index = slot_index
+            self.section_key = section_key
+            self.source_channel_id = source_channel_id
+            self.source_message_id = source_message_id
+            self.invert_lr_input = discord.ui.TextInput(label="Invert L/R (true/false)", default=str(bool(field_data.get("invert_lr", False))), required=True, max_length=8)
+            self.invert_fb_input = discord.ui.TextInput(label="Invert F/B (true/false)", default=str(bool(field_data.get("invert_fb", False))), required=True, max_length=8)
+            self.add_item(self.invert_lr_input)
+            self.add_item(self.invert_fb_input)
+
+        async def on_submit(self, interaction: discord.Interaction):
+            invert_lr_value, invert_lr_error = _parse_required_bool(self.invert_lr_input.value, "Invert L/R")
+            invert_fb_value, invert_fb_error = _parse_required_bool(self.invert_fb_input.value, "Invert F/B")
+            validation_errors = [e for e in [invert_lr_error, invert_fb_error] if e]
+            if validation_errors:
+                await interaction.response.send_message("\n".join(validation_errors), ephemeral=True)
+                return
+
+            failures = []
+            success, _ = _save_slot_field_setting(self.slot_index, "invert_lr", bool(invert_lr_value))
+            if not success:
+                failures.append("invert_lr")
+            success, _ = _save_slot_field_setting(self.slot_index, "invert_fb", bool(invert_fb_value))
+            if not success:
+                failures.append("invert_fb")
+
+            status_message = "Updated pattern flags." if not failures else "Some pattern flags failed to update."
+            await _update_fields_message(
+                interaction,
+                slot_index=self.slot_index,
+                section_key=self.section_key,
+                status_message=status_message,
+                dropdown_key="shape",
+                source_channel_id=self.source_channel_id,
+                source_message_id=self.source_message_id,
+            )
+
+    class UntilFieldModal(discord.ui.Modal, title="Edit Gather Until Settings"):
+        def __init__(self, slot_index: int, section_key: str, field_data: Dict, source_channel_id: Optional[int] = None, source_message_id: Optional[int] = None):
+            super().__init__()
+            self.slot_index = slot_index
+            self.section_key = section_key
+            self.source_channel_id = source_channel_id
+            self.source_message_id = source_message_id
+            self.mins_input = discord.ui.TextInput(label="Mins", default=str(field_data.get("mins", 8)), required=True, max_length=4)
+            self.backpack_input = discord.ui.TextInput(label="Backpack %", default=str(field_data.get("backpack", 95)), required=True, max_length=4)
+            self.whirl_fallback_input = discord.ui.TextInput(label="Whirligig Fallback (true/false)", default=str(bool(field_data.get("use_whirlwig_fallback", False))), required=True, max_length=8)
+            self.add_item(self.mins_input)
+            self.add_item(self.backpack_input)
+            self.add_item(self.whirl_fallback_input)
+
+        async def on_submit(self, interaction: discord.Interaction):
+            mins_value, mins_error = _parse_required_int(self.mins_input.value, "Mins", min_value=1)
+            backpack_value, backpack_error = _parse_required_int(self.backpack_input.value, "Backpack %", min_value=1, max_value=100)
+            whirl_fallback_value, whirl_fallback_error = _parse_required_bool(self.whirl_fallback_input.value, "Whirligig Fallback")
+            validation_errors = [e for e in [mins_error, backpack_error, whirl_fallback_error] if e]
+            if validation_errors:
+                await interaction.response.send_message("\n".join(validation_errors), ephemeral=True)
+                return
+
+            failures = []
+            success, _ = _save_slot_field_setting(self.slot_index, "mins", int(mins_value))
+            if not success:
+                failures.append("mins")
+
+            success, _ = _save_slot_field_setting(self.slot_index, "backpack", int(backpack_value))
+            if not success:
+                failures.append("backpack")
+
+            success, _ = _save_slot_field_setting(self.slot_index, "use_whirlwig_fallback", bool(whirl_fallback_value))
+            if not success:
+                failures.append("use_whirlwig_fallback")
+
+            status_message = "Updated gather-until settings." if not failures else "Some gather-until settings failed to update."
+            await _update_fields_message(
+                interaction,
+                slot_index=self.slot_index,
+                section_key=self.section_key,
+                status_message=status_message,
+                source_channel_id=self.source_channel_id,
+                source_message_id=self.source_message_id,
+            )
+
+    class GooFieldModal(discord.ui.Modal, title="Edit Goo Settings"):
+        def __init__(self, slot_index: int, section_key: str, field_data: Dict, source_channel_id: Optional[int] = None, source_message_id: Optional[int] = None):
+            super().__init__()
+            self.slot_index = slot_index
+            self.section_key = section_key
+            self.source_channel_id = source_channel_id
+            self.source_message_id = source_message_id
+            self.goo_input = discord.ui.TextInput(label="Use Goo (true/false)", default=str(bool(field_data.get("goo", False))), required=True, max_length=8)
+            self.interval_input = discord.ui.TextInput(label="Goo Interval Seconds", default=str(field_data.get("goo_interval", 3)), required=True, max_length=4)
+            self.add_item(self.goo_input)
+            self.add_item(self.interval_input)
+
+        async def on_submit(self, interaction: discord.Interaction):
+            goo_value, goo_error = _parse_required_bool(self.goo_input.value, "Use Goo")
+            interval_value, interval_error = _parse_required_int(self.interval_input.value, "Goo Interval Seconds", min_value=1)
+
+            validation_errors = [e for e in [goo_error, interval_error] if e]
+            if validation_errors:
+                await interaction.response.send_message("\n".join(validation_errors), ephemeral=True)
+                return
+
+            failures = []
+            success, _ = _save_slot_field_setting(self.slot_index, "goo", bool(goo_value))
+            if not success:
+                failures.append("goo")
+            success, _ = _save_slot_field_setting(self.slot_index, "goo_interval", int(interval_value))
+            if not success:
+                failures.append("goo_interval")
+            status_message = "Updated goo settings." if not failures else "Some goo settings failed to update."
+            await _update_fields_message(
+                interaction,
+                slot_index=self.slot_index,
+                section_key=self.section_key,
+                status_message=status_message,
+                source_channel_id=self.source_channel_id,
+                source_message_id=self.source_message_id,
+            )
+
+    class StartFieldModal(discord.ui.Modal, title="Edit Start Settings"):
+        def __init__(self, slot_index: int, section_key: str, field_data: Dict):
+            super().__init__()
+            self.slot_index = slot_index
+            self.section_key = section_key
+            self.note_input = discord.ui.TextInput(label="No form fields needed", default="Start settings use dropdowns below.", required=False, max_length=64)
+            self.add_item(self.note_input)
+
+        async def on_submit(self, interaction: discord.Interaction):
+            status_message = "Start settings use dropdowns in the panel."
+            await _update_fields_message(interaction, slot_index=self.slot_index, section_key=self.section_key, status_message=status_message)
+
+    class PatternDropdownSettingSelect(discord.ui.Select):
+        def __init__(self, current_key: str):
+            options = [
+                discord.SelectOption(label="Shape", value="shape", default=(current_key == "shape")),
+                discord.SelectOption(label="Size", value="size", default=(current_key == "size")),
+                discord.SelectOption(label="Width", value="width", default=(current_key == "width")),
+                discord.SelectOption(label="Turn", value="turn", default=(current_key == "turn")),
+                discord.SelectOption(label="Turn Times", value="turn_times", default=(current_key == "turn_times")),
+            ]
+            super().__init__(placeholder="Pattern dropdown setting", min_values=1, max_values=1, options=options)
+
+        async def callback(self, interaction: discord.Interaction):
+            setting_key = self.values[0]
+            await _update_fields_message(
+                interaction,
+                slot_index=self.view.slot_index,
+                section_key=self.view.section_key,
+                dropdown_key=setting_key,
+            )
+
+    class PatternDropdownValueSelect(discord.ui.Select):
+        def __init__(self, setting_key: str, field_data: Dict):
+            current_value = str(field_data.get(setting_key, ""))
+            if setting_key == "shape":
+                values = _get_available_patterns(current_shape=current_value)
+                options = [discord.SelectOption(label=v, value=v, default=(v == current_value)) for v in values]
+            elif setting_key == "size":
+                options = [
+                    discord.SelectOption(label=s.upper(), value=s, default=(s == current_value.lower()))
+                    for s in ["xs", "s", "m", "l", "xl"]
+                ]
+            elif setting_key == "width":
+                options = [
+                    discord.SelectOption(label=str(v), value=str(v), default=(str(v) == current_value))
+                    for v in range(1, 9)
+                ]
+            elif setting_key == "turn":
+                turn_value = current_value.lower() if current_value else "none"
+                options = [
+                    discord.SelectOption(label="None", value="none", default=(turn_value == "none")),
+                    discord.SelectOption(label="Left", value="left", default=(turn_value == "left")),
+                    discord.SelectOption(label="Right", value="right", default=(turn_value == "right")),
+                ]
+            else:
+                options = [
+                    discord.SelectOption(label=str(v), value=str(v), default=(str(v) == current_value))
+                    for v in [1, 2, 3, 4]
+                ]
+
+            self.setting_key = setting_key
+            super().__init__(placeholder="Pattern dropdown value", min_values=1, max_values=1, options=options)
+
+        async def callback(self, interaction: discord.Interaction):
+            raw_value = self.values[0]
+            save_value = raw_value
+            if self.setting_key in {"width", "turn_times"}:
+                save_value = int(raw_value)
+            success, message = _save_slot_field_setting(self.view.slot_index, self.setting_key, save_value)
+            await _update_fields_message(
+                interaction,
+                slot_index=self.view.slot_index,
+                section_key=self.view.section_key,
+                status_message=(message if success else f"Failed to update {self.setting_key}."),
+                dropdown_key=self.setting_key,
+            )
+
+    class EditBasicFormButton(discord.ui.Button):
+        def __init__(self, slot_index: int, section_key: str):
+            self.slot_index = slot_index
+            self.section_key = section_key
+            super().__init__(label="Edit Basic Form", style=discord.ButtonStyle.primary)
 
         async def callback(self, interaction: discord.Interaction):
             settings = get_cached_settings()
-            field_list = settings.get("fields", [])
-            normalized_fields = [f.lower().replace(" ", "_") for f in field_list]
-            selected = set(self.values)
-            fields_enabled = [field in selected for field in normalized_fields]
-            success, message = update_setting("fields_enabled", fields_enabled)
-            status_message = message if success else "Failed to update fields."
-            await _update_category_message(interaction, "fields", status_message=status_message)
+            fields, fields_enabled = _get_field_slots(settings)
+            field_map = _load_field_map()
+            field_name = fields[self.slot_index]
+            field_data = dict(field_map.get(field_name, {}))
+            await interaction.response.send_modal(
+                BasicFieldModal(
+                    slot_index=self.slot_index,
+                    section_key=self.section_key,
+                    field_name=field_name,
+                    task_enabled=fields_enabled[self.slot_index],
+                    shift_lock=bool(field_data.get("shift_lock", False)),
+                    drift=bool(field_data.get("field_drift_compensation", False)),
+                    source_channel_id=interaction.channel_id,
+                    source_message_id=(interaction.message.id if interaction.message else None),
+                )
+            )
+
+    class EditPatternFormButton(discord.ui.Button):
+        def __init__(self, slot_index: int, section_key: str):
+            self.slot_index = slot_index
+            self.section_key = section_key
+            super().__init__(label="Edit Pattern Form", style=discord.ButtonStyle.primary)
+
+        async def callback(self, interaction: discord.Interaction):
+            settings = get_cached_settings()
+            fields, _ = _get_field_slots(settings)
+            field_map = _load_field_map()
+            field_name = fields[self.slot_index]
+            field_data = dict(field_map.get(field_name, {}))
+            await interaction.response.send_modal(
+                PatternFlagsModal(
+                    self.slot_index,
+                    self.section_key,
+                    field_data,
+                    source_channel_id=interaction.channel_id,
+                    source_message_id=(interaction.message.id if interaction.message else None),
+                )
+            )
+
+    class EditUntilFormButton(discord.ui.Button):
+        def __init__(self, slot_index: int, section_key: str):
+            self.slot_index = slot_index
+            self.section_key = section_key
+            super().__init__(label="Edit Until Form", style=discord.ButtonStyle.primary)
+
+        async def callback(self, interaction: discord.Interaction):
+            settings = get_cached_settings()
+            fields, _ = _get_field_slots(settings)
+            field_map = _load_field_map()
+            field_name = fields[self.slot_index]
+            field_data = dict(field_map.get(field_name, {}))
+            await interaction.response.send_modal(
+                UntilFieldModal(
+                    self.slot_index,
+                    self.section_key,
+                    field_data,
+                    source_channel_id=interaction.channel_id,
+                    source_message_id=(interaction.message.id if interaction.message else None),
+                )
+            )
+
+    class EditGooFormButton(discord.ui.Button):
+        def __init__(self, slot_index: int, section_key: str):
+            self.slot_index = slot_index
+            self.section_key = section_key
+            super().__init__(label="Edit Goo Form", style=discord.ButtonStyle.primary)
+
+        async def callback(self, interaction: discord.Interaction):
+            settings = get_cached_settings()
+            fields, _ = _get_field_slots(settings)
+            field_map = _load_field_map()
+            field_name = fields[self.slot_index]
+            field_data = dict(field_map.get(field_name, {}))
+            await interaction.response.send_modal(
+                GooFieldModal(
+                    self.slot_index,
+                    self.section_key,
+                    field_data,
+                    source_channel_id=interaction.channel_id,
+                    source_message_id=(interaction.message.id if interaction.message else None),
+                )
+            )
+
+    class FieldsPanelView(SettingsBaseView):
+        def __init__(self, slot_index: int, section_key: str, requester_id: Optional[int], status_message: Optional[str] = None, dropdown_key: Optional[str] = None):
+            super().__init__(requester_id=requester_id)
+            self.slot_index = slot_index
+            self.section_key = section_key
+            self.status_message = status_message
+            self.dropdown_key = dropdown_key
+
+            settings = get_cached_settings()
+            fields, _ = _get_field_slots(settings)
+            field_map = _load_field_map()
+            field_name = fields[slot_index]
+            field_data = dict(field_map.get(field_name, {}))
+
+            self.add_item(FieldsSlotSelect(current_slot=slot_index))
+            self.add_item(FieldsSectionSelect(current_section=section_key))
+
+            if section_key == "basic":
+                self.add_item(FieldNameSelect(current_field=field_name))
+                self.add_item(EditBasicFormButton(slot_index=slot_index, section_key=section_key))
+            elif section_key == "pattern":
+                current_pattern_key = dropdown_key or "shape"
+                self.add_item(PatternDropdownSettingSelect(current_key=current_pattern_key))
+                self.add_item(PatternDropdownValueSelect(setting_key=current_pattern_key, field_data=field_data))
+                self.add_item(EditPatternFormButton(slot_index=slot_index, section_key=section_key))
+            elif section_key == "until":
+                self.add_item(FieldReturnSelect(current_return=str(field_data.get("return", "walk"))))
+                self.add_item(EditUntilFormButton(slot_index=slot_index, section_key=section_key))
+            elif section_key == "goo":
+                self.add_item(EditGooFormButton(slot_index=slot_index, section_key=section_key))
+            elif section_key == "start":
+                self.add_item(FieldStartLocationSelect(current_location=str(field_data.get("start_location", "center"))))
+                self.add_item(FieldDistanceSelect(current_distance=field_data.get("distance", 1)))
+
+            self.add_item(RefreshFieldsButton(slot_index=slot_index, section_key=section_key))
+            self.add_item(BackButton())
 
     class MacroModeSelect(discord.ui.Select):
         def __init__(self, settings: Dict):
@@ -662,6 +1678,30 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             category_key = self.view.category_key if hasattr(self.view, "category_key") else "settings"
             await _update_category_message(interaction, category_key, status_message=status_message)
 
+    class UtilityToggleSelect(discord.ui.Select):
+        def __init__(self, settings: Dict):
+            options = []
+            for task_id, label in UTILITY_TASK_SETTINGS:
+                options.append(
+                    discord.SelectOption(
+                        label=label,
+                        value=task_id,
+                        default=_is_task_toggle_enabled(task_id, settings),
+                    )
+                )
+            super().__init__(placeholder="Select enabled utility tasks", min_values=0, max_values=len(options), options=options)
+
+        async def callback(self, interaction: discord.Interaction):
+            selected = set(self.values)
+            settings = get_cached_settings()
+            failures = []
+            for task_id, _ in UTILITY_TASK_SETTINGS:
+                success, _ = _set_task_toggle_enabled(task_id, task_id in selected, settings)
+                if not success:
+                    failures.append(task_id)
+            status_message = "Updated utility settings." if not failures else "Some utility settings failed to update."
+            await _update_category_message(interaction, "utility", status_message=status_message)
+
     class HiveSlotSelect(discord.ui.Select):
         def __init__(self, settings: Dict):
             current = settings.get("hive_number", 1)
@@ -691,7 +1731,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             settings = get_cached_settings()
 
             if category_key == "fields":
-                self.add_item(FieldsSelect(settings))
+                self.add_item(OpenFieldsPanelButton())
             elif category_key == "macro_mode":
                 self.add_item(MacroModeSelect(settings))
             elif category_key == "quests":
@@ -700,12 +1740,14 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 self.add_item(ToggleSettingsSelect(settings, COLLECTIBLE_SETTINGS, "Select enabled collectibles"))
             elif category_key == "mobs":
                 self.add_item(ToggleSettingsSelect(settings, MOB_SETTINGS, "Select enabled mobs"))
+            elif category_key == "utility":
+                self.add_item(UtilityToggleSelect(settings))
             elif category_key == "hive_slot":
                 self.add_item(HiveSlotSelect(settings))
 
             self.add_item(RefreshButton(category_key))
             self.add_item(BackButton())
-    
+
     @bot.tree.command(name = "ping", description = "Check if the bot is online")
     async def ping(interaction: discord.Interaction):
         await interaction.response.send_message("Pong!")
@@ -904,11 +1946,11 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     async def tasklist(interaction: discord.Interaction):
         try:
             settings = get_cached_settings()
-            priority_order = settings.get("task_priority_order", []) or []
+            queue_order = _get_task_list_order(settings)
             enabled_tasks = _get_enabled_task_order(settings)
 
             current_task_raw = status.value if hasattr(status, 'value') and status.value else ""
-            current_task_id = _normalize_current_task_to_priority_task(current_task_raw, settings, priority_order)
+            current_task_id = _normalize_current_task_to_priority_task(current_task_raw, settings, queue_order)
 
             next_task_id = None
             if enabled_tasks:
