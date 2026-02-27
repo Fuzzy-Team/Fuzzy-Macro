@@ -255,4 +255,3 @@ else:
         size = AXValueCreate(kAXValueCGSizeType, CGSize(mw, mh))
         AXUIElementSetAttributeValue(window_ref, "AXPosition", pos)
         AXUIElementSetAttributeValue(window_ref, "AXSize", size)
-        CFRelease(attributes)
