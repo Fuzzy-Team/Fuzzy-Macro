@@ -54,10 +54,10 @@ python -m pip install --upgrade pip setuptools wheel
 
 :: Install PyTorch first (prefer CUDA on Windows, fallback to default wheels)
 echo [35mInstalling PyTorch (GPU if available)[0m
-pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --trusted-host download.pytorch.org --default-timeout=100 --index-url https://download.pytorch.org/whl/cu121 torch torchvision torchaudio
+pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --trusted-host download.pytorch.org --default-timeout=100 --index-url https://download.pytorch.org/whl/cu121 torch torchvision
 if %errorlevel% neq 0 (
     echo [33mCUDA PyTorch install failed, falling back to default PyTorch wheels.[0m
-    pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 torch torchvision torchaudio
+    pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 torch torchvision
 )
 
 :: Install core packages
