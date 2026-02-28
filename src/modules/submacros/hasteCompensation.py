@@ -163,9 +163,8 @@ class HasteCompensationOptimized():
         """Performs template matching on grayscale images."""
         if target_template is None: # Skip if template failed to load
              return (False, 0.0)
-             
-        res = cv2.matchTemplate(screen_grayscale, target_template, cv2.TM_CCOEFF_NORMED)
-        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+
+        _, max_val, _, _ = templateMatch(target_template, screen_grayscale)
         return (max_val > threshold, max_val)
 
 
@@ -297,9 +296,8 @@ class HasteCompensationFastest():
         """Performs template matching on grayscale images."""
         if target_template is None: # Skip if template failed to load
              return (False, 0.0)
-             
-        res = cv2.matchTemplate(screen_grayscale, target_template, cv2.TM_CCOEFF_NORMED)
-        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+
+        _, max_val, _, _ = templateMatch(target_template, screen_grayscale)
         # For TM_CCOEFF_NORMED, the best match is the max_val
         # print(f"Matching {target_template.shape} against {screen_grayscale.shape}: MaxVal={match_value:.2f}") # Debug
 

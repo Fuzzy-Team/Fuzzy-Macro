@@ -10,22 +10,86 @@ class TemplateTooLargeError(Exception):
         self.image_size = image_size
         super().__init__(f"Template size {template_size} is larger than image size {image_size}")
 
-def templateMatch(smallImg, bigImg):
+def _to_grayscale(image):
+    if len(image.shape) == 2:
+        return image
+    if image.shape[2] == 4:
+        return cv2.cvtColor(image, cv2.COLOR_BGRA2GRAY)
+    return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+
+def _orbTemplateMatch(smallImg, bigImg, template_mask=None):
+    template_gray = _to_grayscale(smallImg)
+    image_gray = _to_grayscale(bigImg)
+
+    orb = cv2.ORB_create(nfeatures=800, scoreType=cv2.ORB_FAST_SCORE, edgeThreshold=5, fastThreshold=7)
+    kp_small, des_small = orb.detectAndCompute(template_gray, template_mask)
+    kp_big, des_big = orb.detectAndCompute(image_gray, None)
+
+    if des_small is None or des_big is None or len(kp_small) < 4 or len(kp_big) < 4:
+        return 0.0, (0, 0)
+
+    matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
+    matches = matcher.knnMatch(des_small, des_big, k=2)
+
+    good_matches = []
+    for pair in matches:
+        if len(pair) != 2:
+            continue
+        m, n = pair
+        if m.distance < 0.75 * n.distance:
+            good_matches.append(m)
+
+    if len(good_matches) < 4:
+        return 0.0, (0, 0)
+
+    src_pts = np.float32([kp_small[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+    dst_pts = np.float32([kp_big[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+    homography, inlier_mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 4.0)
+
+    if homography is None or inlier_mask is None:
+        best_match = min(good_matches, key=lambda m: m.distance)
+        x, y = kp_big[best_match.trainIdx].pt
+        return 0.0, (int(x), int(y))
+
+    h, w = template_gray.shape[:2]
+    corners = np.float32([[0, 0], [w, 0], [w, h], [0, h]]).reshape(-1, 1, 2)
+    projected = cv2.perspectiveTransform(corners, homography)
+
+    x = int(np.clip(np.min(projected[:, 0, 0]), 0, max(0, bigImg.shape[1] - 1)))
+    y = int(np.clip(np.min(projected[:, 0, 1]), 0, max(0, bigImg.shape[0] - 1)))
+
+    inlier_count = int(inlier_mask.ravel().sum())
+    inlier_ratio = inlier_count / max(1, len(good_matches))
+    coverage = min(1.0, inlier_count / max(4.0, len(kp_small) * 0.35))
+
+    inlier_distances = [m.distance for i, m in enumerate(good_matches) if inlier_mask.ravel()[i]]
+    if not inlier_distances:
+        inlier_distances = [m.distance for m in good_matches]
+    mean_distance = float(np.mean(inlier_distances))
+    descriptor_quality = 1.0 - min(1.0, mean_distance / 80.0)
+
+    confidence = (
+        0.15
+        + (0.55 * inlier_ratio)
+        + (0.20 * coverage)
+        + (0.10 * descriptor_quality)
+    )
+    confidence = float(np.clip(confidence, 0.0, 1.0))
+
+    return confidence, (x, y)
+
+
+def templateMatch(smallImg, bigImg, mask=None):
     if smallImg.shape[0] > bigImg.shape[0] or smallImg.shape[1] > bigImg.shape[1]:
         raise TemplateTooLargeError(
             template_size=(smallImg.shape[1], smallImg.shape[0]),  # (width, height)
             image_size=(bigImg.shape[1], bigImg.shape[0])          # (width, height)
         )
-    res = cv2.matchTemplate(bigImg, smallImg, cv2.TM_CCOEFF_NORMED)
-    return cv2.minMaxLoc(res)
-
-# def templateMatch(smallImg, bigImg, scale=0.5):
-#     small_resized = cv2.resize(smallImg, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-#     big_resized = cv2.resize(bigImg, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-#     res = cv2.matchTemplate(big_resized, small_resized, cv2.TM_CCOEFF_NORMED)
-#     min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
-#     # scale back to original coordinates
-#     return min_val, max_val, (int(min_loc[0] / scale), int(min_loc[1] / scale)), (int(max_loc[0] / scale), int(max_loc[1] / scale))
+    max_val, max_loc = _orbTemplateMatch(smallImg, bigImg, template_mask=mask)
+    min_val = 1.0 - max_val
+    min_loc = (0, 0)
+    return min_val, max_val, min_loc, max_loc
 
 def locateImageOnScreen(target, x,y,w,h, threshold = 0):
     screen = mssScreenshot(x,y,w,h)
@@ -66,9 +130,7 @@ def locateImageWithMaskOnScreen(image, mask, x,y,w,h, threshold=0):
     if image.shape[0] > screen.shape[0] or image.shape[1] > screen.shape[1]:
         return None
 
-    # do masked template matching and save correlation image
-    res = cv2.matchTemplate(screen, image, cv2.TM_CCORR_NORMED, mask=mask)
-    _, max_val, _, max_loc = cv2.minMaxLoc(res)
+    _, max_val, _, max_loc = templateMatch(image, screen, mask=mask)
     if max_val < threshold: return None
     return (max_val, max_loc)
 
