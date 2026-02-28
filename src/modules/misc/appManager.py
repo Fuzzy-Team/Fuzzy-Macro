@@ -54,6 +54,10 @@ if _IS_WINDOWS:
         try:
             import ctypes
             user32 = ctypes.windll.user32
+            normalized_name = (windowName or "").strip().lower()
+            search_terms = [normalized_name] if normalized_name else []
+            if normalized_name == "roblox roblox":
+                search_terms.append("roblox")
 
             def _enum_callback(hwnd, results):
                 if not user32.IsWindowVisible(hwnd):
@@ -64,7 +68,8 @@ if _IS_WINDOWS:
                 buf = ctypes.create_unicode_buffer(length + 1)
                 user32.GetWindowTextW(hwnd, buf, length + 1)
                 title = buf.value
-                if windowName.lower() in title.lower():
+                title_l = title.lower()
+                if any(term and term in title_l for term in search_terms):
                     rect = ctypes.wintypes.RECT()
                     user32.GetWindowRect(hwnd, ctypes.byref(rect))
                     results.append((rect.left, rect.top,

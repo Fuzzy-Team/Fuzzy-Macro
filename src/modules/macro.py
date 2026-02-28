@@ -798,7 +798,8 @@ class macro:
     def isFullScreen(self):
         windows = gw.getAllTitles()
         for win in windows:
-            if "roblox roblox" in win.lower():
+            win_l = win.lower()
+            if "roblox roblox" in win_l or "roblox" in win_l:
                 x,y,w,h = gw.getWindowGeometry(win)
                 return x==0 and y==0 and w==self.robloxWindow.mw and h==self.robloxWindow.mh
         #can't find the roblox window, most likely fullscreen? Assumes that it exists
@@ -826,7 +827,7 @@ class macro:
         #try running a automator workflow
         #if it doesnt exist, run the .py file instead
 
-        if os.path.exists(path+".workflow"):
+        if sys.platform == "darwin" and os.path.exists(path+".workflow"):
             os.system(f"/usr/bin/automator {path}.workflow")
         else:
             pyPath = f"{path}.py"
