@@ -8,6 +8,7 @@ import platform
 import mss
 from modules.screen.screenData import getScreenData
 import io
+import warnings
 
 _IS_WINDOWS = platform.system() == "Windows"
 
@@ -35,8 +36,27 @@ if ocrLib is None:
             import easyocr
             import ssl
             ssl._create_default_https_context = ssl._create_unverified_context
-            print("Imported easyocr")
-            easyocrReader = easyocr.Reader(['en'])
+            easyocrGPU = False
+            try:
+                import torch
+                hasCuda = torch.cuda.is_available()
+                hasMps = hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+                if _IS_WINDOWS:
+                    easyocrGPU = hasCuda
+                else:
+                    easyocrGPU = hasCuda or hasMps
+            except Exception:
+                easyocrGPU = False
+
+            if not easyocrGPU:
+                warnings.filterwarnings(
+                    "ignore",
+                    message=".*pin_memory.*no accelerator is found.*",
+                    category=UserWarning,
+                )
+
+            print(f"Imported easyocr (gpu={easyocrGPU})")
+            easyocrReader = easyocr.Reader(['en'], gpu=easyocrGPU)
             ocrLib = "easyocr"
         except Exception as e:
             print(f"Failed to import any OCR library: {e}")
