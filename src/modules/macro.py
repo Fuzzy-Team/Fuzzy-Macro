@@ -5579,8 +5579,14 @@ class macro:
         if extrema == (0, 0):
             messageBox.msgBox(text='It seems like you have not enabled roblox scaling. The macro will not work properly.\n1. Close Roblox\n2. Go to finder -> applications -> right click roblox -> get info -> enable "scale to fit below built-in camera"', title='Roblox scaling')
         #make sure game mode is disabled (macOS 14.0 and above and apple chips)
-        macVersion, _, _ = platform.mac_ver()
-        macVersion = float('.'.join(macVersion.split('.')[:2]))
+        macVersion = 0.0
+        if platform.system() == "Darwin":
+            mv, _, _ = platform.mac_ver()
+            if mv:
+                try:
+                    macVersion = float('.'.join(mv.split('.')[:2]))
+                except Exception:
+                    macVersion = 0.0
 
         # Removed lines that were un-fullscreening Roblox on startup
         # appManager.setAppFullscreen(fullscreen=False)
