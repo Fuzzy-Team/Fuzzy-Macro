@@ -1,6 +1,14 @@
 @echo off
 setlocal enabledelayedexpansion
 
+:: Ensure script is running with administrative privileges.
+:: If not, relaunch this batch elevated and exit the current process.
+powershell -NoProfile -ExecutionPolicy Bypass -Command "if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] 'Administrator')) { Start-Process -FilePath '%~f0' -ArgumentList '%*' -WorkingDirectory '%~dp0' -Verb RunAs; exit 123 } else { exit 0 }"
+if %ERRORLEVEL% EQU 123 (
+    echo Requesting administrative privileges via UAC...
+    exit /b
+)
+
 :: Kill any running Python processes related to the macro
 taskkill /F /IM python.exe >nul 2>&1
 taskkill /F /IM python3.exe >nul 2>&1
