@@ -20,6 +20,9 @@ from datetime import datetime, timedelta
 import queue  # <-- Add this import
 from typing import List, Optional, Dict, Tuple
 
+_IS_WINDOWS = sys.platform.startswith("win")
+_IS_MACOS = sys.platform == "darwin"
+
 # Import settings manager functions
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'misc'))
 import settingsManager
@@ -2141,16 +2144,49 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     @bot.tree.command(name = "battery", description = "Get your current battery status")
     async def battery(interaction: discord.Interaction):
         try:
-            output = subprocess.check_output(["pmset", "-g", "batt"], text=True)
-            for line in output.split("\n"):
-                if "InternalBattery" in line:
-                    parts = line.split("\t")[-1].split(";")
-                    percent = parts[0].strip()
-                    status = parts[1].strip()
-                    await interaction.response.send_message(f"Battery is at {percent} and is currently {status}.")
+            if _IS_WINDOWS:
+                import ctypes
+
+                class SYSTEM_POWER_STATUS(ctypes.Structure):
+                    _fields_ = [
+                        ("ACLineStatus", ctypes.c_ubyte),
+                        ("BatteryFlag", ctypes.c_ubyte),
+                        ("BatteryLifePercent", ctypes.c_ubyte),
+                        ("Reserved1", ctypes.c_ubyte),
+                        ("BatteryLifeTime", ctypes.c_uint),
+                        ("BatteryFullLifeTime", ctypes.c_uint),
+                    ]
+
+                status = SYSTEM_POWER_STATUS()
+                result = ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(status))
+                if not result:
+                    await interaction.response.send_message("Battery information is unavailable on this system.")
                     return
-            
-            await interaction.response.send_message("Battery information not found.")
+
+                if status.BatteryFlag == 128 or status.BatteryLifePercent == 255:
+                    await interaction.response.send_message("Battery information not found (desktop/no battery detected).")
+                    return
+
+                power_state = "charging" if status.ACLineStatus == 1 else "discharging"
+                await interaction.response.send_message(
+                    f"Battery is at {int(status.BatteryLifePercent)}% and is currently {power_state}."
+                )
+                return
+
+            if _IS_MACOS:
+                output = subprocess.check_output(["pmset", "-g", "batt"], text=True)
+                for line in output.split("\n"):
+                    if "InternalBattery" in line:
+                        parts = line.split("\t")[-1].split(";")
+                        percent = parts[0].strip()
+                        battery_status = parts[1].strip()
+                        await interaction.response.send_message(f"Battery is at {percent} and is currently {battery_status}.")
+                        return
+
+                await interaction.response.send_message("Battery information not found.")
+                return
+
+            await interaction.response.send_message("Battery status command is currently supported on macOS and Windows only.")
         except Exception as e:
             await interaction.response.send_message(f"An error occurred: {e}")
     
@@ -2185,7 +2221,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     def _set_macos_mute(muted: bool) -> None:
         """Set macOS system audio mute state using AppleScript via osascript."""
         try:
-            if sys.platform != "darwin":
+            if not _IS_MACOS:
                 raise OSError("Not running on macOS")
             state = "true" if muted else "false"
             # Use osascript to set the output muted state
@@ -2193,24 +2229,60 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         except Exception:
             raise
 
-    @bot.tree.command(name = "mute", description = "Mute system audio (macOS only)")
+    _windows_previous_volume = {"value": None}
+
+    def _set_windows_mute(muted: bool) -> None:
+        """Set Windows master output volume to muted/unmuted using winmm API."""
+        if not _IS_WINDOWS:
+            raise OSError("Not running on Windows")
+
+        import ctypes
+
+        winmm = ctypes.windll.winmm
+        WAVE_MAPPER = ctypes.c_uint(-1).value
+
+        if muted:
+            current_volume = ctypes.c_uint(0)
+            get_result = winmm.waveOutGetVolume(WAVE_MAPPER, ctypes.byref(current_volume))
+            if get_result != 0:
+                raise OSError(f"waveOutGetVolume failed with code {get_result}")
+            _windows_previous_volume["value"] = current_volume.value
+            set_result = winmm.waveOutSetVolume(WAVE_MAPPER, 0)
+            if set_result != 0:
+                raise OSError(f"waveOutSetVolume failed with code {set_result}")
+            return
+
+        restore_value = _windows_previous_volume["value"]
+        if restore_value is None:
+            restore_value = 0x7FFF7FFF
+        set_result = winmm.waveOutSetVolume(WAVE_MAPPER, int(restore_value))
+        if set_result != 0:
+            raise OSError(f"waveOutSetVolume failed with code {set_result}")
+
+    @bot.tree.command(name = "mute", description = "Mute system audio")
     async def mute_audio(interaction: discord.Interaction):
         try:
-            if sys.platform != "darwin":
-                await interaction.response.send_message("❌ This command only works on macOS.")
+            if _IS_MACOS:
+                _set_macos_mute(True)
+            elif _IS_WINDOWS:
+                _set_windows_mute(True)
+            else:
+                await interaction.response.send_message("❌ This command is currently supported on macOS and Windows only.")
                 return
-            _set_macos_mute(True)
             await interaction.response.send_message("🔇 System audio muted.")
         except Exception as e:
             await interaction.response.send_message(f"❌ Failed to mute audio: {e}")
 
-    @bot.tree.command(name = "unmute", description = "Unmute system audio (macOS only)")
+    @bot.tree.command(name = "unmute", description = "Unmute system audio")
     async def unmute_audio(interaction: discord.Interaction):
         try:
-            if sys.platform != "darwin":
-                await interaction.response.send_message("❌ This command only works on macOS.")
+            if _IS_MACOS:
+                _set_macos_mute(False)
+            elif _IS_WINDOWS:
+                _set_windows_mute(False)
+            else:
+                await interaction.response.send_message("❌ This command is currently supported on macOS and Windows only.")
                 return
-            _set_macos_mute(False)
             await interaction.response.send_message("🔊 System audio unmuted.")
         except Exception as e:
             await interaction.response.send_message(f"❌ Failed to unmute audio: {e}")
