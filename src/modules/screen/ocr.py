@@ -55,8 +55,16 @@ if ocrLib is None:
                     category=UserWarning,
                 )
 
-            print(f"Imported easyocr (gpu={easyocrGPU})")
-            easyocrReader = easyocr.Reader(['en'], gpu=easyocrGPU)
+            print(f"Imported easyocr (gpu_preferred={easyocrGPU})")
+            try:
+                easyocrReader = easyocr.Reader(['en'], gpu=easyocrGPU)
+            except Exception as readerError:
+                if easyocrGPU:
+                    print(f"EasyOCR GPU initialization failed, falling back to CPU: {readerError}")
+                    easyocrGPU = False
+                    easyocrReader = easyocr.Reader(['en'], gpu=False)
+                else:
+                    raise
             ocrLib = "easyocr"
         except Exception as e:
             print(f"Failed to import any OCR library: {e}")
