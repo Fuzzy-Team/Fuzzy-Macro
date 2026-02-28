@@ -2,9 +2,13 @@ import sys
 import os
 import pyautogui as pag
 import time
+import platform
 from modules.submacros.hasteCompensation import HasteCompensationRevamped
 import threading
 from collections import deque
+
+
+_IS_WINDOWS = platform.system() == "Windows"
 
 
 class keyboard:
@@ -92,7 +96,11 @@ class keyboard:
     @staticmethod
     def keyDown(k, pause = True):
         #for some reason, the function key is sometimes held down, causing it to open the dock or enable dictation
-        keyboard.keyUp('fn', False)
+        if not _IS_WINDOWS:
+            try:
+                keyboard.keyUp('fn', False)
+            except Exception:
+                pass
         pag.keyDown(k, _pause = pause)
 
     @staticmethod
