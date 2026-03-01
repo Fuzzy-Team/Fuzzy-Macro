@@ -271,7 +271,6 @@ planter_hotbar_heat-treated_slot=0
 planter_hotbar_hydroponic_slot=0
 planter_hotbar_petal_slot=0
 planter_hotbar_planter_of_plenty_slot=0
-skip_petal_quests=False
 auto_field_sunflower=False
 auto_field_dandelion=False
 auto_field_mushroom=False
