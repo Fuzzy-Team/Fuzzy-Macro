@@ -1,7 +1,13 @@
 import sys
 import os
 import platform as _platform
-import pyautogui as pag
+if _platform.system() == "Windows":
+    try:
+        import pydirectinput as pag
+    except ModuleNotFoundError:
+        import pyautogui as pag
+else:
+    import pyautogui as pag
 import time
 from modules.submacros.hasteCompensation import HasteCompensationRevamped
 import threading
