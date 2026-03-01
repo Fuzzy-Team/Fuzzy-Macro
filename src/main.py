@@ -2826,7 +2826,7 @@ if __name__ == "__main__":
                     )
 
                 try:
-                    import pyautogui as _pag
+                    import pydirectinput as _pag
                     try:
                         _pag.position()
                     except Exception as e:
@@ -2835,10 +2835,7 @@ if __name__ == "__main__":
                             text="Unable to query/send input events. This may be restricted by system policies or security software. Error: {}".format(e),
                         )
                 except Exception:
-                    messageBox.msgBox(
-                        title="Missing Dependency",
-                        text="pyautogui is required for input control on Windows. Install with: pip install pyautogui",
-                    )
+                    messageBox.msgBox(title="Missing Dependency", text="pydirectinput is required for input control on Windows. Install with: pip install pydirectinput")
             except Exception:
                 pass
 
