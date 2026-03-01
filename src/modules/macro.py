@@ -1926,6 +1926,86 @@ class macro:
         m = n // 60
         s = n % 60
         return f"{int(m)}m {int(s):02d}s"
+
+    def gatherPetal(self, field):
+        normalized_field = str(field).replace('_', ' ').strip()
+        if not normalized_field:
+            return
+
+        # Match requested nm_Reset(2) behavior with full reset/convert before travel.
+        self.reset(convert=True)
+
+        self.waitForBees()
+        try:
+            self.set_task_status(f"travelling_{normalized_field.replace(' ', '_')}", activity="travelling", field=normalized_field)
+        except Exception:
+            pass
+
+        self.cannon()
+        self.logger.webhook("", f"Travelling: {normalized_field.title()} (Petal)", "dark brown")
+        self.goToField(normalized_field)
+
+        try:
+            self.set_task_status(f"gatherpetal_{normalized_field.replace(' ', '_')}", task="gatherpetal", field=normalized_field)
+        except Exception:
+            pass
+        self.logger.webhook("Petal Farming", normalized_field.title(), "light green")
+
+        # Camera/setup sequence from AHK:
+        # Send "{" RotUp " 4}{" RotLeft " 2}{" SC_1 "}"
+        for _ in range(4):
+            self.keyboard.press("pageup")
+        for _ in range(2):
+            self.keyboard.press(",")
+        self.keyboard.press("1")
+
+        tile_size = max(1, self.robloxWindow.mw / 40)
+        middle_x = self.robloxWindow.mw / 2
+        middle_y = self.robloxWindow.mh / 2
+        target_rgb = (255, 219, 128)  # 0xFFDB80
+
+        # Run for quest gather mins if configured; otherwise do a short focused pass.
+        max_scan_time = int(self.setdat.get("quest_gather_mins", 0) * 60) if self.setdat.get("quest_gather_mins", 0) else 45
+        start = time.time()
+        move_speed_factor = 18 / self.setdat["movespeed"]
+
+        while time.time() - start < max_scan_time:
+            if self.checkPauseAndWait():
+                return
+            if self.skipTask is not None and self.skipTask.value == 1:
+                self.skipTask.value = 0
+                self.logger.webhook("Task Skipped", f"Skipped petal farming in {normalized_field.title()}", "orange")
+                return
+
+            try:
+                screen = mssScreenshotNP(self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw, self.robloxWindow.mh)
+                bgr = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
+                found = findColorObjectRGB(bgr, target_rgb, variance=0, mode="point")
+
+                if found:
+                    found_x, found_y = found
+                    delta_x = found_x - middle_x
+                    delta_y = found_y - middle_y
+
+                    tiles_x = math.floor(abs(delta_x) / tile_size)
+                    tiles_y = math.floor(abs(delta_y) / tile_size)
+
+                    if tiles_x > 0:
+                        move_ms_x = tiles_x * 220 * move_speed_factor
+                        self.sleepMSMove("d" if delta_x > 0 else "a", move_ms_x)
+
+                    if tiles_y > 0:
+                        move_ms_y = tiles_y * 220 * move_speed_factor
+                        self.sleepMSMove("s" if delta_y > 0 else "w", move_ms_y)
+
+                time.sleep(0.3)
+            except Exception:
+                time.sleep(0.3)
+
+            time.sleep(0.2)
+
+        self.clear_task_status()
+        self.reset(convert=False)
     
     def gather(self, field, settingsOverride = {}, questGumdrops=False):
         # Normalize field name to handle both space and underscore formats
