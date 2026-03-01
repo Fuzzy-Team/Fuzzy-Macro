@@ -39,7 +39,46 @@ def fastClick():
     pynputMouse.release(Button.left)
 
 def scroll(clicks, pause = False):
-    pag.scroll(clicks, _pause = pause)
+    # pydirectinput may not implement `scroll`. Try the current backend first,
+    # then fall back to pyautogui, and finally to a Windows API call.
+    if hasattr(pag, 'scroll'):
+        try:
+            pag.scroll(clicks, _pause = pause)
+            return
+        except TypeError:
+            # some implementations don't accept the _pause kwarg
+            try:
+                pag.scroll(clicks)
+                return
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    # fallback to pyautogui if available
+    try:
+        import pyautogui as _pag
+        try:
+            _pag.scroll(clicks)
+            return
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+    # final fallback: on Windows use native mouse_event for wheel
+    try:
+        if _platform.system() == "Windows":
+            import ctypes
+            # Windows mouse_event WHEEL delta is in multiples of 120
+            WHEEL_DELTA = 120
+            ctypes.windll.user32.mouse_event(0x0800, 0, 0, int(clicks) * WHEEL_DELTA, 0)
+            return
+    except Exception:
+        pass
+
+    # If we reached here, raise an informative error
+    raise RuntimeError("Unable to perform scroll: no suitable backend available")
 
 def getPos():
     return pag.position()
