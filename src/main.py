@@ -1368,6 +1368,15 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     executedTasks.add(taskId)
                     return True
                 return False
+
+            # Handle petal gather tasks (quest-driven)
+            if taskId.startswith("gatherpetal_"):
+                fieldName = taskId.replace("gatherpetal_", "").replace("_", " ")
+                if fieldName in questPetalGatherFields:
+                    runTask(macro.gatherPetal, args=(fieldName,), resetAfter=False)
+                    executedTasks.add(taskId)
+                    return True
+                return False
             
             # Handle special tasks
             if taskId == "blender":
