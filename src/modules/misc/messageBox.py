@@ -5,18 +5,29 @@ import platform
 
 _IS_WINDOWS = platform.system() == "Windows"
 
+# Win32 MessageBox flags
+MB_OK = 0x00000000
+MB_OKCANCEL = 0x00000001
+MB_SETFOREGROUND = 0x00010000
+MB_TOPMOST = 0x00040000
+
 def msgBox(title, text):
     if _IS_WINDOWS:
         try:
             import ctypes
-            ctypes.windll.user32.MessageBoxW(0, text, title, 0)
+            flags = MB_OK | MB_SETFOREGROUND | MB_TOPMOST
+            ctypes.windll.user32.MessageBoxW(0, text, title, flags)
         except Exception:
             try:
                 import tkinter as tk
                 from tkinter import messagebox
                 root = tk.Tk()
                 root.withdraw()
-                messagebox.showinfo(title, text)
+                try:
+                    root.attributes('-topmost', True)
+                except Exception:
+                    pass
+                messagebox.showinfo(title, text, parent=root)
                 root.destroy()
             except Exception:
                 print(f"[{title}] {text}")
@@ -29,7 +40,8 @@ def msgBoxOkCancel(title, text):
         try:
             import ctypes
             # MB_OKCANCEL = 1, returns 1 for OK, 2 for Cancel
-            result = ctypes.windll.user32.MessageBoxW(0, text, title, 1)
+            flags = MB_OKCANCEL | MB_SETFOREGROUND | MB_TOPMOST
+            result = ctypes.windll.user32.MessageBoxW(0, text, title, flags)
             return result == 1
         except Exception:
             try:
@@ -37,7 +49,11 @@ def msgBoxOkCancel(title, text):
                 from tkinter import messagebox
                 root = tk.Tk()
                 root.withdraw()
-                result = messagebox.askokcancel(title, text)
+                try:
+                    root.attributes('-topmost', True)
+                except Exception:
+                    pass
+                result = messagebox.askokcancel(title, text, parent=root)
                 root.destroy()
                 return result
             except Exception:
