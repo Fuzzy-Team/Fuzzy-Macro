@@ -72,7 +72,10 @@ def scroll(clicks, pause = False):
             import ctypes
             # Windows mouse_event WHEEL delta is in multiples of 120
             WHEEL_DELTA = 120
-            ctypes.windll.user32.mouse_event(0x0800, 0, 0, int(clicks) * WHEEL_DELTA, 0)
+            # pydirectinput/pyautogui tend to move several notches per ``click`` value
+            # when compared to a single WHEEL_DELTA. Use a scale factor to match speed.
+            SCROLL_SCALE = 3
+            ctypes.windll.user32.mouse_event(0x0800, 0, 0, int(clicks) * WHEEL_DELTA * SCROLL_SCALE, 0)
             return
     except Exception:
         pass
