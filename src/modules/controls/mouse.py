@@ -1,4 +1,11 @@
-import pyautogui as pag
+import platform as _platform
+if _platform.system() == "Windows":
+    try:
+        import pydirectinput as pag
+    except ModuleNotFoundError:
+        import pyautogui as pag
+else:
+    import pyautogui as pag
 import time
 from pynput.mouse import Button, Controller
 
