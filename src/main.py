@@ -54,9 +54,6 @@ except ModuleNotFoundError:
 from modules.submacros.hourlyReport import HourlyReport
 mw, mh = pag.size()
 
-# Hardcoded petal quest titles to ignore (lowercase)
-HARDCODED_PETAL_IGNORE_TITLES = {"petal tabbouleh", "petals", "mashed blooms"}
-
 # Discord Rich Presence Manager
 try:
     from pypresence import Presence, exceptions as pypresence_exceptions
@@ -528,6 +525,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         
         gatherFieldsList = []
         gumdropGatherFieldsList = []
+        petalGatherFieldsList = []
         requireRedField = False
         requireBlueField = False
         requireField = False
@@ -548,7 +546,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         if executeQuest:
             if questObjective is None:  # Quest does not exist -> try to claim a new quest
                 if not canClaimTimedBearQuest(questGiver):
-                    return setdatEnable, gatherFieldsList, gumdropGatherFieldsList, requireRedField, requireBlueField, feedBees, requireRedGumdropField, requireBlueGumdropField, requireField
+                    return setdatEnable, gatherFieldsList, gumdropGatherFieldsList, petalGatherFieldsList, requireRedField, requireBlueField, feedBees, requireRedGumdropField, requireBlueGumdropField, requireField
                 questObjective = macro.getNewQuest(questGiver, False)
                 # Clear cached entry for this quest giver so subsequent checks re-read the UI
                 if questGiver in questCache:
@@ -564,20 +562,29 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             if questObjective is None or not len(questObjective):
                 # No quest found or quest completed - we're not executing, so we can't determine requirements
                 # Return empty requirements (will be determined when quest executes in priority order)
-                return setdatEnable, gatherFieldsList, gumdropGatherFieldsList, requireRedField, requireBlueField, feedBees, requireRedGumdropField, requireBlueGumdropField, requireField
+                return setdatEnable, gatherFieldsList, gumdropGatherFieldsList, petalGatherFieldsList, requireRedField, requireBlueField, feedBees, requireRedGumdropField, requireBlueGumdropField, requireField
 
         if questObjective is None: #still not able to find quest
-            return setdatEnable, gatherFieldsList, gumdropGatherFieldsList, requireRedField, requireBlueField, feedBees, requireRedGumdropField, requireBlueGumdropField, requireField
+            return setdatEnable, gatherFieldsList, gumdropGatherFieldsList, petalGatherFieldsList, requireRedField, requireBlueField, feedBees, requireRedGumdropField, requireBlueGumdropField, requireField
 
         for obj in questObjective:
             objData = obj.split("_")
             if objData[0] == "gather":
-                gatherFieldsList.append(objData[1])
+                field_name = "_".join(objData[1:]).replace("_", " ").strip()
+                if field_name:
+                    gatherFieldsList.append(field_name)
             elif objData[0] == "gathergoo":
+                field_name = "_".join(objData[1:]).replace("_", " ").strip()
                 if macro.setdat["quest_use_gumdrops"]:
-                    gumdropGatherFieldsList.append(objData[1])
+                    if field_name:
+                        gumdropGatherFieldsList.append(field_name)
                 else:
-                    gatherFieldsList.append(objData[1])
+                    if field_name:
+                        gatherFieldsList.append(field_name)
+            elif objData[0] == "gatherpetal":
+                field_name = "_".join(objData[1:]).replace("_", " ").strip()
+                if field_name:
+                    petalGatherFieldsList.append(field_name)
             elif objData[0] == "kill":
                 # kill objectives can be in the form "kill_<num>_<mob>" or "kill_<mob>"
                 # determine the mob name robustly
@@ -642,7 +649,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             elif objData[0] == "collect":
                 setdatEnable.append(objData[1].replace("-","_"))
         
-        return setdatEnable, gatherFieldsList, gumdropGatherFieldsList, requireRedField, requireBlueField, feedBees, requireRedGumdropField, requireBlueGumdropField, requireField
+        return setdatEnable, gatherFieldsList, gumdropGatherFieldsList, petalGatherFieldsList, requireRedField, requireBlueField, feedBees, requireRedGumdropField, requireBlueGumdropField, requireField
 
     #macro.rejoin()
     # Cache settings to avoid reloading on every iteration
@@ -746,6 +753,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             questGumdropGatherFields = []
             questGatherFieldOverrides = {}
             questGumdropFieldOverrides = {}
+            questPetalGatherFields = []
             redFieldNeeded = False
             blueFieldNeeded = False
             fieldNeeded = False
@@ -794,27 +802,6 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                 executedTasks.add(taskId)
                                 continue
 
-                        # Detect the current quest title (without executing) so we can honor title-level ignores
-                        try:
-                            setdatEnable_tmp, gatherFields_tmp, gumdropFields_tmp, needsRed_tmp, needsBlue_tmp, feedBees_tmp, needsRedGumdrop_tmp, needsBlueGumdrop_tmp, needsField_tmp = handleQuest(questName, executeQuest=False)
-                            last_titles = getattr(macro, '_last_quest_title', {}) or {}
-                            title = last_titles.get(questName, "") or ""
-                        except Exception:
-                            title = ""
-
-                        # Use hardcoded ignore list and skip if title matches, but only when the
-                        # profile setting `skip_petal_quests` is enabled. Default True preserves
-                        # previous behavior for users without the setting.
-                        if macro.setdat.get("skip_petal_quests", True):
-                            ignore_set = HARDCODED_PETAL_IGNORE_TITLES
-                            if title.lower() in ignore_set:
-                                try:
-                                    gui.log(time.strftime("%H:%M:%S"), f"Skipping ignored quest '{title}' for {questName}", "orange")
-                                except Exception:
-                                    pass
-                                macro.logger.webhook("Skipping ignored petal quest", f"Quest: {title}", "orange")
-                                executedTasks.add(taskId)
-                                continue
                         # Handle quest feeding and gathering requirements
                         questMappings = {
                             "polar bear": "polar_bear_quest",
@@ -834,9 +821,9 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                         # still on cooldown; skip applying requirements this cycle
                                         pass
                                     else:
-                                        setdatEnable, gatherFields, gumdropFields, needsRed, needsBlue, feedBees, needsRedGumdrop, needsBlueGumdrop, needsField = handleQuest(questName)
+                                        setdatEnable, gatherFields, gumdropFields, petalGatherFields, needsRed, needsBlue, feedBees, needsRedGumdrop, needsBlueGumdrop, needsField = handleQuest(questName)
                                 else:
-                                    setdatEnable, gatherFields, gumdropFields, needsRed, needsBlue, feedBees, needsRedGumdrop, needsBlueGumdrop, needsField = handleQuest(questName)
+                                    setdatEnable, gatherFields, gumdropFields, petalGatherFields, needsRed, needsBlue, feedBees, needsRedGumdrop, needsBlueGumdrop, needsField = handleQuest(questName)
                                 questGatherOverrides = getQuestGatherOverrides(questName)
                                 for k in setdatEnable:
                                     macro.setdat[k] = True
@@ -848,6 +835,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                     questGumdropGatherFields.append(field)
                                     if field not in questGumdropFieldOverrides:
                                         questGumdropFieldOverrides[field] = dict(questGatherOverrides)
+                                questPetalGatherFields.extend(petalGatherFields)
                                 redFieldNeeded = redFieldNeeded or needsRed
                                 blueFieldNeeded = blueFieldNeeded or needsBlue
                                 itemsToFeedBees.extend(feedBees)
@@ -903,6 +891,12 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             questGatherFields = [x for x in questGatherFields if not (x in allGatheredFields)]
             for field in questGatherFields:
                 runTask(macro.gather, args=(field, questGatherFieldOverrides.get(field, {})), resetAfter=False)
+                allGatheredFields.append(field)
+
+            # Handle petal quest gather fields
+            questPetalGatherFields = [x for x in questPetalGatherFields if not (x in allGatheredFields)]
+            for field in questPetalGatherFields:
+                runTask(macro.gatherPetal, args=(field,), resetAfter=False)
                 allGatheredFields.append(field)
 
             # Handle required blue/red fields for quests
@@ -1018,6 +1012,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         questGumdropGatherFields = []
         questGatherFieldOverrides = {}
         questGumdropFieldOverrides = {}
+        questPetalGatherFields = []
         redFieldNeeded = False
         blueFieldNeeded = False
         fieldNeeded = False
@@ -1053,25 +1048,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         continue
 
                 # Check requirements without executing (submit/get) the quest
-                setdatEnable, gatherFields, gumdropFields, needsRed, needsBlue, feedBees, needsRedGumdrop, needsBlueGumdrop, needsField = handleQuest(questName, executeQuest=False)
-                # Respect title-level ignore list: if the detected quest title is ignored, skip applying requirements
-                try:
-                    last_titles = getattr(macro, '_last_quest_title', {}) or {}
-                    title = last_titles.get(questName, "") or ""
-                    # Only apply hardcoded petal-title ignores when the setting is enabled
-                    if macro.setdat.get("skip_petal_quests", True):
-                        ignore_set = HARDCODED_PETAL_IGNORE_TITLES
-                        if title.lower() in ignore_set:
-                            try:
-                                gui.log(time.strftime("%H:%M:%S"), f"Skipping ignored quest (requirements): '{title}' for {questName}", "orange")
-                            except Exception:
-                                pass
-                            macro.logger.webhook("Skipping ignored petal quest", f"Quest: {title}", "orange")
-                            continue
-                except Exception:
-                    pass
-                except Exception:
-                    pass
+                setdatEnable, gatherFields, gumdropFields, petalGatherFields, needsRed, needsBlue, feedBees, needsRedGumdrop, needsBlueGumdrop, needsField = handleQuest(questName, executeQuest=False)
                 # Enable any required settings
                 for k in setdatEnable:
                     macro.setdat[k] = True
@@ -1085,6 +1062,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     questGumdropGatherFields.append(field)
                     if field not in questGumdropFieldOverrides:
                         questGumdropFieldOverrides[field] = dict(questGatherOverrides)
+                questPetalGatherFields.extend(petalGatherFields)
                 redFieldNeeded = redFieldNeeded or needsRed
                 blueFieldNeeded = blueFieldNeeded or needsBlue
                 redGumdropFieldNeeded = redGumdropFieldNeeded or needsRedGumdrop
@@ -1149,30 +1127,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     if not canClaimTimedBearQuest(questName):
                         executedTasks.add(taskId)
                         return False
-                # Detect the current quest title (without executing) so we can honor title-level ignores before execution
-                try:
-                    # populate last_quest_title via requirement-only check
-                    _ = handleQuest(questName, executeQuest=False)
-                    last_titles = getattr(macro, '_last_quest_title', {}) or {}
-                    title = last_titles.get(questName, "") or ""
-                    # Only skip based on hardcoded petal titles when the profile setting is enabled
-                    if macro.setdat.get("skip_petal_quests", True):
-                        ignore_set = HARDCODED_PETAL_IGNORE_TITLES
-                        if title.lower() in ignore_set:
-                            try:
-                                gui.log(time.strftime("%H:%M:%S"), f"Skipping ignored quest (execution): '{title}' for {questName}", "orange")
-                            except Exception:
-                                pass
-                            macro.logger.webhook("Skipping ignored petal quest", f"Quest: {title}", "orange")
-                            executedTasks.add(taskId)
-                            return False
-                except Exception:
-                    pass
-                
                 # Actually execute the quest (submit/get) - this will travel to quest giver if needed
                 # For Brown Bear, capture the objectives and gather them immediately
                 if questName == "brown bear":
-                    setdatEnable, gatherFields, gumdropFields, needsRed, needsBlue, feedBees, needsRedGumdrop, needsBlueGumdrop, needsField = handleQuest(questName, executeQuest=True)
+                    setdatEnable, gatherFields, gumdropFields, petalGatherFields, needsRed, needsBlue, feedBees, needsRedGumdrop, needsBlueGumdrop, needsField = handleQuest(questName, executeQuest=True)
                     
                     # Gather the fields for this quest
                     questGatherOverrides = getQuestGatherOverrides(questName)
@@ -1184,6 +1142,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     # Gather gumdrop fields (if any)
                     for field in gumdropFields:
                         runTask(macro.gather, args=(field, questGatherOverrides, True), resetAfter=False)
+
+                    # Gather petal fields (if any)
+                    for field in petalGatherFields:
+                        runTask(macro.gatherPetal, args=(field,), resetAfter=False)
                     
                     # Feed bees if needed
                     for item, quantity in feedBees:
@@ -1324,6 +1286,15 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     executedTasks.add(taskId)
                     return True
                 
+                return False
+
+            # Handle petal gather tasks (quest-driven)
+            if taskId.startswith("gatherpetal_"):
+                fieldName = taskId.replace("gatherpetal_", "").replace("_", " ")
+                if fieldName in questPetalGatherFields:
+                    runTask(macro.gatherPetal, args=(fieldName,), resetAfter=False)
+                    executedTasks.add(taskId)
+                    return True
                 return False
             
             # Handle special tasks
@@ -2273,6 +2244,12 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         questGatherFields = [x for x in questGatherFields if not (x in allGatheredFields)]
         for field in questGatherFields:
             runTask(macro.gather, args=(field, questGatherFieldOverrides.get(field, {})), resetAfter=False)
+            allGatheredFields.append(field)
+
+        # Handle petal quest gather fields
+        questPetalGatherFields = [x for x in questPetalGatherFields if not (x in allGatheredFields)]
+        for field in questPetalGatherFields:
+            runTask(macro.gatherPetal, args=(field,), resetAfter=False)
             allGatheredFields.append(field)
 
         # Handle required blue/red fields for quests
