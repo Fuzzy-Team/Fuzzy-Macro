@@ -15,7 +15,7 @@
 ![Repo Stars](https://img.shields.io/github/stars/Fuzzy-Team/Fuzzy-Macro?style=flat&label=Stars&color=fff240&logo=github&logocolor=white&link=https://github.com/Fuzzy-Team/Fuzzy-Macro/stargazers)
 ![Version](https://img.shields.io/github/v/release/Fuzzy-Team/Fuzzy-Macro)
 <br>
-Roblox Bee Swarm Simulator macro for macOS. Free, open source, and actively maintained!<br>
+Roblox Bee Swarm Simulator macro for macOS and Windows. Free, open source, and actively maintained!<br>
 <br>
 [Discord](https://discord.gg/rGRVG8Rpsb) - [Existance vs. Fuzzy Macro Comparison](https://fuzzy-team.gitbook.io/fuzzy-macro/getting-started/fuzzy-macro-vs-existance-macro) - [Gitbook](https://fuzzy-team.gitbook.io/fuzzy-macro)
 </div>
