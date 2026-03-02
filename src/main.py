@@ -656,6 +656,21 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         if isinstance(task_queue, list):
             return task_queue
         return settings.get("task_priority_order", [])
+
+    def getQuestGatherOverrides(questName):
+        questKeyPrefix = questName.replace(" ", "_")
+        questMinsKey = f"{questKeyPrefix}_quest_gather_mins"
+        questReturnKey = f"{questKeyPrefix}_quest_gather_return"
+
+        overrides = {}
+        mins = macro.setdat.get(questMinsKey, macro.setdat.get("quest_gather_mins", 0))
+        returnToHive = macro.setdat.get(questReturnKey, macro.setdat.get("quest_gather_return", "no override"))
+
+        if mins:
+            overrides["mins"] = mins
+        if returnToHive != "no override":
+            overrides["return"] = returnToHive
+        return overrides
     
     while True:
         # Check for pause - wait while paused
@@ -719,12 +734,19 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             # Initialize quest-related variables
             questGatherFields = []
             questGumdropGatherFields = []
+            questGatherFieldOverrides = {}
+            questGumdropFieldOverrides = {}
             redFieldNeeded = False
             blueFieldNeeded = False
             fieldNeeded = False
             itemsToFeedBees = []
             redGumdropFieldNeeded = False
             blueGumdropFieldNeeded = False
+            redFieldOverride = {}
+            blueFieldOverride = {}
+            redGumdropFieldOverride = {}
+            blueGumdropFieldOverride = {}
+            defaultQuestFieldOverride = {}
 
             # Get priority order and filter to only include quest tasks
             priorityOrder = get_task_list_order(macro.setdat)
@@ -805,16 +827,33 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                         setdatEnable, gatherFields, gumdropFields, needsRed, needsBlue, feedBees, needsRedGumdrop, needsBlueGumdrop, needsField = handleQuest(questName)
                                 else:
                                     setdatEnable, gatherFields, gumdropFields, needsRed, needsBlue, feedBees, needsRedGumdrop, needsBlueGumdrop, needsField = handleQuest(questName)
+                                questGatherOverrides = getQuestGatherOverrides(questName)
                                 for k in setdatEnable:
                                     macro.setdat[k] = True
-                                questGatherFields.extend(gatherFields)
-                                questGumdropGatherFields.extend(gumdropFields)
+                                for field in gatherFields:
+                                    questGatherFields.append(field)
+                                    if field not in questGatherFieldOverrides:
+                                        questGatherFieldOverrides[field] = dict(questGatherOverrides)
+                                for field in gumdropFields:
+                                    questGumdropGatherFields.append(field)
+                                    if field not in questGumdropFieldOverrides:
+                                        questGumdropFieldOverrides[field] = dict(questGatherOverrides)
                                 redFieldNeeded = redFieldNeeded or needsRed
                                 blueFieldNeeded = blueFieldNeeded or needsBlue
                                 itemsToFeedBees.extend(feedBees)
                                 redGumdropFieldNeeded = redGumdropFieldNeeded or needsRedGumdrop
                                 blueGumdropFieldNeeded = blueGumdropFieldNeeded or needsBlueGumdrop
                                 fieldNeeded = fieldNeeded or needsField
+                                if needsRed and not redFieldOverride:
+                                    redFieldOverride = dict(questGatherOverrides)
+                                if needsBlue and not blueFieldOverride:
+                                    blueFieldOverride = dict(questGatherOverrides)
+                                if needsRedGumdrop and not redGumdropFieldOverride:
+                                    redGumdropFieldOverride = dict(questGatherOverrides)
+                                if needsBlueGumdrop and not blueGumdropFieldOverride:
+                                    blueGumdropFieldOverride = dict(questGatherOverrides)
+                                if needsField and not defaultQuestFieldOverride:
+                                    defaultQuestFieldOverride = dict(questGatherOverrides)
 
                         if taskId not in executedTasks:
                             executedTasks.add(taskId)
@@ -823,13 +862,6 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             for item, quantity in itemsToFeedBees:
                 macro.feedBee(item, quantity)
                 taskCompleted = True
-
-            # Handle quest gather fields (done once per cycle)
-            questGatherOverrides = {}
-            if macro.setdat["quest_gather_mins"]:
-                questGatherOverrides["mins"] = macro.setdat["quest_gather_mins"]
-            if macro.setdat["quest_gather_return"] != "no override":
-                questGatherOverrides["return"] = macro.setdat["quest_gather_return"]
 
             allGatheredFields = []
 
@@ -841,6 +873,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         break
                 else:
                     questGumdropGatherFields.append("pine tree")
+                    questGumdropFieldOverrides["pine tree"] = dict(blueGumdropFieldOverride)
 
             if redGumdropFieldNeeded:
                 redFields = ["mushroom", "strawberry", "rose", "pepper"]
@@ -849,16 +882,17 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         break
                 else:
                     questGumdropGatherFields.append("rose")
+                    questGumdropFieldOverrides["rose"] = dict(redGumdropFieldOverride)
 
             for field in questGumdropGatherFields:
                 if field not in allGatheredFields:
-                    runTask(macro.gather, args=(field, questGatherOverrides, True), resetAfter=False)
+                    runTask(macro.gather, args=(field, questGumdropFieldOverrides.get(field, {}), True), resetAfter=False)
                     allGatheredFields.append(field)
 
             # Handle regular quest gather fields
             questGatherFields = [x for x in questGatherFields if not (x in allGatheredFields)]
             for field in questGatherFields:
-                runTask(macro.gather, args=(field, questGatherOverrides), resetAfter=False)
+                runTask(macro.gather, args=(field, questGatherFieldOverrides.get(field, {})), resetAfter=False)
                 allGatheredFields.append(field)
 
             # Handle required blue/red fields for quests
@@ -872,7 +906,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 else:
                     field = "pine tree"
                     allGatheredFields.append(field)
-                    runTask(macro.gather, args=(field, questGatherOverrides), resetAfter=False)
+                    runTask(macro.gather, args=(field, blueFieldOverride), resetAfter=False)
 
             if redFieldNeeded:
                 for f in redFields:
@@ -881,10 +915,13 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 else:
                     field = "rose"
                     allGatheredFields.append(field)
-                    runTask(macro.gather, args=(field, questGatherOverrides), resetAfter=False)
+                    runTask(macro.gather, args=(field, redFieldOverride), resetAfter=False)
 
             if fieldNeeded and not allGatheredFields:
-                runTask(macro.gather, args=("pine tree",), resetAfter=False)
+                if defaultQuestFieldOverride:
+                    runTask(macro.gather, args=("pine tree", defaultQuestFieldOverride), resetAfter=False)
+                else:
+                    runTask(macro.gather, args=("pine tree",), resetAfter=False)
 
             # Skip to next iteration
             continue
@@ -893,12 +930,19 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         # But only feed bees for quests that appear in priority queue order
         questGatherFields = []
         questGumdropGatherFields = []
+        questGatherFieldOverrides = {}
+        questGumdropFieldOverrides = {}
         redFieldNeeded = False
         blueFieldNeeded = False
         fieldNeeded = False
         itemsToFeedBees = []
         redGumdropFieldNeeded = False
         blueGumdropFieldNeeded = False
+        redFieldOverride = {}
+        blueFieldOverride = {}
+        redGumdropFieldOverride = {}
+        blueGumdropFieldOverride = {}
+        defaultQuestFieldOverride = {}
         
         # Track which quests have been executed in priority order (for feeding bees)
         executedQuests = set()
@@ -945,14 +989,31 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 # Enable any required settings
                 for k in setdatEnable:
                     macro.setdat[k] = True
+                questGatherOverrides = getQuestGatherOverrides(questName)
                 # Store gather fields (will be used after priority queue)
-                questGatherFields.extend(gatherFields)
-                questGumdropGatherFields.extend(gumdropFields)
+                for field in gatherFields:
+                    questGatherFields.append(field)
+                    if field not in questGatherFieldOverrides:
+                        questGatherFieldOverrides[field] = dict(questGatherOverrides)
+                for field in gumdropFields:
+                    questGumdropGatherFields.append(field)
+                    if field not in questGumdropFieldOverrides:
+                        questGumdropFieldOverrides[field] = dict(questGatherOverrides)
                 redFieldNeeded = redFieldNeeded or needsRed
                 blueFieldNeeded = blueFieldNeeded or needsBlue
                 redGumdropFieldNeeded = redGumdropFieldNeeded or needsRedGumdrop
                 blueGumdropFieldNeeded = blueGumdropFieldNeeded or needsBlueGumdrop
                 fieldNeeded = fieldNeeded or needsField
+                if needsRed and not redFieldOverride:
+                    redFieldOverride = dict(questGatherOverrides)
+                if needsBlue and not blueFieldOverride:
+                    blueFieldOverride = dict(questGatherOverrides)
+                if needsRedGumdrop and not redGumdropFieldOverride:
+                    redGumdropFieldOverride = dict(questGatherOverrides)
+                if needsBlueGumdrop and not blueGumdropFieldOverride:
+                    blueGumdropFieldOverride = dict(questGatherOverrides)
+                if needsField and not defaultQuestFieldOverride:
+                    defaultQuestFieldOverride = dict(questGatherOverrides)
                 # Store feed requirements (will be used when quest appears in priority queue)
                 questFeedRequirements[questName] = feedBees
         
@@ -1028,11 +1089,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     setdatEnable, gatherFields, gumdropFields, needsRed, needsBlue, feedBees, needsRedGumdrop, needsBlueGumdrop, needsField = handleQuest(questName, executeQuest=True)
                     
                     # Gather the fields for this quest
-                    questGatherOverrides = {}
-                    if macro.setdat.get("quest_gather_mins"):
-                        questGatherOverrides["mins"] = macro.setdat["quest_gather_mins"]
-                    if macro.setdat.get("quest_gather_return") != "no override":
-                        questGatherOverrides["return"] = macro.setdat["quest_gather_return"]
+                    questGatherOverrides = getQuestGatherOverrides(questName)
                     
                     # Gather regular fields
                     for field in gatherFields:
@@ -1173,13 +1230,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 
                 # Check if it's a quest gather field
                 if fieldName in questGatherFields or fieldName in questGumdropGatherFields:
-                    questGatherOverrides = {}
-                    if macro.setdat["quest_gather_mins"]:
-                        questGatherOverrides["mins"] = macro.setdat["quest_gather_mins"]
-                    if macro.setdat["quest_gather_return"] != "no override":
-                        questGatherOverrides["return"] = macro.setdat["quest_gather_return"]
-                    
                     isGumdrop = fieldName in questGumdropGatherFields
+                    questGatherOverrides = questGumdropFieldOverrides.get(fieldName, {}) if isGumdrop else questGatherFieldOverrides.get(fieldName, {})
                     runTask(macro.gather, args=(fieldName, questGatherOverrides, isGumdrop), resetAfter=False)
                     executedTasks.add(taskId)
                     return True
@@ -1881,13 +1933,6 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         blueFields = ["blue flower", "bamboo", "pine tree", "stump"]
         redFields = ["mushroom", "strawberry", "rose", "pepper"]
         
-        # Setup quest gather overrides
-        questGatherOverrides = {}
-        if macro.setdat["quest_gather_mins"]:
-            questGatherOverrides["mins"] = macro.setdat["quest_gather_mins"]
-        if macro.setdat["quest_gather_return"] != "no override":
-            questGatherOverrides["return"] = macro.setdat["quest_gather_return"]
-        
         # Track all gathered fields to avoid duplicates
         allGatheredFields = []
         
@@ -1898,6 +1943,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     break
             else:
                 questGumdropGatherFields.append("pine tree")
+                questGumdropFieldOverrides["pine tree"] = dict(blueGumdropFieldOverride)
         
         if redGumdropFieldNeeded:
             for f in redFields:
@@ -1905,16 +1951,17 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     break
             else:
                 questGumdropGatherFields.append("rose")
+                questGumdropFieldOverrides["rose"] = dict(redGumdropFieldOverride)
 
         for field in questGumdropGatherFields:
             if field not in allGatheredFields:
-                runTask(macro.gather, args=(field, questGatherOverrides, True), resetAfter=False)
+                runTask(macro.gather, args=(field, questGumdropFieldOverrides.get(field, {}), True), resetAfter=False)
                 allGatheredFields.append(field)
 
         # Handle regular quest gather fields
         questGatherFields = [x for x in questGatherFields if not (x in allGatheredFields)]
         for field in questGatherFields:
-            runTask(macro.gather, args=(field, questGatherOverrides), resetAfter=False)
+            runTask(macro.gather, args=(field, questGatherFieldOverrides.get(field, {})), resetAfter=False)
             allGatheredFields.append(field)
 
         # Handle required blue/red fields for quests
@@ -1925,7 +1972,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             else:
                 field = "pine tree"
                 allGatheredFields.append(field)
-                runTask(macro.gather, args=(field, questGatherOverrides), resetAfter=False)
+                runTask(macro.gather, args=(field, blueFieldOverride), resetAfter=False)
         
         if redFieldNeeded:
             for f in redFields:
@@ -1934,10 +1981,13 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             else:
                 field = "rose"
                 allGatheredFields.append(field)
-                runTask(macro.gather, args=(field, questGatherOverrides), resetAfter=False)
+                runTask(macro.gather, args=(field, redFieldOverride), resetAfter=False)
         
         if fieldNeeded and not allGatheredFields:
-            runTask(macro.gather, args=("pine tree",), resetAfter=False)
+            if defaultQuestFieldOverride:
+                runTask(macro.gather, args=("pine tree", defaultQuestFieldOverride), resetAfter=False)
+            else:
+                runTask(macro.gather, args=("pine tree",), resetAfter=False)
         
         # Handle planter gather fields (if not already gathered)
         if planterDataRaw:

@@ -6,29 +6,53 @@
   <div id="quests-settings-tab" class="standard-container sub-tab-panel active">
     <script>
       const questsSettingsParent = document.getElementById("quests-settings-tab");
-      buildStandardContainer(questsSettingsParent, "Override Gather Settings", "Override the gather settings in the gather tab when gathering for quests", [
-        {
-          id: "quest_gather_mins",
-          title: "Gather Until Mins",
-          desc: "Override the 'Gather Until Mins' option. Set it to 0 to disable overriding",
-          type: {
-            name: "textbox",
-            inputType: "float",
-            inputLimit: 4,
-            triggerFunction: saveProfileTriggerFunction,
-          },
-        },
-        {
-          id: "quest_gather_return",
-          title: "Return To Hive",
-          desc: "Override the 'Return To Hive' option",
-          type: {
-            name: "dropdown",
-            data: ["No Override", "💀 Reset", "👟 Walk", "🔄 Rejoin", "🌱 Whirligig"],
-            triggerFunction: saveProfileTriggerFunction,
-          },
-        },
-      ]);
+      // Compact per-quest override table
+      (function buildCompactQuestOverrides(parent) {
+        const quests = [
+          { key: 'polar_bear', label: 'Polar Bear' },
+          { key: 'brown_bear', label: 'Brown Bear' },
+          { key: 'black_bear', label: 'Black Bear' },
+          { key: 'honey_bee', label: 'Honey Bee' },
+          { key: 'bucko_bee', label: 'Bucko Bee' },
+          { key: 'riley_bee', label: 'Riley Bee' }
+        ];
+
+        const returnOptions = ["No Override", "💀 Reset", "👟 Walk", "🔄 Rejoin", "🌱 Whirligig"];
+
+        let html = `
+          <div class="poppins-medium standard-container" style="padding-top:1rem;">
+            <h2>Override Gather Settings</h2>
+            <p style="font-weight:500; font-size:1rem;">Per-quest gather overrides (mins / return). Set mins to 0 for no override.</p>
+            <div class="seperator"></div>
+            <table style="width:100%; border-collapse:collapse; font-size:0.95rem; margin-top:0.5rem;">
+              <thead>
+                <tr style="text-align:left; color:var(--muted); font-weight:600;">
+                  <th style="width:40%; padding:0.5rem 0.25rem;">Quest</th>
+                  <th style="width:30%; padding:0.5rem 0.25rem;">Gather Until Mins</th>
+                  <th style="width:30%; padding:0.5rem 0.25rem;">Return To Hive</th>
+                </tr>
+              </thead>
+              <tbody>
+        `;
+
+        quests.forEach(q => {
+          const minsId = `${q.key}_quest_gather_mins`;
+          const retId = `${q.key}_quest_gather_return`;
+          const minsInput = buildInput(minsId, { name: 'textbox', inputType: 'float', inputLimit: 4, triggerFunction: saveProfileTriggerFunction, length: 8 });
+          const retInput = buildInput(retId, { name: 'dropdown', data: returnOptions, triggerFunction: saveProfileTriggerFunction, length: 12 });
+
+          html += `
+            <tr>
+              <td style="padding:0.35rem 0.25rem; vertical-align:middle;">${q.label}</td>
+              <td style="padding:0.35rem 0.25rem; vertical-align:middle;">${minsInput}</td>
+              <td style="padding:0.35rem 0.25rem; vertical-align:middle;">${retInput}</td>
+            </tr>
+          `;
+        });
+
+        html += `</tbody></table></div>`;
+        parent.innerHTML += html;
+      })(questsSettingsParent);
 
       buildStandardContainer(questsSettingsParent, "Goo Settings", "Decide how the macro wants to handle gathering goo", [
         {
