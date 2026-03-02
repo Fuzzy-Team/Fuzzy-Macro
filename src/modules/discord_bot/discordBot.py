@@ -2389,13 +2389,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                     await interaction.response.send_message("❌ No private server link is configured.")
                 return
 
-            # Validate 'share?code' style links when using deeplink rejoin method
-            if "share" in link and settings.get("rejoin_method") == "deeplink":
-                await interaction.response.send_message(
-                    "❌ You entered a 'share?code' private server link!\n\nTo fix this:\n1. Paste the link in your browser\n2. Wait for roblox to load in\n3. Copy the link from the top of your browser.  It should now be a 'privateServerLinkCode' link",
-                    ephemeral=True,
-                )
-                return
+            # Accept share links — the rejoin deeplink handler supports the newer share link format.
 
             success, message = update_setting("private_server_link", link)
             if success:

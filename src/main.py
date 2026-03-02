@@ -450,9 +450,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
     regularMobData["werewolf"] = ["pumpkin"]
     
     private_server_link = macro.setdat.get("private_server_link", "")
-    if private_server_link and "share" in private_server_link and macro.setdat.get("rejoin_method") == "deeplink":
-                messageBox.msgBox(text="You entered a 'share?code' link!\n\nTo fix this:\n1. Paste the link in your browser\n2. Wait for roblox to load in\n3. Copy the link from the top of your browser.  It should now be a 'privateServerLinkCode' link", title='Unsupported private server link')
-                return
+    # Accept share links — the rejoin deeplink handler now supports the newer share link format.
 
     taskCompleted = True
     questCache = {}
