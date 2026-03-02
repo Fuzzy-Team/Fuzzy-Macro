@@ -44,7 +44,7 @@ def scroll(clicks, pause = False):
     import pyautogui as pag
     try:
         if _platform.system() == "Windows":
-            clicks = int(clicks) * 400
+            clicks = int(clicks) * 200
         try:
             pag.scroll(clicks, _pause=pause)
             return
