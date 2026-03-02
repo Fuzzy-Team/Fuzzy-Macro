@@ -71,10 +71,11 @@ def getPatternsDir():
 def getMacroVersion():
     """Get the macro version from version.txt file"""
     try:
-        destination = os.getcwd().replace("/src", "")
-        version_file = os.path.join(destination, "src", "webapp", "version.txt")
+        # Use project root to build a cross-platform path to version.txt
+        project_root = getProjectRoot()
+        version_file = os.path.join(project_root, "src", "webapp", "version.txt")
         if os.path.exists(version_file):
-            with open(version_file, "r") as f:
+            with open(version_file, "r", encoding="utf-8") as f:
                 version = f.read().strip()
                 return version if version else "1.0"
     except Exception as e:
