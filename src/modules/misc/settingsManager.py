@@ -474,9 +474,12 @@ def removeGeneralSetting(setting):
 def loadSettings():
     settings_path = os.path.join(getProfilePath(), "settings.txt")
     default_settings_path = os.path.join(getDefaultSettingsPath(), "settings.txt")
+    # Read the profile settings if present (capture raw profile to detect legacy keys)
     try:
-        settings = readSettingsFile(settings_path)
+        profile_raw = readSettingsFile(settings_path)
+        settings = profile_raw.copy()
     except FileNotFoundError:
+        profile_raw = {}
         print(f"Warning: Profile '{profileName}' settings file not found, using defaults")
         # Fall back to default settings if profile file is missing
         settings = readSettingsFile(default_settings_path)
@@ -488,6 +491,40 @@ def loadSettings():
         if k not in settings:
             settings[k] = v
             merged_new_keys = True
+
+    # Migrate legacy global quest gather override to per-quest keys on first load
+    try:
+        legacy_present = any(k in profile_raw for k in ("quest_gather_mins", "quest_gather_return"))
+        if legacy_present:
+            legacy_mins = profile_raw.get("quest_gather_mins", None)
+            legacy_return = profile_raw.get("quest_gather_return", None)
+            # Only migrate if legacy values differ from defaults (i.e., the user had configured them)
+            default_mins = defaultSettings.get("quest_gather_mins")
+            default_return = defaultSettings.get("quest_gather_return")
+            do_migrate = False
+            if legacy_mins is not None and legacy_mins != default_mins:
+                do_migrate = True
+            if legacy_return is not None and legacy_return != default_return:
+                do_migrate = True
+
+            if do_migrate:
+                per_quests = ["polar_bear", "brown_bear", "black_bear", "honey_bee", "bucko_bee", "riley_bee"]
+                for q in per_quests:
+                    mins_key = f"{q}_quest_gather_mins"
+                    return_key = f"{q}_quest_gather_return"
+                    if legacy_mins is not None:
+                        settings[mins_key] = legacy_mins
+                    if legacy_return is not None:
+                        settings[return_key] = legacy_return
+                # Remove old global keys so migration happens only once
+                if "quest_gather_mins" in settings:
+                    del settings["quest_gather_mins"]
+                if "quest_gather_return" in settings:
+                    del settings["quest_gather_return"]
+                merged_new_keys = True
+    except Exception:
+        # If migration fails for any reason, skip without blocking startup
+        pass
 
     # Ensure fields and fields_enabled arrays have 5 elements
     defaultFields = defaultSettings.get("fields", ['pine tree', 'sunflower', 'dandelion', 'pine tree', 'sunflower'])
