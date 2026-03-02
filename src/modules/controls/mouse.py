@@ -70,9 +70,12 @@ def scroll(clicks, pause = False):
     try:
         if _platform.system() == "Windows":
             import ctypes
-            # Boosted to better match pyautogui scroll speed in this macro.
-            WHEEL_DELTA = 360
-            ctypes.windll.user32.mouse_event(0x0800, 0, 0, int(clicks) * WHEEL_DELTA, 0)
+            # Use the standard Windows wheel delta and amplify it so
+            # scrolling on Windows matches macOS/pyautogui speed.
+            WHEEL_DELTA = 120
+            WINDOWS_SCROLL_MULTIPLIER = 4
+            total_delta = int(clicks) * WHEEL_DELTA * WINDOWS_SCROLL_MULTIPLIER
+            ctypes.windll.user32.mouse_event(0x0800, 0, 0, int(total_delta), 0)
             return
     except Exception:
         pass
