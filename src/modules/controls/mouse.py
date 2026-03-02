@@ -39,22 +39,25 @@ def fastClick():
     pynputMouse.release(Button.left)
 
 def scroll(clicks, pause = False):
-    # Use pyautogui's built-in scroll. Try passing the _pause kwarg first,
-    # fall back to the signature without it if necessary.
+    # Use the configured backend's scroll. On Windows amplify the clicks
+    # so wheel movement matches other platforms.
     import pyautogui as pag
     try:
-        pag.scroll(clicks, _pause=pause)
-        return
-    except TypeError:
+        if _platform.system() == "Windows":
+            clicks = int(clicks) * 400
         try:
-            pag.scroll(clicks)
+            pag.scroll(clicks, _pause=pause)
             return
-        except Exception:
-            pass
+        except TypeError:
+            try:
+                pag.scroll(clicks)
+                return
+            except Exception:
+                pass
     except Exception:
         pass
 
-    raise RuntimeError("Unable to perform scroll: pyautogui backend not available")
+    raise RuntimeError("Unable to perform scroll: no suitable backend available")
 
 def getPos():
     return pag.position()
