@@ -2630,11 +2630,12 @@ if __name__ == "__main__":
             #check if user enabled field drift compensation but sprinkler is not supreme saturator
             fieldSettings = settingsManager.loadFields()
             sprinkler = setdat["sprinkler_type"]
-            for field in setdat["fields"]:
-                if fieldSettings[field]["field_drift_compensation"] and setdat["sprinkler_type"] != "saturator":
+            for field in setdat.get("fields", []):
+                fs = fieldSettings.get(field, {})
+                if fs.get("field_drift_compensation", False) and setdat.get("sprinkler_type") != "saturator":
                     messageBox.msgBox(title="Field Drift Compensation", text=f"You have Field Drift Compensation enabled for {field} field, \
                                     but you do not have Supreme Saturator as your sprinkler type in configs.\n\
-				                    Field Drift Compensation requires you to own the Supreme Saturator.\n\
+                                    Field Drift Compensation requires you to own the Supreme Saturator.\n\
                                     Kindly disable field drift compensation if you do not have the Supreme Saturator")
                     break
             #check if blender is enabled but there are no items to craft
