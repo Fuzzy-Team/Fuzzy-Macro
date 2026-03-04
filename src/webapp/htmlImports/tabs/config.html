@@ -356,6 +356,17 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
+        {
+          id: "max_cannon_attempts",
+          title: "Max Cannon Attempts Before Rejoin",
+          desc: "Number of attempts the macro will try to reach the cannon before rejoining.",
+          type: {
+            name: "textbox",
+            inputType: "int",
+            inputLimit: 2,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
       ]);
 
       buildStandardContainer(parentOther, "Haste Compensation", "", [

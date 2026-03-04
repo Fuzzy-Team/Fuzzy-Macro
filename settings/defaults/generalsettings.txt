@@ -6,6 +6,7 @@ convert_wait=5
 private_server_link=
 rejoin_wait=30
 rejoin_method=deeplink
+max_cannon_attempts=3
 webhook_link=
 enable_webhook=False
 gifted_vicious=False
