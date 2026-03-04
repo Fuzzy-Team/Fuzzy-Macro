@@ -2744,7 +2744,7 @@ if __name__ == "__main__":
                 pass  # If eel is not ready, continue
         # Note: run.value == 6 (paused) is handled in the macro process loop - it waits for resume
         
-        # Check for crash (non-zero exitcodes). Log exit code and signal name to aid diagnosis.
+        # Check for crash (non-zero exitcodes). Log signal name to aid diagnosis.
         if macroProc and not macroProc.is_alive() and hasattr(macroProc, "exitcode") and macroProc.exitcode is not None and macroProc.exitcode != 0:
             exitcode = macroProc.exitcode
             try:
@@ -2760,9 +2760,8 @@ if __name__ == "__main__":
                     extra = ""
             except Exception:
                 extra = ""
-
-            print(f"Macro process exited with exitcode={exitcode}{extra}")
-            logger.webhook("","Macro Crashed: exitcode={0}{1}".format(exitcode, extra), "red", "screen", ping_category="ping_critical_errors")
+            print(f"Macro process exited{extra}")
+            logger.webhook("","Macro Crashed{0}".format(extra), "red", "screen", ping_category="ping_critical_errors")
             macroProc.join()
             appManager.openApp("Roblox")
             keyboardModule.releaseMovement()
