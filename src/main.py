@@ -914,6 +914,82 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             # Skip to next iteration
             continue
 
+        # Check if bug-run-only mode is enabled
+        if macro.setdat.get("macro_mode", "normal") == "bug":
+            # Bug-only mode: skip all tasks except kill tasks (including bosses)
+            priorityOrder = get_task_list_order(macro.setdat)
+            executedTasks = set()
+
+            # Filter priority order to only include enabled kill tasks or ant challenge
+            bugOnlyTasks = []
+            for taskId in priorityOrder:
+                if taskId == "ant_challenge":
+                    if macro.setdat.get("ant_challenge", False):
+                        bugOnlyTasks.append(taskId)
+                elif taskId == "stinger_hunt":
+                    if macro.setdat.get("stinger_hunt", False):
+                        bugOnlyTasks.append(taskId)
+                elif taskId.startswith("kill_"):
+                    mob = taskId.replace("kill_", "")
+                    if macro.setdat.get(mob, False):
+                        bugOnlyTasks.append(taskId)
+            # No fallback to auto-add mobs: only tasks present in priority order will run
+
+            # Execute bug run tasks in priority order
+            for taskId in bugOnlyTasks:
+                if taskId in executedTasks:
+                    continue
+
+                if taskId == "ant_challenge":
+                    if macro.setdat.get("ant_challenge", False):
+                        runTask(macro.antChallenge, resetAfter=False)
+                        executedTasks.add(taskId)
+                    continue
+
+                if taskId == "stinger_hunt":
+                    if macro.setdat.get("stinger_hunt", False):
+                        runTask(macro.stingerHunt, resetAfter=False)
+                        executedTasks.add(taskId)
+                    continue
+
+                mob = taskId.replace("kill_", "")
+
+                if mob == "coconut_crab":
+                    if macro.setdat["coconut_crab"] and macro.hasRespawned("coconut_crab", 36*60*60, applyMobRespawnBonus=True):
+                        macro.coconutCrab()
+                        executedTasks.add(taskId)
+                    continue
+
+                if mob == "king_beetle":
+                    if macro.setdat["king_beetle"] and macro.hasRespawned("king_beetle", 24*60*60, applyMobRespawnBonus=True):
+                        macro.kingBeetle()
+                        executedTasks.add(taskId)
+                    continue
+
+                if mob == "tunnel_bear":
+                    if macro.setdat["tunnel_bear"] and macro.hasRespawned("tunnel_bear", 48*60*60, applyMobRespawnBonus=True):
+                        macro.tunnelBear()
+                        executedTasks.add(taskId)
+                    continue
+
+                if mob == "stump_snail":
+                    if macro.setdat["stump_snail"] and macro.hasRespawned("stump_snail", 96*60*60, applyMobRespawnBonus=True):
+                        runTask(macro.stumpSnail)
+                        executedTasks.add(taskId)
+                    continue
+
+                if mob in regularMobData and macro.setdat.get(mob, False):
+                    killedInAnyField = False
+                    for field in regularMobData[mob]:
+                        if macro.hasMobRespawned(mob, field):
+                            runTask(macro.killMob, args=(mob, field,), convertAfter=False)
+                            killedInAnyField = True
+                    if killedInAnyField:
+                        executedTasks.add(taskId)
+
+            # Skip to next iteration
+            continue
+
         # Check quest requirements for ALL enabled quests (needed for quest-related gathering fields)
         # But only feed bees for quests that appear in priority queue order
         questGatherFields = []

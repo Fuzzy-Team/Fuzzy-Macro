@@ -268,6 +268,46 @@ async function loadTasks() {
     return;
   }
 
+  // Check if bug-run-only mode is enabled
+  if (setdat.macro_mode === "bug") {
+    out += taskHTML("Bug Run Mode", "🐞 Doing bug runs only (including bosses)");
+
+    // Get priority order and filter to only include enabled kill tasks
+    const priorityOrder = setdat.task_priority_order || [];
+    const bugOnlyTasks = [];
+
+    for (const taskId of priorityOrder) {
+      if (taskId === "ant_challenge") {
+        if (setdat["ant_challenge"]) bugOnlyTasks.push(taskId);
+      } else if (taskId === "stinger_hunt") {
+        if (setdat["stinger_hunt"]) bugOnlyTasks.push(taskId);
+      } else if (taskId.startsWith("kill_")) {
+        const mob = taskId.replace("kill_", "");
+        if (setdat[mob]) {
+          bugOnlyTasks.push(taskId);
+        }
+      }
+    }
+
+    for (const taskId of bugOnlyTasks) {
+      if (taskId === "ant_challenge") {
+        const emoji = killEmojis["ant_challenge"] || "";
+        out += taskHTML("Kill", `${emoji} Ant Challenge`);
+      } else if (taskId === "stinger_hunt") {
+        const emoji = killEmojis["stinger_hunt"] || "";
+        out += taskHTML("Kill", `${emoji} Stinger Hunt`);
+      } else {
+        const mob = taskId.replace("kill_", "");
+        const displayName = mob === "rhinobeetle" ? "rhino beetle" : mob;
+        const emoji = killEmojis[mob] || "";
+        out += taskHTML("Kill", `${emoji} ${toTitleCase(displayName.replaceAll("_", " ") )}`);
+      }
+    }
+
+    document.getElementById("task-list").innerHTML = out;
+    return;
+  }
+
   // Get priority order from settings, or use default order if not set
   const priorityOrder = setdat.task_priority_order || [];
 
