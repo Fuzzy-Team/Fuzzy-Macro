@@ -3816,19 +3816,19 @@ class macro:
     def getHoney(self):
         cap = mssScreenshot(self.robloxWindow.mx+(self.robloxWindow.mw//2-241), self.robloxWindow.my+self.robloxWindow.yOffset+5, 140, 36)
         ocrres = ocr.ocrFunc(cap)
-        honey = ""
+        honeyText = ""
         try:
             result = ''.join([x[1][0] for x in ocrres])
             for i in result:
                 if i == "(" or i == "+":
                     break
                 elif i.isdigit():
-                    honey += i
-            honey = int(honey)
-        except Exception as e:
-            print(e)
-            print(honey)
-        return honey if honey else 0
+                    honeyText += i
+            if honeyText:
+                return int(honeyText)
+        except Exception:
+            pass
+        return 0
 
     def hourlyReportBackgroundOnce(self):
         try:
