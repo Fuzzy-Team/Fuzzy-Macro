@@ -1613,7 +1613,14 @@ class macro:
             self.logger.webhook("", "Unable to detect that player respawned at hive", "dark brown", "screen")
 
     def cannon(self, fast = False):
-        for i in range(3):
+        # number of attempts to try reaching the cannon before rejoining can be configured
+        try:
+            max_attempts = int(self.setdat.get("max_cannon_attempts", 3))
+            if max_attempts < 1:
+                max_attempts = 1
+        except Exception:
+            max_attempts = 3
+        for i in range(max_attempts):
             #Move to canon:
             fieldDist = 0.9
             if self.cannonFromHive:

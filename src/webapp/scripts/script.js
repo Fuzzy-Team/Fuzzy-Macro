@@ -185,9 +185,22 @@ async function saveSetting(ele, type) {
   }
   const id = ele.id;
   const value = getInputValue(id);
+  // Enforce limits for specific settings before saving
+  let valueToSave = value;
+  if (type == "general" && id === "max_cannon_attempts") {
+    // Ensure numeric and clamp between 1 and 25
+    let n = parseInt(value, 10);
+    if (Number.isNaN(n)) n = 1;
+    if (n < 1) n = 1;
+    if (n > 25) n = 25;
+    valueToSave = n;
+    // Update the displayed input to reflect clamped value
+    const inputEl = document.getElementById(id);
+    if (inputEl) inputEl.value = n;
+  }
 
   if (type == "profile") {
-    try { await eel.saveProfileSetting(id, value)(); } catch (e) { /* ignore */ }
+    try { await eel.saveProfileSetting(id, valueToSave)(); } catch (e) { /* ignore */ }
     // Refresh priority/drag-list highlights after profile setting changes
     try {
       loadAllSettings().then((settings) => {
@@ -199,7 +212,7 @@ async function saveSetting(ele, type) {
       // ignore
     }
   } else if (type == "general") {
-    try { await eel.saveGeneralSetting(id, value)(); } catch (e) { /* ignore */ }
+    try { await eel.saveGeneralSetting(id, valueToSave)(); } catch (e) { /* ignore */ }
   }
 }
 
