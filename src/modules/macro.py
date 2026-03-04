@@ -3086,7 +3086,9 @@ class macro:
                 time.sleep(4.5)
                 self.keyboard.walk("w",1)
                 mouse.mouseUp()
-                if time.time()-st > 900: #15min time limit
+                # Respect user-configurable max kill time (minutes)
+                max_kill_time = self.setdat.get("coconut_crab_max_kill_time", 15)
+                if time.time() - st > max_kill_time * 60:
                     self.bossStatus = "timelimit"
                 if self.died or self.bossStatus is not None: break
             
