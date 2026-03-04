@@ -268,6 +268,46 @@ async function loadTasks() {
     return;
   }
 
+  // Check if bug-run-only mode is enabled
+  if (setdat.macro_mode === "bug") {
+    out += taskHTML("Bug Run Mode", "🐞 Doing bug runs only (including bosses)");
+
+    // Get priority order and filter to only include enabled kill tasks
+    const priorityOrder = setdat.task_priority_order || [];
+    const bugOnlyTasks = [];
+
+    for (const taskId of priorityOrder) {
+      if (taskId === "ant_challenge") {
+        if (setdat["ant_challenge"]) bugOnlyTasks.push(taskId);
+      } else if (taskId === "stinger_hunt") {
+        if (setdat["stinger_hunt"]) bugOnlyTasks.push(taskId);
+      } else if (taskId.startsWith("kill_")) {
+        const mob = taskId.replace("kill_", "");
+        if (setdat[mob]) {
+          bugOnlyTasks.push(taskId);
+        }
+      }
+    }
+
+    for (const taskId of bugOnlyTasks) {
+      if (taskId === "ant_challenge") {
+        const emoji = killEmojis["ant_challenge"] || "";
+        out += taskHTML("Kill", `${emoji} Ant Challenge`);
+      } else if (taskId === "stinger_hunt") {
+        const emoji = killEmojis["stinger_hunt"] || "";
+        out += taskHTML("Kill", `${emoji} Stinger Hunt`);
+      } else {
+        const mob = taskId.replace("kill_", "");
+        const displayName = mob === "rhinobeetle" ? "rhino beetle" : mob;
+        const emoji = killEmojis[mob] || "";
+        out += taskHTML("Kill", `${emoji} ${toTitleCase(displayName.replaceAll("_", " ") )}`);
+      }
+    }
+
+    document.getElementById("task-list").innerHTML = out;
+    return;
+  }
+
   // Get priority order from settings, or use default order if not set
   const priorityOrder = setdat.task_priority_order || [];
 
@@ -528,7 +568,7 @@ async function loadTasks() {
 
   //planter timers
 
-  function getPlanterHTML(planter, field, harvestTime) {
+  function getPlanterHTML(planter, field, harvestTime, index) {
     const currTime = Date.now() / 1000;
     const timeRemaining = secondsToMinsAndHours(harvestTime - currTime);
     // Normalize field to fieldNectarIcons key format (lowercase, spaces -> underscores)
@@ -548,7 +588,8 @@ async function loadTasks() {
                     <span>${toTitleCase(field)}</span>
                 </div>
                 <span class="time ${timeRemaining == "Ready!" ? "ready" : ""
-      }">${timeRemaining}</span> 
+      }">${timeRemaining}</span>
+                <button class="purple-button reset-planter-btn" data-index="${index}" style="margin-top: 0.5rem; padding: 0.3rem 0.6rem; font-size: 0.75rem;">Reset</button>
             </div> 
         `;
   }
@@ -570,18 +611,21 @@ async function loadTasks() {
           planterTimersOut += getPlanterHTML(
             planterData.planters[i],
             planterData.fields[i],
-            planterData.harvestTimes[i]
+            planterData.harvestTimes[i],
+            i
           );
         }
       }
     } else if (setdat["planters_mode"] == 2) {
       planterData = (await eel.getAutoPlanterData()()).planters;
-      for (const planter of planterData) {
+      for (let i = 0; i < planterData.length; i++) {
+        const planter = planterData[i];
         if (planter.planter) {
           planterTimersOut += getPlanterHTML(
             planter.planter,
             planter.field,
-            planter.harvest_time
+            planter.harvest_time,
+            i
           );
         }
       }
@@ -775,6 +819,30 @@ $("#home-placeholder")
     document
       .getElementById("planter-timers-container")
       .querySelector(".planter-timers").innerHTML = "";
+    setTimeout(() => {
+      btn.classList.remove("active");
+    }, 700);
+  })
+  .on("click", ".reset-planter-btn", async (event) => {
+    const btn = event.currentTarget;
+    if (btn.classList.contains("active")) return;
+    btn.classList.add("active");
+    
+    const index = parseInt(btn.getAttribute("data-index"));
+    const setdat = await loadAllSettings();
+    
+    if (setdat["planters_mode"] == 1) {
+      await eel.resetManualPlanterTimer(index)();
+    } else if (setdat["planters_mode"] == 2) {
+      await eel.resetAutoPlanterTimer(index)();
+    }
+    
+    // Remove the planter element from display
+    const planterElement = btn.closest(".planter");
+    if (planterElement) {
+      planterElement.remove();
+    }
+    
     setTimeout(() => {
       btn.classList.remove("active");
     }, 700);

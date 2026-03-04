@@ -460,9 +460,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
     regularMobData["werewolf"] = ["pumpkin"]
     
     private_server_link = macro.setdat.get("private_server_link", "")
-    if private_server_link and "share" in private_server_link and macro.setdat.get("rejoin_method") == "deeplink":
-                messageBox.msgBox(text="You entered a 'share?code' link!\n\nTo fix this:\n1. Paste the link in your browser\n2. Wait for roblox to load in\n3. Copy the link from the top of your browser.  It should now be a 'privateServerLinkCode' link", title='Unsupported private server link')
-                return
+    # Accept share links — the rejoin deeplink handler now supports the newer share link format.
 
     taskCompleted = True
     questCache = {}
@@ -922,6 +920,82 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     runTask(macro.gather, args=("pine tree", defaultQuestFieldOverride), resetAfter=False)
                 else:
                     runTask(macro.gather, args=("pine tree",), resetAfter=False)
+
+            # Skip to next iteration
+            continue
+
+        # Check if bug-run-only mode is enabled
+        if macro.setdat.get("macro_mode", "normal") == "bug":
+            # Bug-only mode: skip all tasks except kill tasks (including bosses)
+            priorityOrder = get_task_list_order(macro.setdat)
+            executedTasks = set()
+
+            # Filter priority order to only include enabled kill tasks or ant challenge
+            bugOnlyTasks = []
+            for taskId in priorityOrder:
+                if taskId == "ant_challenge":
+                    if macro.setdat.get("ant_challenge", False):
+                        bugOnlyTasks.append(taskId)
+                elif taskId == "stinger_hunt":
+                    if macro.setdat.get("stinger_hunt", False):
+                        bugOnlyTasks.append(taskId)
+                elif taskId.startswith("kill_"):
+                    mob = taskId.replace("kill_", "")
+                    if macro.setdat.get(mob, False):
+                        bugOnlyTasks.append(taskId)
+            # No fallback to auto-add mobs: only tasks present in priority order will run
+
+            # Execute bug run tasks in priority order
+            for taskId in bugOnlyTasks:
+                if taskId in executedTasks:
+                    continue
+
+                if taskId == "ant_challenge":
+                    if macro.setdat.get("ant_challenge", False):
+                        runTask(macro.antChallenge, resetAfter=False)
+                        executedTasks.add(taskId)
+                    continue
+
+                if taskId == "stinger_hunt":
+                    if macro.setdat.get("stinger_hunt", False):
+                        runTask(macro.stingerHunt, resetAfter=False)
+                        executedTasks.add(taskId)
+                    continue
+
+                mob = taskId.replace("kill_", "")
+
+                if mob == "coconut_crab":
+                    if macro.setdat["coconut_crab"] and macro.hasRespawned("coconut_crab", 36*60*60, applyMobRespawnBonus=True):
+                        macro.coconutCrab()
+                        executedTasks.add(taskId)
+                    continue
+
+                if mob == "king_beetle":
+                    if macro.setdat["king_beetle"] and macro.hasRespawned("king_beetle", 24*60*60, applyMobRespawnBonus=True):
+                        macro.kingBeetle()
+                        executedTasks.add(taskId)
+                    continue
+
+                if mob == "tunnel_bear":
+                    if macro.setdat["tunnel_bear"] and macro.hasRespawned("tunnel_bear", 48*60*60, applyMobRespawnBonus=True):
+                        macro.tunnelBear()
+                        executedTasks.add(taskId)
+                    continue
+
+                if mob == "stump_snail":
+                    if macro.setdat["stump_snail"] and macro.hasRespawned("stump_snail", 96*60*60, applyMobRespawnBonus=True):
+                        runTask(macro.stumpSnail)
+                        executedTasks.add(taskId)
+                    continue
+
+                if mob in regularMobData and macro.setdat.get(mob, False):
+                    killedInAnyField = False
+                    for field in regularMobData[mob]:
+                        if macro.hasMobRespawned(mob, field):
+                            runTask(macro.killMob, args=(mob, field,), convertAfter=False)
+                            killedInAnyField = True
+                    if killedInAnyField:
+                        executedTasks.add(taskId)
 
             # Skip to next iteration
             continue
@@ -1551,6 +1625,9 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                             break
                         nectar = macro.setdat[f"auto_priority_{i}_nectar"]
                         for j in range(3):
+                            # Stop placing if we've reached the allowed maximum
+                            if plantersPlaced >= maxAllowedPlanters:
+                                break
                             planter = planterData[j]
                             if planter["planter"]:
                                 continue
@@ -1567,15 +1644,18 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                             planterToPlace = getBestPlanter(nextField)
                             if planterToPlace is None:
                                 break
-                            if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False, allowAFB=False):
-                                savePlacedPlanter(j, nextField, planterToPlace, nectar)
-                                # If global gather is enabled, gather the field immediately so it is harvested while planter grows
-                                try:
-                                    if gatherFlag:
-                                        runTask(macro.gather, args=(nextField,), resetAfter=False)
-                                except NameError:
-                                    pass
-                                plantersPlaced += 1
+                                if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False, allowAFB=False):
+                                    savePlacedPlanter(j, nextField, planterToPlace, nectar)
+                                    # If global gather is enabled, gather the field immediately so it is harvested while planter grows
+                                    try:
+                                        if gatherFlag:
+                                            runTask(macro.gather, args=(nextField,), resetAfter=False)
+                                    except NameError:
+                                        pass
+                                    plantersPlaced += 1
+                                    # If we've reached the allowed number, stop trying more placements
+                                    if plantersPlaced >= maxAllowedPlanters:
+                                        break
                     
                     if plantersPlaced < maxAllowedPlanters:
                         nectarPercentages = []
@@ -1587,6 +1667,9 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                             if plantersPlaced >= maxAllowedPlanters:
                                 break
                             for j in range(3):
+                                # Stop placing if we've reached the allowed maximum
+                                if plantersPlaced >= maxAllowedPlanters:
+                                    break
                                 planter = planterData[j]
                                 if planter["planter"]:
                                     continue
@@ -1609,6 +1692,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                     except NameError:
                                         pass
                                     plantersPlaced += 1
+                                    if plantersPlaced >= maxAllowedPlanters:
+                                        break
                     
                     if plantersPlaced < maxAllowedPlanters:
                         for i in range(5):
@@ -1616,6 +1701,9 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                 break
                             nectar = macro.setdat[f"auto_priority_{i}_nectar"]
                             for j in range(3):
+                                # Stop placing if we've reached the allowed maximum
+                                if plantersPlaced >= maxAllowedPlanters:
+                                    break
                                 planter = planterData[j]
                                 if planter["planter"]:
                                     continue
@@ -1635,6 +1723,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                     except NameError:
                                         pass
                                     plantersPlaced += 1
+                                    if plantersPlaced >= maxAllowedPlanters:
+                                        break
                     
                     executedTasks.add(taskId)
                     return True
@@ -2685,11 +2775,12 @@ if __name__ == "__main__":
             #check if user enabled field drift compensation but sprinkler is not supreme saturator
             fieldSettings = settingsManager.loadFields()
             sprinkler = setdat["sprinkler_type"]
-            for field in setdat["fields"]:
-                if fieldSettings[field]["field_drift_compensation"] and setdat["sprinkler_type"] != "saturator":
+            for field in setdat.get("fields", []):
+                fs = fieldSettings.get(field, {})
+                if fs.get("field_drift_compensation", False) and setdat.get("sprinkler_type") != "saturator":
                     messageBox.msgBox(title="Field Drift Compensation", text=f"You have Field Drift Compensation enabled for {field} field, \
                                     but you do not have Supreme Saturator as your sprinkler type in configs.\n\
-				                    Field Drift Compensation requires you to own the Supreme Saturator.\n\
+                                    Field Drift Compensation requires you to own the Supreme Saturator.\n\
                                     Kindly disable field drift compensation if you do not have the Supreme Saturator")
                     break
             #check if blender is enabled but there are no items to craft
@@ -2798,7 +2889,7 @@ if __name__ == "__main__":
                 pass  # If eel is not ready, continue
         # Note: run.value == 6 (paused) is handled in the macro process loop - it waits for resume
         
-        # Check for crash (non-zero exitcodes). Log exit code and signal name to aid diagnosis.
+        # Check for crash (non-zero exitcodes). Log signal name to aid diagnosis.
         if macroProc and not macroProc.is_alive() and hasattr(macroProc, "exitcode") and macroProc.exitcode is not None and macroProc.exitcode != 0:
             exitcode = macroProc.exitcode
             try:
@@ -2814,9 +2905,8 @@ if __name__ == "__main__":
                     extra = ""
             except Exception:
                 extra = ""
-
-            print(f"Macro process exited with exitcode={exitcode}{extra}")
-            logger.webhook("","Macro Crashed: exitcode={0}{1}".format(exitcode, extra), "red", "screen", ping_category="ping_critical_errors")
+            print(f"Macro process exited{extra}")
+            logger.webhook("","Macro Crashed{0}".format(extra), "red", "screen", ping_category="ping_critical_errors")
             macroProc.join()
             appManager.openApp("Roblox")
             keyboardModule.releaseMovement()

@@ -315,6 +315,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         ("normal", "Normal"),
         ("quest", "Quests"),
         ("field", "Field"),
+        ("bug", "Bug Runs"),
     ]
 
     SETTINGS_CATEGORIES = {
@@ -817,6 +818,10 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             return False
         if macro_mode == "quest" and not task_id.startswith("quest_"):
             return False
+        if macro_mode == "bug" and not (task_id.startswith("kill_") or task_id == "ant_challenge"):
+            return False
+        if macro_mode == "bug" and not task_id.startswith("kill_"):
+            return False
 
         if task_id.startswith("quest_"):
             quest_key = f"{task_id.replace('quest_', '')}_quest"
@@ -873,6 +878,15 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                     quest_name = quest_key.replace("_quest", "")
                     enabled_tasks.append(f"quest_{quest_name}")
 
+        if macro_mode == "bug" and not enabled_tasks:
+            for mob_key, _ in MOB_SETTINGS:
+                if settings.get(mob_key, False):
+                    enabled_tasks.append(f"kill_{mob_key}")
+            # include ant challenge and stinger hunt if enabled
+            if settings.get("ant_challenge", False):
+                enabled_tasks.append("ant_challenge")
+            if settings.get("stinger_hunt", False):
+                enabled_tasks.append("stinger_hunt")
         return enabled_tasks
 
     def _normalize_current_task_to_priority_task(current_task: str, settings: Dict, queue_order: List[str]) -> Optional[str]:
@@ -2461,13 +2475,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                     await interaction.response.send_message("❌ No private server link is configured.")
                 return
 
-            # Validate 'share?code' style links when using deeplink rejoin method
-            if "share" in link and settings.get("rejoin_method") == "deeplink":
-                await interaction.response.send_message(
-                    "❌ You entered a 'share?code' private server link!\n\nTo fix this:\n1. Paste the link in your browser\n2. Wait for roblox to load in\n3. Copy the link from the top of your browser.  It should now be a 'privateServerLinkCode' link",
-                    ephemeral=True,
-                )
-                return
+            # Accept share links — the rejoin deeplink handler supports the newer share link format.
 
             success, message = update_setting("private_server_link", link)
             if success:

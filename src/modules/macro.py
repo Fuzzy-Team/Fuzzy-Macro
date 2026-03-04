@@ -1614,7 +1614,14 @@ class macro:
             self.logger.webhook("", "Unable to detect that player respawned at hive", "dark brown", "screen")
 
     def cannon(self, fast = False):
-        for i in range(3):
+        # number of attempts to try reaching the cannon before rejoining can be configured
+        try:
+            max_attempts = int(self.setdat.get("max_cannon_attempts", 3))
+            if max_attempts < 1:
+                max_attempts = 1
+        except Exception:
+            max_attempts = 3
+        for i in range(max_attempts):
             #Move to canon:
             fieldDist = 0.9
             if self.cannonFromHive:
@@ -1688,13 +1695,36 @@ class macro:
                 time.sleep(2)
                 deeplink = "roblox://placeID=1537690962"
                 if joinPS:
+                    # Parse the provided private server link robustly using url parsing
+                    from urllib.parse import urlparse, parse_qs
                     try:
-                        if "code=" in psLink.lower():
-                            deeplink += f"&linkCode={psLink.lower().split('code=')[1]}"
+                        parsed = urlparse(psLink)
+                        qs = {k.lower(): v for k, v in parse_qs(parsed.query).items()}
+                        code_val = None
+                        is_share = False
+                        if 'code' in qs and qs['code']:
+                            code_val = qs['code'][0]
+                            is_share = True
+                        elif 'privateserverlinkcode' in qs and qs['privateserverlinkcode']:
+                            code_val = qs['privateserverlinkcode'][0]
+                        elif 'privateserverlink' in qs and qs['privateserverlink']:
+                            code_val = qs['privateserverlink'][0]
+                        elif 'linkcode' in qs and qs['linkcode']:
+                            code_val = qs['linkcode'][0]
                         else:
-                            self.logger.webhook("", "Invalid private server link format. Expected 'code=' in link. Falling back to public server.", "red", ping_category="ping_critical_errors")
+                            # Fallback: try to extract a trailing query value after '='
+                            if '=' in psLink:
+                                code_val = psLink.split('=')[-1].split('&')[0]
+
+                        if not code_val:
+                            self.logger.webhook("", "Invalid private server link format. Could not extract code. Falling back to public server.", "red", ping_category="ping_critical_errors")
                             joinPS = False
-                    except (IndexError, AttributeError) as e:
+                        else:
+                            if is_share:
+                                deeplink = f"roblox://navigation/share_links?code={code_val}&type=Server"
+                            else:
+                                deeplink += f"&linkCode={code_val}"
+                    except Exception as e:
                         self.logger.webhook("", f"Error parsing private server link: {e}. Falling back to public server.", "red", ping_category="ping_critical_errors")
                         joinPS = False
                 appManager.openDeeplink(deeplink)
@@ -3057,7 +3087,9 @@ class macro:
                 time.sleep(4.5)
                 self.keyboard.walk("w",1)
                 mouse.mouseUp()
-                if time.time()-st > 900: #15min time limit
+                # Respect user-configurable max kill time (minutes)
+                max_kill_time = self.setdat.get("coconut_crab_max_kill_time", 15)
+                if time.time() - st > max_kill_time * 60:
                     self.bossStatus = "timelimit"
                 if self.died or self.bossStatus is not None: break
             
@@ -3794,19 +3826,19 @@ class macro:
     def getHoney(self):
         cap = mssScreenshot(self.robloxWindow.mx+(self.robloxWindow.mw//2-241), self.robloxWindow.my+self.robloxWindow.yOffset+5, 140, 36)
         ocrres = ocr.ocrFunc(cap)
-        honey = ""
+        honeyText = ""
         try:
             result = ''.join([x[1][0] for x in ocrres])
             for i in result:
                 if i == "(" or i == "+":
                     break
                 elif i.isdigit():
-                    honey += i
-            honey = int(honey)
-        except Exception as e:
-            print(e)
-            print(honey)
-        return honey if honey else 0
+                    honeyText += i
+            if honeyText:
+                return int(honeyText)
+        except Exception:
+            pass
+        return 0
 
     def hourlyReportBackgroundOnce(self):
         try:
@@ -5630,8 +5662,7 @@ class macro:
         # time.sleep(1)
         
         private_server_link = self.setdat.get("private_server_link", "")
-        if private_server_link and "share" in private_server_link and self.setdat.get("rejoin_method") == "deeplink":
-            messageBox.msgBox(text="You entered a 'share?code' private server link!\n\nTo fix this:\n1. Paste the link in your browser\n2. Wait for roblox to load in\n3. Copy the link from the top of your browser.  It should now be a 'privateServerLinkCode' link", title='Unsupported private server link')
+        # Accept share links — the rejoin deeplink handler now supports the newer share link format.
 
     def start(self):
         print("macro object started")
