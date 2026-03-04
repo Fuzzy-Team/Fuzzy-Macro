@@ -1539,6 +1539,9 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                             break
                         nectar = macro.setdat[f"auto_priority_{i}_nectar"]
                         for j in range(3):
+                            # Stop placing if we've reached the allowed maximum
+                            if plantersPlaced >= maxAllowedPlanters:
+                                break
                             planter = planterData[j]
                             if planter["planter"]:
                                 continue
@@ -1555,15 +1558,18 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                             planterToPlace = getBestPlanter(nextField)
                             if planterToPlace is None:
                                 break
-                            if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False, allowAFB=False):
-                                savePlacedPlanter(j, nextField, planterToPlace, nectar)
-                                # If global gather is enabled, gather the field immediately so it is harvested while planter grows
-                                try:
-                                    if gatherFlag:
-                                        runTask(macro.gather, args=(nextField,), resetAfter=False)
-                                except NameError:
-                                    pass
-                                plantersPlaced += 1
+                                if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False, allowAFB=False):
+                                    savePlacedPlanter(j, nextField, planterToPlace, nectar)
+                                    # If global gather is enabled, gather the field immediately so it is harvested while planter grows
+                                    try:
+                                        if gatherFlag:
+                                            runTask(macro.gather, args=(nextField,), resetAfter=False)
+                                    except NameError:
+                                        pass
+                                    plantersPlaced += 1
+                                    # If we've reached the allowed number, stop trying more placements
+                                    if plantersPlaced >= maxAllowedPlanters:
+                                        break
                     
                     if plantersPlaced < maxAllowedPlanters:
                         nectarPercentages = []
@@ -1575,6 +1581,9 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                             if plantersPlaced >= maxAllowedPlanters:
                                 break
                             for j in range(3):
+                                # Stop placing if we've reached the allowed maximum
+                                if plantersPlaced >= maxAllowedPlanters:
+                                    break
                                 planter = planterData[j]
                                 if planter["planter"]:
                                     continue
@@ -1597,6 +1606,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                     except NameError:
                                         pass
                                     plantersPlaced += 1
+                                    if plantersPlaced >= maxAllowedPlanters:
+                                        break
                     
                     if plantersPlaced < maxAllowedPlanters:
                         for i in range(5):
@@ -1604,6 +1615,9 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                 break
                             nectar = macro.setdat[f"auto_priority_{i}_nectar"]
                             for j in range(3):
+                                # Stop placing if we've reached the allowed maximum
+                                if plantersPlaced >= maxAllowedPlanters:
+                                    break
                                 planter = planterData[j]
                                 if planter["planter"]:
                                     continue
@@ -1623,6 +1637,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                     except NameError:
                                         pass
                                     plantersPlaced += 1
+                                    if plantersPlaced >= maxAllowedPlanters:
+                                        break
                     
                     executedTasks.add(taskId)
                     return True
