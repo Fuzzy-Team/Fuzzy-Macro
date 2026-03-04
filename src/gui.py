@@ -185,6 +185,66 @@ def setAutoPlanterGather(val):
         return True
     except Exception:
         return False
+
+@eel.expose
+def resetManualPlanterTimer(index):
+    """Reset a specific manual planter timer by index (0-2)"""
+    try:
+        with open("./data/user/manualplanters.txt", "r") as f:
+            planterDataRaw = f.read()
+        
+        if not planterDataRaw.strip():
+            return False
+        
+        planterData = ast.literal_eval(planterDataRaw)
+        
+        # Check if index is valid
+        if index < 0 or index >= len(planterData.get("planters", [])):
+            return False
+        
+        # Clear the specific planter
+        if "planters" in planterData and len(planterData["planters"]) > index:
+            planterData["planters"][index] = ""
+        if "fields" in planterData and len(planterData["fields"]) > index:
+            planterData["fields"][index] = ""
+        if "harvestTimes" in planterData and len(planterData["harvestTimes"]) > index:
+            planterData["harvestTimes"][index] = 0
+        
+        with open("./data/user/manualplanters.txt", "w") as f:
+            f.write(str(planterData))
+        
+        return True
+    except Exception as e:
+        print(f"Error resetting manual planter {index}: {e}")
+        return False
+
+@eel.expose
+def resetAutoPlanterTimer(index):
+    """Reset a specific auto planter timer by index (0-2)"""
+    try:
+        with open("./data/user/auto_planters.json", "r") as f:
+            data = json.load(f)
+        
+        # Check if index is valid
+        if index < 0 or index >= len(data.get("planters", [])):
+            return False
+        
+        # Clear the specific planter
+        data["planters"][index] = {
+            "planter": "",
+            "nectar": "",
+            "field": "",
+            "harvest_time": 0,
+            "nectar_est_percent": 0
+        }
+        
+        with open("./data/user/auto_planters.json", "w") as f:
+            json.dump(data, f, indent=3)
+        
+        return True
+    except Exception as e:
+        print(f"Error resetting auto planter {index}: {e}")
+        return False
     
 @eel.expose
 def clearBlender():
