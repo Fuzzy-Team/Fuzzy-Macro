@@ -27,13 +27,17 @@ usePillow = False
 def _resolveCaptureBounds(x, y, w, h):
     try:
         state = getVirtualMonitorState()
-        if state.get("active") and x == 0 and y == 0 and w == mw and h == mh:
-            return (
-                int(state.get("x", 0)),
-                int(state.get("y", 0)),
-                int(state.get("width", 1920)),
-                int(state.get("height", 1080)),
-            )
+        if state.get("active"):
+            # If the caller requested a full-screen capture (defaults), map to VM bounds.
+            try:
+                vmx = int(state.get("x", 0))
+                vmy = int(state.get("y", 0))
+                vmw = int(state.get("width", 1920))
+                vmh = int(state.get("height", 1080))
+            except Exception:
+                vmx, vmy, vmw, vmh = 0, 0, 1920, 1080
+            if x == 0 and y == 0 and w == mw and h == mh:
+                return (vmx, vmy, vmw, vmh)
     except Exception:
         pass
     return int(x), int(y), int(w), int(h)
@@ -41,6 +45,25 @@ def _resolveCaptureBounds(x, y, w, h):
 def pillowGrab(x,y,w,h):
     fh, filepath = tempfile.mkstemp(".png")
     os.close(fh)
+    try:
+        state = getVirtualMonitorState()
+        if state.get("active"):
+            # Use mss to capture the virtual monitor area directly
+            with mss.mss() as sct:
+                left = int(state.get("x", 0))
+                top = int(state.get("y", 0))
+                width = int(state.get("width", 1920))
+                height = int(state.get("height", 1080))
+                monitor = {"left": left, "top": top, "width": width, "height": height}
+                sct_img = sct.grab(monitor)
+                img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
+                # crop requested region relative to VM origin
+                bbox = (x - left, y - top, x - left + w, y - top + h)
+                im_cropped = img.crop(bbox)
+                return im_cropped
+    except Exception:
+        pass
+
     args = ["screencapture"]
     subprocess.call(args + ["-x", filepath])
     im = Image.open(filepath)
