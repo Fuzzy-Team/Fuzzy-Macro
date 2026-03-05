@@ -180,6 +180,7 @@ if [ "$python_ver" = '3.9' ]; then
 	# This installs the latest opencv-headless below 4.11 and enforces numpy<2
 	install_pip_package "opencv-python-headless<4.11 numpy<2" "--force-reinstall"
 	install_pip_package "ocrmac"
+	install_pip_package "ultralytics"
 	install_pip_package "pyobjc-framework-ColorSync<12.0"
 	install_pip_package "pyobjc-framework-ApplicationServices"
 

@@ -28,6 +28,7 @@ from modules.misc.imageManipulation import *
 from PIL import Image
 from modules.misc import messageBox
 from modules.submacros.memoryMatch import MemoryMatch
+from modules.submacros.vicDetector import VicDetector
 import math
 import re
 import ast
@@ -54,7 +55,6 @@ class _PauseAwareTimeModule:
 
 
 time = _PauseAwareTimeModule(time)
-
 pynputKeyboard = Controller()
 #data for collectable objectives
 #[besideE text, movement key, max cooldowns]
@@ -132,7 +132,6 @@ regularMobQuantitiesInFields = {
     },
 }
 regularMobTypesInFields = {k: [x[0] for x in v] for k, v in {k:list(v.items()) for k,v in regularMobQuantitiesInFields.items()}.items()}
-
 mobRespawnTimes = {
     "ladybug": 5*60, #5mins
     "rhinobeetle": 5*60, #5mins
@@ -141,6 +140,7 @@ mobRespawnTimes = {
     "scorpion": 20*60, #20mins
     "werewolf": 60*60 #1hr
 }
+
 
 # Define the color range for reset detection (in HSL color space)
 #white color respawn pad
@@ -525,6 +525,8 @@ class macro:
         self.buffDetector = BuffDetector(self.robloxWindow)
         self.hourlyReport = HourlyReport(self.buffDetector, self.setdat.get("hourly_report_time_format", 24))
         self.memoryMatch = MemoryMatch(self.robloxWindow)
+        self.vicDetector = VicDetector(logger=self.logger)
+        self.currentVicSearchField = None
 
         #setup an internal cooldown tracker. The cooldowns can be modified
         self.collectCooldowns = dict([(k, v[2]) for k,v in mergedCollectData.items()])
@@ -687,108 +689,45 @@ class macro:
         return self.run.value == 0
     
     #thread to detect night
-    #night detection is done by converting the screenshot to hsv and checking the average brightness
-    #TODO:
-    # MAYBE this doesnt actually need to be a thread? Check for night after each reset, when converting and when gathering
+    # Uses pixel-sample based night detection only.
     def detectNight(self):
-        #detects the average brightness of the screen. This isn't very reliable since things like lights can mess it up
-        #the threshold isnt accurate
-        def isNightBrightness(hsv):
-            hsv = hsv[int(hsv.shape[0]/3):hsv.shape[0]]
-            vValues = np.sum(hsv[:, :, 2])
-            area = hsv.shape[0] * hsv.shape[1]
-            avg_brightness = vValues/area
-            #threshold for night. It must be > 10 to deal with cases where the player is inside a fruit or stuck against a wall 
-            return 10 < avg_brightness < 80 
-
-        #Detect the color of the floor at spawn
-        #Useful when resetting/converting
-        def isSpawnFloorNight(hsv):
-            hsv = hsv[int(hsv.shape[0]/2):hsv.shape[0]]
-            lower = np.array([99, 45, 102])
-            upper = np.array([105, 51, 112])
-
-            #might increase kernel size on retina
-            kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(15,15))
-
-            mask = cv2.inRange(hsv, lower, upper)   
-            mask = cv2.erode(mask, kernel, 2)
-
-            #if np.mean = 0, no color ranges are detected, is day, hence return false
-            return np.mean(mask)
-        
-        def isNightSky(bgr):
-            y = 30*self.robloxWindow.multi
-            #crop the image to only the area above buff
-            bgr = bgr[0:y, 180*self.robloxWindow.multi:int(self.robloxWindow.mw)]
-            w,h = bgr.shape[:2]
-            #check if a 15x15 area that is entirely black
-            for x in range(w-15):
-                for y in range(h-15):
-                    area = bgr[x:x+15, y:y+15]
-                    if np.all(area == [0, 0, 0]):
-                        return True
-            return False
-        
-        #detect the color of the grass in fields
-        #useful when gathering
-        def isGrassNight(bgr):       
-            dayColors = [
-                [(47, 117, 57), cv2.getStructuringElement(cv2.MORPH_RECT, (6, 6))], #ground
-                [(46, 117, 58), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))], #dande
-                [(60, 156, 74), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))], #stump
-                [(38, 114, 51), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))], #pa
-                [(66, 123, 40), cv2.getStructuringElement(cv2.MORPH_RECT, (6, 6))], #clov
-                [(32, 211, 22), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))], #ant
-            ]
-
-            nightColors = [
-                [(23, 72, 30), cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))], #a
-                [(17, 71, 28), cv2.getStructuringElement(cv2.MORPH_RECT, (6, 6))], #dande
-            ]
-
-            bgr = bgr[0:bgr.shape[0]- (100*self.robloxWindow.multi)]
-            dayScreen = bgr[int(bgr.shape[0]*2/5):bgr.shape[0]].copy()
-            #detect day
-            for color, kernel in dayColors:
-                if findColorObjectRGB(dayScreen, color, variance=6, kernel=kernel, mode="box"):
+        def isColorClose(color1, color2, maxDiff):
+            for index, col in enumerate(color1):
+                if abs(col - color2[index]) <= maxDiff:
+                    continue
+                else:
                     return False
-            #day not found, detect Night
-            nightScreen = bgr[int(bgr.shape[0]/2):bgr.shape[0]].copy()
-            for color, kernel in nightColors:
-                if findColorObjectRGB(nightScreen, color, variance=6, kernel=kernel, mode="box"):
-                    return True
-                
+            return True
+
+        def NightDetect():
+            target_colors = [(86, 100, 107), (24, 76, 28)]
+            max_diff = 10
+            try:
+                screen_width, screen_height = pag.size()
+                check_points = [
+                    (screen_width // 2, screen_height // 2),
+                    (screen_width // 4, screen_height // 4),
+                    (3 * screen_width // 4, 3 * screen_height // 4),
+                ]
+                for point in check_points:
+                    try:
+                        pixel_color = pag.pixel(point[0], point[1])
+                    except Exception:
+                        continue
+                    for target_color in target_colors:
+                        if isColorClose(pixel_color, target_color, max_diff):
+                            return True
+            except Exception as e:
+                if self.logger:
+                    self.logger.log(f"NightDetect error: {e}")
             return False
 
-        def isNight():
-            screen = mssScreenshotNP(self.robloxWindow.mx,self.robloxWindow.my, self.robloxWindow.mw, self.robloxWindow.mh)
-            # Convert the image from BGRA to HSV
-            bgr = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
-            hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+        if NightDetect():
+            self.nightDetectStreaks += 1
+        else:
+            self.nightDetectStreaks = 0
 
-            if self.converting:
-                nightDetected = isNightSky(bgr)
-            else:
-                nightDetected = isGrassNight(bgr)
-
-            #night detected
-            if nightDetected:
-                self.nightDetectStreaks += 1
-                #self.logger.webhook("", f"Night Detected? ({self.nightDetectStreaks})", "red", "screen")
-                #im = Image.fromarray(cv2.cvtColor(screen, cv2.COLOR_BGR2RGB))
-                #im.save(f"night-{time.time()}.png")
-            else: 
-                #failed to detect night, reset streak counter
-                self.nightDetectStreaks = 0
-
-            #detected night consecutively for 5 times or more
-            if self.nightDetectStreaks >= 5:
-                return True
-            
-            return False
-        
-        if self.canDetectNight and isNight():
+        if self.canDetectNight and self.nightDetectStreaks >= 5:
             self.night = True
             self.logger.webhook("","Night detected","dark brown", "screen")
             time.sleep(200) #wait for night to end
@@ -1930,6 +1869,14 @@ class macro:
     def blueTextImageSearch(self, text, threshold=0.7):
         target = self.adjustImage("./images/blue", text)
         return locateImageOnScreen(target, self.robloxWindow.mx+(self.robloxWindow.mw*3/4), self.robloxWindow.my+(self.robloxWindow.mh*3/5), self.robloxWindow.mw/4, self.robloxWindow.mh-self.robloxWindow.mh*3/5, threshold)
+
+    def detectVicBee(self):
+        if not self.vicDetector.enabled:
+            return False
+
+        screen = mssScreenshotNP(self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw, self.robloxWindow.mh)
+        return self.vicDetector.detect(screen)
+
     #background thread for gather
     #check if mobs have been killed and reset their timings
     #check if player died
@@ -2875,10 +2822,8 @@ class macro:
         while not self.stopVic:
             #detect which field the vic is in
             if self.vicField is None:
-                for field in self.vicFields:
-                    if self.blueTextImageSearch(f"vic{field}", 0.75):
-                        self.vicField = field
-                        break
+                if self.currentVicSearchField and self.detectVicBee():
+                    self.vicField = self.currentVicSearchField
             else:
                 if self.blueTextImageSearch("died"): self.died = True
             
@@ -2895,10 +2840,14 @@ class macro:
             if self.vicField and currField != self.vicField:
                 raise VicStopPathException()
             self.keyboard.walk(key, t)
+            if self.vicField is None and self.detectVicBee():
+                self.vicField = currField
+                raise VicStopPathException()
 
         self.vicStatus = None
         self.vicField = None
         self.stopVic = False
+        self.currentVicSearchField = None
         currField = None
         self.clear_task_status()
 
@@ -2914,7 +2863,10 @@ class macro:
             self.cannon()
             self.logger.webhook("",f"Travelling to {currField} (stinger hunt)","dark brown")
             self.goToField(currField, "south")
+            self.currentVicSearchField = currField
             time.sleep(0.8)
+            if self.detectVicBee():
+                self.vicField = currField
             try:
                 exec(open(f"../paths/vic/find_vic/{currField}.py").read())
             except VicStopPathException:
@@ -2926,11 +2878,14 @@ class macro:
             self.reset(convert=False)
         else: #unable to find vic
             self.stopVic = True
+            self.currentVicSearchField = None
             stingerHuntThread.join()
             self.convert()
             updateHourlyTime()
             self.night = False
             return
+
+        self.currentVicSearchField = None
         
         #kill vic
         def goToVicField(wait=False):
@@ -2977,6 +2932,7 @@ class macro:
         self.night = False
         updateHourlyTime()
         self.stopVic = True
+        self.currentVicSearchField = None
         stingerHuntThread.join()
         self.reset()
 
