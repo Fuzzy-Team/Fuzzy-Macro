@@ -423,6 +423,18 @@
         },
       ]);
 
+      buildStandardContainer(parentOther, "Virtual Monitor (macOS)", "", [
+        {
+          id: "use_virtual_monitor",
+          title: "Use Virtual Monitor for Roblox",
+          desc: "Creates and manages a bundled 1920x1080 virtual monitor before launching Roblox. This feature is macOS-only.",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+      ]);
+
       buildStandardContainer(parentOther, "Time Format", "", [
         {
           id: "hourly_report_time_format",

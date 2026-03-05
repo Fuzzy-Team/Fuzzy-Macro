@@ -9,6 +9,7 @@ import mss.darwin
 mss.darwin.IMAGE_OPTIONS = 0
 from PIL import Image
 from ..misc import settingsManager
+from ..misc.appManager import getVirtualMonitorState
 screenPath = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../data/user/screen.txt'))
 def setScreenData():
     #get screen info
@@ -47,6 +48,23 @@ def setScreenData():
         "y_length_multiplier":1,
         "x_length_multiplier":1
     }
+
+    try:
+        vm_state = getVirtualMonitorState()
+        if vm_state.get("active"):
+            screenData["display_type"] = "built-in"
+            screenData["screen_width"] = int(vm_state.get("width", 1920))
+            screenData["screen_height"] = int(vm_state.get("height", 1080))
+            ndisplay = f"{screenData['screen_width']}x{screenData['screen_height']}"
+            if ndisplay in multiplierData:
+                screenData["y_multiplier"] = multiplierData[ndisplay][0]
+                screenData["x_multiplier"] = multiplierData[ndisplay][1]
+                screenData["y_length_multiplier"] = multiplierData[ndisplay][2]
+                screenData["x_length_multiplier"] = multiplierData[ndisplay][3]
+            settingsManager.saveDict(screenPath, screenData)
+            return
+    except Exception:
+        pass
 
     #for macs: check if its reina, set the screen width and height, set multipliers
     #get a screenshot. The size of the screenshot is the true screen size

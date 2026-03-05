@@ -307,4 +307,20 @@ if spec and spec.origin:
 else:
     print("html2image package not found")
 EOF
+
+# Build bundled virtual monitor helper (best effort)
+# If a prebuilt binary is already bundled, prefer it and skip building.
+if [ -x "src/data/bin/virtual_display_helper_bin" ]; then
+	printf "\033[1;32mBundled virtual display helper found; skipping build.\033[0m\n"
+else
+	if command -v swiftc >/dev/null 2>&1; then
+		printf "\033[1;35mBuilding bundled virtual display helper\033[0m\n"
+		if [ -f "native/virtual_display_helper/build.sh" ]; then
+			bash "native/virtual_display_helper/build.sh" || printf "\033[1;33mWarning: Failed to build virtual display helper. Virtual monitor mode will be unavailable until built.\033[0m\n"
+		fi
+	else
+		printf "\033[1;33mSwift compiler not found. Skipping virtual display helper build.\033[0m\n"
+	fi
+fi
+
 printf "\n\n\n\033[32;1mInstallation complete!\033[0m\n"

@@ -111,3 +111,5 @@ Follow our [installation guide](https://fuzzy-team.gitbook.io/fuzzy-macro) to ge
 - Fuzzy Macro is built on top of Existance Macro, meaning you can easily transitition to Fuzzy Macro. The settings and config works the same, think of Fuzzy Macro as a continuation project of Existance Macro.
 - The macro backend is written in Python while the frontend uses HTML/CSS/JS with eel as a communication layer.
 - Version system uses the format Major.Minor.Bugfix, with an optional letter at the end for test versions. (Ex: 1.1.0 is newer than 1.1.0a - 1.1.0a is a beta version in this case)
+- Optional virtual monitor mode is available in Config → Other Settings as `Use Virtual Monitor for Roblox`. It is default OFF and fixed to `1920x1080`.
+- The bundled helper can be rebuilt with `native/virtual_display_helper/build.sh`.

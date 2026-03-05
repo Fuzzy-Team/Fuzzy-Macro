@@ -2532,6 +2532,10 @@ if __name__ == "__main__":
         #if discordBotProc.is_alive(): discordBotProc.kill()
         keyboardModule.releaseMovement()
         mouse.mouseUp()
+        try:
+            appManager.stopVirtualMonitor(force=True)
+        except Exception:
+            pass
     
     atexit.register(onExit)
         

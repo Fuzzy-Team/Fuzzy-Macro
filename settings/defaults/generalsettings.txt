@@ -39,3 +39,4 @@ stop_keybind=F3
 pause_keybind=F2
 gui_theme=Brown
 ignore_petal_quests=False
+use_virtual_monitor=False

@@ -1,0 +1,35 @@
+#!/usr/bin/env python3
+import json
+import os
+import subprocess
+import sys
+
+
+def main():
+    here = os.path.dirname(os.path.abspath(__file__))
+    native_bin = os.path.join(here, "virtual_display_helper_bin")
+
+    if not os.path.exists(native_bin):
+        payload = {
+            "active": False,
+            "display_id": None,
+            "error": "Native helper binary missing. Build with native/virtual_display_helper/build.sh",
+        }
+        print(json.dumps(payload))
+        return 2
+
+    if not os.access(native_bin, os.X_OK):
+        payload = {
+            "active": False,
+            "display_id": None,
+            "error": "Native helper binary is not executable",
+        }
+        print(json.dumps(payload))
+        return 2
+
+    proc = subprocess.run([native_bin, *sys.argv[1:]])
+    return proc.returncode
+
+
+if __name__ == "__main__":
+    sys.exit(main())

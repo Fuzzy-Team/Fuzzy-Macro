@@ -576,6 +576,18 @@ def loadAllSettings():
         print(f"Warning: Profile '{profileName}' generalsettings file not found, using global generalsettings")
         generalSettings = readSettingsFile(generalsettings_path)
 
+    # Merge any newly introduced default general settings into existing profiles
+    default_generalsettings_path = os.path.join(getDefaultSettingsPath(), "generalsettings.txt")
+    merged_general_keys = False
+    try:
+        defaultGeneralSettings = readSettingsFile(default_generalsettings_path)
+        for k, v in defaultGeneralSettings.items():
+            if k not in generalSettings:
+                generalSettings[k] = v
+                merged_general_keys = True
+    except Exception:
+        defaultGeneralSettings = {}
+
     # Migrate old boolean flags to new macro_mode setting
     migrated = False
     field_only = generalSettings.get("field_only_mode", False)
@@ -605,6 +617,12 @@ def loadAllSettings():
         if migrated:
             saveDict(generalsettings_path, generalSettings)
             print("Migrated old field_only_mode/quest_only_mode settings to new macro_mode setting")
+
+    if merged_general_keys:
+        try:
+            saveDict(generalsettings_path, generalSettings)
+        except Exception:
+            pass
 
     return {**loadSettings(), **generalSettings}
 

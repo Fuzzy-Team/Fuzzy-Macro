@@ -13,7 +13,7 @@ import tempfile
 import subprocess
 import Quartz.CoreGraphics as CG
 from modules.screen.screenData import getScreenData
-from modules.misc.appManager import getWindowSize
+from modules.misc.appManager import getWindowSize, getVirtualMonitorState
 
 mw, mh = pag.size()
 multi = 2 if getScreenData()["display_type"] == "retina" else 1
@@ -22,6 +22,21 @@ Theres an issue for a few people where the mss screenshot takes almost a minute 
 This seems to affect any screenshots taken with quartz, but not those taken with filepath
 '''
 usePillow = False
+
+
+def _resolveCaptureBounds(x, y, w, h):
+    try:
+        state = getVirtualMonitorState()
+        if state.get("active") and x == 0 and y == 0 and w == mw and h == mh:
+            return (
+                int(state.get("x", 0)),
+                int(state.get("y", 0)),
+                int(state.get("width", 1920)),
+                int(state.get("height", 1080)),
+            )
+    except Exception:
+        pass
+    return int(x), int(y), int(w), int(h)
 
 def pillowGrab(x,y,w,h):
     fh, filepath = tempfile.mkstemp(".png")
@@ -82,7 +97,8 @@ def mssScreenshotNP(x,y,w,h, save = False):
     else:
         with mss.mss() as sct:
             # The screen part to capture
-            monitor = {"left": int(x), "top": int(y), "width": int(w), "height": int(h)}
+            left, top, width, height = _resolveCaptureBounds(x, y, w, h)
+            monitor = {"left": left, "top": top, "width": width, "height": height}
             # Grab the data and convert to opencv img
             sct_img = sct.grab(monitor)
             if save: mss.tools.to_png(sct_img.rgb, sct_img.size, output=f"screen-{time.time()}.png")
@@ -99,7 +115,8 @@ def mssScreenshot(x=0,y=0,w=mw,h=mh, save = False, filename=None):
     else:
         with mss.mss() as sct:
             # The screen part to capture
-            monitor = {"left": int(x), "top": int(y), "width": int(w), "height": int(h)}
+            left, top, width, height = _resolveCaptureBounds(x, y, w, h)
+            monitor = {"left": left, "top": top, "width": width, "height": height}
             # Grab the data and convert to pillow img
             sct_img = sct.grab(monitor)
             img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
@@ -145,7 +162,8 @@ def benchmarkMSS():
 #returns a rgba pillow screenshot
 def mssScreenshotPillowRGBA(x=0,y=0,w=mw,h=mh):   
     with mss.mss() as sct:
-        monitor = {"left": int(x), "top": int(y), "width": int(w), "height": int(h)}
+        left, top, width, height = _resolveCaptureBounds(x, y, w, h)
+        monitor = {"left": left, "top": top, "width": width, "height": height}
         sct_img = sct.grab(monitor)
         img = Image.frombytes("RGBA", sct_img.size, sct_img.bgra, "raw", "BGRA")
         #img.save(f"buff_area.png")

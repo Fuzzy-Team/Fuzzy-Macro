@@ -24,3 +24,7 @@ settings/profiles
 backup_macro.zip
 backups/
 smoke_hourly_report.py
+!src/data/bin/
+!src/data/bin/virtual_display_helper
+!src/data/bin/virtual_display_helper_bin
+native
