@@ -2882,9 +2882,31 @@ if __name__ == "__main__":
                     'color': logData['color']
                 }
                 recentLogs.append(log_entry)
-                # Keep only the last 100 entries
+                # Keep only the last 100 entries. Manager proxies can fail
+                # if the manager process closes; guard with fallbacks.
                 if len(recentLogs) > 100:
-                    recentLogs[:] = recentLogs[-100:]
+                    try:
+                        # fast path: use slice operations on proxy
+                        recentLogs[:] = recentLogs[-100:]
+                    except Exception:
+                        # fallback: build a local snapshot and replace contents
+                        try:
+                            snapshot = list(recentLogs)
+                            snapshot = snapshot[-100:]
+                            # clear and extend the proxy list in-place
+                            try:
+                                del recentLogs[:]
+                                recentLogs.extend(snapshot)
+                            except Exception:
+                                # best-effort: if in-place replace fails, attempt to set by index
+                                for i, v in enumerate(snapshot):
+                                    if i < len(recentLogs):
+                                        recentLogs[i] = v
+                                    else:
+                                        recentLogs.append(v)
+                        except Exception:
+                            # give up silently to avoid crashing the main loop
+                            pass
 
             #add it to gui
             gui.log(logData["time"], msg, logData["color"])
