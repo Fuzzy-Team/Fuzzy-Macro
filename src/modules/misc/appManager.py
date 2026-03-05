@@ -10,7 +10,6 @@ import pyautogui as pag
 from AppKit import NSWorkspace
 from ApplicationServices import AXUIElementIsAttributeSettable, AXUIElementCreateApplication, kAXErrorSuccess, AXUIElementSetAttributeValue, AXUIElementCopyAttributeValue, AXValueCreate, kAXValueCGPointType, kAXValueCGSizeType, AXUIElementCopyAttributeNames
 from Quartz import CGPoint, CGSize
-from CoreFoundation import CFRelease
 mw,mh = pag.size()
 
 VIRTUAL_MONITOR_WIDTH = 1920
@@ -386,6 +385,18 @@ def _moveAppToVirtualMonitorAndFullscreen(app="Roblox", wait_timeout=8):
                     setAppFullscreenMac(app, True)
                 except Exception:
                     pass
+
+            try:
+                runAppleScript('activate application "{}"'.format(app))
+            except Exception:
+                pass
+
+            try:
+                center_x = int(state.get("x", 0) + (state.get("width", VIRTUAL_MONITOR_WIDTH) / 2))
+                center_y = int(state.get("y", 0) + (state.get("height", VIRTUAL_MONITOR_HEIGHT) / 2))
+                pag.moveTo(center_x, center_y, duration=0)
+            except Exception:
+                pass
 
             # Do not manually CFRelease objects returned/managed by PyObjC
             # PyObjC manages lifetime and explicit CFRelease can cause double-free.

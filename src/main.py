@@ -2430,6 +2430,10 @@ if __name__ == "__main__":
         multiprocessing.set_start_method("spawn")
     macroProc = None
     #set screen data
+    try:
+        appManager.prepareVirtualMonitorIfEnabled()
+    except Exception:
+        pass
     screenData.setScreenData()
     screenInfo = screenData.getScreenData()
     #value to control if macro main loop is running
@@ -2498,6 +2502,10 @@ if __name__ == "__main__":
 
     def onExit():
         stopApp()
+        try:
+            appManager.stopVirtualMonitor(force=True)
+        except Exception:
+            pass
         # Reset timed bear quest states on exit so macro resumes checking next run
         try:
             settingsManager.saveSettingFile("brown_bear_quest_state", 0, "./data/user/timings.txt")
@@ -2532,10 +2540,6 @@ if __name__ == "__main__":
         #if discordBotProc.is_alive(): discordBotProc.kill()
         keyboardModule.releaseMovement()
         mouse.mouseUp()
-        try:
-            appManager.stopVirtualMonitor(force=True)
-        except Exception:
-            pass
     
     atexit.register(onExit)
         
@@ -2685,6 +2689,11 @@ if __name__ == "__main__":
             logger.webhookURL = setdat.get("webhook_link", "")
             logger.sendScreenshots = setdat.get("send_screenshot", True)
             stopThreads = False
+
+            try:
+                appManager.prepareVirtualMonitorIfEnabled()
+            except Exception:
+                pass
 
             #reset hourly report data
             hourlyReport = HourlyReport()
