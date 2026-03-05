@@ -387,11 +387,8 @@ def _moveAppToVirtualMonitorAndFullscreen(app="Roblox", wait_timeout=8):
                 except Exception:
                     pass
 
-            try:
-                CFRelease(pos)
-                CFRelease(size)
-            except Exception:
-                pass
+            # Do not manually CFRelease objects returned/managed by PyObjC
+            # PyObjC manages lifetime and explicit CFRelease can cause double-free.
 
             return True
         except Exception:
