@@ -7,6 +7,7 @@ import time
 from modules.misc.appleScript import runAppleScript
 import pygetwindow as gw
 import pyautogui as pag
+import threading
 from AppKit import NSWorkspace
 from ApplicationServices import AXUIElementIsAttributeSettable, AXUIElementCreateApplication, kAXErrorSuccess, AXUIElementSetAttributeValue, AXUIElementCopyAttributeValue, AXValueCreate, kAXValueCGPointType, kAXValueCGSizeType, AXUIElementCopyAttributeNames
 from Quartz import CGPoint, CGSize
@@ -22,6 +23,7 @@ _virtual_monitor_state = {
     "display_id": None,
 }
 _virtual_monitor_process = None
+_virtual_monitor_lock = threading.Lock()
 
 
 def _projectRoot():
@@ -202,17 +204,19 @@ def prepareVirtualMonitorIfEnabled():
         return True
     if not _isVirtualMonitorEnabled():
         return True
+    # Serialize startup to avoid races where concurrent callers create multiple displays
+    with _virtual_monitor_lock:
+        state = getVirtualMonitorState()
+        if state.get("active"):
+            return True
 
-    state = getVirtualMonitorState()
-    if state.get("active"):
-        return True
-
-    print("[VirtualMonitor] Starting bundled virtual monitor at 1920x1080")
-    success = startVirtualMonitor(force=True)
-    if not success:
-        print("[VirtualMonitor] Continuing Roblox launch without virtual monitor")
-    time.sleep(0.5)
-    return success
+        print("[VirtualMonitor] Starting bundled virtual monitor at 1920x1080")
+        success = startVirtualMonitor(force=True)
+        if not success:
+            print("[VirtualMonitor] Continuing Roblox launch without virtual monitor")
+        # small pause to allow helper to register the display
+        time.sleep(0.5)
+        return success
 
 def isAppOpenMac(app="roblox"):
     tmp = os.popen("ps -Af").read()
