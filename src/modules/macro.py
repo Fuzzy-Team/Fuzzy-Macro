@@ -2259,51 +2259,112 @@ class macro:
             self.keyboard.press(",")
         self.keyboard.press("1")
 
-        tile_size = max(1, self.robloxWindow.mw / 40)
-        middle_x = self.robloxWindow.mw / 2
-        middle_y = self.robloxWindow.mh / 2
-        target_rgb = (255, 219, 128)  # 0xFFDB80
+        center_x = self.robloxWindow.mw / 2
+        center_y = self.robloxWindow.mh / 2
+        dead_x = self.robloxWindow.mw * 0.035
+        dead_y = self.robloxWindow.mh * 0.035
+
+        # AHK target color: 0xCC9C5C with tolerance 16.
+        target_rgb = (204, 156, 92)
+        target_variance = 16
 
         # Run for quest gather mins if configured; otherwise do a short focused pass.
         max_scan_time = int(self.setdat.get("quest_gather_mins", 0) * 60) if self.setdat.get("quest_gather_mins", 0) else 45
         start = time.time()
-        move_speed_factor = 18 / self.setdat["movespeed"]
+
+        pwm_ms = 50
+        miss = 0
+        last_pos = None
+        held_keys = {"w": False, "a": False, "s": False, "d": False}
+
+        def release_held_keys():
+            for key, is_held in held_keys.items():
+                if is_held:
+                    self.keyboard.keyUp(key, False)
+                    held_keys[key] = False
 
         while time.time() - start < max_scan_time:
             if self.checkPauseAndWait():
-                return
+                break
+
             if self.skipTask is not None and self.skipTask.value == 1:
                 self.skipTask.value = 0
                 self.logger.webhook("Task Skipped", f"Skipped petal farming in {normalized_field.title()}", "orange")
-                return
+                break
 
             try:
                 screen = mssScreenshotNP(self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw, self.robloxWindow.mh)
                 bgr = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
-                found = findColorObjectRGB(bgr, target_rgb, variance=0, mode="point")
 
-                if found:
-                    found_x, found_y = found
-                    delta_x = found_x - middle_x
-                    delta_y = found_y - middle_y
+                found = None
 
-                    tiles_x = math.floor(abs(delta_x) / tile_size)
-                    tiles_y = math.floor(abs(delta_y) / tile_size)
+                # Fast local scan around previous location first (AHK-style).
+                if last_pos is not None:
+                    scan_w = max(5, int(round(self.robloxWindow.mw * 0.1)))
+                    scan_h = max(5, int(round(self.robloxWindow.mh * 0.1)))
+                    scan_x = max(0, min(int(last_pos[0] - (scan_w // 2)), self.robloxWindow.mw - scan_w))
+                    scan_y = max(0, min(int(last_pos[1] - (scan_h // 2)), self.robloxWindow.mh - scan_h))
 
-                    if tiles_x > 0:
-                        move_ms_x = tiles_x * 220 * move_speed_factor
-                        self.sleepMSMove("d" if delta_x > 0 else "a", move_ms_x)
+                    roi = bgr[scan_y:scan_y + scan_h, scan_x:scan_x + scan_w]
+                    if roi.size:
+                        local_found = findColorObjectRGB(roi, target_rgb, variance=target_variance, mode="point")
+                        if local_found:
+                            found = (scan_x + local_found[0], scan_y + local_found[1])
 
-                    if tiles_y > 0:
-                        move_ms_y = tiles_y * 220 * move_speed_factor
-                        self.sleepMSMove("s" if delta_y > 0 else "w", move_ms_y)
+                # Fallback: full-window scan.
+                if found is None:
+                    full_found = findColorObjectRGB(bgr, target_rgb, variance=target_variance, mode="point")
+                    if full_found:
+                        found = full_found
 
-                time.sleep(0.3)
+                if found is None:
+                    last_pos = None
+                    miss += 1
+                    release_held_keys()
+                    if miss > 3:
+                        break
+                    time.sleep(0.02)
+                    continue
+
+                miss = 0
+                last_pos = found
+                vec_x = found[0] - center_x
+                vec_y = found[1] - center_y
+
+                if abs(vec_x) < dead_x and abs(vec_y) < dead_y:
+                    break
+
+                max_dist = max(abs(vec_x), abs(vec_y), 1)
+                duty_x = abs(vec_x) / max_dist
+                duty_y = abs(vec_y) / max_dist
+
+                target_x = "d" if vec_x > 0 else "a"
+                target_y = "s" if vec_y > 0 else "w"
+
+                cycle = int((time.time() * 1000) % pwm_ms)
+                should_hold_x = (cycle < (pwm_ms * duty_x)) and (abs(vec_x) > dead_x)
+                should_hold_y = (cycle < (pwm_ms * duty_y)) and (abs(vec_y) > dead_y)
+
+                desired = {"w": False, "a": False, "s": False, "d": False}
+                if should_hold_x:
+                    desired[target_x] = True
+                if should_hold_y:
+                    desired[target_y] = True
+
+                for key in held_keys:
+                    if desired[key] and not held_keys[key]:
+                        self.keyboard.keyDown(key, False)
+                        held_keys[key] = True
+                    elif not desired[key] and held_keys[key]:
+                        self.keyboard.keyUp(key, False)
+                        held_keys[key] = False
+
+                time.sleep(0.02)
             except Exception:
-                time.sleep(0.3)
+                release_held_keys()
+                time.sleep(0.05)
 
-            time.sleep(0.2)
-
+        release_held_keys()
         self.clear_task_status()
         self.reset(convert=False)
     
