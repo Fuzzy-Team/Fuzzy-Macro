@@ -17,6 +17,7 @@ snow_machine=False
 lid_art=False
 candles=False
 glue_dispenser=False
+glue_dispenser_use_gumdrop_slot=False
 wreath=False
 mondo_buff_wait=2
 sticker_printer=False

@@ -67,6 +67,18 @@
           },
         },
         {
+          id: "honeystorm",
+          title: "Honey Storm",
+          desc: "Summon a Honey Storm",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+      ]);
+
+      buildStandardContainer(parentCollect, "Glue Dispenser", "", [
+        {
           id: "glue_dispenser",
           title: "Glue Dispenser",
           desc: "Collect the glue dispenser in gummy bear's lair",
@@ -76,9 +88,9 @@
           },
         },
         {
-          id: "honeystorm",
-          title: "Honey Storm",
-          desc: "Summon a Honey Storm",
+          id: "glue_dispenser_use_gumdrop_slot",
+          title: "Use Gumdrop Slot",
+          desc: "Use the gumdrop quickslot instead of searching the inventory when using gumdrops",
           type: {
             name: "checkbox",
             triggerFunction: saveProfileTriggerFunction,
