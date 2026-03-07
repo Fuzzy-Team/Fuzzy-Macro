@@ -1,10 +1,20 @@
 import sys
 import os
-import pyautogui as pag
+import platform as _platform
+if _platform.system() == "Windows":
+    try:
+        import pydirectinput as pag
+    except ModuleNotFoundError:
+        import pyautogui as pag
+else:
+    import pyautogui as pag
 import time
 from modules.submacros.hasteCompensation import HasteCompensationRevamped
 import threading
 from collections import deque
+
+
+_IS_MACOS = _platform.system() == "Darwin"
 
 
 class keyboard:
@@ -92,7 +102,11 @@ class keyboard:
     @staticmethod
     def keyDown(k, pause = True):
         #for some reason, the function key is sometimes held down, causing it to open the dock or enable dictation
-        keyboard.keyUp('fn', False)
+        if _IS_MACOS:
+            try:
+                keyboard.keyUp('fn', False)
+            except Exception:
+                pass
         pag.keyDown(k, _pause = pause)
 
     @staticmethod
@@ -176,6 +190,18 @@ class keyboard:
             self.keyUp(key, False)
         else:
             self.press(key,(tiles/8.3)*28/self.haste.value)
+
+    def tileMultiWalk(self, keys, tiles, applyHaste=True):
+        for k in keys:
+            pag.keyDown(k, _pause=False)
+
+        if applyHaste:
+            self.tileWait(tiles)
+        else:
+            time.sleep((tiles / 8.3) * 28 / self.ws)
+
+        for k in keys:
+            pag.keyUp(k, _pause=False)
 
     #release all movement keys (wasd, space)
     @staticmethod

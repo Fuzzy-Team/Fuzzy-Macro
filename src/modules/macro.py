@@ -798,7 +798,8 @@ class macro:
     def isFullScreen(self):
         windows = gw.getAllTitles()
         for win in windows:
-            if "roblox roblox" in win.lower():
+            win_l = win.lower()
+            if "roblox roblox" in win_l or "roblox" in win_l:
                 x,y,w,h = gw.getWindowGeometry(win)
                 return x==0 and y==0 and w==self.robloxWindow.mw and h==self.robloxWindow.mh
         #can't find the roblox window, most likely fullscreen? Assumes that it exists
@@ -826,7 +827,7 @@ class macro:
         #try running a automator workflow
         #if it doesnt exist, run the .py file instead
 
-        if os.path.exists(path+".workflow"):
+        if sys.platform == "darwin" and os.path.exists(path+".workflow"):
             os.system(f"/usr/bin/automator {path}.workflow")
         else:
             pyPath = f"{path}.py"
@@ -5611,8 +5612,14 @@ class macro:
         if extrema == (0, 0):
             messageBox.msgBox(text='It seems like you have not enabled roblox scaling. The macro will not work properly.\n1. Close Roblox\n2. Go to finder -> applications -> right click roblox -> get info -> enable "scale to fit below built-in camera"', title='Roblox scaling')
         #make sure game mode is disabled (macOS 14.0 and above and apple chips)
-        macVersion, _, _ = platform.mac_ver()
-        macVersion = float('.'.join(macVersion.split('.')[:2]))
+        macVersion = 0.0
+        if platform.system() == "Darwin":
+            mv, _, _ = platform.mac_ver()
+            if mv:
+                try:
+                    macVersion = float('.'.join(mv.split('.')[:2]))
+                except Exception:
+                    macVersion = 0.0
 
         # Removed lines that were un-fullscreening Roblox on startup
         # appManager.setAppFullscreen(fullscreen=False)

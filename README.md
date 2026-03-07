@@ -15,7 +15,7 @@
 ![Repo Stars](https://img.shields.io/github/stars/Fuzzy-Team/Fuzzy-Macro?style=flat&label=Stars&color=fff240&logo=github&logocolor=white&link=https://github.com/Fuzzy-Team/Fuzzy-Macro/stargazers)
 ![Version](https://img.shields.io/github/v/release/Fuzzy-Team/Fuzzy-Macro)
 <br>
-Roblox Bee Swarm Simulator macro for macOS. Free, open source, and actively maintained!<br>
+Roblox Bee Swarm Simulator macro for macOS and Windows. Free, open source, and actively maintained!<br>
 <br>
 [Discord](https://discord.gg/rGRVG8Rpsb) - [Existance vs. Fuzzy Macro Comparison](https://fuzzy-team.gitbook.io/fuzzy-macro/getting-started/fuzzy-macro-vs-existance-macro) - [Gitbook](https://fuzzy-team.gitbook.io/fuzzy-macro) - [Our Website](https://fuzzymacro.com)
 </div>
@@ -107,7 +107,7 @@ Follow our [installation guide](https://fuzzy-team.gitbook.io/fuzzy-macro) to ge
 
 ## Notes
 
-- This Macro is for MacOS only, Windows is work in progress. Linux support is not planned, for Linux use [BeeTuxMacro](https://github.com/painvision/BeeTuxMacro).
+- This Macro supports macOS and Windows. Linux support is not planned; for Linux use [BeeTuxMacro](https://github.com/painvision/BeeTuxMacro).
 - Fuzzy Macro is built on top of Existance Macro, meaning you can easily transitition to Fuzzy Macro. The settings and config works the same, think of Fuzzy Macro as a continuation project of Existance Macro.
 - The macro backend is written in Python while the frontend uses HTML/CSS/JS with pywebview as a communication layer.
 - Version system uses the format Major.Minor.Bugfix, with an optional letter at the end for test versions. (Ex: 1.1.0 is newer than 1.1.0a - 1.1.0a is a beta version in this case)

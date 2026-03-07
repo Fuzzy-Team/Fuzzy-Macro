@@ -8,6 +8,11 @@ import os
 from pathlib import Path
 import importlib.util
 import subprocess
+import tempfile
+import zipfile
+import atexit
+
+_EXTRACTED_EXT_DIRS = []
 
 def get_python_version():
     """Get Python version as string (e.g., '3.9')."""
@@ -27,34 +32,69 @@ def get_architecture():
     }
     return arch_map.get(arch, arch)
 
+def _get_cp_tag():
+    """Get CPython tag (e.g., cp39)."""
+    return f"cp{sys.version_info.major}{sys.version_info.minor}"
+
+def _get_windows_platform_tags():
+    """Get compatible Windows wheel platform tags in preference order."""
+    arch = get_architecture()
+    if arch == 'x86_64':
+        return ['win_amd64']
+    if arch == 'x86':
+        return ['win32']
+    if arch == 'arm64':
+        return ['win_arm64']
+    return []
+
+def _cleanup_extracted_dirs():
+    """Cleanup extracted temporary extension directories."""
+    for temp_dir in _EXTRACTED_EXT_DIRS:
+        try:
+            import shutil
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        except Exception:
+            pass
+
+atexit.register(_cleanup_extracted_dirs)
+
 def find_compatible_so():
-    """Find the most compatible .so file for current environment."""
+    """Find the most compatible unpacked extension file for current environment."""
     py_version = get_python_version()
     arch = get_architecture()
     current_dir = Path(__file__).parent
     
-    # Search patterns in order of preference
-    search_patterns = [
-        # Exact match: Python version + architecture
-        f"bitmap_matcher_py{py_version.replace('.', '')}_{arch}.so",
-        f"bitmap_matcher_{arch}_py{py_version.replace('.', '')}.so",
-        
-        # Python version specific (any architecture)
-        f"bitmap_matcher_py{py_version.replace('.', '')}.so",
-        f"bitmap_matcher.cpython-{py_version.replace('.', '')}.so",
-        
-        # Architecture specific (any Python version)
-        f"bitmap_matcher_{arch}.so",
-        
-        # Version-specific directories
-        f"py{py_version.replace('.', '')}/bitmap_matcher_{arch}.so",
-        f"py{py_version.replace('.', '')}/bitmap_matcher.so",
-        f"dist/py{py_version.replace('.', '')}/bitmap_matcher_{arch}.so",
-        f"dist/py{py_version.replace('.', '')}/bitmap_matcher.so",
-        
-        # Generic fallback
-        "bitmap_matcher.so",
-    ]
+    # Search patterns in order of preference.
+    # On Windows prefer .pyd files (and wheels are handled separately).
+    is_windows = platform.system() == "Windows"
+    py_ver_nodot = py_version.replace('.', '')
+    if is_windows:
+        # Do NOT include any .so fallbacks on Windows; prefer .pyd only.
+        search_patterns = [
+            f"bitmap_matcher_py{py_ver_nodot}_{arch}.pyd",
+            f"bitmap_matcher_{arch}_py{py_ver_nodot}.pyd",
+            f"bitmap_matcher.{_get_cp_tag()}-win_amd64.pyd",
+            f"bitmap_matcher.{_get_cp_tag()}-win32.pyd",
+            f"bitmap_matcher.{_get_cp_tag()}-win_arm64.pyd",
+            f"bitmap_matcher_py{py_ver_nodot}.pyd",
+            f"bitmap_matcher_{arch}.pyd",
+            "bitmap_matcher.pyd",
+        ]
+    else:
+        search_patterns = [
+            f"bitmap_matcher_py{py_ver_nodot}_{arch}.so",
+            f"bitmap_matcher_{arch}_py{py_ver_nodot}.so",
+            f"bitmap_matcher_py{py_ver_nodot}.so",
+            f"bitmap_matcher.cpython-{py_ver_nodot}.so",
+            f"bitmap_matcher_{arch}.so",
+            "bitmap_matcher.so",
+            # fallback to .pyd
+            f"bitmap_matcher_py{py_ver_nodot}_{arch}.pyd",
+            f"bitmap_matcher_{arch}_py{py_ver_nodot}.pyd",
+            f"bitmap_matcher_py{py_ver_nodot}.pyd",
+            f"bitmap_matcher_{arch}.pyd",
+            "bitmap_matcher.pyd",
+        ]
     
     # Search in current directory and subdirectories
     search_dirs = [
@@ -75,20 +115,88 @@ def find_compatible_so():
     
     return None
 
+def find_compatible_wheel_extension():
+    """Find and extract compatible .pyd from a Windows wheel, returning extracted path."""
+    if platform.system() != "Windows":
+        return None
+
+    current_dir = Path(__file__).parent
+    cp_tag = _get_cp_tag()
+    plat_tags = _get_windows_platform_tags()
+
+    if not plat_tags:
+        return None
+
+    # Wheel naming: dist-version-pythonTag-abiTag-platformTag.whl
+    wheel_candidates = []
+    for wheel_path in current_dir.glob("*.whl"):
+        name = wheel_path.name
+        if f"-{cp_tag}-" not in name:
+            continue
+        for platform_tag in plat_tags:
+            if name.endswith(f"-{platform_tag}.whl"):
+                wheel_candidates.append(wheel_path)
+                break
+
+    for wheel_path in wheel_candidates:
+        try:
+            with zipfile.ZipFile(wheel_path) as wheel_zip:
+                member_names = wheel_zip.namelist()
+                pyd_members = [name for name in member_names if name.lower().endswith('.pyd')]
+                if not pyd_members:
+                    continue
+
+                preferred = None
+                for member in pyd_members:
+                    member_lower = member.lower()
+                    if cp_tag in member_lower and any(tag in member_lower for tag in plat_tags):
+                        preferred = member
+                        break
+                if preferred is None:
+                    preferred = pyd_members[0]
+
+                temp_dir = tempfile.mkdtemp(prefix="bitmap_matcher_")
+                _EXTRACTED_EXT_DIRS.append(temp_dir)
+                extracted_path = Path(wheel_zip.extract(preferred, path=temp_dir))
+                return extracted_path
+        except zipfile.BadZipFile:
+            continue
+
+    return None
+
 def load_bitmap_matcher():
     """Dynamically load the bitmap_matcher module."""
-    so_path = find_compatible_so()
+    # On Windows prefer extracting from a wheel first; never load .so on Windows.
+    so_path = None
+    if platform.system() == "Windows":
+        so_path = find_compatible_wheel_extension()
+        if so_path is None:
+            # fall back to any unpacked .pyd
+            so_path = find_compatible_so()
+    else:
+        # Non-Windows: try .so/.pyd first, then wheel extraction.
+        so_path = find_compatible_so()
+        if so_path is None:
+            so_path = find_compatible_wheel_extension()
     
     if so_path is None:
         raise ImportError(
             f"Could not find compatible bitmap_matcher extension for "
             f"Python {get_python_version()} on {get_architecture()}.\n"
             f"Available files in current directory:\n" +
-            "\n".join([f"  - {f.name}" for f in Path(__file__).parent.glob("*.so")]) +
+            "\n".join([f"  - {f.name}" for f in sorted(Path(__file__).parent.glob("*.so"))] +
+                       [f"  - {f.name}" for f in sorted(Path(__file__).parent.glob("*.pyd"))] +
+                       [f"  - {f.name}" for f in sorted(Path(__file__).parent.glob("*.whl"))]) +
             f"\n\nTry building with: python{get_python_version()} build_universal.py"
         )
     
-    subprocess.run(["xattr", "-cr", so_path])
+    # On macOS, remove quarantine attributes; skip on other platforms.
+    try:
+        if platform.system() == "Darwin":
+            subprocess.run(["xattr", "-cr", str(so_path)], check=False)
+    except Exception:
+        # Non-fatal if xattr not available or fails
+        pass
 
     #load the module from the .so file
     spec = importlib.util.spec_from_file_location("bitmap_matcher", so_path)
@@ -166,7 +274,69 @@ class BitmapMatcherLoader:
         py_ver = self.python_version.replace('.', '')
         arch = self.architecture
         
-        # File patterns in preference order
+        # Directory patterns
+        dir_patterns = [
+            "",
+            f"py{py_ver}/",
+            f"dist/py{py_ver}/",
+            "dist/",
+        ]
+
+        # On Windows: prefer extracting from a wheel (.whl) first, then look for .pyd files.
+        if platform.system() == "Windows":
+            cp_tag = _get_cp_tag()
+            plat_tags = _get_windows_platform_tags()
+
+            for search_path in self.search_paths:
+                search_path = Path(search_path)
+
+                for dir_pattern in dir_patterns:
+                    search_dir = search_path / dir_pattern
+                    if not search_dir.exists():
+                        continue
+
+                    # Try wheel files first
+                    for wheel_path in search_dir.glob("*.whl"):
+                        try:
+                            with zipfile.ZipFile(wheel_path) as wheel_zip:
+                                member_names = wheel_zip.namelist()
+                                pyd_members = [name for name in member_names if name.lower().endswith('.pyd')]
+                                if not pyd_members:
+                                    continue
+
+                                preferred = None
+                                for member in pyd_members:
+                                    member_lower = member.lower()
+                                    if cp_tag in member_lower and any(tag in member_lower for tag in plat_tags):
+                                        preferred = member
+                                        break
+                                if preferred is None:
+                                    preferred = pyd_members[0]
+
+                                temp_dir = tempfile.mkdtemp(prefix="bitmap_matcher_")
+                                _EXTRACTED_EXT_DIRS.append(temp_dir)
+                                extracted_path = Path(wheel_zip.extract(preferred, path=temp_dir))
+                                return extracted_path
+                        except zipfile.BadZipFile:
+                            continue
+
+                    # If no wheel worked, search for .pyd files directly
+                    pyd_patterns = [
+                        f"bitmap_matcher_py{py_ver}_{arch}.pyd",
+                        f"bitmap_matcher_{arch}_py{py_ver}.pyd",
+                        f"bitmap_matcher_py{py_ver}.pyd",
+                        f"bitmap_matcher_{arch}.pyd",
+                        "bitmap_matcher.pyd",
+                    ]
+
+                    for pattern in pyd_patterns:
+                        matches = list(search_dir.glob(pattern))
+                        if matches:
+                            return matches[0]
+
+            return None
+
+        # Non-Windows: behave as before, preferring .so then falling back to .pyd
         patterns = [
             f"bitmap_matcher_py{py_ver}_{arch}.so",
             f"bitmap_matcher_{arch}_py{py_ver}.so",
@@ -176,23 +346,15 @@ class BitmapMatcherLoader:
             "bitmap_matcher.so",
             "bitmap_matcher.pyd",
         ]
-        
-        # Directory patterns
-        dir_patterns = [
-            "",
-            f"py{py_ver}/",
-            f"dist/py{py_ver}/",
-            "dist/",
-        ]
-        
+
         for search_path in self.search_paths:
             search_path = Path(search_path)
-            
+
             for dir_pattern in dir_patterns:
                 search_dir = search_path / dir_pattern
                 if not search_dir.exists():
                     continue
-                
+
                 for pattern in patterns:
                     matches = list(search_dir.glob(pattern))
                     if matches:

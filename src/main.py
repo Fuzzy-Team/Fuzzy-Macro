@@ -1,12 +1,18 @@
 from modules.misc import messageBox
+import platform as _platform
+_IS_WINDOWS = _platform.system() == "Windows"
 #check if installing dependencies was ran
 try:
     import requests
 except ModuleNotFoundError:
     try:
-        script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "install_dependencies.command"))
+        _script_name = "install_dependencies.bat" if _IS_WINDOWS else "install_dependencies.command"
+        script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", _script_name))
         if os.path.exists(script):
-            subprocess.Popen(["/bin/bash", script])
+            if _IS_WINDOWS:
+                subprocess.Popen(["cmd", "/c", script], shell=False)
+            else:
+                subprocess.Popen(["/bin/bash", script])
         else:
             messageBox.msgBox(title="Dependencies not installed", text="Dependencies are not installed. Refer to Discord for help.")
     except Exception:
@@ -42,9 +48,13 @@ try:
 	from modules.misc.ColorProfile import DisplayColorProfile
 except ModuleNotFoundError:
     try:
-        script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "install_dependencies.command"))
+        _script_name = "install_dependencies.bat" if _IS_WINDOWS else "install_dependencies.command"
+        script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", _script_name))
         if os.path.exists(script):
-            subprocess.Popen(["/bin/bash", script])
+            if _IS_WINDOWS:
+                subprocess.Popen(["cmd", "/c", script], shell=False)
+            else:
+                subprocess.Popen(["/bin/bash", script])
         else:
             messageBox.msgBox(title="Dependencies not installed", text="The new update requires new dependencies. Refer to Discord for help.")
     except Exception:
@@ -2623,53 +2633,98 @@ if __name__ == "__main__":
                 elif run.value == 6 and status.value != "paused":
                     status.value = "paused"
 
-            if run.value != prevRunState:
-                if prevRunState == 6 and run.value == 2:
-                    try:
-                        appManager.openApp("Roblox")
-                    except Exception:
-                        pass
-                    logger.webhook("Macro Resumed", "Fuzzy Macro", "bright green")
-                elif prevRunState == 2 and run.value == 6:
-                    keyboardModule.releaseMovement()
-                    mouse.mouseUp()
-                    logger.webhook("Macro Paused", "Use F2 or /resume to continue", "orange")
-
-                gui.setRunState(run.value)
+    #check color profile (macOS only)
+    try:
+        import platform
+        if platform.system() == "Darwin":
+            colorProfileManager = DisplayColorProfile()
+            currentProfileColor = colorProfileManager.getCurrentColorProfile()
+            if not "sRGB" in currentProfileColor:
                 try:
-                    gui.toggleStartStop()
+                    if messageBox.msgBoxOkCancel(title="Incorrect Color Profile", text=f"You current display's color profile is {currentProfileColor} but sRGB is required for the macro.\nPress 'Ok' to change color profiles"):
+                        colorProfileManager.resetDisplayProfile()
+                        colorProfileManager.setCustomProfile("/System/Library/ColorSync/Profiles/sRGB Profile.icc")
+                        messageBox.msgBox(title="Color Profile Success", text="Successfully changed the current color profile to sRGB")
+                except Exception as e:
+                    messageBox.msgBox(title="Failed to change color profile", text=e)
+    except Exception:
+        pass
+    
+    #check screen recording permissions
+    #check screen recording permissions (macOS only)
+    try:
+        import platform
+        if platform.system() == "Darwin":
+            cg = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
+            cg.CGRequestScreenCaptureAccess.restype = ctypes.c_bool
+            if not cg.CGRequestScreenCaptureAccess():
+                messageBox.msgBox(title="Screen Recording Permission", text='Terminal does not have the screen recording permission. The macro will not work properly.\n\nTo fix it, go to System Settings -> Privacy and Security -> Screen Recording -> add and enable Terminal. After that, restart the macro')
+    except (AttributeError, OSError, FileNotFoundError):
+        pass
+    #check full keyboard access (macOS only)
+    try:
+        import platform
+        if platform.system() == "Darwin":
+            result = subprocess.run(
+                ["defaults", "read", "com.apple.universalaccess", "KeyboardAccessEnabled"],
+                capture_output=True,
+                text=True
+            )
+            value = result.stdout.strip()
+            if value == "1":
+                messageBox.msgBox(text = f"Full Keyboard Access is enabled. The macro will not work properly\
+                    \nTo disable it, go to System Settings -> Accessibility -> Keyboard -> uncheck 'Full Keyboard Access'")
+    except Exception:
+        pass
+
+    discordBotProc = None
+    prevDiscordBotToken = None
+    prevRunState = run.value  # Track previous run state for GUI updates
+    # Windows permissions parity checks
+    try:
+        import platform
+        if platform.system() == "Windows":
+            try:
+                import ctypes
+                is_admin = False
+                try:
+                    is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
                 except Exception:
-                    pass
-                prevRunState = run.value
+                    is_admin = False
+                if not is_admin:
+                    messageBox.msgBox(title="Administrator Privileges Recommended", text="The macro may need administrator privileges to control elevated apps. If the target app runs as Administrator, run this macro as Administrator.")
 
-            if run.value == 1:
-                logger.enableWebhook = setdat.get("enable_webhook", False)
-                logger.webhookURL = setdat.get("webhook_link", "")
-                logger.sendScreenshots = setdat.get("send_screenshot", True)
-                stopThreads = False
+                # Screen capture test using mss
+                try:
+                    import mss
+                    with mss.mss() as sct:
+                        monitor = sct.monitors[0] if sct.monitors else None
+                        if monitor:
+                            sct.grab({"left": monitor.get('left', 0), "top": monitor.get('top', 0), "width": 1, "height": 1})
+                except Exception as e:
+                    messageBox.msgBox(title="Screen Capture Warning", text="Unable to capture the screen. Screen capture may be blocked by system settings or other software. Error: {}".format(e))
 
-                hourlyReport = HourlyReport()
-                hourlyReport.resetAllStats()
-
-                def waitForStreamURL():
-                    for _ in range(150):
-                        time.sleep(0.1)
-                        if stream.publicURL:
-                            logger.webhook("Stream Started", f'Stream URL: {stream.publicURL}', "purple")
-                            if setdat.get("discord_bot", False) and setdat.get("pin_stream_url", False):
-                                import modules.logging.webhook as webhookModule
-                                if webhookModule.last_channel_id:
-                                    try:
-                                        pin_requests.put({
-                                            'channel_id': webhookModule.last_channel_id,
-                                            'search_text': 'Stream URL'
-                                        })
-                                        print("Pin request queued for stream URL message")
-                                    except Exception as e:
-                                        print(f"Error queueing pin request: {e}")
-                            return
-
-                    logger.webhook("", 'Stream could not start. Check terminal for more info', "red", ping_category="ping_critical_errors")
+                # Input control availability check (non-invasive)
+                try:
+                    import pydirectinput as _pag
+                    try:
+                        _pag.position()
+                    except Exception as e:
+                        messageBox.msgBox(title="Input Control Warning", text="Unable to query/send input events. This may be restricted by system policies or security software. Error: {}".format(e))
+                except Exception:
+                    messageBox.msgBox(title="Missing Dependency", text="pydirectinput is required for input control on Windows. Install with: pip install pydirectinput")
+            except Exception:
+                pass
+    except Exception:
+        pass
+    
+    # Initialize Rich Presence Manager
+    richPresenceManager = None
+    
+    # Cache settings for main GUI loop to avoid reloading every 0.5 seconds
+    gui_settings_cache = {}
+    last_gui_settings_load = 0
+    gui_settings_cache_duration = 1.0  # Reload settings every 1 second max
 
                 if setdat.get("enable_stream", False):
                     if stream.isCloudflaredInstalled():
