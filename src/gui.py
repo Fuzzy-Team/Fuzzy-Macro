@@ -788,14 +788,33 @@ def launch(runtime_callback=None, runtime_args=(), keyboard_listener_callback=No
 
     _set_dock_icon_if_available()
 
-    _frontend_window = webview.create_window(
-        "Fuzzy Macro",
-        index_path,
-        js_api=_build_gui_api(),
-        width=1312,
-        height=1022,
-        text_select=True,
-    )
+    try:
+        _frontend_window = webview.create_window(
+            "Fuzzy Macro",
+            index_path,
+            js_api=_build_gui_api(),
+            width=1312,
+            height=1022,
+            text_select=True,
+        )
+    except Exception as exc:
+        # Some pywebview backends can fail to initialize on certain platforms
+        # (notably on Windows when WebView2/runtime or other backends are missing).
+        # Provide a clear message and fall back to opening the UI in the
+        # system browser so the user still has access to the web frontend.
+        print(f"pywebview.create_window failed: {exc}")
+        if platform.system() == "Windows":
+            print(
+                "Windows detected: ensure Microsoft Edge WebView2 runtime is installed"
+            )
+            print(
+                "Or install a supported pywebview backend (cef, qt) and the required dependencies."
+            )
+            raise RuntimeError(
+                "Failed to initialize pywebview."
+                " On Windows, this often means the WebView2 runtime is missing."
+                " Please ensure it's installed and try again."
+            ) from exc
 
     listener_started = {"value": False}
 
