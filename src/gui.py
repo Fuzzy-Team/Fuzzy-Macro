@@ -818,6 +818,18 @@ def launch(runtime_callback=None, runtime_args=(), keyboard_listener_callback=No
 
     listener_started = {"value": False}
 
+    # If a keyboard listener callback was provided, start it now on the
+    # main thread (required on macOS). Keep the on_shown handler as a
+    # fallback for backends that only expose the shown event on the main
+    # thread.
+    if keyboard_listener_callback and not listener_started["value"]:
+        try:
+            keyboard_listener_callback()
+            listener_started["value"] = True
+            print("Keyboard listener started on main thread during launch")
+        except Exception as exc:
+            print(f"Failed to start keyboard listener during launch: {exc}")
+
     def on_loaded(window):
         global _frontend_ready
         _frontend_ready = True
