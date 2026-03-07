@@ -2875,6 +2875,29 @@ if __name__ == "__main__":
 
         while True:
             if gui.isShutdownRequested():
+                # Ensure settings and external integrations are cleanly shut down
+                try:
+                    settingsManager.saveCurrentProfile()
+                except Exception:
+                    pass
+                try:
+                    if richPresenceManager is not None:
+                        try:
+                            richPresenceManager.stop()
+                        except Exception:
+                            # best-effort disconnect
+                            try:
+                                richPresenceManager.disconnect()
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+                try:
+                    if discordBotProc is not None and discordBotProc.is_alive():
+                        discordBotProc.terminate()
+                        discordBotProc.join(timeout=2)
+                except Exception:
+                    pass
                 break
 
             time.sleep(0.5)
