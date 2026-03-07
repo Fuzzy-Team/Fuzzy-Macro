@@ -45,7 +45,7 @@ except Exception:
     pass
 
 try:
-	from modules.misc.ColorProfile import DisplayColorProfile
+    from modules.misc.ColorProfile import DisplayColorProfile
 except ModuleNotFoundError:
     try:
         _script_name = "install_dependencies.bat" if _IS_WINDOWS else "install_dependencies.command"
@@ -2960,7 +2960,6 @@ if __name__ == "__main__":
                             return
 
                     logger.webhook("", 'Stream could not start. Check terminal for more info', "red", ping_category="ping_critical_errors")
-
                 if setdat.get("enable_stream", False):
                     if stream.isCloudflaredInstalled():
                         logger.webhook("", "Starting Stream...", "light blue")
