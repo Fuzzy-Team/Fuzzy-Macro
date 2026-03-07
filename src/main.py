@@ -2454,6 +2454,50 @@ if __name__ == "__main__":
     recentLogs = manager.list()  # Shared list to store recent log entries for discord bot
     gui.setRecentLogs(recentLogs)
     updateGUI = multiprocessing.Value('i', 0)
+    # Register signal handlers to persist settings on Ctrl-C or termination
+    try:
+        import signal
+
+        def _signal_handler(signum, frame):
+            try:
+                # Best-effort persist via gui helper
+                try:
+                    if 'gui' in globals() and hasattr(gui, 'ensureSettingsSaved'):
+                        gui.ensureSettingsSaved()
+                except Exception:
+                    pass
+                # Persist current profile as well
+                try:
+                    settingsManager.saveCurrentProfile()
+                except Exception:
+                    pass
+                # Try to close the frontend window if present
+                try:
+                    if 'gui' in globals() and getattr(gui, '_frontend_window', None) is not None:
+                        try:
+                            gui._frontend_window.destroy()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                try:
+                    time.sleep(0.05)
+                except Exception:
+                    pass
+            finally:
+                try:
+                    sys.exit(0)
+                except SystemExit:
+                    os._exit(0)
+
+        signal.signal(signal.SIGINT, _signal_handler)
+        # Some platforms (e.g., Windows) may not support SIGTERM; register if available
+        try:
+            signal.signal(signal.SIGTERM, _signal_handler)
+        except Exception:
+            pass
+    except Exception:
+        pass
     skipTask = multiprocessing.Value('i', 0)  # 0 = don't skip, 1 = skip current task
     status = manager.Value(ctypes.c_wchar_p, "none")
     presence = manager.Value(ctypes.c_wchar_p, "")
