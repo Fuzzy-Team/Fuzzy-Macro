@@ -223,7 +223,7 @@ install_pip_package "python-Levenshtein"
 install_pip_package "pyscreeze<0.1.29"
 install_pip_package "html2image"
 install_pip_package "gevent"
-install_pip_package "eel"
+## eel removed; pywebview is used instead
 install_pip_package "ImageHash"
 install_pip_package "httpx"
 install_pip_package "flask"

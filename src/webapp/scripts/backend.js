@@ -65,7 +65,7 @@
     }
 
     handlers.set(eventName, fn);
-    // Keep handler registered for frontend dispatch; do not expose via Eel.
+    // Keep handler registered for frontend dispatch; do not expose via legacy bridge.
     // Avoid adding global fallbacks.
     return fn;
   }

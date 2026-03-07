@@ -212,7 +212,7 @@ async function loadPlanters(){
             }
         })
     }catch(e){
-        // ignore if DOM not ready or eel not available
+        // ignore if DOM not ready
     }
 
     // Update the planter restriction summaries after inputs have loaded
