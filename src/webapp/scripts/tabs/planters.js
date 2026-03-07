@@ -208,7 +208,7 @@ async function loadPlanters(){
         pfInputs.forEach(inp => {
             if (!settings.hasOwnProperty(inp.id)){
                 inp.checked = true
-                try{ eel.saveProfileSetting(inp.id, true) }catch(e){}
+                try{ AppBridge.fireAndForget("saveProfileSetting", inp.id, true) }catch(e){}
             }
         })
     }catch(e){
@@ -223,7 +223,7 @@ async function loadPlanters(){
     }
     // load auto-planter JSON to set the global gather checkbox
     try{
-        const autoData = await eel.getAutoPlanterData()()
+        const autoData = await AppBridge.call("getAutoPlanterData")
         const gatherCheckbox = document.getElementById("auto_planters_gather")
         if (gatherCheckbox && autoData && typeof autoData.gather !== 'undefined'){
             gatherCheckbox.checked = !!autoData.gather
@@ -237,7 +237,7 @@ async function loadPlanters(){
 
 async function toggleAutoPlantersGather(val){
     try{
-        await eel.setAutoPlanterGather(!!val)()
+        await AppBridge.call("setAutoPlanterGather", !!val)
     }catch(e){
         console.warn('Failed to set auto planter gather flag', e)
     }
@@ -246,7 +246,7 @@ async function toggleAutoPlantersGather(val){
 function clearManualPlantersData(){
     const btn = document.getElementById("manual-planters-reset-btn")
     if (btn.classList.contains("active")) return
-    eel.clearManualPlanters()
+    AppBridge.fireAndForget("clearManualPlanters")
     btn.classList.add("active")
     setTimeout(() => {
         btn.classList.remove("active")
@@ -257,7 +257,7 @@ function clearAutoPlantersData(){
     const btn = document.getElementById("auto-planters-reset-btn")
     if (btn.classList.contains("active")) return
     // This button used to clear auto-planter configuration; keep that behavior
-    eel.clearAutoPlanters()
+    AppBridge.fireAndForget("clearAutoPlanters")
     btn.classList.add("active")
     setTimeout(() => {
         btn.classList.remove("active")
@@ -269,7 +269,7 @@ function resetAutoPlantersTimersAll(){
     const btn = document.getElementById("auto-planters-reset-btn")
     if (btn.classList.contains("active")) return
     try{
-        eel.resetAutoPlanterTimer('all')
+        AppBridge.fireAndForget("resetAutoPlanterTimer", 'all')
     }catch(e){
         console.warn('Failed to reset all auto-planter timers', e)
     }
