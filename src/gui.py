@@ -49,9 +49,37 @@ def isShutdownRequested():
     return _shutdown_requested
 
 
+def ensureSettingsSaved():
+    """Best-effort: persist any settings/state to disk on close."""
+    try:
+        # Persist the selected profile
+        settingsManager.saveCurrentProfile()
+    except Exception:
+        pass
+
+    try:
+        # Load the current profile settings and write them back to ensure
+        # any in-memory defaults or migrations are persisted.
+        profile_settings = settingsManager.loadSettings()
+        settingsManager.saveDictProfileSettings(profile_settings)
+    except Exception:
+        pass
+
+    try:
+        # Ensure fields sync between profile and general settings
+        settingsManager.initializeFieldSync()
+    except Exception:
+        pass
+
+
 def closeWindow():
     global _shutdown_requested
     _shutdown_requested = True
+    # Ensure settings are persisted before the window is destroyed
+    try:
+        ensureSettingsSaved()
+    except Exception:
+        pass
     if _frontend_window is not None:
         try:
             _frontend_window.destroy()
@@ -550,6 +578,10 @@ def update():
         updated = False
     if updated:
         if _frontend_window is not None:
+            try:
+                ensureSettingsSaved()
+            except Exception:
+                pass
             _frontend_window.destroy()
         sys.exit()
     else:
@@ -567,6 +599,10 @@ def updateFromHash(commit_hash):
         updated = False
     if updated:
         if _frontend_window is not None:
+            try:
+                ensureSettingsSaved()
+            except Exception:
+                pass
             _frontend_window.destroy()
         sys.exit()
     else:
@@ -842,6 +878,11 @@ def launch(runtime_callback=None, runtime_args=(), keyboard_listener_callback=No
         global _frontend_ready, _frontend_window, _shutdown_requested
         _frontend_ready = False
         _shutdown_requested = True
+        # Persist settings on close (best-effort)
+        try:
+            ensureSettingsSaved()
+        except Exception:
+            pass
         _frontend_window = None
 
     def on_shown(*_args):
