@@ -1078,3 +1078,69 @@ select:focus {
 #import-profile-modal h3 {
   color: var(--text-main) !important;
 }
+
+/* Slider (range input) - styled to match the app theme */
+input[type="range"],
+.slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 28px;
+  background: transparent;
+  margin: 0.4rem 0;
+}
+
+/* Track */
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 8px;
+  background: var(--textbox-bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+input[type="range"]::-moz-range-track {
+  height: 8px;
+  background: var(--textbox-bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+input[type="range"]::-ms-track {
+  height: 8px;
+  background: transparent;
+  border-color: transparent;
+}
+
+/* Filled portion (webkit only) */
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid var(--surface);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+  margin-top: -5px; /* center the thumb on the track */
+  transition: transform 0.12s ease;
+}
+input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.05); }
+
+input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid var(--surface);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+}
+
+/* Focus states */
+input[type="range"]:focus {
+  outline: none;
+}
+input[type="range"]:focus::-webkit-slider-runnable-track {
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.12);
+}
+
+/* Small responsive tweak for the planter slider container */
+.planters-slider-wrap {
+  width: 100%;
+}
