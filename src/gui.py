@@ -924,6 +924,26 @@ def launch(runtime_callback=None, runtime_args=(), keyboard_listener_callback=No
                 " On Windows, this often means the WebView2 runtime is missing."
                 " Please ensure it's installed and try again."
             ) from exc
+        elif platform.system() == "Darwin":
+            # On macOS the default Cocoa/WebKit backend can be incompatible
+            # with older macOS versions. Provide actionable guidance so users
+            # on macOS 10.12+ can install an alternative backend.
+            print(
+                "macOS detected: pywebview failed to initialize."
+            )
+            print(
+                "On older macOS releases (10.12+), the default Cocoa backend may be incompatible."
+            )
+            print(
+                "Try installing the Qt backend: pip install pywebview[qt] PyQt5==5.15.9"
+            )
+            print(
+                "Alternatively install a CEF backend (cefpython3) or update macOS/Python as needed."
+            )
+            raise RuntimeError(
+                "Failed to initialize pywebview on macOS. "
+                "See above for suggested backend installation commands."
+            ) from exc
 
     listener_started = {"value": False}
 
