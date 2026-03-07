@@ -1891,8 +1891,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             success, message = update_setting("macro_mode", mode)
             if success:
                 try:
-                    import eel
-                    eel.updateMacroMode()
+                    import gui
+                    gui.updateMacroMode()
                 except Exception:
                     pass
             status_message = message if success else "Failed to update macro mode."
@@ -3187,8 +3187,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
             # Update GUI if available
             try:
-                import eel
-                eel.updateMacroMode()
+                import gui
+                gui.updateMacroMode()
             except:
                 pass  # GUI not available, continue
 

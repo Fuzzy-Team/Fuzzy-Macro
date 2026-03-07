@@ -6,20 +6,20 @@ window.updateButtonReset = function () {
     updateBtn.innerText = "Update";
   }
 };
-if (window.eel) eel.expose(window.updateButtonReset, 'updateButtonReset');
+AppBridge.expose(window.updateButtonReset, "updateButtonReset");
 
 // Auto-update check functionality
 async function checkForUpdatesOnStartup() {
   try {
     // Check if auto-update checking is disabled
-    const isDisabled = await eel.getAutoUpdateCheckDisabled()();
+    const isDisabled = await AppBridge.call("getAutoUpdateCheckDisabled");
     if (isDisabled) {
       console.log("Auto-update check is disabled");
       return;
     }
 
     // Check for updates
-    const updateInfo = await eel.checkForUpdates()();
+    const updateInfo = await AppBridge.call("checkForUpdates");
     if (updateInfo && updateInfo.available) {
       showUpdateModal(updateInfo);
     }
@@ -98,7 +98,7 @@ async function closeUpdateModal() {
   const dontShowCheckbox = document.getElementById("dont-show-update-again");
   if (dontShowCheckbox && dontShowCheckbox.checked) {
     try {
-      await eel.disableAutoUpdateCheck()();
+      await AppBridge.call("disableAutoUpdateCheck");
       console.log("Auto-update check disabled");
     } catch (error) {
       console.error("Error disabling auto-update check:", error);
@@ -118,12 +118,9 @@ async function startUpdate() {
   const updateBtn = document.getElementById("update-btn");
   if (updateBtn && !updateBtn.classList.contains("active")) {
     purpleButtonToggle(updateBtn, ["Update", "Updating"]);
-    if (window.eel && typeof eel.update === "function") {
-      await eel.update();
-    }
+    await AppBridge.fireAndForget("update");
   }
 }
-
 // Ensure sidebar update button always works
 document.addEventListener("DOMContentLoaded", function () {
   const updateBtn = document.getElementById("update-btn");
@@ -131,14 +128,12 @@ document.addEventListener("DOMContentLoaded", function () {
     updateBtn.addEventListener("click", async function (event) {
       if (!event.currentTarget.classList.contains("active")) {
         purpleButtonToggle(event.currentTarget, ["Update", "Updating"]);
-        if (window.eel && typeof eel.update === "function") {
-          await eel.update();
-        }
+        await AppBridge.fireAndForget("update");
       }
     });
   }
 
-  // Check for updates on startup (with a small delay to ensure eel is ready)
+  // Check for updates on startup (with a small delay to ensure bridge is ready)
   setTimeout(() => {
     checkForUpdatesOnStartup();
   }, 1000);
@@ -192,11 +187,11 @@ function getInputValue(id) {
 }
 
 async function loadSettings() {
-  return await eel.loadSettings()();
+  return await AppBridge.call("loadSettings");
 }
 
 async function loadAllSettings() {
-  return await eel.loadAllSettings()();
+  return await AppBridge.call("loadAllSettings");
 }
 
 // Refresh the currently visible tab content after backend-triggered profile swaps
@@ -291,7 +286,7 @@ window.refreshCurrentTabContent = async function () {
     return false;
   }
 };
-if (window.eel) eel.expose(window.refreshCurrentTabContent, "refreshCurrentTabContent");
+AppBridge.expose(window.refreshCurrentTabContent, "refreshCurrentTabContent");
 //save the setting
 //element
 //type: setting type, eg: profile, general
@@ -302,7 +297,7 @@ async function saveSetting(ele, type) {
     const bindTarget = document.getElementById(bindTargetId);
     if (ele.checked) {
       bindTarget.checked = false;
-      try { await eel.saveProfileSetting(bindTargetId, false)(); } catch (e) { /* ignore */ }
+      try { await AppBridge.call("saveProfileSetting", bindTargetId, false); } catch (e) { /* ignore */ }
     }
   }
   const id = ele.id;
@@ -322,7 +317,7 @@ async function saveSetting(ele, type) {
   }
 
   if (type == "profile") {
-    try { await eel.saveProfileSetting(id, valueToSave)(); } catch (e) { /* ignore */ }
+    try { await AppBridge.call("saveProfileSetting", id, valueToSave); } catch (e) { /* ignore */ }
     // Refresh priority/drag-list highlights after profile setting changes
     try {
       loadAllSettings().then((settings) => {
@@ -334,7 +329,7 @@ async function saveSetting(ele, type) {
       // ignore
     }
   } else if (type == "general") {
-    try { await eel.saveGeneralSetting(id, valueToSave)(); } catch (e) { /* ignore */ }
+    try { await AppBridge.call("saveGeneralSetting", id, valueToSave); } catch (e) { /* ignore */ }
   }
 }
 
@@ -613,7 +608,7 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
 }
 
 //load fields based on the obj data
-eel.expose(loadInputs);
+AppBridge.expose(loadInputs, "loadInputs");
 function loadInputs(obj, save = "") {
   for (const [k, v] of Object.entries(obj)) {
     // Specific logic for theme switching
@@ -640,7 +635,7 @@ function loadInputs(obj, save = "") {
     }
   }
   if (save == "profile") {
-    eel.saveDictProfileSettings(obj);
+    AppBridge.fireAndForget("saveDictProfileSettings", obj);
   }
   // Update visibility of any dependent fields after loading inputs
   try { updateReturnDependentFields(); } catch (e) { /* ignore */ }
@@ -929,6 +924,7 @@ function startKeybindRecording(elementId) {
   keybindRecording = true;
   currentKeybindElement = element;
   element.dataset.recording = "true";
+  AppBridge.fireAndForget("setKeybindRecordingState", elementId, true);
   element.style.borderColor = "var(--primary)";
   element.style.backgroundColor = "#36393F";
   element.style.boxShadow = "0 0 10px rgba(var(--primary-rgb), 0.3)";
@@ -1013,12 +1009,16 @@ async function updateKeybindDisplay() {
 function stopKeybindRecording() {
   if (!keybindRecording) return;
 
+  const previousElementId = currentKeybindElement ? currentKeybindElement.id : null;
   keybindRecording = false;
   if (currentKeybindElement) {
     currentKeybindElement.dataset.recording = "false";
     currentKeybindElement.style.borderColor = "var(--primary)";
     currentKeybindElement.style.backgroundColor = "#2F3136";
     currentKeybindElement.style.boxShadow = "none";
+  }
+  if (previousElementId) {
+    AppBridge.fireAndForget("setKeybindRecordingState", previousElementId, false);
   }
   currentKeybindElement = null;
   keybindSequence = [];

@@ -6,7 +6,7 @@ Home Tab
 
 //use a python function to open the link in the user's actual browser
 function ahref(link) {
-  eel.openLink(link);
+  AppBridge.fireAndForget("openLink", link);
 }
 
 //update the button text with current keybinds and state
@@ -18,7 +18,7 @@ async function updateStartButtonText() {
 
   // Check current run state
   try {
-    const runState = await eel.getRunState()();
+    const runState = await AppBridge.call("getRunState");
     // 2 = running, 3 = stopped, 6 = paused
 
     const startBtn = document.getElementById("start-btn");
@@ -65,7 +65,7 @@ async function updateStartButtonText() {
 }
 
 //toggle the start/stop/pause button visuals based on run state
-eel.expose(toggleStartStop);
+AppBridge.expose(toggleStartStop, "toggleStartStop");
 async function toggleStartStop() {
   const settings = await loadAllSettings();
   const startKey = settings.start_keybind || "F1";
@@ -74,7 +74,7 @@ async function toggleStartStop() {
 
   // Check current run state
   try {
-    const runState = await eel.getRunState()();
+    const runState = await AppBridge.call("getRunState");
     // 2 = running, 3 = stopped, 6 = paused
 
     const startBtn = document.getElementById("start-btn");
@@ -114,7 +114,7 @@ async function toggleStartStop() {
   }
 }
 
-eel.expose(log);
+AppBridge.expose(log, "log");
 function log(time = "", msg = "", color = "") {
   document.getElementById("log");
   let timeText = "";
@@ -149,12 +149,12 @@ function secondsToMinsAndHours(time) {
 
 //load the tasks
 //also set max-height for logs
-eel.expose(loadTasks);
+AppBridge.expose(loadTasks, "loadTasks");
 // Prevent updates while user is actively changing the dropdown
 let isUserChangingMode = false;
 let modeUpdateTimeout = null;
 
-eel.expose(updateMacroMode);
+AppBridge.expose(updateMacroMode, "updateMacroMode");
 async function updateMacroMode() {
   // Don't update if user is currently changing the dropdown
   if (isUserChangingMode) {
@@ -605,7 +605,7 @@ async function loadTasks() {
     let planterTimersOut = "";
 
     if (setdat["planters_mode"] == 1) {
-      planterData = await eel.getManualPlanterData()();
+      planterData = await AppBridge.call("getManualPlanterData");
       for (let i = 0; i < planterData.planters.length; i++) {
         if (planterData.planters[i]) {
           planterTimersOut += getPlanterHTML(
@@ -617,7 +617,7 @@ async function loadTasks() {
         }
       }
     } else if (setdat["planters_mode"] == 2) {
-      planterData = (await eel.getAutoPlanterData()()).planters;
+      planterData = (await AppBridge.call("getAutoPlanterData")).planters;
       for (let i = 0; i < planterData.length; i++) {
         const planter = planterData[i];
         if (planter.planter) {
@@ -636,16 +636,15 @@ async function loadTasks() {
   }
 }
 
-eel.expose(closeWindow);
+AppBridge.expose(closeWindow, "closeWindow");
 function closeWindow() {
-  let new_window = open(location, "_self");
-  new_window.top.close();
+  AppBridge.fireAndForget("closeWindow");
 }
 
 // Function to periodically check and update button state
 async function checkAndUpdateButtonState() {
   try {
-    const runState = await eel.getRunState()();
+    const runState = await AppBridge.call("getRunState");
     // 2 = running, 3 = stopped, 6 = paused
 
     const settings = await loadAllSettings();
@@ -707,7 +706,7 @@ $("#home-placeholder")
 
     // Load recent logs from backend
     try {
-      const recentLogs = await eel.getRecentLogs()();
+      const recentLogs = await AppBridge.call("getRecentLogs");
       if (recentLogs && recentLogs.length > 0) {
         recentLogs.forEach((logEntry) => {
           const msg = `${logEntry.title}<br>${logEntry.desc}`;
@@ -748,13 +747,13 @@ $("#home-placeholder")
     const settings = await loadAllSettings();
     const pauseKey = settings.pause_keybind || "F2";
     const stopKey = settings.stop_keybind || "F3";
-    const runState = await eel.getRunState()();
+    const runState = await AppBridge.call("getRunState");
     const startBtn = document.getElementById("start-btn");
     const stopBtn = document.getElementById("stop-btn");
 
     if (runState === 6) {
       // Paused -> resume
-      eel.resume();
+      AppBridge.fireAndForget("resume");
       // Update button state optimistically (show stop button immediately)
       if (startBtn) startBtn.classList.add("d-none");
       if (stopBtn) {
@@ -763,7 +762,7 @@ $("#home-placeholder")
       }
     } else {
       // Stopped -> start
-      eel.start();
+      AppBridge.fireAndForget("start");
       // Update button state optimistically (show stop button immediately)
       if (startBtn) startBtn.classList.add("d-none");
       if (stopBtn) {
@@ -774,7 +773,7 @@ $("#home-placeholder")
   })
   .on("click", "#stop-btn", async (event) => {
     //stop button - stops the macro completely
-    eel.stop();
+    AppBridge.fireAndForget("stop");
     // Update button state optimistically (show start button immediately)
     const settings = await loadAllSettings();
     const startKey = settings.start_keybind || "F1";
@@ -790,20 +789,20 @@ $("#home-placeholder")
   })
   // .on("click", "#pause-btn", async (event) => {
   //   //pause/resume button - toggle between pause and resume
-  //   const runState = await eel.getRunState()();
+  //   const runState = await AppBridge.call("getRunState");
   //   if (runState === 2) {
   //     // Running -> Pause
-  //     eel.pause();
+  //     AppBridge.fireAndForget("pause");
   //   } else if (runState === 6) {
   //     // Paused -> Resume
-  //     eel.resume();
+  //     AppBridge.fireAndForget("resume");
   //   }
   // })
   .on("click", "#update-btn", async (event) => {
     //start button
     if (!event.currentTarget.classList.contains("active")) {
       purpleButtonToggle(event.currentTarget, ["Update", "Updating"]);
-      await eel.update();
+      await AppBridge.call("update");
     }
   })
   .on("click", "#clear-timers-btn", async (event) => {
@@ -812,9 +811,9 @@ $("#home-placeholder")
     btn.classList.add("active");
     const setdat = await loadAllSettings();
     if (setdat["planters_mode"] == 1) {
-      eel.clearManualPlanters();
+      AppBridge.fireAndForget("clearManualPlanters");
     } else if (setdat["planters_mode"] == 2) {
-      eel.clearAutoPlanters();
+      AppBridge.fireAndForget("clearAutoPlanters");
     }
     document
       .getElementById("planter-timers-container")
@@ -832,9 +831,9 @@ $("#home-placeholder")
     const setdat = await loadAllSettings();
     
     if (setdat["planters_mode"] == 1) {
-      await eel.resetManualPlanterTimer(index)();
+      await AppBridge.call("resetManualPlanterTimer", index);
     } else if (setdat["planters_mode"] == 2) {
-      await eel.resetAutoPlanterTimer(index)();
+      await AppBridge.call("resetAutoPlanterTimer", index);
     }
     
     // Remove the planter element from display
@@ -855,7 +854,7 @@ $("#home-placeholder")
       // Handle macro mode dropdown
       const selectedValue = event.currentTarget.value;
 
-      await eel.saveGeneralSetting("macro_mode", selectedValue);
+      await AppBridge.call("saveGeneralSetting", "macro_mode", selectedValue);
 
       // Small delay before reloading tasks to ensure backend is updated
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -871,14 +870,14 @@ $("#home-placeholder")
   })
   .on("click", "#clear-logs-btn", async (event) => {
     if (confirm("Are you sure you want to clear all logs?")) {
-      await eel.clearRecentLogs()();
+      await AppBridge.call("clearRecentLogs");
       const logs = document.getElementById("logs");
       if (logs) logs.innerHTML = "";
     }
   })
   .on("click", "#export-logs-btn", async (event) => {
     try {
-      const recentLogs = await eel.getRecentLogs()();
+      const recentLogs = await AppBridge.call("getRecentLogs");
       if (!recentLogs || recentLogs.length === 0) {
         alert("No logs to export.");
         return;

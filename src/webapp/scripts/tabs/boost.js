@@ -28,7 +28,7 @@ function loadBoost(){
 
 function clearAFBData(ele){
     if (ele.classList.contains("active")) return
-    eel.clearAFB()
+    AppBridge.fireAndForget("clearAFB")
     ele.classList.add("active")
     setTimeout(() => {
         ele.classList.remove("active")
