@@ -2126,7 +2126,7 @@ def watch_for_hotkeys(run):
     last_settings_load = 0
     settings_cache_duration = 1.0  # Reload settings every 1 second max
     
-    # Cache Eel recording state to avoid repeated calls
+    # Cache GUI recording state to avoid repeated calls
     recording_cache = {"start": False, "pause": False, "stop": False}
     last_recording_check = 0
     recording_cache_duration = 0.5  # Check recording state every 0.5 seconds max
