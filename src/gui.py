@@ -1,4 +1,3 @@
-import eel
 import webbrowser
 import modules.misc.settingsManager as settingsManager
 import os
@@ -8,35 +7,106 @@ import ast
 import json
 import webbrowser
 import time
+import threading
+import platform
 
-eel.init('webapp')
+try:
+    from AppKit import NSApplication, NSImage
+except Exception:
+    NSApplication = None
+    NSImage = None
+
+try:
+    import webview
+except ImportError:
+    webview = None
+
 run = None
 _recent_logs = []
-@eel.expose
+_frontend_window = None
+_frontend_ready = False
+_shutdown_requested = False
+_keybind_recording_state = {
+    "start": False,
+    "pause": False,
+    "stop": False,
+}
+_keybind_recording_lock = threading.Lock()
+
+
+def _dispatch_frontend(event_name, *args, await_result=False):
+    if _frontend_window is None or not _frontend_ready:
+        return None
+
+    script = (
+        "window.AppBridge && window.AppBridge.dispatch("
+        f"{json.dumps(event_name)}, ...{json.dumps(list(args))})"
+    )
+    return _frontend_window.evaluate_js(script)
+
+
+def isShutdownRequested():
+    return _shutdown_requested
+
+
+def ensureSettingsSaved():
+    """Best-effort: persist any settings/state to disk on close."""
+    try:
+        # Persist the selected profile
+        settingsManager.saveCurrentProfile()
+    except Exception:
+        pass
+
+    try:
+        # Load the current profile settings and write them back to ensure
+        # any in-memory defaults or migrations are persisted.
+        profile_settings = settingsManager.loadSettings()
+        settingsManager.saveDictProfileSettings(profile_settings)
+    except Exception:
+        pass
+
+    try:
+        # Ensure fields sync between profile and general settings
+        settingsManager.initializeFieldSync()
+    except Exception:
+        pass
+
+
+def closeWindow():
+    global _shutdown_requested
+    _shutdown_requested = True
+    # Ensure settings are persisted before the window is destroyed
+    try:
+        ensureSettingsSaved()
+    except Exception:
+        pass
+    if _frontend_window is not None:
+        try:
+            _frontend_window.destroy()
+        except Exception:
+            pass
+    return True
+
+
 def openLink(link):
     webbrowser.open(link, autoraise = True)
     
-@eel.expose
 def start():
     if run.value == 2: return #already running
     run.value = 1
     
-@eel.expose
 def stop():
     if run.value == 3: return #already stopped
     run.value = 0
 
-@eel.expose
 def pause():
     if run.value != 2: return #only pause if running
     run.value = 6  # 6 = paused
 
-@eel.expose
 def resume():
     if run.value != 6: return #only resume if paused
     run.value = 2  # 2 = running (resume)
 
-@eel.expose
 def getPatterns():
     patterns = []
     try:
@@ -48,8 +118,6 @@ def getPatterns():
         pass
     return patterns
 
-
-@eel.expose
 def importPatterns(patterns):
     """Import pattern files sent from the frontend.
     `patterns` should be a list of dicts: {"name": "filename.py", "content": "..."}
@@ -89,11 +157,9 @@ def importPatterns(patterns):
 
     return results
 
-@eel.expose
 def clearManualPlanters():
     settingsManager.clearFile("./data/user/manualplanters.txt")
 
-@eel.expose
 def getManualPlanterData():
     with open("./data/user/manualplanters.txt", "r") as f:
         planterDataRaw = f.read()
@@ -102,7 +168,6 @@ def getManualPlanterData():
     else: 
         return ""
     
-@eel.expose
 def getAutoPlanterData():
     try:
         with open("./data/user/auto_planters.json", "r") as f:
@@ -125,7 +190,6 @@ def getAutoPlanterData():
             "gather": False
         }
 
-@eel.expose
 def clearAutoPlanters():
     data = {
         "planters": [
@@ -165,7 +229,6 @@ def clearAutoPlanters():
         json.dump(data, f, indent=3)
 
 
-@eel.expose
 def setAutoPlanterGather(val):
     """Set the global 'gather' flag in data/user/auto_planters.json"""
     try:
@@ -186,7 +249,6 @@ def setAutoPlanterGather(val):
     except Exception:
         return False
 
-@eel.expose
 def resetManualPlanterTimer(index):
     """Reset a specific manual planter timer by index (0-2)"""
     try:
@@ -218,7 +280,6 @@ def resetManualPlanterTimer(index):
         print(f"Error resetting manual planter {index}: {e}")
         return False
 
-@eel.expose
 def resetAutoPlanterTimer(index):
     """Reset a specific auto planter timer by index (0-2)"""
     try:
@@ -246,7 +307,6 @@ def resetAutoPlanterTimer(index):
         print(f"Error resetting auto planter {index}: {e}")
         return False
     
-@eel.expose
 def clearBlender():
     blenderData = {
         "item": 1,
@@ -256,7 +316,6 @@ def clearBlender():
         f.write(str(blenderData))
     f.close()
 
-@eel.expose
 def clearAFB():
     AFBData = {
         "AFB_dice_cd": 0,
@@ -270,7 +329,6 @@ def clearAFB():
     with open("data/user/AFB.txt", "w") as f:
         f.write(data_str)
 
-@eel.expose
 def resetFieldToDefault(field_name):
     """Reset a field's settings to the default values"""
     try:
@@ -291,7 +349,6 @@ def resetFieldToDefault(field_name):
         print(f"Error resetting field to default: {e}")
         return False
 
-@eel.expose
 def exportFieldSettings(field_name):
     """Export field settings as JSON string"""
     try:
@@ -301,7 +358,6 @@ def exportFieldSettings(field_name):
         return None
 
 
-@eel.expose
 def exportDebugZip(profile_name=None):
     """Create a zip containing the exported profile, recent logs, and system info. Returns (True, base64zip, filename) or (False, error)."""
     try:
@@ -389,7 +445,82 @@ def exportDebugZip(profile_name=None):
     except Exception as e:
         return False, str(e)
 
-@eel.expose
+
+def exportFieldSettingsWithDialog(field_name):
+    """Export field settings and show native save dialog to save JSON file"""
+    try:
+        json_content = settingsManager.exportFieldSettings(field_name)
+        # Suggest filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        suggested = f"{field_name}_settings_{timestamp}.json"
+
+        if _frontend_window is None:
+            return False, "Window not available"
+
+        save_path = _frontend_window.create_file_dialog(
+            dialog_type=webview.FileDialog.SAVE,
+            save_filename=suggested,
+            file_types=("JSON Files (*.json)",),
+        )
+
+        if not save_path:
+            return False, "Export cancelled"
+
+        if not save_path.endswith('.json'):
+            save_path += '.json'
+
+        with open(save_path, 'w', encoding='utf-8') as f:
+            f.write(json_content)
+
+        # Provide basic metadata to the frontend
+        try:
+            parsed = json.loads(json_content)
+            metadata = parsed.get('metadata', {}) if isinstance(parsed, dict) else {}
+        except Exception:
+            metadata = {}
+
+        return True, f"Saved to {os.path.basename(save_path)}", metadata
+    except Exception as e:
+        return False, f"Failed to export field settings: {str(e)}"
+
+
+def exportDebugZipWithDialog(profile_name=None):
+    """Create debug zip (reuse exportDebugZip) and show save dialog to save zip file"""
+    try:
+        res = exportDebugZip(profile_name)
+        if not res or res[0] is not True:
+            # res may be (False, error)
+            err = res[1] if isinstance(res, (list, tuple)) and len(res) > 1 else str(res)
+            return False, err
+
+        # res == (True, b64, filename)
+        _, b64, filename = res
+
+        if _frontend_window is None:
+            return False, "Window not available"
+
+        save_path = _frontend_window.create_file_dialog(
+            dialog_type=webview.FileDialog.SAVE,
+            save_filename=filename,
+            file_types=("Zip Files (*.zip)",),
+        )
+
+        if not save_path:
+            return False, "Export cancelled"
+
+        if not save_path.endswith('.zip'):
+            save_path += '.zip'
+
+        import base64
+        data = base64.b64decode(b64)
+        with open(save_path, 'wb') as f:
+            f.write(data)
+
+        return True, f"Saved to {os.path.basename(save_path)}"
+    except Exception as e:
+        return False, f"Failed to export debug zip: {str(e)}"
+
+
 def importFieldSettings(field_name, json_settings):
     """Import field settings from JSON string"""
     try:
@@ -397,68 +528,116 @@ def importFieldSettings(field_name, json_settings):
     except Exception as e:
         print(f"Error importing field settings: {e}")
         return False
+
+def exportProfileWithDialog(profile_name):
+    """Export a profile using native save dialog"""
+    try:
+        # Get the export data from settingsManager
+        result = settingsManager.exportProfile(profile_name)
         
-@eel.expose
+        if not result[0]:
+            return False, result[1]
+        
+        success, json_content, suggested_filename = result
+        
+        # Show save file dialog
+        if _frontend_window is None:
+            return False, "Window not available"
+        
+        save_path = _frontend_window.create_file_dialog(
+            dialog_type=webview.FileDialog.SAVE,
+            save_filename=suggested_filename,
+            file_types=('JSON Files (*.json)',)
+        )
+        
+        if not save_path:
+            # User cancelled
+            return False, "Export cancelled"
+        
+        # Ensure .json extension
+        if not save_path.endswith('.json'):
+            save_path += '.json'
+        
+        # Write the file
+        with open(save_path, 'w', encoding='utf-8') as f:
+            f.write(json_content)
+        
+        return True, f"Profile exported to {os.path.basename(save_path)}"
+        
+    except Exception as e:
+        return False, f"Failed to export profile: {str(e)}"
+        
 def getMacroVersion():
     """Get the macro version from version.txt"""
     return settingsManager.getMacroVersion()
 
-@eel.expose
 def update():
     try:
         updated = updateModule.update()
     except Exception:
         updated = False
     if updated:
-        eel.closeWindow()
+        if _frontend_window is not None:
+            try:
+                ensureSettingsSaved()
+            except Exception:
+                pass
+            _frontend_window.destroy()
         sys.exit()
     else:
         try:
-            eel.updateButtonReset()()
+            _dispatch_frontend("updateButtonReset", await_result=True)
         except Exception:
             pass
     return
 
 
-@eel.expose
 def updateFromHash(commit_hash):
     try:
         updated = updateModule.update_from_commit(commit_hash)
     except Exception:
         updated = False
     if updated:
-        eel.closeWindow()
+        if _frontend_window is not None:
+            try:
+                ensureSettingsSaved()
+            except Exception:
+                pass
+            _frontend_window.destroy()
         sys.exit()
     else:
         try:
-            eel.updateButtonReset()()
+            _dispatch_frontend("updateButtonReset", await_result=True)
         except Exception:
             pass
     return
 
+
+def updateMacroMode():
+    _dispatch_frontend("updateMacroMode")
+
+
+def setKeybindRecordingState(element_id, is_recording):
+    key_name = str(element_id or "").replace("_keybind", "")
+    if key_name not in _keybind_recording_state:
+        return False
+
+    with _keybind_recording_lock:
+        _keybind_recording_state[key_name] = bool(is_recording)
+    return True
+
+
+def getKeybindRecordingState():
+    with _keybind_recording_lock:
+        return dict(_keybind_recording_state)
+
+
+def isAnyKeybindRecording():
+    with _keybind_recording_lock:
+        return any(_keybind_recording_state.values())
+
 def log(time = "", msg = "", color = ""):
-    eel.log(time, msg, color)
-
-eel.expose(settingsManager.loadFields)
-eel.expose(settingsManager.saveField) 
-eel.expose(settingsManager.loadSettings)
-eel.expose(settingsManager.loadAllSettings)
-eel.expose(settingsManager.saveProfileSetting)
-eel.expose(settingsManager.saveGeneralSetting)
-eel.expose(settingsManager.saveDictProfileSettings)
-eel.expose(settingsManager.initializeFieldSync)
-
-# Profile management functions
-eel.expose(settingsManager.listProfiles)
-eel.expose(settingsManager.getCurrentProfile)
-eel.expose(settingsManager.switchProfile)
-eel.expose(settingsManager.createProfile)
-eel.expose(settingsManager.deleteProfile)
-eel.expose(settingsManager.renameProfile)
-eel.expose(settingsManager.duplicateProfile)
-eel.expose(settingsManager.exportProfile)
-eel.expose(settingsManager.importProfile)
-eel.expose(settingsManager.importProfileContent)
+    _dispatch_frontend("log", time, msg, color)
 
 def updateGUI():
     # Load settings, ensure Brown Bear keys exist, then load into frontend
@@ -496,15 +675,38 @@ def updateGUI():
     except Exception:
         pass
 
-    eel.loadInputs(settings)
-    eel.loadTasks()
+
+def _set_dock_icon_if_available():
+    """Set the macOS Dock icon at runtime if AppKit is available.
+
+    icon_path may be a .icns or a PNG; returns True if set, False otherwise.
+    """
     try:
-        eel.refreshCurrentTabContent()()
+        if platform.system() != "Darwin":
+            return False
+        if NSApplication is None or NSImage is None:
+            return False
+        if not os.path.exists(os.path.join(os.path.dirname(__file__), "webapp", "assets", "general", "appicon.png")):
+            return False
+        app = NSApplication.sharedApplication()
+        img = NSImage.alloc().initWithContentsOfFile_(os.path.join(os.path.dirname(__file__), "webapp", "assets", "general", "appicon.png"))
+        if not img:
+            return False
+        app.setApplicationIconImage_(img)
+        return True
+    except Exception as e:
+        print(f"Failed to set dock icon: {e}")
+        return False
+
+    _dispatch_frontend("loadInputs", settings)
+    _dispatch_frontend("loadTasks")
+    try:
+        _dispatch_frontend("refreshCurrentTabContent", await_result=True)
     except Exception:
         pass
 
 def toggleStartStop():
-    eel.toggleStartStop()
+    _dispatch_frontend("toggleStartStop")
 
 # Global variable to store run state
 # 0=stop request, 1=start request, 2=running, 3=stopped, 4=disconnected, 6=paused
@@ -517,20 +719,14 @@ def setRunState(state):
 def getRunState():
     return _run_state
 
-# Expose functions to eel
-eel.expose(getRunState)
-eel.expose(setRunState)
-
 def setRecentLogs(logs):
     global _recent_logs
     _recent_logs = logs
 
-@eel.expose
 def getRecentLogs():
     # Return as a list of dicts for the frontend
     return list(_recent_logs)
 
-@eel.expose
 def clearRecentLogs():
     global _recent_logs
     # Clear the shared list
@@ -545,37 +741,187 @@ def clearRecentLogs():
         # Fallback to re-initializing if clear fails
         _recent_logs = []
 
-def launch():
+def _build_gui_api():
+    api_methods = {
+        "closeWindow": closeWindow,
+        "openLink": openLink,
+        "start": start,
+        "stop": stop,
+        "pause": pause,
+        "resume": resume,
+        "getPatterns": getPatterns,
+        "importPatterns": importPatterns,
+        "clearManualPlanters": clearManualPlanters,
+        "getManualPlanterData": getManualPlanterData,
+        "getAutoPlanterData": getAutoPlanterData,
+        "clearAutoPlanters": clearAutoPlanters,
+        "setAutoPlanterGather": setAutoPlanterGather,
+        "resetManualPlanterTimer": resetManualPlanterTimer,
+        "resetAutoPlanterTimer": resetAutoPlanterTimer,
+        "clearBlender": clearBlender,
+        "clearAFB": clearAFB,
+        "resetFieldToDefault": resetFieldToDefault,
+        "exportFieldSettings": exportFieldSettings,
+        "exportFieldSettingsWithDialog": exportFieldSettingsWithDialog,
+        "exportDebugZip": exportDebugZip,
+        "exportDebugZipWithDialog": exportDebugZipWithDialog,
+        "importFieldSettings": importFieldSettings,
+        "getMacroVersion": getMacroVersion,
+        "update": update,
+        "updateFromHash": updateFromHash,
+        "loadFields": settingsManager.loadFields,
+        "saveField": settingsManager.saveField,
+        "loadSettings": settingsManager.loadSettings,
+        "loadAllSettings": settingsManager.loadAllSettings,
+        "saveProfileSetting": settingsManager.saveProfileSetting,
+        "saveGeneralSetting": settingsManager.saveGeneralSetting,
+        "saveDictProfileSettings": settingsManager.saveDictProfileSettings,
+        "initializeFieldSync": settingsManager.initializeFieldSync,
+        "listProfiles": settingsManager.listProfiles,
+        "getCurrentProfile": settingsManager.getCurrentProfile,
+        "switchProfile": settingsManager.switchProfile,
+        "createProfile": settingsManager.createProfile,
+        "deleteProfile": settingsManager.deleteProfile,
+        "renameProfile": settingsManager.renameProfile,
+        "duplicateProfile": settingsManager.duplicateProfile,
+        "exportProfile": settingsManager.exportProfile,
+        "exportProfileWithDialog": exportProfileWithDialog,
+        "importProfile": settingsManager.importProfile,
+        "importProfileContent": settingsManager.importProfileContent,
+        "getRunState": getRunState,
+        "setRunState": setRunState,
+        "getRecentLogs": getRecentLogs,
+        "clearRecentLogs": clearRecentLogs,
+        "setKeybindRecordingState": setKeybindRecordingState,
+        "getKeybindRecordingState": getKeybindRecordingState,
+    }
 
-    import socket
-    def get_free_port(start_port=8000, max_tries=100):
-        port = start_port
-        for _ in range(max_tries):
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                try:
-                    s.bind(("localhost", port))
-                    return port
-                except OSError:
-                    port += 1
-        raise RuntimeError(f"No free port found in range {start_port}-{port}")
+    def _make_method(func):
+        def method(self, *args, **kwargs):
+            return func(*args, **kwargs)
+        method.__name__ = func.__name__
+        return method
 
-    port = get_free_port(8000, 100)
-    port_url = f"http://localhost:{port}"
+    api_class = type("GuiApi", (), {})
+    for name, fn in api_methods.items():
+        setattr(api_class, name, _make_method(fn))
+    return api_class()
 
-    # Ensure important functions are exposed to the frontend before eel starts
+
+def launch(runtime_callback=None, runtime_args=(), keyboard_listener_callback=None):
+    global _frontend_window, _frontend_ready, _shutdown_requested
+
+    if webview is None:
+        raise RuntimeError(
+            "pywebview is not installed. Install dependencies before launching the GUI."
+        )
+
+    index_path = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "webapp", "index.html")
+    )
+    _frontend_ready = False
+    _shutdown_requested = False
+
+    _set_dock_icon_if_available()
+
     try:
-        eel.expose(getRecentLogs)
-    except Exception:
-        # ignore if already exposed or if exposure fails at import time
-        pass
+        _frontend_window = webview.create_window(
+            "Fuzzy Macro",
+            index_path,
+            js_api=_build_gui_api(),
+            width=1312,
+            height=1022,
+            text_select=True,
+        )
+    except Exception as exc:
+        # Some pywebview backends can fail to initialize on certain platforms
+        # (notably on Windows when WebView2/runtime or other backends are missing).
+        # Provide a clear message and fall back to opening the UI in the
+        # system browser so the user still has access to the web frontend.
+        print(f"pywebview.create_window failed: {exc}")
+        if platform.system() == "Windows":
+            print(
+                "Windows detected: ensure Microsoft Edge WebView2 runtime is installed"
+            )
+            print(
+                "Or install a supported pywebview backend (cef, qt) and the required dependencies."
+            )
+            raise RuntimeError(
+                "Failed to initialize pywebview."
+                " On Windows, this often means the WebView2 runtime is missing."
+                " Please ensure it's installed and try again."
+            ) from exc
+        elif platform.system() == "Darwin":
+            # On macOS the default Cocoa/WebKit backend can be incompatible
+            # with older macOS versions. Provide actionable guidance so users
+            # on macOS 10.12+ can install an alternative backend.
+            print(
+                "macOS detected: pywebview failed to initialize."
+            )
+            print(
+                "On older macOS releases (10.12+), the default Cocoa backend may be incompatible."
+            )
+            print(
+                "Try installing the Qt backend: pip install pywebview[qt] PyQt5==5.15.9"
+            )
+            print(
+                "Alternatively install a CEF backend (cefpython3) or update macOS/Python as needed."
+            )
+            raise RuntimeError(
+                "Failed to initialize pywebview on macOS. "
+                "See above for suggested backend installation commands."
+            ) from exc
 
-    try:
-        eel.start('index.html', mode = "chrome", app_mode = True, block = False, port=port, cmdline_args=["--incognito", f"--app={port_url}"])
-    except EnvironmentError:
+    listener_started = {"value": False}
+
+    # If a keyboard listener callback was provided, start it now on the
+    # main thread (required on macOS). Keep the on_shown handler as a
+    # fallback for backends that only expose the shown event on the main
+    # thread.
+    if keyboard_listener_callback and not listener_started["value"]:
         try:
-            eel.start('index.html', mode = "chrome-app", app_mode = True, block = False, port=port, cmdline_args=["--incognito", f"--app={port_url}"])
-        except EnvironmentError:
-            print("Chrome/Chromium could not be found. Opening in default browser...")
-            eel.start('index.html', block=False, mode=None, port=port)
-            time.sleep(2)
-            webbrowser.open(f"{port_url}/", new=2)
+            keyboard_listener_callback()
+            listener_started["value"] = True
+            print("Keyboard listener started on main thread during launch")
+        except Exception as exc:
+            print(f"Failed to start keyboard listener during launch: {exc}")
+
+    def on_loaded(window):
+        global _frontend_ready
+        _frontend_ready = True
+        try:
+            updateGUI()
+        except Exception:
+            pass
+
+    def on_closed(*_args):
+        global _frontend_ready, _frontend_window, _shutdown_requested
+        _frontend_ready = False
+        _shutdown_requested = True
+        # Persist settings on close (best-effort)
+        try:
+            ensureSettingsSaved()
+        except Exception:
+            pass
+        _frontend_window = None
+
+    def on_shown(*_args):
+        if keyboard_listener_callback and not listener_started["value"]:
+            listener_started["value"] = True
+            try:
+                keyboard_listener_callback()
+                print("Keyboard listener started successfully")
+            except Exception as exc:
+                print(f"Failed to start keyboard listener after GUI launch: {exc}")
+
+    _frontend_window.events.loaded += on_loaded
+    _frontend_window.events.closed += on_closed
+    _frontend_window.events.shown += on_shown
+
+    start_kwargs = {"http_server": True}
+    if runtime_callback is not None:
+        start_kwargs["func"] = runtime_callback
+        if runtime_args:
+            start_kwargs["args"] = runtime_args
+
+    webview.start(**start_kwargs)

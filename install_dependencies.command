@@ -218,11 +218,16 @@ install_pip_package "discord.py"
 install_pip_package "pypresence"
 install_pip_package "matplotlib"
 install_pip_package "fuzzywuzzy"
+# Ensure pywebview is installed in a way that supports older macOS versions.
+# On older macOS (10.12 - 10.14) the Cocoa/WebKit backend may have compatibility
+# issues; prefer the Qt backend for better compatibility on those releases.
+# Install pywebview with the Qt backend by default for broader macOS compatibility
+install_pip_package "pywebview[qt] PyQt5==5.15.9"
 install_pip_package "python-Levenshtein"
 install_pip_package "pyscreeze<0.1.29"
 install_pip_package "html2image"
 install_pip_package "gevent"
-install_pip_package "eel"
+## eel removed; pywebview is used instead
 install_pip_package "ImageHash"
 install_pip_package "httpx"
 install_pip_package "flask"
