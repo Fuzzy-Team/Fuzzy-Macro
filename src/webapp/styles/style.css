@@ -999,6 +999,21 @@ select:focus {
   border-color: var(--primary);
 }
 
+/* Ensure dropdowns (select/profile-input) and action buttons share the same height */
+.profile-input {
+  height: 40px;
+  padding: 0 0.6rem;
+  box-sizing: border-box;
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.profile-btn {
+  height: 40px;
+  padding: 0 1.2rem;
+  box-sizing: border-box;
+}
+
 /* Profile Buttons */
 .profile-btn {
   border: none;
@@ -1007,7 +1022,7 @@ select:focus {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
-  font-size: 0.9rem;
+  font-size: 1rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
