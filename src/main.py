@@ -2781,6 +2781,44 @@ if __name__ == "__main__":
     #setup stream class
     stream = cloudflaredStream()
 
+    def waitForStreamURL(timeout=30):
+        """Wait for the stream's public URL to become available and print it.
+
+        This checks the `stream.publicURL` attribute first (if present),
+        then falls back to the `stream_url.txt` file written by the streamer.
+        """
+        import os, time
+        src_dir = os.path.dirname(__file__)
+        stream_url_file = os.path.join(src_dir, 'stream_url.txt')
+        start = time.time()
+        while time.time() - start < timeout:
+            try:
+                url = None
+                # Prefer the in-memory value if available
+                try:
+                    url = getattr(stream, 'publicURL', None)
+                except Exception:
+                    url = None
+
+                # Fallback to file if not set yet
+                if not url and os.path.exists(stream_url_file):
+                    try:
+                        with open(stream_url_file, 'r') as f:
+                            url = f.read().strip()
+                    except Exception:
+                        url = None
+
+                if url:
+                    print("Cloudflare URL:", url)
+                    try:
+                        presence.value = url
+                    except Exception:
+                        pass
+                    break
+            except Exception:
+                pass
+            time.sleep(0.5)
+
     def onExit():
         stopApp()
         # Reset timed bear quest states on exit so macro resumes checking next run
