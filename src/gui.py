@@ -8,6 +8,13 @@ import json
 import webbrowser
 import time
 import threading
+import platform
+
+try:
+    from AppKit import NSApplication, NSImage
+except Exception:
+    NSApplication = None
+    NSImage = None
 
 try:
     import webview
@@ -423,7 +430,7 @@ def exportFieldSettingsWithDialog(field_name):
             return False, "Window not available"
 
         save_path = _frontend_window.create_file_dialog(
-            dialog_type=webview.SAVE_DIALOG,
+            dialog_type=webview.FileDialog.SAVE,
             save_filename=suggested,
             file_types=("JSON Files (*.json)",),
         )
@@ -465,7 +472,7 @@ def exportDebugZipWithDialog(profile_name=None):
             return False, "Window not available"
 
         save_path = _frontend_window.create_file_dialog(
-            dialog_type=webview.SAVE_DIALOG,
+            dialog_type=webview.FileDialog.SAVE,
             save_filename=filename,
             file_types=("Zip Files (*.zip)",),
         )
@@ -510,7 +517,7 @@ def exportProfileWithDialog(profile_name):
             return False, "Window not available"
         
         save_path = _frontend_window.create_file_dialog(
-            dialog_type=webview.SAVE_DIALOG,
+            dialog_type=webview.FileDialog.SAVE,
             save_filename=suggested_filename,
             file_types=('JSON Files (*.json)',)
         )
@@ -631,6 +638,29 @@ def updateGUI():
             pass
     except Exception:
         pass
+
+
+def _set_dock_icon_if_available():
+    """Set the macOS Dock icon at runtime if AppKit is available.
+
+    icon_path may be a .icns or a PNG; returns True if set, False otherwise.
+    """
+    try:
+        if platform.system() != "Darwin":
+            return False
+        if NSApplication is None or NSImage is None:
+            return False
+        if not os.path.exists(os.path.join(os.path.dirname(__file__), "webapp", "assets", "general", "appicon.png")):
+            return False
+        app = NSApplication.sharedApplication()
+        img = NSImage.alloc().initWithContentsOfFile_(os.path.join(os.path.dirname(__file__), "webapp", "assets", "general", "appicon.png"))
+        if not img:
+            return False
+        app.setApplicationIconImage_(img)
+        return True
+    except Exception as e:
+        print(f"Failed to set dock icon: {e}")
+        return False
 
     _dispatch_frontend("loadInputs", settings)
     _dispatch_frontend("loadTasks")
@@ -755,6 +785,9 @@ def launch(runtime_callback=None, runtime_args=(), keyboard_listener_callback=No
     )
     _frontend_ready = False
     _shutdown_requested = False
+
+    _set_dock_icon_if_available()
+
     _frontend_window = webview.create_window(
         "Fuzzy Macro",
         index_path,
