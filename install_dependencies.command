@@ -227,15 +227,15 @@ pywebview_packages=""
 
 # macOS 10.12–10.13
 if echo -e "$os_ver \n10.13.99" | sort -V | tail -n1 | grep -Fq "10.13.99"; then
-	pywebview_packages="pywebview[qt]==3.7 PyQt5==5.15.9"
+	pywebview_packages="pywebview[qt]==3.7 PyQt5==5.15.9 PyQtWebEngine"
 
 # macOS 10.14–10.15
 elif echo -e "$os_ver \n10.15.99" | sort -V | tail -n1 | grep -Fq "10.15.99"; then
-	pywebview_packages="pywebview[qt]==4.4 PyQt5==5.15.9"
+	pywebview_packages="pywebview[qt]==4.4 PyQt5==5.15.9 PyQtWebEngine"
 
 # macOS 11+
 else
-	pywebview_packages="pywebview[qt] PyQt5==5.15.9"
+	pywebview_packages="pywebview[qt] PyQt5==5.15.9 PyQtWebEngine"
 fi
 
 printf "\033[1;32mSelected pywebview packages: %s\033[0m\n" "$pywebview_packages"
