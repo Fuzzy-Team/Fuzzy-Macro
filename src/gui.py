@@ -856,10 +856,8 @@ def launch(runtime_callback=None, runtime_args=(), keyboard_listener_callback=No
     _set_dock_icon_if_available()
 
     try:
-        # Create kwargs for create_window and only include js_api when
-        # supported by the installed pywebview version. Some pywebview
-        # backends or versions do not accept the `js_api` keyword and
-        # calling with it raises a TypeError.
+        # Build kwargs in a version-safe way: older pywebview releases reject
+        # newer parameters such as `text_select`.
         import inspect
 
         create_window_fn = webview.create_window
@@ -868,16 +866,42 @@ def launch(runtime_callback=None, runtime_args=(), keyboard_listener_callback=No
             "height": 1022,
             "text_select": True,
         }
+
+        signature_kwargs = None
         try:
             sig = inspect.signature(create_window_fn)
-            if "js_api" in sig.parameters:
-                kwargs["js_api"] = _build_gui_api()
-        except Exception:
-            # If signature inspection fails for any reason, avoid passing
-            # js_api to prevent unexpected keyword errors.
-            pass
+            params = sig.parameters
+            accepts_var_kw = any(
+                p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()
+            )
 
-        _frontend_window = create_window_fn("Fuzzy Macro", index_path, **kwargs)
+            if "js_api" in params or accepts_var_kw:
+                kwargs["js_api"] = _build_gui_api()
+
+            if not accepts_var_kw:
+                signature_kwargs = {k: v for k, v in kwargs.items() if k in params}
+            else:
+                signature_kwargs = kwargs
+        except Exception:
+            # If signature inspection fails, try the full kwargs and rely on
+            # TypeError fallback below to remove unsupported keys.
+            signature_kwargs = kwargs
+
+        # Retry once without a reported unexpected keyword argument.
+        active_kwargs = dict(signature_kwargs)
+        for _ in range(2):
+            try:
+                _frontend_window = create_window_fn("Fuzzy Macro", index_path, **active_kwargs)
+                break
+            except TypeError as exc:
+                msg = str(exc)
+                marker = "unexpected keyword argument "
+                if marker in msg:
+                    bad_key = msg.split(marker, 1)[1].strip().strip("'\"")
+                    if bad_key in active_kwargs:
+                        active_kwargs.pop(bad_key, None)
+                        continue
+                raise
     except Exception as exc:
         # Some pywebview backends can fail to initialize on certain platforms
         # (notably on Windows when WebView2/runtime or other backends are missing).
