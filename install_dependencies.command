@@ -180,8 +180,11 @@ if [ "$python_ver" = '3.9' ]; then
 	# This installs the latest opencv-headless below 4.11 and enforces numpy<2
 	install_pip_package "opencv-python-headless<4.11 numpy<2" "--force-reinstall"
 	install_pip_package "ocrmac"
+	install_pip_package "pyobjc-core<12.0"
+	install_pip_package "pyobjc-framework-Cocoa<12.0"
+	install_pip_package "pyobjc-framework-WebKit<12.0"
 	install_pip_package "pyobjc-framework-ColorSync<12.0"
-	install_pip_package "pyobjc-framework-ApplicationServices"
+	install_pip_package "pyobjc-framework-ApplicationServices<12.0"
 
 elif echo -e "$os_ver \n10.15.0" | sort -V | tail -n1 | grep -Fq "10.15.0"; then
 	printf "\033[1;35mInstalling rust\n\n\033[0m"
@@ -237,6 +240,33 @@ fi
 
 printf "\033[1;32mSelected pywebview packages: %s\033[0m\n" "$pywebview_packages"
 install_pip_package "$pywebview_packages"
+
+printf "\033[1;35mValidating pywebview backend availability\033[0m\n"
+"$VENV_PATH/bin/python" << "EOF"
+import importlib.util
+import sys
+
+def has(name):
+	try:
+		return importlib.util.find_spec(name) is not None
+	except Exception:
+		return False
+
+has_webview = has("webview")
+has_pyqt5 = has("PyQt5")
+has_webkit = has("WebKit")
+
+print(f"pywebview installed: {has_webview}")
+print(f"PyQt5 installed: {has_pyqt5}")
+print(f"WebKit installed: {has_webkit}")
+
+if not has_webview or (not has_pyqt5 and not has_webkit):
+	print("ERROR: pywebview backend validation failed.")
+	print("Re-run installer and ensure pip install errors are resolved.")
+	sys.exit(1)
+
+print("pywebview backend validation passed")
+EOF
 install_pip_package "python-Levenshtein"
 install_pip_package "pyscreeze<0.1.29"
 install_pip_package "html2image"
