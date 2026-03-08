@@ -871,10 +871,15 @@ def launch(runtime_callback=None, runtime_args=(), keyboard_listener_callback=No
         has_pyqt5 = _module_available("PyQt5")
         has_webkit = _module_available("WebKit")
 
-        # Prefer Qt on macOS when available for broader pywebview compatibility.
-        if has_pyqt5:
+        # Prefer native Cocoa/WebKit first on macOS. Qt can open a blank
+        # window on some systems when Qt WebEngine dependencies are incomplete.
+        if has_webkit:
+            preferred_gui = None
+            print("pywebview macOS backend: cocoa (WebKit)")
+        elif has_pyqt5:
             preferred_gui = "qt"
-        elif not has_webkit:
+            print("pywebview macOS backend: qt")
+        else:
             raise RuntimeError(
                 "No supported pywebview backend found on macOS. "
                 "Missing both PyQt5 and WebKit. "
