@@ -9,6 +9,7 @@ import webbrowser
 import time
 import threading
 import platform
+import importlib.util
 
 try:
     from AppKit import NSApplication, NSImage
@@ -45,6 +46,16 @@ def _normalize_dialog_path(dialog_result):
             return None
         return dialog_result[0]
     return dialog_result
+
+
+def _module_available(module_name):
+    """Best-effort module availability check without importing the module."""
+    try:
+        return importlib.util.find_spec(module_name) is not None
+    except Exception:
+        return False
+
+
 _keybind_recording_state = {
     "start": False,
     "pause": False,
@@ -927,6 +938,23 @@ def launch(runtime_callback=None, runtime_args=(), keyboard_listener_callback=No
     _shutdown_requested = False
 
     _set_dock_icon_if_available()
+    preferred_gui = None
+
+    if platform.system() == "Darwin":
+        has_pyqt5 = _module_available("PyQt5")
+        has_webkit = _module_available("WebKit")
+
+        # Prefer Qt on macOS when available for broader pywebview compatibility.
+        if has_pyqt5:
+            preferred_gui = "qt"
+        elif not has_webkit:
+            raise RuntimeError(
+                "No supported pywebview backend found on macOS. "
+                "Missing both PyQt5 and WebKit. "
+                "Re-run install_dependencies.command or install one backend manually: "
+                "pip install 'pywebview[qt]' PyQt5==5.15.9 "
+                "or pip install pyobjc-core pyobjc-framework-Cocoa pyobjc-framework-WebKit"
+            )
 
     try:
         # Build kwargs in a version-safe way: older pywebview releases reject
@@ -939,6 +967,8 @@ def launch(runtime_callback=None, runtime_args=(), keyboard_listener_callback=No
             "height": 1022,
             "text_select": True,
         }
+        if preferred_gui:
+            kwargs["gui"] = preferred_gui
 
         signature_kwargs = None
         try:
@@ -1068,8 +1098,8 @@ def launch(runtime_callback=None, runtime_args=(), keyboard_listener_callback=No
 
     # On macOS we install the Qt backend for better compatibility across
     # older OS versions and pywebview releases.
-    if platform.system() == "Darwin":
-        start_kwargs["gui"] = "qt"
+    if preferred_gui:
+        start_kwargs["gui"] = preferred_gui
 
     try:
         webview.start(**start_kwargs)
