@@ -898,14 +898,28 @@ def launch(runtime_callback=None, runtime_args=(), keyboard_listener_callback=No
     _set_dock_icon_if_available()
 
     try:
-        _frontend_window = webview.create_window(
-            "Fuzzy Macro",
-            index_path,
-            js_api=_build_gui_api(),
-            width=1312,
-            height=1022,
-            text_select=True,
-        )
+        # Create kwargs for create_window and only include js_api when
+        # supported by the installed pywebview version. Some pywebview
+        # backends or versions do not accept the `js_api` keyword and
+        # calling with it raises a TypeError.
+        import inspect
+
+        create_window_fn = webview.create_window
+        kwargs = {
+            "width": 1312,
+            "height": 1022,
+            "text_select": True,
+        }
+        try:
+            sig = inspect.signature(create_window_fn)
+            if "js_api" in sig.parameters:
+                kwargs["js_api"] = _build_gui_api()
+        except Exception:
+            # If signature inspection fails for any reason, avoid passing
+            # js_api to prevent unexpected keyword errors.
+            pass
+
+        _frontend_window = create_window_fn("Fuzzy Macro", index_path, **kwargs)
     except Exception as exc:
         # Some pywebview backends can fail to initialize on certain platforms
         # (notably on Windows when WebView2/runtime or other backends are missing).
