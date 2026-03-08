@@ -227,15 +227,15 @@ pywebview_packages=""
 
 # macOS 10.12–10.13
 if echo -e "$os_ver \n10.13.99" | sort -V | tail -n1 | grep -Fq "10.13.99"; then
-	pywebview_packages="pywebview[qt]==3.7 PyQt5==5.15.9 PyQtWebEngine"
+	pywebview_packages="pywebview[qt]==3.7 PyQt5==5.15.9"
 
 # macOS 10.14–10.15
 elif echo -e "$os_ver \n10.15.99" | sort -V | tail -n1 | grep -Fq "10.15.99"; then
-	pywebview_packages="pywebview[qt]==4.4 PyQt5==5.15.9 PyQtWebEngine"
+	pywebview_packages="pywebview[qt]==4.4 PyQt5==5.15.9"
 
 # macOS 11+
 else
-	pywebview_packages="pywebview[qt] PyQt5==5.15.9 PyQtWebEngine"
+	pywebview_packages="pywebview[qt] PyQt5==5.15.9"
 fi
 
 printf "\033[1;32mSelected pywebview packages: %s\033[0m\n" "$pywebview_packages"
@@ -254,19 +254,15 @@ def has(name):
 
 has_webview = has("webview")
 has_pyqt5 = has("PyQt5")
-has_pyqt_webengine = has("PyQt5.QtWebEngineWidgets")
 has_webkit = has("WebKit")
 
 print(f"pywebview installed: {has_webview}")
 print(f"PyQt5 installed: {has_pyqt5}")
-print(f"PyQtWebEngine installed: {has_pyqt_webengine}")
 print(f"WebKit installed: {has_webkit}")
 
-has_qt_backend = has_pyqt5 and has_pyqt_webengine
-
-if not has_webview or (not has_qt_backend and not has_webkit):
+if not has_webview or (not has_pyqt5 and not has_webkit):
 	print("ERROR: pywebview backend validation failed.")
-	print("Re-run installer and ensure pip install errors are resolved (PyQt5+PyQtWebEngine or WebKit).")
+	print("Re-run installer and ensure pip install errors are resolved.")
 	sys.exit(1)
 
 print("pywebview backend validation passed")
