@@ -944,17 +944,19 @@ def launch(runtime_callback=None, runtime_args=(), keyboard_listener_callback=No
         has_pyqt5 = _module_available("PyQt5")
         has_webkit = _module_available("WebKit")
 
-        # Prefer Qt on macOS when available for broader pywebview compatibility.
-        if has_pyqt5:
-            preferred_gui = "qt"
-        elif not has_webkit:
-            raise RuntimeError(
-                "No supported pywebview backend found on macOS. "
-                "Missing both PyQt5 and WebKit. "
-                "Re-run install_dependencies.command or install one backend manually: "
-                "pip install 'pywebview[qt]' PyQt5==5.15.9 "
-                "or pip install pyobjc-core pyobjc-framework-Cocoa pyobjc-framework-WebKit"
-            )
+        # Prefer the native Cocoa/WebKit backend on macOS (preferred_gui stays None).
+        # Only fall back to Qt when the WebKit pyobjc modules are genuinely absent.
+        if not has_webkit:
+            if has_pyqt5:
+                preferred_gui = "qt"
+            else:
+                raise RuntimeError(
+                    "No supported pywebview backend found on macOS. "
+                    "Missing both PyQt5 and WebKit. "
+                    "Re-run install_dependencies.command or install one backend manually: "
+                    "pip install 'pywebview[qt]' PyQt5==5.15.9 "
+                    "or pip install pyobjc-core pyobjc-framework-Cocoa pyobjc-framework-WebKit"
+                )
 
     try:
         # Build kwargs in a version-safe way: older pywebview releases reject
@@ -1090,14 +1092,58 @@ def launch(runtime_callback=None, runtime_args=(), keyboard_listener_callback=No
     _frontend_window.events.closed += on_closed
     _frontend_window.events.shown += on_shown
 
-    start_kwargs = {"http_server": True}
+    # Start the runtime loop in a daemon thread so it doesn't block
+    # webview.start() on macOS, which must own the main thread.
     if runtime_callback is not None:
-        start_kwargs["func"] = runtime_callback
-        if runtime_args:
-            start_kwargs["args"] = runtime_args
+        _runtime_thread = threading.Thread(
+            target=runtime_callback,
+            args=tuple(runtime_args) if runtime_args else (),
+            daemon=True,
+            name="runtime-loop",
+        )
+        _runtime_thread.start()
 
-    # On macOS we install the Qt backend for better compatibility across
-    # older OS versions and pywebview releases.
+    # Watchdog: if the frontend hasn't fired events.loaded within 12 seconds
+    # the native window is probably stuck on a white screen.  Fall back to
+    # serving the webapp via a plain HTTP server and open the system browser.
+    def _browser_fallback():
+        import http.server
+        import socketserver
+
+        webapp_dir = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "webapp")
+        )
+
+        class _Handler(http.server.SimpleHTTPRequestHandler):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, directory=webapp_dir, **kwargs)
+
+            def log_message(self, format, *args):  # noqa: A002
+                pass
+
+        httpd = socketserver.TCPServer(("127.0.0.1", 0), _Handler)
+        httpd.allow_reuse_address = True
+        port = httpd.server_address[1]
+        srv_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        srv_thread.start()
+        url = f"http://127.0.0.1:{port}/index.html?browser_fallback=1"
+        print(f"[gui] White-screen watchdog: opening browser fallback at {url}")
+        webbrowser.open(url)
+        try:
+            if _frontend_window is not None:
+                _frontend_window.destroy()
+        except Exception:
+            pass
+
+    def _watchdog():
+        time.sleep(12)
+        if not _frontend_ready and not _shutdown_requested:
+            print("[gui] Frontend not loaded after 12s — launching browser fallback")
+            _browser_fallback()
+
+    threading.Thread(target=_watchdog, daemon=True, name="gui-watchdog").start()
+
+    start_kwargs = {"http_server": True}
     if preferred_gui:
         start_kwargs["gui"] = preferred_gui
 
