@@ -218,11 +218,20 @@ install_pip_package "discord.py"
 install_pip_package "pypresence"
 install_pip_package "matplotlib"
 install_pip_package "fuzzywuzzy"
-# Ensure pywebview is installed in a way that supports older macOS versions.
-# On older macOS (10.12 - 10.14) the Cocoa/WebKit backend may have compatibility
-# issues; prefer the Qt backend for better compatibility on those releases.
-# Install pywebview with the Qt backend by default for broader macOS compatibility
-install_pip_package "pywebview[qt] PyQt5==5.15.9"
+printf "\033[1;35mInstalling pywebview (macOS compatible version)\033[0m\n"
+
+# macOS 10.12–10.13
+if echo -e "$os_ver \n10.13.99" | sort -V | tail -n1 | grep -Fq "10.13.99"; then
+    install_pip_package "pywebview[qt]==3.7 PyQt5==5.15.9"
+
+# macOS 10.14–10.15
+elif echo -e "$os_ver \n10.15.99" | sort -V | tail -n1 | grep -Fq "10.15.99"; then
+    install_pip_package "pywebview[qt]==4.4 PyQt5==5.15.9"
+
+# macOS 11+
+else
+    install_pip_package "pywebview[qt] PyQt5==5.15.9"
+fi
 install_pip_package "python-Levenshtein"
 install_pip_package "pyscreeze<0.1.29"
 install_pip_package "html2image"
