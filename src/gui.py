@@ -1095,11 +1095,34 @@ def launch(runtime_callback=None, runtime_args=(), keyboard_listener_callback=No
     _frontend_window.events.closed += on_closed
     _frontend_window.events.shown += on_shown
 
+    def _frontend_watchdog():
+        # Diagnostics for white-screen reports: if loaded event never arrives,
+        # print a clear marker so users can report backend issues quickly.
+        time.sleep(12)
+        if not _frontend_ready and not _shutdown_requested:
+            print("Warning: frontend did not signal loaded after 12s (possible backend render stall)")
+
+    try:
+        threading.Thread(target=_frontend_watchdog, daemon=True, name="fuzzy-frontend-watchdog").start()
+    except Exception:
+        pass
+
     start_kwargs = {"http_server": True}
+
+    # Run the runtime loop in our own daemon thread instead of relying on
+    # webview.start(func=...). On some pywebview/backend combinations,
+    # passing func can block or delay first paint and leave a white window.
     if runtime_callback is not None:
-        start_kwargs["func"] = runtime_callback
-        if runtime_args:
-            start_kwargs["args"] = runtime_args
+        try:
+            runtime_thread = threading.Thread(
+                target=runtime_callback,
+                args=runtime_args or (),
+                daemon=True,
+                name="fuzzy-gui-runtime",
+            )
+            runtime_thread.start()
+        except Exception as exc:
+            print(f"Failed to start GUI runtime thread: {exc}")
 
     # On macOS we install the Qt backend for better compatibility across
     # older OS versions and pywebview releases.
