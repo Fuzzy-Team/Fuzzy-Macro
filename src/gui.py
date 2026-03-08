@@ -26,6 +26,25 @@ _recent_logs = []
 _frontend_window = None
 _frontend_ready = False
 _shutdown_requested = False
+
+
+def _get_save_dialog_type():
+    """Return the save dialog constant across pywebview versions."""
+    file_dialog = getattr(webview, "FileDialog", None)
+    if file_dialog is not None and hasattr(file_dialog, "SAVE"):
+        return file_dialog.SAVE
+    return getattr(webview, "SAVE_DIALOG", None)
+
+
+def _normalize_dialog_path(dialog_result):
+    """Normalize pywebview file dialog result to a single string path."""
+    if not dialog_result:
+        return None
+    if isinstance(dialog_result, (list, tuple)):
+        if len(dialog_result) == 0:
+            return None
+        return dialog_result[0]
+    return dialog_result
 _keybind_recording_state = {
     "start": False,
     "pause": False,
@@ -457,11 +476,15 @@ def exportFieldSettingsWithDialog(field_name):
         if _frontend_window is None:
             return False, "Window not available"
 
+        save_dialog_type = _get_save_dialog_type()
+        if save_dialog_type is None:
+            return False, "Installed pywebview version does not expose a save file dialog API"
         save_path = _frontend_window.create_file_dialog(
-            dialog_type=webview.FileDialog.SAVE,
+            dialog_type=save_dialog_type,
             save_filename=suggested,
             file_types=("JSON Files (*.json)",),
         )
+        save_path = _normalize_dialog_path(save_path)
 
         if not save_path:
             return False, "Export cancelled"
@@ -499,11 +522,15 @@ def exportDebugZipWithDialog(profile_name=None):
         if _frontend_window is None:
             return False, "Window not available"
 
+        save_dialog_type = _get_save_dialog_type()
+        if save_dialog_type is None:
+            return False, "Installed pywebview version does not expose a save file dialog API"
         save_path = _frontend_window.create_file_dialog(
-            dialog_type=webview.FileDialog.SAVE,
+            dialog_type=save_dialog_type,
             save_filename=filename,
             file_types=("Zip Files (*.zip)",),
         )
+        save_path = _normalize_dialog_path(save_path)
 
         if not save_path:
             return False, "Export cancelled"
@@ -544,11 +571,15 @@ def exportProfileWithDialog(profile_name):
         if _frontend_window is None:
             return False, "Window not available"
         
+        save_dialog_type = _get_save_dialog_type()
+        if save_dialog_type is None:
+            return False, "Installed pywebview version does not expose a save file dialog API"
         save_path = _frontend_window.create_file_dialog(
-            dialog_type=webview.FileDialog.SAVE,
+            dialog_type=save_dialog_type,
             save_filename=suggested_filename,
             file_types=('JSON Files (*.json)',)
         )
+        save_path = _normalize_dialog_path(save_path)
         
         if not save_path:
             # User cancelled
@@ -938,4 +969,17 @@ def launch(runtime_callback=None, runtime_args=(), keyboard_listener_callback=No
         if runtime_args:
             start_kwargs["args"] = runtime_args
 
-    webview.start(**start_kwargs)
+    # On macOS we install the Qt backend for better compatibility across
+    # older OS versions and pywebview releases.
+    if platform.system() == "Darwin":
+        start_kwargs["gui"] = "qt"
+
+    try:
+        webview.start(**start_kwargs)
+    except TypeError as exc:
+        # Fallback for pywebview versions that do not accept `gui`.
+        if "gui" in start_kwargs and "gui" in str(exc):
+            start_kwargs.pop("gui", None)
+            webview.start(**start_kwargs)
+        else:
+            raise
