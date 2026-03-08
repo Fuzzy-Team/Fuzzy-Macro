@@ -257,26 +257,44 @@ def readSettingsFile(path):
     #get each line
     #read the file, format it to:
     #[[key, value], [key, value]]
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         raw = f.read()
 
     # If `max_convert_time=` was accidentally concatenated onto the previous line,
     # insert a newline before it so it becomes its own setting line.
     raw = re.sub(r'(?<!\n)max_convert_time=', r'\nmax_convert_time=', raw)
 
-    data = [[x.strip() for x in y.split("=", 1)] for y in raw.split("\n") if y]
-    #convert to a dict
+    # Split into non-empty lines and parse only lines that contain '='.
+    lines = [y for y in raw.splitlines() if y and y.strip()]
+    data = []
+    for y in lines:
+        if "=" in y:
+            k, v = y.split("=", 1)
+            data.append((k.strip(), v.strip()))
+        else:
+            # Ignore malformed lines without an '='; they may be accidental
+            # fragments left by external editors or corruption.
+            continue
+
+    # Convert parsed pairs to typed values where possible
     out = {}
-    for k,v in data:
+    for k, v in data:
+        parsed = None
         try:
-            out[k] = ast.literal_eval(v)
-        except:
-            #check if integer
+            parsed = ast.literal_eval(v)
+        except Exception:
+            # Try integer
             if v.isdigit():
-                out[k] = int(v)
-            elif v.replace(".","",1).isdigit():
-                out[k] = float(v)
-            out[k] = v
+                parsed = int(v)
+            else:
+                # Try float (allow one decimal point)
+                try:
+                    if v.replace('.', '', 1).isdigit():
+                        parsed = float(v)
+                except Exception:
+                    parsed = None
+
+        out[k] = parsed if parsed is not None else v
     return out
 
 def saveDict(path, data):

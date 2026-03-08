@@ -8,7 +8,7 @@ var fieldNo = 1;
 async function saveEnabled() {
   const fields = (await loadSettings()).fields;
   fields[fieldNo - 1] = ele.value;
-  eel.saveProfileSetting("fields", fields);
+  AppBridge.fireAndForget("saveProfileSetting", "fields", fields);
 }
 function saveField() {
   const fieldProperties = [
@@ -41,24 +41,24 @@ function saveField() {
   }
 
   const fieldData = generateSettingObject(fieldProperties);
-  eel.saveField(getInputValue("field"), fieldData);
+  AppBridge.fireAndForget("saveField", getInputValue("field"), fieldData);
 }
 //save the fields_enabled
 async function updateFieldEnable(ele) {
   //save
   const fields_enabled = (await loadSettings()).fields_enabled;
   fields_enabled[fieldNo - 1] = ele.checked;
-  eel.saveProfileSetting("fields_enabled", fields_enabled);
+  AppBridge.fireAndForget("saveProfileSetting", "fields_enabled", fields_enabled);
 }
 
 //load the field selected in the dropdown
 async function loadAndSaveField(ele) {
-  const data = (await eel.loadFields()())[getDropdownValue(ele)];
+  const data = (await AppBridge.call("loadFields"))[getDropdownValue(ele)];
   loadInputs(data);
   //save
   const fields = (await loadSettings()).fields;
   fields[fieldNo - 1] = getDropdownValue(ele);
-  eel.saveProfileSetting("fields", fields);
+  AppBridge.fireAndForget("saveProfileSetting", "fields", fields);
 }
 
 async function switchGatherTab(target) {
@@ -84,7 +84,7 @@ async function switchGatherTab(target) {
   document.getElementById("field_enable").checked =
     settings.fields_enabled[fieldNo - 1];
   //get the pattern list
-  const patterns = await eel.getPatterns()();
+  const patterns = await AppBridge.call("getPatterns");
   setDropdownData("shape", patterns);
   //load the inputs
   loadAndSaveField(fieldDropdown);
@@ -119,14 +119,14 @@ $("#gather-placeholder")
       }
 
       try {
-        const result = await eel.importPatterns(patterns)();
+        const result = await AppBridge.call("importPatterns", patterns);
         let msg = '';
         if (result.saved && result.saved.length) msg += `Saved: ${result.saved.join(', ')}\n`;
         if (result.errors && result.errors.length) msg += `Errors: ${result.errors.join(', ')}`;
         if (!msg) msg = 'No files were processed.';
         alert(msg);
         // refresh pattern dropdown
-        const patternsList = await eel.getPatterns()();
+        const patternsList = await AppBridge.call("getPatterns");
         setDropdownData('shape', patternsList);
       } catch (err) {
         console.error(err);
@@ -158,11 +158,11 @@ $("#gather-placeholder")
 
     try {
       // Call the reset function
-      const success = await eel.resetFieldToDefault(currentFieldName)();
+      const success = await AppBridge.call("resetFieldToDefault", currentFieldName);
 
       if (success) {
         // Reload the field data and update the UI
-        const data = (await eel.loadFields()())[currentFieldName];
+        const data = (await AppBridge.call("loadFields"))[currentFieldName];
         loadInputs(data);
         alert(
           `Successfully reset "${currentFieldName}" field settings to defaults.`
@@ -190,34 +190,23 @@ $("#gather-placeholder")
     }
 
     try {
-      // Call the export function
-      const jsonSettings = await eel.exportFieldSettings(currentFieldName)();
+      // Call the export function which now shows a native save dialog
+      const res = await AppBridge.call("exportFieldSettingsWithDialog", currentFieldName);
+      if (!res) return alert("Failed to export field settings.");
 
-      if (jsonSettings) {
-        // Parse JSON to extract metadata
-        let metadata = {};
-        try {
-          const parsedData = JSON.parse(jsonSettings);
-          metadata = parsedData.metadata || {};
-        } catch (e) {
-          // If parsing fails, that's okay - just use empty metadata
+      const [success, message, metadata] = res;
+      if (success) {
+        let successMsg = `Settings for "${currentFieldName}" exported.`;
+        if (message) successMsg += `\n${message}`;
+        if (metadata && metadata.macro_version) {
+          successMsg += `\nMacro version: ${metadata.macro_version}`;
         }
-
-        // Copy to clipboard
-        await navigator.clipboard.writeText(jsonSettings);
-        
-        // Build success message with metadata
-        let successMsg = `Settings for "${currentFieldName}" exported and copied to clipboard!`;
-        if (metadata.macro_version) {
-          successMsg += `\n\nExport details:\nMacro version: ${metadata.macro_version}`;
-        }
-        if (metadata.export_date) {
+        if (metadata && metadata.export_date) {
           successMsg += `\nExported: ${new Date(metadata.export_date).toLocaleString()}`;
         }
-        
         alert(successMsg);
       } else {
-        alert("Failed to export field settings. Field may not exist.");
+        alert("Failed to export field settings: " + (message || "unknown error"));
       }
     } catch (error) {
       console.error("Error exporting field settings:", error);
@@ -262,11 +251,15 @@ $("#gather-placeholder")
 
     try {
       // Call the import function
-      const result = await eel.importFieldSettings(currentFieldName, jsonSettings)();
+      const result = await AppBridge.call(
+        "importFieldSettings",
+        currentFieldName,
+        jsonSettings
+      );
 
       if (result && result.success) {
         // Reload the field data and update the UI
-        const data = (await eel.loadFields()())[currentFieldName];
+        const data = (await AppBridge.call("loadFields"))[currentFieldName];
         loadInputs(data);
         // Hide the modal
         document.getElementById("import-modal").style.display = "none";

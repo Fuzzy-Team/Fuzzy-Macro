@@ -22,7 +22,6 @@ from pynput import keyboard
 import multiprocessing
 import ctypes
 from threading import Thread
-import eel
 import time
 import sys
 import os
@@ -46,7 +45,7 @@ except Exception:
     pass
 
 try:
-	from modules.misc.ColorProfile import DisplayColorProfile
+    from modules.misc.ColorProfile import DisplayColorProfile
 except ModuleNotFoundError:
     try:
         _script_name = "install_dependencies.bat" if _IS_WINDOWS else "install_dependencies.command"
@@ -2137,7 +2136,7 @@ def watch_for_hotkeys(run):
     last_settings_load = 0
     settings_cache_duration = 1.0  # Reload settings every 1 second max
     
-    # Cache Eel recording state to avoid repeated calls
+    # Cache GUI recording state to avoid repeated calls
     recording_cache = {"start": False, "pause": False, "stop": False}
     last_recording_check = 0
     recording_cache_duration = 0.5  # Check recording state every 0.5 seconds max
@@ -2155,10 +2154,11 @@ def watch_for_hotkeys(run):
         current_time = time.time()
         if current_time - last_recording_check > recording_cache_duration:
             try:
-                import eel
-                recording_cache["start"] = eel.getElementProperty("start_keybind", "dataset.recording")() == "true"
-                recording_cache["pause"] = eel.getElementProperty("pause_keybind", "dataset.recording")() == "true"
-                recording_cache["stop"] = eel.getElementProperty("stop_keybind", "dataset.recording")() == "true"
+                import gui
+                gui_state = gui.getKeybindRecordingState()
+                recording_cache["start"] = bool(gui_state.get("start", False))
+                recording_cache["pause"] = bool(gui_state.get("pause", False))
+                recording_cache["stop"] = bool(gui_state.get("stop", False))
                 last_recording_check = current_time
             except:
                 recording_cache = {"start": False, "pause": False, "stop": False}
@@ -2454,6 +2454,50 @@ if __name__ == "__main__":
     recentLogs = manager.list()  # Shared list to store recent log entries for discord bot
     gui.setRecentLogs(recentLogs)
     updateGUI = multiprocessing.Value('i', 0)
+    # Register signal handlers to persist settings on Ctrl-C or termination
+    try:
+        import signal
+
+        def _signal_handler(signum, frame):
+            try:
+                # Best-effort persist via gui helper
+                try:
+                    if 'gui' in globals() and hasattr(gui, 'ensureSettingsSaved'):
+                        gui.ensureSettingsSaved()
+                except Exception:
+                    pass
+                # Persist current profile as well
+                try:
+                    settingsManager.saveCurrentProfile()
+                except Exception:
+                    pass
+                # Try to close the frontend window if present
+                try:
+                    if 'gui' in globals() and getattr(gui, '_frontend_window', None) is not None:
+                        try:
+                            gui._frontend_window.destroy()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                try:
+                    time.sleep(0.05)
+                except Exception:
+                    pass
+            finally:
+                try:
+                    sys.exit(0)
+                except SystemExit:
+                    os._exit(0)
+
+        signal.signal(signal.SIGINT, _signal_handler)
+        # Some platforms (e.g., Windows) may not support SIGTERM; register if available
+        try:
+            signal.signal(signal.SIGTERM, _signal_handler)
+        except Exception:
+            pass
+    except Exception:
+        pass
     skipTask = multiprocessing.Value('i', 0)  # 0 = don't skip, 1 = skip current task
     status = manager.Value(ctypes.c_wchar_p, "none")
     presence = manager.Value(ctypes.c_wchar_p, "")
@@ -2506,6 +2550,44 @@ if __name__ == "__main__":
     #setup stream class
     stream = cloudflaredStream()
 
+    def waitForStreamURL(timeout=30):
+        """Wait for the stream's public URL to become available and print it.
+
+        This checks the `stream.publicURL` attribute first (if present),
+        then falls back to the `stream_url.txt` file written by the streamer.
+        """
+        import os, time
+        src_dir = os.path.dirname(__file__)
+        stream_url_file = os.path.join(src_dir, 'stream_url.txt')
+        start = time.time()
+        while time.time() - start < timeout:
+            try:
+                url = None
+                # Prefer the in-memory value if available
+                try:
+                    url = getattr(stream, 'publicURL', None)
+                except Exception:
+                    url = None
+
+                # Fallback to file if not set yet
+                if not url and os.path.exists(stream_url_file):
+                    try:
+                        with open(stream_url_file, 'r') as f:
+                            url = f.read().strip()
+                    except Exception:
+                        url = None
+
+                if url:
+                    print("Cloudflare URL:", url)
+                    try:
+                        presence.value = url
+                    except Exception:
+                        pass
+                    break
+            except Exception:
+                pass
+            time.sleep(0.5)
+
     def onExit():
         stopApp()
         # Reset timed bear quest states on exit so macro resumes checking next run
@@ -2544,31 +2626,12 @@ if __name__ == "__main__":
         mouse.mouseUp()
     
     atexit.register(onExit)
-        
-    #setup and launch gui
-    gui.run = run
-    gui.launch()
-    # Ensure GUI loads current settings immediately on open (adds Brown Bear if missing)
-    try:
-        gui.updateGUI()
-    except Exception:
-        pass
-    
-    # Start keyboard listener after GUI launch to ensure it's on the main thread (required on macOS)
-    # This prevents TIS/TSM errors on macOS
-    if start_keyboard_listener_fn:
-        try:
-            start_keyboard_listener_fn()
-            print("Keyboard listener started successfully")
-        except Exception as e:
-            print(f"Failed to start keyboard listener after GUI launch: {e}")
-    
-    #use run.value to control the macro loop
 
-    #check color profile (macOS only)
-    try:
-        import platform
-        if platform.system() == "Darwin":
+    def gui_runtime_loop():
+        global stopThreads, macroProc
+
+        #check color profile
+        try:
             colorProfileManager = DisplayColorProfile()
             currentProfileColor = colorProfileManager.getCurrentColorProfile()
             if not "sRGB" in currentProfileColor:
@@ -2579,24 +2642,18 @@ if __name__ == "__main__":
                         messageBox.msgBox(title="Color Profile Success", text="Successfully changed the current color profile to sRGB")
                 except Exception as e:
                     messageBox.msgBox(title="Failed to change color profile", text=e)
-    except Exception:
-        pass
-    
-    #check screen recording permissions
-    #check screen recording permissions (macOS only)
-    try:
-        import platform
-        if platform.system() == "Darwin":
+        except Exception:
+            pass
+
+        try:
             cg = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
             cg.CGRequestScreenCaptureAccess.restype = ctypes.c_bool
             if not cg.CGRequestScreenCaptureAccess():
                 messageBox.msgBox(title="Screen Recording Permission", text='Terminal does not have the screen recording permission. The macro will not work properly.\n\nTo fix it, go to System Settings -> Privacy and Security -> Screen Recording -> add and enable Terminal. After that, restart the macro')
-    except (AttributeError, OSError, FileNotFoundError):
-        pass
-    #check full keyboard access (macOS only)
-    try:
-        import platform
-        if platform.system() == "Darwin":
+        except AttributeError:
+            pass
+
+        try:
             result = subprocess.run(
                 ["defaults", "read", "com.apple.universalaccess", "KeyboardAccessEnabled"],
                 capture_output=True,
@@ -2606,351 +2663,258 @@ if __name__ == "__main__":
             if value == "1":
                 messageBox.msgBox(text = f"Full Keyboard Access is enabled. The macro will not work properly\
                     \nTo disable it, go to System Settings -> Accessibility -> Keyboard -> uncheck 'Full Keyboard Access'")
-    except Exception:
-        pass
+        except Exception as e:
+            print("Error reading Full Keyboard Access:", e)
 
-    discordBotProc = None
-    prevDiscordBotToken = None
-    prevRunState = run.value  # Track previous run state for GUI updates
-    # Windows permissions parity checks
-    try:
-        import platform
-        if platform.system() == "Windows":
-            try:
-                import ctypes
-                is_admin = False
+        discordBotProc = None
+        prevDiscordBotToken = None
+        prevRunState = run.value
+        richPresenceManager = None
+        gui_settings_cache = {}
+        last_gui_settings_load = 0
+        gui_settings_cache_duration = 1.0
+        disconnectCooldownUntil = 0
+
+        while True:
+            if gui.isShutdownRequested():
+                # Ensure settings and external integrations are cleanly shut down
                 try:
-                    is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
-                except Exception:
-                    is_admin = False
-                if not is_admin:
-                    messageBox.msgBox(title="Administrator Privileges Recommended", text="The macro may need administrator privileges to control elevated apps. If the target app runs as Administrator, run this macro as Administrator.")
-
-                # Screen capture test using mss
-                try:
-                    import mss
-                    with mss.mss() as sct:
-                        monitor = sct.monitors[0] if sct.monitors else None
-                        if monitor:
-                            sct.grab({"left": monitor.get('left', 0), "top": monitor.get('top', 0), "width": 1, "height": 1})
-                except Exception as e:
-                    messageBox.msgBox(title="Screen Capture Warning", text="Unable to capture the screen. Screen capture may be blocked by system settings or other software. Error: {}".format(e))
-
-                # Input control availability check (non-invasive)
-                try:
-                    import pydirectinput as _pag
-                    try:
-                        _pag.position()
-                    except Exception as e:
-                        messageBox.msgBox(title="Input Control Warning", text="Unable to query/send input events. This may be restricted by system policies or security software. Error: {}".format(e))
-                except Exception:
-                    messageBox.msgBox(title="Missing Dependency", text="pydirectinput is required for input control on Windows. Install with: pip install pydirectinput")
-            except Exception:
-                pass
-    except Exception:
-        pass
-    
-    # Initialize Rich Presence Manager
-    richPresenceManager = None
-    
-    # Cache settings for main GUI loop to avoid reloading every 0.5 seconds
-    gui_settings_cache = {}
-    last_gui_settings_load = 0
-    gui_settings_cache_duration = 1.0  # Reload settings every 1 second max
-
-    while True:
-        eel.sleep(0.5)
-        
-        # Get cached settings
-        current_time = time.time()
-        if current_time - last_gui_settings_load > gui_settings_cache_duration:
-            gui_settings_cache = settingsManager.loadAllSettings()
-            last_gui_settings_load = current_time
-        setdat = gui_settings_cache
-
-        #discord bot. Look for changes in the bot token
-        currentDiscordBotToken = setdat.get("discord_bot_token", "")
-        if setdat.get("discord_bot", False) and currentDiscordBotToken and currentDiscordBotToken.strip() and currentDiscordBotToken != prevDiscordBotToken:
-            if discordBotProc is not None and discordBotProc.is_alive():
-                print("Detected change in discord bot token, killing previous bot process")
-                discordBotProc.terminate()
-                discordBotProc.join()
-            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI), daemon=True)
-            prevDiscordBotToken = currentDiscordBotToken
-            discordBotProc.start()
-
-        # Discord Rich Presence - Initialize and always show status
-        discord_rp_enabled = setdat.get("discord_rich_presence", False)
-        
-        if richPresenceManager is None and discord_rp_enabled:
-            # Initialize Rich Presence Manager
-            richPresenceManager = RichPresenceManager(status, enabled=True, presence_value=presence)
-            richPresenceManager.start()
-            print("Discord Rich Presence started")
-        elif richPresenceManager is not None:
-            # Update settings if they changed
-            richPresenceManager.set_enabled(discord_rp_enabled)
-            
-            # Update status based on macro run state
-            if run.value == 0 or run.value == 3:  # Stopped
-                # Clear any presence override and show "On main menu" when not running
-                try:
-                    if presence is not None:
-                        presence.value = ""
+                    settingsManager.saveCurrentProfile()
                 except Exception:
                     pass
-                if status.value != "idle_main_menu":
-                    status.value = "idle_main_menu"
-            elif run.value == 6:  # Paused
-                # Show "Paused" status
-                if status.value != "paused":
+                try:
+                    if richPresenceManager is not None:
+                        try:
+                            richPresenceManager.stop()
+                        except Exception:
+                            # best-effort disconnect
+                            try:
+                                richPresenceManager.disconnect()
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+                try:
+                    if discordBotProc is not None and discordBotProc.is_alive():
+                        discordBotProc.terminate()
+                        discordBotProc.join(timeout=2)
+                except Exception:
+                    pass
+                break
+
+            time.sleep(0.5)
+
+            current_time = time.time()
+            if current_time - last_gui_settings_load > gui_settings_cache_duration:
+                gui_settings_cache = settingsManager.loadAllSettings()
+                last_gui_settings_load = current_time
+            setdat = gui_settings_cache
+
+            currentDiscordBotToken = setdat.get("discord_bot_token", "")
+            if setdat.get("discord_bot", False) and currentDiscordBotToken and currentDiscordBotToken.strip() and currentDiscordBotToken != prevDiscordBotToken:
+                if discordBotProc is not None and discordBotProc.is_alive():
+                    print("Detected change in discord bot token, killing previous bot process")
+                    discordBotProc.terminate()
+                    discordBotProc.join()
+                discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI), daemon=True)
+                prevDiscordBotToken = currentDiscordBotToken
+                discordBotProc.start()
+
+            discord_rp_enabled = setdat.get("discord_rich_presence", False)
+            if richPresenceManager is None and discord_rp_enabled:
+                richPresenceManager = RichPresenceManager(status, enabled=True, presence_value=presence)
+                richPresenceManager.start()
+                print("Discord Rich Presence started")
+            elif richPresenceManager is not None:
+                richPresenceManager.set_enabled(discord_rp_enabled)
+                if run.value == 0 or run.value == 3:
+                    try:
+                        if presence is not None:
+                            presence.value = ""
+                    except Exception:
+                        pass
+                    if status.value != "idle_main_menu":
+                        status.value = "idle_main_menu"
+                elif run.value == 6 and status.value != "paused":
                     status.value = "paused"
 
-        # Check if run state changed
-        if run.value != prevRunState:
-            # Check for resume (transition from paused to running)
-            if prevRunState == 6 and run.value == 2:
+            if run.value == 1:
+                if setdat.get("enable_stream", False):
+                    if stream.isCloudflaredInstalled():
+                        logger.webhook("", "Starting Stream...", "light blue")
+                        stream.start(setdat.get("stream_resolution", 0.75))
+                        Thread(target=waitForStreamURL, daemon=True).start()
+                    else:
+                        messageBox.msgBox(text='Cloudflared is required for streaming but is not installed. Visit https://fuzzy-team.gitbook.io/fuzzy-macro/discord-setup/stream-setup for installation instructions', title='Cloudflared not installed')
+
+                print("starting macro proc")
+                fieldSettings = settingsManager.loadFields()
+                for field in setdat.get("fields", []):
+                    fs = fieldSettings.get(field, {})
+                    if fs.get("field_drift_compensation", False) and setdat.get("sprinkler_type") != "saturator":
+                        messageBox.msgBox(title="Field Drift Compensation", text=f"You have Field Drift Compensation enabled for {field} field, but you do not have Supreme Saturator as your sprinkler type in configs.\nField Drift Compensation requires you to own the Supreme Saturator.\nKindly disable field drift compensation if you do not have the Supreme Saturator")
+                        break
+
+                validBlender = not setdat["blender_enable"]
+                for i in range(1,4):
+                    if setdat[f"blender_item_{i}"] != "none" and (setdat[f"blender_repeat_{i}"] or setdat[f"blender_repeat_inf_{i}"]):
+                        validBlender = True
+                if not validBlender:
+                    messageBox.msgBox(title="Blender", text="You have blender enabled, but there are no more items left to craft.\nCheck the 'repeat' setting on your blender items and reset blender data.")
+
+                macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
+                macroProc.start()
+
+                macro_version = settingsManager.getMacroVersion()
+                logger.webhook("Macro Started", f'Fuzzy Macro v{macro_version}\nDisplay: {screenInfo["display_type"]}, {screenInfo["screen_width"]}x{screenInfo["screen_height"]}', "purple")
+                run.value = 2
+                gui.setRunState(2)
                 try:
-                    appManager.openApp("Roblox")
+                    gui.toggleStartStop()
                 except Exception:
                     pass
-                logger.webhook("Macro Resumed", "Fuzzy Macro", "bright green")
-            # Check for pause (transition from running to paused)
-            elif prevRunState == 2 and run.value == 6:
+                try:
+                    gui.toggleStartStop()
+                except Exception:
+                    pass
+            elif run.value == 0:
+                if macroProc:
+                    logger.webhook("Macro Stopped", "Fuzzy Macro", "red")
+                    run.value = 3
+                    gui.setRunState(3)
+                    try:
+                        gui.toggleStartStop()
+                    except Exception:
+                        pass
+
+                    stopApp()
+
+                    try:
+                        print("Generating final report...")
+                        from modules.submacros.finalReport import FinalReport
+                        finalReportObj = FinalReport()
+                        sessionStats = finalReportObj.generateFinalReport(setdat)
+                        if sessionStats and os.path.exists("finalReport.png"):
+                            sessionTime = sessionStats.get("total_session_time", 0)
+                            hours = int(sessionTime / 3600)
+                            minutes = int((sessionTime % 3600) / 60)
+                            timeStr = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+                            totalHoney = sessionStats.get("total_honey", 0)
+                            avgHoneyPerHour = sessionStats.get("avg_honey_per_hour", 0)
+
+                            def millify(n):
+                                if n < 1000:
+                                    return str(int(n))
+                                elif n < 1000000:
+                                    return f"{n/1000:.1f}K"
+                                elif n < 1000000000:
+                                    return f"{n/1000000:.1f}M"
+                                elif n < 1000000000000:
+                                    return f"{n/1000000000:.1f}B"
+                                return f"{n/1000000000000:.1f}T"
+
+                            avgLabel = "Est. Avg/Hour" if sessionTime < 3600 else "Avg/Hour"
+                            description = f"Runtime: {timeStr}\nTotal Honey: {millify(totalHoney)}\n{avgLabel}: {millify(avgHoneyPerHour)}"
+                            logger.finalReport("Session Complete", description, "purple")
+                            print("Final report sent successfully")
+                        else:
+                            print("Failed to generate final report - no data available")
+                    except Exception as e:
+                        print(f"Error generating final report: {e}")
+                        import traceback
+                        traceback.print_exc()
+            elif run.value == 4:
+                if macroProc and macroProc.is_alive():
+                    macroProc.kill()
+                    macroProc.join()
+                logger.webhook("","Disconnected", "red", "screen", ping_category="ping_disconnects")
+                appManager.closeApp("Roblox")
                 keyboardModule.releaseMovement()
                 mouse.mouseUp()
-                logger.webhook("Macro Paused", "Use F2 or /resume to continue", "orange")
-
-            gui.setRunState(run.value)
-            try:
-                gui.toggleStartStop()  # Update UI
-            except:
-                pass  # If eel is not ready, continue
-            prevRunState = run.value
-
-        if run.value == 1:
-            #create and set webhook obj for the logger
-            logger.enableWebhook = setdat.get("enable_webhook", False)
-            logger.webhookURL = setdat.get("webhook_link", "")
-            logger.sendScreenshots = setdat.get("send_screenshot", True)
-            stopThreads = False
-
-            #reset hourly report data
-            hourlyReport = HourlyReport()
-            hourlyReport.resetAllStats()
-            #stream
-            def waitForStreamURL():
-                #wait for up to 15 seconds for the public link
-                for _ in range(150):
-                    time.sleep(0.1)
-                    if stream.publicURL:
-                        logger.webhook("Stream Started", f'Stream URL: {stream.publicURL}', "purple")
-                        
-                        # If bot is enabled, request pinning of the stream message
-                        if setdat.get("discord_bot", False) and setdat.get("pin_stream_url", False):
-                            import modules.logging.webhook as webhookModule
-                            if webhookModule.last_channel_id:
-                                try:
-                                    pin_requests.put({
-                                        'channel_id': webhookModule.last_channel_id,
-                                        'search_text': 'Stream URL'
-                                    })
-                                    print("Pin request queued for stream URL message")
-                                except Exception as e:
-                                    print(f"Error queueing pin request: {e}")
-                        return
-
-                logger.webhook("", f'Stream could not start. Check terminal for more info', "red", ping_category="ping_critical_errors")
-
-            streamLink = None
-            if setdat.get("enable_stream", False):
-                if stream.isCloudflaredInstalled():
-                    logger.webhook("", "Starting Stream...", "light blue")
-                    streamLink = stream.start(setdat.get("stream_resolution", 0.75))
-                    Thread(target=waitForStreamURL, daemon=True).start()
-                else:
-                    messageBox.msgBox(text='Cloudflared is required for streaming but is not installed. Visit https://fuzzy-team.gitbook.io/fuzzy-macro/discord-setup/stream-setup for installation instructions', title='Cloudflared not installed')
-
-            print("starting macro proc")
-            #check if user enabled field drift compensation but sprinkler is not supreme saturator
-            fieldSettings = settingsManager.loadFields()
-            sprinkler = setdat["sprinkler_type"]
-            for field in setdat.get("fields", []):
-                fs = fieldSettings.get(field, {})
-                if fs.get("field_drift_compensation", False) and setdat.get("sprinkler_type") != "saturator":
-                    messageBox.msgBox(title="Field Drift Compensation", text=f"You have Field Drift Compensation enabled for {field} field, \
-                                    but you do not have Supreme Saturator as your sprinkler type in configs.\n\
-                                    Field Drift Compensation requires you to own the Supreme Saturator.\n\
-                                    Kindly disable field drift compensation if you do not have the Supreme Saturator")
-                    break
-            #check if blender is enabled but there are no items to craft
-            validBlender = not setdat["blender_enable"] #valid blender set to false if blender is enabled, else its true since blender is disabled
-            for i in range(1,4):
-                if setdat[f"blender_item_{i}"] != "none" and (setdat[f"blender_repeat_{i}"] or setdat[f"blender_repeat_inf_{i}"]):
-                    validBlender = True
-            if not validBlender:
-                messageBox.msgBox(title="Blender", text=f"You have blender enabled, \
-                                    but there are no more items left to craft.\n\
-				                    Check the 'repeat' setting on your blender items and reset blender data.")
-            #macro proc
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
-            macroProc.start()
-
-            macro_version = settingsManager.getMacroVersion()
-            logger.webhook("Macro Started", f'Fuzzy Macro v{macro_version}\nDisplay: {screenInfo["display_type"]}, {screenInfo["screen_width"]}x{screenInfo["screen_height"]}', "purple")
-            run.value = 2
-            gui.setRunState(2)  # Update the global run state
-            try:
-                gui.toggleStartStop()  # Update UI
-            except:
-                pass  # If eel is not ready, continue
-            try:
-                gui.toggleStartStop()  # Update UI
-            except:
-                pass  # If eel is not ready, continue
-        elif run.value == 0:
-            if macroProc:
-                # Stop macro and release all inputs first
-                logger.webhook("Macro Stopped", "Fuzzy Macro", "red")
-                
-                run.value = 3
-                gui.setRunState(3)  # Update the global run state
+                macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
+                macroProc.start()
+                run.value = 2
+                gui.setRunState(2)
                 try:
-                    gui.toggleStartStop()  # Update UI
-                except:
-                    pass  # If eel is not ready, continue
-                
-                # Stop all inputs and processes
-                stopApp()
-                
-                # Generate and send final report AFTER stopping inputs
+                    gui.toggleStartStop()
+                except Exception:
+                    pass
+
+            if macroProc and not macroProc.is_alive() and hasattr(macroProc, "exitcode") and macroProc.exitcode is not None and macroProc.exitcode != 0:
+                exitcode = macroProc.exitcode
                 try:
-                    print("Generating final report...")
-                    from modules.submacros.finalReport import FinalReport
-                    import os
-                    
-                    # Create final report object
-                    finalReportObj = FinalReport()
-                    sessionStats = finalReportObj.generateFinalReport(setdat)
-                    
-                    # Check if report was generated successfully
-                    if sessionStats and os.path.exists("finalReport.png"):
-                        # Format session summary for webhook
-                        sessionTime = sessionStats.get("total_session_time", 0)
-                        hours = int(sessionTime / 3600)
-                        minutes = int((sessionTime % 3600) / 60)
-                        timeStr = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
-                        
-                        totalHoney = sessionStats.get("total_honey", 0)
-                        avgHoneyPerHour = sessionStats.get("avg_honey_per_hour", 0)
-                        
-                        def millify(n):
-                            """Format large numbers with suffixes"""
-                            if n < 1000:
-                                return str(int(n))
-                            elif n < 1000000:
-                                return f"{n/1000:.1f}K"
-                            elif n < 1000000000:
-                                return f"{n/1000000:.1f}M"
-                            elif n < 1000000000000:
-                                return f"{n/1000000000:.1f}B"
-                            else:
-                                return f"{n/1000000000000:.1f}T"
-                        
-                        # Add "Estimated" label if session was less than 1 hour
-                        avgLabel = "Est. Avg/Hour" if sessionTime < 3600 else "Avg/Hour"
-                        description = f"Runtime: {timeStr}\nTotal Honey: {millify(totalHoney)}\n{avgLabel}: {millify(avgHoneyPerHour)}"
-                        
-                        # Send final report webhook
-                        logger.finalReport("Session Complete", description, "purple")
-                        print("Final report sent successfully")
+                    import signal
+                    if exitcode < 0:
+                        signum = -exitcode
+                        try:
+                            signame = signal.Signals(signum).name
+                        except Exception:
+                            signame = str(signum)
+                        extra = f" (terminated by signal {signame})"
                     else:
-                        print("Failed to generate final report - no data available")
-                        
-                except Exception as e:
-                    print(f"Error generating final report: {e}")
-                    import traceback
-                    traceback.print_exc()
-        elif run.value == 4: #disconnected
-            if macroProc and macroProc.is_alive():
-                macroProc.kill()
-                macroProc.join()
-            logger.webhook("","Disconnected", "red", "screen", ping_category="ping_disconnects")
-            appManager.closeApp("Roblox")
-            keyboardModule.releaseMovement()
-            mouse.mouseUp()
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
-            macroProc.start()
-            run.value = 2
-            gui.setRunState(2)  # Update the global run state
-            try:
-                gui.toggleStartStop()  # Update UI
-            except:
-                pass  # If eel is not ready, continue
-        # Note: run.value == 6 (paused) is handled in the macro process loop - it waits for resume
-        
-        # Check for crash (non-zero exitcodes). Log signal name to aid diagnosis.
-        if macroProc and not macroProc.is_alive() and hasattr(macroProc, "exitcode") and macroProc.exitcode is not None and macroProc.exitcode != 0:
-            exitcode = macroProc.exitcode
-            try:
-                import signal
-                if exitcode < 0:
-                    signum = -exitcode
-                    try:
-                        signame = signal.Signals(signum).name
-                    except Exception:
-                        signame = str(signum)
-                    extra = f" (terminated by signal {signame})"
-                else:
+                        extra = ""
+                except Exception:
                     extra = ""
-            except Exception:
-                extra = ""
-            print(f"Macro process exited{extra}")
-            logger.webhook("","Macro Crashed{0}".format(extra), "red", "screen", ping_category="ping_critical_errors")
-            macroProc.join()
-            appManager.openApp("Roblox")
-            keyboardModule.releaseMovement()
-            mouse.mouseUp()
-            # restart macro process
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
-            macroProc.start()
-            run.value = 2
-            gui.setRunState(2)  # Update the global run state
-            try:
-                gui.toggleStartStop()  # Update UI
-            except:
-                pass  # If eel is not ready, continue
+                print(f"Macro process exited{extra}")
+                logger.webhook("", "Macro Crashed{0}".format(extra), "red", "screen", ping_category="ping_critical_errors")
+                macroProc.join()
+                appManager.openApp("Roblox")
+                keyboardModule.releaseMovement()
+                mouse.mouseUp()
+                macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
+                macroProc.start()
+                run.value = 2
+                gui.setRunState(2)
+                try:
+                    gui.toggleStartStop()
+                except Exception:
+                    pass
 
-        #detect a new log message
-        if not logQueue.empty():
-            logData = logQueue.get()
-            if logData["type"] == "webhook": #webhook
-                msg = f"{logData['title']}<br>{logData['desc']}"
+            if not logQueue.empty():
+                logData = logQueue.get()
+                if logData["type"] == "webhook":
+                    msg = f"{logData['title']}<br>{logData['desc']}"
+                    log_entry = {
+                        'time': logData['time'],
+                        'title': logData['title'],
+                        'desc': logData['desc'],
+                        'color': logData['color']
+                    }
+                    recentLogs.append(log_entry)
+                    if len(recentLogs) > 100:
+                        try:
+                            recentLogs[:] = recentLogs[-100:]
+                        except Exception:
+                            try:
+                                snapshot = list(recentLogs)[-100:]
+                                try:
+                                    del recentLogs[:]
+                                    recentLogs.extend(snapshot)
+                                except Exception:
+                                    for i, v in enumerate(snapshot):
+                                        if i < len(recentLogs):
+                                            recentLogs[i] = v
+                                        else:
+                                            recentLogs.append(v)
+                            except Exception:
+                                pass
 
-                # Add to recent logs list (keep last 100 entries)
-                log_entry = {
-                    'time': logData['time'],
-                    'title': logData['title'],
-                    'desc': logData['desc'],
-                    'color': logData['color']
-                }
-                recentLogs.append(log_entry)
-                # Keep only the last 100 entries
-                if len(recentLogs) > 100:
-                    recentLogs[:] = recentLogs[-100:]
+                gui.log(logData["time"], msg, logData["color"])
 
-            #add it to gui
-            gui.log(logData["time"], msg, logData["color"])
-        
-        #detect if the gui needs to be updated
-        if updateGUI.value:
-            gui.updateGUI()
-            updateGUI.value = 0
-        
-        if run.value == 2 and time.time() > disconnectCooldownUntil:
-            img = adjustImage("./images/menu", "disconnect", screenInfo["display_type"])
-            wmx, wmy, wmw, wmh = getWindowSize("roblox roblox")
-            if locateImageOnScreen(img, wmx+wmw/3, wmy+wmh/2.8, wmw/2.3, wmh/5, 0.7):
-                print("disconnected")
-                run.value = 4
-                disconnectCooldownUntil = time.time() + 300  # 5 min cooldown
+            if updateGUI.value:
+                gui.updateGUI()
+                updateGUI.value = 0
+
+            if run.value == 2 and time.time() > disconnectCooldownUntil:
+                img = adjustImage("./images/menu", "disconnect", screenInfo["display_type"])
+                wmx, wmy, wmw, wmh = getWindowSize("roblox roblox")
+                if locateImageOnScreen(img, wmx+wmw/3, wmy+wmh/2.8, wmw/2.3, wmh/5, 0.7):
+                    print("disconnected")
+                    run.value = 4
+                    disconnectCooldownUntil = time.time() + 300
+
+    gui.run = run
+    gui.launch(
+        runtime_callback=gui_runtime_loop,
+        keyboard_listener_callback=start_keyboard_listener_fn,
+    )

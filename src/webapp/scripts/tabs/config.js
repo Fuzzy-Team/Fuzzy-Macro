@@ -115,7 +115,7 @@ function saveDragOrder(container) {
 
   // Save to settings
   const data = { task_priority_order: order };
-  eel.saveDictProfileSettings(data);
+  AppBridge.fireAndForget("saveDictProfileSettings", data);
 }
 
 function initializePrioritySearch() {
@@ -168,8 +168,8 @@ function initializeQuickActions() {
   });
 }
 
-$("#config-placeholder", loadConfig)
-  .load("../htmlImports/tabs/config.html") //load config tab
+$("#config-placeholder")
+  .load("../htmlImports/tabs/config.html", loadConfig) //load config tab
   .on("click", ".config-tab-item", (event) =>
     switchConfigTab(event.currentTarget)
   ); //navigate between fields
@@ -193,8 +193,8 @@ async function loadProfiles() {
 
 async function loadProfileList() {
   try {
-    const profiles = await eel.listProfiles()();
-    const currentProfile = await eel.getCurrentProfile()();
+    const profiles = await AppBridge.call("listProfiles");
+    const currentProfile = await AppBridge.call("getCurrentProfile");
 
     // Update current profile display
     const currentProfileDisplay = document.getElementById(
@@ -274,7 +274,7 @@ async function loadProfileList() {
 
 async function switchToProfile(profileName) {
   try {
-    const [success, message] = await eel.switchProfile(profileName)();
+    const [success, message] = await AppBridge.call("switchProfile", profileName);
     if (success) {
       showProfileStatus("create-profile-status", message, "success");
 
@@ -364,7 +364,7 @@ async function createNewProfile() {
   }
 
   try {
-    const [success, message] = await eel.createProfile(name)();
+    const [success, message] = await AppBridge.call("createProfile", name);
     if (success) {
       showProfileStatus("create-profile-status", message, "success");
       nameInput.value = "";
@@ -384,7 +384,7 @@ async function deleteProfileConfirm(profileName) {
     )
   ) {
     try {
-      const [success, message] = await eel.deleteProfile(profileName)();
+      const [success, message] = await AppBridge.call("deleteProfile", profileName);
       if (success) {
         showProfileStatus("create-profile-status", message, "success");
         await loadProfileList();
@@ -414,10 +414,11 @@ async function duplicateExistingProfile() {
   }
 
   try {
-    const [success, message] = await eel.duplicateProfile(
+    const [success, message] = await AppBridge.call(
+      "duplicateProfile",
       sourceName,
       newName
-    )();
+    );
     if (success) {
       showProfileStatus("duplicate-profile-status", message, "success");
       newNameInput.value = "";
@@ -444,30 +445,17 @@ async function exportProfile() {
   }
 
   try {
-    const result = await eel.exportProfile(profileName)();
-    const [success, contentOrMessage, filename] = result;
+    const result = await AppBridge.call("exportProfileWithDialog", profileName);
+    const [success, message] = result;
 
     if (success) {
-      // Create download link for the JSON content
-      const blob = new Blob([contentOrMessage], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-
-      URL.revokeObjectURL(url);
-
       showProfileStatus(
         "export-profile-status",
-        `Profile exported as ${filename}`,
+        message,
         "success"
       );
     } else {
-      showProfileStatus("export-profile-status", contentOrMessage, "error");
+      showProfileStatus("export-profile-status", message, "error");
     }
   } catch (error) {
     showProfileStatus("export-profile-status", `Error: ${error}`, "error");
@@ -564,10 +552,11 @@ async function confirmImportProfile() {
     const fileContent = await file.text();
 
     // Import the profile
-    const [success, message] = await eel.importProfileContent(
+    const [success, message] = await AppBridge.call(
+      "importProfileContent",
       fileContent,
       profileName
-    )();
+    );
 
     if (success) {
       showProfileStatus("import-profile-status", message, "success");
@@ -639,7 +628,7 @@ async function triggerBetaUpdate() {
 
   try {
     // call backend updater
-    const res = await eel.updateFromHash(hash)();
+    const res = await AppBridge.call("updateFromHash", hash);
     if (res) {
       alert("Update started. The app may close to apply the update.");
     } else {
@@ -654,27 +643,13 @@ async function triggerBetaUpdate() {
 // Export debug folder (profile, logs, system info)
 async function exportDebugFolder() {
   try {
-    const current = await eel.getCurrentProfile()();
-    const res = await eel.exportDebugZip(current)();
+    const current = await AppBridge.call("getCurrentProfile");
+    const res = await AppBridge.call("exportDebugZipWithDialog", current);
     if (!res) return alert("Failed to export debug folder.");
-    if (res[0] !== true) return alert("Export failed: " + res[1]);
+    const [success, message] = res;
+    if (!success) return alert("Export failed: " + (message || "unknown error"));
 
-    const b64 = res[1];
-    const filename = res[2] || `fuzzy_debug.zip`;
-
-    const byteCharacters = atob(b64);
-    const byteNumbers = new Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i++) {
-      byteNumbers[i] = byteCharacters.charCodeAt(i);
-    }
-    const byteArray = new Uint8Array(byteNumbers);
-    const blob = new Blob([byteArray], { type: "application/zip" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    alert(message || "Debug folder saved.");
   } catch (e) {
     console.error(e);
     alert("Failed to export debug folder: " + e);

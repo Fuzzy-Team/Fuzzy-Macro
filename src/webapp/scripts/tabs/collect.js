@@ -7,7 +7,7 @@ Collect Tab
 
 function clearBlenderData(ele){
     if (ele.classList.contains("active")) return
-    eel.clearBlender()
+    AppBridge.fireAndForget("clearBlender")
     ele.classList.add("active")
     setTimeout(() => {
         ele.classList.remove("active")
