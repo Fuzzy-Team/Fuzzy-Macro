@@ -254,15 +254,19 @@ def has(name):
 
 has_webview = has("webview")
 has_pyqt5 = has("PyQt5")
+has_pyqt_webengine = has("PyQt5.QtWebEngineWidgets")
 has_webkit = has("WebKit")
 
 print(f"pywebview installed: {has_webview}")
 print(f"PyQt5 installed: {has_pyqt5}")
+print(f"PyQtWebEngine installed: {has_pyqt_webengine}")
 print(f"WebKit installed: {has_webkit}")
 
-if not has_webview or (not has_pyqt5 and not has_webkit):
+has_qt_backend = has_pyqt5 and has_pyqt_webengine
+
+if not has_webview or (not has_qt_backend and not has_webkit):
 	print("ERROR: pywebview backend validation failed.")
-	print("Re-run installer and ensure pip install errors are resolved.")
+	print("Re-run installer and ensure pip install errors are resolved (PyQt5+PyQtWebEngine or WebKit).")
 	sys.exit(1)
 
 print("pywebview backend validation passed")

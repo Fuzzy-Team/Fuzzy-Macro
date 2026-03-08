@@ -10,6 +10,9 @@ import time
 import threading
 import platform
 import importlib.util
+import socket
+import functools
+from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 
 try:
     from AppKit import NSApplication, NSImage
@@ -27,6 +30,8 @@ _recent_logs = []
 _frontend_window = None
 _frontend_ready = False
 _shutdown_requested = False
+_browser_fallback_server = None
+_browser_fallback_url = None
 
 
 def _get_save_dialog_type():
@@ -54,6 +59,31 @@ def _module_available(module_name):
         return importlib.util.find_spec(module_name) is not None
     except Exception:
         return False
+
+
+def _start_browser_fallback_server(webapp_dir):
+    """Start a lightweight local HTTP server for browser fallback UI."""
+    global _browser_fallback_server, _browser_fallback_url
+
+    if _browser_fallback_server is not None and _browser_fallback_url:
+        return _browser_fallback_url
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        host, port = s.getsockname()
+
+    handler = functools.partial(SimpleHTTPRequestHandler, directory=webapp_dir)
+    server = ThreadingHTTPServer(("127.0.0.1", port), handler)
+    thread = threading.Thread(
+        target=server.serve_forever,
+        daemon=True,
+        name="fuzzy-browser-fallback-server",
+    )
+    thread.start()
+
+    _browser_fallback_server = server
+    _browser_fallback_url = f"http://127.0.0.1:{port}/index.html?browser_fallback=1"
+    return _browser_fallback_url
 
 
 _keybind_recording_state = {
@@ -861,8 +891,10 @@ def launch(runtime_callback=None, runtime_args=(), keyboard_listener_callback=No
     index_path = os.path.abspath(
         os.path.join(os.path.dirname(__file__), "webapp", "index.html")
     )
+    webapp_dir = os.path.dirname(index_path)
     _frontend_ready = False
     _shutdown_requested = False
+    fallback_triggered = {"value": False}
 
     _set_dock_icon_if_available()
     preferred_gui = None
@@ -1024,10 +1056,26 @@ def launch(runtime_callback=None, runtime_args=(), keyboard_listener_callback=No
 
     def _frontend_watchdog():
         # Diagnostics for white-screen reports: if loaded event never arrives,
-        # print a clear marker so users can report backend issues quickly.
+        # print a clear marker and auto-open the browser fallback.
         time.sleep(12)
-        if not _frontend_ready and not _shutdown_requested:
-            print("Warning: frontend did not signal loaded after 12s (possible backend render stall)")
+        if _frontend_ready or _shutdown_requested or fallback_triggered["value"]:
+            return
+
+        fallback_triggered["value"] = True
+        print("Warning: frontend did not signal loaded after 12s (possible backend render stall)")
+        try:
+            fallback_url = _start_browser_fallback_server(webapp_dir)
+            print(f"Opening browser fallback UI at {fallback_url}")
+            webbrowser.open(fallback_url, autoraise=True)
+        except Exception as exc:
+            print(f"Failed to open browser fallback UI: {exc}")
+
+        # Best effort: close stalled native window after fallback opens.
+        try:
+            if _frontend_window is not None:
+                _frontend_window.destroy()
+        except Exception:
+            pass
 
     try:
         threading.Thread(target=_frontend_watchdog, daemon=True, name="fuzzy-frontend-watchdog").start()
