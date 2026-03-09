@@ -592,3 +592,45 @@ def update_from_commit(commit_hash):
 
     msgBox("Update success", "Update complete. You can now relaunch the macro")
     return True
+
+
+def check_for_updates_silent():
+    """
+    Silently check if an update is available without downloading or showing popups.
+    Returns a dict with 'available' (bool), 'current_version' (str), and 'latest_version' (str).
+    Returns None on error.
+    """
+    try:
+        import time
+        destination = os.getcwd().replace("/src", "")
+        
+        # Read local version
+        local_version = "0.0.0"
+        local_version_path = os.path.join(destination, "src", "webapp", "version.txt")
+        if not os.path.exists(local_version_path):
+            local_version_path = os.path.join(destination, "version.txt")
+        try:
+            if os.path.exists(local_version_path):
+                with open(local_version_path, "r") as fh:
+                    local_version = fh.read().strip()
+        except Exception:
+            local_version = "0.0.0"
+        
+        # Discover remote version using GitHub API
+        remote_version_url = f"https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/src/webapp/version.txt?cb={int(time.time())}"
+        remote_version = _discover_remote_version(remote_version_url, timeout=10)
+        
+        if not remote_version:
+            return None
+        
+        # Check if remote is newer
+        is_newer = _is_remote_newer(local_version, remote_version)
+        
+        return {
+            'available': is_newer,
+            'current_version': local_version,
+            'latest_version': remote_version
+        }
+    except Exception as e:
+        print(f"Error checking for updates: {e}")
+        return None

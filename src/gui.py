@@ -436,6 +436,36 @@ def updateFromHash(commit_hash):
             pass
     return
 
+@eel.expose
+def checkForUpdates():
+    """Check for updates silently and return update information"""
+    try:
+        update_info = updateModule.check_for_updates_silent()
+        return update_info
+    except Exception as e:
+        print(f"Error checking for updates: {e}")
+        return None
+
+@eel.expose
+def disableAutoUpdateCheck():
+    """Disable automatic update checking by saving preference to generalsettings"""
+    try:
+        settingsManager.saveGeneralSetting("auto_update_check_disabled", True)
+        return True
+    except Exception as e:
+        print(f"Error disabling auto update check: {e}")
+        return False
+
+@eel.expose
+def getAutoUpdateCheckDisabled():
+    """Check if automatic update checking is disabled"""
+    try:
+        generalsettings_path = os.path.join(settingsManager.getProfilePath(), "generalsettings.txt")
+        settings = settingsManager.readSettingsFile(generalsettings_path)
+        return settings.get("auto_update_check_disabled", False)
+    except Exception:
+        return False
+
 def log(time = "", msg = "", color = ""):
     eel.log(time, msg, color)
 
