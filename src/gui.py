@@ -440,7 +440,12 @@ def updateFromHash(commit_hash):
 def checkForUpdates():
     """Check for updates silently and return update information"""
     try:
-        update_info = updateModule.check_for_updates_silent()
+        # Get the update channel preference
+        generalsettings_path = os.path.join(settingsManager.getProfilePath(), "generalsettings.txt")
+        settings = settingsManager.readSettingsFile(generalsettings_path)
+        update_channel = settings.get("update_channel", "stable")
+        
+        update_info = updateModule.check_for_updates_silent(update_channel)
         return update_info
     except Exception as e:
         print(f"Error checking for updates: {e}")
