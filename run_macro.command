@@ -11,7 +11,13 @@ VENV_NAME="fuzzy-macro-env"
 VENV_PATH="$HOME/$VENV_NAME"
 
 # force Python to use certifi for SSL (fixes Discord/aiohttp on macOS)
-export SSL_CERT_FILE="$VENV_PATH/lib/python3.9/site-packages/certifi/cacert.pem"
+for py_dir in python3.9 python3.8 python3.7 python3 python; do
+    cert_path="$VENV_PATH/lib/$py_dir/site-packages/certifi/cacert.pem"
+    if [ -f "$cert_path" ]; then
+        export SSL_CERT_FILE="$cert_path"
+        break
+    fi
+done
 
 # get system information
 chip=$(arch)
