@@ -7,6 +7,123 @@ window.updateButtonReset = function () {
   }
 };
 if (window.eel) eel.expose(window.updateButtonReset, 'updateButtonReset');
+
+// Auto-update check functionality
+async function checkForUpdatesOnStartup() {
+  try {
+    // Check if auto-update checking is disabled
+    const isDisabled = await eel.getAutoUpdateCheckDisabled()();
+    if (isDisabled) {
+      console.log("Auto-update check is disabled");
+      return;
+    }
+
+    // Check for updates
+    const updateInfo = await eel.checkForUpdates()();
+    if (updateInfo && updateInfo.available) {
+      showUpdateModal(updateInfo);
+    }
+  } catch (error) {
+    console.error("Error checking for updates:", error);
+  }
+}
+
+function showUpdateModal(updateInfo) {
+  // Remove any existing modal
+  const existingModal = document.getElementById("update-notification-modal");
+  if (existingModal) {
+    existingModal.remove();
+  }
+
+  // Create modal
+  const modal = document.createElement("div");
+  modal.id = "update-notification-modal";
+  modal.style.cssText = `
+    display: flex;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+  `;
+
+  modal.innerHTML = `
+    <div style="
+      background: #36393f;
+      border-radius: 8px;
+      padding: 2rem;
+      width: 400px;
+      max-width: 90%;
+      border: 1px solid #4f545c;
+    ">
+      <h3 style="color: #dcddde; margin: 0 0 1rem 0; font-size: 1.2rem">
+        Update Available
+      </h3>
+      
+      <p style="color: #b9bbbe; margin-bottom: 1.5rem; font-size: 0.95rem">
+        A new version of Fuzzy Macro is available!<br><br>
+        Current version: <strong style="color: #dcddde">${updateInfo.current_version}</strong><br>
+        Latest version: <strong style="color: #7289da">${updateInfo.latest_version}</strong>
+      </p>
+      
+      <div style="margin-bottom: 1.5rem">
+        <label style="color: #b9bbbe; display: flex; align-items: center; cursor: pointer; user-select: none;">
+          <input type="checkbox" id="dont-show-update-again" style="margin-right: 0.5rem; cursor: pointer;">
+          <span>Don't show this again</span>
+        </label>
+      </div>
+      
+      <div style="display: flex; gap: 0.75rem; justify-content: flex-end">
+        <button class="profile-btn profile-btn-secondary" onclick="closeUpdateModal()">
+          Close
+        </button>
+        <button class="profile-btn profile-btn-primary" onclick="startUpdate()">
+          Update Now
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+}
+
+async function closeUpdateModal() {
+  const modal = document.getElementById("update-notification-modal");
+  if (!modal) return;
+
+  const dontShowCheckbox = document.getElementById("dont-show-update-again");
+  if (dontShowCheckbox && dontShowCheckbox.checked) {
+    try {
+      await eel.disableAutoUpdateCheck()();
+      console.log("Auto-update check disabled");
+    } catch (error) {
+      console.error("Error disabling auto-update check:", error);
+    }
+  }
+
+  modal.remove();
+}
+
+async function startUpdate() {
+  const modal = document.getElementById("update-notification-modal");
+  if (modal) {
+    modal.remove();
+  }
+
+  // Trigger the existing update function
+  const updateBtn = document.getElementById("update-btn");
+  if (updateBtn && !updateBtn.classList.contains("active")) {
+    purpleButtonToggle(updateBtn, ["Update", "Updating"]);
+    if (window.eel && typeof eel.update === "function") {
+      await eel.update();
+    }
+  }
+}
+
 // Ensure sidebar update button always works
 document.addEventListener("DOMContentLoaded", function () {
   const updateBtn = document.getElementById("update-btn");
@@ -20,6 +137,11 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     });
   }
+
+  // Check for updates on startup (with a small delay to ensure eel is ready)
+  setTimeout(() => {
+    checkForUpdatesOnStartup();
+  }, 1000);
 });
 //change the styling of the purple buttons
 //element: the purple button element
