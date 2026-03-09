@@ -406,7 +406,12 @@ def getMacroVersion():
 @eel.expose
 def update():
     try:
-        updated = updateModule.update()
+        # Get the update channel preference
+        generalsettings_path = os.path.join(settingsManager.getProfilePath(), "generalsettings.txt")
+        settings = settingsManager.readSettingsFile(generalsettings_path)
+        update_channel = settings.get("update_channel", "stable")
+        
+        updated = updateModule.update(update_channel=update_channel)
     except Exception:
         updated = False
     if updated:
