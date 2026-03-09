@@ -594,14 +594,18 @@ def update_from_commit(commit_hash):
     return True
 
 
-def check_for_updates_silent():
+def check_for_updates_silent(update_channel="stable"):
     """
     Silently check if an update is available without downloading or showing popups.
+    Uses GitHub releases API to find the latest version based on the update channel.
+    
+    Args:
+        update_channel: "stable" (non-prerelease) or "beta" (includes prerelease)
+    
     Returns a dict with 'available' (bool), 'current_version' (str), and 'latest_version' (str).
     Returns None on error.
     """
     try:
-        import time
         destination = os.getcwd().replace("/src", "")
         
         # Read local version
@@ -616,9 +620,35 @@ def check_for_updates_silent():
         except Exception:
             local_version = "0.0.0"
         
-        # Discover remote version using GitHub API
-        remote_version_url = f"https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/src/webapp/version.txt?cb={int(time.time())}"
-        remote_version = _discover_remote_version(remote_version_url, timeout=10)
+        # Query GitHub releases API
+        github_releases_api = "https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/releases?per_page=100"
+        headers = {
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            "Accept": "application/vnd.github.v3+json",
+        }
+        
+        r = requests.get(github_releases_api, timeout=10, headers=headers)
+        r.raise_for_status()
+        releases = r.json()
+        
+        if not releases:
+            return None
+        
+        # Filter releases based on channel preference
+        remote_version = None
+        if update_channel == "beta":
+            # Beta channel: accept any release (prerelease or stable)
+            # Just get the first one (most recent)
+            if releases[0].get("tag_name"):
+                remote_version = releases[0].get("tag_name").lstrip("v")
+        else:
+            # Stable channel: only non-prerelease versions
+            for rel in releases:
+                if not rel.get("prerelease") and rel.get("tag_name"):
+                    remote_version = rel.get("tag_name").lstrip("v")
+                    break
         
         if not remote_version:
             return None
