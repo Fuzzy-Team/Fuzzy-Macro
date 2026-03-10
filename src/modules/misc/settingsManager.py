@@ -179,7 +179,23 @@ def saveHotbarTimings(data):
 
 def loadScreenData():
     state = loadUiState()
-    return state.get("screen", {})
+    screen_defaults = {
+        "display_type": "built-in",
+        "screen_width": 1920,
+        "screen_height": 1080,
+        "y_multiplier": 1,
+        "x_multiplier": 1,
+        "y_length_multiplier": 1,
+        "x_length_multiplier": 1,
+    }
+    screen = state.get("screen", {})
+    if not isinstance(screen, dict):
+        screen = {}
+    merged = {**screen_defaults, **screen}
+    if merged != screen:
+        state["screen"] = merged
+        saveUiState(state)
+    return merged
 
 def saveScreenData(data):
     state = loadUiState()

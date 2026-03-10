@@ -373,9 +373,8 @@ def getMacroVersion():
 @eel.expose
 def update():
     try:
-        # Get the update channel preference
-        generalsettings_path = os.path.join(settingsManager.getProfilePath(), "generalsettings.txt")
-        settings = settingsManager.readSettingsFile(generalsettings_path)
+        # Get the update channel preference from profile general settings.
+        settings = settingsManager.loadAllSettings()
         update_channel = settings.get("update_channel", "stable")
         
         updated = updateModule.update(update_channel=update_channel)
@@ -412,9 +411,8 @@ def updateFromHash(commit_hash):
 def checkForUpdates():
     """Check for updates silently and return update information"""
     try:
-        # Get the update channel preference
-        generalsettings_path = os.path.join(settingsManager.getProfilePath(), "generalsettings.txt")
-        settings = settingsManager.readSettingsFile(generalsettings_path)
+        # Get the update channel preference from profile general settings.
+        settings = settingsManager.loadAllSettings()
         update_channel = settings.get("update_channel", "stable")
         
         update_info = updateModule.check_for_updates_silent(update_channel)
@@ -437,8 +435,7 @@ def disableAutoUpdateCheck():
 def getAutoUpdateCheckDisabled():
     """Check if automatic update checking is disabled"""
     try:
-        generalsettings_path = os.path.join(settingsManager.getProfilePath(), "generalsettings.txt")
-        settings = settingsManager.readSettingsFile(generalsettings_path)
+        settings = settingsManager.loadAllSettings()
         return settings.get("auto_update_check_disabled", False)
     except Exception:
         return False
@@ -473,8 +470,7 @@ def updateGUI():
 
     # Ensure any missing default settings are present in the profile.
     try:
-        default_path = os.path.join(settingsManager.getDefaultSettingsPath(), "settings.txt")
-        defaults = settingsManager.readSettingsFile(default_path)
+        defaults = settingsManager.loadDefaultCoreSettings()
 
         # Add any top-level default keys missing from the loaded settings
         for k, v in defaults.items():
