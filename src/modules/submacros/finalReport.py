@@ -483,10 +483,12 @@ class FinalReport:
             if setdat.get("planters_mode") == 1:
                 try:
                     planterData = settingsManager.loadManualPlanters()
+                    planterData = settingsManager.loadManualPlanters()
                 except (FileNotFoundError, SyntaxError, ValueError):
                     planterData = ""
             elif setdat.get("planters_mode") == 2:
                 try:
+                    planterData = settingsManager.loadAutoPlanters()["planters"]
                     planterData = settingsManager.loadAutoPlanters()["planters"]
                     planterData = {
                         "planters": [p["planter"] for p in planterData],

@@ -92,9 +92,12 @@ def importPatterns(patterns):
 @eel.expose
 def clearManualPlanters():
     settingsManager.saveManualPlanters("")
+    settingsManager.saveManualPlanters("")
 
 @eel.expose
 def getManualPlanterData():
+    planterData = settingsManager.loadManualPlanters()
+    return planterData
     planterData = settingsManager.loadManualPlanters()
     return planterData
     
@@ -251,6 +254,7 @@ def clearBlender():
         "collectTime": 0
     }
     settingsManager.saveBlenderData(blenderData)
+    settingsManager.saveBlenderData(blenderData)
 
 @eel.expose
 def clearAFB():
@@ -260,12 +264,14 @@ def clearAFB():
         "AFB_limit": 0
     }
     settingsManager.saveAFBTimings(AFBData)
+    settingsManager.saveAFBTimings(AFBData)
 
 @eel.expose
 def resetFieldToDefault(field_name):
     """Reset a field's settings to the default values"""
     try:
         # Load default field settings
+        default_fields = settingsManager.loadDefaultFieldSettings()
         default_fields = settingsManager.loadDefaultFieldSettings()
 
         # Get the default settings for the specified field

@@ -453,7 +453,9 @@ class HourlyReport():
         #get planter data
         if setdat["planters_mode"] == 1:
             planterData = settingsManager.loadManualPlanters()
+            planterData = settingsManager.loadManualPlanters()
         elif setdat["planters_mode"] == 2:
+            planterData = settingsManager.loadAutoPlanters()["planters"]
             planterData = settingsManager.loadAutoPlanters()["planters"]
             planterData = {
                 "planters": [p["planter"] for p in planterData],
@@ -465,6 +467,7 @@ class HourlyReport():
 
 
         #get history
+        historyData = settingsManager.loadHourlyReportHistory()
         historyData = settingsManager.loadHourlyReportHistory()
         
         if len(self.hourlyReportStats["honey_per_min"]) < 3:
@@ -568,8 +571,17 @@ class HourlyReport():
             "uptimeBuffsValues": self.uptimeBuffsValues,
             "buffGatherIntervals": self.buffGatherIntervals,
         })
+        settingsManager.saveHourlyReportStats({
+            "hourlyReportStats": self.hourlyReportStats,
+            "uptimeBuffsValues": self.uptimeBuffsValues,
+            "buffGatherIntervals": self.buffGatherIntervals,
+        })
     
     def loadHourlyReportData(self):
+        data = settingsManager.loadHourlyReportStats()
+        self.hourlyReportStats = data.get("hourlyReportStats", self.hourlyReportStats)
+        self.uptimeBuffsValues = data.get("uptimeBuffsValues", self.uptimeBuffsValues)
+        self.buffGatherIntervals = data.get("buffGatherIntervals", self.buffGatherIntervals)
         data = settingsManager.loadHourlyReportStats()
         self.hourlyReportStats = data.get("hourlyReportStats", self.hourlyReportStats)
         self.uptimeBuffsValues = data.get("uptimeBuffsValues", self.uptimeBuffsValues)
