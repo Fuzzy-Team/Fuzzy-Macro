@@ -24,5 +24,4 @@ settings/profiles
 backup_macro.zip
 backups/
 smoke_hourly_report.py
-usrdata/legacy_backups
-usrdata/profiles
+usrdata/
