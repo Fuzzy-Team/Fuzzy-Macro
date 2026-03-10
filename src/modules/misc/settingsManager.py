@@ -1772,6 +1772,49 @@ def _saveProfileRegistry(registry):
     writeJsonFile(_profileRegistryPath(), registry)
 
 
+def _defaultTimingState():
+    return {
+        "timings": {},
+        "AFB": {},
+    }
+
+
+def _defaultPlantersState():
+    return {
+        "manual": "",
+        "auto": {
+            "planters": [
+                {"planter": "", "nectar": "", "field": "", "harvest_time": 0, "nectar_est_percent": 0},
+                {"planter": "", "nectar": "", "field": "", "harvest_time": 0, "nectar_est_percent": 0},
+                {"planter": "", "nectar": "", "field": "", "harvest_time": 0, "nectar_est_percent": 0},
+            ],
+            "nectar_last_field": {
+                "comforting": "",
+                "refreshing": "",
+                "satisfying": "",
+                "motivating": "",
+                "invigorating": "",
+            },
+        },
+    }
+
+
+def _defaultReportsState():
+    return {
+        "hourly_report_history": [],
+        "hourly_report_stats": {},
+        "hourly_report_bg": "",
+        "hourly_report_main": "",
+    }
+
+
+def _defaultUiState():
+    return {
+        "screen": {},
+        "hotbar_timings": [0] * 8,
+    }
+
+
 def _ensureProfileStateFiles(profile_name=None):
     profile_name = profile_name or profileName
     defaults_by_file = {
