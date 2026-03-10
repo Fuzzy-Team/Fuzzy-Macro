@@ -15,25 +15,26 @@
       return window.__appBridgePywebviewWaiter;
     }
 
+    // Polling-based waiter: some pywebview backends expose the js API
+    // asynchronously without reliably firing a specific custom event.
+    // Poll every `intervalMs` until the API appears or the timeout elapses.
     window.__appBridgePywebviewWaiter = new Promise((resolve) => {
-      let resolved = false;
+      const intervalMs = 100;
+      const timeoutMs = PYWEBVIEW_READY_TIMEOUT_MS;
+      let elapsed = 0;
 
-      const finish = (api) => {
-        if (!resolved) {
-          resolved = true;
-          resolve(api);
+      const poll = setInterval(() => {
+        if (hasPywebviewApi()) {
+          clearInterval(poll);
+          resolve(window.pywebview.api);
+          return;
         }
-      };
-
-      window.addEventListener(
-        "pywebviewready",
-        () => finish(window.pywebview?.api || null),
-        { once: true }
-      );
-
-      setTimeout(() => {
-        finish(window.pywebview?.api || null);
-      }, PYWEBVIEW_READY_TIMEOUT_MS);
+        elapsed += intervalMs;
+        if (elapsed >= timeoutMs) {
+          clearInterval(poll);
+          resolve(window.pywebview?.api || null);
+        }
+      }, intervalMs);
     });
 
     return window.__appBridgePywebviewWaiter;
@@ -65,7 +66,7 @@
     }
 
     handlers.set(eventName, fn);
-    // Keep handler registered for frontend dispatch; do not expose via legacy bridge.
+    // Keep handler registered for frontend dispatch; do not expose via Eel.
     // Avoid adding global fallbacks.
     return fn;
   }
