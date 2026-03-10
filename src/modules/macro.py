@@ -23,6 +23,7 @@ from modules.screen.imageSearch import *
 import webbrowser
 from pynput.keyboard import Controller
 import cv2
+from modules.screen.color_check import get_sample_colors, percent_pixels_similar_to_color
 from datetime import timedelta, datetime
 from modules.misc.imageManipulation import *
 from PIL import Image
@@ -1661,6 +1662,25 @@ class macro:
                         return
                     self.keyboard.walk("a",0.2)
             self.logger.webhook("Notice", f"Could not find cannon", "dark brown", "screen")
+            # If cannon not found, also check for full-screen light/dark mode colors
+            try:
+                percent_threshold = float(self.setdat.get("rejoin_color_percent", 0.6))
+                color_tolerance = int(self.setdat.get("rejoin_color_tolerance", 40))
+                sample_colors = get_sample_colors()
+                for col in sample_colors:
+                    pct = percent_pixels_similar_to_color(self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw, self.robloxWindow.mh, col, tolerance=color_tolerance)
+                    if pct >= percent_threshold:
+                        self.logger.webhook("", "Detected light/dark-mode screen while searching for cannon — restarting Roblox and rejoining", "dark brown", "screen")
+                        try:
+                            appManager.forceCloseApp("Roblox")
+                        except Exception:
+                            appManager.closeApp("Roblox")
+                        # give the OS a moment to close
+                        time.sleep(2)
+                        self.rejoin()
+                        return
+            except Exception:
+                pass
             self.reset(convert=False)
         else:
             self.logger.webhook("Notice", f"Failed to reach cannon too many times", "red", ping_category="ping_critical_errors")
@@ -1748,6 +1768,15 @@ class macro:
             loadStartTime = time.time()
             signUpImage = self.adjustImage("./images/menu", "signup")
             robloxHomeImage = self.adjustImage("./images/menu", "robloxhome")
+            # prepare rejoin color-based detection
+            try:
+                sample_colors = get_sample_colors()
+            except Exception:
+                sample_colors = [(250, 250, 250), (20, 20, 20)]
+            percent_threshold = float(self.setdat.get("rejoin_color_percent", 0.6))
+            sustain_seconds = int(self.setdat.get("rejoin_color_duration", 60))
+            color_tolerance = int(self.setdat.get("rejoin_color_tolerance", 40))
+            sustained_start = 0
             rejoinSuccess = True
             robloxOpenTime = 0
             while not locateImageOnScreen(sprinklerImg, self.robloxWindow.mx, self.robloxWindow.my+(self.robloxWindow.mh*3/4), self.robloxWindow.mw, self.robloxWindow.mh*1/4, 0.75) and time.time() - loadStartTime < 240:
@@ -1769,6 +1798,26 @@ class macro:
                             self.logger.webhook("","Roblox Home Page is open","brown","screen")
                             rejoinSuccess = False
                             break
+
+                # Check for sustained dominant color (light/dark) that indicates a stuck screen.
+                try:
+                    matched = False
+                    for col in sample_colors:
+                        pct = percent_pixels_similar_to_color(self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw, self.robloxWindow.mh, col, tolerance=color_tolerance)
+                        if pct >= percent_threshold:
+                            matched = True
+                            break
+                    if matched:
+                        if sustained_start == 0:
+                            sustained_start = time.time()
+                        elif time.time() - sustained_start >= sustain_seconds:
+                            self.logger.webhook("","Detected sustained screen color — retrying rejoin","dark brown","screen")
+                            rejoinSuccess = False
+                            break
+                    else:
+                        sustained_start = 0
+                except Exception:
+                    sustained_start = 0
 
                     self.setRobloxWindowInfo(setYOffset=False)
 
