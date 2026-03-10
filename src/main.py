@@ -390,23 +390,21 @@ def canClaimTimedBearQuest(name):
     """Return True if the given quest giver can be claimed for timed bear quests.
 
     Brown and black bear quests are limited to one claim per hour. This checks
-    the timestamp stored in `src/data/user/timings.txt` under the key
+    the timestamp stored in profile timing state under the key
     `<bear>_quest_cd`. If no valid timestamp exists, allow claiming.
     """
     if name not in ["brown bear", "black bear"]:
         return True
     timing_key = f"{name.replace(' ', '_')}_quest_cd"
     state_key = f"{name.replace(' ', '_')}_quest_state"
-    try:
-        timings = settingsManager.readSettingsFile("./data/user/timings.txt") or {}
-    except Exception:
-        timings = {}
+    timings = settingsManager.loadTimings() or {}
     # Ensure both bear quest state keys exist in the timings file with a default of 0
     try:
         for required_state in ("brown_bear_quest_state", "black_bear_quest_state"):
             if required_state not in timings:
                 try:
-                    settingsManager.saveSettingFile(required_state, 0, "./data/user/timings.txt")
+                    timings[required_state] = 0
+                    settingsManager.saveTimings(timings)
                 except Exception:
                     pass
                 timings[required_state] = 0
@@ -423,11 +421,13 @@ def canClaimTimedBearQuest(name):
     if state == 1:
         if not isinstance(timing, (float, int)):
             # Missing timestamp -> reset state to 0 to recover
-            settingsManager.saveSettingFile(state_key, 0, "./data/user/timings.txt")
+            timings[state_key] = 0
+            settingsManager.saveTimings(timings)
             return True
         # If timer expired, reset state and allow claiming
         if time.time() - timing >= 60 * 60:
-            settingsManager.saveSettingFile(state_key, 0, "./data/user/timings.txt")
+            timings[state_key] = 0
+            settingsManager.saveTimings(timings)
             return True
         return False
     # state == 0 -> allow claiming
@@ -2066,8 +2066,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         try:
             # Only auto-gather when planters mode is auto and auto-harvest is enabled
             if macro.setdat.get("planters_mode") == 2:
-                with open("./data/user/auto_planters.json", "r") as f:
-                    auto_data = json.load(f)
+                auto_data = settingsManager.loadAutoPlanters() or {}
                 auto_planters = auto_data.get("planters", [])
                 auto_gather = auto_data.get("gather", False)
                 if auto_gather:
@@ -2468,11 +2467,15 @@ if __name__ == "__main__":
         stopApp()
         # Reset timed bear quest states on exit so macro resumes checking next run
         try:
-            settingsManager.saveSettingFile("brown_bear_quest_state", 0, "./data/user/timings.txt")
+            timing_data = settingsManager.loadTimings() or {}
+            timing_data["brown_bear_quest_state"] = 0
+            settingsManager.saveTimings(timing_data)
         except Exception:
             pass
         try:
-            settingsManager.saveSettingFile("black_bear_quest_state", 0, "./data/user/timings.txt")
+            timing_data = settingsManager.loadTimings() or {}
+            timing_data["black_bear_quest_state"] = 0
+            settingsManager.saveTimings(timing_data)
         except Exception:
             pass
         try:

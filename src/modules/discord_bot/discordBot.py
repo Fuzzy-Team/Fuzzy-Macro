@@ -2045,12 +2045,11 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 except Exception:
                     current_vals[n] = 0.0
 
-            # Get estimated nectar percents from auto_planters.json
+            # Get estimated nectar percents from the profile-aware user state.
             estimates = {n: 0.0 for n in nectar_names}
             try:
-                with open("./data/user/auto_planters.json","r") as f:
-                    ap = _json.load(f)
-                    planters = ap.get('planters', [])
+                ap = settingsManager.loadAutoPlanters() or {}
+                planters = ap.get('planters', [])
                 for p in planters:
                     nectar = p.get('nectar')
                     if nectar in estimates:

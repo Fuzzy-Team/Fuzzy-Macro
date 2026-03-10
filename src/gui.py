@@ -92,38 +92,15 @@ def importPatterns(patterns):
 @eel.expose
 def clearManualPlanters():
     settingsManager.saveManualPlanters("")
-    settingsManager.saveManualPlanters("")
 
 @eel.expose
 def getManualPlanterData():
-    planterData = settingsManager.loadManualPlanters()
-    return planterData
     planterData = settingsManager.loadManualPlanters()
     return planterData
     
 @eel.expose
 def getAutoPlanterData():
     return settingsManager.loadAutoPlanters()
-    try:
-        with open("./data/user/auto_planters.json", "r") as f:
-            return json.load(f)
-    except Exception:
-        # Return sensible default if file missing or invalid
-        return {
-            "planters": [
-                {"planter": "", "nectar": "", "field": "", "harvest_time": 0, "nectar_est_percent": 0},
-                {"planter": "", "nectar": "", "field": "", "harvest_time": 0, "nectar_est_percent": 0},
-                {"planter": "", "nectar": "", "field": "", "harvest_time": 0, "nectar_est_percent": 0}
-            ],
-            "nectar_last_field": {
-                "comforting": "",
-                "refreshing": "",
-                "satisfying": "",
-                "motivating": "",
-                "invigorating": ""
-            },
-            "gather": False
-        }
 
 @eel.expose
 def clearAutoPlanters():
@@ -162,27 +139,18 @@ def clearAutoPlanters():
         "gather": False
     }
     settingsManager.saveAutoPlanters(data)
-    with open("./data/user/auto_planters.json", "w") as f:
-        json.dump(data, f, indent=3)
 
 
 @eel.expose
 def setAutoPlanterGather(val):
-    """Set the global 'gather' flag in data/user/auto_planters.json"""
+    """Set the global auto-planter gather flag in user state."""
     try:
-        try:
-            with open("./data/user/auto_planters.json", "r") as f:
-                current = json.load(f)
-        except Exception:
-            current = None
-
+        current = settingsManager.loadAutoPlanters()
         if not current:
             current = getAutoPlanterData()
 
         current["gather"] = bool(val)
-
-        with open("./data/user/auto_planters.json", "w") as f:
-            json.dump(current, f, indent=3)
+        settingsManager.saveAutoPlanters(current)
         return True
     except Exception:
         return False
@@ -191,13 +159,19 @@ def setAutoPlanterGather(val):
 def resetManualPlanterTimer(index):
     """Reset a specific manual planter timer by index (0-2)"""
     try:
-        with open("./data/user/manualplanters.txt", "r") as f:
-            planterDataRaw = f.read()
+        planterDataRaw = settingsManager.loadManualPlanters()
         
-        if not planterDataRaw.strip():
+        if not planterDataRaw:
             return False
-        
-        planterData = ast.literal_eval(planterDataRaw)
+
+        if isinstance(planterDataRaw, dict):
+            planterData = planterDataRaw
+        elif isinstance(planterDataRaw, str):
+            if not planterDataRaw.strip():
+                return False
+            planterData = ast.literal_eval(planterDataRaw)
+        else:
+            return False
         
         # Check if index is valid
         if index < 0 or index >= len(planterData.get("planters", [])):
@@ -211,8 +185,7 @@ def resetManualPlanterTimer(index):
         if "harvestTimes" in planterData and len(planterData["harvestTimes"]) > index:
             planterData["harvestTimes"][index] = 0
         
-        with open("./data/user/manualplanters.txt", "w") as f:
-            f.write(str(planterData))
+        settingsManager.saveManualPlanters(planterData)
         
         return True
     except Exception as e:
@@ -223,8 +196,7 @@ def resetManualPlanterTimer(index):
 def resetAutoPlanterTimer(index):
     """Reset a specific auto planter timer by index (0-2)"""
     try:
-        with open("./data/user/auto_planters.json", "r") as f:
-            data = json.load(f)
+        data = settingsManager.loadAutoPlanters()
         
         # Check if index is valid
         if index < 0 or index >= len(data.get("planters", [])):
@@ -239,8 +211,7 @@ def resetAutoPlanterTimer(index):
             "nectar_est_percent": 0
         }
         
-        with open("./data/user/auto_planters.json", "w") as f:
-            json.dump(data, f, indent=3)
+        settingsManager.saveAutoPlanters(data)
         
         return True
     except Exception as e:

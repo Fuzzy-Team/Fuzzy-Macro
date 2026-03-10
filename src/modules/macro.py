@@ -926,7 +926,8 @@ class macro:
                 print(f"could not find timing for {name}, setting a new one")
                 # For bear quest cooldown keys, initialize to 0 instead of current time
                 if name in ("brown_bear_quest_cd", "black_bear_quest_cd"):
-                    settingsManager.saveSettingFile(name, 0, "./data/user/timings.txt")
+                    data[name] = 0
+                    settingsManager.saveTimings(data)
                     return 0
                 else:
                     self.saveTiming(name)
@@ -1103,7 +1104,7 @@ class macro:
                 mouse.click()
                 time.sleep(0.05)
 
-        outDir = os.path.join("./data/user/inventory_screenshots", datetime.now().strftime("%Y%m%d_%H%M%S"))
+        outDir = settingsManager.getUserDataPath("inventory_screenshots", datetime.now().strftime("%Y%m%d_%H%M%S"))
         os.makedirs(outDir, exist_ok=True)
 
         savedPaths = []
@@ -5260,14 +5261,20 @@ class macro:
                 if submitQuest:
                     if questObjective is None:
                         self.saveTiming(timing_key)
-                        settingsManager.saveSettingFile(state_key, 1, "./data/user/timings.txt")
+                        timing_data = settingsManager.loadTimings() or {}
+                        timing_data[state_key] = 1
+                        settingsManager.saveTimings(timing_data)
                     else:
                         # A new quest appeared immediately after submitting - remain in state 0
-                        settingsManager.saveSettingFile(state_key, 0, "./data/user/timings.txt")
+                        timing_data = settingsManager.loadTimings() or {}
+                        timing_data[state_key] = 0
+                        settingsManager.saveTimings(timing_data)
                 else:
                     # When simply getting a new quest, ensure state is 0
                     if questObjective is not None:
-                        settingsManager.saveSettingFile(state_key, 0, "./data/user/timings.txt")
+                        timing_data = settingsManager.loadTimings() or {}
+                        timing_data[state_key] = 0
+                        settingsManager.saveTimings(timing_data)
             except Exception:
                 pass
         return questObjective
