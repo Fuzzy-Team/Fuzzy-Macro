@@ -116,9 +116,16 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             print(f"Error syncing commands: {e}")
             import traceback
             traceback.print_exc()
-        # Set bot presence/status
+        # Set bot presence/status (include macro version from version.txt)
         try:
-            await bot.change_presence(activity=discord.Game(name="Fuzzy Macro!"))
+            version = "1.0"
+            try:
+                version = settingsManager.getMacroVersion()
+            except Exception:
+                # Fallback to default if reading version fails
+                pass
+            status_name = f"Fuzzy Macro v{version}!"
+            await bot.change_presence(activity=discord.Game(name=status_name))
         except Exception as e:
             print(f"Failed to set Discord status: {e}")
         
