@@ -42,7 +42,7 @@ Follow our [installation guide](https://fuzzy-team.gitbook.io/fuzzy-macro) to ge
 
 ### Mob & Boss Combat
 - **Regular Mobs**: Ladybugs, Rhino Beetles, Scorpions, Mantises, Spiders, Werewolf
-- **Boss Mobs**:  Stump Snail, Coconut Crab (King Beetle and Tunnel Bear coming soon)
+- **Boss Mobs**:  Stump Snail, Coconut Crab, King Beetle, and Tunnel Bear
 - **Stinger Hunt**: Automated Vicious Bee hunting during night
 - Respawn time tracking with bonuses (Gifted Vicious, Stick Bug Amulet, Icicles Beequip)
 - Automatic looting patterns
@@ -88,7 +88,7 @@ Follow our [installation guide](https://fuzzy-team.gitbook.io/fuzzy-macro) to ge
 - Web-based GUI for configuration
 - Profile system for multiple configurations
 - Task priority system with drag-and-drop ordering
-- Pause/Resume functionality (Coming back soon)
+- Pause/Resume functionality
 - Hourly reports with statistics
 - Death detection and recovery
 - Screen resolution detection (See [Display Settings](https://fuzzy-team.gitbook.io/fuzzy-macro/system-settings/display-settings))
