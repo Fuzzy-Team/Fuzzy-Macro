@@ -3411,24 +3411,62 @@ class macro:
         st = time.time()
         def updateHourlyTime():
             self.hourlyReport.addHourlyStat("misc_time", time.time()-st)
-        
+        # Determine whether planter-check retry behavior is enabled for current mode
+        try:
+            mode = int(self.setdat.get("planters_mode", 0))
+        except Exception:
+            mode = 0
 
-        for _ in range(2):
-            if self.goToPlanter(planter, field, "collect"): 
-                break
-            self.logger.webhook("",f"Unable to find Planter: {planter.title()}", "dark brown", "screen")
-            self.reset()
+        if mode == 1:
+            check_enabled = bool(self.setdat.get("manual_planters_check", False))
+        elif mode == 2:
+            check_enabled = bool(self.setdat.get("auto_planters_check", False))
         else:
+            check_enabled = False
+
+        attempts = 3 if check_enabled else 1
+
+        # normalize planter name for inventory lookup
+        name = planter.lower().replace(" ", "").replace("-", "")
+
+        for attempt in range(attempts):
+            if not self.goToPlanter(planter, field, "collect"):
+                self.logger.webhook("", f"Unable to find Planter: {planter.title()}", "dark brown", "screen")
+                self.reset()
+                # if this was the last attempt, update time and return False
+                if attempt == attempts - 1:
+                    updateHourlyTime()
+                    return False
+                continue
+
+            # Loot the planter
+            self.keyboard.press("e")
+            self.clickYes()
+            self.logger.webhook("", f"Looting: {planter.title()} planter", "bright green", "screen", ping_category="ping_conversion_events")
+            self.keyboard.multiWalk(["s","d"], 0.87)
+            self.nmLoot(9, 5, "a")
+            self.setMobTimer(field)
             updateHourlyTime()
-            return False
-        
-        self.keyboard.press("e")
-        self.clickYes()
-        self.logger.webhook("",f"Looting: {planter.title()} planter","bright green", "screen", ping_category="ping_conversion_events")
-        self.keyboard.multiWalk(["s","d"], 0.87)
-        self.nmLoot(9, 5, "a")
-        self.setMobTimer(field)
-        updateHourlyTime()
+
+            # If planter-check not enabled, we're done
+            if not check_enabled:
+                return True
+
+            # Planter-check enabled: verify the planter is now in inventory
+            # findPlanterInInventory will set self.planterCoords if found
+            self.planterCoords = None
+            self.findPlanterInInventory(name)
+            if self.planterCoords is not None:
+                # found the planter in inventory — success
+                return True
+
+            # Not found: log and retry (if attempts remain)
+            self.logger.webhook("", f"Planter {planter.title()} not found in inventory after looting (attempt {attempt+1}/{attempts}), retrying.", "red", "screen")
+            self.reset()
+            time.sleep(1)
+
+        # Exhausted attempts — move on but warn the user
+        self.logger.webhook("", f"Planter {planter.title()} still not found in inventory after {attempts} attempts. Continuing.", "orange", "screen")
         return True
         
     
