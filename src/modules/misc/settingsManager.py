@@ -51,48 +51,6 @@ LEGACY_PROFILE_SETTINGS_FILE = "settings.txt"
 LEGACY_GENERAL_SETTINGS_FILE = "generalsettings.txt"
 LEGACY_FIELDS_FILE = "fields.txt"
 
-def loadCurrentProfile():
-    """Load the current profile from persistent storage"""
-    global profileName
-    try:
-        migrateCurrentProfileSelection()
-        misc_state = loadMiscState()
-        saved_profile = misc_state.get("current_profile")
-        if saved_profile and os.path.exists(getProfilePath(saved_profile)):
-            profileName = saved_profile
-            return
-        migrateCurrentProfileSelection()
-        misc_state = loadMiscState()
-        saved_profile = misc_state.get("current_profile")
-        if saved_profile and os.path.exists(getProfilePath(saved_profile)):
-            profileName = saved_profile
-            return
-        if os.path.exists(CURRENT_PROFILE_FILE):
-            with open(CURRENT_PROFILE_FILE, "r") as f:
-                saved_profile = f.read().strip()
-                if saved_profile and os.path.exists(getProfilePath(saved_profile)):
-                    profileName = saved_profile
-                    misc_state["current_profile"] = saved_profile
-                    saveMiscState(misc_state)
-                    misc_state["current_profile"] = saved_profile
-                    saveMiscState(misc_state)
-    except Exception as e:
-        print(f"Warning: Could not load current profile: {e}")
-
-def saveCurrentProfile():
-    """Save the current profile to persistent storage"""
-    try:
-        misc_state = loadMiscState()
-        misc_state["current_profile"] = profileName
-        saveMiscState(misc_state)
-        misc_state = loadMiscState()
-        misc_state["current_profile"] = profileName
-        saveMiscState(misc_state)
-    except Exception as e:
-        print(f"Warning: Could not save current profile: {e}")
-
-# Load the current profile when the module is imported (called at the end of the file)
-
 # Get the project root directory (4 levels up from this file: src/modules/misc/settingsManager.py)
 def getProjectRoot():
     """Get the project root directory path"""
@@ -127,104 +85,6 @@ def getUserDataPath(*parts):
     migrateLegacySettingsIfNeeded()
     ensureDir(getUserDataDir())
     return os.path.join(getUserDataDir(), *parts)
-
-def getUserStatePath(filename):
-    """Get a path under the user data state directory"""
-    state_dir = getUserDataPath(USER_STATE_DIR)
-    ensureDir(state_dir)
-    return os.path.join(state_dir, filename)
-
-def loadUserState(filename, default=None):
-    """Load a unified user state JSON file"""
-    path = getUserStatePath(filename)
-    data = readJsonFile(path, default=default if default is not None else {})
-    if default is not None:
-        merged = mergeDefaults(data, default)
-        if merged != data:
-            writeJsonFile(path, merged)
-        return merged
-    return data
-
-def saveUserState(filename, data):
-    """Save a unified user state JSON file"""
-    path = getUserStatePath(filename)
-    writeJsonFile(path, data)
-
-def _defaultTimingState():
-    return {
-        "timings": {},
-        "AFB": {},
-    }
-
-def _defaultPlantersState():
-    return {
-        "manual": "",
-        "auto": {
-            "planters": [
-                {"planter": "", "nectar": "", "field": "", "harvest_time": 0, "nectar_est_percent": 0},
-                {"planter": "", "nectar": "", "field": "", "harvest_time": 0, "nectar_est_percent": 0},
-                {"planter": "", "nectar": "", "field": "", "harvest_time": 0, "nectar_est_percent": 0},
-            ],
-            "nectar_last_field": {
-                "comforting": "",
-                "refreshing": "",
-                "satisfying": "",
-                "motivating": "",
-                "invigorating": "",
-            },
-        },
-    }
-
-def _defaultReportsState():
-    return {
-        "hourly_report_history": [],
-        "hourly_report_stats": {},
-        "hourly_report_bg": "",
-        "hourly_report_main": "",
-    }
-
-def _defaultUiState():
-    return {
-        "screen": {},
-        "hotbar_timings": [0] * 8,
-    }
-
-def _defaultMiscState():
-    return {
-        "blender": {"item": 1, "collectTime": 0},
-        "sticker_stack": 0,
-        "current_profile": "a",
-    }
-
-def loadTimingState():
-    return loadUserState(USER_STATE_TIMING, default=_defaultTimingState())
-
-def saveTimingState(data):
-    saveUserState(USER_STATE_TIMING, data)
-
-def loadPlantersState():
-    return loadUserState(USER_STATE_PLANTERS, default=_defaultPlantersState())
-
-def savePlantersState(data):
-    saveUserState(USER_STATE_PLANTERS, data)
-
-def loadReportsState():
-    return loadUserState(USER_STATE_REPORTS, default=_defaultReportsState())
-
-def saveReportsState(data):
-    saveUserState(USER_STATE_REPORTS, data)
-
-def loadUiState():
-    return loadUserState(USER_STATE_UI, default=_defaultUiState())
-
-def saveUiState(data):
-    saveUserState(USER_STATE_UI, data)
-
-def loadMiscState():
-    return loadUserState(USER_STATE_MISC, default=_defaultMiscState())
-
-def saveMiscState(data):
-    saveUserState(USER_STATE_MISC, data)
 
 def loadTimings():
     state = loadTimingState()
@@ -361,7 +221,6 @@ def saveHourlyReportMain(data):
     state = loadReportsState()
     state["hourly_report_main"] = data
     saveReportsState(state)
-    return os.path.join(getProjectRoot(), "src", "defaultconfig")
 
 def getUserDataDir():
     """Get the user data directory path"""
@@ -372,104 +231,6 @@ def getUserDataPath(*parts):
     migrateLegacySettingsIfNeeded()
     ensureDir(getUserDataDir())
     return os.path.join(getUserDataDir(), *parts)
-
-def getUserStatePath(filename):
-    """Get a path under the user data state directory"""
-    state_dir = getUserDataPath(USER_STATE_DIR)
-    ensureDir(state_dir)
-    return os.path.join(state_dir, filename)
-
-def loadUserState(filename, default=None):
-    """Load a unified user state JSON file"""
-    path = getUserStatePath(filename)
-    data = readJsonFile(path, default=default if default is not None else {})
-    if default is not None:
-        merged = mergeDefaults(data, default)
-        if merged != data:
-            writeJsonFile(path, merged)
-        return merged
-    return data
-
-def saveUserState(filename, data):
-    """Save a unified user state JSON file"""
-    path = getUserStatePath(filename)
-    writeJsonFile(path, data)
-
-def _defaultTimingState():
-    return {
-        "timings": {},
-        "AFB": {},
-    }
-
-def _defaultPlantersState():
-    return {
-        "manual": "",
-        "auto": {
-            "planters": [
-                {"planter": "", "nectar": "", "field": "", "harvest_time": 0, "nectar_est_percent": 0},
-                {"planter": "", "nectar": "", "field": "", "harvest_time": 0, "nectar_est_percent": 0},
-                {"planter": "", "nectar": "", "field": "", "harvest_time": 0, "nectar_est_percent": 0},
-            ],
-            "nectar_last_field": {
-                "comforting": "",
-                "refreshing": "",
-                "satisfying": "",
-                "motivating": "",
-                "invigorating": "",
-            },
-        },
-    }
-
-def _defaultReportsState():
-    return {
-        "hourly_report_history": [],
-        "hourly_report_stats": {},
-        "hourly_report_bg": "",
-        "hourly_report_main": "",
-    }
-
-def _defaultUiState():
-    return {
-        "screen": {},
-        "hotbar_timings": [0] * 8,
-    }
-
-def _defaultMiscState():
-    return {
-        "blender": {"item": 1, "collectTime": 0},
-        "sticker_stack": 0,
-        "current_profile": "a",
-    }
-
-def loadTimingState():
-    return loadUserState(USER_STATE_TIMING, default=_defaultTimingState())
-
-def saveTimingState(data):
-    saveUserState(USER_STATE_TIMING, data)
-
-def loadPlantersState():
-    return loadUserState(USER_STATE_PLANTERS, default=_defaultPlantersState())
-
-def savePlantersState(data):
-    saveUserState(USER_STATE_PLANTERS, data)
-
-def loadReportsState():
-    return loadUserState(USER_STATE_REPORTS, default=_defaultReportsState())
-
-def saveReportsState(data):
-    saveUserState(USER_STATE_REPORTS, data)
-
-def loadUiState():
-    return loadUserState(USER_STATE_UI, default=_defaultUiState())
-
-def saveUiState(data):
-    saveUserState(USER_STATE_UI, data)
-
-def loadMiscState():
-    return loadUserState(USER_STATE_MISC, default=_defaultMiscState())
-
-def saveMiscState(data):
-    saveUserState(USER_STATE_MISC, data)
 
 def loadTimings():
     state = loadTimingState()
