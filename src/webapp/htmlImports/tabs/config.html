@@ -411,6 +411,22 @@
         },
       ]);
 
+      buildStandardContainer(parentOther, "Update Settings", "", [
+        {
+          id: "update_channel",
+          title: "Update Channel",
+          desc: "Stable: Only stable releases | Beta: Includes pre-release versions for testing",
+          type: {
+            name: "dropdown",
+            data: [
+              { label: "Stable Releases", value: "stable" },
+              { label: "Beta Releases", value: "beta" },
+            ],
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+      ]);
+
       buildStandardContainer(parentOther, "Low Performance", "", [
         {
           id: "low_performance",

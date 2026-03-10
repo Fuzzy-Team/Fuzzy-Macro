@@ -202,7 +202,7 @@ def _discover_remote_version(remote_version_url, timeout=15):
         return None
 
 
-def update(t="main"):
+def update(t="main", update_channel="stable"):
     msgBox("Update in progress", "Updating... Do not close terminal")
     # Important: preserve user data and profiles. Protect pattern folder
     # during the generic overwrite so we can merge new/old patterns safely.
@@ -253,12 +253,8 @@ def update(t="main"):
 
     # remote version URL and zip link
     import time
-    # Attempt to discover the latest non-prerelease tag using the GitHub API.
-    # Fall back to reading `version.txt` on the main branch if API lookup fails.
+    # Use GitHub releases API with channel filtering
     github_releases_api = "https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/releases?per_page=100"
-    github_tags_api = "https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/tags?per_page=100"
-    # Add cache-busting query param to version URL for fallback
-    remote_version_url = f"https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/src/webapp/version.txt?cb={int(time.time())}"
     backup_path = os.path.join(destination, "backup_macro.zip")
 
     # create a silent backup (overwrite previous backup)
@@ -280,9 +276,36 @@ def update(t="main"):
     except Exception:
         local_version = "0.0.0"
 
-
-    # Discover remote version (GitHub API preferred, fallback to version.txt)
-    remote_version = _discover_remote_version(remote_version_url)
+    # Discover remote version using GitHub releases API with channel filtering
+    headers = {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+        "Accept": "application/vnd.github.v3+json",
+    }
+    
+    remote_version = None
+    try:
+        r = requests.get(github_releases_api, timeout=10, headers=headers)
+        r.raise_for_status()
+        releases = r.json()
+        
+        if releases:
+            # Filter releases based on channel preference
+            if update_channel == "beta":
+                # Beta channel: accept any release (prerelease or stable)
+                # Get the first one (most recent)
+                if releases[0].get("tag_name"):
+                    remote_version = releases[0].get("tag_name").lstrip("v")
+            else:
+                # Stable channel: only non-prerelease versions
+                for rel in releases:
+                    if not rel.get("prerelease") and rel.get("tag_name"):
+                        remote_version = rel.get("tag_name").lstrip("v")
+                        break
+    except Exception:
+        pass
+    
     if not remote_version:
         msgBox("Update failed", "Could not fetch remote version. Update aborted.")
         return False
@@ -630,3 +653,75 @@ def update_from_commit(commit_hash):
 
     msgBox("Update success", "Update complete. You can now relaunch the macro")
     return True
+
+
+def check_for_updates_silent(update_channel="stable"):
+    """
+    Silently check if an update is available without downloading or showing popups.
+    Uses GitHub releases API to find the latest version based on the update channel.
+    
+    Args:
+        update_channel: "stable" (non-prerelease) or "beta" (includes prerelease)
+    
+    Returns a dict with 'available' (bool), 'current_version' (str), and 'latest_version' (str).
+    Returns None on error.
+    """
+    try:
+        destination = os.getcwd().replace("/src", "")
+        
+        # Read local version
+        local_version = "0.0.0"
+        local_version_path = os.path.join(destination, "src", "webapp", "version.txt")
+        if not os.path.exists(local_version_path):
+            local_version_path = os.path.join(destination, "version.txt")
+        try:
+            if os.path.exists(local_version_path):
+                with open(local_version_path, "r") as fh:
+                    local_version = fh.read().strip()
+        except Exception:
+            local_version = "0.0.0"
+        
+        # Query GitHub releases API
+        github_releases_api = "https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/releases?per_page=100"
+        headers = {
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            "Accept": "application/vnd.github.v3+json",
+        }
+        
+        r = requests.get(github_releases_api, timeout=10, headers=headers)
+        r.raise_for_status()
+        releases = r.json()
+        
+        if not releases:
+            return None
+        
+        # Filter releases based on channel preference
+        remote_version = None
+        if update_channel == "beta":
+            # Beta channel: accept any release (prerelease or stable)
+            # Just get the first one (most recent)
+            if releases[0].get("tag_name"):
+                remote_version = releases[0].get("tag_name").lstrip("v")
+        else:
+            # Stable channel: only non-prerelease versions
+            for rel in releases:
+                if not rel.get("prerelease") and rel.get("tag_name"):
+                    remote_version = rel.get("tag_name").lstrip("v")
+                    break
+        
+        if not remote_version:
+            return None
+        
+        # Check if remote is newer
+        is_newer = _is_remote_newer(local_version, remote_version)
+        
+        return {
+            'available': is_newer,
+            'current_version': local_version,
+            'latest_version': remote_version
+        }
+    except Exception as e:
+        print(f"Error checking for updates: {e}")
+        return None

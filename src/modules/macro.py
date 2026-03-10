@@ -3699,7 +3699,9 @@ class macro:
                 stickerUsed = True
             elif not "/" in self.setdat["sticker_stack_item"]:
                 self.logger.webhook("", "No Stickers left to stack, Sticker Stack has been disabled", "red", "screen", ping_category="ping_critical_errors")
+                self.updateGUI.value = 1
                 self.setdat["sticker_stack"] = False
+                settingsManager.saveProfileSetting("sticker_stack", False)
                 self.keyboard.press("e")
                 return
         if "ticket" in self.setdat["sticker_stack_item"] and not stickerUsed:
