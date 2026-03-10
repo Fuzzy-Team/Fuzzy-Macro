@@ -36,11 +36,21 @@
                     <label>Harvest When Full</label>
                     <p>Collect the planters when they are fully grown. Overrides the 'Harvest Every X Hours' setting</p>
                 </div>
-                <label class="checkbox-container" style="margin-top: 0.6rem;">
-                    <input type="checkbox" id="manual_planters_collect_full" onchange="saveSetting(this, 'profile')">
-                    <span class="checkmark"></span>
-                </label>
+                    <label class="checkbox-container" style="margin-top: 0.6rem;">
+                        <input type="checkbox" id="manual_planters_collect_full" onchange="saveSetting(this, 'profile')">
+                        <span class="checkmark"></span>
+                    </label>
             </form> 
+            <form style="display: flex; align-items:flex-start; justify-content: space-between; padding-right: 5%; margin-top:1rem">
+                <div style="width: 70%;">
+                    <label>Planter check</label>
+                    <p>Check inventory after looting planters and make sure that the planter was in fact collected.</p>
+                </div>
+                <label class="checkbox-container" style="margin-top: 0.6rem; margin-left: 8px;">
+                        <input type="checkbox" id="manual_planters_check" onchange="saveSetting(this, 'profile')">
+                        <span class="checkmark"></span>
+                    </label>
+                </form>
             <form style="display: flex; align-items:flex-start; justify-content: space-between; padding-right: 5%; margin-top:1rem">
                 <div style="width: 70%;">
                     <label>Clear Planter Timers</label>
@@ -75,11 +85,21 @@
                     <label>Harvest When Full</label>
                     <p>Collect the planters when they are fully grown. Overrides the 'Harvest Every X Hours' setting</p>
                 </div>
-                <label class="checkbox-container" style="margin-top: 0.6rem;">
-                    <input type="checkbox" id="auto_planters_collect_full" onchange="saveSetting(this, 'profile')" data-input-bind="auto_planters_collect_auto">
-                    <span class="checkmark"></span>
-                </label>
+                    <label class="checkbox-container" style="margin-top: 0.6rem;">
+                        <input type="checkbox" id="auto_planters_collect_full" onchange="saveSetting(this, 'profile')" data-input-bind="auto_planters_collect_auto">
+                        <span class="checkmark"></span>
+                    </label>
             </form> 
+            <form style="display: flex; align-items:flex-start; justify-content: space-between; padding-right: 5%; margin-top:1rem">
+                <div style="width: 70%;">
+                    <label>Planter check</label>
+                    <p>Check inventory after looting planters and make sure that the planter was in fact collected.</p>
+                </div>
+                <label class="checkbox-container" style="margin-top: 0.6rem; margin-left: 8px;">
+                        <input type="checkbox" id="auto_planters_check" onchange="saveSetting(this, 'profile')">
+                        <span class="checkmark"></span>
+                    </label>
+                </form>
             <form style="display: flex; align-items:flex-start; justify-content: space-between; padding-right: 5%; margin-top:1rem">
                 <div style="width: 70%;">
                     <label>Auto Harvest</label>
