@@ -3458,6 +3458,7 @@ class macro:
             self.findPlanterInInventory(name)
             if self.planterCoords is not None:
                 # found the planter in inventory — success
+                self.logger.webhook("", f"Found {planter.title()} in inventory after collect", "bright green", "screen", ping_category="ping_conversion_events")
                 return True
 
             # Not found: log and retry (if attempts remain)
