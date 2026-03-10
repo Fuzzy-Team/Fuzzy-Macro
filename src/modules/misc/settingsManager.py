@@ -8,8 +8,6 @@ from datetime import datetime
 import re
 import pickle
 from modules.misc import messageBox
-import pickle
-from modules.misc import messageBox
 
 #returns a dictionary containing the settings
 profileName = "a"
@@ -18,40 +16,6 @@ _profile_change_counter = 0
 
 # File to store current profile persistence (defined after getProjectRoot)
 CURRENT_PROFILE_FILE = None
-LEGACY_CURRENT_PROFILE_FILE = None
-LEGACY_USER_DATA_DIR = None
-LEGACY_USER_DATA_FILES = [
-    "hourly_report_stats.pkl",
-    "timings.txt",
-    "auto_planters.json",
-    "hourly_report_history.txt",
-    "hourly_report_bg.txt",
-    "screen.txt",
-    "hourly_report_main.txt",
-    "AFB.txt",
-    "hotbar_timings.txt",
-    "blender.txt",
-    "current_profile.txt",
-    "sticker_stack.txt",
-    "manualplanters.txt",
-]
-
-CORE_SETTINGS_FILE = "core.json"
-GENERAL_SETTINGS_FILE = "general.json"
-FIELDS_SETTINGS_FILE = "fields.json"
-
-USER_STATE_DIR = "state"
-USER_STATE_TIMING = "timing.json"
-USER_STATE_PLANTERS = "planters.json"
-USER_STATE_REPORTS = "reports.json"
-USER_STATE_UI = "ui.json"
-USER_STATE_MISC = "misc.json"
-
-MIGRATION_NOTICE_FILE = "migration_notice.json"
-
-LEGACY_PROFILE_SETTINGS_FILE = "settings.txt"
-LEGACY_GENERAL_SETTINGS_FILE = "generalsettings.txt"
-LEGACY_FIELDS_FILE = "fields.txt"
 LEGACY_CURRENT_PROFILE_FILE = None
 LEGACY_USER_DATA_DIR = None
 LEGACY_USER_DATA_FILES = [
@@ -138,15 +102,10 @@ def getProjectRoot():
 CURRENT_PROFILE_FILE = os.path.join(getProjectRoot(), "usrdata", "current_profile.txt")
 LEGACY_CURRENT_PROFILE_FILE = os.path.join(getProjectRoot(), "src", "data", "user", "current_profile.txt")
 LEGACY_USER_DATA_DIR = os.path.join(getProjectRoot(), "src", "data", "user")
-# File to store current profile persistence (legacy)
-CURRENT_PROFILE_FILE = os.path.join(getProjectRoot(), "usrdata", "current_profile.txt")
-LEGACY_CURRENT_PROFILE_FILE = os.path.join(getProjectRoot(), "src", "data", "user", "current_profile.txt")
-LEGACY_USER_DATA_DIR = os.path.join(getProjectRoot(), "src", "data", "user")
 
 # Helper functions for common paths
 def getProfilesDir():
     """Get the profiles directory path"""
-    return os.path.join(getUserDataDir(), "profiles")
     return os.path.join(getUserDataDir(), "profiles")
 
 def getProfilePath(profile_name=None):
@@ -2014,270 +1973,520 @@ def removeGeneralSetting(setting):
         del data[setting]
         writeJsonFile(generalsettings_path, data)
 
+PROFILE_REGISTRY_FILE = "profile_registry.json"
+_shared_state_migration_done = False
+
+
+def _profileRegistryPath():
+    return getUserDataPath(PROFILE_REGISTRY_FILE)
+
+
+def _defaultProfileRegistry():
+    return {
+        "version": getMacroVersion(),
+        "current_profile": "a",
+    }
+
+
+def _loadProfileRegistry():
+    registry = readJsonFile(_profileRegistryPath(), default=_defaultProfileRegistry())
+    changed = False
+    if not isinstance(registry, dict):
+        registry = _defaultProfileRegistry()
+        changed = True
+    expected_version = getMacroVersion()
+    if "current_profile" not in registry:
+        registry["current_profile"] = "a"
+        changed = True
+    if registry.get("version") != expected_version:
+        registry["version"] = expected_version
+        changed = True
+    if changed:
+        _saveProfileRegistry(registry)
+    return registry
+
+
+def _saveProfileRegistry(registry):
+    registry["version"] = getMacroVersion()
+    writeJsonFile(_profileRegistryPath(), registry)
+
+
+def _ensureProfileStateFiles(profile_name=None):
+    profile_name = profile_name or profileName
+    defaults_by_file = {
+        USER_STATE_TIMING: _defaultTimingState(),
+        USER_STATE_PLANTERS: _defaultPlantersState(),
+        USER_STATE_REPORTS: _defaultReportsState(),
+        USER_STATE_UI: _defaultUiState(),
+        USER_STATE_MISC: _defaultMiscState(),
+    }
+    for filename, defaults in defaults_by_file.items():
+        path = getUserStatePath(filename, profile_name=profile_name)
+        if not os.path.exists(path):
+            writeJsonFile(path, defaults)
+
+
+def _defaultMiscState():
+    return {
+        "blender": {"item": 1, "collectTime": 0},
+        "sticker_stack": 0,
+    }
+
+
+def migrateSharedStateToProfilesIfNeeded():
+    global _shared_state_migration_done
+    if _shared_state_migration_done:
+        return
+    _shared_state_migration_done = True
+
+    shared_state_dir = os.path.join(getUserDataDir(), USER_STATE_DIR)
+    if not os.path.isdir(shared_state_dir):
+        return
+
+    state_files = [
+        USER_STATE_TIMING,
+        USER_STATE_PLANTERS,
+        USER_STATE_REPORTS,
+        USER_STATE_UI,
+        USER_STATE_MISC,
+    ]
+    profiles = listProfiles() or ["a"]
+
+    # Hard cutover behavior: seed each profile from existing shared state once.
+    for profile in profiles:
+        profile_state_dir = os.path.join(getProfilePath(profile), USER_STATE_DIR)
+        ensureDir(profile_state_dir)
+        for filename in state_files:
+            src = os.path.join(shared_state_dir, filename)
+            dst = getUserStatePath(filename, profile_name=profile)
+            if os.path.exists(src) and not os.path.exists(dst):
+                shutil.copy2(src, dst)
+        _ensureProfileStateFiles(profile)
+
+    # Keep a legacy copy for rollback/debug, then remove old runtime location.
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    legacy_dir = os.path.join(getUserDataDir(), "legacy_backups", f"shared_state_{timestamp}")
+    ensureDir(legacy_dir)
+    for filename in state_files:
+        src = os.path.join(shared_state_dir, filename)
+        if os.path.exists(src):
+            shutil.copy2(src, os.path.join(legacy_dir, filename))
+    shutil.rmtree(shared_state_dir, ignore_errors=True)
+
+
+def getUserStatePath(filename, profile_name=None):
+    profile_name = profile_name or profileName
+    state_dir = os.path.join(getProfilePath(profile_name), USER_STATE_DIR)
+    ensureDir(state_dir)
+    return os.path.join(state_dir, filename)
+
+
+def loadUserState(filename, default=None, profile_name=None):
+    path = getUserStatePath(filename, profile_name=profile_name)
+    data = readJsonFile(path, default=default if default is not None else {})
+    if default is None:
+        return data
+    merged = mergeDefaults(data, default)
+    if merged != data:
+        writeJsonFile(path, merged)
+    return merged
+
+
+def saveUserState(filename, data, profile_name=None):
+    path = getUserStatePath(filename, profile_name=profile_name)
+    writeJsonFile(path, data)
+
+
+def loadTimingState(profile_name=None):
+    return loadUserState(USER_STATE_TIMING, default=_defaultTimingState(), profile_name=profile_name)
+
+
+def saveTimingState(data, profile_name=None):
+    saveUserState(USER_STATE_TIMING, data, profile_name=profile_name)
+
+
+def loadPlantersState(profile_name=None):
+    return loadUserState(USER_STATE_PLANTERS, default=_defaultPlantersState(), profile_name=profile_name)
+
+
+def savePlantersState(data, profile_name=None):
+    saveUserState(USER_STATE_PLANTERS, data, profile_name=profile_name)
+
+
+def loadReportsState(profile_name=None):
+    return loadUserState(USER_STATE_REPORTS, default=_defaultReportsState(), profile_name=profile_name)
+
+
+def saveReportsState(data, profile_name=None):
+    saveUserState(USER_STATE_REPORTS, data, profile_name=profile_name)
+
+
+def loadUiState(profile_name=None):
+    return loadUserState(USER_STATE_UI, default=_defaultUiState(), profile_name=profile_name)
+
+
+def saveUiState(data, profile_name=None):
+    saveUserState(USER_STATE_UI, data, profile_name=profile_name)
+
+
+def loadMiscState(profile_name=None):
+    data = loadUserState(USER_STATE_MISC, default=_defaultMiscState(), profile_name=profile_name)
+    if "current_profile" in data:
+        del data["current_profile"]
+        saveMiscState(data, profile_name=profile_name)
+    return data
+
+
+def saveMiscState(data, profile_name=None):
+    saveUserState(USER_STATE_MISC, data, profile_name=profile_name)
+
+
+def migrateCurrentProfileSelection():
+    registry = _loadProfileRegistry()
+    if registry.get("current_profile") and os.path.exists(getProfilePath(registry["current_profile"])):
+        return
+
+    legacy_candidates = [CURRENT_PROFILE_FILE, LEGACY_CURRENT_PROFILE_FILE]
+    for candidate in legacy_candidates:
+        if not candidate or not os.path.exists(candidate):
+            continue
+        with open(candidate, "r", encoding="utf-8") as f:
+            name = f.read().strip()
+        if name and os.path.exists(getProfilePath(name)):
+            registry["current_profile"] = name
+            _saveProfileRegistry(registry)
+            return
+
+
+def loadCurrentProfile():
+    global profileName
+    migrateLegacySettingsIfNeeded()
+    migrateSharedStateToProfilesIfNeeded()
+    ensureDefaultProfileExists()
+    migrateCurrentProfileSelection()
+
+    registry = _loadProfileRegistry()
+    selected = registry.get("current_profile", "a")
+    if not os.path.exists(getProfilePath(selected)):
+        selected = "a"
+        registry["current_profile"] = selected
+        _saveProfileRegistry(registry)
+
+    profileName = selected
+    ensureCurrentProfileDefaults()
+    _ensureProfileStateFiles(profileName)
+
+
+def saveCurrentProfile():
+    registry = _loadProfileRegistry()
+    registry["current_profile"] = profileName
+    _saveProfileRegistry(registry)
+
+
+def getCurrentProfile():
+    return profileName
+
+
+def switchProfile(name):
+    global profileName
+    profile_files = getProfileFiles(name)
+    for required in ("core", "general", "fields"):
+        if not os.path.exists(profile_files[required]):
+            return False, f"Profile '{name}' is missing {required}.json"
+
+    profileName = name
+    saveCurrentProfile()
+    _ensureProfileStateFiles(profileName)
+
+    global _profile_change_counter
+    _profile_change_counter += 1
+
+    initializeFieldSync()
+    return True, f"Switched to profile: {name}"
+
+
+def listProfiles():
+    profiles_dir = getProfilesDir()
+    if not os.path.exists(profiles_dir):
+        return []
+    profiles = [
+        d for d in os.listdir(profiles_dir)
+        if os.path.isdir(os.path.join(profiles_dir, d)) and not d.startswith(".")
+    ]
+    return sorted(profiles)
+
+
+def createProfile(name):
+    name = name.strip().replace(" ", "_").lower()
+    if not name:
+        return False, "Profile name cannot be empty"
+
+    profile_path = getProfilePath(name)
+    if os.path.exists(profile_path):
+        return False, f"Profile '{name}' already exists"
+
+    try:
+        os.makedirs(profile_path, exist_ok=False)
+        profile_files = getProfileFiles(name)
+        writeJsonFile(profile_files["core"], loadDefaultCoreSettings())
+        writeJsonFile(profile_files["general"], loadDefaultGeneralSettings())
+        writeJsonFile(profile_files["fields"], loadDefaultFieldSettings())
+        _ensureProfileStateFiles(name)
+        return True, f"Created profile: {name}"
+    except Exception as e:
+        shutil.rmtree(profile_path, ignore_errors=True)
+        return False, f"Failed to create profile: {str(e)}"
+
+
+def deleteProfile(name):
+    if name == profileName:
+        return False, "Cannot delete the currently active profile"
+
+    profiles = listProfiles()
+    if len(profiles) <= 1:
+        return False, "Cannot delete the only remaining profile"
+
+    profile_path = getProfilePath(name)
+    if not os.path.exists(profile_path):
+        return False, f"Profile '{name}' not found"
+
+    try:
+        shutil.rmtree(profile_path)
+        return True, f"Deleted profile: {name}"
+    except Exception as e:
+        return False, f"Failed to delete profile: {str(e)}"
+
+
+def renameProfile(old_name, new_name):
+    global profileName
+    new_name = new_name.strip().replace(" ", "_").lower()
+    if not new_name:
+        return False, "New profile name cannot be empty"
+
+    old_path = getProfilePath(old_name)
+    new_path = getProfilePath(new_name)
+
+    if not os.path.exists(old_path):
+        return False, f"Profile '{old_name}' not found"
+    if os.path.exists(new_path):
+        return False, f"Profile '{new_name}' already exists"
+
+    try:
+        os.rename(old_path, new_path)
+        if profileName == old_name:
+            profileName = new_name
+            saveCurrentProfile()
+        return True, f"Renamed profile '{old_name}' to '{new_name}'"
+    except Exception as e:
+        return False, f"Failed to rename profile: {str(e)}"
+
+
+def duplicateProfile(source_name, new_name):
+    new_name = new_name.strip().replace(" ", "_").lower()
+    if not new_name:
+        return False, "New profile name cannot be empty"
+
+    source_path = getProfilePath(source_name)
+    destination_path = getProfilePath(new_name)
+
+    if not os.path.exists(source_path):
+        return False, f"Profile '{source_name}' not found"
+    if os.path.exists(destination_path):
+        return False, f"Profile '{new_name}' already exists"
+
+    try:
+        shutil.copytree(source_path, destination_path)
+        _ensureProfileStateFiles(new_name)
+        return True, f"Duplicated profile '{source_name}' to '{new_name}'"
+    except Exception as e:
+        shutil.rmtree(destination_path, ignore_errors=True)
+        return False, f"Failed to duplicate profile: {str(e)}"
+
+
 def loadSettings():
     migrateLegacySettingsIfNeeded()
     settings_path = getProfileFiles()["core"]
     default_settings = loadDefaultCoreSettings()
-    migrateLegacySettingsIfNeeded()
-    settings_path = getProfileFiles()["core"]
-    default_settings = loadDefaultCoreSettings()
-    try:
-        settings = readJsonFile(settings_path, default={})
-        settings = readJsonFile(settings_path, default={})
-    except FileNotFoundError:
-        print(f"Warning: Profile '{profileName}' core settings file not found, using defaults")
-        settings = {}
 
+    settings = readJsonFile(settings_path, default={})
     merged = {**default_settings, **settings}
-
-    # Read default settings and ensure profile contains any missing keys
-    defaultSettings = readSettingsFile(default_settings_path)
-    merged_new_keys = False
-    for k, v in defaultSettings.items():
-        if k not in settings:
-            settings[k] = v
-            merged_new_keys = True
-
-    # Migrate legacy global quest gather override to per-quest keys on first load
-    try:
-        legacy_present = any(k in profile_raw for k in ("quest_gather_mins", "quest_gather_return"))
-        if legacy_present:
-            legacy_mins = profile_raw.get("quest_gather_mins", None)
-            legacy_return = profile_raw.get("quest_gather_return", None)
-            # Only migrate if legacy values differ from defaults (i.e., the user had configured them)
-            default_mins = defaultSettings.get("quest_gather_mins")
-            default_return = defaultSettings.get("quest_gather_return")
-            do_migrate = False
-            if legacy_mins is not None and legacy_mins != default_mins:
-                do_migrate = True
-            if legacy_return is not None and legacy_return != default_return:
-                do_migrate = True
-
-            if do_migrate:
-                per_quests = ["polar_bear", "brown_bear", "black_bear", "honey_bee", "bucko_bee", "riley_bee"]
-                for q in per_quests:
-                    mins_key = f"{q}_quest_gather_mins"
-                    return_key = f"{q}_quest_gather_return"
-                    if legacy_mins is not None:
-                        settings[mins_key] = legacy_mins
-                    if legacy_return is not None:
-                        settings[return_key] = legacy_return
-                # Remove old global keys so migration happens only once
-                if "quest_gather_mins" in settings:
-                    del settings["quest_gather_mins"]
-                if "quest_gather_return" in settings:
-                    del settings["quest_gather_return"]
-                merged_new_keys = True
-    except Exception:
-        # If migration fails for any reason, skip without blocking startup
-        pass
-
-    # Ensure fields and fields_enabled arrays have 5 elements
-    defaultFields = default_settings.get("fields", ['pine tree', 'sunflower', 'dandelion', 'pine tree', 'sunflower'])
-    defaultFieldsEnabled = default_settings.get("fields_enabled", [True, False, False, False, False])
-
-    fields = merged.get("fields", [])
-    fieldsEnabled = merged.get("fields_enabled", [])
-
-    updated = False
-    while len(fields) < 5:
-        fields.append(defaultFields[len(fields)] if len(fields) < len(defaultFields) else defaultFields[-1])
-        updated = True
-    while len(fieldsEnabled) < 5:
-        fieldsEnabled.append(defaultFieldsEnabled[len(fieldsEnabled)] if len(fieldsEnabled) < len(defaultFieldsEnabled) else False)
-        updated = True
-
-
-    if updated:
-        merged["fields"] = fields
-        merged["fields_enabled"] = fieldsEnabled
-
-    if merged != settings or updated:
-        writeJsonFile(settings_path, merged)
-
-    return merged
-        merged["fields"] = fields
-        merged["fields_enabled"] = fieldsEnabled
+    merged, updated = _normalize_core_fields(merged, default_settings)
 
     if merged != settings or updated:
         writeJsonFile(settings_path, merged)
 
     return merged
 
-#return a dict containing all settings except field (general, profile, planters)
+
 def loadAllSettings():
     migrateLegacySettingsIfNeeded()
-    migrateLegacySettingsIfNeeded()
-
     generalsettings_path = getProfileFiles()["general"]
-    generalsettings_path = getProfileFiles()["general"]
-    try:
-        generalSettings = readJsonFile(generalsettings_path, default={})
-        generalSettings = readJsonFile(generalsettings_path, default={})
-    except FileNotFoundError:
-        print(f"Warning: Profile '{profileName}' general settings file not found, using defaults")
-        generalSettings = {}
-
+    general_settings = readJsonFile(generalsettings_path, default={})
     default_general = loadDefaultGeneralSettings()
-    generalSettings = {**default_general, **generalSettings}
-        print(f"Warning: Profile '{profileName}' general settings file not found, using defaults")
-        generalSettings = {}
+    general_settings = {**default_general, **general_settings}
 
-    default_general = loadDefaultGeneralSettings()
-    generalSettings = {**default_general, **generalSettings}
-
-    # Migrate old boolean flags to new macro_mode setting
     migrated = False
-    field_only = generalSettings.get("field_only_mode", False)
-    quest_only = generalSettings.get("quest_only_mode", False)
-
-    # Check if old settings exist (regardless of their value)
-    if "field_only_mode" in generalSettings or "quest_only_mode" in generalSettings:
-        if field_only and quest_only:
-            # If both are somehow true, prioritize field mode
-            generalSettings["macro_mode"] = "field"
-        elif field_only:
-            generalSettings["macro_mode"] = "field"
+    field_only = general_settings.get("field_only_mode", False)
+    quest_only = general_settings.get("quest_only_mode", False)
+    if "field_only_mode" in general_settings or "quest_only_mode" in general_settings:
+        if field_only:
+            general_settings["macro_mode"] = "field"
         elif quest_only:
-            generalSettings["macro_mode"] = "quest"
+            general_settings["macro_mode"] = "quest"
         else:
-            generalSettings["macro_mode"] = "normal"
+            general_settings["macro_mode"] = "normal"
+        general_settings.pop("field_only_mode", None)
+        general_settings.pop("quest_only_mode", None)
+        migrated = True
 
-        # Remove old settings
-        if "field_only_mode" in generalSettings:
-            del generalSettings["field_only_mode"]
-            migrated = True
-        if "quest_only_mode" in generalSettings:
-            del generalSettings["quest_only_mode"]
-            migrated = True
+    if migrated:
+        writeJsonFile(generalsettings_path, general_settings)
 
-        # Save the migrated settings back to file
-        if migrated:
-            writeJsonFile(generalsettings_path, generalSettings)
-            writeJsonFile(generalsettings_path, generalSettings)
-            print("Migrated old field_only_mode/quest_only_mode settings to new macro_mode setting")
+    return {**loadSettings(), **general_settings}
 
-    if generalSettings != readJsonFile(generalsettings_path, default=generalSettings):
-        writeJsonFile(generalsettings_path, generalSettings)
-
-    if generalSettings != readJsonFile(generalsettings_path, default=generalSettings):
-        writeJsonFile(generalsettings_path, generalSettings)
-
-    return {**loadSettings(), **generalSettings}
 
 def ensureCurrentProfileDefaults():
-    """Ensure current profile files exist and include defaults"""
     loadAllSettings()
     loadFields()
 
-def ensureCurrentProfileDefaults():
-    """Ensure current profile files exist and include defaults"""
-    loadAllSettings()
-    loadFields()
 
 def initializeFieldSync():
-    """Initialize field synchronization between profile and general settings"""
     try:
         settings_path = getProfileFiles()["core"]
         generalsettings_path = getProfileFiles()["general"]
-        settings_path = getProfileFiles()["core"]
-        generalsettings_path = getProfileFiles()["general"]
-        try:
-            profileData = readJsonFile(settings_path, default={})
-            profileData = readJsonFile(settings_path, default={})
-        except FileNotFoundError:
-            print(f"Warning: Profile '{profileName}' settings file not found during sync, skipping")
-            return
+        profile_data = readJsonFile(settings_path, default={})
+        general_data = readJsonFile(generalsettings_path, default={})
 
-        generalData = readJsonFile(generalsettings_path, default={})
-        generalData = readJsonFile(generalsettings_path, default={})
+        profile_fields = profile_data.get("fields", [])
+        profile_fields_enabled = profile_data.get("fields_enabled", [])
+        changed = False
 
-        # Check if field settings exist in both files
-        profileFields = profileData.get("fields", [])
-        generalFields = generalData.get("fields", [])
+        if profile_fields and general_data.get("fields") != profile_fields:
+            general_data["fields"] = profile_fields
+            changed = True
+        if profile_fields_enabled and general_data.get("fields_enabled") != profile_fields_enabled:
+            general_data["fields_enabled"] = profile_fields_enabled
+            changed = True
 
-        # If general settings has different fields, sync from profile to general
-        if profileFields != generalFields and profileFields:
-            generalData["fields"] = profileFields
-            writeJsonFile(generalsettings_path, generalData)
-            writeJsonFile(generalsettings_path, generalData)
-
-        # Sync fields_enabled as well
-        profileFieldsEnabled = profileData.get("fields_enabled", [])
-        generalFieldsEnabled = generalData.get("fields_enabled", [])
-
-        if profileFieldsEnabled != generalFieldsEnabled and profileFieldsEnabled:
-            generalData["fields_enabled"] = profileFieldsEnabled
-            writeJsonFile(generalsettings_path, generalData)
-            writeJsonFile(generalsettings_path, generalData)
-            
+        if changed:
+            writeJsonFile(generalsettings_path, general_data)
     except Exception as e:
         print(f"Warning: Could not initialize field synchronization: {e}")
 
-def exportProfile(profile_name):
-    """Export a profile to JSON content for browser download"""
-    profiles_dir = getProfilesDir()
-    profile_path = os.path.join(profiles_dir, profile_name)
 
+def syncFieldSettings(setting, value):
+    """Synchronize field settings from profile core to profile general."""
+    try:
+        general_settings_path = getProfileFiles()["general"]
+        general_data = readJsonFile(general_settings_path, default={})
+        general_data[setting] = value
+        writeJsonFile(general_settings_path, general_data)
+    except Exception as e:
+        print(f"Warning: Could not sync field settings to general settings: {e}")
+
+
+def syncFieldSettingsToProfile(setting, value):
+    """Synchronize field settings from profile general to profile core."""
+    try:
+        profile_settings_path = getProfileFiles()["core"]
+        profile_data = readJsonFile(profile_settings_path, default={})
+        profile_data[setting] = value
+        writeJsonFile(profile_settings_path, profile_data)
+    except Exception as e:
+        print(f"Warning: Could not sync field settings to profile settings: {e}")
+
+
+def saveProfileSetting(setting, value):
+    settings_path = getProfileFiles()["core"]
+    data = readJsonFile(settings_path, default={})
+    data[setting] = value
+    writeJsonFile(settings_path, data)
+    if setting in ["fields", "fields_enabled"]:
+        syncFieldSettings(setting, value)
+
+
+def saveDictProfileSettings(values):
+    settings_path = getProfileFiles()["core"]
+    data = readJsonFile(settings_path, default={})
+    data.update(values)
+    writeJsonFile(settings_path, data)
+    for setting in ("fields", "fields_enabled"):
+        if setting in values:
+            syncFieldSettings(setting, values[setting])
+
+
+def incrementProfileSetting(setting, incrValue):
+    settings_path = getProfileFiles()["core"]
+    data = readJsonFile(settings_path, default={})
+    data[setting] = data.get(setting, 0) + incrValue
+    writeJsonFile(settings_path, data)
+    return data
+
+
+def saveGeneralSetting(setting, value):
+    generalsettings_path = getProfileFiles()["general"]
+    data = readJsonFile(generalsettings_path, default={})
+    data[setting] = value
+    writeJsonFile(generalsettings_path, data)
+    if setting in ["fields", "fields_enabled"]:
+        syncFieldSettingsToProfile(setting, value)
+
+
+def removeGeneralSetting(setting):
+    generalsettings_path = getProfileFiles()["general"]
+    data = readJsonFile(generalsettings_path, default={})
+    if setting in data:
+        del data[setting]
+        writeJsonFile(generalsettings_path, data)
+
+
+def exportProfile(profile_name):
+    profile_path = getProfilePath(profile_name)
     if not os.path.exists(profile_path):
         return False, f"Profile '{profile_name}' not found"
 
-    # Read profile data
     try:
         profile_files = getProfileFiles(profile_name)
-        profile_files = getProfileFiles(profile_name)
+        for required in ("core", "general", "fields"):
+            if not os.path.exists(profile_files[required]):
+                return False, f"Profile '{profile_name}' is missing required files"
 
-        if not os.path.exists(profile_files["core"]) or not os.path.exists(profile_files["fields"]) or not os.path.exists(profile_files["general"]):
-        if not os.path.exists(profile_files["core"]) or not os.path.exists(profile_files["fields"]) or not os.path.exists(profile_files["general"]):
-            return False, f"Profile '{profile_name}' is missing required files"
-
-        settings_data = readJsonFile(profile_files["core"], default={})
-        fields_data = loadFields() if profile_name == getCurrentProfile() else readJsonFile(profile_files["fields"], default={})
-        generalsettings_data = readJsonFile(profile_files["general"], default={})
-        settings_data = readJsonFile(profile_files["core"], default={})
-        fields_data = loadFields() if profile_name == getCurrentProfile() else readJsonFile(profile_files["fields"], default={})
-        generalsettings_data = readJsonFile(profile_files["general"], default={})
-
-        # Create export data structure
         export_data = {
             "profile_name": profile_name,
             "export_date": datetime.now().isoformat(),
-            "version": "2.0",
-            "core": settings_data,
-            "version": "2.0",
-            "core": settings_data,
-            "fields": fields_data,
-            "general": generalsettings_data
-            "general": generalsettings_data
+            "version": "3.0",
+            "core": readJsonFile(profile_files["core"], default={}),
+            "fields": readJsonFile(profile_files["fields"], default={}),
+            "general": readJsonFile(profile_files["general"], default={}),
+            "state": {
+                "timing": loadTimingState(profile_name),
+                "planters": loadPlantersState(profile_name),
+                "reports": loadReportsState(profile_name),
+                "ui": loadUiState(profile_name),
+                "misc": loadMiscState(profile_name),
+            },
         }
 
-        # Generate filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"profile_{profile_name}_{timestamp}.json"
-
-        # Return JSON content and filename
         json_content = json.dumps(export_data, indent=2, ensure_ascii=False)
         return True, json_content, filename
-
     except Exception as e:
         return False, f"Failed to export profile: {str(e)}"
 
+
 def importProfile(import_path, new_profile_name=None):
-    """Import a profile from a JSON file"""
     if not os.path.exists(import_path):
         return False, f"Import file '{import_path}' not found"
-
     try:
-        # Read and validate import data
-        with open(import_path, 'r', encoding='utf-8') as f:
+        with open(import_path, "r", encoding="utf-8") as f:
             import_data = json.load(f)
-
         return _importProfileData(import_data, new_profile_name)
     except Exception as e:
         return False, f"Failed to import profile: {str(e)}"
 
+
 def importProfileContent(json_content, new_profile_name=None):
-    """Import a profile from JSON content string"""
     try:
         import_data = json.loads(json_content)
         return _importProfileData(import_data, new_profile_name)
@@ -2286,78 +2495,63 @@ def importProfileContent(json_content, new_profile_name=None):
     except Exception as e:
         return False, f"Failed to import profile: {str(e)}"
 
+
 def _importProfileData(import_data, new_profile_name=None):
-    """Internal function to import profile data"""
     try:
-        # Validate structure
         if all(k in import_data for k in ["profile_name", "core", "fields", "general"]):
             core_data = import_data["core"]
             fields_data = import_data["fields"]
             general_data = import_data["general"]
+            state_data = import_data.get("state", {})
         elif all(k in import_data for k in ["profile_name", "settings", "fields", "generalsettings"]):
             core_data = import_data["settings"]
             fields_data = import_data["fields"]
             general_data = import_data["generalsettings"]
-        else:
-            return False, "Invalid import file: missing required keys"
-        if all(k in import_data for k in ["profile_name", "core", "fields", "general"]):
-            core_data = import_data["core"]
-            fields_data = import_data["fields"]
-            general_data = import_data["general"]
-        elif all(k in import_data for k in ["profile_name", "settings", "fields", "generalsettings"]):
-            core_data = import_data["settings"]
-            fields_data = import_data["fields"]
-            general_data = import_data["generalsettings"]
+            state_data = {}
         else:
             return False, "Invalid import file: missing required keys"
 
-        # Determine new profile name
         if new_profile_name is None:
             original_name = import_data["profile_name"]
             new_profile_name = original_name
             counter = 1
-            while os.path.exists(os.path.join(getProfilesDir(), new_profile_name)):
+            while os.path.exists(getProfilePath(new_profile_name)):
                 new_profile_name = f"{original_name}_imported_{counter}"
                 counter += 1
 
-        # Sanitize profile name
-        new_profile_name = new_profile_name.strip().replace(' ', '_').lower()
+        new_profile_name = new_profile_name.strip().replace(" ", "_").lower()
         if not new_profile_name:
             return False, "Profile name cannot be empty"
-
-        # Check if profile already exists
-        new_profile_path = os.path.join(getProfilesDir(), new_profile_name)
-        if os.path.exists(new_profile_path):
+        if os.path.exists(getProfilePath(new_profile_name)):
             return False, f"Profile '{new_profile_name}' already exists"
 
-        # Create profile directory
-        os.makedirs(new_profile_path)
-
+        os.makedirs(getProfilePath(new_profile_name), exist_ok=True)
         profile_files = getProfileFiles(new_profile_name)
-
-        profile_files = getProfileFiles(new_profile_name)
-
-        # Write settings file
         writeJsonFile(profile_files["core"], core_data)
-        writeJsonFile(profile_files["core"], core_data)
-
-        # Write fields file
         writeJsonFile(profile_files["fields"], fields_data)
-        writeJsonFile(profile_files["fields"], fields_data)
+        writeJsonFile(profile_files["general"], general_data)
 
-        # Write general settings file
-        writeJsonFile(profile_files["general"], general_data)
-        # Write general settings file
-        writeJsonFile(profile_files["general"], general_data)
+        _ensureProfileStateFiles(new_profile_name)
+        if isinstance(state_data, dict):
+            if "timing" in state_data:
+                saveTimingState(state_data["timing"], profile_name=new_profile_name)
+            if "planters" in state_data:
+                savePlantersState(state_data["planters"], profile_name=new_profile_name)
+            if "reports" in state_data:
+                saveReportsState(state_data["reports"], profile_name=new_profile_name)
+            if "ui" in state_data:
+                saveUiState(state_data["ui"], profile_name=new_profile_name)
+            if "misc" in state_data:
+                saveMiscState(state_data["misc"], profile_name=new_profile_name)
 
         return True, f"Profile imported successfully as '{new_profile_name}'"
-
     except Exception as e:
         return False, f"Failed to import profile: {str(e)}"
 
-# Load the current profile when the module is imported
+
+# Load the current profile when the module is imported.
 loadCurrentProfile()
 
-#clear a file
+
 def clearFile(filePath):
-    open(filePath, 'w').close()
+    open(filePath, "w").close()
