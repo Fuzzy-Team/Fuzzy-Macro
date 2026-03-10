@@ -911,10 +911,22 @@ def migrateLegacySettingsIfNeeded():
             legacy_global_general_data = {}
 
     backup_root = None
+    # If we've already recorded a migration backup, reuse it and avoid creating a new one.
     try:
-        backup_root = _ensureBackupDir()
-    except Exception as e:
-        print(f"Warning: Could not create legacy backup directory: {e}")
+        existing_notice = _loadMigrationNotice()
+    except Exception:
+        existing_notice = {}
+
+    if existing_notice.get("backup_path"):
+        backup_root = existing_notice.get("backup_path")
+    else:
+        # Only create a new backup directory when the environment or legacy settings
+        # indicate the user wants to keep a legacy settings backup.
+        try:
+            if _should_keep_legacy_backup(legacy_global_general_data):
+                backup_root = _ensureBackupDir()
+        except Exception as e:
+            print(f"Warning: Could not create legacy backup directory: {e}")
 
     for profile_name in legacy_profiles:
         legacy_profile_path = os.path.join(legacy_profiles_dir, profile_name)
