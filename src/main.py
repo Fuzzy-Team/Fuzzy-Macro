@@ -1417,16 +1417,14 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         res = macro.buffDetector.getNectar(nectar)
                         print(f"Current {nectar} Nectar: {res}%")
                         return res
-                    
+
+                    # Estimates removed; rely solely on live detection for percentages
                     def getEstimateNectarPercent(nectar):
-                        estimatedNectarPercent = 0
-                        for i in range(3):
-                            if planterData[i]["nectar"] == nectar:
-                                estimatedNectarPercent += planterData[i]["nectar_est_percent"]
-                        return estimatedNectarPercent
-                    
+                        return 0
+
                     def getTotalNectarPercent(nectar):
-                        return getCurrentNectarPercent(nectar) + getEstimateNectarPercent(nectar)
+                        # Return the detected current nectar percentage
+                        return getCurrentNectarPercent(nectar)
 
                     def getNextField(nectar):
                         availableFields = []
@@ -1520,11 +1518,12 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         # Send a nectar percentage menu so users don't have to wait for the hourly report
                         try:
                             nectar_percentages = []
+                            # Use BuffDetector to get current nectar percentages
                             for nectar_name in macroModule.nectarNames:
                                 try:
-                                    total_percent = getTotalNectarPercent(nectar_name)
+                                    total_percent = macro.buffDetector.getNectar(nectar_name)
                                 except Exception:
-                                    total_percent = getCurrentNectarPercent(nectar_name)
+                                    total_percent = 0.0
                                 nectar_percentages.append((nectar_name, total_percent))
 
                             # Format the menu
@@ -1572,7 +1571,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         nectar = macro.setdat[f"auto_priority_{i}_nectar"]
                         if nectar == "none":
                             continue
-                        currentNectarPerc = getCurrentNectarPercent(nectar)
+                        currentNectarPerc = macro.buffDetector.getNectar(nectar)
                         estimateNectarPerc = getEstimateNectarPercent(nectar) 
                         if (macro.setdat["auto_planters_collect_auto"] and (
                             (currentNectarPerc > 99) or
@@ -1649,8 +1648,12 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     
                     if plantersPlaced < maxAllowedPlanters:
                         nectarPercentages = []
+                        # Build nectar percentages using the detector
                         for nectar in macroModule.nectarFields:
-                            nectarPercentages.append((nectar, getTotalNectarPercent(nectar)))
+                            try:
+                                nectarPercentages.append((nectar, macro.buffDetector.getNectar(nectar)))
+                            except Exception:
+                                nectarPercentages.append((nectar, 0.0))
                         nectarPercentages.sort(key=lambda x: x[1])
 
                         for nectar, totalNectarPercent in nectarPercentages:
