@@ -1,4 +1,11 @@
-import pyautogui as pag
+import platform as _platform
+if _platform.system() == "Windows":
+    try:
+        import pydirectinput as pag
+    except ModuleNotFoundError:
+        import pyautogui as pag
+else:
+    import pyautogui as pag
 import time
 from pynput.mouse import Button, Controller
 
@@ -32,7 +39,25 @@ def fastClick():
     pynputMouse.release(Button.left)
 
 def scroll(clicks, pause = False):
-    pag.scroll(clicks, _pause = pause)
+    # Use the configured backend's scroll. On Windows amplify the clicks
+    # so wheel movement matches other platforms.
+    import pyautogui as pag
+    try:
+        if _platform.system() == "Windows":
+            clicks = int(clicks) * 200
+        try:
+            pag.scroll(clicks, _pause=pause)
+            return
+        except TypeError:
+            try:
+                pag.scroll(clicks)
+                return
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    raise RuntimeError("Unable to perform scroll: no suitable backend available")
 
 def getPos():
     return pag.position()
