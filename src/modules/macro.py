@@ -23,6 +23,7 @@ from modules.screen.imageSearch import *
 import webbrowser
 from pynput.keyboard import Controller
 import cv2
+from modules.screen.color_check import get_sample_colors, percent_pixels_similar_to_color
 from datetime import timedelta, datetime
 from modules.misc.imageManipulation import *
 from PIL import Image
@@ -1662,6 +1663,25 @@ class macro:
                         return
                     self.keyboard.walk("a",0.2)
             self.logger.webhook("Notice", f"Could not find cannon", "dark brown", "screen")
+            # If cannon not found, also check for full-screen light/dark mode colors
+            try:
+                percent_threshold = float(self.setdat.get("rejoin_color_percent", 0.6))
+                color_tolerance = int(self.setdat.get("rejoin_color_tolerance", 40))
+                sample_colors = get_sample_colors()
+                for col in sample_colors:
+                    pct = percent_pixels_similar_to_color(self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw, self.robloxWindow.mh, col, tolerance=color_tolerance)
+                    if pct >= percent_threshold:
+                        self.logger.webhook("", "Detected light/dark-mode screen while searching for cannon — restarting Roblox and rejoining", "dark brown", "screen")
+                        try:
+                            appManager.forceCloseApp("Roblox")
+                        except Exception:
+                            appManager.closeApp("Roblox")
+                        # give the OS a moment to close
+                        time.sleep(2)
+                        self.rejoin()
+                        return
+            except Exception:
+                pass
             self.reset(convert=False)
         else:
             self.logger.webhook("Notice", f"Failed to reach cannon too many times", "red", ping_category="ping_critical_errors")
@@ -1749,6 +1769,15 @@ class macro:
             loadStartTime = time.time()
             signUpImage = self.adjustImage("./images/menu", "signup")
             robloxHomeImage = self.adjustImage("./images/menu", "robloxhome")
+            # prepare rejoin color-based detection
+            try:
+                sample_colors = get_sample_colors()
+            except Exception:
+                sample_colors = [(250, 250, 250), (20, 20, 20)]
+            percent_threshold = float(self.setdat.get("rejoin_color_percent", 0.6))
+            sustain_seconds = int(self.setdat.get("rejoin_color_duration", 60))
+            color_tolerance = int(self.setdat.get("rejoin_color_tolerance", 40))
+            sustained_start = 0
             rejoinSuccess = True
             robloxOpenTime = 0
             while not locateImageOnScreen(sprinklerImg, self.robloxWindow.mx, self.robloxWindow.my+(self.robloxWindow.mh*3/4), self.robloxWindow.mw, self.robloxWindow.mh*1/4, 0.75) and time.time() - loadStartTime < 240:
@@ -1770,6 +1799,26 @@ class macro:
                             self.logger.webhook("","Roblox Home Page is open","brown","screen")
                             rejoinSuccess = False
                             break
+
+                # Check for sustained dominant color (light/dark) that indicates a stuck screen.
+                try:
+                    matched = False
+                    for col in sample_colors:
+                        pct = percent_pixels_similar_to_color(self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw, self.robloxWindow.mh, col, tolerance=color_tolerance)
+                        if pct >= percent_threshold:
+                            matched = True
+                            break
+                    if matched:
+                        if sustained_start == 0:
+                            sustained_start = time.time()
+                        elif time.time() - sustained_start >= sustain_seconds:
+                            self.logger.webhook("","Detected sustained screen color — retrying rejoin","dark brown","screen")
+                            rejoinSuccess = False
+                            break
+                    else:
+                        sustained_start = 0
+                except Exception:
+                    sustained_start = 0
 
                     self.setRobloxWindowInfo(setYOffset=False)
 
@@ -3412,24 +3461,63 @@ class macro:
         st = time.time()
         def updateHourlyTime():
             self.hourlyReport.addHourlyStat("misc_time", time.time()-st)
-        
+        # Determine whether planter-check retry behavior is enabled for current mode
+        try:
+            mode = int(self.setdat.get("planters_mode", 0))
+        except Exception:
+            mode = 0
 
-        for _ in range(2):
-            if self.goToPlanter(planter, field, "collect"): 
-                break
-            self.logger.webhook("",f"Unable to find Planter: {planter.title()}", "dark brown", "screen")
-            self.reset()
+        if mode == 1:
+            check_enabled = bool(self.setdat.get("manual_planters_check", False))
+        elif mode == 2:
+            check_enabled = bool(self.setdat.get("auto_planters_check", False))
         else:
+            check_enabled = False
+
+        attempts = 3 if check_enabled else 1
+
+        # normalize planter name for inventory lookup
+        name = planter.lower().replace(" ", "").replace("-", "")
+
+        for attempt in range(attempts):
+            if not self.goToPlanter(planter, field, "collect"):
+                self.logger.webhook("", f"Unable to find Planter: {planter.title()}", "dark brown", "screen")
+                self.reset()
+                # if this was the last attempt, update time and return False
+                if attempt == attempts - 1:
+                    updateHourlyTime()
+                    return False
+                continue
+
+            # Loot the planter
+            self.keyboard.press("e")
+            self.clickYes()
+            self.logger.webhook("", f"Looting: {planter.title()} planter", "bright green", "screen", ping_category="ping_conversion_events")
+            self.keyboard.multiWalk(["s","d"], 0.87)
+            self.nmLoot(9, 5, "a")
+            self.setMobTimer(field)
             updateHourlyTime()
-            return False
-        
-        self.keyboard.press("e")
-        self.clickYes()
-        self.logger.webhook("",f"Looting: {planter.title()} planter","bright green", "screen", ping_category="ping_conversion_events")
-        self.keyboard.multiWalk(["s","d"], 0.87)
-        self.nmLoot(9, 5, "a")
-        self.setMobTimer(field)
-        updateHourlyTime()
+
+            # If planter-check not enabled, we're done
+            if not check_enabled:
+                return True
+
+            # Planter-check enabled: verify the planter is now in inventory
+            # findPlanterInInventory will set self.planterCoords if found
+            self.planterCoords = None
+            self.findPlanterInInventory(name)
+            if self.planterCoords is not None:
+                # found the planter in inventory — success
+                self.logger.webhook("", f"Found {planter.title()} in inventory after collect", "bright green", "screen", ping_category="ping_conversion_events")
+                return True
+
+            # Not found: log and retry (if attempts remain)
+            self.logger.webhook("", f"Planter {planter.title()} not found in inventory after looting (attempt {attempt+1}/{attempts}), retrying.", "red", "screen")
+            self.reset()
+            time.sleep(1)
+
+        # Exhausted attempts — move on but warn the user
+        self.logger.webhook("", f"Planter {planter.title()} still not found in inventory after {attempts} attempts. Continuing.", "orange", "screen")
         return True
         
     
