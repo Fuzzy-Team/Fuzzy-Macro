@@ -472,6 +472,23 @@ def update(t="main", update_channel="stable"):
                 pass
     except Exception:
         pass
+    # Cleanup: remove helper files for the opposite platform
+    try:
+        if _IS_WINDOWS:
+            to_remove = [os.path.join(destination, 'run_macro.command'), os.path.join(destination, 'install_dependencies.command')]
+        else:
+            to_remove = [os.path.join(destination, 'run_macro.bat'), os.path.join(destination, 'install_dependencies.bat')]
+        for p in to_remove:
+            try:
+                if os.path.exists(p):
+                    if os.path.isdir(p):
+                        shutil.rmtree(p)
+                    else:
+                        os.remove(p)
+            except Exception:
+                pass
+    except Exception:
+        pass
 
     msgBox("Update success", "Update complete. You can now relaunch the macro")
     return True
