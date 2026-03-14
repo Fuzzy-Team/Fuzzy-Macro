@@ -418,6 +418,20 @@ class HourlyReport():
 
         #setup stats
         self.hourlyReportStats = {}
+        self.sessionReportStats = {}
+
+    def _defaultSessionReportStats(self):
+        return {
+            "honey_per_min": [],
+            "backpack_per_min": [],
+            "bugs": 0,
+            "quests_completed": 0,
+            "vicious_bees": 0,
+            "gathering_time": 0,
+            "converting_time": 0,
+            "bug_run_time": 0,
+            "misc_time": 0,
+        }
 
     def filterOutliers(self, values, threshold=3):
         nonZeroValues = [x for x in values if x]
@@ -557,6 +571,7 @@ class HourlyReport():
     def resetAllStats(self):
         self.hourlyReportStats["start_time"] = 0
         self.hourlyReportStats["start_honey"] = 0
+        self.sessionReportStats = self._defaultSessionReportStats()
         self.resetHourlyStats()
     
     def addHourlyStat(self, stat, value):
@@ -564,6 +579,13 @@ class HourlyReport():
             self.hourlyReportStats[stat].append(value)
         else:
             self.hourlyReportStats[stat] += value
+
+        # Keep session totals independent from hourly resets.
+        if stat in self.sessionReportStats:
+            if isinstance(self.sessionReportStats[stat], list):
+                self.sessionReportStats[stat].append(value)
+            else:
+                self.sessionReportStats[stat] += value
         self.saveHourlyReportData()
     
     def setSessionStats(self, start_honey, start_time):
@@ -575,6 +597,7 @@ class HourlyReport():
         with open("data/user/hourly_report_stats.pkl", "wb") as f:
             pickle.dump({
                 "hourlyReportStats": self.hourlyReportStats,
+                "sessionReportStats": self.sessionReportStats,
                 "uptimeBuffsValues": self.uptimeBuffsValues,
                 "buffGatherIntervals": self.buffGatherIntervals,
             }, f)
@@ -583,6 +606,7 @@ class HourlyReport():
         with open("data/user/hourly_report_stats.pkl", "rb") as f:
             data = pickle.load(f)
             self.hourlyReportStats = data["hourlyReportStats"]
+            self.sessionReportStats = data.get("sessionReportStats", self._defaultSessionReportStats())
             self.uptimeBuffsValues = data["uptimeBuffsValues"]
             self.buffGatherIntervals = data["buffGatherIntervals"]
 
