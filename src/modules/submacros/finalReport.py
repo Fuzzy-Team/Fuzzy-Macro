@@ -467,10 +467,28 @@ class FinalReport:
                     "start_time": 0,
                     "start_honey": 0
                 }
+                self.hourlyReport.sessionReportStats = {
+                    "honey_per_min": [0],
+                    "backpack_per_min": [0],
+                    "bugs": 0,
+                    "quests_completed": 0,
+                    "vicious_bees": 0,
+                    "gathering_time": 0,
+                    "converting_time": 0,
+                    "bug_run_time": 0,
+                    "misc_time": 0,
+                }
                 self.hourlyReport.uptimeBuffsValues = {}
                 self.hourlyReport.buffGatherIntervals = [0]
             except:
                 return None
+
+        sessionReportStats = getattr(self.hourlyReport, "sessionReportStats", {})
+        if sessionReportStats.get("honey_per_min"):
+            sourceStats = copy.deepcopy(sessionReportStats)
+        else:
+            # Backward compatibility for old saved data that predates sessionReportStats.
+            sourceStats = copy.deepcopy(self.hourlyReport.hourlyReportStats)
         
         # Skip buff/nectar detection since we can't access in-game data after macro stops
         # These are set to empty for final report as game is likely stopped
@@ -506,20 +524,20 @@ class FinalReport:
             planterData = ""
 
         # Ensure we have valid data
-        if not self.hourlyReport.hourlyReportStats.get("honey_per_min"):
-            self.hourlyReport.hourlyReportStats["honey_per_min"] = [0]
+        if not sourceStats.get("honey_per_min"):
+            sourceStats["honey_per_min"] = [0]
         
-        if len(self.hourlyReport.hourlyReportStats["honey_per_min"]) < 3:
-            self.hourlyReport.hourlyReportStats["honey_per_min"] = [0]*3 + self.hourlyReport.hourlyReportStats["honey_per_min"]
+        if len(sourceStats["honey_per_min"]) < 3:
+            sourceStats["honey_per_min"] = [0]*3 + sourceStats["honey_per_min"]
         
         # Filter outliers from honey data
-        self.hourlyReport.hourlyReportStats["honey_per_min"] = self.hourlyReport.filterOutliers(self.hourlyReport.hourlyReportStats["honey_per_min"])
+        sourceStats["honey_per_min"] = self.hourlyReport.filterOutliers(sourceStats["honey_per_min"])
         
         # Calculate honey/sec for the entire session
         honeyPerSec = [0]
-        if len(self.hourlyReport.hourlyReportStats["honey_per_min"]) > 0:
-            prevHoney = self.hourlyReport.hourlyReportStats["honey_per_min"][0]
-            for x in self.hourlyReport.hourlyReportStats["honey_per_min"][1:]:
+        if len(sourceStats["honey_per_min"]) > 0:
+            prevHoney = sourceStats["honey_per_min"][0]
+            for x in sourceStats["honey_per_min"][1:]:
                 if x > prevHoney:
                     # Honey gained in this minute, divided by 60 for per-second rate
                     honeyPerSec.append((x-prevHoney)/60)
@@ -528,10 +546,10 @@ class FinalReport:
                 prevHoney = x
         
         # Calculate session statistics
-        if len(set(self.hourlyReport.hourlyReportStats["honey_per_min"])) <= 1:
-            onlyValidHourlyHoney = self.hourlyReport.hourlyReportStats["honey_per_min"].copy()
+        if len(set(sourceStats["honey_per_min"])) <= 1:
+            onlyValidHourlyHoney = sourceStats["honey_per_min"].copy()
         else:
-            onlyValidHourlyHoney = [x for x in self.hourlyReport.hourlyReportStats["honey_per_min"] if x]
+            onlyValidHourlyHoney = [x for x in sourceStats["honey_per_min"] if x]
         
         # Calculate total session honey and time
         sessionHoney = 0
@@ -549,8 +567,8 @@ class FinalReport:
         validHoneyPerSec = [x for x in honeyPerSec if x > 0]
         peakHoneyRate = max(validHoneyPerSec) if validHoneyPerSec else 0
         
-        # Create a deep copy of stats to avoid modification
-        hourlyReportStats = copy.deepcopy(self.hourlyReport.hourlyReportStats)
+        # Use session-wide stats for final report cards and charts.
+        hourlyReportStats = copy.deepcopy(sourceStats)
         
         # Add session summary stats
         sessionStats = {
@@ -558,13 +576,13 @@ class FinalReport:
             "total_honey": sessionHoney,
             "avg_honey_per_hour": avgHoneyPerHour,
             "peak_honey_rate": peakHoneyRate,
-            "total_bugs": hourlyReportStats.get("bugs", 0),
-            "total_quests": hourlyReportStats.get("quests_completed", 0),
-            "total_vicious_bees": hourlyReportStats.get("vicious_bees", 0),
-            "gathering_time": hourlyReportStats.get("gathering_time", 0),
-            "converting_time": hourlyReportStats.get("converting_time", 0),
-            "bug_run_time": hourlyReportStats.get("bug_run_time", 0),
-            "misc_time": hourlyReportStats.get("misc_time", 0)
+            "total_bugs": sourceStats.get("bugs", 0),
+            "total_quests": sourceStats.get("quests_completed", 0),
+            "total_vicious_bees": sourceStats.get("vicious_bees", 0),
+            "gathering_time": sourceStats.get("gathering_time", 0),
+            "converting_time": sourceStats.get("converting_time", 0),
+            "bug_run_time": sourceStats.get("bug_run_time", 0),
+            "misc_time": sourceStats.get("misc_time", 0)
         }
 
         # Ensure uptimeBuffsValues and buffGatherIntervals exist
