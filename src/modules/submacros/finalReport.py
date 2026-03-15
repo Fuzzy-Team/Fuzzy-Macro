@@ -7,12 +7,13 @@ import pickle
 import statistics
 import math
 from modules.submacros.hourlyReport import HourlyReport, HourlyReportDrawer
+from modules.misc.settingsManager import loadFields
 
 
 class FinalReportDrawer(HourlyReportDrawer):
     """Drawer for final session reports, inherits from HourlyReportDrawer"""
     
-    def drawFinalReport(self, hourlyReportStats, sessionStats, honeyPerSec, sessionHoney, onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData, uptimeBuffsValues, buffGatherIntervals):
+    def drawFinalReport(self, hourlyReportStats, sessionStats, honeyPerSec, sessionHoney, onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData, uptimeBuffsValues, buffGatherIntervals, enabled_fields=None, field_patterns=None):
         """Draw comprehensive final report with session statistics and trends"""
         
         def getAverageBuff(buffValues):
@@ -80,11 +81,6 @@ class FinalReportDrawer(HourlyReportDrawer):
             "FINAL REPORT",
             "Session Summary",
             "Full-session performance in the same Fuzzy Macro report language.",
-            [
-                ("Runtime", sessionTimeStr, self.primarySoftColor),
-                ("Total Honey", self.millify(totalHoney), self.honeyColor),
-                ("Avg / hr", self.millify(avgHoneyPerHour), self.secondaryAccentColor),
-            ],
             accent=self.primaryColor
         )
         self.drawBrandCard(self.sidebarX, 80, self.sidebarPanelWidth, 350)
@@ -123,7 +119,7 @@ class FinalReportDrawer(HourlyReportDrawer):
         y = 980
         panelWidth = self.availableSpace
         self.drawPanel(self.leftPadding, y, panelWidth, 1120, accent=self.honeyColor, fill=self.tintedSurface(self.primaryColor, 0.1))
-        self.drawSectionHeader(
+        headerBottom = self.drawSectionHeader(
             self.leftPadding + 60,
             y + 56,
             panelWidth - 120,
@@ -141,12 +137,13 @@ class FinalReportDrawer(HourlyReportDrawer):
                 1: (*self.honeyColor, 140)
             }
         }]
-        self.drawGraph(self.leftPadding + 430, y + 960, self.availableSpace - 540, 700, mins, dataset, xLabelFunc=sessionTimeLabel, yLabelFunc=lambda i, x: self.millify(x))
+        graphTop = headerBottom + 72
+        self.drawGraph(self.leftPadding + 430, graphTop + 700, self.availableSpace - 540, 700, mins, dataset, xLabelFunc=sessionTimeLabel, yLabelFunc=lambda i, x: self.millify(x))
 
         #section 3: backpack utilization over session
         y = 2160
         self.drawPanel(self.leftPadding, y, panelWidth, 1120, accent=self.primaryColor, fill=self.tintedSurface(self.primaryColor, 0.08))
-        self.drawSectionHeader(
+        headerBottom = self.drawSectionHeader(
             self.leftPadding + 60,
             y + 56,
             panelWidth - 120,
@@ -174,12 +171,13 @@ class FinalReportDrawer(HourlyReportDrawer):
                 1: (255, 65, 84, 90),
             }
         }]
-        self.drawGraph(self.leftPadding + 430, y + 960, self.availableSpace - 540, 700, mins, dataset, maxY=100, xLabelFunc=sessionTimeLabel, yLabelFunc=lambda i, x: f"{int(x)}%")
+        graphTop = headerBottom + 72
+        self.drawGraph(self.leftPadding + 430, graphTop + 700, self.availableSpace - 540, 700, mins, dataset, maxY=100, xLabelFunc=sessionTimeLabel, yLabelFunc=lambda i, x: f"{int(x)}%")
 
         #section 4: buff uptime
         y = 3340
         self.drawPanel(self.leftPadding, y, panelWidth, 4300, accent=self.secondaryAccentColor, fill=self.tintedSurface(self.secondaryAccentColor, 0.06))
-        self.drawSectionHeader(
+        headerBottom = self.drawSectionHeader(
             self.leftPadding + 60,
             y + 56,
             panelWidth - 120,
@@ -188,7 +186,7 @@ class FinalReportDrawer(HourlyReportDrawer):
             meta="Session average",
             accent=self.secondaryAccentColor
         )
-        y += 620
+        y = headerBottom + 360
         dataset = [
         {
             "data": uptimeBuffsValues.get("blue_boost", [0]*600),
@@ -332,8 +330,8 @@ class FinalReportDrawer(HourlyReportDrawer):
         #side bar - Session Summary
         y2 = 470
         self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, 1080, accent=self.primaryColor, fill=self.tintedSurface(self.primaryColor, 0.08))
-        self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Session Snapshot", "High-level totals for the completed run.", accent=self.primarySoftColor)
-        y2 += 198
+        headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Session Snapshot", "High-level totals for the completed run.", accent=self.primarySoftColor)
+        y2 = headerBottom + 18
 
         totalSessionTime = sessionStats.get("total_session_time", 0)
         self.drawSessionStat(y2, "time_icon", "Total Runtime", self.displayTime(totalSessionTime, ['d','h','m']), self.bodyColor)
@@ -350,9 +348,10 @@ class FinalReportDrawer(HourlyReportDrawer):
         self.drawSessionStat(y2, "average_icon", avgSidebarLabel, self.millify(avgHoneyPerHour), self.secondaryAccentColor)
 
         y2 += 300
-        self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, 1360, accent=self.secondaryAccentColor, fill=self.tintedSurface(self.secondaryAccentColor, 0.06))
-        self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Time Breakdown", "Where the macro spent the session.", accent=self.secondaryAccentColor)
-        y2 += 194
+        taskPanelHeight = self.getTaskTimesPanelHeight(4)
+        self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, taskPanelHeight, accent=self.secondaryAccentColor, fill=self.tintedSurface(self.secondaryAccentColor, 0.06))
+        headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Time Breakdown", "Where the macro spent the session.", accent=self.secondaryAccentColor)
+        y2 = headerBottom + 18
 
         gatherTime = sessionStats.get("gathering_time", 0)
         convertTime = sessionStats.get("converting_time", 0)
@@ -396,18 +395,33 @@ class FinalReportDrawer(HourlyReportDrawer):
             planterRows = max(1, math.ceil(len(planterNames) / 2))
             planterHeight = planterRows * 520 + max(0, planterRows - 1) * 36
             self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, planterHeight + 250, accent=self.primaryColor, fill=self.tintedSurface(self.primaryColor, 0.07))
-            self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Planters", "Current placements carried into the final snapshot.", accent=self.primaryColor)
-            self.drawPlanters(y2 + 188, planterNames, planterTimes, planterFields)
+            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Planters", "Current placements carried into the final snapshot.", accent=self.primaryColor)
+            self.drawPlanters(headerBottom + 18, planterNames, planterTimes, planterFields)
             y2 += planterHeight + 290
         
-        self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, 360, accent=self.secondaryAccentColor, fill=self.tintedSurface(self.secondaryAccentColor, 0.05))
-        self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Buffs", "Final captured stack values.", accent=self.secondaryAccentColor)
-        self.drawBuffs(y2 + 150, buffQuantity)
+        buffPanelHeight = 700
+        sectionGap = 70
+        self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, buffPanelHeight, accent=self.secondaryAccentColor, fill=self.tintedSurface(self.secondaryAccentColor, 0.05))
+        headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Buffs", "Final captured stack values.", accent=self.secondaryAccentColor)
+        self.drawBuffs(headerBottom + 30, buffQuantity)
 
-        y2 += 430
-        self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, 520, accent=self.honeyColor, fill=self.tintedSurface(self.honeyColor, 0.05))
-        self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Nectars", "Session-end field nectar percentages.", accent=self.honeyColor)
-        self.drawNectars(y2 + 162, nectarQuantity)
+        y2 += buffPanelHeight + sectionGap
+        nectarPanelHeight = 820
+        self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, nectarPanelHeight, accent=self.honeyColor, fill=self.tintedSurface(self.honeyColor, 0.05))
+        headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Nectars", "Session-end field nectar percentages.", accent=self.honeyColor)
+        self.drawNectars(headerBottom + 38, nectarQuantity)
+
+        if enabled_fields is None:
+            enabled_fields = []
+        if field_patterns is None:
+            field_patterns = {}
+
+        if enabled_fields:
+            y2 += nectarPanelHeight + sectionGap
+            fieldPanelHeight = self.getFieldsPanelHeight(len(enabled_fields))
+            self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, fieldPanelHeight, accent=self.primarySoftColor, fill=self.tintedSurface(self.primaryColor, 0.05))
+            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Fields", "Enabled fields and their active patterns.", accent=self.primarySoftColor)
+            self.drawFields(headerBottom + 24, enabled_fields, field_patterns)
 
         return self.canvas
 
@@ -699,13 +713,36 @@ class FinalReport:
                 600
             )
 
+        # Determine enabled fields and their patterns from profile settings.
+        enabled_fields = []
+        field_patterns = {}
+        try:
+            profile_fields_settings = loadFields()
+        except Exception:
+            profile_fields_settings = {}
+
+        fields_list = setdat.get("fields", []) if isinstance(setdat, dict) else []
+        fields_enabled = setdat.get("fields_enabled", []) if isinstance(setdat, dict) else []
+        if len(fields_enabled) < len(fields_list):
+            fields_enabled += [False] * (len(fields_list) - len(fields_enabled))
+
+        for i, fname in enumerate(fields_list):
+            try:
+                if fields_enabled[i]:
+                    enabled_fields.append(fname)
+                    pattern = profile_fields_settings.get(fname, {}).get("shape") if isinstance(profile_fields_settings, dict) else None
+                    field_patterns[fname] = pattern or "unknown"
+            except Exception:
+                continue
+
         # Draw the comprehensive final report
         try:
             canvas = self.drawer.drawFinalReport(
                 hourlyReportStats, sessionStats, honeyPerSec, 
                 sessionHoney, onlyValidHourlyHoney, 
                 buffQuantity, nectarQuantity, planterData, 
-                self.hourlyReport.sessionUptimeBuffsValues, self.hourlyReport.sessionBuffGatherIntervals
+                self.hourlyReport.sessionUptimeBuffsValues, self.hourlyReport.sessionBuffGatherIntervals,
+                enabled_fields, field_patterns
             )
             
             # Resize for better quality
