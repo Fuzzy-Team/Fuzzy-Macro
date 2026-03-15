@@ -1320,8 +1320,8 @@ class HourlyReportDrawer:
     def drawSessionStat(self, y, imageName, label, value, valueColor):
         sectionX = self.sidebarX + getattr(self, "sidebarInnerInset", 0)
         sectionWidth = getattr(self, "sidebarContentWidth", self.sidebarWidth - self.sidebarPadding * 2)
-        rowHeight = 210
-        imgContainerDimension = 140
+        rowHeight = 234
+        imgContainerDimension = 152
         accent = self.toRgb(valueColor)
 
         self.draw.rounded_rectangle(
@@ -1332,33 +1332,33 @@ class HourlyReportDrawer:
             width=3
         )
         self.draw.rounded_rectangle(
-            (sectionX + 30, y + 35, sectionX + 30 + imgContainerDimension, y + 35 + imgContainerDimension),
+            (sectionX + 30, y + 41, sectionX + 30 + imgContainerDimension, y + 41 + imgContainerDimension),
             radius=36,
             fill=self.withAlpha(self.surfaceInsetColor, 235)
         )
         img = Image.open(f"{self.assetPath}/{imageName}.png").convert("RGBA")
         width, height = img.size
-        imageWidth = 88
+        imageWidth = 96
         imageHeight = int(height*(imageWidth/width))
         img = img.resize((imageWidth, imageHeight))
         self.canvas.paste(
             img,
-            (sectionX + 30 + (imgContainerDimension-imageWidth)//2, y + 35 + (imgContainerDimension-imageHeight)//2),
+            (sectionX + 30 + (imgContainerDimension-imageWidth)//2, y + 41 + (imgContainerDimension-imageHeight)//2),
             img
         )
 
-        labelFont = self.getFont("medium", 46)
-        valueFont = self.getFont("semibold", 60)
-        textX = sectionX + 204
-        self.draw.text((textX, y + 50), label, self.mutedColor, font=labelFont)
+        labelFont = self.getFont("medium", 50)
+        valueFont = self.getFont("semibold", 66)
+        textX = sectionX + 222
+        self.draw.text((textX, y + 54), label, self.mutedColor, font=labelFont)
         bbox = self.draw.textbbox((0, 0), value, font=valueFont)
         textWidth = bbox[2] - bbox[0]
-        self.draw.text((sectionX + sectionWidth - textWidth - 30, y + 118), str(value), accent, font=valueFont)
+        self.draw.text((sectionX + sectionWidth - textWidth - 30, y + 132), str(value), accent, font=valueFont)
 
     def drawTaskTimes(self, y, datasets, totalTime=None):
-        legendIconDimension = 90
-        labelFont = self.getFont("medium", 54)
-        valueFont = self.getFont("semibold", 56)
+        legendIconDimension = 102
+        labelFont = self.getFont("medium", 58)
+        valueFont = self.getFont("semibold", 60)
         x = self.sidebarX + getattr(self, "sidebarInnerInset", 0)
         sectionWidth = getattr(self, "sidebarContentWidth", self.sidebarWidth - self.sidebarPadding * 2)
         totalData = totalTime if totalTime is not None else sum([x["data"] for x in datasets])
@@ -1371,35 +1371,35 @@ class HourlyReportDrawer:
             timeText = self.displayTime(dataset["data"])
 
             self.draw.rounded_rectangle(
-                (x, y, x + sectionWidth, y + 148),
+                (x, y, x + sectionWidth, y + 160),
                 radius=38,
                 fill=self.withAlpha(self.surfaceRaisedColor, 200),
                 outline=self.withAlpha(color, 60),
                 width=2
             )
             self.draw.rounded_rectangle((x + 26, y + 29, x + 26 + legendIconDimension, y + 29 + legendIconDimension), fill=color, radius=24)
-            self.draw.text((x + legendIconDimension + 62, y + 28), dataset["label"], self.bodyColor, font=labelFont)
+            self.draw.text((x + legendIconDimension + 68, y + 30), dataset["label"], self.bodyColor, font=labelFont)
 
             percentBox = self.draw.textbbox((0, 0), percentText, font=valueFont)
             percentWidth = percentBox[2] - percentBox[0]
             percentX = x + sectionWidth - percentWidth - 30
-            self.draw.text((percentX, y + 42), percentText, self.mutedColor, font=valueFont)
+            self.draw.text((percentX, y + 46), percentText, self.mutedColor, font=valueFont)
 
             timeBox = self.draw.textbbox((0, 0), timeText, font=valueFont)
             timeWidth = timeBox[2] - timeBox[0]
             timeX = percentX - timeWidth - 60
-            self.draw.text((timeX, y + 42), timeText, color, font=valueFont)
-            y += 176
+            self.draw.text((timeX, y + 46), timeText, color, font=valueFont)
+            y += 190
 
-        y += 140
-        doughnutChartSize = 620
+        y += 156
+        doughnutChartSize = 680
         chartX = x + (sectionWidth - doughnutChartSize) // 2
         self.drawDoughnutChart(chartX, y, doughnutChartSize, datasets, holeRatio=0.44)
-        return (len(datasets) * 176) + 140 + doughnutChartSize
+        return (len(datasets) * 190) + 156 + doughnutChartSize
 
     def getTaskTimesPanelHeight(self, datasetCount, headerHeight=188, bottomPadding=70):
-        rowsHeight = datasetCount * 176
-        chartBlockHeight = 140 + 620
+        rowsHeight = datasetCount * 190
+        chartBlockHeight = 156 + 680
         return headerHeight + rowsHeight + chartBlockHeight + bottomPadding
 
     def drawPlanters(self, y, planterNames, planterTimes, planterFields):
@@ -1694,17 +1694,17 @@ class HourlyReportDrawer:
 
     def getSidebarMetricPanelHeight(self, itemCount, columns=2, headerHeight=188, bottomPadding=64):
         rows = max(1, math.ceil(max(itemCount, 1) / columns))
-        return headerHeight + rows * 274 + max(0, rows - 1) * 30 + bottomPadding
+        return headerHeight + rows * 308 + max(0, rows - 1) * 34 + bottomPadding
 
     def drawSidebarMetricGrid(self, y, items, columns=2):
         sectionX = self.sidebarX + getattr(self, "sidebarInnerInset", 0)
         sectionWidth = getattr(self, "sidebarContentWidth", self.sidebarWidth - self.sidebarPadding * 2)
         cardGap = 28
-        rowGap = 30
+        rowGap = 34
         cardWidth = (sectionWidth - cardGap * (columns - 1)) // columns
-        cardHeight = 244
-        labelFont = self.getFont("medium", 30)
-        valueFont = self.getFont("semibold", 54)
+        cardHeight = 274
+        labelFont = self.getFont("medium", 34)
+        valueFont = self.getFont("semibold", 60)
 
         for i, item in enumerate(items):
             accent = self.toRgb(item.get("color", self.primaryColor))
@@ -1719,26 +1719,26 @@ class HourlyReportDrawer:
                 width=3
             )
             self.draw.rounded_rectangle(
-                (cardX + 24, cardY + 24, cardX + 126, cardY + 126),
+                (cardX + 24, cardY + 24, cardX + 136, cardY + 136),
                 radius=28,
                 fill=self.withAlpha(self.surfaceInsetColor, 235)
             )
 
             img = Image.open(f"{self.assetPath}/{item['icon']}.png").convert("RGBA")
             width, height = img.size
-            imageHeight = 70
+            imageHeight = 78
             imageWidth = int(width * (imageHeight / height))
             img = img.resize((imageWidth, imageHeight), Image.LANCZOS)
             self.canvas.paste(
                 img,
-                (cardX + 75 - imageWidth // 2, cardY + 75 - imageHeight // 2),
+                (cardX + 80 - imageWidth // 2, cardY + 80 - imageHeight // 2),
                 img
             )
 
             label = self.truncateText(item.get("label", ""), labelFont, cardWidth - 58)
             value = str(item.get("value", "0"))
-            self.draw.text((cardX + 24, cardY + 148), label, fill=self.mutedColor, font=labelFont)
-            self.draw.text((cardX + 24, cardY + 184), value, fill=accent, font=valueFont)
+            self.draw.text((cardX + 24, cardY + 162), label, fill=self.mutedColor, font=labelFont)
+            self.draw.text((cardX + 24, cardY + 206), value, fill=accent, font=valueFont)
 
     def getQuestPanelHeight(self, questCount, headerHeight=188, bottomPadding=56):
         visibleCount = max(1, min(max(questCount, 0), 6))
@@ -1847,16 +1847,16 @@ class HourlyReportDrawer:
 
     def getQuestSummaryPanelHeight(self, groupCount, headerHeight=188, bottomPadding=64):
         visibleCount = max(1, max(groupCount, 0))
-        summaryHeight = 206
-        rowHeight = 138
-        rowGap = 24
+        summaryHeight = 228
+        rowHeight = 154
+        rowGap = 26
         return headerHeight + summaryHeight + 52 + visibleCount * rowHeight + max(0, visibleCount - 1) * rowGap + bottomPadding
 
     def drawQuestSummary(self, y, questGroups, accent=(103, 253, 153), emptyMessage="No quest turn-ins recorded yet."):
         sectionX = self.sidebarX + getattr(self, "sidebarInnerInset", 0)
         sectionWidth = getattr(self, "sidebarContentWidth", self.sidebarWidth - self.sidebarPadding * 2)
         accent = self.toRgb(accent)
-        summaryHeight = 206
+        summaryHeight = 228
 
         self.draw.rounded_rectangle(
             (sectionX, y, sectionX + sectionWidth, y + summaryHeight),
@@ -1866,24 +1866,24 @@ class HourlyReportDrawer:
             width=3
         )
         self.draw.rounded_rectangle(
-            (sectionX + 28, y + 36, sectionX + 148, y + 156),
+            (sectionX + 28, y + 38, sectionX + 156, y + 166),
             radius=30,
             fill=self.withAlpha(self.surfaceInsetColor, 235)
         )
-        img = Image.open(f"{self.assetPath}/quest_icon.png").convert("RGBA").resize((82, 82), Image.LANCZOS)
-        self.canvas.paste(img, (sectionX + 47, y + 55), img)
+        img = Image.open(f"{self.assetPath}/quest_icon.png").convert("RGBA").resize((90, 90), Image.LANCZOS)
+        self.canvas.paste(img, (sectionX + 47, y + 57), img)
 
-        labelFont = self.getFont("medium", 34)
-        valueFont = self.getFont("semibold", 64)
+        labelFont = self.getFont("medium", 38)
+        valueFont = self.getFont("semibold", 70)
         totalCount = sum(count for _, count in questGroups)
-        self.draw.text((sectionX + 184, y + 48), "Quest Turn-Ins", fill=self.mutedColor, font=labelFont)
-        self.draw.text((sectionX + 184, y + 96), str(totalCount), fill=accent, font=valueFont)
+        self.draw.text((sectionX + 196, y + 52), "Quest Turn-Ins", fill=self.mutedColor, font=labelFont)
+        self.draw.text((sectionX + 196, y + 104), str(totalCount), fill=accent, font=valueFont)
 
-        rowFont = self.getFont("medium", 34)
-        valueRowFont = self.getFont("semibold", 38)
-        pillFont = self.getFont("semibold", 26)
-        rowHeight = 138
-        rowGap = 24
+        rowFont = self.getFont("medium", 38)
+        valueRowFont = self.getFont("semibold", 42)
+        pillFont = self.getFont("semibold", 30)
+        rowHeight = 154
+        rowGap = 26
         contentY = y + summaryHeight + 52
         visibleGroups = list(questGroups)
         if not visibleGroups:
@@ -1902,7 +1902,7 @@ class HourlyReportDrawer:
             pillText = owner if count else "-"
             pillWidth, pillHeight = self.drawChip(
                 sectionX + 24,
-                rowY + 34,
+                rowY + 38,
                 self.truncateText(pillText, pillFont, sectionWidth - 270),
                 fill=self.withAlpha(self.tintedSurface(accent, 0.25), 235),
                 textColor=accent,
@@ -1916,10 +1916,10 @@ class HourlyReportDrawer:
                 valueBox = self.draw.textbbox((0, 0), valueText, font=valueRowFont)
                 valueWidth = valueBox[2] - valueBox[0]
                 valueX = sectionX + sectionWidth - valueWidth - 28
-                self.draw.text((valueX, rowY + 40), valueText, fill=self.bodyColor, font=valueRowFont)
-                self.draw.text((valueX - 102, rowY + 48), "done", fill=self.mutedColor, font=rowFont)
+                self.draw.text((valueX, rowY + 46), valueText, fill=self.bodyColor, font=valueRowFont)
+                self.draw.text((valueX - 114, rowY + 54), "done", fill=self.mutedColor, font=rowFont)
             else:
-                self.draw.text((sectionX + 24, rowY + pillHeight + 46), owner, fill=self.mutedColor, font=rowFont)
+                self.draw.text((sectionX + 24, rowY + pillHeight + 50), owner, fill=self.mutedColor, font=rowFont)
 
     def drawHourlyReport(self, hourlyReportStats, sessionTime, honeyPerMin, sessionHoney, honeyThisHour, onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData, uptimeBuffsValues, buffGatherIntervals, questCompletions=None, enabled_fields=None, field_patterns=None):
 
