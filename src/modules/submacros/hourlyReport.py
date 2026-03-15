@@ -421,6 +421,8 @@ class HourlyReport():
         self.sessionReportStats = {}
         self.sessionUptimeBuffsValues = {}
         self.sessionBuffGatherIntervals = []
+        self.latestBuffQuantity = []
+        self.latestNectarQuantity = []
 
     def _defaultSessionReportStats(self):
         return {
@@ -494,6 +496,8 @@ class HourlyReport():
     def generateHourlyReport(self, setdat):
         buffQuantity = self.buffDetector.getBuffsWithImage(self.hourBuffs)
         nectarQuantity = self.buffDetector.getNectars()
+        self.latestBuffQuantity = list(buffQuantity)
+        self.latestNectarQuantity = list(nectarQuantity)
         #mssScreenshot(save=True)
 
         #get the hourly report data
@@ -606,6 +610,8 @@ class HourlyReport():
         self.sessionReportStats = self._defaultSessionReportStats()
         self.sessionUptimeBuffsValues = self._defaultSessionUptimeBuffs()
         self.sessionBuffGatherIntervals = []
+        self.latestBuffQuantity = []
+        self.latestNectarQuantity = []
         self.resetHourlyStats()
     
     def addHourlyStat(self, stat, value):
@@ -636,6 +642,8 @@ class HourlyReport():
                 "buffGatherIntervals": self.buffGatherIntervals,
                 "sessionUptimeBuffsValues": self.sessionUptimeBuffsValues,
                 "sessionBuffGatherIntervals": self.sessionBuffGatherIntervals,
+                "latestBuffQuantity": self.latestBuffQuantity,
+                "latestNectarQuantity": self.latestNectarQuantity,
             }, f)
     
     def loadHourlyReportData(self):
@@ -647,6 +655,8 @@ class HourlyReport():
             self.buffGatherIntervals = data.get("buffGatherIntervals", [0]*600)
             self.sessionUptimeBuffsValues = data.get("sessionUptimeBuffsValues", self._defaultSessionUptimeBuffs())
             self.sessionBuffGatherIntervals = data.get("sessionBuffGatherIntervals", [])
+            self.latestBuffQuantity = data.get("latestBuffQuantity", [])
+            self.latestNectarQuantity = data.get("latestNectarQuantity", [])
 
 
 class HourlyReportDrawer:

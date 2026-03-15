@@ -628,10 +628,17 @@ class FinalReport:
             # Backward compatibility for old saved data that predates sessionReportStats.
             sourceStats = copy.deepcopy(self.hourlyReport.hourlyReportStats)
         
-        # Skip buff/nectar detection since we can't access in-game data after macro stops
-        # These are set to empty for final report as game is likely stopped
-        buffQuantity = [0] * len(self.hourlyReport.hourBuffs)
-        nectarQuantity = [0, 0, 0, 0, 0]
+        # Use the most recent values captured by the hourly report instead of live detection.
+        buffQuantity = list(getattr(self.hourlyReport, "latestBuffQuantity", []))
+        nectarQuantity = list(getattr(self.hourlyReport, "latestNectarQuantity", []))
+        if len(buffQuantity) < len(self.hourlyReport.hourBuffs):
+            buffQuantity += [0] * (len(self.hourlyReport.hourBuffs) - len(buffQuantity))
+        else:
+            buffQuantity = buffQuantity[:len(self.hourlyReport.hourBuffs)]
+        if len(nectarQuantity) < 5:
+            nectarQuantity += [0] * (5 - len(nectarQuantity))
+        else:
+            nectarQuantity = nectarQuantity[:5]
 
         # Get planter data
         planterData = ""
