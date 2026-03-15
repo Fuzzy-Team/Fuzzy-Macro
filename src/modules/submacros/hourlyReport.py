@@ -421,6 +421,8 @@ class HourlyReport():
         self.sessionReportStats = {}
         self.sessionUptimeBuffsValues = {}
         self.sessionBuffGatherIntervals = []
+        self.hourlyQuestCompletions = []
+        self.sessionQuestCompletions = []
         self.latestBuffQuantity = []
         self.latestNectarQuantity = []
 
@@ -469,6 +471,23 @@ class HourlyReport():
         if not hasattr(self, "sessionBuffGatherIntervals") or self.sessionBuffGatherIntervals is None:
             self.sessionBuffGatherIntervals = []
         self.sessionBuffGatherIntervals.append(1 if isGathering else 0)
+
+    def recordQuestCompletion(self, questTitle=None, questGiver=None):
+        questTitle = str(questTitle or "").strip()
+        questGiver = str(questGiver or "").strip()
+
+        if questTitle and questGiver:
+            label = f"{questGiver.title()}: {questTitle}"
+        elif questTitle:
+            label = questTitle
+        elif questGiver:
+            label = f"{questGiver.title()} Quest"
+        else:
+            label = "Quest Completed"
+
+        self.hourlyQuestCompletions.append(label)
+        self.sessionQuestCompletions.append(label)
+        self.saveHourlyReportData()
 
     def filterOutliers(self, values, threshold=3):
         nonZeroValues = [x for x in values if x]
@@ -581,6 +600,7 @@ class HourlyReport():
                                                           sessionHoney, honeyThisHour, onlyValidHourlyHoney, 
                                                           buffQuantity, nectarQuantity, planterData, 
                                                           self.uptimeBuffsValues, self.buffGatherIntervals,
+                                                          getattr(self, "hourlyQuestCompletions", []),
                                                           enabled_fields, field_patterns)
         w, h = canvas.size
         canvas = canvas.resize((int(w*1.2), int(h*1.2))) 
@@ -601,6 +621,7 @@ class HourlyReport():
 
         self.uptimeBuffsValues = self._defaultHourlyUptimeBuffs()
         self.buffGatherIntervals = [0]*600
+        self.hourlyQuestCompletions = []
 
         self.saveHourlyReportData()
     
@@ -610,6 +631,8 @@ class HourlyReport():
         self.sessionReportStats = self._defaultSessionReportStats()
         self.sessionUptimeBuffsValues = self._defaultSessionUptimeBuffs()
         self.sessionBuffGatherIntervals = []
+        self.hourlyQuestCompletions = []
+        self.sessionQuestCompletions = []
         self.latestBuffQuantity = []
         self.latestNectarQuantity = []
         self.resetHourlyStats()
@@ -642,6 +665,8 @@ class HourlyReport():
                 "buffGatherIntervals": self.buffGatherIntervals,
                 "sessionUptimeBuffsValues": self.sessionUptimeBuffsValues,
                 "sessionBuffGatherIntervals": self.sessionBuffGatherIntervals,
+                "hourlyQuestCompletions": self.hourlyQuestCompletions,
+                "sessionQuestCompletions": self.sessionQuestCompletions,
                 "latestBuffQuantity": self.latestBuffQuantity,
                 "latestNectarQuantity": self.latestNectarQuantity,
             }, f)
@@ -655,6 +680,8 @@ class HourlyReport():
             self.buffGatherIntervals = data.get("buffGatherIntervals", [0]*600)
             self.sessionUptimeBuffsValues = data.get("sessionUptimeBuffsValues", self._defaultSessionUptimeBuffs())
             self.sessionBuffGatherIntervals = data.get("sessionBuffGatherIntervals", [])
+            self.hourlyQuestCompletions = data.get("hourlyQuestCompletions", [])
+            self.sessionQuestCompletions = data.get("sessionQuestCompletions", [])
             self.latestBuffQuantity = data.get("latestBuffQuantity", [])
             self.latestNectarQuantity = data.get("latestNectarQuantity", [])
 
@@ -677,11 +704,12 @@ class HourlyReportDrawer:
         self.mutedColor = (194, 179, 164)
         self.subtleColor = (152, 138, 124)
         self.gridColor = (88, 72, 60)
-        self.canvasSize = (6400, 8000)
+        self.canvasSize = (6400, 9200)
         self.sidebarWidth = 1900
         self.leftPadding = 150
         self.availableSpace = self.canvasSize[0] - self.sidebarWidth - self.leftPadding*2
         self.time_format = time_format
+        self.fontScale = 1.1
         self.hour = datetime.now().hour
         self.sideBarBackground = (25, 21, 19)
         if self.hour == 0:
@@ -746,7 +774,8 @@ class HourlyReportDrawer:
         return ' '.join(result)
         
     def getFont(self, weight, fontSize):
-        return ImageFont.truetype(f"hourly_report/Inter/static/Inter_18pt-{weight.title()}.ttf", fontSize)
+        scaledSize = max(1, int(round(fontSize * self.fontScale)))
+        return ImageFont.truetype(f"hourly_report/Inter/static/Inter_18pt-{weight.title()}.ttf", scaledSize)
 
     def toRgb(self, color):
         if isinstance(color, tuple):
@@ -1327,9 +1356,9 @@ class HourlyReportDrawer:
         self.draw.text((sectionX + sectionWidth - textWidth - 30, y + 118), str(value), accent, font=valueFont)
 
     def drawTaskTimes(self, y, datasets, totalTime=None):
-        legendIconDimension = 80
-        labelFont = self.getFont("medium", 52)
-        valueFont = self.getFont("semibold", 52)
+        legendIconDimension = 90
+        labelFont = self.getFont("medium", 54)
+        valueFont = self.getFont("semibold", 56)
         x = self.sidebarX + getattr(self, "sidebarInnerInset", 0)
         sectionWidth = getattr(self, "sidebarContentWidth", self.sidebarWidth - self.sidebarPadding * 2)
         totalData = totalTime if totalTime is not None else sum([x["data"] for x in datasets])
@@ -1342,35 +1371,35 @@ class HourlyReportDrawer:
             timeText = self.displayTime(dataset["data"])
 
             self.draw.rounded_rectangle(
-                (x, y, x + sectionWidth, y + 132),
+                (x, y, x + sectionWidth, y + 148),
                 radius=38,
                 fill=self.withAlpha(self.surfaceRaisedColor, 200),
                 outline=self.withAlpha(color, 60),
                 width=2
             )
-            self.draw.rounded_rectangle((x + 26, y + 26, x + 26 + legendIconDimension, y + 26 + legendIconDimension), fill=color, radius=24)
-            self.draw.text((x + legendIconDimension + 62, y + 24), dataset["label"], self.bodyColor, font=labelFont)
+            self.draw.rounded_rectangle((x + 26, y + 29, x + 26 + legendIconDimension, y + 29 + legendIconDimension), fill=color, radius=24)
+            self.draw.text((x + legendIconDimension + 62, y + 28), dataset["label"], self.bodyColor, font=labelFont)
 
             percentBox = self.draw.textbbox((0, 0), percentText, font=valueFont)
             percentWidth = percentBox[2] - percentBox[0]
             percentX = x + sectionWidth - percentWidth - 30
-            self.draw.text((percentX, y + 38), percentText, self.mutedColor, font=valueFont)
+            self.draw.text((percentX, y + 42), percentText, self.mutedColor, font=valueFont)
 
             timeBox = self.draw.textbbox((0, 0), timeText, font=valueFont)
             timeWidth = timeBox[2] - timeBox[0]
             timeX = percentX - timeWidth - 60
-            self.draw.text((timeX, y + 38), timeText, color, font=valueFont)
-            y += 160
+            self.draw.text((timeX, y + 42), timeText, color, font=valueFont)
+            y += 176
 
-        y += 120
-        doughnutChartSize = 560
+        y += 140
+        doughnutChartSize = 620
         chartX = x + (sectionWidth - doughnutChartSize) // 2
         self.drawDoughnutChart(chartX, y, doughnutChartSize, datasets, holeRatio=0.44)
-        return (len(datasets) * 160) + 120 + doughnutChartSize
+        return (len(datasets) * 176) + 140 + doughnutChartSize
 
     def getTaskTimesPanelHeight(self, datasetCount, headerHeight=188, bottomPadding=70):
-        rowsHeight = datasetCount * 160
-        chartBlockHeight = 120 + 560
+        rowsHeight = datasetCount * 176
+        chartBlockHeight = 140 + 620
         return headerHeight + rowsHeight + chartBlockHeight + bottomPadding
 
     def drawPlanters(self, y, planterNames, planterTimes, planterFields):
@@ -1647,7 +1676,252 @@ class HourlyReportDrawer:
         rows = max(1, math.ceil(max(len(enabled_fields), 1) / 2))
         return rows * cardHeight + max(0, rows - 1) * 30
 
-    def drawHourlyReport(self, hourlyReportStats, sessionTime, honeyPerMin, sessionHoney, honeyThisHour, onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData, uptimeBuffsValues, buffGatherIntervals, enabled_fields=None, field_patterns=None):
+    def truncateText(self, text, font, maxWidth):
+        text = str(text or "")
+        if not text:
+            return text
+        if self.draw.textbbox((0, 0), text, font=font)[2] <= maxWidth:
+            return text
+
+        ellipsis = "..."
+        trimmed = text
+        while trimmed:
+            candidate = trimmed.rstrip() + ellipsis
+            if self.draw.textbbox((0, 0), candidate, font=font)[2] <= maxWidth:
+                return candidate
+            trimmed = trimmed[:-1]
+        return ellipsis
+
+    def getSidebarMetricPanelHeight(self, itemCount, columns=2, headerHeight=188, bottomPadding=64):
+        rows = max(1, math.ceil(max(itemCount, 1) / columns))
+        return headerHeight + rows * 274 + max(0, rows - 1) * 30 + bottomPadding
+
+    def drawSidebarMetricGrid(self, y, items, columns=2):
+        sectionX = self.sidebarX + getattr(self, "sidebarInnerInset", 0)
+        sectionWidth = getattr(self, "sidebarContentWidth", self.sidebarWidth - self.sidebarPadding * 2)
+        cardGap = 28
+        rowGap = 30
+        cardWidth = (sectionWidth - cardGap * (columns - 1)) // columns
+        cardHeight = 244
+        labelFont = self.getFont("medium", 30)
+        valueFont = self.getFont("semibold", 54)
+
+        for i, item in enumerate(items):
+            accent = self.toRgb(item.get("color", self.primaryColor))
+            cardX = sectionX + (i % columns) * (cardWidth + cardGap)
+            cardY = y + (i // columns) * (cardHeight + rowGap)
+
+            self.draw.rounded_rectangle(
+                (cardX, cardY, cardX + cardWidth, cardY + cardHeight),
+                radius=38,
+                fill=self.withAlpha(self.surfaceRaisedColor, 210),
+                outline=self.withAlpha(accent, 95),
+                width=3
+            )
+            self.draw.rounded_rectangle(
+                (cardX + 24, cardY + 24, cardX + 126, cardY + 126),
+                radius=28,
+                fill=self.withAlpha(self.surfaceInsetColor, 235)
+            )
+
+            img = Image.open(f"{self.assetPath}/{item['icon']}.png").convert("RGBA")
+            width, height = img.size
+            imageHeight = 70
+            imageWidth = int(width * (imageHeight / height))
+            img = img.resize((imageWidth, imageHeight), Image.LANCZOS)
+            self.canvas.paste(
+                img,
+                (cardX + 75 - imageWidth // 2, cardY + 75 - imageHeight // 2),
+                img
+            )
+
+            label = self.truncateText(item.get("label", ""), labelFont, cardWidth - 58)
+            value = str(item.get("value", "0"))
+            self.draw.text((cardX + 24, cardY + 148), label, fill=self.mutedColor, font=labelFont)
+            self.draw.text((cardX + 24, cardY + 184), value, fill=accent, font=valueFont)
+
+    def getQuestPanelHeight(self, questCount, headerHeight=188, bottomPadding=56):
+        visibleCount = max(1, min(max(questCount, 0), 6))
+        summaryHeight = 180
+        rowHeight = 124
+        rowGap = 20
+        return headerHeight + summaryHeight + 44 + visibleCount * rowHeight + max(0, visibleCount - 1) * rowGap + bottomPadding
+
+    def drawQuestList(self, y, quests, accent=(103, 253, 153), emptyMessage="No quest turn-ins recorded yet."):
+        sectionX = self.sidebarX + getattr(self, "sidebarInnerInset", 0)
+        sectionWidth = getattr(self, "sidebarContentWidth", self.sidebarWidth - self.sidebarPadding * 2)
+        accent = self.toRgb(accent)
+        summaryHeight = 180
+
+        self.draw.rounded_rectangle(
+            (sectionX, y, sectionX + sectionWidth, y + summaryHeight),
+            radius=40,
+            fill=self.withAlpha(self.surfaceRaisedColor, 210),
+            outline=self.withAlpha(accent, 100),
+            width=3
+        )
+        self.draw.rounded_rectangle(
+            (sectionX + 28, y + 30, sectionX + 138, y + 140),
+            radius=30,
+            fill=self.withAlpha(self.surfaceInsetColor, 235)
+        )
+        img = Image.open(f"{self.assetPath}/quest_icon.png").convert("RGBA").resize((74, 74), Image.LANCZOS)
+        self.canvas.paste(img, (sectionX + 46, y + 48), img)
+
+        labelFont = self.getFont("medium", 32)
+        valueFont = self.getFont("semibold", 58)
+        countLabel = "Quest Turn-Ins"
+        countValue = str(len(quests))
+        self.draw.text((sectionX + 170, y + 40), countLabel, fill=self.mutedColor, font=labelFont)
+        self.draw.text((sectionX + 170, y + 84), countValue, fill=accent, font=valueFont)
+
+        rowFont = self.getFont("medium", 32)
+        badgeFont = self.getFont("semibold", 28)
+        rowHeight = 124
+        rowGap = 20
+        contentY = y + summaryHeight + 44
+        visibleQuests = list(quests)[-6:][::-1]
+        if not visibleQuests:
+            visibleQuests = [emptyMessage]
+
+        for i, quest in enumerate(visibleQuests):
+            rowY = contentY + i * (rowHeight + rowGap)
+            self.draw.rounded_rectangle(
+                (sectionX, rowY, sectionX + sectionWidth, rowY + rowHeight),
+                radius=34,
+                fill=self.withAlpha(self.surfaceRaisedColor, 205),
+                outline=self.withAlpha(self.borderColor, 110),
+                width=2
+            )
+
+            badgeRight = sectionX + 88
+            self.draw.rounded_rectangle(
+                (sectionX + 20, rowY + 22, badgeRight, rowY + 102),
+                radius=24,
+                fill=self.withAlpha(self.tintedSurface(accent, 0.25), 235)
+            )
+            badgeText = str(i + 1) if quests else "-"
+            badgeBox = self.draw.textbbox((0, 0), badgeText, font=badgeFont)
+            badgeWidth = badgeBox[2] - badgeBox[0]
+            badgeHeight = badgeBox[3] - badgeBox[1]
+            self.draw.text(
+                (sectionX + 54 - badgeWidth / 2, rowY + 62 - badgeHeight / 2 - 4),
+                badgeText,
+                fill=self.backgroundColor,
+                font=badgeFont
+            )
+
+            rowText = self.truncateText(quest, rowFont, sectionWidth - 138)
+            self.draw.text((sectionX + 112, rowY + 42), rowText, fill=self.bodyColor, font=rowFont)
+
+    def summarizeQuestCompletions(self, quests):
+        summary = {}
+        for quest in quests or []:
+            label = str(quest or "").strip()
+            if not label:
+                continue
+
+            owner = "Unknown"
+            if ":" in label:
+                owner = label.split(":", 1)[0].strip()
+            elif label.lower().endswith(" quest"):
+                owner = label[:-6].strip()
+
+            owner = owner.title() if owner else "Unknown"
+            summary[owner] = summary.get(owner, 0) + 1
+
+        preferredOrder = [
+            "Brown Bear",
+            "Black Bear",
+            "Polar Bear",
+            "Bucko Bee",
+            "Riley Bee",
+            "Honey Bee",
+        ]
+        ordered = []
+        for owner in preferredOrder:
+            if owner in summary:
+                ordered.append((owner, summary.pop(owner)))
+        ordered.extend(sorted(summary.items()))
+        return ordered
+
+    def getQuestSummaryPanelHeight(self, groupCount, headerHeight=188, bottomPadding=64):
+        visibleCount = max(1, max(groupCount, 0))
+        summaryHeight = 206
+        rowHeight = 138
+        rowGap = 24
+        return headerHeight + summaryHeight + 52 + visibleCount * rowHeight + max(0, visibleCount - 1) * rowGap + bottomPadding
+
+    def drawQuestSummary(self, y, questGroups, accent=(103, 253, 153), emptyMessage="No quest turn-ins recorded yet."):
+        sectionX = self.sidebarX + getattr(self, "sidebarInnerInset", 0)
+        sectionWidth = getattr(self, "sidebarContentWidth", self.sidebarWidth - self.sidebarPadding * 2)
+        accent = self.toRgb(accent)
+        summaryHeight = 206
+
+        self.draw.rounded_rectangle(
+            (sectionX, y, sectionX + sectionWidth, y + summaryHeight),
+            radius=40,
+            fill=self.withAlpha(self.surfaceRaisedColor, 210),
+            outline=self.withAlpha(accent, 100),
+            width=3
+        )
+        self.draw.rounded_rectangle(
+            (sectionX + 28, y + 36, sectionX + 148, y + 156),
+            radius=30,
+            fill=self.withAlpha(self.surfaceInsetColor, 235)
+        )
+        img = Image.open(f"{self.assetPath}/quest_icon.png").convert("RGBA").resize((82, 82), Image.LANCZOS)
+        self.canvas.paste(img, (sectionX + 47, y + 55), img)
+
+        labelFont = self.getFont("medium", 34)
+        valueFont = self.getFont("semibold", 64)
+        totalCount = sum(count for _, count in questGroups)
+        self.draw.text((sectionX + 184, y + 48), "Quest Turn-Ins", fill=self.mutedColor, font=labelFont)
+        self.draw.text((sectionX + 184, y + 96), str(totalCount), fill=accent, font=valueFont)
+
+        rowFont = self.getFont("medium", 34)
+        valueRowFont = self.getFont("semibold", 38)
+        pillFont = self.getFont("semibold", 26)
+        rowHeight = 138
+        rowGap = 24
+        contentY = y + summaryHeight + 52
+        visibleGroups = list(questGroups)
+        if not visibleGroups:
+            visibleGroups = [(emptyMessage, 0)]
+
+        for i, (owner, count) in enumerate(visibleGroups):
+            rowY = contentY + i * (rowHeight + rowGap)
+            self.draw.rounded_rectangle(
+                (sectionX, rowY, sectionX + sectionWidth, rowY + rowHeight),
+                radius=34,
+                fill=self.withAlpha(self.surfaceRaisedColor, 205),
+                outline=self.withAlpha(self.borderColor, 110),
+                width=2
+            )
+
+            pillText = owner if count else "-"
+            pillWidth, pillHeight = self.drawChip(
+                sectionX + 24,
+                rowY + 34,
+                self.truncateText(pillText, pillFont, sectionWidth - 270),
+                fill=self.withAlpha(self.tintedSurface(accent, 0.25), 235),
+                textColor=accent,
+                font=pillFont,
+                paddingX=18,
+                paddingY=10
+            )
+
+            if count:
+                valueText = str(count)
+                valueBox = self.draw.textbbox((0, 0), valueText, font=valueRowFont)
+                valueWidth = valueBox[2] - valueBox[0]
+                valueX = sectionX + sectionWidth - valueWidth - 28
+                self.draw.text((valueX, rowY + 40), valueText, fill=self.bodyColor, font=valueRowFont)
+                self.draw.text((valueX - 102, rowY + 48), "done", fill=self.mutedColor, font=rowFont)
+            else:
+                self.draw.text((sectionX + 24, rowY + pillHeight + 46), owner, fill=self.mutedColor, font=rowFont)
+
+    def drawHourlyReport(self, hourlyReportStats, sessionTime, honeyPerMin, sessionHoney, honeyThisHour, onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData, uptimeBuffsValues, buffGatherIntervals, questCompletions=None, enabled_fields=None, field_patterns=None):
 
         def getAverageBuff(buffValues):
             #get the buff average when gathering, rounded to 2p
@@ -1688,19 +1962,11 @@ class HourlyReportDrawer:
         )
         self.drawBrandCard(self.sidebarX, heroY, self.sidebarPanelWidth, heroHeight)
 
-        #section 1: hourly stats
-        y = 470
-        cardGap = 28
-        cardWidth = int((self.availableSpace - cardGap * 4) / 5)
-        self.drawStatCard(self.leftPadding, y, "average_icon", self.millify(avgHoneyPerHour), "Average Honey\nPer Hour", cardWidth=cardWidth)
-        self.drawStatCard(self.leftPadding + (cardWidth + cardGap) * 1, y, "honey_icon", self.millify(honeyThisHour), "Honey Made\nThis Hour", self.honeyColor, self.honeyColor, cardWidth=cardWidth)
-        self.drawStatCard(self.leftPadding + (cardWidth + cardGap) * 2, y, "kill_icon", hourlyReportStats["bugs"], "Bugs Killed\nThis Hour", (254,101,99), (254,101,99), cardWidth=cardWidth)
-        self.drawStatCard(self.leftPadding + (cardWidth + cardGap) * 3, y, "quest_icon", hourlyReportStats["quests_completed"], "Quests Completed\nThis Hour", (103,253,153), (103,253,153), cardWidth=cardWidth)
-        self.drawStatCard(self.leftPadding + (cardWidth + cardGap) * 4, y, "vicious_bee_icon", hourlyReportStats["vicious_bees"], "Vicious Bees\nThis Hour", (132,233,254), (132,233,254), cardWidth=cardWidth)
-
-        #section 2: honey/min
-        y = 980
         panelWidth = self.availableSpace
+        questCompletions = questCompletions or []
+
+        #section 1: honey/min
+        y = 470
         self.drawPanel(self.leftPadding, y, panelWidth, 1120, accent=self.honeyColor, fill=self.tintedSurface(self.primaryColor, 0.1))
         headerBottom = self.drawSectionHeader(
             self.leftPadding + 60,
@@ -1748,9 +2014,9 @@ class HourlyReportDrawer:
         graphTop = headerBottom + 72
         self.drawGraph(self.leftPadding + 430, graphTop + 700, self.availableSpace - 540, 700, mins, dataset, maxY=100, xLabelFunc=self.transformXLabelTime, yLabelFunc=lambda i, x: f"{int(x)}%")
 
-        #section 4: buff uptime
-        y = 3340
-        self.drawPanel(self.leftPadding, y, panelWidth, 4300, accent=self.secondaryAccentColor, fill=self.tintedSurface(self.secondaryAccentColor, 0.06))
+        #section 3: buff uptime
+        y = 2830
+        self.drawPanel(self.leftPadding, y, panelWidth, 4600, accent=self.secondaryAccentColor, fill=self.tintedSurface(self.secondaryAccentColor, 0.06))
         headerBottom = self.drawSectionHeader(
             self.leftPadding + 60,
             y + 56,
@@ -1901,28 +2167,64 @@ class HourlyReportDrawer:
         ]
         self.drawBuffUptimeGraphUnstackableBuff(y, dataset, "baby_love_buff", renderTime=True)
 
-        #side bar 
-
-        #session stats
-
+        #side bar
         y2 = 470
+        sectionGap = 90
         currentHoney = onlyValidHourlyHoney[-1] if onlyValidHourlyHoney else 0
-        self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, 980, accent=self.primaryColor, fill=self.tintedSurface(self.primaryColor, 0.08))
+        sessionPanelHeight = 980
+        self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, sessionPanelHeight, accent=self.primaryColor, fill=self.tintedSurface(self.primaryColor, 0.08))
         headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Session Snapshot", "Current run totals outside the hourly slice.", accent=self.primarySoftColor)
-        y2 = headerBottom + 18
-        self.drawSessionStat(y2, "time_icon", "Session Time", self.displayTime(sessionTime, ['d','h','m']), self.bodyColor)
-        y2 += 238
-        self.drawSessionStat(y2, "honey_icon", "Current Honey", self.millify(currentHoney), self.honeyColor)
-        y2 += 238
-        self.drawSessionStat(y2, "session_honey_icon", "Session Honey", self.millify(sessionHoney), "#FDE395")
+        statY = headerBottom + 18
+        self.drawSessionStat(statY, "time_icon", "Session Time", self.displayTime(sessionTime, ['d','h','m']), self.bodyColor)
+        statY += 238
+        self.drawSessionStat(statY, "honey_icon", "Current Honey", self.millify(currentHoney), self.honeyColor)
+        statY += 238
+        self.drawSessionStat(statY, "session_honey_icon", "Session Honey", self.millify(sessionHoney), "#FDE395")
+
+        y2 += sessionPanelHeight + sectionGap
+        glanceItems = [
+            {
+                "icon": "average_icon",
+                "label": "Average / Hour",
+                "value": self.millify(avgHoneyPerHour),
+                "color": self.primaryColor
+            },
+            {
+                "icon": "honey_icon",
+                "label": "Honey This Hour",
+                "value": self.millify(honeyThisHour),
+                "color": self.honeyColor
+            },
+            {
+                "icon": "kill_icon",
+                "label": "Bugs Killed",
+                "value": hourlyReportStats["bugs"],
+                "color": (254,101,99)
+            },
+            {
+                "icon": "vicious_bee_icon",
+                "label": "Vicious Bees",
+                "value": hourlyReportStats["vicious_bees"],
+                "color": (132,233,254)
+            }
+        ]
+        glancePanelHeight = self.getSidebarMetricPanelHeight(len(glanceItems))
+        self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, glancePanelHeight, accent=self.primaryColor, fill=self.tintedSurface(self.primaryColor, 0.08))
+        headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Past Hour At A Glance", "The hourly overview cards moved here for faster scanning.", accent=self.primarySoftColor)
+        self.drawSidebarMetricGrid(headerBottom + 24, glanceItems)
+
+        y2 += glancePanelHeight + sectionGap
+        questPanelHeight = self.getQuestPanelHeight(len(questCompletions))
+        self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, questPanelHeight, accent=(103,253,153), fill=self.tintedSurface((103,253,153), 0.08))
+        headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Quests Completed", "Specific quest turn-ins recorded during the past hour.", accent=(103,253,153))
+        self.drawQuestList(headerBottom + 24, questCompletions, accent=(103,253,153))
 
         #task times
-        y2 += 330
+        y2 += questPanelHeight + sectionGap
         taskPanelHeight = self.getTaskTimesPanelHeight(4)
         self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, taskPanelHeight, accent=self.secondaryAccentColor, fill=self.tintedSurface(self.secondaryAccentColor, 0.06))
         headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Task Breakdown", "How the macro spent the last hour.", accent=self.secondaryAccentColor)
-        y2 = headerBottom + 18
-        self.drawTaskTimes(y2, [
+        self.drawTaskTimes(headerBottom + 18, [
             {
                 "label": "Gathering",
                 "data": hourlyReportStats["gathering_time"],
@@ -1948,12 +2250,10 @@ class HourlyReportDrawer:
         ])
 
         #planters
-        sectionGap = 80
         y2 += taskPanelHeight + sectionGap
-        #check if there are planters
-        planterNames = [] #planterData["planters"]
-        planterTimes = [] #[x-time.time() for x in planterData["harvestTimes"]]
-        planterFields = [] #planterData["fields"]
+        planterNames = []
+        planterTimes = []
+        planterFields = []
         if planterData:
             for i in range(len(planterData["planters"])):
                 if planterData["planters"][i]:
@@ -1966,17 +2266,17 @@ class HourlyReportDrawer:
             self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, planterHeight + 250, accent=self.primaryColor, fill=self.tintedSurface(self.primaryColor, 0.07))
             headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Planters", "Current placements and ready times.", accent=self.primaryColor)
             self.drawPlanters(headerBottom + 18, planterNames, planterTimes, planterFields)
-            y2 += planterHeight + 290
+            y2 += planterHeight + 250 + sectionGap
         
         #buffs
-        buffPanelHeight = 820
+        buffPanelHeight = 860
         self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, buffPanelHeight, accent=self.secondaryAccentColor, fill=self.tintedSurface(self.secondaryAccentColor, 0.05))
         headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Buffs", "Latest captured stack values.", accent=self.secondaryAccentColor)
         self.drawBuffs(headerBottom + 30, buffQuantity)
 
         #nectars
         y2 += buffPanelHeight + sectionGap
-        nectarPanelHeight = 920
+        nectarPanelHeight = 960
         self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, nectarPanelHeight, accent=self.honeyColor, fill=self.tintedSurface(self.honeyColor, 0.05))
         headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Nectars", "Field nectar percentages at render time.", accent=self.honeyColor)
         self.drawNectars(headerBottom + 38, nectarQuantity)

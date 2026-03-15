@@ -554,8 +554,14 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 if questGiver in questCache:
                     del questCache[questGiver]
             elif not len(questObjective):  # No incomplete objectives reported -> submit and get a new quest
+                completedQuestTitle = ""
+                try:
+                    completedQuestTitle = getattr(macro, "_last_quest_title", {}).get(questGiver, "")
+                except Exception:
+                    completedQuestTitle = ""
                 questObjective = macro.getNewQuest(questGiver, True)
                 macro.hourlyReport.addHourlyStat("quests_completed", 1)
+                macro.hourlyReport.recordQuestCompletion(completedQuestTitle, questGiver)
                 # Clear cached entry for this quest giver so we don't reuse stale data
                 if questGiver in questCache:
                     del questCache[questGiver]
