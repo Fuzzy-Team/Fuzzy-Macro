@@ -329,25 +329,25 @@ class FinalReportDrawer(HourlyReportDrawer):
 
         #side bar - Session Summary
         y2 = 470
-        self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, 1080, accent=self.primaryColor, fill=self.tintedSurface(self.primaryColor, 0.08))
+        self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, 1220, accent=self.primaryColor, fill=self.tintedSurface(self.primaryColor, 0.08))
         headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Session Snapshot", "High-level totals for the completed run.", accent=self.primarySoftColor)
         y2 = headerBottom + 18
 
         totalSessionTime = sessionStats.get("total_session_time", 0)
         self.drawSessionStat(y2, "time_icon", "Total Runtime", self.displayTime(totalSessionTime, ['d','h','m']), self.bodyColor)
-        y2 += 206
+        y2 += 238
 
         finalHoney = onlyValidHourlyHoney[-1] if onlyValidHourlyHoney else 0
         self.drawSessionStat(y2, "honey_icon", "Final Honey", self.millify(finalHoney), self.honeyColor)
-        y2 += 206
+        y2 += 238
 
         self.drawSessionStat(y2, "session_honey_icon", "Total Gained", self.millify(totalHoney), "#FDE395")
-        y2 += 206
+        y2 += 238
 
         avgSidebarLabel = "Est. Avg/Hour" if totalSessionTime < 3600 else "Avg/Hour"
         self.drawSessionStat(y2, "average_icon", avgSidebarLabel, self.millify(avgHoneyPerHour), self.secondaryAccentColor)
 
-        y2 += 300
+        y2 += 330
         taskPanelHeight = self.getTaskTimesPanelHeight(4)
         self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, taskPanelHeight, accent=self.secondaryAccentColor, fill=self.tintedSurface(self.secondaryAccentColor, 0.06))
         headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Time Breakdown", "Where the macro spent the session.", accent=self.secondaryAccentColor)
@@ -381,7 +381,8 @@ class FinalReportDrawer(HourlyReportDrawer):
             },
         ], totalSessionTime)
 
-        y2 += 1220
+        sectionGap = 80
+        y2 += taskPanelHeight + sectionGap
         planterNames = []
         planterTimes = []
         planterFields = []
@@ -393,35 +394,22 @@ class FinalReportDrawer(HourlyReportDrawer):
                     planterFields.append(planterData["fields"][i])
         if planterNames:
             planterRows = max(1, math.ceil(len(planterNames) / 2))
-            planterHeight = planterRows * 520 + max(0, planterRows - 1) * 36
+            planterHeight = planterRows * 600 + max(0, planterRows - 1) * 40
             self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, planterHeight + 250, accent=self.primaryColor, fill=self.tintedSurface(self.primaryColor, 0.07))
             headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Planters", "Current placements carried into the final snapshot.", accent=self.primaryColor)
             self.drawPlanters(headerBottom + 18, planterNames, planterTimes, planterFields)
             y2 += planterHeight + 290
         
-        buffPanelHeight = 700
-        sectionGap = 70
+        buffPanelHeight = 820
         self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, buffPanelHeight, accent=self.secondaryAccentColor, fill=self.tintedSurface(self.secondaryAccentColor, 0.05))
         headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Buffs", "Final captured stack values.", accent=self.secondaryAccentColor)
         self.drawBuffs(headerBottom + 30, buffQuantity)
 
         y2 += buffPanelHeight + sectionGap
-        nectarPanelHeight = 820
+        nectarPanelHeight = 920
         self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, nectarPanelHeight, accent=self.honeyColor, fill=self.tintedSurface(self.honeyColor, 0.05))
         headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Nectars", "Session-end field nectar percentages.", accent=self.honeyColor)
         self.drawNectars(headerBottom + 38, nectarQuantity)
-
-        if enabled_fields is None:
-            enabled_fields = []
-        if field_patterns is None:
-            field_patterns = {}
-
-        if enabled_fields:
-            y2 += nectarPanelHeight + sectionGap
-            fieldPanelHeight = self.getFieldsPanelHeight(len(enabled_fields))
-            self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, fieldPanelHeight, accent=self.primarySoftColor, fill=self.tintedSurface(self.primaryColor, 0.05))
-            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Fields", "Enabled fields and their active patterns.", accent=self.primarySoftColor)
-            self.drawFields(headerBottom + 24, enabled_fields, field_patterns)
 
         return self.canvas
 

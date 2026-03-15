@@ -1291,8 +1291,8 @@ class HourlyReportDrawer:
     def drawSessionStat(self, y, imageName, label, value, valueColor):
         sectionX = self.sidebarX + getattr(self, "sidebarInnerInset", 0)
         sectionWidth = getattr(self, "sidebarContentWidth", self.sidebarWidth - self.sidebarPadding * 2)
-        rowHeight = 178
-        imgContainerDimension = 120
+        rowHeight = 210
+        imgContainerDimension = 140
         accent = self.toRgb(valueColor)
 
         self.draw.rounded_rectangle(
@@ -1303,33 +1303,33 @@ class HourlyReportDrawer:
             width=3
         )
         self.draw.rounded_rectangle(
-            (sectionX + 28, y + 28, sectionX + 28 + imgContainerDimension, y + 28 + imgContainerDimension),
-            radius=32,
+            (sectionX + 30, y + 35, sectionX + 30 + imgContainerDimension, y + 35 + imgContainerDimension),
+            radius=36,
             fill=self.withAlpha(self.surfaceInsetColor, 235)
         )
         img = Image.open(f"{self.assetPath}/{imageName}.png").convert("RGBA")
         width, height = img.size
-        imageWidth = 76
+        imageWidth = 88
         imageHeight = int(height*(imageWidth/width))
         img = img.resize((imageWidth, imageHeight))
         self.canvas.paste(
             img,
-            (sectionX + 28 + (imgContainerDimension-imageWidth)//2, y + 28 + (imgContainerDimension-imageHeight)//2),
+            (sectionX + 30 + (imgContainerDimension-imageWidth)//2, y + 35 + (imgContainerDimension-imageHeight)//2),
             img
         )
 
-        labelFont = self.getFont("medium", 42)
-        valueFont = self.getFont("semibold", 54)
-        textX = sectionX + 180
-        self.draw.text((textX, y + 40), label, self.mutedColor, font=labelFont)
+        labelFont = self.getFont("medium", 46)
+        valueFont = self.getFont("semibold", 60)
+        textX = sectionX + 204
+        self.draw.text((textX, y + 50), label, self.mutedColor, font=labelFont)
         bbox = self.draw.textbbox((0, 0), value, font=valueFont)
         textWidth = bbox[2] - bbox[0]
-        self.draw.text((sectionX + sectionWidth - textWidth - 30, y + 90), str(value), accent, font=valueFont)
+        self.draw.text((sectionX + sectionWidth - textWidth - 30, y + 118), str(value), accent, font=valueFont)
 
     def drawTaskTimes(self, y, datasets, totalTime=None):
-        legendIconDimension = 68
-        labelFont = self.getFont("medium", 48)
-        valueFont = self.getFont("semibold", 48)
+        legendIconDimension = 80
+        labelFont = self.getFont("medium", 52)
+        valueFont = self.getFont("semibold", 52)
         x = self.sidebarX + getattr(self, "sidebarInnerInset", 0)
         sectionWidth = getattr(self, "sidebarContentWidth", self.sidebarWidth - self.sidebarPadding * 2)
         totalData = totalTime if totalTime is not None else sum([x["data"] for x in datasets])
@@ -1342,35 +1342,35 @@ class HourlyReportDrawer:
             timeText = self.displayTime(dataset["data"])
 
             self.draw.rounded_rectangle(
-                (x, y, x + sectionWidth, y + 112),
-                radius=34,
+                (x, y, x + sectionWidth, y + 132),
+                radius=38,
                 fill=self.withAlpha(self.surfaceRaisedColor, 200),
                 outline=self.withAlpha(color, 60),
                 width=2
             )
-            self.draw.rounded_rectangle((x + 24, y + 22, x + 24 + legendIconDimension, y + 22 + legendIconDimension), fill=color, radius=22)
-            self.draw.text((x + legendIconDimension + 54, y + 18), dataset["label"], self.bodyColor, font=labelFont)
+            self.draw.rounded_rectangle((x + 26, y + 26, x + 26 + legendIconDimension, y + 26 + legendIconDimension), fill=color, radius=24)
+            self.draw.text((x + legendIconDimension + 62, y + 24), dataset["label"], self.bodyColor, font=labelFont)
 
             percentBox = self.draw.textbbox((0, 0), percentText, font=valueFont)
             percentWidth = percentBox[2] - percentBox[0]
             percentX = x + sectionWidth - percentWidth - 30
-            self.draw.text((percentX, y + 30), percentText, self.mutedColor, font=valueFont)
+            self.draw.text((percentX, y + 38), percentText, self.mutedColor, font=valueFont)
 
             timeBox = self.draw.textbbox((0, 0), timeText, font=valueFont)
             timeWidth = timeBox[2] - timeBox[0]
             timeX = percentX - timeWidth - 60
-            self.draw.text((timeX, y + 30), timeText, color, font=valueFont)
-            y += 136
+            self.draw.text((timeX, y + 38), timeText, color, font=valueFont)
+            y += 160
 
-        y += 100
-        doughnutChartSize = 500
+        y += 120
+        doughnutChartSize = 560
         chartX = x + (sectionWidth - doughnutChartSize) // 2
         self.drawDoughnutChart(chartX, y, doughnutChartSize, datasets, holeRatio=0.44)
-        return (len(datasets) * 136) + 100 + doughnutChartSize
+        return (len(datasets) * 160) + 120 + doughnutChartSize
 
     def getTaskTimesPanelHeight(self, datasetCount, headerHeight=188, bottomPadding=70):
-        rowsHeight = datasetCount * 136
-        chartBlockHeight = 100 + 500
+        rowsHeight = datasetCount * 160
+        chartBlockHeight = 120 + 560
         return headerHeight + rowsHeight + chartBlockHeight + bottomPadding
 
     def drawPlanters(self, y, planterNames, planterTimes, planterFields):
@@ -1396,17 +1396,17 @@ class HourlyReportDrawer:
 
         planterX = self.sidebarX + getattr(self, "sidebarInnerInset", 0)
         sectionWidth = getattr(self, "sidebarContentWidth", self.sidebarWidth - self.sidebarPadding * 2)
-        fieldFont = self.getFont("semibold", 68)
-        timeFont = self.getFont("semibold", 55)
-        cardWidth = (sectionWidth - 40) // 2
-        cardHeight = 520
+        fieldFont = self.getFont("semibold", 74)
+        timeFont = self.getFont("semibold", 60)
+        cardWidth = (sectionWidth - 32) // 2
+        cardHeight = 600
         for i in range(len(planterNames)):
             if not planterNames[i]:
                 continue
             col = i % 2
             row = i // 2
-            cardX = planterX + col * (cardWidth + 40)
-            cardY = y + row * (cardHeight + 36)
+            cardX = planterX + col * (cardWidth + 32)
+            cardY = y + row * (cardHeight + 40)
             bbox = self.draw.textbbox((0, 0), planterFields[i].title(), font=fieldFont)
             fieldTextWidth = bbox[2] - bbox[0]
 
@@ -1420,7 +1420,7 @@ class HourlyReportDrawer:
 
             img = Image.open(f'{self.assetPath}/{planterNames[i].replace(" ","_")}_planter.png')
             width, height = img.size
-            imageHeight = 250
+            imageHeight = 290
             imageWidth = int(width*(imageHeight/height))
             img = img.resize((imageWidth, imageHeight))
 
@@ -1436,26 +1436,26 @@ class HourlyReportDrawer:
                 outline=self.withAlpha(self.borderColor, 110),
                 width=3
             )
-            self.canvas.paste(img, (cardX + (cardWidth-imageWidth)//2, cardY + 40), img)
-            self.draw.text((cardX + (cardWidth - fieldAndNectarWidth)//2, cardY + 312), planterFields[i].title(), font=fieldFont, fill=self.bodyColor) 
-            self.canvas.paste(nectarImg, (cardX + (cardWidth - fieldAndNectarWidth)//2 + fieldTextWidth + 30, cardY + 327), nectarImg)
-            self.draw.text((cardX + (cardWidth - timeTextWidth)//2, cardY + 416), timeText, font=timeFont, fill=self.mutedColor)
+            self.canvas.paste(img, (cardX + (cardWidth-imageWidth)//2, cardY + 46), img)
+            self.draw.text((cardX + (cardWidth - fieldAndNectarWidth)//2, cardY + 366), planterFields[i].title(), font=fieldFont, fill=self.bodyColor) 
+            self.canvas.paste(nectarImg, (cardX + (cardWidth - fieldAndNectarWidth)//2 + fieldTextWidth + 30, cardY + 383), nectarImg)
+            self.draw.text((cardX + (cardWidth - timeTextWidth)//2, cardY + 494), timeText, font=timeFont, fill=self.mutedColor)
 
         rows = max(1, math.ceil(len(planterNames) / 2)) if planterNames else 0
-        return rows * cardHeight + max(0, rows - 1) * 36
+        return rows * cardHeight + max(0, rows - 1) * 40
 
     def drawBuffs(self, y, buffData):
         buffImages = ["tabby_love_buff", "polar_power_buff", "wealth_clock_buff", "blessing_buff", "bloat_buff"]
 
-        font = self.getFont("bold", 58)
+        font = self.getFont("bold", 64)
         baseX = self.sidebarX + getattr(self, "sidebarInnerInset", 0)
         sectionWidth = getattr(self, "sidebarContentWidth", self.sidebarWidth - self.sidebarPadding * 2)
-        gap = 24
+        gap = 18
         imageWidth = (sectionWidth - gap * 4) // 5
         for i in range(len(buffData)):
             buff = str(buffData[i]) #I cant make up my mind on if buffData should switch to ints or remain as string
             x = baseX + (imageWidth + gap) * i
-            cardHeight = imageWidth + 88
+            cardHeight = imageWidth + 120
 
             img = Image.open(f"{self.assetPath}/{buffImages[i]}.png").convert("RGBA")
             width, height = img.size
@@ -1475,22 +1475,22 @@ class HourlyReportDrawer:
                 outline=self.withAlpha(self.borderColor, 110),
                 width=2
             )
-            self.canvas.paste(img, (x, y + 18), img)
+            self.canvas.paste(img, (x, y + 26), img)
 
             if buff != "0":
                 buffText = f"x{buff}"
                 bbox = self.draw.textbbox((0, 0), buffText, font=font, stroke_width=4)
                 textWidth = bbox[2] - bbox[0]
-                textHeight = 58
-                self.draw.text((x + imageWidth - textWidth - 12, y + imageHeight - textHeight - 10), buffText, fill=self.bodyColor, font=font, stroke_width=4, stroke_fill=(0,0,0))
+                textHeight = 64
+                self.draw.text((x + imageWidth - textWidth - 10, y + imageHeight - textHeight + 12), buffText, fill=self.bodyColor, font=font, stroke_width=4, stroke_fill=(0,0,0))
 
     def drawNectars(self, y, nectarData):
         nectarColors = [(165, 207, 234), (235, 120, 108), (194, 166, 236), (162, 239, 163), (239, 205, 224)]
         nectarNames = ["comforting", "invigorating", "motivating", "refreshing", "satisfying"]
-        progressChartSize = 228
-        imageHeight = 92
+        progressChartSize = 260
+        imageHeight = 108
         baseX = self.sidebarX + getattr(self, "sidebarInnerInset", 0)
-        gap = 44
+        gap = 16
         for i in range(len(nectarData)):
             x = baseX + i*(progressChartSize+gap)
             self.draw.rounded_rectangle(
@@ -1506,7 +1506,7 @@ class HourlyReportDrawer:
             width, height = img.size
             imageWidth = int(width*(imageHeight/height))
             img = img.resize((imageWidth, imageHeight))
-            self.canvas.paste(img, (x + (progressChartSize-imageWidth)//2, y+progressChartSize + 50), img)
+            self.canvas.paste(img, (x + (progressChartSize-imageWidth)//2, y+progressChartSize + 58), img)
 
     def getFieldVisuals(self, fieldName):
         normalized = str(fieldName or "").strip().lower()
@@ -1559,23 +1559,23 @@ class HourlyReportDrawer:
 
     def getFieldsPanelHeight(self, fieldCount):
         rows = max(1, math.ceil(max(fieldCount, 1) / 2))
-        return 280 + rows * 174 + max(0, rows - 1) * 24
+        return 320 + rows * 194 + max(0, rows - 1) * 30
 
     def drawFields(self, y, enabled_fields, field_patterns):
         sectionX = self.sidebarX + getattr(self, "sidebarInnerInset", 0)
         sectionWidth = getattr(self, "sidebarContentWidth", self.sidebarWidth - self.sidebarPadding * 2)
-        cardGap = 24
+        cardGap = 28
         cardWidth = (sectionWidth - cardGap) // 2
-        cardHeight = 174
-        labelFont = self.getFont("semibold", 36)
-        metaFont = self.getFont("medium", 24)
-        patternFont = self.getFont("semibold", 30)
+        cardHeight = 194
+        labelFont = self.getFont("semibold", 40)
+        metaFont = self.getFont("medium", 26)
+        patternFont = self.getFont("semibold", 32)
 
         for i, fieldName in enumerate(enabled_fields):
             visuals = self.getFieldVisuals(fieldName)
             pattern = str(field_patterns.get(fieldName, "unknown")).replace("_", " ")
             cardX = sectionX + (i % 2) * (cardWidth + cardGap)
-            cardY = y + (i // 2) * (cardHeight + 24)
+            cardY = y + (i // 2) * (cardHeight + 30)
             accent = self.toRgb(visuals["accent"])
 
             self.draw.rounded_rectangle(
@@ -1592,34 +1592,34 @@ class HourlyReportDrawer:
                 width=2
             )
 
-            iconBox = (cardX + 26, cardY + 24, cardX + 110, cardY + 108)
+            iconBox = (cardX + 24, cardY + 24, cardX + 118, cardY + 118)
             self.draw.rounded_rectangle(iconBox, radius=26, fill=self.withAlpha(accent, 220))
-            initialBox = self.draw.textbbox((0, 0), visuals["initials"], font=self.getFont("bold", 34))
+            initialBox = self.draw.textbbox((0, 0), visuals["initials"], font=self.getFont("bold", 38))
             initialWidth = initialBox[2] - initialBox[0]
             initialHeight = initialBox[3] - initialBox[1]
             self.draw.text(
-                (cardX + 68 - initialWidth // 2, cardY + 66 - initialHeight // 2 - 4),
+                (cardX + 71 - initialWidth // 2, cardY + 69 - initialHeight // 2 - 4),
                 visuals["initials"],
                 fill=self.backgroundColor,
-                font=self.getFont("bold", 34)
+                font=self.getFont("bold", 38)
             )
 
             nectarIcon = visuals.get("nectar")
             if nectarIcon:
                 try:
                     nectarImg = Image.open(f"{self.assetPath}/{nectarIcon}.png").convert("RGBA")
-                    nectarImg = nectarImg.resize((36, 36), Image.LANCZOS)
-                    self.canvas.paste(nectarImg, (cardX + 88, cardY + 82), nectarImg)
+                    nectarImg = nectarImg.resize((40, 40), Image.LANCZOS)
+                    self.canvas.paste(nectarImg, (cardX + 92, cardY + 88), nectarImg)
                 except Exception:
                     pass
 
-            textX = cardX + 132
+            textX = cardX + 138
             rightInset = 22
-            self.draw.text((textX, cardY + 30), visuals["title"], fill=self.bodyColor, font=labelFont)
+            self.draw.text((textX, cardY + 34), visuals["title"], fill=self.bodyColor, font=labelFont)
             patternLabel = "Pattern"
             patternLabelBox = self.draw.textbbox((0, 0), patternLabel, font=metaFont)
             patternLabelWidth = patternLabelBox[2] - patternLabelBox[0]
-            self.draw.text((cardX + cardWidth - rightInset - patternLabelWidth, cardY + 34), patternLabel, fill=self.subtleColor, font=metaFont)
+            self.draw.text((cardX + cardWidth - rightInset - patternLabelWidth, cardY + 40), patternLabel, fill=self.subtleColor, font=metaFont)
 
             chipText = pattern.title()
             maxChipWidth = cardWidth - 154
@@ -1635,7 +1635,7 @@ class HourlyReportDrawer:
             chipX = cardX + cardWidth - rightInset - chipWidth
             self.drawChip(
                 chipX,
-                cardY + 92,
+                cardY + 108,
                 chipText,
                 fill=self.withAlpha(self.tintedSurface(accent, 0.22), 232),
                 textColor=accent,
@@ -1645,7 +1645,7 @@ class HourlyReportDrawer:
             )
 
         rows = max(1, math.ceil(max(len(enabled_fields), 1) / 2))
-        return rows * cardHeight + max(0, rows - 1) * 24
+        return rows * cardHeight + max(0, rows - 1) * 30
 
     def drawHourlyReport(self, hourlyReportStats, sessionTime, honeyPerMin, sessionHoney, honeyThisHour, onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData, uptimeBuffsValues, buffGatherIntervals, enabled_fields=None, field_patterns=None):
 
@@ -1683,6 +1683,7 @@ class HourlyReportDrawer:
             heroHeight,
             "HOURLY REPORT",
             "Past Hour In Focus",
+            "Past hour performance, surfaced in the Fuzzy Macro palette.",
             accent=self.primaryColor
         )
         self.drawBrandCard(self.sidebarX, heroY, self.sidebarPanelWidth, heroHeight)
@@ -1906,17 +1907,17 @@ class HourlyReportDrawer:
 
         y2 = 470
         currentHoney = onlyValidHourlyHoney[-1] if onlyValidHourlyHoney else 0
-        self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, 860, accent=self.primaryColor, fill=self.tintedSurface(self.primaryColor, 0.08))
+        self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, 980, accent=self.primaryColor, fill=self.tintedSurface(self.primaryColor, 0.08))
         headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Session Snapshot", "Current run totals outside the hourly slice.", accent=self.primarySoftColor)
         y2 = headerBottom + 18
         self.drawSessionStat(y2, "time_icon", "Session Time", self.displayTime(sessionTime, ['d','h','m']), self.bodyColor)
-        y2 += 206
+        y2 += 238
         self.drawSessionStat(y2, "honey_icon", "Current Honey", self.millify(currentHoney), self.honeyColor)
-        y2 += 206
+        y2 += 238
         self.drawSessionStat(y2, "session_honey_icon", "Session Honey", self.millify(sessionHoney), "#FDE395")
 
         #task times
-        y2 += 300
+        y2 += 330
         taskPanelHeight = self.getTaskTimesPanelHeight(4)
         self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, taskPanelHeight, accent=self.secondaryAccentColor, fill=self.tintedSurface(self.secondaryAccentColor, 0.06))
         headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Task Breakdown", "How the macro spent the last hour.", accent=self.secondaryAccentColor)
@@ -1947,7 +1948,8 @@ class HourlyReportDrawer:
         ])
 
         #planters
-        y2 += 1220
+        sectionGap = 80
+        y2 += taskPanelHeight + sectionGap
         #check if there are planters
         planterNames = [] #planterData["planters"]
         planterTimes = [] #[x-time.time() for x in planterData["harvestTimes"]]
@@ -1960,22 +1962,21 @@ class HourlyReportDrawer:
                     planterFields.append(planterData["fields"][i])
         if planterNames:
             planterRows = max(1, math.ceil(len(planterNames) / 2))
-            planterHeight = planterRows * 520 + max(0, planterRows - 1) * 36
+            planterHeight = planterRows * 600 + max(0, planterRows - 1) * 40
             self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, planterHeight + 250, accent=self.primaryColor, fill=self.tintedSurface(self.primaryColor, 0.07))
             headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Planters", "Current placements and ready times.", accent=self.primaryColor)
             self.drawPlanters(headerBottom + 18, planterNames, planterTimes, planterFields)
             y2 += planterHeight + 290
         
         #buffs
-        buffPanelHeight = 700
-        sectionGap = 70
+        buffPanelHeight = 820
         self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, buffPanelHeight, accent=self.secondaryAccentColor, fill=self.tintedSurface(self.secondaryAccentColor, 0.05))
         headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Buffs", "Latest captured stack values.", accent=self.secondaryAccentColor)
         self.drawBuffs(headerBottom + 30, buffQuantity)
 
         #nectars
         y2 += buffPanelHeight + sectionGap
-        nectarPanelHeight = 760
+        nectarPanelHeight = 920
         self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, nectarPanelHeight, accent=self.honeyColor, fill=self.tintedSurface(self.honeyColor, 0.05))
         headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Nectars", "Field nectar percentages at render time.", accent=self.honeyColor)
         self.drawNectars(headerBottom + 38, nectarQuantity)
