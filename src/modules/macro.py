@@ -3995,13 +3995,15 @@ class macro:
                 uptimeBuffsColors = self.hourlyReport.uptimeBuffsColors
                 uptimeBearBuffs = self.hourlyReport.uptimeBearBuffs
 
+                sampleValues = {}
+
                 for j in ["baby_love"]:
                     if self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors[j][0], uptimeBuffsColors[j][1], y1=30*self.multi, searchDirection=7):
-                        self.hourlyReport.uptimeBuffsValues[j][i] = 1
+                        sampleValues[j] = 1
 
                 bearBuffRes = [int(x) for x in self.buffDetector.getBuffsWithImage(uptimeBearBuffs, screen=screen, threshold=0.78)]
                 if any(bearBuffRes):
-                    self.hourlyReport.uptimeBuffsValues["bear"][i] = 1
+                    sampleValues["bear"] = 1
 
                 for j in ["focus", "bomb_combo", "balloon_aura", "inspire"]:
                     res = self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors[j][0], uptimeBuffsColors[j][1], y1=30*self.multi, y2=50*self.multi, searchDirection=7)
@@ -4010,7 +4012,7 @@ class macro:
                         x1 = max(0, int(x-25*self.multi))
                         x2 = min(width, int(x+5*self.multi))
                         buffImg = screen[15*self.multi:50*self.multi , x1:x2]
-                        self.hourlyReport.uptimeBuffsValues[j][i] = int(self.buffDetector.getBuffQuantityFromImgTight(buffImg))
+                        sampleValues[j] = int(self.buffDetector.getBuffQuantityFromImgTight(buffImg))
 
                 x = 0
                 for _ in range(3):
@@ -4019,12 +4021,12 @@ class macro:
                         break
                     x = res[0]
                     if self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["melody"][0], uptimeBuffsColors["melody"][1], x+2*self.multi, 30, x+34*self.multi, 40*self.multi, 12):
-                        self.hourlyReport.uptimeBuffsValues["melody"][i] = 1
-                    elif not self.hourlyReport.uptimeBuffsValues["haste"][i]:
+                        sampleValues["melody"] = 1
+                    elif not sampleValues.get("haste", 0):
                         x1 = max(0, int(x+6*self.multi))
                         x2 = min(width, int(x+44*self.multi))
                         buffImg = screen[15*self.multi:50*self.multi , x1:x2]
-                        self.hourlyReport.uptimeBuffsValues["haste"][i] = int(self.buffDetector.getBuffQuantityFromImgTight(buffImg))
+                        sampleValues["haste"] = int(self.buffDetector.getBuffQuantityFromImgTight(buffImg))
                     x += 44*self.multi
                 #print(bd.detectBuffColorInImage(screen, 0xff242424, variation=12, minSize=(3*2,2*2), show=True))
 
@@ -4045,14 +4047,14 @@ class macro:
 
                     x1 = max(0, x-25*self.multi)
                     buffImg = screen[15*self.multi: 50*self.multi, x1: x]
-                    self.hourlyReport.uptimeBuffsValues[buffType][i] = int(self.buffDetector.getBuffQuantityFromImgTight(buffImg))
+                    sampleValues[buffType] = int(self.buffDetector.getBuffQuantityFromImgTight(buffImg))
 
                     x -= 40*self.multi
                 
                 self.prevSec = currSec
 
-                if "gather_" in self.status.value:
-                    self.hourlyReport.buffGatherIntervals[i] = 1
+                isGathering = "gather_" in self.status.value
+                self.hourlyReport.recordUptimeSample(i, sampleValues, isGathering=isGathering)
                 self.hourlyReport.saveHourlyReportData()
         except Exception:
             self.logger.webhook("Hourly Report Error", traceback.format_exc(), "red", ping_category="ping_critical_errors")
