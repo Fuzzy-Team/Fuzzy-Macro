@@ -1480,17 +1480,18 @@ class HourlyReportDrawer:
         font = self.getFont("bold", 64)
         baseX = self.sidebarX + getattr(self, "sidebarInnerInset", 0)
         sectionWidth = getattr(self, "sidebarContentWidth", self.sidebarWidth - self.sidebarPadding * 2)
-        gap = 18
-        imageWidth = (sectionWidth - gap * 4) // 5
+        gap = 24
+        cardWidth = (sectionWidth - gap * 4) // 5
+        imageWidth = max(120, cardWidth - 24)
         for i in range(len(buffData)):
             buff = str(buffData[i]) #I cant make up my mind on if buffData should switch to ints or remain as string
-            x = baseX + (imageWidth + gap) * i
-            cardHeight = imageWidth + 120
+            x = baseX + (cardWidth + gap) * i
+            cardHeight = cardWidth + 92
 
             img = Image.open(f"{self.assetPath}/{buffImages[i]}.png").convert("RGBA")
             width, height = img.size
             imageHeight= int(width*(imageWidth/height))
-            img = img.resize((imageWidth, imageHeight))
+            img = img.resize((imageWidth, imageHeight), Image.LANCZOS)
 
             if buff == "0":
                 #dim the image
@@ -1499,44 +1500,49 @@ class HourlyReportDrawer:
                 overlay = Image.new("RGBA", img.size, (0, 0, 0, 20))
             img = Image.alpha_composite(img, overlay)
             self.draw.rounded_rectangle(
-                (x, y, x + imageWidth, y + cardHeight),
+                (x, y, x + cardWidth, y + cardHeight),
                 radius=32,
                 fill=self.withAlpha(self.surfaceRaisedColor, 210),
                 outline=self.withAlpha(self.borderColor, 110),
                 width=2
             )
-            self.canvas.paste(img, (x, y + 26), img)
+            imageX = x + (cardWidth - imageWidth) // 2
+            imageY = y + 18
+            self.canvas.paste(img, (imageX, imageY), img)
 
             if buff != "0":
                 buffText = f"x{buff}"
                 bbox = self.draw.textbbox((0, 0), buffText, font=font, stroke_width=4)
                 textWidth = bbox[2] - bbox[0]
                 textHeight = 64
-                self.draw.text((x + imageWidth - textWidth - 10, y + imageHeight - textHeight + 12), buffText, fill=self.bodyColor, font=font, stroke_width=4, stroke_fill=(0,0,0))
+                self.draw.text((x + cardWidth - textWidth - 12, imageY + imageHeight - textHeight + 6), buffText, fill=self.bodyColor, font=font, stroke_width=4, stroke_fill=(0,0,0))
 
     def drawNectars(self, y, nectarData):
         nectarColors = [(165, 207, 234), (235, 120, 108), (194, 166, 236), (162, 239, 163), (239, 205, 224)]
         nectarNames = ["comforting", "invigorating", "motivating", "refreshing", "satisfying"]
-        progressChartSize = 260
-        imageHeight = 108
         baseX = self.sidebarX + getattr(self, "sidebarInnerInset", 0)
-        gap = 16
+        sectionWidth = getattr(self, "sidebarContentWidth", self.sidebarWidth - self.sidebarPadding * 2)
+        gap = 28
+        cardWidth = (sectionWidth - gap * 4) // 5
+        progressChartSize = min(240, cardWidth)
+        imageHeight = 100
         for i in range(len(nectarData)):
-            x = baseX + i*(progressChartSize+gap)
+            x = baseX + i * (cardWidth + gap)
             self.draw.rounded_rectangle(
-                (x, y, x + progressChartSize, y + progressChartSize + 180),
+                (x, y, x + cardWidth, y + progressChartSize + 172),
                 radius=36,
                 fill=self.withAlpha(self.surfaceRaisedColor, 210),
                 outline=self.withAlpha(self.borderColor, 100),
                 width=2
             )
-            self.drawProgressChart(x, y, progressChartSize, nectarData[i], nectarColors[i], 0.75)
+            chartX = x + (cardWidth - progressChartSize) // 2
+            self.drawProgressChart(chartX, y, progressChartSize, nectarData[i], nectarColors[i], 0.75)
 
             img = Image.open(f"{self.assetPath}/{nectarNames[i]}.png").convert("RGBA")
             width, height = img.size
             imageWidth = int(width*(imageHeight/height))
-            img = img.resize((imageWidth, imageHeight))
-            self.canvas.paste(img, (x + (progressChartSize-imageWidth)//2, y+progressChartSize + 58), img)
+            img = img.resize((imageWidth, imageHeight), Image.LANCZOS)
+            self.canvas.paste(img, (x + (cardWidth - imageWidth)//2, y + progressChartSize + 54), img)
 
     def getFieldVisuals(self, fieldName):
         normalized = str(fieldName or "").strip().lower()
@@ -1742,7 +1748,7 @@ class HourlyReportDrawer:
             self.draw.text((cardX + 24, cardY + 206), value, fill=accent, font=valueFont)
 
     def getQuestPanelHeight(self, questCount, headerHeight=188, bottomPadding=56):
-        visibleCount = max(1, min(max(questCount, 0), 6))
+        visibleCount = max(1, max(questCount, 0))
         summaryHeight = 180
         rowHeight = 124
         rowGap = 20
@@ -1781,7 +1787,7 @@ class HourlyReportDrawer:
         rowHeight = 124
         rowGap = 20
         contentY = y + summaryHeight + 44
-        visibleQuests = list(quests)[-6:][::-1]
+        visibleQuests = list(quests)[::-1]
         if not visibleQuests:
             visibleQuests = [emptyMessage]
 
@@ -2271,12 +2277,6 @@ class HourlyReportDrawer:
             self.drawSidebarMetricGrid(headerBottom + 24, glanceItems)
 
             y2 += glancePanelHeight + sectionGap
-            questPanelHeight = self.getQuestPanelHeight(len(questCompletions))
-            self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, questPanelHeight, accent=(103, 253, 153), fill=self.tintedSurface((103, 253, 153), 0.08))
-            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Quests Completed", "Specific quest turn-ins recorded during the past hour.", accent=(103, 253, 153))
-            self.drawQuestList(headerBottom + 24, questCompletions, accent=(103, 253, 153))
-
-            y2 += questPanelHeight + sectionGap
             taskPanelHeight = self.getTaskTimesPanelHeight(4)
             self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, taskPanelHeight, accent=self.secondaryAccentColor, fill=self.tintedSurface(self.secondaryAccentColor, 0.06))
             headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Task Breakdown", "How the macro spent the last hour.", accent=self.secondaryAccentColor)
@@ -2287,6 +2287,13 @@ class HourlyReportDrawer:
                 {"label": "Other", "data": hourlyReportStats["misc_time"], "color": "#6C5B4E"},
             ])
             y2 += taskPanelHeight + sectionGap
+
+            questGroups = self.summarizeQuestCompletions(questCompletions)
+            questPanelHeight = self.getQuestSummaryPanelHeight(len(questGroups))
+            self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, questPanelHeight, accent=(103, 253, 153), fill=self.tintedSurface((103, 253, 153), 0.08))
+            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Quest Bears / Bees", "All recorded turn-ins grouped by quest owner for the past hour.", accent=(103, 253, 153))
+            self.drawQuestSummary(headerBottom + 24, questGroups, accent=(103, 253, 153), emptyMessage="No completed quests were recorded this hour.")
+            y2 += questPanelHeight + sectionGap
 
         planterNames = []
         planterTimes = []
