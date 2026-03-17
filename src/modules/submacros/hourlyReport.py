@@ -704,7 +704,8 @@ class HourlyReportDrawer:
         self.mutedColor = (194, 179, 164)
         self.subtleColor = (152, 138, 124)
         self.gridColor = (88, 72, 60)
-        self.canvasSize = (6400, 9200)
+        # reduced canvas height to shrink overall report image
+        self.canvasSize = (6400, 8000)
         self.sidebarWidth = 1900
         self.leftPadding = 150
         self.availableSpace = self.canvasSize[0] - self.sidebarWidth - self.leftPadding*2
