@@ -1922,26 +1922,55 @@ class HourlyReportDrawer:
             else:
                 self.draw.text((sectionX + 24, rowY + pillHeight + 50), owner, fill=self.mutedColor, font=rowFont)
 
-    def drawHourlyReport(self, hourlyReportStats, sessionTime, honeyPerMin, sessionHoney, honeyThisHour, onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData, uptimeBuffsValues, buffGatherIntervals, questCompletions=None, enabled_fields=None, field_patterns=None):
+    def _getAverageBuff(self, buffValues, buffGatherIntervals):
+        count = 0
+        total = 0
+        for gatherFlag, buffValue in zip(buffGatherIntervals, buffValues):
+            if gatherFlag:
+                total += buffValue
+                count += 1
 
-        def getAverageBuff(buffValues):
-            #get the buff average when gathering, rounded to 2p
-            count = 0
-            total = 0
-            for i, e in enumerate(buffGatherIntervals):
-                if e:
-                    total += buffValues[i]
-                    count += 1
+        res = total / count if count else 0
+        return f"x{res:.2f}"
 
-            res = total/count if count else 0
+    def _getBuffSeries(self, uptimeBuffsValues, buffName, defaultLength=600):
+        return uptimeBuffsValues.get(buffName, [0] * defaultLength)
 
-            return f"x{res:.2f}"
-
+    def _drawReportTemplate(self, reportType, hourlyReportStats, primarySeries, sessionHoney, onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData, uptimeBuffsValues, buffGatherIntervals, questCompletions=None, enabled_fields=None, field_patterns=None, sessionTime=0, honeyThisHour=0, sessionStats=None):
         self.beginReportCanvas()
 
-        mins = list(range(61))
-        avgHoneyPerHour = max(0, sessionHoney/(sessionTime/3600)) if sessionTime > 0 else 0
-        peakHourlyRate = max(honeyPerMin) if honeyPerMin else 0
+        questCompletions = questCompletions or []
+        enabled_fields = enabled_fields or []
+        field_patterns = field_patterns or {}
+        sessionStats = sessionStats or {}
+        isFinalReport = reportType == "final"
+
+        if isFinalReport:
+            sessionTime = sessionStats.get("total_session_time", 0)
+            totalHoney = sessionStats.get("total_honey", 0)
+            avgHoneyPerHour = sessionStats.get("avg_honey_per_hour", 0)
+            peakRate = sessionStats.get("peak_honey_rate", 0)
+            dataPoints = len(primarySeries) if primarySeries else 1
+            if sessionTime > 0:
+                timeInterval = sessionTime / max(dataPoints - 1, 1) if dataPoints > 1 else 60
+                mins = [i * timeInterval / 60 for i in range(dataPoints)]
+            else:
+                mins = list(range(dataPoints))
+        else:
+            totalHoney = sessionHoney
+            avgHoneyPerHour = max(0, sessionHoney / (sessionTime / 3600)) if sessionTime > 0 else 0
+            peakRate = max(primarySeries) if primarySeries else 0
+            mins = list(range(61))
+
+        buffSampleCount = max(
+            max((len(values) for values in uptimeBuffsValues.values()), default=0),
+            len(buffGatherIntervals),
+            1
+        )
+        if isFinalReport and sessionTime > 0:
+            buffXAxis = [i * sessionTime / max(buffSampleCount - 1, 1) / 60 for i in range(buffSampleCount)]
+        else:
+            buffXAxis = None
 
         self.sidebarPadding = 85
         self.sidebarX = self.canvasSize[0] - self.sidebarWidth + self.sidebarPadding
@@ -1949,37 +1978,52 @@ class HourlyReportDrawer:
         self.sidebarInnerInset = 46
         self.sidebarContentWidth = self.sidebarPanelWidth - self.sidebarInnerInset * 2
 
-        heroY = 80
-        heroHeight = 350
         self.drawHeroCard(
             self.leftPadding,
-            heroY,
+            80,
             self.availableSpace,
-            heroHeight,
-            "HOURLY REPORT",
-            "Past Hour In Focus",
-            "Past hour performance, surfaced in the Fuzzy Macro palette.",
+            350,
+            "FINAL REPORT" if isFinalReport else "HOURLY REPORT",
+            "Session Summary" if isFinalReport else "Past Hour In Focus",
+            "Full-session performance in the same Fuzzy Macro report language." if isFinalReport else "Past hour performance, surfaced in the Fuzzy Macro palette.",
             accent=self.primaryColor
         )
-        self.drawBrandCard(self.sidebarX, heroY, self.sidebarPanelWidth, heroHeight)
+        self.drawBrandCard(self.sidebarX, 80, self.sidebarPanelWidth, 350)
+
+        def sessionTimeLabel(i, val):
+            if val == 0:
+                return "0m"
+            if sessionTime < 3600:
+                return f"{int(val)}m"
+            if sessionTime < 86400:
+                return f"{int(val/60)}h"
+            return f"{int(val/1440)}d"
+
+        def buffTimeLabel(i, val):
+            if buffSampleCount <= 1:
+                return "0m" if i == 0 else None
+
+            labelCount = 6 if sessionTime >= 3600 else 5
+            step = max(1, (buffSampleCount - 1) // labelCount)
+            if i not in (0, buffSampleCount - 1) and i % step:
+                return None
+            return sessionTimeLabel(i, val)
 
         panelWidth = self.availableSpace
-        questCompletions = questCompletions or []
 
-        #section 1: honey/min
         y = 470
         self.drawPanel(self.leftPadding, y, panelWidth, 1120, accent=self.honeyColor, fill=self.tintedSurface(self.primaryColor, 0.1))
         headerBottom = self.drawSectionHeader(
             self.leftPadding + 60,
             y + 56,
             panelWidth - 120,
-            "Honey / Sec",
-            "Minute-by-minute collection rate across the last completed hour.",
-            meta=f"Peak {self.millify(peakHourlyRate)}/s",
+            "Honey / Sec Over Session" if isFinalReport else "Honey / Sec",
+            "Trend line across the full runtime, scaled to the recorded sample cadence." if isFinalReport else "Minute-by-minute collection rate across the last completed hour.",
+            meta=f"Peak {self.millify(peakRate)}/s",
             accent=self.honeyColor
         )
         dataset = [{
-            "data": honeyPerMin,
+            "data": primarySeries,
             "lineColor": self.primarySoftColor,
             "gradientFill": {
                 0: (*self.primarySoftColor, 18),
@@ -1988,22 +2032,40 @@ class HourlyReportDrawer:
             }
         }]
         graphTop = headerBottom + 72
-        self.drawGraph(self.leftPadding + 430, graphTop + 700, self.availableSpace - 540, 700, mins, dataset, xLabelFunc=self.transformXLabelTime, yLabelFunc=lambda i, x: self.millify(x))
+        self.drawGraph(
+            self.leftPadding + 430,
+            graphTop + 700,
+            self.availableSpace - 540,
+            700,
+            mins,
+            dataset,
+            xLabelFunc=sessionTimeLabel if isFinalReport else self.transformXLabelTime,
+            yLabelFunc=lambda i, x: self.millify(x)
+        )
 
-        #section 3: backpack
-        y = 2160
+        # Keep the main-column sections on a single vertical rhythm so later panels
+        # cannot drift into the previous graph area when hourly/final variants diverge.
+        y = 1650
         self.drawPanel(self.leftPadding, y, panelWidth, 1120, accent=self.primaryColor, fill=self.tintedSurface(self.primaryColor, 0.08))
         headerBottom = self.drawSectionHeader(
             self.leftPadding + 60,
             y + 56,
             panelWidth - 120,
             "Backpack Utilization",
-            "Storage pressure over the hour so spikes are easy to spot.",
+            "Session-wide pressure curve to show where capacity starts clipping the run." if isFinalReport else "Storage pressure over the hour so spikes are easy to spot.",
             meta="0-100%",
             accent=self.primarySoftColor
         )
+        backpackData = hourlyReportStats.get("backpack_per_min", [])
+        if isFinalReport:
+            if not backpackData:
+                backpackData = [0] * len(mins)
+            elif len(backpackData) < len(mins):
+                backpackData = backpackData + [0] * (len(mins) - len(backpackData))
+            elif len(backpackData) > len(mins):
+                backpackData = backpackData[:len(mins)]
         dataset = [{
-            "data": hourlyReportStats["backpack_per_min"],
+            "data": backpackData,
             "lineColor": "gradient",
             "gradientFill": {
                 0: (65, 255, 128, 90),
@@ -2013,245 +2075,219 @@ class HourlyReportDrawer:
             }
         }]
         graphTop = headerBottom + 72
-        self.drawGraph(self.leftPadding + 430, graphTop + 700, self.availableSpace - 540, 700, mins, dataset, maxY=100, xLabelFunc=self.transformXLabelTime, yLabelFunc=lambda i, x: f"{int(x)}%")
+        self.drawGraph(
+            self.leftPadding + 430,
+            graphTop + 700,
+            self.availableSpace - 540,
+            700,
+            mins,
+            dataset,
+            maxY=100,
+            xLabelFunc=sessionTimeLabel if isFinalReport else self.transformXLabelTime,
+            yLabelFunc=lambda i, x: f"{int(x)}%"
+        )
 
-        #section 3: buff uptime
         y = 2830
         self.drawPanel(self.leftPadding, y, panelWidth, 4600, accent=self.secondaryAccentColor, fill=self.tintedSurface(self.secondaryAccentColor, 0.06))
         headerBottom = self.drawSectionHeader(
             self.leftPadding + 60,
             y + 56,
             panelWidth - 120,
-            "Buff Uptime",
-            "Stackable averages while gathering, followed by binary buff coverage.",
-            meta="Past hour",
+            "Average Buff Uptime" if isFinalReport else "Buff Uptime",
+            "Gathering-window averages across the session, followed by binary coverage charts." if isFinalReport else "Stackable averages while gathering, followed by binary buff coverage.",
+            meta="Session average" if isFinalReport else "Past hour",
             accent=self.secondaryAccentColor
         )
         y = headerBottom + 360
+
         dataset = [
-        {
-            "data": uptimeBuffsValues["blue_boost"],
-            "lineColor": (77,147,193),
-            "average": getAverageBuff(uptimeBuffsValues["blue_boost"]),
-            "gradientFill": {
-                0: (77,147,193,10),
-                1: (77,147,193,120),
+            {
+                "data": self._getBuffSeries(uptimeBuffsValues, "blue_boost"),
+                "lineColor": (77, 147, 193),
+                "average": self._getAverageBuff(self._getBuffSeries(uptimeBuffsValues, "blue_boost"), buffGatherIntervals),
+                "gradientFill": {0: (77, 147, 193, 10), 1: (77, 147, 193, 120)}
+            },
+            {
+                "data": self._getBuffSeries(uptimeBuffsValues, "red_boost"),
+                "lineColor": (200, 90, 80),
+                "average": self._getAverageBuff(self._getBuffSeries(uptimeBuffsValues, "red_boost"), buffGatherIntervals),
+                "gradientFill": {0: (200, 90, 80, 10), 1: (200, 90, 80, 120)}
+            },
+            {
+                "data": self._getBuffSeries(uptimeBuffsValues, "white_boost"),
+                "lineColor": (220, 220, 220),
+                "average": self._getAverageBuff(self._getBuffSeries(uptimeBuffsValues, "white_boost"), buffGatherIntervals),
+                "gradientFill": {0: (220, 220, 220, 10), 1: (220, 220, 220, 120)}
             }
-        },
-        {
-            "data": uptimeBuffsValues["red_boost"],
-            "lineColor": (200,90,80),
-            "average": getAverageBuff(uptimeBuffsValues["red_boost"]),
-            "gradientFill": {
-                0: (200,90,80,10),
-                1: (200,90,80,120),
-            }
-        },
-        {
-            "data": uptimeBuffsValues["white_boost"],
-            "lineColor": (220,220,220),
-            "average": getAverageBuff(uptimeBuffsValues["white_boost"]),
-            "gradientFill": {
-                0: (220,220,220,10),
-                1: (220,220,220,120),
-            }
-        }
         ]
-        self.drawBuffUptimeGraphStackableBuff(y, dataset, "boost_buff")
+        self.drawBuffUptimeGraphStackableBuff(y, dataset, "boost_buff", xData=buffXAxis)
 
         y += 460
-        dataset = [
-        {
-            "data": uptimeBuffsValues["haste"],
-            "lineColor": (210,210,210),
-            "average": getAverageBuff(uptimeBuffsValues["haste"]),
-            "gradientFill": {
-                0: (210,210,210,10),
-                1: (210,210,210,120),
-            }
-        }
-        ]
-        self.drawBuffUptimeGraphStackableBuff(y, dataset, "haste_buff")
+        dataset = [{
+            "data": self._getBuffSeries(uptimeBuffsValues, "haste"),
+            "lineColor": (210, 210, 210),
+            "average": self._getAverageBuff(self._getBuffSeries(uptimeBuffsValues, "haste"), buffGatherIntervals),
+            "gradientFill": {0: (210, 210, 210, 10), 1: (210, 210, 210, 120)}
+        }]
+        self.drawBuffUptimeGraphStackableBuff(y, dataset, "haste_buff", xData=buffXAxis)
 
         y += 460
-        dataset = [
-        {
-            "data": uptimeBuffsValues["focus"],
-            "lineColor": (30,191,5),
-            "average": getAverageBuff(uptimeBuffsValues["focus"]),
-            "gradientFill": {
-                0: (30,191,5,10),
-                1: (30,191,5,120),
-            }
-        }
-        ]
-        self.drawBuffUptimeGraphStackableBuff(y, dataset, "focus_buff")
+        dataset = [{
+            "data": self._getBuffSeries(uptimeBuffsValues, "focus"),
+            "lineColor": (30, 191, 5),
+            "average": self._getAverageBuff(self._getBuffSeries(uptimeBuffsValues, "focus"), buffGatherIntervals),
+            "gradientFill": {0: (30, 191, 5, 10), 1: (30, 191, 5, 120)}
+        }]
+        self.drawBuffUptimeGraphStackableBuff(y, dataset, "focus_buff", xData=buffXAxis)
 
         y += 460
-        dataset = [
-        {
-            "data": uptimeBuffsValues["bomb_combo"],
-            "lineColor": (160,160,160),
-            "average": getAverageBuff(uptimeBuffsValues["bomb_combo"]),
-            "gradientFill": {
-                0: (160,160,160,10),
-                1: (160,160,160,120),
-            }
-        }
-        ]
-        self.drawBuffUptimeGraphStackableBuff(y, dataset, "bomb_combo_buff")
+        dataset = [{
+            "data": self._getBuffSeries(uptimeBuffsValues, "bomb_combo"),
+            "lineColor": (160, 160, 160),
+            "average": self._getAverageBuff(self._getBuffSeries(uptimeBuffsValues, "bomb_combo"), buffGatherIntervals),
+            "gradientFill": {0: (160, 160, 160, 10), 1: (160, 160, 160, 120)}
+        }]
+        self.drawBuffUptimeGraphStackableBuff(y, dataset, "bomb_combo_buff", xData=buffXAxis)
 
         y += 460
-        dataset = [
-        {
-            "data": uptimeBuffsValues["balloon_aura"],
-            "lineColor": (50,80,200),
-            "average": getAverageBuff(uptimeBuffsValues["balloon_aura"]),
-            "gradientFill": {
-                0: (50,80,200,10),
-                1: (50,80,200,120),
-            }
-        }
-        ]
-        self.drawBuffUptimeGraphStackableBuff(y, dataset, "balloon_aura_buff")
+        dataset = [{
+            "data": self._getBuffSeries(uptimeBuffsValues, "balloon_aura"),
+            "lineColor": (50, 80, 200),
+            "average": self._getAverageBuff(self._getBuffSeries(uptimeBuffsValues, "balloon_aura"), buffGatherIntervals),
+            "gradientFill": {0: (50, 80, 200, 10), 1: (50, 80, 200, 120)}
+        }]
+        self.drawBuffUptimeGraphStackableBuff(y, dataset, "balloon_aura_buff", xData=buffXAxis)
 
         y += 460
-        dataset = [
-        {
-            "data": uptimeBuffsValues["inspire"],
-            "lineColor": (195,191,18),
-            "average": getAverageBuff(uptimeBuffsValues["inspire"]),
-            "gradientFill": {
-                0: (195,191,18,10),
-                1: (195,191,18,120),
-            }
-        }
-        ]
-        self.drawBuffUptimeGraphStackableBuff(y, dataset, "inspire_buff")
+        dataset = [{
+            "data": self._getBuffSeries(uptimeBuffsValues, "inspire"),
+            "lineColor": (195, 191, 18),
+            "average": self._getAverageBuff(self._getBuffSeries(uptimeBuffsValues, "inspire"), buffGatherIntervals),
+            "gradientFill": {0: (195, 191, 18, 10), 1: (195, 191, 18, 120)}
+        }]
+        self.drawBuffUptimeGraphStackableBuff(y, dataset, "inspire_buff", xData=buffXAxis)
 
         y += 260
-        dataset = [
-        {
-            "data": uptimeBuffsValues["melody"],
-            "lineColor": (200,200,200),
-            "gradientFill": {
-                0: (200,200,200,255),
-                1: (200,200,200,255),
-            }
-        }
-        ]
-        self.drawBuffUptimeGraphUnstackableBuff(y, dataset, "melody_buff")
+        dataset = [{
+            "data": self._getBuffSeries(uptimeBuffsValues, "melody"),
+            "lineColor": (200, 200, 200),
+            "gradientFill": {0: (200, 200, 200, 255), 1: (200, 200, 200, 255)}
+        }]
+        self.drawBuffUptimeGraphUnstackableBuff(y, dataset, "melody_buff", xData=buffXAxis)
 
         y += 260
-        dataset = [
-        {
-            "data": uptimeBuffsValues["bear"],
-            "lineColor": (115,71,40),
-            "gradientFill": {
-                0: (115,71,40,255),
-                1: (115,71,40,255),
-            }
-        }
-        ]
-        self.drawBuffUptimeGraphUnstackableBuff(y, dataset, "bear_buff")
+        dataset = [{
+            "data": self._getBuffSeries(uptimeBuffsValues, "bear"),
+            "lineColor": (115, 71, 40),
+            "gradientFill": {0: (115, 71, 40, 255), 1: (115, 71, 40, 255)}
+        }]
+        self.drawBuffUptimeGraphUnstackableBuff(y, dataset, "bear_buff", xData=buffXAxis)
 
         y += 260
-        dataset = [
-        {
-            "data": uptimeBuffsValues["baby_love"],
-            "lineColor": (112,181,195),
-            "gradientFill": {
-                0: (112,181,195,255),
-                1: (112,181,195,255),
-            }
-        }
-        ]
-        self.drawBuffUptimeGraphUnstackableBuff(y, dataset, "baby_love_buff", renderTime=True)
+        dataset = [{
+            "data": self._getBuffSeries(uptimeBuffsValues, "baby_love"),
+            "lineColor": (112, 181, 195),
+            "gradientFill": {0: (112, 181, 195, 255), 1: (112, 181, 195, 255)}
+        }]
+        self.drawBuffUptimeGraphUnstackableBuff(
+            y,
+            dataset,
+            "baby_love_buff",
+            renderTime=not isFinalReport,
+            xData=buffXAxis,
+            xLabelFunc=buffTimeLabel if isFinalReport else None
+        )
 
-        #side bar
         y2 = 470
         sectionGap = 90
-        currentHoney = onlyValidHourlyHoney[-1] if onlyValidHourlyHoney else 0
-        sessionPanelHeight = 980
-        self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, sessionPanelHeight, accent=self.primaryColor, fill=self.tintedSurface(self.primaryColor, 0.08))
-        headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Session Snapshot", "Current run totals outside the hourly slice.", accent=self.primarySoftColor)
-        statY = headerBottom + 18
-        self.drawSessionStat(statY, "time_icon", "Session Time", self.displayTime(sessionTime, ['d','h','m']), self.bodyColor)
-        statY += 238
-        self.drawSessionStat(statY, "honey_icon", "Current Honey", self.millify(currentHoney), self.honeyColor)
-        statY += 238
-        self.drawSessionStat(statY, "session_honey_icon", "Session Honey", self.millify(sessionHoney), "#FDE395")
+        if isFinalReport:
+            totalSessionTime = sessionStats.get("total_session_time", 0)
+            finalHoney = onlyValidHourlyHoney[-1] if onlyValidHourlyHoney else 0
+            snapshotPanelHeight = 1220
+            self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, snapshotPanelHeight, accent=self.primaryColor, fill=self.tintedSurface(self.primaryColor, 0.08))
+            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Session Snapshot", "High-level totals for the completed run.", accent=self.primarySoftColor)
+            statY = headerBottom + 18
+            self.drawSessionStat(statY, "time_icon", "Total Runtime", self.displayTime(totalSessionTime, ['d', 'h', 'm']), self.bodyColor)
+            statY += 238
+            self.drawSessionStat(statY, "honey_icon", "Final Honey", self.millify(finalHoney), self.honeyColor)
+            statY += 238
+            self.drawSessionStat(statY, "session_honey_icon", "Total Gained", self.millify(totalHoney), "#FDE395")
+            statY += 238
+            avgSidebarLabel = "Est. Avg/Hour" if totalSessionTime < 3600 else "Avg/Hour"
+            self.drawSessionStat(statY, "average_icon", avgSidebarLabel, self.millify(avgHoneyPerHour), self.secondaryAccentColor)
 
-        y2 += sessionPanelHeight + sectionGap
-        glanceItems = [
-            {
-                "icon": "average_icon",
-                "label": "Average / Hour",
-                "value": self.millify(avgHoneyPerHour),
-                "color": self.primaryColor
-            },
-            {
-                "icon": "honey_icon",
-                "label": "Honey This Hour",
-                "value": self.millify(honeyThisHour),
-                "color": self.honeyColor
-            },
-            {
-                "icon": "kill_icon",
-                "label": "Bugs Killed",
-                "value": hourlyReportStats["bugs"],
-                "color": (254,101,99)
-            },
-            {
-                "icon": "vicious_bee_icon",
-                "label": "Vicious Bees",
-                "value": hourlyReportStats["vicious_bees"],
-                "color": (132,233,254)
-            }
-        ]
-        glancePanelHeight = self.getSidebarMetricPanelHeight(len(glanceItems))
-        self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, glancePanelHeight, accent=self.primaryColor, fill=self.tintedSurface(self.primaryColor, 0.08))
-        headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Past Hour At A Glance", "The hourly overview cards moved here for faster scanning.", accent=self.primarySoftColor)
-        self.drawSidebarMetricGrid(headerBottom + 24, glanceItems)
+            y2 += snapshotPanelHeight + sectionGap
+            glanceItems = [
+                {"icon": "honey_icon", "label": "Total Honey", "value": self.millify(totalHoney), "color": self.honeyColor},
+                {"icon": "average_icon", "label": "Average / Hour", "value": self.millify(avgHoneyPerHour), "color": self.secondaryAccentColor},
+                {"icon": "kill_icon", "label": "Bugs Killed", "value": sessionStats.get("total_bugs", 0), "color": (254, 101, 99)},
+                {"icon": "vicious_bee_icon", "label": "Vicious Bees", "value": sessionStats.get("total_vicious_bees", 0), "color": (132, 233, 254)}
+            ]
+            glancePanelHeight = self.getSidebarMetricPanelHeight(len(glanceItems))
+            self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, glancePanelHeight, accent=self.primaryColor, fill=self.tintedSurface(self.primaryColor, 0.08))
+            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Session At A Glance", "Total honey, averages, bugs, and vicious bees in one grid.", accent=self.primarySoftColor)
+            self.drawSidebarMetricGrid(headerBottom + 24, glanceItems)
 
-        y2 += glancePanelHeight + sectionGap
-        questPanelHeight = self.getQuestPanelHeight(len(questCompletions))
-        self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, questPanelHeight, accent=(103,253,153), fill=self.tintedSurface((103,253,153), 0.08))
-        headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Quests Completed", "Specific quest turn-ins recorded during the past hour.", accent=(103,253,153))
-        self.drawQuestList(headerBottom + 24, questCompletions, accent=(103,253,153))
+            y2 += glancePanelHeight + sectionGap
+            taskPanelHeight = self.getTaskTimesPanelHeight(4)
+            self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, taskPanelHeight, accent=self.secondaryAccentColor, fill=self.tintedSurface(self.secondaryAccentColor, 0.06))
+            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Time Breakdown", "Where the macro spent the session.", accent=self.secondaryAccentColor)
+            self.drawTaskTimes(headerBottom + 18, [
+                {"label": "Gathering", "data": sessionStats.get("gathering_time", 0), "color": self.primarySoftColor},
+                {"label": "Converting", "data": sessionStats.get("converting_time", 0), "color": self.honeyColor},
+                {"label": "Bug Runs", "data": sessionStats.get("bug_run_time", 0), "color": self.secondaryAccentColor},
+                {"label": "Other", "data": sessionStats.get("misc_time", 0), "color": "#6C5B4E"},
+            ], totalSessionTime)
 
-        #task times
-        y2 += questPanelHeight + sectionGap
-        taskPanelHeight = self.getTaskTimesPanelHeight(4)
-        self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, taskPanelHeight, accent=self.secondaryAccentColor, fill=self.tintedSurface(self.secondaryAccentColor, 0.06))
-        headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Task Breakdown", "How the macro spent the last hour.", accent=self.secondaryAccentColor)
-        self.drawTaskTimes(headerBottom + 18, [
-            {
-                "label": "Gathering",
-                "data": hourlyReportStats["gathering_time"],
-                "color": self.primarySoftColor
-            },
-            {
-                "label": "Converting",
-                "data": hourlyReportStats["converting_time"],
-                "color": self.honeyColor
-            },
-            {
-                "label": "Bug Run",
-                "data": hourlyReportStats["bug_run_time"],
-                "color": self.secondaryAccentColor
-            },
-            {
-                "label": "Other",
-                "data": hourlyReportStats["misc_time"],
-                "color": "#6C5B4E"
-            },
-            
+            y2 += taskPanelHeight + sectionGap
+            questGroups = self.summarizeQuestCompletions(questCompletions)
+            questPanelHeight = self.getQuestSummaryPanelHeight(len(questGroups))
+            self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, questPanelHeight, accent=(103, 253, 153), fill=self.tintedSurface((103, 253, 153), 0.08))
+            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Completed Quests", "Turn-ins grouped by bee or bear for the whole session.", accent=(103, 253, 153))
+            self.drawQuestSummary(headerBottom + 24, questGroups, accent=(103, 253, 153), emptyMessage="No completed quests were recorded this session.")
+            y2 += questPanelHeight + sectionGap
+        else:
+            currentHoney = onlyValidHourlyHoney[-1] if onlyValidHourlyHoney else 0
+            sessionPanelHeight = 980
+            self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, sessionPanelHeight, accent=self.primaryColor, fill=self.tintedSurface(self.primaryColor, 0.08))
+            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Session Snapshot", "Current run totals outside the hourly slice.", accent=self.primarySoftColor)
+            statY = headerBottom + 18
+            self.drawSessionStat(statY, "time_icon", "Session Time", self.displayTime(sessionTime, ['d', 'h', 'm']), self.bodyColor)
+            statY += 238
+            self.drawSessionStat(statY, "honey_icon", "Current Honey", self.millify(currentHoney), self.honeyColor)
+            statY += 238
+            self.drawSessionStat(statY, "session_honey_icon", "Session Honey", self.millify(sessionHoney), "#FDE395")
 
-        ])
+            y2 += sessionPanelHeight + sectionGap
+            glanceItems = [
+                {"icon": "average_icon", "label": "Average / Hour", "value": self.millify(avgHoneyPerHour), "color": self.primaryColor},
+                {"icon": "honey_icon", "label": "Honey This Hour", "value": self.millify(honeyThisHour), "color": self.honeyColor},
+                {"icon": "kill_icon", "label": "Bugs Killed", "value": hourlyReportStats["bugs"], "color": (254, 101, 99)},
+                {"icon": "vicious_bee_icon", "label": "Vicious Bees", "value": hourlyReportStats["vicious_bees"], "color": (132, 233, 254)}
+            ]
+            glancePanelHeight = self.getSidebarMetricPanelHeight(len(glanceItems))
+            self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, glancePanelHeight, accent=self.primaryColor, fill=self.tintedSurface(self.primaryColor, 0.08))
+            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Past Hour At A Glance", "The hourly overview cards moved here for faster scanning.", accent=self.primarySoftColor)
+            self.drawSidebarMetricGrid(headerBottom + 24, glanceItems)
 
-        #planters
-        y2 += taskPanelHeight + sectionGap
+            y2 += glancePanelHeight + sectionGap
+            questPanelHeight = self.getQuestPanelHeight(len(questCompletions))
+            self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, questPanelHeight, accent=(103, 253, 153), fill=self.tintedSurface((103, 253, 153), 0.08))
+            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Quests Completed", "Specific quest turn-ins recorded during the past hour.", accent=(103, 253, 153))
+            self.drawQuestList(headerBottom + 24, questCompletions, accent=(103, 253, 153))
+
+            y2 += questPanelHeight + sectionGap
+            taskPanelHeight = self.getTaskTimesPanelHeight(4)
+            self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, taskPanelHeight, accent=self.secondaryAccentColor, fill=self.tintedSurface(self.secondaryAccentColor, 0.06))
+            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Task Breakdown", "How the macro spent the last hour.", accent=self.secondaryAccentColor)
+            self.drawTaskTimes(headerBottom + 18, [
+                {"label": "Gathering", "data": hourlyReportStats["gathering_time"], "color": self.primarySoftColor},
+                {"label": "Converting", "data": hourlyReportStats["converting_time"], "color": self.honeyColor},
+                {"label": "Bug Run", "data": hourlyReportStats["bug_run_time"], "color": self.secondaryAccentColor},
+                {"label": "Other", "data": hourlyReportStats["misc_time"], "color": "#6C5B4E"},
+            ])
+            y2 += taskPanelHeight + sectionGap
+
         planterNames = []
         planterTimes = []
         planterFields = []
@@ -2265,30 +2301,29 @@ class HourlyReportDrawer:
             planterRows = max(1, math.ceil(len(planterNames) / 2))
             planterHeight = planterRows * 600 + max(0, planterRows - 1) * 40
             self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, planterHeight + 250, accent=self.primaryColor, fill=self.tintedSurface(self.primaryColor, 0.07))
-            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Planters", "Current placements and ready times.", accent=self.primaryColor)
+            headerBottom = self.drawSectionHeader(
+                self.sidebarX + 50,
+                y2 + 44,
+                self.sidebarPanelWidth - 100,
+                "Planters",
+                "Current placements carried into the final snapshot." if isFinalReport else "Current placements and ready times.",
+                accent=self.primaryColor
+            )
             self.drawPlanters(headerBottom + 18, planterNames, planterTimes, planterFields)
             y2 += planterHeight + 250 + sectionGap
-        
-        #buffs
+
         buffPanelHeight = 860
         self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, buffPanelHeight, accent=self.secondaryAccentColor, fill=self.tintedSurface(self.secondaryAccentColor, 0.05))
-        headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Buffs", "Latest captured stack values.", accent=self.secondaryAccentColor)
+        headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Buffs", "Final captured stack values." if isFinalReport else "Latest captured stack values.", accent=self.secondaryAccentColor)
         self.drawBuffs(headerBottom + 30, buffQuantity)
 
-        #nectars
         y2 += buffPanelHeight + sectionGap
         nectarPanelHeight = 960
         self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, nectarPanelHeight, accent=self.honeyColor, fill=self.tintedSurface(self.honeyColor, 0.05))
-        headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Nectars", "Field nectar percentages at render time.", accent=self.honeyColor)
+        headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Nectars", "Session-end field nectar percentages." if isFinalReport else "Field nectar percentages at render time.", accent=self.honeyColor)
         self.drawNectars(headerBottom + 38, nectarQuantity)
 
-        # Fields: show enabled fields and the pattern used
-        if enabled_fields is None:
-            enabled_fields = []
-        if field_patterns is None:
-            field_patterns = {}
-
-        if enabled_fields:
+        if not isFinalReport and enabled_fields:
             y2 += nectarPanelHeight + sectionGap
             fieldPanelHeight = self.getFieldsPanelHeight(len(enabled_fields))
             self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, fieldPanelHeight, accent=self.primarySoftColor, fill=self.tintedSurface(self.primaryColor, 0.05))
@@ -2296,3 +2331,40 @@ class HourlyReportDrawer:
             self.drawFields(headerBottom + 24, enabled_fields, field_patterns)
 
         return self.canvas
+
+    def drawHourlyReport(self, hourlyReportStats, sessionTime, honeyPerMin, sessionHoney, honeyThisHour, onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData, uptimeBuffsValues, buffGatherIntervals, questCompletions=None, enabled_fields=None, field_patterns=None):
+        return self._drawReportTemplate(
+            "hourly",
+            hourlyReportStats,
+            honeyPerMin,
+            sessionHoney,
+            onlyValidHourlyHoney,
+            buffQuantity,
+            nectarQuantity,
+            planterData,
+            uptimeBuffsValues,
+            buffGatherIntervals,
+            questCompletions=questCompletions,
+            enabled_fields=enabled_fields,
+            field_patterns=field_patterns,
+            sessionTime=sessionTime,
+            honeyThisHour=honeyThisHour
+        )
+
+    def drawFinalReport(self, hourlyReportStats, sessionStats, honeyPerSec, sessionHoney, onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData, uptimeBuffsValues, buffGatherIntervals, questCompletions=None, enabled_fields=None, field_patterns=None):
+        return self._drawReportTemplate(
+            "final",
+            hourlyReportStats,
+            honeyPerSec,
+            sessionHoney,
+            onlyValidHourlyHoney,
+            buffQuantity,
+            nectarQuantity,
+            planterData,
+            uptimeBuffsValues,
+            buffGatherIntervals,
+            questCompletions=questCompletions,
+            enabled_fields=enabled_fields,
+            field_patterns=field_patterns,
+            sessionStats=sessionStats
+        )
