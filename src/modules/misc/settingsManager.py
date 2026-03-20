@@ -1244,7 +1244,7 @@ def _should_keep_legacy_backup(legacy_general_data):
     if env in ("1", "true", "yes"):
         return True
     if isinstance(legacy_general_data, dict):
-        return bool(legacy_general_data.get("keep_legacy_settings_backup", False))
+        return bool(legacy_general_data.get("keep_legacy_settings_backup", True))
     return False
 
 def ensureDefaultProfileExists():
@@ -1285,9 +1285,23 @@ def migrateLegacySettingsIfNeeded():
 
     backup_root = None
     try:
-        backup_root = _ensureBackupDir()
-    except Exception as e:
-        print(f"Warning: Could not create legacy backup directory: {e}")
+        notice = _loadMigrationNotice()
+    except Exception:
+        notice = {"shown": False, "pending_paths": [], "backup_path": ""}
+
+    if notice.get("backup_path"):
+        backup_root = notice.get("backup_path")
+    else:
+        try:
+            if _should_keep_legacy_backup(legacy_global_general_data):
+                backup_root = _ensureBackupDir()
+                # Persist the chosen backup path immediately so parallel startup
+                # processes reuse the same migration backup instead of creating
+                # a fresh timestamped directory each time they import settings.
+                notice["backup_path"] = backup_root
+                _saveMigrationNotice(notice)
+        except Exception as e:
+            print(f"Warning: Could not create legacy backup directory: {e}")
 
     for profile_name in legacy_profiles:
         legacy_profile_path = os.path.join(legacy_profiles_dir, profile_name)
@@ -1386,7 +1400,7 @@ def migrateLegacySettingsIfNeeded():
         if not notice.get("shown", False):
             notice["shown"] = False
             notice["pending_paths"] = sorted(list(set(pending_paths)))
-            notice["backup_path"] = backup_root or ""
+            notice["backup_path"] = backup_root or notice.get("backup_path", "")
             _saveMigrationNotice(notice)
 
 def loadFields():
