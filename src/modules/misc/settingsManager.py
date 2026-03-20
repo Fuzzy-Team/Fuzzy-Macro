@@ -871,7 +871,7 @@ def _should_keep_legacy_backup(legacy_general_data):
     if env in ("1", "true", "yes"):
         return True
     if isinstance(legacy_general_data, dict):
-        return bool(legacy_general_data.get("keep_legacy_settings_backup", False))
+        return bool(legacy_general_data.get("keep_legacy_settings_backup", True))
     return False
 
 def ensureDefaultProfileExists():
@@ -1284,21 +1284,10 @@ def migrateLegacySettingsIfNeeded():
             legacy_global_general_data = {}
 
     backup_root = None
-    # Reuse an existing recorded migration backup and avoid creating a new
-    # timestamped backup directory on every startup.
     try:
-        existing_notice = _loadMigrationNotice()
-    except Exception:
-        existing_notice = {}
-
-    if existing_notice.get("backup_path"):
-        backup_root = existing_notice.get("backup_path")
-    else:
-        try:
-            if _should_keep_legacy_backup(legacy_global_general_data):
-                backup_root = _ensureBackupDir()
-        except Exception as e:
-            print(f"Warning: Could not create legacy backup directory: {e}")
+        backup_root = _ensureBackupDir()
+    except Exception as e:
+        print(f"Warning: Could not create legacy backup directory: {e}")
 
     for profile_name in legacy_profiles:
         legacy_profile_path = os.path.join(legacy_profiles_dir, profile_name)
