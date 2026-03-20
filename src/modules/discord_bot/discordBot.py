@@ -116,9 +116,16 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             print(f"Error syncing commands: {e}")
             import traceback
             traceback.print_exc()
-        # Set bot presence/status
+        # Set bot presence/status (include macro version from version.txt)
         try:
-            await bot.change_presence(activity=discord.Game(name="Fuzzy Macro!"))
+            version = "1.0"
+            try:
+                version = settingsManager.getMacroVersion()
+            except Exception:
+                # Fallback to default if reading version fails
+                pass
+            status_name = f"Fuzzy Macro v{version}!"
+            await bot.change_presence(activity=discord.Game(name=status_name))
         except Exception as e:
             print(f"Failed to set Discord status: {e}")
         
@@ -2045,30 +2052,13 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 except Exception:
                     current_vals[n] = 0.0
 
-            # Get estimated nectar percents from the profile-aware user state.
-            estimates = {n: 0.0 for n in nectar_names}
-            try:
-                ap = settingsManager.loadAutoPlanters() or {}
-                planters = ap.get('planters', [])
-                for p in planters:
-                    nectar = p.get('nectar')
-                    if nectar in estimates:
-                        try:
-                            estimates[nectar] += float(p.get('nectar_est_percent', 0))
-                        except Exception:
-                            pass
-            except Exception:
-                pass
-
-            # Build embed
+            # Build embed using only detected nectar values
             desc_lines = []
             for n in nectar_names:
                 cur = current_vals.get(n, 0.0)
-                est = estimates.get(n, 0.0)
-                total = round(cur + est, 1)
-                desc_lines.append(f"**{n.title()}**: {cur}% (est +{est}%) → Total: {total}%")
+                desc_lines.append(f"**{n.title()}**: {cur}%")
 
-            embed = discord.Embed(title="🍯 Nectar Percentages", description="\n".join(desc_lines), color=0x00ff00)
+            embed = discord.Embed(title="Nectar Percentages", description="\n".join(desc_lines), color=0x00ff00)
 
             # Attach a screenshot of the game window if possible
             try:

@@ -42,7 +42,7 @@ Follow our [installation guide](https://fuzzy-team.gitbook.io/fuzzy-macro) to ge
 
 ### Mob & Boss Combat
 - **Regular Mobs**: Ladybugs, Rhino Beetles, Scorpions, Mantises, Spiders, Werewolf
-- **Boss Mobs**:  Stump Snail, Coconut Crab (King Beetle and Tunnel Bear coming soon)
+- **Boss Mobs**:  Stump Snail, Coconut Crab, King Beetle, and Tunnel Bear
 - **Stinger Hunt**: Automated Vicious Bee hunting during night
 - Respawn time tracking with bonuses (Gifted Vicious, Stick Bug Amulet, Icicles Beequip)
 - Automatic looting patterns
@@ -88,7 +88,7 @@ Follow our [installation guide](https://fuzzy-team.gitbook.io/fuzzy-macro) to ge
 - Web-based GUI for configuration
 - Profile system for multiple configurations
 - Task priority system with drag-and-drop ordering
-- Pause/Resume functionality (Coming back soon)
+- Pause/Resume functionality
 - Hourly reports with statistics
 - Death detection and recovery
 - Screen resolution detection (See [Display Settings](https://fuzzy-team.gitbook.io/fuzzy-macro/system-settings/display-settings))
@@ -107,7 +107,7 @@ Follow our [installation guide](https://fuzzy-team.gitbook.io/fuzzy-macro) to ge
 
 ## Notes
 
-- This Macro is for MacOS only, Windows is work in progress. Linux support is not planned, for Linux use [BeeTuxMacro](https://github.com/painvision/BeeTuxMacro).
+- This Macro supports macOS and Windows is in beta testing. Linux support is not planned; for Linux use [BeeTuxMacro](https://github.com/painvision/BeeTuxMacro).
 - Fuzzy Macro is built on top of Existance Macro, meaning you can easily transitition to Fuzzy Macro. The settings and config works the same, think of Fuzzy Macro as a continuation project of Existance Macro.
 - The macro backend is written in Python while the frontend uses HTML/CSS/JS with eel as a communication layer.
 - Version system uses the format Major.Minor.Bugfix, with an optional letter at the end for test versions. (Ex: 1.1.0 is newer than 1.1.0a - 1.1.0a is a beta version in this case)

@@ -16,7 +16,6 @@ from modules.screen.ocr import ocrRead, imToString
 import copy
 from datetime import datetime
 from modules.screen.robloxWindow import RobloxWindowBounds
-import pickle
 import json
 from modules.misc.settingsManager import getCurrentProfile, loadFields, getMacroVersion
 
@@ -418,6 +417,57 @@ class HourlyReport():
 
         #setup stats
         self.hourlyReportStats = {}
+        self.sessionReportStats = {}
+        self.sessionUptimeBuffsValues = {}
+        self.sessionBuffGatherIntervals = []
+        self.latestBuffQuantity = []
+        self.latestNectarQuantity = []
+
+    def _defaultSessionReportStats(self):
+        return {
+            "honey_per_min": [],
+            "backpack_per_min": [],
+            "bugs": 0,
+            "quests_completed": 0,
+            "vicious_bees": 0,
+            "gathering_time": 0,
+            "converting_time": 0,
+            "bug_run_time": 0,
+            "misc_time": 0,
+        }
+
+    def _defaultHourlyUptimeBuffs(self):
+        uptimeBuffs = {k:[0]*600 for k in self.uptimeBuffsColors.keys()}
+        for k in ["bear", "white_boost"]:
+            uptimeBuffs[k] = [0]*600
+        return uptimeBuffs
+
+    def _defaultSessionUptimeBuffs(self):
+        sessionUptimeBuffs = {k:[] for k in self.uptimeBuffsColors.keys()}
+        for k in ["bear", "white_boost"]:
+            sessionUptimeBuffs[k] = []
+        return sessionUptimeBuffs
+
+    def recordUptimeSample(self, index, sampleValues, isGathering=False):
+        for buffName in self._defaultSessionUptimeBuffs():
+            value = int(sampleValues.get(buffName, 0) or 0)
+            if buffName not in self.uptimeBuffsValues:
+                self.uptimeBuffsValues[buffName] = [0] * 600
+            if 0 <= index < len(self.uptimeBuffsValues[buffName]):
+                self.uptimeBuffsValues[buffName][index] = value
+
+            if buffName not in self.sessionUptimeBuffsValues:
+                self.sessionUptimeBuffsValues[buffName] = []
+            self.sessionUptimeBuffsValues[buffName].append(value)
+
+        if not hasattr(self, "buffGatherIntervals") or self.buffGatherIntervals is None:
+            self.buffGatherIntervals = [0] * 600
+        if 0 <= index < len(self.buffGatherIntervals):
+            self.buffGatherIntervals[index] = 1 if isGathering else 0
+
+        if not hasattr(self, "sessionBuffGatherIntervals") or self.sessionBuffGatherIntervals is None:
+            self.sessionBuffGatherIntervals = []
+        self.sessionBuffGatherIntervals.append(1 if isGathering else 0)
 
     def filterOutliers(self, values, threshold=3):
         nonZeroValues = [x for x in values if x]
@@ -445,6 +495,8 @@ class HourlyReport():
     def generateHourlyReport(self, setdat):
         buffQuantity = self.buffDetector.getBuffsWithImage(self.hourBuffs)
         nectarQuantity = self.buffDetector.getNectars()
+        self.latestBuffQuantity = list(buffQuantity)
+        self.latestNectarQuantity = list(nectarQuantity)
         #mssScreenshot(save=True)
 
         #get the hourly report data
@@ -540,10 +592,7 @@ class HourlyReport():
         self.hourlyReportStats["bug_run_time"] = 0
         self.hourlyReportStats["misc_time"] = 0
 
-        self.uptimeBuffsValues = {k:[0]*600 for k in self.uptimeBuffsColors.keys()} #*600
-        for k in ["bear", "white_boost"]:
-            self.uptimeBuffsValues[k] = [0]*600
-        
+        self.uptimeBuffsValues = self._defaultHourlyUptimeBuffs()
         self.buffGatherIntervals = [0]*600
 
         self.saveHourlyReportData()
@@ -551,6 +600,11 @@ class HourlyReport():
     def resetAllStats(self):
         self.hourlyReportStats["start_time"] = 0
         self.hourlyReportStats["start_honey"] = 0
+        self.sessionReportStats = self._defaultSessionReportStats()
+        self.sessionUptimeBuffsValues = self._defaultSessionUptimeBuffs()
+        self.sessionBuffGatherIntervals = []
+        self.latestBuffQuantity = []
+        self.latestNectarQuantity = []
         self.resetHourlyStats()
     
     def addHourlyStat(self, stat, value):
@@ -558,6 +612,13 @@ class HourlyReport():
             self.hourlyReportStats[stat].append(value)
         else:
             self.hourlyReportStats[stat] += value
+
+        # Keep session totals independent from hourly resets.
+        if stat in self.sessionReportStats:
+            if isinstance(self.sessionReportStats[stat], list):
+                self.sessionReportStats[stat].append(value)
+            else:
+                self.sessionReportStats[stat] += value
         self.saveHourlyReportData()
     
     def setSessionStats(self, start_honey, start_time):
@@ -568,24 +629,25 @@ class HourlyReport():
     def saveHourlyReportData(self):
         settingsManager.saveHourlyReportStats({
             "hourlyReportStats": self.hourlyReportStats,
+            "sessionReportStats": self.sessionReportStats,
             "uptimeBuffsValues": self.uptimeBuffsValues,
             "buffGatherIntervals": self.buffGatherIntervals,
-        })
-        settingsManager.saveHourlyReportStats({
-            "hourlyReportStats": self.hourlyReportStats,
-            "uptimeBuffsValues": self.uptimeBuffsValues,
-            "buffGatherIntervals": self.buffGatherIntervals,
+            "sessionUptimeBuffsValues": self.sessionUptimeBuffsValues,
+            "sessionBuffGatherIntervals": self.sessionBuffGatherIntervals,
+            "latestBuffQuantity": self.latestBuffQuantity,
+            "latestNectarQuantity": self.latestNectarQuantity,
         })
     
     def loadHourlyReportData(self):
         data = settingsManager.loadHourlyReportStats()
         self.hourlyReportStats = data.get("hourlyReportStats", self.hourlyReportStats)
+        self.sessionReportStats = data.get("sessionReportStats", self._defaultSessionReportStats())
         self.uptimeBuffsValues = data.get("uptimeBuffsValues", self.uptimeBuffsValues)
         self.buffGatherIntervals = data.get("buffGatherIntervals", self.buffGatherIntervals)
-        data = settingsManager.loadHourlyReportStats()
-        self.hourlyReportStats = data.get("hourlyReportStats", self.hourlyReportStats)
-        self.uptimeBuffsValues = data.get("uptimeBuffsValues", self.uptimeBuffsValues)
-        self.buffGatherIntervals = data.get("buffGatherIntervals", self.buffGatherIntervals)
+        self.sessionUptimeBuffsValues = data.get("sessionUptimeBuffsValues", self._defaultSessionUptimeBuffs())
+        self.sessionBuffGatherIntervals = data.get("sessionBuffGatherIntervals", [])
+        self.latestBuffQuantity = data.get("latestBuffQuantity", [])
+        self.latestNectarQuantity = data.get("latestNectarQuantity", [])
 
 
 class HourlyReportDrawer:
@@ -920,12 +982,14 @@ class HourlyReportDrawer:
         self.draw.text((leftPadding, y+380), str(statValue), font=self.getFont("semibold", 80), fill=fontColor if fontColor else self.bodyColor)
         self.draw.text((leftPadding, y+550), statTitle, font=self.getFont("medium", 55), fill=self.bodyColor)
 
-    def drawBuffUptimeGraphStackableBuff(self, y, datasets, imageName, ):
+    def drawBuffUptimeGraphStackableBuff(self, y, datasets, imageName, xData=None, xLabelFunc=None):
         #draw the graph
         graphHeight = 450
         graphXStart = self.leftPadding+450
-        xData = list(range(601))
-        self.drawGraph(graphXStart, y, self.availableSpace-570, graphHeight, xData, datasets, maxY=10, showXAxisLabels=False, showYAxisLabels=False, ticks=3)
+        if xData is None:
+            maxLen = max((len(dataset.get("data", [])) for dataset in datasets), default=0)
+            xData = list(range(maxLen if maxLen else 1))
+        self.drawGraph(graphXStart, y, self.availableSpace-570, graphHeight, xData, datasets, maxY=10, showXAxisLabels=bool(xLabelFunc), showYAxisLabels=False, ticks=3, xLabelFunc=xLabelFunc)
 
         #load the icon
         imageDimension = 170
@@ -940,7 +1004,7 @@ class HourlyReportDrawer:
         for i, dataset in enumerate(datasets):
             self.draw.text((imageX, imageY - (90+60*i)), dataset["average"], font=self.getFont("semibold", 60), fill=dataset["lineColor"])
 
-    def drawBuffUptimeGraphUnstackableBuff(self, y, datasets, imageName, renderTime = False):
+    def drawBuffUptimeGraphUnstackableBuff(self, y, datasets, imageName, renderTime = False, xData=None, xLabelFunc=None):
 
         def transformXLabel(i, val):
             if i%100:
@@ -957,8 +1021,11 @@ class HourlyReportDrawer:
         #draw the graph
         graphHeight = 250
         graphXStart = self.leftPadding+450
-        xData = list(range(601))
-        self.drawGraph(graphXStart, y, self.availableSpace-570, graphHeight, xData, datasets, maxY=1, showXAxisLabels=renderTime, showYAxisLabels=False, ticks=2, xLabelFunc=transformXLabel)
+        if xData is None:
+            maxLen = max((len(dataset.get("data", [])) for dataset in datasets), default=0)
+            xData = list(range(maxLen if maxLen else 1))
+        labelFunc = xLabelFunc if xLabelFunc else transformXLabel
+        self.drawGraph(graphXStart, y, self.availableSpace-570, graphHeight, xData, datasets, maxY=1, showXAxisLabels=renderTime or bool(xLabelFunc), showYAxisLabels=False, ticks=2, xLabelFunc=labelFunc)
 
         #load the icon
         imageDimension = 170
@@ -990,11 +1057,11 @@ class HourlyReportDrawer:
         textWidth = bbox[2] - bbox[0]
         self.draw.text((self.canvasSize[0]-self.sidebarPadding-textWidth, textY), str(value), valueColor, font=font)
 
-    def drawTaskTimes(self, y, datasets):
+    def drawTaskTimes(self, y, datasets, totalTime=None):
         legendIconDimension = 80
         font = self.getFont("medium", 68)
         x = self.sidebarX
-        totalData = sum([x["data"] for x in datasets])
+        totalData = totalTime if totalTime is not None else sum([x["data"] for x in datasets])
         if not totalData:
             totalData = 1
 
