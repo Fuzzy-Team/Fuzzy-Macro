@@ -723,11 +723,16 @@ window.oncontextmenu = function(event) {
 // Function to check if current key combination matches a configured keybind
 function isConfiguredKeybind(event) {
   // Get current keybinds from settings
-  const startKeybind =
-    document.getElementById("start_keybind")?.dataset.keybind;
-  const pauseKeybind =
-    document.getElementById("pause_keybind")?.dataset.keybind;
-  const stopKeybind = document.getElementById("stop_keybind")?.dataset.keybind;
+  const startKeybindEl = document.getElementById("start_keybind");
+  const pauseKeybindEl = document.getElementById("pause_keybind");
+  const stopKeybindEl = document.getElementById("stop_keybind");
+  const startKeybind = startKeybindEl
+    ? startKeybindEl.dataset.keybind
+    : undefined;
+  const pauseKeybind = pauseKeybindEl
+    ? pauseKeybindEl.dataset.keybind
+    : undefined;
+  const stopKeybind = stopKeybindEl ? stopKeybindEl.dataset.keybind : undefined;
 
   if (!startKeybind && !pauseKeybind && !stopKeybind) return false;
 

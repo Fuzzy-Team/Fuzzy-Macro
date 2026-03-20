@@ -393,7 +393,10 @@ async function loadTasks() {
       if (!setdat.blender_enable) return { enabled: false };
       const selectedBlenderItems = {};
       for (let i = 1; i < 4; i++) {
-        const item = setdat[`blender_item_${i}`]?.replaceAll(" ", "_");
+        const blenderItemValue = setdat[`blender_item_${i}`];
+        const item = blenderItemValue
+          ? blenderItemValue.replaceAll(" ", "_")
+          : blenderItemValue;
         if (item == "none" || !item) continue;
         selectedBlenderItems[toTitleCase(item.replaceAll("_", " "))] =
           blenderIcons[item];

@@ -790,6 +790,13 @@ def updateGUI():
     except Exception:
         pass
 
+    _dispatch_frontend("loadInputs", settings)
+    _dispatch_frontend("loadTasks")
+    try:
+        _dispatch_frontend("refreshCurrentTabContent", await_result=True)
+    except Exception:
+        pass
+
 
 def _set_dock_icon_if_available():
     """Set the macOS Dock icon at runtime if AppKit is available.
@@ -812,13 +819,6 @@ def _set_dock_icon_if_available():
     except Exception as e:
         print(f"Failed to set dock icon: {e}")
         return False
-
-    _dispatch_frontend("loadInputs", settings)
-    _dispatch_frontend("loadTasks")
-    try:
-        _dispatch_frontend("refreshCurrentTabContent", await_result=True)
-    except Exception:
-        pass
 
 def toggleStartStop():
     _dispatch_frontend("toggleStartStop")

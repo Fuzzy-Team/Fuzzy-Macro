@@ -32,7 +32,11 @@
         elapsed += intervalMs;
         if (elapsed >= timeoutMs) {
           clearInterval(poll);
-          resolve(window.pywebview?.api || null);
+          resolve(
+            window.pywebview && window.pywebview.api
+              ? window.pywebview.api
+              : null
+          );
         }
       }, intervalMs);
     });

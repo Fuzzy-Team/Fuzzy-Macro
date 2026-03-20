@@ -133,8 +133,8 @@ function initializePrioritySearch() {
 
     const items = container.querySelectorAll(".drag-item");
     items.forEach((item) => {
-      const text =
-        item.querySelector(".drag-text")?.textContent.toLowerCase() || "";
+      const dragText = item.querySelector(".drag-text");
+      const text = dragText ? dragText.textContent.toLowerCase() : "";
       if (searchTerm === "" || text.includes(searchTerm)) {
           item.style.display = "";
       } else {
@@ -149,7 +149,7 @@ function initializeQuickActions() {
   document.addEventListener("click", (e) => {
     if (e.target.classList.contains("move-to-top")) {
       const item = e.target.closest(".drag-item");
-      const container = item?.parentElement;
+      const container = item ? item.parentElement : null;
       if (container && item) {
         container.insertBefore(item, container.firstChild);
         saveDragOrder(container);
@@ -159,7 +159,7 @@ function initializeQuickActions() {
     // Handle move to bottom buttons
     if (e.target.classList.contains("move-to-bottom")) {
       const item = e.target.closest(".drag-item");
-      const container = item?.parentElement;
+      const container = item ? item.parentElement : null;
       if (container && item) {
         container.appendChild(item);
         saveDragOrder(container);
