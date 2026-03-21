@@ -403,6 +403,96 @@ select:focus {
   color: white;
 }
 
+.bond-calc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.bond-calc-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.bond-calc-select {
+  margin-top: 0;
+  height: 2.2rem;
+}
+
+.bond-calc-warning {
+  margin-top: 0.8rem;
+  border: 1px solid #a94545;
+  background: rgba(169, 69, 69, 0.15);
+  color: #ffb3b3;
+  border-radius: 8px;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.85rem;
+}
+
+.bond-calc-summary {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.bond-calc-summary-item {
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.bond-calc-summary-item span {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.bond-calc-summary-item strong {
+  font-size: 1rem;
+  color: var(--text-main);
+}
+
+@media (max-width: 720px) {
+  .bond-calc-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.bond-calc-table-wrap {
+  margin-top: 1rem;
+  overflow-x: auto;
+}
+
+.bond-calc-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 640px;
+}
+
+.bond-calc-table th,
+.bond-calc-table td {
+  padding: 0.55rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  font-size: 0.85rem;
+}
+
+.bond-calc-table th {
+  color: var(--text-main);
+  font-weight: 600;
+  background: var(--surface-hover);
+}
+
+.bond-calc-table td {
+  color: var(--text-dim);
+}
+
 .textbox {
   background-color: var(--textbox-bg);
   /* Slightly lighter than surface */

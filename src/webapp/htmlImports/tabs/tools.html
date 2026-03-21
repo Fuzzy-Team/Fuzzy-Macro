@@ -1,6 +1,7 @@
 <div class="main-content-container">
   <div id="tools-nav" class="sub-nav-bar">
     <div id="tools-autoclicker" class="tools-tab-item">Auto Clicker</div>
+    <div id="tools-bond-calculator" class="tools-tab-item">Bond/Treat Calculator</div>
   </div>
 
   <div id="tools-autoclicker-tab" class="standard-container sub-tab-panel active">
@@ -49,5 +50,125 @@
         },
       ]);
     </script>
+  </div>
+
+  <div id="tools-bond-calculator-tab" class="standard-container sub-tab-panel">
+    <div class="poppins-medium standard-container" style="display: block; justify-items: unset; padding-top: 1rem;">
+      <h2 id="bond-treat-calculator">Bond/Treat Calculator</h2>
+      <p style="font-weight:500; font-size:1rem;">Calculate treat count and honey cost between bond levels using your Bond from Treats stat.</p>
+      <p style="font-size:0.95rem; opacity:0.8; margin-top:0.5rem;">You can find your Bond from Treats % in your character stats in BSS.</p>
+      <div class="seperator"></div>
+
+      <div class="bond-calc-grid">
+        <div class="bond-calc-input-group">
+          <label for="bond-calc-start-level">Initial Level</label>
+          <select id="bond-calc-start-level" class="textbox bond-calc-select">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="7">7</option>
+            <option value="8">8</option>
+            <option value="9">9</option>
+            <option value="10">10</option>
+            <option value="11">11</option>
+            <option value="12">12</option>
+            <option value="13">13</option>
+            <option value="14">14</option>
+            <option value="15">15</option>
+            <option value="16">16</option>
+            <option value="17">17</option>
+            <option value="18">18</option>
+            <option value="19">19</option>
+            <option value="20">20</option>
+            <option value="21">21</option>
+            <option value="22">22</option>
+            <option value="23">23</option>
+            <option value="24">24</option>
+          </select>
+        </div>
+
+        <div class="bond-calc-input-group">
+          <label for="bond-calc-end-level">Final Level</label>
+          <select id="bond-calc-end-level" class="textbox bond-calc-select">
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="7">7</option>
+            <option value="8">8</option>
+            <option value="9">9</option>
+            <option value="10">10</option>
+            <option value="11">11</option>
+            <option value="12">12</option>
+            <option value="13">13</option>
+            <option value="14">14</option>
+            <option value="15">15</option>
+            <option value="16">16</option>
+            <option value="17">17</option>
+            <option value="18">18</option>
+            <option value="19">19</option>
+            <option value="20" selected>20</option>
+            <option value="21">21</option>
+            <option value="22">22</option>
+            <option value="23">23</option>
+            <option value="24">24</option>
+            <option value="25">25</option>
+          </select>
+        </div>
+
+        <div class="bond-calc-input-group">
+          <label for="bond-calc-bonus">Bond from Treats (%)</label>
+          <input
+            id="bond-calc-bonus"
+            class="textbox"
+            type="number"
+            min="0"
+            max="300"
+            step="0.1"
+            value="20"
+          />
+        </div>
+      </div>
+
+      <div id="bond-calc-warning" class="bond-calc-warning" style="display:none;"></div>
+
+      <div class="bond-calc-summary">
+        <div class="bond-calc-summary-item">
+          <span>Total Bond</span>
+          <strong id="bond-calc-total-bond">0</strong>
+        </div>
+        <div class="bond-calc-summary-item">
+          <span>Treats Needed (1 Bee)</span>
+          <strong id="bond-calc-total-treats">0</strong>
+        </div>
+        <div class="bond-calc-summary-item">
+          <span>Cost (1 Bee)</span>
+          <strong id="bond-calc-total-cost-one">0</strong>
+        </div>
+        <div class="bond-calc-summary-item">
+          <span>Cost (50 Bees)</span>
+          <strong id="bond-calc-total-cost-fifty">0</strong>
+        </div>
+      </div>
+
+      <div class="bond-calc-table-wrap">
+        <table class="bond-calc-table">
+          <thead>
+            <tr>
+              <th>Level</th>
+              <th>Bond Required</th>
+              <th>Treats Needed</th>
+              <th>Cost per Bee</th>
+              <th>Cost for 50 Bees</th>
+            </tr>
+          </thead>
+          <tbody id="bond-calc-breakdown"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </div>
