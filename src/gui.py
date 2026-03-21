@@ -101,55 +101,52 @@ def getManualPlanterData():
         return ast.literal_eval(planterDataRaw)
     else: 
         return ""
-    
-@eel.expose
-def getAutoPlanterData():
-    try:
-        with open("./data/user/auto_planters.json", "r") as f:
-            return json.load(f)
-    except Exception:
-        # Return sensible default if file missing or invalid
-        return {
-            "planters": [
-                {"planter": "", "nectar": "", "field": "", "harvest_time": 0, "nectar_est_percent": 0},
-                {"planter": "", "nectar": "", "field": "", "harvest_time": 0, "nectar_est_percent": 0},
-                {"planter": "", "nectar": "", "field": "", "harvest_time": 0, "nectar_est_percent": 0}
-            ],
-            "nectar_last_field": {
-                "comforting": "",
-                "refreshing": "",
-                "satisfying": "",
-                "motivating": "",
-                "invigorating": ""
-            },
-            "gather": False
-        }
 
-@eel.expose
-def clearAutoPlanters():
-    data = {
+def emptyAutoPlanterSlot():
+    return {
+        "planter": "",
+        "nectar": "",
+        "field": "",
+        "harvest_time": 0,
+        "nectar_est_percent": 0,
+        "placed_time": 0,
+        "grow_duration": 0,
+        "natural_grow_duration": 0
+    }
+
+def emptyAutoPlanterFieldDegradation():
+    return {
+        field: {
+            "hours": 0.0,
+            "updated_at": 0.0
+        }
+        for field in [
+            "dandelion",
+            "bamboo",
+            "pine tree",
+            "mushroom",
+            "spider",
+            "stump",
+            "rose",
+            "sunflower",
+            "pineapple",
+            "pumpkin",
+            "blue flower",
+            "strawberry",
+            "coconut",
+            "clover",
+            "cactus",
+            "mountain top",
+            "pepper"
+        ]
+    }
+
+def defaultAutoPlanterData():
+    return {
         "planters": [
-            {
-                "planter": "",
-                "nectar": "",
-                "field": "",
-                "harvest_time": 0,
-                "nectar_est_percent": 0
-            },
-            {
-                "planter": "",
-                "nectar": "",
-                "field": "",
-                "harvest_time": 0,
-                "nectar_est_percent": 0
-            },
-            {
-                "planter": "",
-                "nectar": "",
-                "field": "",
-                "harvest_time": 0,
-                "nectar_est_percent": 0
-            }
+            emptyAutoPlanterSlot(),
+            emptyAutoPlanterSlot(),
+            emptyAutoPlanterSlot()
         ],
         "nectar_last_field": {
             "comforting": "",
@@ -157,10 +154,55 @@ def clearAutoPlanters():
             "satisfying": "",
             "motivating": "",
             "invigorating": ""
-        }
-        ,
-        "gather": False
+        },
+        "gather": False,
+        "field_degradation": emptyAutoPlanterFieldDegradation()
     }
+
+def normalizeAutoPlanterData(data):
+    normalized = defaultAutoPlanterData()
+    if not isinstance(data, dict):
+        return normalized
+
+    for key in ("gather",):
+        if key in data:
+            normalized[key] = data[key]
+
+    if isinstance(data.get("nectar_last_field"), dict):
+        for nectar, value in data["nectar_last_field"].items():
+            if nectar in normalized["nectar_last_field"]:
+                normalized["nectar_last_field"][nectar] = value
+
+    if isinstance(data.get("field_degradation"), dict):
+        for field, value in data["field_degradation"].items():
+            if field in normalized["field_degradation"] and isinstance(value, dict):
+                normalized["field_degradation"][field]["hours"] = value.get("hours", value.get("value", 0.0) or 0.0)
+                normalized["field_degradation"][field]["updated_at"] = value.get("updated_at", 0.0) or 0.0
+
+    if isinstance(data.get("planters"), list):
+        normalized["planters"] = []
+        for planter in data["planters"][:3]:
+            slot = emptyAutoPlanterSlot()
+            if isinstance(planter, dict):
+                for key in slot:
+                    slot[key] = planter.get(key, slot[key])
+            normalized["planters"].append(slot)
+        while len(normalized["planters"]) < 3:
+            normalized["planters"].append(emptyAutoPlanterSlot())
+
+    return normalized
+    
+@eel.expose
+def getAutoPlanterData():
+    try:
+        with open("./data/user/auto_planters.json", "r") as f:
+            return normalizeAutoPlanterData(json.load(f))
+    except Exception:
+        return defaultAutoPlanterData()
+
+@eel.expose
+def clearAutoPlanters():
+    data = defaultAutoPlanterData()
     with open("./data/user/auto_planters.json", "w") as f:
         json.dump(data, f, indent=3)
 
@@ -171,12 +213,12 @@ def setAutoPlanterGather(val):
     try:
         try:
             with open("./data/user/auto_planters.json", "r") as f:
-                current = json.load(f)
+                current = normalizeAutoPlanterData(json.load(f))
         except Exception:
             current = None
 
         if not current:
-            current = getAutoPlanterData()
+            current = defaultAutoPlanterData()
 
         current["gather"] = bool(val)
 
@@ -223,20 +265,14 @@ def resetAutoPlanterTimer(index):
     """Reset a specific auto planter timer by index (0-2)"""
     try:
         with open("./data/user/auto_planters.json", "r") as f:
-            data = json.load(f)
+            data = normalizeAutoPlanterData(json.load(f))
         
         # Check if index is valid
         if index < 0 or index >= len(data.get("planters", [])):
             return False
         
         # Clear the specific planter
-        data["planters"][index] = {
-            "planter": "",
-            "nectar": "",
-            "field": "",
-            "harvest_time": 0,
-            "nectar_est_percent": 0
-        }
+        data["planters"][index] = emptyAutoPlanterSlot()
         
         with open("./data/user/auto_planters.json", "w") as f:
             json.dump(data, f, indent=3)
