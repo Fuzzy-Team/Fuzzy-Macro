@@ -446,6 +446,7 @@ select:focus {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
+  min-width: 0;
 }
 
 .bond-calc-summary-item span {
@@ -456,6 +457,9 @@ select:focus {
 .bond-calc-summary-item strong {
   font-size: 1rem;
   color: var(--text-main);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.2;
 }
 
 @media (max-width: 720px) {
