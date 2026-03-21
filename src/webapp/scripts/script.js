@@ -280,6 +280,17 @@ window.refreshCurrentTabContent = async function () {
       }
     }
 
+    if (activeMainTab === "tools" && typeof switchToolsTab === "function") {
+      const activeToolsTab = document.querySelector(".tools-tab-item.active");
+      if (activeToolsTab) {
+        switchToolsTab(activeToolsTab);
+      } else {
+        const defaultToolsTab = document.getElementById("tools-autoclicker");
+        if (defaultToolsTab) switchToolsTab(defaultToolsTab);
+      }
+      return true;
+    }
+
     if (typeof loadTasks === "function") {
       await loadTasks();
       return true;
