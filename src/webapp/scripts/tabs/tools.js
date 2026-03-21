@@ -1,8 +1,12 @@
 let autoClickerTimer = null;
+let autoClickerStartTimeout = null;
+let autoGiftedBasicBeeStatusTimer = null;
 const AUTOCLICKER_MIN_INTERVAL = 10;
 const AUTOCLICKER_DEFAULT_INTERVAL = 100;
-const AUTOCLICKER_DEFAULT_KEYBIND = "F4";
+const AUTOCLICKER_DEFAULT_KEYBIND = "F3";
+const AUTOCLICKER_START_DELAY_MS = 3000;
 let autoClickerHotkeyListenerAdded = false;
+const AUTO_GIFTED_BASIC_BEE_DEFAULT_DELAY = 3;
 
 const TREAT_COST_HONEY = 10000;
 const BOND_REQUIREMENTS = [
@@ -249,10 +253,8 @@ function addAutoClickerHotkeyListener() {
     event.preventDefault();
     event.stopPropagation();
 
-    if (autoClickerTimer) {
+    if (autoClickerTimer || autoClickerStartTimeout) {
       stopAutoClicker();
-    } else {
-      startAutoClicker();
     }
   });
 }
@@ -282,34 +284,163 @@ function onAutoClickerIntervalChange() {
 }
 
 function startAutoClicker() {
-  if (autoClickerTimer) return;
+  if (autoClickerTimer || autoClickerStartTimeout) return;
 
-  const interval = getAutoClickerInterval();
   const startButton = document.getElementById("autoclicker_start");
 
   if (startButton) {
     startButton.classList.add("active");
-    startButton.innerText = "Running";
+    startButton.innerText = "Starting...";
   }
 
-  autoClickerTimer = setInterval(() => {
-    if (window.eel && typeof eel.autoClickerClick === "function") {
-      eel.autoClickerClick();
+  autoClickerStartTimeout = setTimeout(() => {
+    autoClickerStartTimeout = null;
+
+    const interval = getAutoClickerInterval();
+    autoClickerTimer = setInterval(() => {
+      if (window.eel && typeof eel.autoClickerClick === "function") {
+        eel.autoClickerClick();
+      }
+    }, interval);
+
+    if (startButton) {
+      startButton.classList.add("active");
+      startButton.innerText = "Running";
     }
-  }, interval);
+  }, AUTOCLICKER_START_DELAY_MS);
 }
 
 function stopAutoClicker() {
-  if (!autoClickerTimer) return;
+  if (autoClickerStartTimeout) {
+    clearTimeout(autoClickerStartTimeout);
+    autoClickerStartTimeout = null;
+  }
 
-  clearInterval(autoClickerTimer);
-  autoClickerTimer = null;
+  if (autoClickerTimer) {
+    clearInterval(autoClickerTimer);
+    autoClickerTimer = null;
+  }
 
   const startButton = document.getElementById("autoclicker_start");
   if (startButton) {
     startButton.classList.remove("active");
     startButton.innerText = "Start";
   }
+}
+
+function getAutoGiftedBasicBeeDelay() {
+  const input = document.getElementById("auto-gifted-basic-bee-delay");
+  if (!input) return AUTO_GIFTED_BASIC_BEE_DEFAULT_DELAY;
+
+  let delay = parseInt(input.value, 10);
+  if (Number.isNaN(delay)) delay = AUTO_GIFTED_BASIC_BEE_DEFAULT_DELAY;
+  delay = Math.min(10, Math.max(1, delay));
+  input.value = delay;
+  return delay;
+}
+
+function getAutoGiftedBasicBeePauseSettings() {
+  return {
+    pause_on_gifted_basic: true,
+    pause_on_gifted_other: !!document.getElementById("auto-gifted-basic-bee-pause-gifted-other")?.checked,
+    pause_on_legendary: !!document.getElementById("auto-gifted-basic-bee-pause-legendary")?.checked,
+    pause_on_mythic: !!document.getElementById("auto-gifted-basic-bee-pause-mythic")?.checked,
+    pause_on_basic: false,
+    pause_on_other: false,
+  };
+}
+
+function renderAutoGiftedBasicBeeStatus(status) {
+  if (!status) return;
+
+  const state = document.getElementById("auto-gifted-basic-bee-state");
+  const slot = document.getElementById("auto-gifted-basic-bee-slot");
+  const eggs = document.getElementById("auto-gifted-basic-bee-eggs");
+  const rj = document.getElementById("auto-gifted-basic-bee-rj");
+  const rolls = document.getElementById("auto-gifted-basic-bee-rolls");
+  const message = document.getElementById("auto-gifted-basic-bee-message");
+  const lastText = document.getElementById("auto-gifted-basic-bee-last-text");
+  const startButton = document.getElementById("auto-gifted-basic-bee-start");
+  const stopButton = document.getElementById("auto-gifted-basic-bee-stop");
+
+  if (state) state.textContent = status.state || "idle";
+  if (slot) {
+    slot.textContent =
+      status.bee_slot_x != null && status.bee_slot_y != null
+        ? `${status.bee_slot_x}, ${status.bee_slot_y}`
+        : "Not captured";
+  }
+  if (eggs) eggs.textContent = status.basic_eggs_used ?? 0;
+  if (rj) rj.textContent = status.royal_jellies_used ?? 0;
+  if (rolls) rolls.textContent = status.rolls ?? 0;
+  if (message) message.textContent = status.message || "Ready";
+  if (lastText) lastText.textContent = status.last_detected_text || "None";
+
+  if (startButton) {
+    startButton.classList.toggle("active", !!status.running);
+    startButton.textContent = "Start";
+    startButton.style.display = status.running ? "none" : "";
+  }
+
+  if (stopButton) {
+    stopButton.classList.toggle("active", !!status.running);
+    stopButton.style.display = status.running ? "" : "none";
+  }
+}
+
+async function refreshAutoGiftedBasicBeeStatus() {
+  if (!window.eel || typeof eel.getAutoGiftedBasicBeeStatus !== "function") return;
+  try {
+    const status = await eel.getAutoGiftedBasicBeeStatus()();
+    renderAutoGiftedBasicBeeStatus(status);
+  } catch (error) {
+    console.error("Failed to refresh Auto Gifted Basic Bee status:", error);
+  }
+}
+
+async function startAutoGiftedBasicBeeTool() {
+  if (!window.eel || typeof eel.startAutoGiftedBasicBeeTool !== "function") return;
+  const delay = getAutoGiftedBasicBeeDelay();
+  const pauseSettings = getAutoGiftedBasicBeePauseSettings();
+
+  try {
+    const result = await eel.startAutoGiftedBasicBeeTool(delay, pauseSettings)();
+    const message = document.getElementById("auto-gifted-basic-bee-message");
+    if (message && result && result.message) {
+      message.textContent = result.message;
+    }
+    await refreshAutoGiftedBasicBeeStatus();
+  } catch (error) {
+    console.error("Failed to start Auto Gifted Basic Bee tool:", error);
+  }
+}
+
+async function stopAutoGiftedBasicBeeTool() {
+  if (!window.eel || typeof eel.stopAutoGiftedBasicBeeTool !== "function") return;
+
+  try {
+    const result = await eel.stopAutoGiftedBasicBeeTool()();
+    const message = document.getElementById("auto-gifted-basic-bee-message");
+    if (message && result && result.message) {
+      message.textContent = result.message;
+    }
+    await refreshAutoGiftedBasicBeeStatus();
+  } catch (error) {
+    console.error("Failed to stop Auto Gifted Basic Bee tool:", error);
+  }
+}
+
+function initializeAutoGiftedBasicBeeTool() {
+  const delayInput = document.getElementById("auto-gifted-basic-bee-delay");
+  if (delayInput && !delayInput.value) {
+    delayInput.value = AUTO_GIFTED_BASIC_BEE_DEFAULT_DELAY;
+  }
+
+  if (!autoGiftedBasicBeeStatusTimer) {
+    autoGiftedBasicBeeStatusTimer = setInterval(refreshAutoGiftedBasicBeeStatus, 1000);
+  }
+
+  refreshAutoGiftedBasicBeeStatus();
 }
 
 function switchToolsTab(target) {
@@ -341,6 +472,7 @@ function loadTools() {
   ensureAutoClickerKeybindLoaded();
   addAutoClickerHotkeyListener();
   initializeBondTreatCalculator();
+  initializeAutoGiftedBasicBeeTool();
 
   switchToolsTab(document.getElementById("tools-autoclicker"));
 }

@@ -9,10 +9,12 @@ import ast
 import json
 import webbrowser
 import time
+from modules.submacros.autoGiftedBasicBee import AutoGiftedBasicBeeRunner
 
 eel.init('webapp')
 run = None
 _recent_logs = []
+_auto_gifted_basic_bee_runner = AutoGiftedBasicBeeRunner()
 @eel.expose
 def openLink(link):
     webbrowser.open(link, autoraise = True)
@@ -448,6 +450,18 @@ def autoClickerClick():
         return True
     except Exception:
         return False
+
+@eel.expose
+def startAutoGiftedBasicBeeTool(capture_delay_seconds=3, pause_settings=None):
+    return _auto_gifted_basic_bee_runner.start(capture_delay_seconds, getRunState(), pause_settings)
+
+@eel.expose
+def stopAutoGiftedBasicBeeTool():
+    return _auto_gifted_basic_bee_runner.stop()
+
+@eel.expose
+def getAutoGiftedBasicBeeStatus():
+    return _auto_gifted_basic_bee_runner.get_status()
 
 @eel.expose
 def update():

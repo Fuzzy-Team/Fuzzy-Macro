@@ -39,5 +39,5 @@ goo_slot=3
 start_keybind=F1
 stop_keybind=F3
 pause_keybind=F2
-autoclicker_keybind=F4
+autoclicker_keybind=F3
 macro_mode=normal
