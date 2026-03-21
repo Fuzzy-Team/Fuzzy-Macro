@@ -29,12 +29,14 @@ const BOND_REQUIREMENTS = [
   475000000000,
   4500000000000,
   95000000000000,
-  5000000000000000,
-  95000000000000000,
+  900000000000000,
+  9000000000000000,
 ];
 
 function formatCompactHoney(value) {
   const units = [
+    { threshold: 1e18, suffix: "Qn" },
+    { threshold: 1e15, suffix: "Qd" },
     { threshold: 1e12, suffix: "T" },
     { threshold: 1e9, suffix: "B" },
     { threshold: 1e6, suffix: "M" },
@@ -138,8 +140,8 @@ function updateBondTreatCalculator() {
     { bond: 0, treats: 0, costOne: 0, costFifty: 0 }
   );
 
-  el.totalBond.textContent = formatWholeNumber(totals.bond);
-  el.totalTreats.textContent = formatWholeNumber(totals.treats);
+  el.totalBond.textContent = formatCompactHoney(totals.bond);
+  el.totalTreats.textContent = formatCompactHoney(totals.treats);
   el.totalCostOne.textContent = formatCompactHoney(totals.costOne);
   el.totalCostFifty.textContent = formatCompactHoney(totals.costFifty);
 
