@@ -1,6 +1,89 @@
 let autoClickerTimer = null;
 const AUTOCLICKER_MIN_INTERVAL = 10;
 const AUTOCLICKER_DEFAULT_INTERVAL = 100;
+const AUTOCLICKER_DEFAULT_KEYBIND = "F4";
+let autoClickerHotkeyListenerAdded = false;
+
+function normalizeKeybindFromEvent(event) {
+  let combo = [];
+  if (event.ctrlKey) combo.push("Ctrl");
+  if (event.altKey) combo.push("Alt");
+  if (event.shiftKey) combo.push("Shift");
+  if (event.metaKey) combo.push("Cmd");
+
+  let mainKey = event.key;
+  if (mainKey === " ") mainKey = "Space";
+  else if (mainKey === "Control") mainKey = "Ctrl";
+  else if (mainKey === "Alt") mainKey = "Alt";
+  else if (mainKey === "Shift") mainKey = "Shift";
+  else if (mainKey === "Meta") mainKey = "Cmd";
+  else if (mainKey.startsWith("F") && mainKey.length <= 3) mainKey = mainKey;
+  else if (mainKey.length === 1) mainKey = mainKey.toUpperCase();
+
+  combo.push(mainKey);
+  return combo.join("+");
+}
+
+function getAutoClickerKeybind() {
+  const keybindElement = document.getElementById("autoclicker_keybind");
+  if (!keybindElement) return AUTOCLICKER_DEFAULT_KEYBIND;
+  return keybindElement.dataset.keybind || AUTOCLICKER_DEFAULT_KEYBIND;
+}
+
+function ensureAutoClickerKeybindLoaded() {
+  const keybindElement = document.getElementById("autoclicker_keybind");
+  if (!keybindElement) return;
+
+  let keybind = keybindElement.dataset.keybind || "";
+  if (!keybind) {
+    keybind = AUTOCLICKER_DEFAULT_KEYBIND;
+    keybindElement.dataset.keybind = keybind;
+    if (window.eel && typeof eel.saveGeneralSetting === "function") {
+      eel.saveGeneralSetting("autoclicker_keybind", keybind);
+    }
+  }
+
+  const display = keybindElement.querySelector(".keybind-display");
+  if (display) {
+    display.textContent = keybind.replace(/\+/g, " + ");
+  }
+}
+
+function shouldIgnoreAutoClickerHotkey(event) {
+  if (typeof keybindRecording !== "undefined" && keybindRecording) return true;
+
+  const target = event.target;
+  if (!target) return false;
+
+  const tagName = (target.tagName || "").toLowerCase();
+  const editable = target.isContentEditable;
+  const isTextInput = tagName === "input" || tagName === "textarea" || tagName === "select";
+  return editable || isTextInput;
+}
+
+function addAutoClickerHotkeyListener() {
+  if (autoClickerHotkeyListenerAdded) return;
+  autoClickerHotkeyListenerAdded = true;
+
+  window.addEventListener("keydown", (event) => {
+    if (shouldIgnoreAutoClickerHotkey(event)) return;
+
+    const configuredKeybind = getAutoClickerKeybind();
+    if (!configuredKeybind) return;
+
+    const pressed = normalizeKeybindFromEvent(event);
+    if (pressed !== configuredKeybind) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (autoClickerTimer) {
+      stopAutoClicker();
+    } else {
+      startAutoClicker();
+    }
+  });
+}
 
 function getAutoClickerInterval() {
   const input = document.getElementById("autoclicker_interval_ms");
@@ -82,6 +165,10 @@ function loadTools() {
   if (intervalInput && !intervalInput.value) {
     intervalInput.value = AUTOCLICKER_DEFAULT_INTERVAL;
   }
+
+  ensureAutoClickerKeybindLoaded();
+  addAutoClickerHotkeyListener();
+
   switchToolsTab(document.getElementById("tools-autoclicker"));
 }
 
