@@ -8,6 +8,15 @@
       const toolsParent = document.getElementById("tools-autoclicker-tab");
       buildStandardContainer(toolsParent, "Auto Clicker", "Repeatedly left-clicks at a configurable interval", [
         {
+          id: "autoclicker_keybind",
+          title: "Toggle Hotkey",
+          desc: "Press to start/stop the auto clicker. Default: F4.",
+          type: {
+            name: "keybind",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
           id: "autoclicker_interval_ms",
           title: "Click Interval (ms)",
           desc: "Time between clicks in milliseconds. Lower values click faster.",
