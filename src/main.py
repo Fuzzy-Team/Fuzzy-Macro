@@ -2496,6 +2496,11 @@ def watch_for_hotkeys(run):
                 if is_stop_keybind_held():
                     if not stop_key_held:
                         stop_key_held = True
+                    try:
+                        import gui
+                        gui.stopAutoGiftedBasicBeeTool()
+                    except Exception:
+                        pass
                     # Force stop immediately when stop keybind is held
                     if run.value != 0:  # Only if not already stopped
                         run.value = 0
@@ -2532,8 +2537,6 @@ def watch_for_hotkeys(run):
                     except:
                         pass  # If gui is not ready, continue
                 elif current_combo == stop_keybind and not stop_key_held:
-                    if run.value == 3: #already stopped
-                        return
                     # Check debounce with error handling
                     try:
                         if current_time - last_trigger_time["stop"] < debounce_duration:
@@ -2542,6 +2545,13 @@ def watch_for_hotkeys(run):
                         # Reset trigger time if there's a comparison error
                         last_trigger_time["stop"] = 0.0
                     last_trigger_time["stop"] = current_time
+                    try:
+                        import gui
+                        gui.stopAutoGiftedBasicBeeTool()
+                    except Exception:
+                        pass
+                    if run.value == 3: #already stopped
+                        return
                     run.value = 0
                     # Update GUI immediately (optimistically show stopped state)
                     try:

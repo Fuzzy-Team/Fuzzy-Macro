@@ -2,6 +2,7 @@
   <div id="tools-nav" class="sub-nav-bar">
     <div id="tools-autoclicker" class="tools-tab-item">Auto Clicker</div>
     <div id="tools-bond-calculator" class="tools-tab-item">Bond/Treat Calculator</div>
+    <div id="tools-auto-gifted-basic-bee" class="tools-tab-item">Auto Gifted Basic Bee</div>
   </div>
 
   <div id="tools-autoclicker-tab" class="standard-container sub-tab-panel active">
@@ -10,8 +11,8 @@
       buildStandardContainer(toolsParent, "Auto Clicker", "Repeatedly left-clicks at a configurable interval", [
         {
           id: "autoclicker_keybind",
-          title: "Toggle Hotkey",
-          desc: "Press to start/stop the auto clicker. Default: F4.",
+          title: "Stop Hotkey",
+          desc: "Press to stop the auto clicker or cancel a pending start. Default: F3.",
           type: {
             name: "keybind",
             triggerFunction: saveGeneralTriggerFunction,
@@ -31,7 +32,7 @@
         {
           id: "autoclicker_start",
           title: "Start Auto Clicker",
-          desc: "Begins clicking until stopped.",
+          desc: "Begins clicking after a 3-second delay.",
           type: {
             name: "button",
             text: "Start",
@@ -169,6 +170,97 @@
           <tbody id="bond-calc-breakdown"></tbody>
         </table>
       </div>
+    </div>
+  </div>
+
+  <div id="tools-auto-gifted-basic-bee-tab" class="standard-container sub-tab-panel">
+    <div class="poppins-medium standard-container" style="display: block; justify-items: unset; padding-top: 1rem;">
+      <h2>Auto Gifted Basic Bee Tool</h2>
+      <p style="font-weight:500; font-size:1rem;">Automates the old Basic Egg + Royal Jelly gifted-basic routine directly from Python.</p>
+      <p style="font-size:0.95rem; opacity:0.8; margin-top:0.5rem;">
+        When you press start, the tool focuses Roblox, waits a short countdown, captures your current mouse position as the bee slot,
+        then alternates Basic Egg, Royal Jelly, Basic Egg, and repeats until it finds a Gifted Basic Bee or a paused result.
+      </p>
+      <div class="seperator"></div>
+
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; align-items:end;">
+        <div>
+          <label for="auto-gifted-basic-bee-delay">Capture Delay (seconds)</label>
+          <input
+            id="auto-gifted-basic-bee-delay"
+            class="textbox"
+            type="number"
+            min="1"
+            max="10"
+            step="1"
+            value="3"
+            style="margin-top:0.5rem; width:8rem;"
+          />
+        </div>
+        <div style="display:flex; gap:0.75rem; flex-wrap:wrap;">
+          <button id="auto-gifted-basic-bee-start" class="purple-button" onclick="startAutoGiftedBasicBeeTool()">
+            Start
+          </button>
+          <button id="auto-gifted-basic-bee-stop" class="purple-button" onclick="stopAutoGiftedBasicBeeTool()" style="display:none;">
+            Stop
+          </button>
+        </div>
+      </div>
+
+      <div style="margin-top:1rem;">
+        <label style="display:block; margin-bottom:0.5rem;">Pause On Result</label>
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:0.6rem 1rem;">
+          <label style="display:flex; align-items:center; gap:0.5rem;">
+            <input id="auto-gifted-basic-bee-pause-gifted-other" type="checkbox" checked />
+            Gifted Non-Basic
+          </label>
+          <label style="display:flex; align-items:center; gap:0.5rem;">
+            <input id="auto-gifted-basic-bee-pause-legendary" type="checkbox" />
+            Legendary
+          </label>
+          <label style="display:flex; align-items:center; gap:0.5rem;">
+            <input id="auto-gifted-basic-bee-pause-mythic" type="checkbox" checked />
+            Mythic
+          </label>
+        </div>
+      </div>
+
+      <div style="margin-top:1rem; padding:1rem; border-radius:10px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.07);">
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:0.75rem;">
+          <div>
+            <label>Status</label>
+            <div id="auto-gifted-basic-bee-state" style="margin-top:0.3rem; font-weight:600;">Idle</div>
+          </div>
+          <div>
+            <label>Bee Slot</label>
+            <div id="auto-gifted-basic-bee-slot" style="margin-top:0.3rem;">Not captured</div>
+          </div>
+          <div>
+            <label>Basic Eggs</label>
+            <div id="auto-gifted-basic-bee-eggs" style="margin-top:0.3rem;">0</div>
+          </div>
+          <div>
+            <label>Royal Jellies</label>
+            <div id="auto-gifted-basic-bee-rj" style="margin-top:0.3rem;">0</div>
+          </div>
+          <div>
+            <label>Total Rolls</label>
+            <div id="auto-gifted-basic-bee-rolls" style="margin-top:0.3rem;">0</div>
+          </div>
+        </div>
+        <div style="margin-top:1rem;">
+          <label>Message</label>
+          <div id="auto-gifted-basic-bee-message" style="margin-top:0.3rem; opacity:0.9;">Ready</div>
+        </div>
+        <div style="margin-top:1rem;">
+          <label>Last OCR Read</label>
+          <div id="auto-gifted-basic-bee-last-text" style="margin-top:0.3rem; opacity:0.75; word-break:break-word;">None</div>
+        </div>
+      </div>
+
+      <p style="font-size:0.9rem; opacity:0.75; margin-top:1rem;">
+        Requirements: stop the main macro first, keep Auto-Jelly disabled in-game, and make sure Roblox is visible before starting.
+      </p>
     </div>
   </div>
 </div>
