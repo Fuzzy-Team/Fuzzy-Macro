@@ -1,0 +1,44 @@
+<div class="main-content-container">
+  <div id="tools-nav" class="sub-nav-bar">
+    <div id="tools-autoclicker" class="tools-tab-item">Auto Clicker</div>
+  </div>
+
+  <div id="tools-autoclicker-tab" class="standard-container sub-tab-panel active">
+    <script>
+      const toolsParent = document.getElementById("tools-autoclicker-tab");
+      buildStandardContainer(toolsParent, "Auto Clicker", "Repeatedly left-clicks at a configurable interval", [
+        {
+          id: "autoclicker_interval_ms",
+          title: "Click Interval (ms)",
+          desc: "Time between clicks in milliseconds. Lower values click faster.",
+          type: {
+            name: "textbox",
+            inputType: "int",
+            inputLimit: 4,
+            triggerFunction: "onAutoClickerIntervalChange(this)",
+          },
+        },
+        {
+          id: "autoclicker_start",
+          title: "Start Auto Clicker",
+          desc: "Begins clicking until stopped.",
+          type: {
+            name: "button",
+            text: "Start",
+            triggerFunction: "startAutoClicker()",
+          },
+        },
+        {
+          id: "autoclicker_stop",
+          title: "Stop Auto Clicker",
+          desc: "Stops all automatic clicking.",
+          type: {
+            name: "button",
+            text: "Stop",
+            triggerFunction: "stopAutoClicker()",
+          },
+        },
+      ]);
+    </script>
+  </div>
+</div>

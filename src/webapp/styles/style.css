@@ -223,7 +223,8 @@ select:focus {
 .sub-nav-bar .kill-tab-item,
 .sub-nav-bar .quests-tab-item,
 .sub-nav-bar .config-tab-item,
-.sub-nav-bar .planters-tab-item {
+.sub-nav-bar .planters-tab-item,
+.sub-nav-bar .tools-tab-item {
   padding: 0.45rem 0.75rem;
   border-radius: 8px;
   background: transparent;
@@ -239,7 +240,8 @@ select:focus {
 .sub-nav-bar .kill-tab-item:hover,
 .sub-nav-bar .quests-tab-item:hover,
 .sub-nav-bar .config-tab-item:hover,
-.sub-nav-bar .planters-tab-item:hover {
+.sub-nav-bar .planters-tab-item:hover,
+.sub-nav-bar .tools-tab-item:hover {
   background-color: var(--surface-hover);
   color: var(--text-main);
   border-color: var(--border);
@@ -250,7 +252,8 @@ select:focus {
 .sub-nav-bar .kill-tab-item.active,
 .sub-nav-bar .quests-tab-item.active,
 .sub-nav-bar .config-tab-item.active,
-.sub-nav-bar .planters-tab-item.active {
+.sub-nav-bar .planters-tab-item.active,
+.sub-nav-bar .tools-tab-item.active {
   background: rgba(var(--primary-rgb), 0.12);
   color: var(--primary);
   border-color: rgba(var(--primary-rgb), 0.15);

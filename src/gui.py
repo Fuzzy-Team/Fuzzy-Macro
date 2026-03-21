@@ -3,6 +3,7 @@ import webbrowser
 import modules.misc.settingsManager as settingsManager
 import os
 import modules.misc.update as updateModule
+import modules.controls.mouse as mouseControl
 import sys
 import ast
 import json
@@ -438,6 +439,15 @@ def importFieldSettings(field_name, json_settings):
 def getMacroVersion():
     """Get the macro version from version.txt"""
     return settingsManager.getMacroVersion()
+
+@eel.expose
+def autoClickerClick():
+    """Perform a single fast left click for the tools tab auto clicker."""
+    try:
+        mouseControl.fastClick()
+        return True
+    except Exception:
+        return False
 
 @eel.expose
 def update():
