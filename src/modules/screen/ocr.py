@@ -7,8 +7,11 @@ import time
 import mss
 import mss.darwin
 mss.darwin.IMAGE_OPTIONS = 0
-from modules.screen.screenData import getScreenData
+from modules.screen.screenData import getScreenData, scaleRegion, scaleX, scaleY
 import io
+
+BASE_SCREEN_WIDTH = 2880
+BASE_SCREEN_HEIGHT = 1800
 
 ocrLib = None
 useLangPref = True
@@ -33,11 +36,11 @@ mw, mh = pag.size()
 screenInfo = getScreenData()
 ww = screenInfo["screen_width"]
 wh = screenInfo["screen_height"]
-ysm = screenInfo["y_multiplier"]
-xsm = screenInfo['x_multiplier']
-ylm = screenInfo['y_length_multiplier']
-xlm = screenInfo['x_length_multiplier']
 newUI = False
+
+
+def scaledRegion(left, top, width, height, anchor_x="left", anchor_y="top"):
+    return tuple(int(value) for value in scaleRegion(left, top, width, height, anchor_x, anchor_y, screenInfo))
 
 def getCenter(coords):
     x = coords[0][0]
@@ -89,24 +92,22 @@ def screenshot(**kwargs):
 
 def imToString(m):
     sn = time.time()
-    ebY = mh//(20*ysm)
+    ebY = scaleY(BASE_SCREEN_HEIGHT / 20, screenInfo)
     honeyY = 0
     if newUI:
-        ebY = mh//(14*ysm)
-        honeyY = 25
+        ebY = scaleY(BASE_SCREEN_HEIGHT / 14, screenInfo)
+        honeyY = scaleY(25, screenInfo)
     if m == "bee bear":
-        #cap = screenshot(region=(ww//(3*xsm),ebY/1.1,ww//(3*xlm),wh//(15*ylm)))
-        cap = mssScreenshot(mw//2-200,ebY/1.1,400,mh//(12*ylm))
+        cap = mssScreenshot(*scaledRegion(1240, BASE_SCREEN_HEIGHT / 22, 400, 150, anchor_x="center"))
         #cap.save("ebutton.png")
     elif m == "egg shop":
-        cap = screenshot(region=(ww//(1.2*xsm),wh//(3*ysm),ww-ww//1.2,wh//5))
+        cap = screenshot(region=scaledRegion(2400, 600, 480, 360, anchor_x="right"))
     elif m == "blue":
         cap = mssScreenshot(mw*3//4, mh//3*2, mw//4,mh//3)
     elif m == "chat":
         cap = screenshot(region=(ww*3//4, 0, ww//4,wh//3))
     elif m == "ebutton":
-        #cap = screenshot(region=(ww//(2.65*xsm),ebY,ww//(21*xlm),wh//(17*ylm)))
-        cap = mssScreenshot(mw//2-200,20,400,125)
+        cap = mssScreenshot(*scaledRegion(1240, 20, 400, 125, anchor_x="center"))
         result = ocrFunc(cap)
         try:
             result = sorted(result, key = lambda x: x[1][1], reverse = True)
@@ -114,7 +115,7 @@ def imToString(m):
         except:
             return ""
     elif m == "honey":
-        cap = mssScreenshot(mw//2-241, honeyY, 140, 36)
+        cap = mssScreenshot(*scaledRegion(1199, honeyY, 140, 36, anchor_x="center"))
         if not cap: return ""
         ocrres = ocrFunc(cap)
         honey = ""
@@ -133,7 +134,7 @@ def imToString(m):
     elif m == "disconnect":
         cap = screenshot(region=(ww//(3),wh//(2.8),ww//(2.3),wh//(5)))
     elif m == "dialog":
-        cap = screenshot(region=(ww//(3*xsm),wh//(1.6*ysm),ww//(8*xlm),wh//(ylm*15)))
+        cap = screenshot(region=scaledRegion(960, 1125, 360, 120, anchor_x="center"))
     if not cap: return ""
     result = ocrFunc(cap)
     try:
@@ -145,7 +146,7 @@ def imToString(m):
 
 def customOCR(X1,Y1,W1,H1,applym=1):
     if applym:
-        cap = screenshot(region=(X1/xsm,Y1/ysm,W1/xlm,H1/ylm))
+        cap = screenshot(region=scaledRegion(X1, Y1, W1, H1))
     else:
         cap = screenshot(region=(X1,Y1,W1,H1))
     out = ocrFunc(cap)

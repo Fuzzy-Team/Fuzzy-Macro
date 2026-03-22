@@ -1,51 +1,91 @@
 #update the screen user data
 import pyautogui as pag
-import numpy as np
-import subprocess
-import sys
 import os
 import mss
 import mss.darwin
 mss.darwin.IMAGE_OPTIONS = 0
-from PIL import Image
 from ..misc import settingsManager
-screenPath = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../data/user/screen.txt'))
-def setScreenData():
-    #get screen info
-    multiplierData = {
-        #ysm, xsm, ylm,  xlm
-        "2880x1800": [1,1,1,1],
-        "2940x1912": [1.1,0.98,1,1.2],
-        "1920x1080": [1.2,0.92,1.3,1.5],
-        "1440x900": [1,1,1,1],
-        "1366x768": [0.8,1,1,1.2],
-        "4096x2304": [1.45,0.91,1.32,1.5],
-        "3024x1964": [1,0.98, 1.2, 1.2],
-        "3360x2100": [1.2,0.95,1.2,1.3],
-        "4480x2520": [1.4,0.89,1.4,1.9],
-        "3600x2338": [1.45,0.93,1.2,1.6],
-        "3584x2240": [1.3, 0.93, 1.2, 1.5],
-        "1280x800": [0.9,1.03,1,1],
-        "3840x2160": [1.13,0.92,1.3,1.5],
-        "3456x2234": [1.2, 0.93, 1.3, 1.6],
-        "2560x1600": [0.9, 1.02, 1, 1.1],
-        "2560x1440": [1.45,0.87,1.8,2.2],
-        "5120x2880": [1.4,0.87,1.7,2],
-        "3420x2224":[0.81, 0.95, 1.12, 1.24],
-        "3840x2486": [1.3, 0.92, 1.45, 1.45],
-        "3420x2214":[0.9, 0.95, 1.1, 1.15],
-        "3440x1440": [1.6, 0.84, 1.6, 2.3]
-    }
 
+BASE_SCREEN_WIDTH = 2880
+BASE_SCREEN_HEIGHT = 1800
+
+screenPath = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../data/user/screen.txt'))
+
+
+def _get_reference_scale(screen_data=None):
+    if screen_data is None:
+        screen_data = getScreenData()
+
+    screen_width = screen_data.get("screen_width", BASE_SCREEN_WIDTH) or BASE_SCREEN_WIDTH
+    screen_height = screen_data.get("screen_height", BASE_SCREEN_HEIGHT) or BASE_SCREEN_HEIGHT
+    return (
+        screen_width / BASE_SCREEN_WIDTH,
+        screen_height / BASE_SCREEN_HEIGHT,
+    )
+
+
+def scaleX(value, screen_data=None):
+    scale_x, _ = _get_reference_scale(screen_data)
+    return int(round(value * scale_x))
+
+
+def scaleY(value, screen_data=None):
+    _, scale_y = _get_reference_scale(screen_data)
+    return int(round(value * scale_y))
+
+
+def scaleRegion(left, top, width, height, anchor_x="left", anchor_y="top", screen_data=None):
+    if screen_data is None:
+        screen_data = getScreenData()
+
+    screen_width = screen_data.get("screen_width", BASE_SCREEN_WIDTH) or BASE_SCREEN_WIDTH
+    screen_height = screen_data.get("screen_height", BASE_SCREEN_HEIGHT) or BASE_SCREEN_HEIGHT
+    scaled_width = max(1, scaleX(width, screen_data))
+    scaled_height = max(1, scaleY(height, screen_data))
+
+    if anchor_x == "center":
+        base_center_x = left + width / 2
+        center_offset_x = base_center_x - (BASE_SCREEN_WIDTH / 2)
+        scaled_center_x = (screen_width / 2) + (center_offset_x * screen_width / BASE_SCREEN_WIDTH)
+        scaled_left = int(round(scaled_center_x - (scaled_width / 2)))
+    elif anchor_x == "right":
+        base_right_margin = BASE_SCREEN_WIDTH - (left + width)
+        scaled_right_margin = scaleX(base_right_margin, screen_data)
+        scaled_left = int(round(screen_width - scaled_right_margin - scaled_width))
+    else:
+        scaled_left = scaleX(left, screen_data)
+
+    if anchor_y == "center":
+        base_center_y = top + height / 2
+        center_offset_y = base_center_y - (BASE_SCREEN_HEIGHT / 2)
+        scaled_center_y = (screen_height / 2) + (center_offset_y * screen_height / BASE_SCREEN_HEIGHT)
+        scaled_top = int(round(scaled_center_y - (scaled_height / 2)))
+    elif anchor_y == "bottom":
+        base_bottom_margin = BASE_SCREEN_HEIGHT - (top + height)
+        scaled_bottom_margin = scaleY(base_bottom_margin, screen_data)
+        scaled_top = int(round(screen_height - scaled_bottom_margin - scaled_height))
+    else:
+        scaled_top = scaleY(top, screen_data)
+
+    scaled_left = max(0, min(int(screen_width - scaled_width), scaled_left))
+    scaled_top = max(0, min(int(screen_height - scaled_height), scaled_top))
+    return (scaled_left, scaled_top, scaled_width, scaled_height)
+
+
+def setScreenData():
     wwd, whd = pag.size()
     screenData = {
         "display_type": "built-in",
         "screen_width": wwd,
         "screen_height": whd,
+        "reference_width": BASE_SCREEN_WIDTH,
+        "reference_height": BASE_SCREEN_HEIGHT,
+        "x_scale": 1,
+        "y_scale": 1,
         "y_multiplier": 1,
         "x_multiplier": 1,
-        "y_length_multiplier":1,
-        "x_length_multiplier":1
+        "y_length_multiplier": 1,
+        "x_length_multiplier": 1
     }
 
     #for macs: check if its reina, set the screen width and height, set multipliers
@@ -80,14 +120,12 @@ def setScreenData():
         screenData["screen_width"] = wwd
         screenData["screen_height"] = whd
 
-    ndisplay = "{}x{}".format(screenData["screen_width"], screenData["screen_height"])
+    screenData["x_scale"], screenData["y_scale"] = _get_reference_scale(screenData)
+    screenData["x_multiplier"] = BASE_SCREEN_WIDTH / screenData["screen_width"]
+    screenData["y_multiplier"] = BASE_SCREEN_HEIGHT / screenData["screen_height"]
+    screenData["x_length_multiplier"] = screenData["x_multiplier"]
+    screenData["y_length_multiplier"] = screenData["y_multiplier"]
 
-    # get multipliers based on detected physical display resolution
-    if ndisplay in multiplierData:
-        screenData["y_multiplier"] = multiplierData[ndisplay][0]
-        screenData["x_multiplier"] = multiplierData[ndisplay][1]
-        screenData["y_length_multiplier"] = multiplierData[ndisplay][2]
-        screenData["x_length_multiplier"] = multiplierData[ndisplay][3]
     #save the data
     settingsManager.saveDict(screenPath, screenData)
 
