@@ -16,6 +16,8 @@ import signal
 import json
 import ast
 import time
+import cv2
+import numpy as np
 from datetime import datetime, timedelta
 import queue  # <-- Add this import
 from typing import List, Optional, Dict, Tuple
@@ -40,6 +42,7 @@ except Exception:
 _settings_cache = {}
 _cache_timestamp = 0
 _cache_duration = 5  # seconds
+_shift_lock_template_cache = None
 
 def get_cached_settings():
     """Get settings with caching to improve performance"""
@@ -93,6 +96,227 @@ def update_profile_setting(setting_key, value):
         return True, f"✅ Successfully updated {setting_key} to {value}"
     except Exception as e:
         return False, f"❌ Error updating profile setting: {str(e)}"
+
+def _load_shift_lock_template():
+    global _shift_lock_template_cache
+    if _shift_lock_template_cache is not None:
+        return _shift_lock_template_cache
+
+    src_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    def load_variant(filename: str):
+        template_path = os.path.join(src_dir, "images", "menu", filename)
+        template = cv2.imread(template_path, cv2.IMREAD_UNCHANGED)
+        if template is None:
+            raise FileNotFoundError(f"Shift lock template not found: {template_path}")
+
+        if len(template.shape) == 2:
+            color = cv2.cvtColor(template, cv2.COLOR_GRAY2BGR)
+            mask = None
+        else:
+            color = template[:, :, :3]
+            mask = template[:, :, 3] if template.shape[2] == 4 else None
+
+        return {
+            "color": color,
+            "mask": mask,
+        }
+
+    _shift_lock_template_cache = {
+        "on": load_variant("shiftlock-on.png"),
+        "off": load_variant("shiftlock-off.png"),
+    }
+    return _shift_lock_template_cache
+
+def _resize_shift_lock_template(color, mask, scale: float):
+    if scale == 1.0:
+        return color, mask
+
+    interpolation = cv2.INTER_AREA if scale < 1 else cv2.INTER_LINEAR
+    resized_color = cv2.resize(color, None, fx=scale, fy=scale, interpolation=interpolation)
+    resized_mask = None
+    if mask is not None:
+        resized_mask = cv2.resize(mask, None, fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST)
+    return resized_color, resized_mask
+
+def _template_pixel_diff(icon_crop_bgr, icon_template_bgr, icon_mask):
+    if icon_crop_bgr.size == 0:
+        return float("inf")
+
+    if icon_mask is not None:
+        active_pixels = icon_mask > 0
+        pixels = icon_crop_bgr[active_pixels]
+        template_pixels = icon_template_bgr[active_pixels]
+    else:
+        pixels = icon_crop_bgr.reshape(-1, 3)
+        template_pixels = icon_template_bgr.reshape(-1, 3)
+
+    if pixels.size == 0:
+        return float("inf")
+
+    return float(np.mean(np.abs(pixels.astype(np.int16) - template_pixels.astype(np.int16))))
+
+def _get_shiftlock_search_regions(roblox_window):
+    mx, my, mw, mh = roblox_window.mx, roblox_window.my, roblox_window.mw, roblox_window.mh
+    return [
+        (
+            mx,
+            my + mh - min(mh, max(145, int(mh * 0.16))),
+            min(mw, max(130, int(mw * 0.13))),
+            min(mh, max(145, int(mh * 0.16))),
+        ),
+        (
+            mx,
+            my + mh - min(mh, max(210, int(mh * 0.22))),
+            min(mw, max(210, int(mw * 0.18))),
+            min(mh, max(210, int(mh * 0.22))),
+        ),
+        (
+            mx,
+            my + mh - min(mh, max(270, int(mh * 0.28))),
+            min(mw, max(280, int(mw * 0.24))),
+            min(mh, max(270, int(mh * 0.28))),
+        ),
+    ]
+
+def _score_shiftlock_candidate(score, pixel_diff, center_x, center_y, roblox_window):
+    x_penalty = ((center_x - roblox_window.mx) / max(roblox_window.mw, 1)) * 0.08
+    bottom_penalty = (((roblox_window.my + roblox_window.mh) - center_y) / max(roblox_window.mh, 1)) * 0.12
+    diff_penalty = (min(pixel_diff, 255.0) / 255.0) * 0.2
+    return score - x_penalty - bottom_penalty - diff_penalty
+
+def _detect_shift_lock_state_with_retries(retries: int = 4, delay: float = 0.2):
+    last_detection = None
+    for attempt in range(retries):
+        try:
+            last_detection = _detect_shift_lock_button()
+        except Exception:
+            last_detection = None
+
+        if last_detection and last_detection.get("state") is not None:
+            return last_detection
+
+        if attempt < retries - 1:
+            time.sleep(delay)
+
+    return last_detection
+
+def _detect_shift_lock_button():
+    from modules.screen.robloxWindow import RobloxWindowBounds
+    from modules.screen.screenshot import mssScreenshotNP
+
+    roblox_window = RobloxWindowBounds()
+    roblox_window.setRobloxWindowBounds()
+
+    template_data = _load_shift_lock_template()
+
+    search_regions = _get_shiftlock_search_regions(roblox_window)
+    scales = (0.5, 0.65, 0.8, 1.0, 1.2, 1.4, 1.6, 2.0)
+
+    best_match = None
+    for search_x, search_y, search_w, search_h in search_regions:
+        screen = mssScreenshotNP(search_x, search_y, search_w, search_h)
+        screen_bgr = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
+
+        for variant_name, variant_state in (("on", True), ("off", False)):
+            variant = template_data[variant_name]
+            for scale in scales:
+                scaled_template_color, scaled_mask = _resize_shift_lock_template(
+                    variant["color"],
+                    variant["mask"],
+                    scale,
+                )
+                template_h, template_w = scaled_template_color.shape[:2]
+                if template_h > screen_bgr.shape[0] or template_w > screen_bgr.shape[1]:
+                    continue
+
+                result = cv2.matchTemplate(screen_bgr, scaled_template_color, cv2.TM_CCORR_NORMED, mask=scaled_mask)
+                _, max_val, _, max_loc = cv2.minMaxLoc(result)
+                match_x, match_y = max_loc
+                icon_crop = screen_bgr[match_y:match_y + template_h, match_x:match_x + template_w]
+                center_x = search_x + match_x + template_w // 2
+                center_y = search_y + match_y + template_h // 2
+                pixel_diff = _template_pixel_diff(icon_crop, scaled_template_color, scaled_mask)
+                weighted_score = _score_shiftlock_candidate(
+                    max_val,
+                    pixel_diff,
+                    center_x,
+                    center_y,
+                    roblox_window,
+                )
+                if best_match is None or weighted_score > best_match["weighted_score"]:
+                    best_match = {
+                        "score": max_val,
+                        "weighted_score": weighted_score,
+                        "center_x": center_x,
+                        "center_y": center_y,
+                        "state": variant_state,
+                        "variant": variant_name,
+                        "pixel_diff": pixel_diff,
+                    }
+
+        if best_match and best_match["score"] >= 0.8 and best_match["pixel_diff"] <= 40:
+            break
+
+    if not best_match or best_match["score"] < 0.68:
+        raise RuntimeError("Could not locate the shift lock button on screen.")
+
+    return best_match
+
+def _press_shift_lock_input():
+    keyboard.pagPress("shift")
+    time.sleep(0.35)
+
+def _set_shift_lock_mode(mode: str):
+    desired_states = {"on": True, "off": False}
+
+    if mode == "toggle":
+        before = None
+        try:
+            before = _detect_shift_lock_state_with_retries()
+        except Exception:
+            pass
+
+        _press_shift_lock_input()
+
+        after = None
+        try:
+            after = _detect_shift_lock_state_with_retries()
+        except Exception:
+            pass
+
+        if before and after and before.get("state") is not None and after.get("state") is not None:
+            state_text = "on" if after["state"] else "off"
+            return f"✅ Sent shift input. Shift lock is now {state_text}."
+        return "✅ Sent shift input to toggle shift lock."
+
+    desired_state = desired_states[mode]
+    attempts = 0
+    last_detection = None
+
+    while attempts < 2:
+        try:
+            last_detection = _detect_shift_lock_state_with_retries()
+        except Exception:
+            last_detection = None
+
+        if last_detection and last_detection.get("state") is desired_state:
+            return f"✅ Shift lock is already {'on' if desired_state else 'off'}."
+
+        _press_shift_lock_input()
+        attempts += 1
+
+        try:
+            last_detection = _detect_shift_lock_state_with_retries()
+        except Exception:
+            last_detection = None
+
+        if last_detection and last_detection.get("state") is desired_state:
+            return f"✅ Shift lock turned {'on' if desired_state else 'off'}."
+
+    if last_detection and last_detection.get("state") is not None:
+        state_text = "on" if last_detection["state"] else "off"
+        return f"⚠️ Sent shift input, but shift lock still appears {state_text}."
+    return "⚠️ Sent shift input, but I could not verify the shift lock state afterwards."
 
 def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None, updateGUI=None):
     import modules.macro
@@ -2933,6 +3157,22 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         except Exception as e:
             await interaction.response.send_message(f"❌ Error using hotbar slot: {str(e)}")
 
+    @bot.tree.command(name="shiftlock", description="Set or toggle shift lock")
+    @app_commands.describe(mode="Choose whether shift lock should be on, off, or toggled")
+    @app_commands.choices(mode=[
+        app_commands.Choice(name="on", value="on"),
+        app_commands.Choice(name="off", value="off"),
+        app_commands.Choice(name="toggle", value="toggle"),
+    ])
+    async def shift_lock(interaction: discord.Interaction, mode: str):
+        """Send shift input and optionally verify the resulting shift lock state."""
+        await interaction.response.defer()
+        try:
+            message = _set_shift_lock_mode(mode)
+            await interaction.followup.send(message)
+        except Exception as e:
+            await interaction.followup.send(f"❌ Error controlling shift lock: {str(e)}")
+
     @bot.tree.command(name="macromode", description="Set macro mode (normal, quests, or field)")
     @app_commands.describe(mode="Macro mode to set")
     @app_commands.choices(mode=[
@@ -2967,7 +3207,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         """Show available commands"""
         embed = discord.Embed(title="🤖 BSS Macro Discord Bot", description="Available Commands:", color=0x0099ff)
 
-        embed.add_field(name="🔧 **Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/stop` - Stop the macro\n`/pause` - Pause the macro\n`/resume` - Resume the macro\n`/status` - Get macro status and current task\n`/rejoin` - Make macro rejoin game\n`/screenshot` - Get screenshot\n`/settings` - Open settings panel\n`/hiveslot <1-6>` - Change hive slot number", inline=False)
+        embed.add_field(name="🔧 **Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/stop` - Stop the macro\n`/pause` - Pause the macro\n`/resume` - Resume the macro\n`/status` - Get macro status and current task\n`/rejoin` - Make macro rejoin game\n`/screenshot` - Get screenshot\n`/settings` - Open settings panel\n`/hiveslot <1-6>` - Change hive slot number\n`/shiftlock <on/off/toggle>` - Control shift lock", inline=False)
 
         embed.add_field(name="🌾 **Field Management**", value="`/fields` - View field configuration\n`/field <field> <true/false>` - Enable or disable a field\n`/swapfield <current> <new>` - Swap one field for another (new can be any field)", inline=False)
 
