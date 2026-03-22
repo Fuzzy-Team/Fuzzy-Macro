@@ -4,6 +4,7 @@ import copy
 import json
 import ast
 import pickle
+import statistics
 from modules.submacros.hourlyReport import HourlyReport, HourlyReportDrawer
 from modules.misc.settingsManager import getCurrentProfile, getMacroVersion
 
@@ -18,9 +19,9 @@ class FinalReportDrawer(HourlyReportDrawer):
             #get the buff average when gathering, rounded to 2p
             count = 0
             total = 0
-            for i, e in enumerate(buffGatherIntervals):
-                if e:
-                    total += buffValues[i]
+            for gatherFlag, buffValue in zip(buffGatherIntervals, buffValues):
+                if gatherFlag:
+                    total += buffValue
                     count += 1
 
             res = total/count if count else 0
@@ -51,6 +52,16 @@ class FinalReportDrawer(HourlyReportDrawer):
             mins = [i * timeInterval / 60 for i in range(dataPoints)]  # Convert to minutes for x-axis
         else:
             mins = list(range(dataPoints))
+
+        buffSampleCount = max(
+            max((len(values) for values in uptimeBuffsValues.values()), default=0),
+            len(buffGatherIntervals),
+            1
+        )
+        if sessionTime > 0:
+            buffXAxis = [i * sessionTime / max(buffSampleCount - 1, 1) / 60 for i in range(buffSampleCount)]
+        else:
+            buffXAxis = list(range(buffSampleCount))
 
         #draw aside bar
         self.draw.rectangle((self.canvasSize[0]-self.sidebarWidth, 0, self.canvasSize[0], self.canvasSize[1]), fill=self.sideBarBackground)
@@ -162,6 +173,16 @@ class FinalReportDrawer(HourlyReportDrawer):
                 return f"{int(val/60)}h"
             else:  # Multiple days
                 return f"{int(val/1440)}d"
+
+        def buffTimeLabel(i, val):
+            if buffSampleCount <= 1:
+                return "0m" if i == 0 else None
+
+            labelCount = 6 if sessionTime >= 3600 else 5
+            step = max(1, (buffSampleCount - 1) // labelCount)
+            if i not in (0, buffSampleCount - 1) and i % step:
+                return None
+            return sessionTimeLabel(i, val)
         
         self.drawGraph(self.leftPadding+450, y, self.availableSpace-570, 700, mins, dataset, xLabelFunc=sessionTimeLabel, yLabelFunc=lambda i,x : self.millify(x))
 
@@ -228,7 +249,7 @@ class FinalReportDrawer(HourlyReportDrawer):
             }
         }
         ]
-        self.drawBuffUptimeGraphStackableBuff(y, dataset, "boost_buff")
+        self.drawBuffUptimeGraphStackableBuff(y, dataset, "boost_buff", xData=buffXAxis)
 
         y += 460
         dataset = [
@@ -242,7 +263,7 @@ class FinalReportDrawer(HourlyReportDrawer):
             }
         }
         ]
-        self.drawBuffUptimeGraphStackableBuff(y, dataset, "haste_buff")
+        self.drawBuffUptimeGraphStackableBuff(y, dataset, "haste_buff", xData=buffXAxis)
 
         y += 460
         dataset = [
@@ -256,7 +277,7 @@ class FinalReportDrawer(HourlyReportDrawer):
             }
         }
         ]
-        self.drawBuffUptimeGraphStackableBuff(y, dataset, "focus_buff")
+        self.drawBuffUptimeGraphStackableBuff(y, dataset, "focus_buff", xData=buffXAxis)
 
         y += 460
         dataset = [
@@ -270,7 +291,7 @@ class FinalReportDrawer(HourlyReportDrawer):
             }
         }
         ]
-        self.drawBuffUptimeGraphStackableBuff(y, dataset, "bomb_combo_buff")
+        self.drawBuffUptimeGraphStackableBuff(y, dataset, "bomb_combo_buff", xData=buffXAxis)
 
         y += 460
         dataset = [
@@ -284,7 +305,7 @@ class FinalReportDrawer(HourlyReportDrawer):
             }
         }
         ]
-        self.drawBuffUptimeGraphStackableBuff(y, dataset, "balloon_aura_buff")
+        self.drawBuffUptimeGraphStackableBuff(y, dataset, "balloon_aura_buff", xData=buffXAxis)
 
         y += 460
         dataset = [
@@ -298,7 +319,7 @@ class FinalReportDrawer(HourlyReportDrawer):
             }
         }
         ]
-        self.drawBuffUptimeGraphStackableBuff(y, dataset, "inspire_buff")
+        self.drawBuffUptimeGraphStackableBuff(y, dataset, "inspire_buff", xData=buffXAxis)
 
         y += 260
         dataset = [
@@ -311,7 +332,7 @@ class FinalReportDrawer(HourlyReportDrawer):
             }
         }
         ]
-        self.drawBuffUptimeGraphUnstackableBuff(y, dataset, "melody_buff")
+        self.drawBuffUptimeGraphUnstackableBuff(y, dataset, "melody_buff", xData=buffXAxis)
 
         y += 260
         dataset = [
@@ -324,7 +345,7 @@ class FinalReportDrawer(HourlyReportDrawer):
             }
         }
         ]
-        self.drawBuffUptimeGraphUnstackableBuff(y, dataset, "bear_buff")
+        self.drawBuffUptimeGraphUnstackableBuff(y, dataset, "bear_buff", xData=buffXAxis)
 
         y += 260
         dataset = [
@@ -337,7 +358,7 @@ class FinalReportDrawer(HourlyReportDrawer):
             }
         }
         ]
-        self.drawBuffUptimeGraphUnstackableBuff(y, dataset, "baby_love_buff", renderTime=True)
+        self.drawBuffUptimeGraphUnstackableBuff(y, dataset, "baby_love_buff", renderTime=True, xData=buffXAxis, xLabelFunc=buffTimeLabel)
 
         #side bar - Session Summary
 
@@ -399,7 +420,7 @@ class FinalReportDrawer(HourlyReportDrawer):
                 "data": miscTime,
                 "color": "#E6D6FF"
             },
-        ])
+        ], totalSessionTime)
 
         #planters
         y2 += 1500
@@ -444,6 +465,123 @@ class FinalReport:
         """
         self.hourlyReport = hourlyReport if hourlyReport else HourlyReport()
         self.drawer = FinalReportDrawer()
+
+    def _normalizeCumulativeHoneySeries(self, values, baseline=None):
+        """Return a stable cumulative honey series while preserving sample count."""
+        if not values:
+            return [0]
+
+        numericValues = []
+        for value in values:
+            try:
+                numericValues.append(max(0, float(value)))
+            except (TypeError, ValueError):
+                numericValues.append(0.0)
+
+        firstNonZero = next((value for value in numericValues if value > 0), 0.0)
+        if baseline is None:
+            baseline = firstNonZero
+        baseline = max(0.0, float(baseline or 0.0))
+
+        # Replace placeholder leading zeroes so the first real reading does not look like session gain.
+        if baseline > 0:
+            seenPositive = False
+            for i, value in enumerate(numericValues):
+                if value > 0:
+                    seenPositive = True
+                    break
+                if not seenPositive:
+                    numericValues[i] = baseline
+
+        positiveDeltas = []
+        prevValue = numericValues[0]
+        for value in numericValues[1:]:
+            delta = value - prevValue
+            if delta > 0:
+                positiveDeltas.append(delta)
+            if value > 0:
+                prevValue = value
+
+        deltaCap = None
+        if len(positiveDeltas) >= 5:
+            sortedDeltas = sorted(positiveDeltas)
+            trimmedCount = max(1, int(len(sortedDeltas) * 0.9))
+            trimmedDeltas = sortedDeltas[:trimmedCount]
+            medianDelta = statistics.median(trimmedDeltas)
+            mad = statistics.median([abs(delta - medianDelta) for delta in trimmedDeltas]) if trimmedDeltas else 0
+            p95Trimmed = trimmedDeltas[min(len(trimmedDeltas) - 1, int((len(trimmedDeltas) - 1) * 0.95))]
+            deltaCap = max(1.0, medianDelta * 8.0, medianDelta + mad * 10.0, p95Trimmed * 1.5)
+
+        stabilized = [numericValues[0]]
+        valueCount = len(numericValues)
+        for i, value in enumerate(numericValues[1:], start=1):
+            prev = stabilized[-1]
+
+            if value <= 0:
+                stabilized.append(prev)
+                continue
+
+            if value < prev:
+                stabilized.append(prev)
+                continue
+
+            delta = value - prev
+            if deltaCap is not None and delta > deltaCap:
+                nextValue = None
+                for lookAhead in range(i + 1, valueCount):
+                    candidate = numericValues[lookAhead]
+                    if candidate > 0:
+                        nextValue = candidate
+                        break
+
+                # Ignore obvious OCR spikes that immediately collapse back to the normal range.
+                if nextValue is not None and nextValue < value - deltaCap:
+                    stabilized.append(prev)
+                    continue
+
+                value = prev + deltaCap
+
+            stabilized.append(value)
+
+        return stabilized
+
+    def _buildHoneyPerSec(self, cumulativeHoney):
+        if not cumulativeHoney:
+            return [0]
+
+        honeyPerSec = [0]
+        prevHoney = cumulativeHoney[0]
+        for currentHoney in cumulativeHoney[1:]:
+            honeyPerSec.append(max(0.0, currentHoney - prevHoney) / 60.0)
+            prevHoney = currentHoney
+        return honeyPerSec
+
+    def _buildSessionTimeBreakdown(self, sourceStats, sessionTime):
+        gatherTime = max(0, float(sourceStats.get("gathering_time", 0) or 0))
+        convertTime = max(0, float(sourceStats.get("converting_time", 0) or 0))
+        bugRunTime = max(0, float(sourceStats.get("bug_run_time", 0) or 0))
+        miscTime = max(0, float(sourceStats.get("misc_time", 0) or 0))
+
+        trackedWithoutOther = gatherTime + convertTime + bugRunTime
+        totalCategorized = trackedWithoutOther + miscTime
+
+        if sessionTime > totalCategorized:
+            miscTime += sessionTime - totalCategorized
+        elif sessionTime > trackedWithoutOther:
+            miscTime = min(miscTime, sessionTime - trackedWithoutOther)
+        elif sessionTime > 0:
+            scale = sessionTime / max(trackedWithoutOther, 1)
+            gatherTime *= scale
+            convertTime *= scale
+            bugRunTime *= scale
+            miscTime = 0
+
+        return {
+            "gathering_time": gatherTime,
+            "converting_time": convertTime,
+            "bug_run_time": bugRunTime,
+            "misc_time": miscTime,
+        }
     
     def generateFinalReport(self, setdat):
         """Generate a comprehensive final report covering the entire macro session"""
@@ -467,15 +605,40 @@ class FinalReport:
                     "start_time": 0,
                     "start_honey": 0
                 }
+                self.hourlyReport.sessionReportStats = {
+                    "honey_per_min": [0],
+                    "backpack_per_min": [0],
+                    "bugs": 0,
+                    "quests_completed": 0,
+                    "vicious_bees": 0,
+                    "gathering_time": 0,
+                    "converting_time": 0,
+                    "bug_run_time": 0,
+                    "misc_time": 0,
+                }
                 self.hourlyReport.uptimeBuffsValues = {}
                 self.hourlyReport.buffGatherIntervals = [0]
             except:
                 return None
+
+        sessionReportStats = getattr(self.hourlyReport, "sessionReportStats", {})
+        if sessionReportStats.get("honey_per_min"):
+            sourceStats = copy.deepcopy(sessionReportStats)
+        else:
+            # Backward compatibility for old saved data that predates sessionReportStats.
+            sourceStats = copy.deepcopy(self.hourlyReport.hourlyReportStats)
         
-        # Skip buff/nectar detection since we can't access in-game data after macro stops
-        # These are set to empty for final report as game is likely stopped
-        buffQuantity = [0] * len(self.hourlyReport.hourBuffs)
-        nectarQuantity = [0, 0, 0, 0, 0]
+        # Use the most recent values captured by the hourly report instead of live detection.
+        buffQuantity = list(getattr(self.hourlyReport, "latestBuffQuantity", []))
+        nectarQuantity = list(getattr(self.hourlyReport, "latestNectarQuantity", []))
+        if len(buffQuantity) < len(self.hourlyReport.hourBuffs):
+            buffQuantity += [0] * (len(self.hourlyReport.hourBuffs) - len(buffQuantity))
+        else:
+            buffQuantity = buffQuantity[:len(self.hourlyReport.hourBuffs)]
+        if len(nectarQuantity) < 5:
+            nectarQuantity += [0] * (5 - len(nectarQuantity))
+        else:
+            nectarQuantity = nectarQuantity[:5]
 
         # Get planter data
         planterData = ""
@@ -505,42 +668,34 @@ class FinalReport:
             print(f"Error loading planter data: {e}")
             planterData = ""
 
-        # Ensure we have valid data
-        if not self.hourlyReport.hourlyReportStats.get("honey_per_min"):
-            self.hourlyReport.hourlyReportStats["honey_per_min"] = [0]
-        
-        if len(self.hourlyReport.hourlyReportStats["honey_per_min"]) < 3:
-            self.hourlyReport.hourlyReportStats["honey_per_min"] = [0]*3 + self.hourlyReport.hourlyReportStats["honey_per_min"]
-        
-        # Filter outliers from honey data
-        self.hourlyReport.hourlyReportStats["honey_per_min"] = self.hourlyReport.filterOutliers(self.hourlyReport.hourlyReportStats["honey_per_min"])
-        
-        # Calculate honey/sec for the entire session
-        honeyPerSec = [0]
-        if len(self.hourlyReport.hourlyReportStats["honey_per_min"]) > 0:
-            prevHoney = self.hourlyReport.hourlyReportStats["honey_per_min"][0]
-            for x in self.hourlyReport.hourlyReportStats["honey_per_min"][1:]:
-                if x > prevHoney:
-                    # Honey gained in this minute, divided by 60 for per-second rate
-                    honeyPerSec.append((x-prevHoney)/60)
-                else:
-                    honeyPerSec.append(0)
-                prevHoney = x
+        # Ensure we have valid honey data and keep one point per minute.
+        rawHoneyPerMin = sourceStats.get("honey_per_min", [])
+        if not rawHoneyPerMin:
+            rawHoneyPerMin = [0]
+        if len(rawHoneyPerMin) < 3:
+            rawHoneyPerMin = [0] * (3 - len(rawHoneyPerMin)) + rawHoneyPerMin
+
+        startHoney = self.hourlyReport.hourlyReportStats.get("start_honey", 0)
+        normalizedHoneyPerMin = self._normalizeCumulativeHoneySeries(rawHoneyPerMin, baseline=startHoney)
+        sourceStats["honey_per_min"] = normalizedHoneyPerMin
+
+        # Build per-second gain from the normalized cumulative timeline.
+        honeyPerSec = self._buildHoneyPerSec(normalizedHoneyPerMin)
         
         # Calculate session statistics
-        if len(set(self.hourlyReport.hourlyReportStats["honey_per_min"])) <= 1:
-            onlyValidHourlyHoney = self.hourlyReport.hourlyReportStats["honey_per_min"].copy()
-        else:
-            onlyValidHourlyHoney = [x for x in self.hourlyReport.hourlyReportStats["honey_per_min"] if x]
+        onlyValidHourlyHoney = [x for x in normalizedHoneyPerMin if x > 0] or normalizedHoneyPerMin.copy()
         
         # Calculate total session honey and time
         sessionHoney = 0
         sessionTime = 0
-        if onlyValidHourlyHoney and self.hourlyReport.hourlyReportStats.get("start_honey"):
-            sessionHoney = max(0, onlyValidHourlyHoney[-1] - self.hourlyReport.hourlyReportStats["start_honey"])
+        if onlyValidHourlyHoney and startHoney:
+            sessionHoney = max(0, onlyValidHourlyHoney[-1] - startHoney)
         
         if self.hourlyReport.hourlyReportStats.get("start_time"):
             sessionTime = time.time() - self.hourlyReport.hourlyReportStats["start_time"]
+        elif len(normalizedHoneyPerMin) > 1:
+            # Fallback for legacy/missing start_time data.
+            sessionTime = (len(normalizedHoneyPerMin) - 1) * 60
         
         # Calculate average honey per hour for the entire session
         avgHoneyPerHour = max(0, (sessionHoney / (sessionTime / 3600)) if sessionTime > 0 else 0)
@@ -549,8 +704,9 @@ class FinalReport:
         validHoneyPerSec = [x for x in honeyPerSec if x > 0]
         peakHoneyRate = max(validHoneyPerSec) if validHoneyPerSec else 0
         
-        # Create a deep copy of stats to avoid modification
-        hourlyReportStats = copy.deepcopy(self.hourlyReport.hourlyReportStats)
+        # Use session-wide stats for final report cards and charts.
+        hourlyReportStats = copy.deepcopy(sourceStats)
+        timeBreakdown = self._buildSessionTimeBreakdown(sourceStats, sessionTime)
         
         # Add session summary stats
         sessionStats = {
@@ -558,23 +714,31 @@ class FinalReport:
             "total_honey": sessionHoney,
             "avg_honey_per_hour": avgHoneyPerHour,
             "peak_honey_rate": peakHoneyRate,
-            "total_bugs": hourlyReportStats.get("bugs", 0),
-            "total_quests": hourlyReportStats.get("quests_completed", 0),
-            "total_vicious_bees": hourlyReportStats.get("vicious_bees", 0),
-            "gathering_time": hourlyReportStats.get("gathering_time", 0),
-            "converting_time": hourlyReportStats.get("converting_time", 0),
-            "bug_run_time": hourlyReportStats.get("bug_run_time", 0),
-            "misc_time": hourlyReportStats.get("misc_time", 0)
+            "total_bugs": sourceStats.get("bugs", 0),
+            "total_quests": sourceStats.get("quests_completed", 0),
+            "total_vicious_bees": sourceStats.get("vicious_bees", 0),
+            "gathering_time": timeBreakdown["gathering_time"],
+            "converting_time": timeBreakdown["converting_time"],
+            "bug_run_time": timeBreakdown["bug_run_time"],
+            "misc_time": timeBreakdown["misc_time"]
         }
 
-        # Ensure uptimeBuffsValues and buffGatherIntervals exist
-        if not hasattr(self.hourlyReport, 'uptimeBuffsValues') or not self.hourlyReport.uptimeBuffsValues:
-            self.hourlyReport.uptimeBuffsValues = {k:[0]*600 for k in self.hourlyReport.uptimeBuffsColors.keys()}
-            self.hourlyReport.uptimeBuffsValues["bear"] = [0]*600
-            self.hourlyReport.uptimeBuffsValues["white_boost"] = [0]*600
+        # Prefer full-session buff history when available.
+        if not hasattr(self.hourlyReport, 'sessionUptimeBuffsValues') or not self.hourlyReport.sessionUptimeBuffsValues:
+            self.hourlyReport.sessionUptimeBuffsValues = copy.deepcopy(getattr(self.hourlyReport, "uptimeBuffsValues", {}))
+        if not hasattr(self.hourlyReport, 'sessionBuffGatherIntervals') or not self.hourlyReport.sessionBuffGatherIntervals:
+            self.hourlyReport.sessionBuffGatherIntervals = list(getattr(self.hourlyReport, "buffGatherIntervals", []))
+
+        if not self.hourlyReport.sessionUptimeBuffsValues:
+            self.hourlyReport.sessionUptimeBuffsValues = {k:[0]*600 for k in self.hourlyReport.uptimeBuffsColors.keys()}
+            self.hourlyReport.sessionUptimeBuffsValues["bear"] = [0]*600
+            self.hourlyReport.sessionUptimeBuffsValues["white_boost"] = [0]*600
         
-        if not hasattr(self.hourlyReport, 'buffGatherIntervals') or not self.hourlyReport.buffGatherIntervals:
-            self.hourlyReport.buffGatherIntervals = [0]*600
+        if not self.hourlyReport.sessionBuffGatherIntervals:
+            self.hourlyReport.sessionBuffGatherIntervals = [0] * max(
+                max((len(values) for values in self.hourlyReport.sessionUptimeBuffsValues.values()), default=0),
+                600
+            )
 
         # Draw the comprehensive final report
         try:
@@ -582,7 +746,7 @@ class FinalReport:
                 hourlyReportStats, sessionStats, honeyPerSec, 
                 sessionHoney, onlyValidHourlyHoney, 
                 buffQuantity, nectarQuantity, planterData, 
-                self.hourlyReport.uptimeBuffsValues, self.hourlyReport.buffGatherIntervals
+                self.hourlyReport.sessionUptimeBuffsValues, self.hourlyReport.sessionBuffGatherIntervals
             )
             
             # Resize for better quality
@@ -599,5 +763,3 @@ class FinalReport:
             import traceback
             traceback.print_exc()
             return None
-
-
