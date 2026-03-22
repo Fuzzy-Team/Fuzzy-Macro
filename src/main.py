@@ -57,6 +57,10 @@ mw, mh = pag.size()
 # Hardcoded petal quest titles to ignore (lowercase)
 HARDCODED_PETAL_IGNORE_TITLES = {"petal tabbouleh", "petals", "mashed blooms"}
 
+HARD_RESET_PLANTERS_NONE = 0
+HARD_RESET_PLANTERS_ALL = 1
+HARD_RESET_PLANTERS_CURRENT = 2
+
 # Discord Rich Presence Manager
 try:
     from pypresence import Presence, exceptions as pypresence_exceptions
@@ -435,7 +439,7 @@ def canClaimTimedBearQuest(name):
     
 # (set_enabled moved into RichPresenceManager class)
 #controller for the macro
-def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
+def macro(status, logQueue, updateGUI, run, skipTask, hardResetPlanters=None, presence=None):
     macro = macroModule.macro(status, logQueue, updateGUI, run, skipTask, presence)
     #invert the regularMobsInFields dict
     #instead of storing mobs in field, store the fields associated with each mob
@@ -681,6 +685,194 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         if returnToHive != "no override":
             overrides["return"] = returnToHive
         return overrides
+
+    def executeHardResetPlanters(resetMode):
+        modeName = "reset all" if resetMode == HARD_RESET_PLANTERS_ALL else "reset current"
+
+        def uniqueFieldTargets(targets):
+            seen = set()
+            ordered = []
+            for planterName, fieldName in targets:
+                normalizedField = (fieldName or "").strip()
+                if not normalizedField or normalizedField in seen:
+                    continue
+                seen.add(normalizedField)
+                ordered.append((planterName or "planter", normalizedField))
+            return ordered
+
+        def loadManualPlanterData():
+            defaultData = {
+                "cycles": [1, 1, 1],
+                "planters": ["", "", ""],
+                "fields": ["", "", ""],
+                "gatherFields": ["", "", ""],
+                "harvestTimes": [0, 0, 0]
+            }
+            try:
+                with open("./data/user/manualplanters.txt", "r") as f:
+                    raw = f.read().strip()
+                if not raw:
+                    return defaultData
+                loaded = ast.literal_eval(raw)
+                if not isinstance(loaded, dict):
+                    return defaultData
+            except Exception:
+                return defaultData
+
+            normalized = dict(defaultData)
+            for key, defaultValue in defaultData.items():
+                value = loaded.get(key, defaultValue)
+                if isinstance(defaultValue, list):
+                    value = list(value) if isinstance(value, list) else list(defaultValue)
+                    if len(value) < len(defaultValue):
+                        value.extend(defaultValue[len(value):])
+                    normalized[key] = value[:len(defaultValue)]
+                else:
+                    normalized[key] = value
+            return normalized
+
+        def saveManualPlanterData(planterData):
+            with open("./data/user/manualplanters.txt", "w") as f:
+                f.write(str(planterData))
+
+        def emptyAutoPlanterSlot():
+            return {
+                "planter": "",
+                "nectar": "",
+                "field": "",
+                "harvest_time": 0,
+                "nectar_est_percent": 0,
+                "placed_time": 0,
+                "grow_duration": 0,
+                "natural_grow_duration": 0
+            }
+
+        def loadAutoPlanterData():
+            defaultData = {
+                "planters": [
+                    emptyAutoPlanterSlot(),
+                    emptyAutoPlanterSlot(),
+                    emptyAutoPlanterSlot()
+                ],
+                "nectar_last_field": {},
+                "gather": False,
+                "field_degradation": {}
+            }
+            try:
+                with open("./data/user/auto_planters.json", "r") as f:
+                    loaded = json.load(f)
+                if not isinstance(loaded, dict):
+                    return defaultData
+            except Exception:
+                return defaultData
+
+            normalized = dict(defaultData)
+            normalized["nectar_last_field"] = loaded.get("nectar_last_field", {}) if isinstance(loaded.get("nectar_last_field", {}), dict) else {}
+            normalized["gather"] = bool(loaded.get("gather", False))
+            normalized["field_degradation"] = loaded.get("field_degradation", {}) if isinstance(loaded.get("field_degradation", {}), dict) else {}
+
+            planters = loaded.get("planters", [])
+            if not isinstance(planters, list):
+                planters = []
+            normalized["planters"] = []
+            for slot in planters[:3]:
+                slotData = emptyAutoPlanterSlot()
+                if isinstance(slot, dict):
+                    for key in slotData:
+                        slotData[key] = slot.get(key, slotData[key])
+                normalized["planters"].append(slotData)
+            while len(normalized["planters"]) < 3:
+                normalized["planters"].append(emptyAutoPlanterSlot())
+            return normalized
+
+        def saveAutoPlanterData(planterData):
+            with open("./data/user/auto_planters.json", "w") as f:
+                json.dump(planterData, f, indent=3)
+
+        macro.logger.webhook("Planter Hard Reset", f"Starting {modeName}", "orange")
+        targets = []
+
+        try:
+            if macro.setdat.get("planters_mode") == 1:
+                manualPlanterData = loadManualPlanterData()
+                activeByField = {}
+                for planterName, fieldName in zip(manualPlanterData["planters"], manualPlanterData["fields"]):
+                    if fieldName:
+                        activeByField[fieldName] = planterName or "planter"
+
+                if resetMode == HARD_RESET_PLANTERS_CURRENT:
+                    targets = [
+                        (planterName or "planter", fieldName)
+                        for planterName, fieldName in zip(manualPlanterData["planters"], manualPlanterData["fields"])
+                        if fieldName
+                    ]
+                else:
+                    for cycle in range(1, 6):
+                        for slot in range(1, 4):
+                            fieldName = macro.setdat.get(f"cycle{cycle}_{slot}_field", "none")
+                            if fieldName and fieldName != "none":
+                                targets.append((activeByField.get(fieldName, "planter"), fieldName))
+
+                targets = uniqueFieldTargets(targets)
+                for planterName, fieldName in targets:
+                    macro.hardResetPlanterField(fieldName, planterName)
+                    macro.reset(convert=False)
+
+                manualPlanterData["planters"] = ["", "", ""]
+                manualPlanterData["fields"] = ["", "", ""]
+                manualPlanterData["gatherFields"] = ["", "", ""]
+                manualPlanterData["harvestTimes"] = [0, 0, 0]
+                saveManualPlanterData(manualPlanterData)
+            elif macro.setdat.get("planters_mode") == 2:
+                autoPlanterData = loadAutoPlanterData()
+                activeByField = {}
+                for slot in autoPlanterData["planters"]:
+                    fieldName = slot.get("field", "")
+                    if fieldName:
+                        activeByField[fieldName] = slot.get("planter", "") or "planter"
+
+                if resetMode == HARD_RESET_PLANTERS_CURRENT:
+                    targets = [
+                        (slot.get("planter", "") or "planter", slot.get("field", ""))
+                        for slot in autoPlanterData["planters"]
+                        if slot.get("field", "")
+                    ]
+                else:
+                    for nectarFields in macroModule.nectarFields.values():
+                        for fieldName in nectarFields:
+                            if macro.setdat.get(f"auto_field_{fieldName.replace(' ', '_')}", False):
+                                targets.append((activeByField.get(fieldName, "planter"), fieldName))
+                    for fieldName, planterName in activeByField.items():
+                        targets.append((planterName, fieldName))
+
+                targets = uniqueFieldTargets(targets)
+                for planterName, fieldName in targets:
+                    macro.hardResetPlanterField(fieldName, planterName)
+                    macro.reset(convert=False)
+
+                autoPlanterData["planters"] = [
+                    emptyAutoPlanterSlot(),
+                    emptyAutoPlanterSlot(),
+                    emptyAutoPlanterSlot()
+                ]
+                saveAutoPlanterData(autoPlanterData)
+            else:
+                macro.logger.webhook("Planter Hard Reset", "Planters are disabled, nothing to reset", "orange")
+                return
+
+            updateGUI.value = 1
+            if targets:
+                targetSummary = ", ".join(field.title() for _, field in targets)
+                macro.logger.webhook("Planter Hard Reset", f"Completed {modeName}: {targetSummary}", "bright green")
+            else:
+                macro.logger.webhook("Planter Hard Reset", f"Completed {modeName}: no planter locations were configured", "orange")
+        except Exception as e:
+            macro.logger.webhook("Planter Hard Reset", f"Failed {modeName}: {str(e)}", "red", ping_category="ping_critical_errors")
+            raise
+        finally:
+            macro.clear_task_status()
+            if hardResetPlanters is not None:
+                hardResetPlanters.value = HARD_RESET_PLANTERS_NONE
     
     while True:
         # Check for pause - wait while paused
@@ -699,6 +891,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         #run empty task
         #this is in case no other settings are selected
         runTask(resetAfter=False)
+
+        if hardResetPlanters is not None and hardResetPlanters.value in (HARD_RESET_PLANTERS_ALL, HARD_RESET_PLANTERS_CURRENT):
+            executeHardResetPlanters(hardResetPlanters.value)
+            continue
 
         updateGUI.value = 1
 
@@ -2676,6 +2872,7 @@ if __name__ == "__main__":
     gui.setRecentLogs(recentLogs)
     updateGUI = multiprocessing.Value('i', 0)
     skipTask = multiprocessing.Value('i', 0)  # 0 = don't skip, 1 = skip current task
+    hardResetPlanters = multiprocessing.Value('i', HARD_RESET_PLANTERS_NONE)
     status = manager.Value(ctypes.c_wchar_p, "none")
     presence = manager.Value(ctypes.c_wchar_p, "")
     logQueue = manager.Queue()
@@ -2853,7 +3050,7 @@ if __name__ == "__main__":
                 print("Detected change in discord bot token, killing previous bot process")
                 discordBotProc.terminate()
                 discordBotProc.join()
-            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI), daemon=True)
+            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, hardResetPlanters, recentLogs, pin_requests, updateGUI), daemon=True)
             prevDiscordBotToken = currentDiscordBotToken
             discordBotProc.start()
 
@@ -2971,7 +3168,7 @@ if __name__ == "__main__":
                                     but there are no more items left to craft.\n\
 				                    Check the 'repeat' setting on your blender items and reset blender data.")
             #macro proc
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, hardResetPlanters, presence), daemon=True)
             macroProc.start()
 
             macro_version = settingsManager.getMacroVersion()
@@ -3057,7 +3254,7 @@ if __name__ == "__main__":
             appManager.closeApp("Roblox")
             keyboardModule.releaseMovement()
             mouse.mouseUp()
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, hardResetPlanters, presence), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state
@@ -3090,7 +3287,7 @@ if __name__ == "__main__":
             keyboardModule.releaseMovement()
             mouse.mouseUp()
             # restart macro process
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, hardResetPlanters, presence), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state

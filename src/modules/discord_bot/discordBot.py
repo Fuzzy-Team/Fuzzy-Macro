@@ -44,6 +44,10 @@ _cache_timestamp = 0
 _cache_duration = 5  # seconds
 _shift_lock_template_cache = None
 
+HARD_RESET_PLANTERS_NONE = 0
+HARD_RESET_PLANTERS_ALL = 1
+HARD_RESET_PLANTERS_CURRENT = 2
+
 def get_cached_settings():
     """Get settings with caching to improve performance"""
     global _settings_cache, _cache_timestamp
@@ -318,7 +322,7 @@ def _set_shift_lock_mode(mode: str):
         return f"⚠️ Sent shift input, but shift lock still appears {state_text}."
     return "⚠️ Sent shift input, but I could not verify the shift lock state afterwards."
 
-def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None, updateGUI=None):
+def discordBot(token, run, status, skipTask, hardResetPlanters=None, recentLogs=None, pin_requests=None, updateGUI=None):
     import modules.macro
     bot = commands.Bot(command_prefix="fuzz!", intents=discord.Intents.all())
     
@@ -2089,6 +2093,33 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.followup.send("✅ Reset completed.")
         except Exception as e:
             await interaction.followup.send(f"❌ Failed to request reset: {str(e)}")
+
+    @bot.tree.command(name="hardresetplanters", description="Collect planters from reset targets and clear planter timers")
+    @app_commands.describe(mode="Choose whether to reset all planter locations or only current planted locations")
+    @app_commands.choices(mode=[
+        app_commands.Choice(name="reset all", value=HARD_RESET_PLANTERS_ALL),
+        app_commands.Choice(name="reset current", value=HARD_RESET_PLANTERS_CURRENT),
+    ])
+    async def hard_reset_planters(interaction: discord.Interaction, mode: app_commands.Choice[int]):
+        if run.value != 2:
+            if run.value == 6:
+                await interaction.response.send_message("❌ The macro is paused. Resume it before using `/hardresetplanters`.")
+            else:
+                await interaction.response.send_message("❌ The macro must be running to use `/hardresetplanters`.")
+            return
+
+        if hardResetPlanters is None:
+            await interaction.response.send_message("❌ Hard planter reset is not available in this build.")
+            return
+
+        if hardResetPlanters.value != HARD_RESET_PLANTERS_NONE:
+            await interaction.response.send_message("⏳ A planter hard reset is already queued.")
+            return
+
+        hardResetPlanters.value = mode.value
+        await interaction.response.send_message(
+            f"🌱 Queued planter hard reset: **{mode.name}**. The macro will collect the targeted planter locations and clear their timers."
+        )
     
     @bot.tree.command(name = "logs", description = "Show recent macro actions (optionally specify count)")
     @app_commands.describe(count="Number of recent log entries to show (1-50)")
@@ -3207,7 +3238,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         """Show available commands"""
         embed = discord.Embed(title="🤖 BSS Macro Discord Bot", description="Available Commands:", color=0x0099ff)
 
-        embed.add_field(name="🔧 **Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/stop` - Stop the macro\n`/pause` - Pause the macro\n`/resume` - Resume the macro\n`/status` - Get macro status and current task\n`/rejoin` - Make macro rejoin game\n`/screenshot` - Get screenshot\n`/settings` - Open settings panel\n`/hiveslot <1-6>` - Change hive slot number\n`/shiftlock <on/off/toggle>` - Control shift lock", inline=False)
+        embed.add_field(name="🔧 **Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/stop` - Stop the macro\n`/pause` - Pause the macro\n`/resume` - Resume the macro\n`/status` - Get macro status and current task\n`/rejoin` - Make macro rejoin game\n`/reset` - Reset character and return to hive\n`/hardresetplanters <reset all/reset current>` - Collect planter reset targets and clear planter timers\n`/screenshot` - Get screenshot\n`/settings` - Open settings panel\n`/hiveslot <1-6>` - Change hive slot number\n`/shiftlock <on/off/toggle>` - Control shift lock", inline=False)
 
         embed.add_field(name="🌾 **Field Management**", value="`/fields` - View field configuration\n`/field <field> <true/false>` - Enable or disable a field\n`/swapfield <current> <new>` - Swap one field for another (new can be any field)", inline=False)
 

@@ -3740,6 +3740,26 @@ class macro:
         # Exhausted attempts — move on but warn the user
         self.logger.webhook("", f"Planter {planter.title()} still not found in inventory after {attempts} attempts. Continuing.", "orange", "screen")
         return True
+
+    def hardResetPlanterField(self, field, planter="planter"):
+        field_key = field.replace(" ", "_")
+        planter_label = (planter or "planter").title()
+        self.set_task_status(f"planter_{field_key}", task="planter", field=field)
+        st = time.time()
+
+        if not self.goToPlanter(planter_label, field, "collect"):
+            self.logger.webhook("", f"No planter found during hard reset in {field.title()}", "orange", "screen")
+            self.hourlyReport.addHourlyStat("misc_time", time.time()-st)
+            return False
+
+        self.keyboard.press("e")
+        self.clickYes()
+        self.logger.webhook("", f"Hard reset collected planter in {field.title()}", "bright green", "screen", ping_category="ping_conversion_events")
+        self.keyboard.multiWalk(["s", "d"], 0.87)
+        self.nmLoot(9, 5, "a")
+        self.setMobTimer(field)
+        self.hourlyReport.addHourlyStat("misc_time", time.time()-st)
+        return True
         
     
     def placePlanterInCycle(self, slot, cycle):
