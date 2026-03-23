@@ -754,7 +754,7 @@ $("#home-placeholder")
 
     if (runState === 6) {
       // Paused -> resume
-      eel.resume();
+      await eel.resume()();
       // Update button state optimistically (show stop button immediately)
       if (startBtn) startBtn.classList.add("d-none");
       if (stopBtn) {
@@ -763,7 +763,10 @@ $("#home-placeholder")
       }
     } else {
       // Stopped -> start
-      eel.start();
+      const result = await eel.start()();
+      if (result && result.ok === false) {
+        return;
+      }
       // Update button state optimistically (show stop button immediately)
       if (startBtn) startBtn.classList.add("d-none");
       if (stopBtn) {
@@ -774,7 +777,7 @@ $("#home-placeholder")
   })
   .on("click", "#stop-btn", async (event) => {
     //stop button - stops the macro completely
-    eel.stop();
+    await eel.stop()();
     // Update button state optimistically (show start button immediately)
     const settings = await loadAllSettings();
     const startKey = settings.start_keybind || "F1";

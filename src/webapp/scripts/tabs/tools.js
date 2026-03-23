@@ -1,11 +1,8 @@
 let autoClickerTimer = null;
-let autoClickerStartTimeout = null;
+let autoClickerStatusTimer = null;
 let autoGiftedBasicBeeStatusTimer = null;
 const AUTOCLICKER_MIN_INTERVAL = 10;
 const AUTOCLICKER_DEFAULT_INTERVAL = 100;
-const AUTOCLICKER_DEFAULT_KEYBIND = "F3";
-const AUTOCLICKER_START_DELAY_MS = 3000;
-let autoClickerHotkeyListenerAdded = false;
 const AUTO_GIFTED_BASIC_BEE_DEFAULT_DELAY = 3;
 
 const TREAT_COST_HONEY = 10000;
@@ -201,85 +198,6 @@ function initializeBondTreatCalculator() {
   updateBondTreatCalculator();
 }
 
-function normalizeKeybindFromEvent(event) {
-  let combo = [];
-  if (event.ctrlKey) combo.push("Ctrl");
-  if (event.altKey) combo.push("Alt");
-  if (event.shiftKey) combo.push("Shift");
-  if (event.metaKey) combo.push("Cmd");
-
-  let mainKey = event.key;
-  if (mainKey === " ") mainKey = "Space";
-  else if (mainKey === "Control") mainKey = "Ctrl";
-  else if (mainKey === "Alt") mainKey = "Alt";
-  else if (mainKey === "Shift") mainKey = "Shift";
-  else if (mainKey === "Meta") mainKey = "Cmd";
-  else if (mainKey.startsWith("F") && mainKey.length <= 3) mainKey = mainKey;
-  else if (mainKey.length === 1) mainKey = mainKey.toUpperCase();
-
-  combo.push(mainKey);
-  return combo.join("+");
-}
-
-function getAutoClickerKeybind() {
-  const keybindElement = document.getElementById("autoclicker_keybind");
-  if (!keybindElement) return AUTOCLICKER_DEFAULT_KEYBIND;
-  return keybindElement.dataset.keybind || AUTOCLICKER_DEFAULT_KEYBIND;
-}
-
-function ensureAutoClickerKeybindLoaded() {
-  const keybindElement = document.getElementById("autoclicker_keybind");
-  if (!keybindElement) return;
-
-  let keybind = keybindElement.dataset.keybind || "";
-  if (!keybind) {
-    keybind = AUTOCLICKER_DEFAULT_KEYBIND;
-    keybindElement.dataset.keybind = keybind;
-    if (window.eel && typeof eel.saveGeneralSetting === "function") {
-      eel.saveGeneralSetting("autoclicker_keybind", keybind);
-    }
-  }
-
-  const display = keybindElement.querySelector(".keybind-display");
-  if (display) {
-    display.textContent = keybind.replace(/\+/g, " + ");
-  }
-}
-
-function shouldIgnoreAutoClickerHotkey(event) {
-  if (typeof keybindRecording !== "undefined" && keybindRecording) return true;
-
-  const target = event.target;
-  if (!target) return false;
-
-  const tagName = (target.tagName || "").toLowerCase();
-  const editable = target.isContentEditable;
-  const isTextInput = tagName === "input" || tagName === "textarea" || tagName === "select";
-  return editable || isTextInput;
-}
-
-function addAutoClickerHotkeyListener() {
-  if (autoClickerHotkeyListenerAdded) return;
-  autoClickerHotkeyListenerAdded = true;
-
-  window.addEventListener("keydown", (event) => {
-    if (shouldIgnoreAutoClickerHotkey(event)) return;
-
-    const configuredKeybind = getAutoClickerKeybind();
-    if (!configuredKeybind) return;
-
-    const pressed = normalizeKeybindFromEvent(event);
-    if (pressed !== configuredKeybind) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    if (autoClickerTimer || autoClickerStartTimeout) {
-      stopAutoClicker();
-    }
-  });
-}
-
 function getAutoClickerInterval() {
   const input = document.getElementById("autoclicker_interval_ms");
   if (!input) return AUTOCLICKER_DEFAULT_INTERVAL;
@@ -292,61 +210,116 @@ function getAutoClickerInterval() {
   return interval;
 }
 
-function onAutoClickerIntervalChange() {
-  const interval = getAutoClickerInterval();
-  if (autoClickerTimer) {
-    clearInterval(autoClickerTimer);
-    autoClickerTimer = setInterval(() => {
-      if (window.eel && typeof eel.autoClickerClick === "function") {
-        eel.autoClickerClick();
-      }
-    }, interval);
+async function refreshToolStopHotkey() {
+  if (typeof loadAllSettings !== "function") return;
+
+  try {
+    const settings = await loadAllSettings();
+    const stopKey = settings.stop_keybind || "F3";
+
+    const autoClickerStopHotkey = document.getElementById("autoclicker_stop_hotkey");
+    if (autoClickerStopHotkey) {
+      autoClickerStopHotkey.textContent = stopKey;
+    }
+
+    const autoGiftedBasicBeeStopHotkey = document.getElementById("auto-gifted-basic-bee-stop-hotkey");
+    if (autoGiftedBasicBeeStopHotkey) {
+      autoGiftedBasicBeeStopHotkey.textContent = stopKey;
+    }
+  } catch (error) {
+    console.error("Failed to load tool stop hotkey:", error);
   }
 }
 
-function startAutoClicker() {
-  if (autoClickerTimer || autoClickerStartTimeout) return;
+function onAutoClickerIntervalChange() {
+  getAutoClickerInterval();
+}
+
+function renderAutoClickerStatus(status) {
+  if (!status) return;
+
+  autoClickerTimer = status.running ? true : null;
 
   const startButton = document.getElementById("autoclicker_start");
+  if (startButton) {
+    startButton.classList.toggle("active", !!status.running);
+    startButton.innerText = status.running ? "Running" : "Start";
+    startButton.style.display = status.running ? "none" : "";
+  }
 
+  const stopButton = document.getElementById("autoclicker_stop");
+  if (stopButton) {
+    stopButton.classList.toggle("active", !!status.running);
+    stopButton.style.display = status.running ? "" : "none";
+  }
+
+  const statusElement = document.getElementById("autoclicker_status");
+  if (statusElement) {
+    statusElement.textContent = status.message || "Ready";
+  }
+}
+
+async function refreshAutoClickerStatus() {
+  if (!window.eel || typeof eel.getAutoClickerStatus !== "function") return;
+
+  try {
+    const status = await eel.getAutoClickerStatus()();
+    renderAutoClickerStatus(status);
+  } catch (error) {
+    console.error("Failed to refresh auto clicker status:", error);
+  }
+}
+
+async function startAutoClicker() {
+  if (!window.eel || typeof eel.startAutoClickerTool !== "function") return;
+  if (autoClickerTimer) return;
+
+  const startButton = document.getElementById("autoclicker_start");
   if (startButton) {
     startButton.classList.add("active");
     startButton.innerText = "Starting...";
   }
 
-  autoClickerStartTimeout = setTimeout(() => {
-    autoClickerStartTimeout = null;
-
-    const interval = getAutoClickerInterval();
-    autoClickerTimer = setInterval(() => {
-      if (window.eel && typeof eel.autoClickerClick === "function") {
-        eel.autoClickerClick();
-      }
-    }, interval);
-
-    if (startButton) {
-      startButton.classList.add("active");
-      startButton.innerText = "Running";
+  try {
+    const result = await eel.startAutoClickerTool(getAutoClickerInterval())();
+    const statusElement = document.getElementById("autoclicker_status");
+    if (statusElement && result && result.message) {
+      statusElement.textContent = result.message;
     }
-  }, AUTOCLICKER_START_DELAY_MS);
+  } catch (error) {
+    console.error("Failed to start auto clicker:", error);
+  }
+
+  await refreshAutoClickerStatus();
 }
 
-function stopAutoClicker() {
-  if (autoClickerStartTimeout) {
-    clearTimeout(autoClickerStartTimeout);
-    autoClickerStartTimeout = null;
+async function stopAutoClicker() {
+  if (!window.eel || typeof eel.stopAutoClickerTool !== "function") return;
+
+  try {
+    const result = await eel.stopAutoClickerTool()();
+    const statusElement = document.getElementById("autoclicker_status");
+    if (statusElement && result && result.message) {
+      statusElement.textContent = result.message;
+    }
+  } catch (error) {
+    console.error("Failed to stop auto clicker:", error);
   }
 
-  if (autoClickerTimer) {
-    clearInterval(autoClickerTimer);
-    autoClickerTimer = null;
+  await refreshAutoClickerStatus();
+}
+
+function initializeAutoClickerTool() {
+  const intervalInput = document.getElementById("autoclicker_interval_ms");
+  if (intervalInput && !intervalInput.value) {
+    intervalInput.value = AUTOCLICKER_DEFAULT_INTERVAL;
   }
 
-  const startButton = document.getElementById("autoclicker_start");
-  if (startButton) {
-    startButton.classList.remove("active");
-    startButton.innerText = "Start";
+  if (!autoClickerStatusTimer) {
+    autoClickerStatusTimer = setInterval(refreshAutoClickerStatus, 1000);
   }
+
+  refreshAutoClickerStatus();
 }
 
 function getAutoGiftedBasicBeeDelay() {
@@ -485,13 +458,8 @@ function switchToolsTab(target) {
 }
 
 function loadTools() {
-  const intervalInput = document.getElementById("autoclicker_interval_ms");
-  if (intervalInput && !intervalInput.value) {
-    intervalInput.value = AUTOCLICKER_DEFAULT_INTERVAL;
-  }
-
-  ensureAutoClickerKeybindLoaded();
-  addAutoClickerHotkeyListener();
+  refreshToolStopHotkey();
+  initializeAutoClickerTool();
   initializeBondTreatCalculator();
   initializeAutoGiftedBasicBeeTool();
 
