@@ -71,11 +71,15 @@ function getBondCalcElements() {
     start: document.getElementById("bond-calc-start-level"),
     end: document.getElementById("bond-calc-end-level"),
     bonus: document.getElementById("bond-calc-bonus"),
+    beeCount: document.getElementById("bond-calc-bee-count"),
     warning: document.getElementById("bond-calc-warning"),
     totalBond: document.getElementById("bond-calc-total-bond"),
+    totalTreatsLabel: document.getElementById("bond-calc-total-treats-label"),
     totalTreats: document.getElementById("bond-calc-total-treats"),
     totalCostOne: document.getElementById("bond-calc-total-cost-one"),
-    totalCostFifty: document.getElementById("bond-calc-total-cost-fifty"),
+    totalCostBeesLabel: document.getElementById("bond-calc-total-cost-bees-label"),
+    totalCostBees: document.getElementById("bond-calc-total-cost-bees"),
+    breakdownCostBeesLabel: document.getElementById("bond-calc-breakdown-cost-bees-label"),
     breakdown: document.getElementById("bond-calc-breakdown"),
   };
 }
@@ -85,21 +89,21 @@ function calculateTreatsForBond(bond, bonusPercent) {
   return Math.ceil(bond / bondPerTreat);
 }
 
-function buildBondBreakdownRows(startLevel, endLevel, bonusPercent) {
+function buildBondBreakdownRows(startLevel, endLevel, bonusPercent, beeCount) {
   const rows = [];
 
   for (let level = startLevel; level < endLevel; level++) {
     const bond = BOND_REQUIREMENTS[level] || 0;
     const treats = calculateTreatsForBond(bond, bonusPercent);
     const costPerBee = treats * TREAT_COST_HONEY;
-    const costForFifty = costPerBee * 50;
+    const costForBees = costPerBee * beeCount;
 
     rows.push({
       label: `${level} -> ${level + 1}`,
       bond,
       treats,
       costPerBee,
-      costForFifty,
+      costForBees,
     });
   }
 
@@ -108,15 +112,30 @@ function buildBondBreakdownRows(startLevel, endLevel, bonusPercent) {
 
 function updateBondTreatCalculator() {
   const el = getBondCalcElements();
-  if (!el.start || !el.end || !el.bonus || !el.breakdown) return;
+  if (!el.start || !el.end || !el.bonus || !el.beeCount || !el.breakdown) return;
 
   const startLevel = parseInt(el.start.value, 10);
   const endLevel = parseInt(el.end.value, 10);
   let bonusPercent = parseFloat(el.bonus.value);
+  let beeCount = parseInt(el.beeCount.value, 10);
 
   if (Number.isNaN(bonusPercent) || bonusPercent < 0) bonusPercent = 0;
   if (bonusPercent > 300) bonusPercent = 300;
   el.bonus.value = bonusPercent;
+
+  if (Number.isNaN(beeCount) || beeCount < 1) beeCount = 1;
+  if (beeCount > 50) beeCount = 50;
+  el.beeCount.value = beeCount;
+
+  if (el.totalTreatsLabel) {
+    el.totalTreatsLabel.textContent = `Treats Needed (${beeCount} Bee${beeCount === 1 ? "" : "s"})`;
+  }
+  if (el.totalCostBeesLabel) {
+    el.totalCostBeesLabel.textContent = `Cost (${beeCount} Bee${beeCount === 1 ? "" : "s"})`;
+  }
+  if (el.breakdownCostBeesLabel) {
+    el.breakdownCostBeesLabel.textContent = `Cost for ${beeCount} Bee${beeCount === 1 ? "" : "s"}`;
+  }
 
   if (startLevel >= endLevel) {
     el.warning.style.display = "block";
@@ -125,29 +144,30 @@ function updateBondTreatCalculator() {
     el.totalBond.textContent = "0";
     el.totalTreats.textContent = "0";
     el.totalCostOne.textContent = "0";
-    el.totalCostFifty.textContent = "0";
+    el.totalCostBees.textContent = "0";
     el.breakdown.innerHTML = "";
     return;
   }
 
   el.warning.style.display = "none";
 
-  const rows = buildBondBreakdownRows(startLevel, endLevel, bonusPercent);
+  const rows = buildBondBreakdownRows(startLevel, endLevel, bonusPercent, beeCount);
   const totals = rows.reduce(
     (acc, row) => {
       acc.bond += row.bond;
       acc.treats += row.treats;
       acc.costOne += row.costPerBee;
-      acc.costFifty += row.costForFifty;
       return acc;
     },
-    { bond: 0, treats: 0, costOne: 0, costFifty: 0 }
+    { bond: 0, treats: 0, costOne: 0 }
   );
+  const totalTreatsForBees = totals.treats * beeCount;
+  const totalCostForBees = totals.costOne * beeCount;
 
   el.totalBond.textContent = formatCompactHoney(totals.bond);
-  el.totalTreats.textContent = formatCompactHoney(totals.treats);
+  el.totalTreats.textContent = formatCompactHoney(totalTreatsForBees);
   el.totalCostOne.textContent = formatCompactHoney(totals.costOne);
-  el.totalCostFifty.textContent = formatCompactHoney(totals.costFifty);
+  el.totalCostBees.textContent = formatCompactHoney(totalCostForBees);
 
   el.breakdown.innerHTML = rows
     .map(
@@ -157,7 +177,7 @@ function updateBondTreatCalculator() {
         <td>${formatWholeNumber(row.bond)}</td>
         <td>${formatWholeNumber(row.treats)}</td>
         <td>${formatCompactHoney(row.costPerBee)}</td>
-        <td>${formatCompactHoney(row.costForFifty)}</td>
+        <td>${formatCompactHoney(row.costForBees)}</td>
       </tr>
     `
     )
@@ -166,13 +186,14 @@ function updateBondTreatCalculator() {
 
 function initializeBondTreatCalculator() {
   const el = getBondCalcElements();
-  if (!el.start || !el.end || !el.bonus) return;
+  if (!el.start || !el.end || !el.bonus || !el.beeCount) return;
 
   if (!el.start.value) el.start.value = "1";
   if (!el.end.value) el.end.value = "20";
   if (!el.bonus.value) el.bonus.value = "20";
+  if (!el.beeCount.value) el.beeCount.value = "50";
 
-  [el.start, el.end, el.bonus].forEach((input) => {
+  [el.start, el.end, el.bonus, el.beeCount].forEach((input) => {
     input.addEventListener("change", updateBondTreatCalculator);
     input.addEventListener("input", updateBondTreatCalculator);
   });

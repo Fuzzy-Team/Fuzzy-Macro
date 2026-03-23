@@ -133,6 +133,19 @@
             value="20"
           />
         </div>
+
+        <div class="bond-calc-input-group">
+          <label for="bond-calc-bee-count"># of Bees</label>
+          <input
+            id="bond-calc-bee-count"
+            class="textbox"
+            type="number"
+            min="1"
+            max="50"
+            step="1"
+            value="50"
+          />
+        </div>
       </div>
 
       <div id="bond-calc-warning" class="bond-calc-warning" style="display:none;"></div>
@@ -143,7 +156,7 @@
           <strong id="bond-calc-total-bond">0</strong>
         </div>
         <div class="bond-calc-summary-item">
-          <span>Treats Needed (1 Bee)</span>
+          <span id="bond-calc-total-treats-label">Treats Needed (1 Bee)</span>
           <strong id="bond-calc-total-treats">0</strong>
         </div>
         <div class="bond-calc-summary-item">
@@ -151,8 +164,8 @@
           <strong id="bond-calc-total-cost-one">0</strong>
         </div>
         <div class="bond-calc-summary-item">
-          <span>Cost (50 Bees)</span>
-          <strong id="bond-calc-total-cost-fifty">0</strong>
+          <span id="bond-calc-total-cost-bees-label">Cost (50 Bees)</span>
+          <strong id="bond-calc-total-cost-bees">0</strong>
         </div>
       </div>
 
@@ -164,7 +177,7 @@
               <th>Bond Required</th>
               <th>Treats Needed</th>
               <th>Cost per Bee</th>
-              <th>Cost for 50 Bees</th>
+              <th id="bond-calc-breakdown-cost-bees-label">Cost for 50 Bees</th>
             </tr>
           </thead>
           <tbody id="bond-calc-breakdown"></tbody>
