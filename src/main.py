@@ -2699,6 +2699,7 @@ if __name__ == "__main__":
     pin_requests = manager.Queue()  # Shared queue for pin requests
     start_keyboard_listener_fn = watch_for_hotkeys(run)
     logger = logModule.log(logQueue, False, None, False, blocking=False)
+    gui.configureToolRuntime(logger=logger, status=status, presence=presence)
 
     disconnectCooldownUntil = 0 #only for running disconnect check on low performance
 
