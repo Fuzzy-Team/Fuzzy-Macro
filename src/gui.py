@@ -9,12 +9,129 @@ import ast
 import json
 import webbrowser
 import time
+import threading
 from modules.submacros.autoGiftedBasicBee import AutoGiftedBasicBeeRunner
 
 eel.init('webapp')
 run = None
 _recent_logs = []
 _auto_gifted_basic_bee_runner = AutoGiftedBasicBeeRunner()
+
+
+class AutoClickerRunner:
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._stop_event = threading.Event()
+        self._thread = None
+        self._interval_ms = 100
+        self._status = self._fresh_status()
+
+    def _fresh_status(self):
+        return {
+            "running": False,
+            "state": "idle",
+            "message": "Ready. Stop it with the macro's configured stop hotkey.",
+            "interval_ms": self._interval_ms,
+        }
+
+    def get_status(self):
+        with self._lock:
+            return dict(self._status)
+
+    def is_active(self):
+        with self._lock:
+            return bool(
+                (self._thread and self._thread.is_alive())
+                or self._status.get("running")
+                or self._status.get("state") == "stopping"
+            )
+
+    def _update_status(self, **kwargs):
+        with self._lock:
+            self._status.update(kwargs)
+
+    def start(self, interval_ms=100, run_state=3):
+        try:
+            interval_ms = int(interval_ms or 100)
+        except Exception:
+            interval_ms = 100
+        interval_ms = max(10, interval_ms)
+
+        thread_to_join = None
+        with self._lock:
+            if self._thread and not self._thread.is_alive():
+                self._thread = None
+            elif self._thread and self._stop_event.is_set():
+                thread_to_join = self._thread
+            elif self._thread and self._thread.is_alive():
+                return {"ok": False, "message": "The tool is already running."}
+            if run_state != 3:
+                return {"ok": False, "message": "Stop the macro before starting this tool."}
+
+        if thread_to_join:
+            thread_to_join.join(timeout=0.3)
+
+        with self._lock:
+            if self._thread and self._thread.is_alive():
+                return {"ok": False, "message": "The tool is still stopping. Try again in a moment."}
+            if run_state != 3:
+                return {"ok": False, "message": "Stop the macro before starting this tool."}
+            self._stop_event.clear()
+            self._interval_ms = interval_ms
+            self._status = self._fresh_status()
+            self._status.update(
+                {
+                    "running": True,
+                    "state": "running",
+                    "message": "Auto clicker running. Stop it with the macro's configured stop hotkey.",
+                    "interval_ms": self._interval_ms,
+                }
+            )
+            self._thread = threading.Thread(target=self._run, daemon=True)
+            self._thread.start()
+
+        return {"ok": True, "message": "Auto clicker started."}
+
+    def stop(self):
+        self._stop_event.set()
+        self._update_status(
+            running=False,
+            state="stopping",
+            message="Stopping auto clicker.",
+        )
+        thread = self._thread
+        if thread and thread.is_alive():
+            thread.join(timeout=0.3)
+        return {"ok": True, "message": "Auto clicker stop requested."}
+
+    def _run(self):
+        try:
+            interval_seconds = self._interval_ms / 1000.0
+            while not self._stop_event.is_set():
+                mouseControl.fastClick()
+                if self._stop_event.wait(interval_seconds):
+                    break
+        except Exception as exc:
+            self._update_status(
+                running=False,
+                state="finished",
+                message=str(exc),
+            )
+        finally:
+            with self._lock:
+                self._thread = None
+                if self._status.get("state") != "finished" or self._status.get("running"):
+                    self._status.update(
+                        {
+                            "running": False,
+                            "state": "idle",
+                            "message": "Ready. Stop it with the macro's configured stop hotkey.",
+                            "interval_ms": self._interval_ms,
+                        }
+                    )
+
+
+_auto_clicker_runner = AutoClickerRunner()
 @eel.expose
 def openLink(link):
     webbrowser.open(link, autoraise = True)
@@ -22,22 +139,28 @@ def openLink(link):
 @eel.expose
 def start():
     if run.value == 2: return #already running
+    if isAnyToolRunning():
+        return {"ok": False, "message": "Stop the running tool before starting the macro."}
     run.value = 1
+    return {"ok": True}
     
 @eel.expose
 def stop():
     if run.value == 3: return #already stopped
     run.value = 0
+    return {"ok": True}
 
 @eel.expose
 def pause():
     if run.value != 2: return #only pause if running
     run.value = 6  # 6 = paused
+    return {"ok": True}
 
 @eel.expose
 def resume():
     if run.value != 6: return #only resume if paused
     run.value = 2  # 2 = running (resume)
+    return {"ok": True}
 
 @eel.expose
 def getPatterns():
@@ -452,6 +575,18 @@ def autoClickerClick():
         return False
 
 @eel.expose
+def startAutoClickerTool(interval_ms=100):
+    return _auto_clicker_runner.start(interval_ms, getRunState())
+
+@eel.expose
+def stopAutoClickerTool():
+    return _auto_clicker_runner.stop()
+
+@eel.expose
+def getAutoClickerStatus():
+    return _auto_clicker_runner.get_status()
+
+@eel.expose
 def startAutoGiftedBasicBeeTool(capture_delay_seconds=3, pause_settings=None):
     return _auto_gifted_basic_bee_runner.start(capture_delay_seconds, getRunState(), pause_settings)
 
@@ -462,6 +597,18 @@ def stopAutoGiftedBasicBeeTool():
 @eel.expose
 def getAutoGiftedBasicBeeStatus():
     return _auto_gifted_basic_bee_runner.get_status()
+
+@eel.expose
+def isAnyToolRunning():
+    return _auto_clicker_runner.is_active() or _auto_gifted_basic_bee_runner.is_active()
+
+@eel.expose
+def stopAllTools():
+    results = {
+        "auto_clicker": stopAutoClickerTool(),
+        "auto_gifted_basic_bee": stopAutoGiftedBasicBeeTool(),
+    }
+    return {"ok": True, "results": results}
 
 @eel.expose
 def update():

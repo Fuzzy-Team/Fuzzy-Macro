@@ -2498,7 +2498,7 @@ def watch_for_hotkeys(run):
                         stop_key_held = True
                     try:
                         import gui
-                        gui.stopAutoGiftedBasicBeeTool()
+                        gui.stopAllTools()
                     except Exception:
                         pass
                     # Force stop immediately when stop keybind is held
@@ -2520,6 +2520,13 @@ def watch_for_hotkeys(run):
                 if current_combo == start_keybind:
                     if run.value == 2: #already running
                         return
+                    try:
+                        import gui
+                        if gui.isAnyToolRunning():
+                            messageBox.msgBox(title="Tool Running", text="Stop the running tool before starting the macro.")
+                            return
+                    except Exception:
+                        pass
                     # Check debounce with error handling
                     try:
                         if current_time - last_trigger_time["start"] < debounce_duration:
@@ -2547,7 +2554,7 @@ def watch_for_hotkeys(run):
                     last_trigger_time["stop"] = current_time
                     try:
                         import gui
-                        gui.stopAutoGiftedBasicBeeTool()
+                        gui.stopAllTools()
                     except Exception:
                         pass
                     if run.value == 3: #already stopped

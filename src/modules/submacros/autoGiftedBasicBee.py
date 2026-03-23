@@ -83,6 +83,14 @@ class AutoGiftedBasicBeeRunner:
         with self._lock:
             return dict(self._status)
 
+    def is_active(self):
+        with self._lock:
+            return bool(
+                (self._thread and self._thread.is_alive())
+                or self._status.get("running")
+                or self._status.get("state") == "stopping"
+            )
+
     def _update_status(self, **kwargs):
         with self._lock:
             self._status.update(kwargs)
@@ -91,9 +99,23 @@ class AutoGiftedBasicBeeRunner:
         capture_delay_seconds = int(capture_delay_seconds or 3)
         capture_delay_seconds = max(1, min(capture_delay_seconds, 10))
 
+        thread_to_join = None
+        with self._lock:
+            if self._thread and not self._thread.is_alive():
+                self._thread = None
+            elif self._thread and self._stop_event.is_set():
+                thread_to_join = self._thread
+            elif self._thread and self._thread.is_alive():
+                return {"ok": False, "message": "The tool is already running."}
+            if run_state != 3:
+                return {"ok": False, "message": "Stop the macro before starting this tool."}
+
+        if thread_to_join:
+            thread_to_join.join(timeout=0.5)
+
         with self._lock:
             if self._thread and self._thread.is_alive():
-                return {"ok": False, "message": "The tool is already running."}
+                return {"ok": False, "message": "The tool is still stopping. Try again in a moment."}
             if run_state != 3:
                 return {"ok": False, "message": "Stop the macro before starting this tool."}
             merged_pause_settings = self._default_pause_settings()
@@ -128,6 +150,9 @@ class AutoGiftedBasicBeeRunner:
     def stop(self):
         self._stop_event.set()
         self._update_status(message="Stopping after the current step.")
+        thread = self._thread
+        if thread and thread.is_alive():
+            thread.join(timeout=0.5)
         return {"ok": True, "message": "Stop requested."}
 
     def _raise_if_stopped(self):
@@ -587,3 +612,5 @@ class AutoGiftedBasicBeeRunner:
             except Exception:
                 pass
             self._update_status(running=False)
+            with self._lock:
+                self._thread = None
