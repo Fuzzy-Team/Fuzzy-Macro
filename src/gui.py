@@ -15,7 +15,86 @@ from modules.submacros.autoGiftedBasicBee import AutoGiftedBasicBeeRunner
 eel.init('webapp')
 run = None
 _recent_logs = []
-_auto_gifted_basic_bee_runner = AutoGiftedBasicBeeRunner()
+_tool_logger = None
+_tool_status = None
+_tool_presence = None
+_active_tool_presence_key = None
+
+
+def _refresh_tool_logger_settings():
+    global _tool_logger
+    if _tool_logger is None:
+        return
+    try:
+        settings = settingsManager.loadAllSettings()
+    except Exception:
+        settings = {}
+    _tool_logger.enableWebhook = settings.get("enable_webhook", False)
+    _tool_logger.webhookURL = settings.get("webhook_link", "")
+    _tool_logger.sendScreenshots = settings.get("send_screenshot", True)
+    _tool_logger.enableDiscordPing = settings.get("enable_discord_ping", False)
+    _tool_logger.discordUserID = settings.get("discord_user_id", "")
+    _tool_logger.pingSettings = {
+        key: value for key, value in settings.items() if str(key).startswith("ping_")
+    }
+
+
+def _set_tool_presence(presence_key):
+    global _active_tool_presence_key
+    _active_tool_presence_key = presence_key
+    if _tool_presence is None:
+        return
+    try:
+        _tool_presence.value = presence_key
+    except Exception:
+        pass
+
+
+def _clear_tool_presence(presence_key=None):
+    global _active_tool_presence_key
+    if presence_key and _active_tool_presence_key != presence_key:
+        return
+    _active_tool_presence_key = None
+    if _tool_presence is None:
+        return
+    try:
+        _tool_presence.value = ""
+    except Exception:
+        pass
+
+
+def _send_tool_webhook(title, desc, color="light blue"):
+    if _tool_logger is None:
+        return
+    _refresh_tool_logger_settings()
+    try:
+        _tool_logger.webhook(title, desc, color)
+    except Exception:
+        pass
+
+
+def _handle_auto_gifted_basic_bee_event(event_name, payload=None):
+    payload = payload or {}
+    if event_name == "started":
+        _set_tool_presence("tool_auto_gifted_basic_bee")
+        _send_tool_webhook("Tool Started", "Auto Gifted Basic Bee started.", "purple")
+        return
+
+    if event_name != "finished":
+        return
+
+    result = payload.get("result", "")
+    message = payload.get("message", "Auto Gifted Basic Bee finished.")
+    _clear_tool_presence("tool_auto_gifted_basic_bee")
+    if result == "success":
+        _send_tool_webhook("Tool Completed", f"Auto Gifted Basic Bee: {message}", "bright green")
+    elif result == "stopped":
+        _send_tool_webhook("Tool Stopped", f"Auto Gifted Basic Bee: {message}", "orange")
+    else:
+        _send_tool_webhook("Tool Error", f"Auto Gifted Basic Bee: {message}", "red")
+
+
+_auto_gifted_basic_bee_runner = AutoGiftedBasicBeeRunner(event_callback=_handle_auto_gifted_basic_bee_event)
 
 
 class AutoClickerRunner:
@@ -117,6 +196,8 @@ class AutoClickerRunner:
                 state="finished",
                 message=str(exc),
             )
+            _clear_tool_presence("tool_auto_clicker")
+            _send_tool_webhook("Tool Error", f"Auto Clicker: {str(exc)}", "red")
         finally:
             with self._lock:
                 self._thread = None
@@ -129,9 +210,17 @@ class AutoClickerRunner:
                             "interval_ms": self._interval_ms,
                         }
                     )
+            _clear_tool_presence("tool_auto_clicker")
 
 
 _auto_clicker_runner = AutoClickerRunner()
+
+
+def configureToolRuntime(logger=None, status=None, presence=None):
+    global _tool_logger, _tool_status, _tool_presence
+    _tool_logger = logger
+    _tool_status = status
+    _tool_presence = presence
 @eel.expose
 def openLink(link):
     webbrowser.open(link, autoraise = True)
@@ -576,11 +665,20 @@ def autoClickerClick():
 
 @eel.expose
 def startAutoClickerTool(interval_ms=100):
-    return _auto_clicker_runner.start(interval_ms, getRunState())
+    result = _auto_clicker_runner.start(interval_ms, getRunState())
+    if result.get("ok"):
+        _set_tool_presence("tool_auto_clicker")
+        _send_tool_webhook("Tool Started", "Auto Clicker started.", "purple")
+    return result
 
 @eel.expose
 def stopAutoClickerTool():
-    return _auto_clicker_runner.stop()
+    was_active = _auto_clicker_runner.is_active()
+    result = _auto_clicker_runner.stop()
+    if was_active:
+        _clear_tool_presence("tool_auto_clicker")
+        _send_tool_webhook("Tool Stopped", "Auto Clicker stopped.", "orange")
+    return result
 
 @eel.expose
 def getAutoClickerStatus():

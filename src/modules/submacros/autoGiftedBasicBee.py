@@ -38,7 +38,7 @@ class AutoGiftedBasicBeeRunner:
         "buoyant", "fuzzy", "precise", "spicy", "tadpole", "vector",
     }
 
-    def __init__(self):
+    def __init__(self, event_callback=None):
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._thread = None
@@ -48,6 +48,8 @@ class AutoGiftedBasicBeeRunner:
         self._cached_inventory_positions = {}
         self._templates = {}
         self._inventory_open = False
+        self._event_callback = event_callback
+        self._final_event_sent = False
 
     def _default_pause_settings(self):
         return {
@@ -95,6 +97,21 @@ class AutoGiftedBasicBeeRunner:
         with self._lock:
             self._status.update(kwargs)
 
+    def _emit_event(self, event_name, **payload):
+        if not self._event_callback:
+            return
+        try:
+            self._event_callback(event_name, payload)
+        except Exception:
+            pass
+
+    def _emit_finished_once(self, result, message):
+        with self._lock:
+            if self._final_event_sent:
+                return
+            self._final_event_sent = True
+        self._emit_event("finished", result=result, message=message)
+
     def start(self, capture_delay_seconds=3, run_state=3, pause_settings=None):
         capture_delay_seconds = int(capture_delay_seconds or 3)
         capture_delay_seconds = max(1, min(capture_delay_seconds, 10))
@@ -126,6 +143,7 @@ class AutoGiftedBasicBeeRunner:
             merged_pause_settings["pause_on_gifted_basic"] = True
             self._pause_settings = merged_pause_settings
             self._stop_event.clear()
+            self._final_event_sent = False
             self._cached_inventory_positions = {}
             self._roblox_window = None
             self._inventory_open = False
@@ -145,6 +163,7 @@ class AutoGiftedBasicBeeRunner:
             )
             self._thread.start()
 
+        self._emit_event("started", message="Tool started. Roblox will be focused automatically.")
         return {"ok": True, "message": "Tool started. Roblox will be focused automatically."}
 
     def stop(self):
@@ -601,6 +620,7 @@ class AutoGiftedBasicBeeRunner:
             if message == "Stopped by user.":
                 result = "stopped"
             self._update_status(running=False, state="finished", result=result, message=message)
+            self._emit_finished_once(result, message)
         finally:
             try:
                 if self._inventory_open:
@@ -613,4 +633,8 @@ class AutoGiftedBasicBeeRunner:
                 pass
             self._update_status(running=False)
             with self._lock:
+                result = self._status.get("result", "")
+                message = self._status.get("message", "Tool finished.")
                 self._thread = None
+            if result:
+                self._emit_finished_once(result, message)
