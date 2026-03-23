@@ -1634,8 +1634,12 @@ class macro:
                 pass
             return None
 
-        # Retry cannon search once after a reset, then rejoin on the second failed attempt.
-        max_attempts = 2
+        # Honor the configured retry count before forcing a rejoin.
+        try:
+            max_attempts = int(self.setdat.get("max_cannon_attempts", 3))
+        except (TypeError, ValueError):
+            max_attempts = 3
+        max_attempts = max(1, max_attempts)
         first_attempt_color = None
         for i in range(max_attempts):
             #Move to canon:
@@ -1677,23 +1681,40 @@ class macro:
                     if self.isBesideEImage("cannon"):
                         return
                     self.keyboard.walk("a",0.2)
-            self.logger.webhook("Notice", f"Could not find cannon", "dark brown", "screen")
+            self.logger.webhook(
+                "Notice",
+                f"Could not find cannon (attempt {i+1}/{max_attempts})",
+                "dark brown",
+                "screen",
+            )
             detected_color = detect_rejoin_mode_color()
 
-            # First failure: reset and rerun cannon search once.
-            if i == 0:
+            # Reset between failed attempts until the configured limit is exhausted.
+            if i < max_attempts - 1:
                 first_attempt_color = detected_color
                 if detected_color is not None:
-                    self.logger.webhook("", "Detected light/dark-mode screen while searching for cannon. Resetting and retrying cannon search once.", "dark brown", "screen")
+                    retries_left = max_attempts - (i + 1)
+                    retry_label = "time" if retries_left == 1 else "times"
+                    self.logger.webhook(
+                        "",
+                        f"Detected light/dark-mode screen while searching for cannon. Resetting and retrying cannon search ({retries_left} {retry_label} remaining).",
+                        "dark brown",
+                        "screen",
+                    )
                 self.reset(convert=False)
                 continue
 
-            # Second failure: rejoin. If the same color persists after reset, call it out.
+            # Final failure: rejoin. If the same color persists after reset, call it out.
             if detected_color is not None and first_attempt_color is not None and tuple(detected_color) == tuple(first_attempt_color):
                 self.logger.webhook("", "Detected the same light/dark-mode color again after reset while searching for cannon. Rejoining.", "dark brown", "screen")
             elif detected_color is not None:
                 self.logger.webhook("", "Detected light/dark-mode screen again while searching for cannon. Rejoining.", "dark brown", "screen")
-            self.logger.webhook("Notice", "Failed to reach cannon on retry; rejoining", "red", ping_category="ping_critical_errors")
+            self.logger.webhook(
+                "Notice",
+                f"Failed to reach cannon after {max_attempts} attempts; rejoining",
+                "red",
+                ping_category="ping_critical_errors",
+            )
             self.rejoin()
             return
         else:
