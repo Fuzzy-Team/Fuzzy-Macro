@@ -2243,6 +2243,29 @@ class macro:
         # Convert underscores to spaces for fieldSettings lookup
         normalized_field = field.replace('_', ' ')
         fieldSetting = {**self.fieldSettings[normalized_field], **settingsOverride}
+        def shouldUseHoneyWreathReturn():
+            if not self.setdat.get("wreath", False):
+                return False
+
+            fields_enabled = list(self.setdat.get("fields_enabled", []))
+            configured_fields = list(self.setdat.get("fields", []))
+            for index, enabled in enumerate(fields_enabled[:5]):
+                if not enabled or index >= len(configured_fields):
+                    continue
+                configured_field = str(configured_fields[index]).replace("_", " ").strip().lower()
+                if configured_field == normalized_field.lower():
+                    return True
+            return False
+
+        def isHoneyWreathReady():
+            cooldown = self.collectCooldowns.get("wreath", collectData["wreath"][2])
+            return self.hasRespawned("wreath", cooldown)
+
+        def isHoneyWreathBackpackReady(backpack=None):
+            if backpack is None:
+                backpack = self.getBackpack()
+            return backpack >= fieldSetting["backpack"]
+
         for i in range(3):
             self.waitForBees()
             #go to field
@@ -2332,6 +2355,9 @@ class macro:
         lastGumdropTime = 0  # Track when gumdrop was last used
         gooTimerActive = True  # Flag to control goo timer thread
         gumdropTimerActive = True  # Flag to control gumdrop timer thread
+        honeyWreathReturnEnabled = shouldUseHoneyWreathReturn()
+        honeyWreathPending = False
+        honeyWreathWaitLogged = False
 
         # Add goo status to webhook message
         gooStatus = " - Goo Enabled" if fieldSetting["goo"] else ""
@@ -2461,12 +2487,53 @@ class macro:
                 self.reset()
                 break
             elif getGatherTime() > maxGatherTime:
-                self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Time Limit - Return: {returnType.title()}", "light green", "screen")
-                keepGathering = False
+                if honeyWreathReturnEnabled and isHoneyWreathReady():
+                    backpack = self.getBackpack()
+                    if isHoneyWreathBackpackReady(backpack):
+                        self.logger.webhook(
+                            "Gathering: Ended",
+                            f"Time: {gatherTime} - Time Limit - Backpack Full - Return: Honey Wreath",
+                            "light green",
+                            "screen"
+                        )
+                        honeyWreathPending = True
+                        keepGathering = False
+                    elif not honeyWreathWaitLogged:
+                        self.logger.webhook(
+                            "Gathering: Extended",
+                            "Time limit reached. Waiting for backpack to fill before claiming Honey Wreath",
+                            "light green",
+                            "screen"
+                        )
+                        honeyWreathWaitLogged = True
+                else:
+                    self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Time Limit - Return: {returnType.title()}", "light green", "screen")
+                    keepGathering = False
             #check backpack
-            elif self.getBackpack() >= fieldSetting["backpack"]:
-                self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Backpack - Return: {returnType.title()}", "light green", "screen")
-                keepGathering = False
+            else:
+                backpack = self.getBackpack()
+                if backpack >= fieldSetting["backpack"]:
+                    if honeyWreathReturnEnabled and isHoneyWreathReady():
+                        if isHoneyWreathBackpackReady(backpack):
+                            self.logger.webhook(
+                                "Gathering: Ended",
+                                f"Time: {gatherTime} - Backpack Full - Return: Honey Wreath",
+                                "light green",
+                                "screen"
+                            )
+                            honeyWreathPending = True
+                            keepGathering = False
+                        elif not honeyWreathWaitLogged:
+                            self.logger.webhook(
+                                "Gathering: Extended",
+                                f"Honey Wreath is ready. Waiting for the configured backpack limit ({fieldSetting['backpack']}%) before claiming",
+                                "light green",
+                                "screen"
+                            )
+                            honeyWreathWaitLogged = True
+                    else:
+                        self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Backpack - Return: {returnType.title()}", "light green", "screen")
+                        keepGathering = False
 
         #gathering was interrupted
         if keepGathering:
@@ -2477,7 +2544,7 @@ class macro:
         #goo timer continues via background thread during return process
 
         #go back to hive
-        def walkToHive():
+        def walkToHive(convertAtHive=True):
             nonlocal self
             #walk to hive
             #face correct direction (towards hive)
@@ -2508,10 +2575,18 @@ class macro:
             self.keyboard.keyUp("a")
             #in case we overrun
             time.sleep(0.4)
+            if self.isBesideEImage("makehoney"):
+                if not convertAtHive:
+                    return True
+            elif not convertAtHive:
+                self.logger.webhook("","Can't find hive, resetting", "dark brown", "screen")
+                self.reset()
+                return False
+
             for _ in range(7):
                 #goo timer continues via background thread during conversion attempts
                 if self.convert(forced_convert_balloon=(str(self.setdat.get("convert_balloon","")).lower().replace(" ","_")=="every_gather")):
-                    break
+                    return True
                 self.keyboard.walk("d",0.1)
                 time.sleep(0.2) #add a delay so that the E can popup
             else:
@@ -2529,6 +2604,16 @@ class macro:
                 else:
                     self.logger.webhook("","Can't find hive, resetting", "dark brown", "screen")
                     self.reset()
+                return False
+            return True
+
+        if honeyWreathPending:
+            if walkToHive(convertAtHive=False):
+                self.logger.webhook("", "Claiming Honey Wreath before converting", "dark brown", "screen")
+                self.collect("wreath")
+                self.reset(convert=True)
+            gooTimerActive = False
+            return
 
         if returnType == "reset":
             #goo timer continues via background thread during reset
