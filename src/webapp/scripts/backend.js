@@ -1,6 +1,6 @@
 (function () {
   const handlers = new Map();
-  const PYWEBVIEW_READY_TIMEOUT_MS = 5000;
+  const PYWEBVIEW_READY_TIMEOUT_MS = 15000;
 
   function hasPywebviewApi() {
     return !!(window.pywebview && window.pywebview.api);
@@ -15,24 +15,38 @@
       return window.__appBridgePywebviewWaiter;
     }
 
-    // Polling-based waiter: some pywebview backends expose the js API
-    // asynchronously without reliably firing a specific custom event.
-    // Poll every `intervalMs` until the API appears or the timeout elapses.
+    // Prefer the native pywebviewready event, but keep polling for older or
+    // slower backends where the bridge appears asynchronously.
     window.__appBridgePywebviewWaiter = new Promise((resolve) => {
       const intervalMs = 100;
       const timeoutMs = PYWEBVIEW_READY_TIMEOUT_MS;
       let elapsed = 0;
+      let settled = false;
+
+      const finish = (api) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        window.removeEventListener("pywebviewready", onReady);
+        clearInterval(poll);
+        resolve(api);
+      };
+
+      const onReady = () => {
+        finish(hasPywebviewApi() ? window.pywebview.api : null);
+      };
+
+      window.addEventListener("pywebviewready", onReady, { once: true });
 
       const poll = setInterval(() => {
         if (hasPywebviewApi()) {
-          clearInterval(poll);
-          resolve(window.pywebview.api);
+          finish(window.pywebview.api);
           return;
         }
         elapsed += intervalMs;
         if (elapsed >= timeoutMs) {
-          clearInterval(poll);
-          resolve(
+          finish(
             window.pywebview && window.pywebview.api
               ? window.pywebview.api
               : null

@@ -1,15 +1,16 @@
-import webbrowser
-import modules.misc.settingsManager as settingsManager
-import os
-import modules.misc.update as updateModule
-import sys
 import ast
-import json
-import webbrowser
-import time
-import threading
-import platform
 import importlib.util
+import inspect
+import json
+import os
+import platform
+import sys
+import threading
+import time
+import webbrowser
+
+import modules.misc.settingsManager as settingsManager
+import modules.misc.update as updateModule
 
 try:
     from AppKit import NSApplication, NSImage
@@ -27,6 +28,11 @@ _recent_logs = []
 _frontend_window = None
 _frontend_ready = False
 _shutdown_requested = False
+_CHROME_LIKE_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/120.0.0.0 Safari/537.36"
+)
 
 
 def _get_save_dialog_type():
@@ -54,6 +60,142 @@ def _module_available(module_name):
         return importlib.util.find_spec(module_name) is not None
     except Exception:
         return False
+
+
+def _parse_version_tuple(version_string):
+    parts = []
+    for part in str(version_string).split("."):
+        try:
+            parts.append(int(part))
+        except ValueError:
+            break
+    while len(parts) < 3:
+        parts.append(0)
+    return tuple(parts[:3])
+
+
+def _macos_version():
+    if platform.system() != "Darwin":
+        return None
+    version = platform.mac_ver()[0]
+    if not version:
+        return None
+    return _parse_version_tuple(version)
+
+
+def _get_storage_path():
+    storage_path = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "data", "user", "pywebview")
+    )
+    try:
+        os.makedirs(storage_path, exist_ok=True)
+    except Exception:
+        pass
+    return storage_path
+
+
+def _get_backend_override():
+    override = os.environ.get("FUZZY_MACRO_WEBVIEW_GUI", "").strip().lower()
+    if not override:
+        return None
+    if override in {"cocoa", "native", "default"}:
+        return None
+    if override in {"qt"}:
+        return override
+    print(
+        "Ignoring unsupported FUZZY_MACRO_WEBVIEW_GUI override. "
+        "Supported values: cocoa/native/default, qt."
+    )
+    return None
+
+
+def _get_backend_candidates():
+    if platform.system() != "Darwin":
+        return [None]
+
+    override = _get_backend_override()
+    has_pyqt5 = _module_available("PyQt5")
+    has_webkit = _module_available("WebKit")
+    macos_version = _macos_version()
+
+    if override == "qt":
+        if not has_pyqt5:
+            raise RuntimeError(
+                "FUZZY_MACRO_WEBVIEW_GUI=qt was requested, but PyQt5 is not installed."
+            )
+        return ["qt"]
+
+    if not has_webkit and not has_pyqt5:
+        raise RuntimeError(
+            "No supported pywebview backend found on macOS. "
+            "Missing both PyQt5 and WebKit. "
+            "Re-run install_dependencies.command or install one backend manually: "
+            "pip install 'pywebview[qt]' PyQt5==5.15.9 "
+            "or pip install pyobjc-core pyobjc-framework-Cocoa pyobjc-framework-WebKit"
+        )
+
+    candidates = []
+
+    # Older macOS releases tend to be more reliable with the Qt backend when it
+    # is available; newer releases generally behave best with native WebKit.
+    if has_pyqt5 and macos_version and macos_version < (11, 0, 0):
+        candidates.append("qt")
+    if has_webkit:
+        candidates.append(None)
+    if has_pyqt5:
+        candidates.append("qt")
+
+    ordered_candidates = []
+    for candidate in candidates:
+        if candidate not in ordered_candidates:
+            ordered_candidates.append(candidate)
+
+    return ordered_candidates or [None]
+
+
+def _filter_supported_kwargs(func, kwargs):
+    try:
+        sig = inspect.signature(func)
+    except Exception:
+        return dict(kwargs)
+
+    params = sig.parameters
+    accepts_var_kw = any(
+        param.kind == inspect.Parameter.VAR_KEYWORD for param in params.values()
+    )
+    if accepts_var_kw:
+        return dict(kwargs)
+    return {key: value for key, value in kwargs.items() if key in params}
+
+
+def _create_frontend_window(index_path):
+    create_window_fn = webview.create_window
+    window_kwargs = {
+        "js_api": _build_gui_api(),
+        "width": 1312,
+        "height": 1022,
+        "min_size": (1120, 820),
+        "text_select": True,
+        "zoomable": True,
+    }
+    active_kwargs = _filter_supported_kwargs(create_window_fn, window_kwargs)
+
+    for _ in range(2):
+        try:
+            return create_window_fn("Fuzzy Macro", index_path, **active_kwargs)
+        except TypeError as exc:
+            msg = str(exc)
+            marker = "unexpected keyword argument "
+            if marker not in msg:
+                raise
+
+            bad_key = msg.split(marker, 1)[1].strip().strip("'\"")
+            if bad_key not in active_kwargs:
+                raise
+
+            active_kwargs.pop(bad_key, None)
+
+    return create_window_fn("Fuzzy Macro", index_path, **active_kwargs)
 
 
 _keybind_recording_state = {
@@ -938,75 +1080,10 @@ def launch(runtime_callback=None, runtime_args=(), keyboard_listener_callback=No
     _shutdown_requested = False
 
     _set_dock_icon_if_available()
-    preferred_gui = None
-
-    if platform.system() == "Darwin":
-        has_pyqt5 = _module_available("PyQt5")
-        has_webkit = _module_available("WebKit")
-
-        # Prefer the native Cocoa/WebKit backend on macOS (preferred_gui stays None).
-        # Only fall back to Qt when the WebKit pyobjc modules are genuinely absent.
-        if not has_webkit:
-            if has_pyqt5:
-                preferred_gui = "qt"
-            else:
-                raise RuntimeError(
-                    "No supported pywebview backend found on macOS. "
-                    "Missing both PyQt5 and WebKit. "
-                    "Re-run install_dependencies.command or install one backend manually: "
-                    "pip install 'pywebview[qt]' PyQt5==5.15.9 "
-                    "or pip install pyobjc-core pyobjc-framework-Cocoa pyobjc-framework-WebKit"
-                )
+    backend_candidates = _get_backend_candidates()
 
     try:
-        # Build kwargs in a version-safe way: older pywebview releases reject
-        # newer parameters such as `text_select`.
-        import inspect
-
-        create_window_fn = webview.create_window
-        kwargs = {
-            "width": 1312,
-            "height": 1022,
-            "text_select": True,
-        }
-        if preferred_gui:
-            kwargs["gui"] = preferred_gui
-
-        signature_kwargs = None
-        try:
-            sig = inspect.signature(create_window_fn)
-            params = sig.parameters
-            accepts_var_kw = any(
-                p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()
-            )
-
-            if "js_api" in params or accepts_var_kw:
-                kwargs["js_api"] = _build_gui_api()
-
-            if not accepts_var_kw:
-                signature_kwargs = {k: v for k, v in kwargs.items() if k in params}
-            else:
-                signature_kwargs = kwargs
-        except Exception:
-            # If signature inspection fails, try the full kwargs and rely on
-            # TypeError fallback below to remove unsupported keys.
-            signature_kwargs = kwargs
-
-        # Retry once without a reported unexpected keyword argument.
-        active_kwargs = dict(signature_kwargs)
-        for _ in range(2):
-            try:
-                _frontend_window = create_window_fn("Fuzzy Macro", index_path, **active_kwargs)
-                break
-            except TypeError as exc:
-                msg = str(exc)
-                marker = "unexpected keyword argument "
-                if marker in msg:
-                    bad_key = msg.split(marker, 1)[1].strip().strip("'\"")
-                    if bad_key in active_kwargs:
-                        active_kwargs.pop(bad_key, None)
-                        continue
-                raise
+        _frontend_window = _create_frontend_window(index_path)
     except Exception as exc:
         # Some pywebview backends can fail to initialize on certain platforms
         # (notably on Windows when WebView2/runtime or other backends are missing).
@@ -1136,23 +1213,57 @@ def launch(runtime_callback=None, runtime_args=(), keyboard_listener_callback=No
             pass
 
     def _watchdog():
-        time.sleep(12)
+        time.sleep(20)
         if not _frontend_ready and not _shutdown_requested:
-            print("[gui] Frontend not loaded after 12s — launching browser fallback")
+            print("[gui] Frontend not loaded after 20s — launching browser fallback")
             _browser_fallback()
 
     threading.Thread(target=_watchdog, daemon=True, name="gui-watchdog").start()
 
-    start_kwargs = {"http_server": True}
-    if preferred_gui:
-        start_kwargs["gui"] = preferred_gui
+    base_start_kwargs = {
+        "http_server": True,
+        "private_mode": False,
+        "storage_path": _get_storage_path(),
+        "user_agent": _CHROME_LIKE_USER_AGENT,
+    }
+    start_fn = webview.start
+    last_error = None
 
-    try:
-        webview.start(**start_kwargs)
-    except TypeError as exc:
-        # Fallback for pywebview versions that do not accept `gui`.
-        if "gui" in start_kwargs and "gui" in str(exc):
-            start_kwargs.pop("gui", None)
-            webview.start(**start_kwargs)
-        else:
+    for backend in backend_candidates:
+        start_kwargs = dict(base_start_kwargs)
+        if backend:
+            start_kwargs["gui"] = backend
+
+        active_kwargs = _filter_supported_kwargs(start_fn, start_kwargs)
+
+        try:
+            if backend:
+                print(f"[gui] Starting pywebview with {backend} backend")
+            else:
+                print("[gui] Starting pywebview with native backend")
+            start_fn(**active_kwargs)
+            last_error = None
+            break
+        except TypeError as exc:
+            if "gui" in active_kwargs and "gui" in str(exc):
+                active_kwargs.pop("gui", None)
+                start_fn(**active_kwargs)
+                last_error = None
+                break
+            last_error = exc
             raise
+        except Exception as exc:
+            last_error = exc
+            if platform.system() == "Darwin" and backend != backend_candidates[-1]:
+                backend_name = backend or "native"
+                print(f"[gui] Failed to start {backend_name} backend: {exc}")
+                continue
+            break
+
+    if last_error is not None:
+        if platform.system() == "Darwin":
+            raise RuntimeError(
+                "Failed to initialize pywebview on macOS. "
+                "Try FUZZY_MACRO_WEBVIEW_GUI=qt if Qt is installed, or re-run install_dependencies.command."
+            ) from last_error
+        raise last_error
