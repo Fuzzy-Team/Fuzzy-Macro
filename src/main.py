@@ -499,6 +499,28 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         macro.clear_task_status()
         return returnVal
     
+
+    def isBackpackReadyForWreath():
+        try:
+            current_backpack = macro.getBackpack()
+            fields = list(macro.setdat.get("fields", []))
+            fields_enabled = list(macro.setdat.get("fields_enabled", []))
+            for index, enabled in enumerate(fields_enabled[:5]):
+                if not enabled or index >= len(fields):
+                    continue
+                field_name = str(fields[index]).replace("_", " ").strip()
+                field_settings = macro.fieldSettings.get(field_name, {})
+                threshold = field_settings.get("backpack", 100)
+                try:
+                    threshold = float(threshold)
+                except Exception:
+                    threshold = 100
+                if current_backpack >= threshold:
+                    return True
+            return False
+        except Exception:
+            return False
+
     def handleQuest(questGiver, executeQuest=True):
         nonlocal questCache, taskCompleted
         
@@ -1222,10 +1244,12 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 # Regular collect items
                 if collectName in macroModule.collectData:
                     if macro.setdat[collectName] and macro.hasRespawned(collectName, macro.collectCooldowns[collectName]):
+                        if collectName == "wreath" and not isBackpackReadyForWreath():
+                            macro.logger.webhook("", "Honey Wreath ready, but backpack is not full yet. Deferring claim", "dark brown", "screen")
+                            return False
                         runTask(macro.collect, args=(collectName,))
                         executedTasks.add(taskId)
                         return True
-                return False
             
             # Handle kill tasks
             if taskId.startswith("kill_"):
@@ -2098,6 +2122,9 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     if collectName in macroModule.collectData:
                         # Execute collect task directly, ignoring enabled/disabled setting
                         if macro.hasRespawned(collectName, macro.collectCooldowns[collectName]):
+                            if collectName == "wreath" and not isBackpackReadyForWreath():
+                                macro.logger.webhook("Quest Task", "Honey Wreath ready, but backpack is not full yet. Deferring claim", "orange")
+                                return False
                             macro.logger.webhook("Quest Task", f"Executing collect: {collectName}", "light blue")
                             runTask(macro.collect, args=(collectName,))
                             macro.logger.webhook("Quest Task", f"Completed collect: {collectName}", "bright green")
@@ -2200,10 +2227,9 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             #collect
             for k, _ in macroModule.collectData.items():
                 if macro.setdat[k] and macro.hasRespawned(k, macro.collectCooldowns[k]):
-                    runTask(macro.collect, args=(k,))
-
-            if macro.setdat["sticker_printer"] and macro.hasRespawned("sticker_printer", macro.collectCooldowns["sticker_printer"]):
-                runTask(macro.collectStickerPrinter)
+                    if k == "wreath" and not isBackpackReadyForWreath():
+                        macro.logger.webhook("", "Honey Wreath ready, but backpack is not full yet. Deferring claim", "dark brown", "screen")
+                        continue
             
             #blender
             if macro.setdat["blender_enable"]:
