@@ -706,8 +706,8 @@ class HourlyReportDrawer:
         self.gridColor = (88, 72, 60)
         # reduced canvas height to shrink overall report image
         self.canvasSize = (6400, 8000)
-        self.sidebarWidth = 1900
-        self.leftPadding = 150
+        self.sidebarWidth = 1820
+        self.leftPadding = 136
         self.availableSpace = self.canvasSize[0] - self.sidebarWidth - self.leftPadding*2
         self.time_format = time_format
         self.fontScale = 1.1
@@ -810,11 +810,11 @@ class HourlyReportDrawer:
 
         overlay = Image.new("RGBA", self.canvasSize, (0, 0, 0, 0))
         overlayDraw = ImageDraw.Draw(overlay)
-        overlayDraw.ellipse((-800, -200, 2600, 2200), fill=self.withAlpha(self.primaryColor, 44))
-        overlayDraw.ellipse((3450, -200, 7000, 1800), fill=self.withAlpha(self.honeyColor, 18))
-        overlayDraw.ellipse((4200, 4600, 7600, 7900), fill=self.withAlpha(self.secondaryAccentColor, 18))
-        overlayDraw.rectangle((0, 0, self.canvasSize[0], 480), fill=self.withAlpha(self.primaryColor, 12))
-        overlay = overlay.filter(ImageFilter.GaussianBlur(160))
+        overlayDraw.ellipse((-900, -280, 2500, 2100), fill=self.withAlpha(self.primaryColor, 26))
+        overlayDraw.ellipse((3320, -260, 7040, 1660), fill=self.withAlpha(self.honeyColor, 14))
+        overlayDraw.ellipse((4180, 4700, 7600, 7920), fill=self.withAlpha(self.secondaryAccentColor, 12))
+        overlayDraw.rectangle((0, 0, self.canvasSize[0], 360), fill=self.withAlpha((255, 255, 255), 8))
+        overlay = overlay.filter(ImageFilter.GaussianBlur(190))
 
         self.canvas = Image.alpha_composite(base, overlay)
         self.draw = ImageDraw.Draw(self.canvas)
@@ -823,25 +823,25 @@ class HourlyReportDrawer:
         accent = self.toRgb(accent or self.primaryColor)
         fill = self.toRgb(fill or self.surfaceColor)
 
-        shadowBox = (x + 14, y + 18, x + width + 14, y + height + 18)
+        shadowBox = (x + 12, y + 16, x + width + 12, y + height + 16)
         self.draw.rounded_rectangle(shadowBox, radius=radius + 4, fill=(0, 0, 0, shadowAlpha))
         self.draw.rounded_rectangle(
             (x, y, x + width, y + height),
             radius=radius,
-            fill=self.withAlpha(fill, 245),
-            outline=self.withAlpha(self.borderColor, 220),
-            width=4
+            fill=self.withAlpha(fill, 244),
+            outline=self.withAlpha(self.borderColor, 204),
+            width=3
         )
         self.draw.rounded_rectangle(
             (x + 18, y + 18, x + width - 18, y + height - 18),
             radius=max(18, radius - 18),
-            outline=self.withAlpha(self.blendColor(fill, accent, 0.3), 90),
+            outline=self.withAlpha(self.blendColor(fill, accent, 0.18), 74),
             width=2
         )
         self.draw.rounded_rectangle(
-            (x + 32, y + 26, x + width - 32, y + 44),
-            radius=9,
-            fill=self.withAlpha(accent, 185)
+            (x + 34, y + 28, x + width - 34, y + 38),
+            radius=5,
+            fill=self.withAlpha(accent, 168)
         )
 
     def drawChip(self, x, y, text, fill=None, textColor=None, font=None, paddingX=26, paddingY=16):
@@ -901,20 +901,20 @@ class HourlyReportDrawer:
             )
             cursorY += chipHeight + 28
 
-        titleFont = self.getFont("semibold", 84)
+        titleFont = self.getFont("semibold", 68)
         self.draw.text((x, cursorY), title, fill=self.bodyColor, font=titleFont)
 
         if meta:
-            metaFont = self.getFont("medium", 48)
+            metaFont = self.getFont("medium", 40)
             metaBox = self.draw.textbbox((0, 0), meta, font=metaFont)
             metaWidth = metaBox[2] - metaBox[0]
-            self.draw.text((x + width - metaWidth, cursorY + 18), meta, fill=accent, font=metaFont)
+            self.draw.text((x + width - metaWidth, cursorY + 10), meta, fill=accent, font=metaFont)
 
         if subtitle:
-            self.draw.text((x, cursorY + 108), subtitle, fill=self.mutedColor, font=self.getFont("medium", 48))
-            return cursorY + 188
+            self.draw.text((x, cursorY + 84), subtitle, fill=self.mutedColor, font=self.getFont("medium", 38))
+            return cursorY + 150
 
-        return cursorY + 108
+        return cursorY + 82
 
     def getBrandInfo(self):
         try:
@@ -938,8 +938,8 @@ class HourlyReportDrawer:
         self.canvas.paste(macroIcon, (x + 67, y + 85), macroIcon)
 
         textX = x + 280
-        self.draw.text((textX, y + 74), "Fuzzy Macro", fill=self.bodyColor, font=self.getFont("bold", 88))
-        self.draw.text((textX, y + 176), "macro analytics", fill=self.mutedColor, font=self.getFont("medium", 44))
+        self.draw.text((textX, y + 74), "Fuzzy Macro", fill=self.bodyColor, font=self.getFont("bold", 82))
+        self.draw.text((textX, y + 170), "report dashboard", fill=self.mutedColor, font=self.getFont("medium", 38))
 
         profileName, macroVersion = self.getBrandInfo()
         chipY = y + height - 110
@@ -976,9 +976,56 @@ class HourlyReportDrawer:
         self.drawSectionHeader(contentX, contentY, width - 128, title, subtitle, accent=accent, eyebrow=eyebrow)
 
         chipX = contentX
-        chipY = y + height - 140
+        chipY = y + height - 118
         for label, value, chipAccent in chips or []:
             chipX += self.drawMetricChip(chipX, chipY, label, value, chipAccent) + 22
+
+    def drawOverviewCards(self, x, y, width, items, columns=4, cardHeight=284):
+        if not items:
+            return 0
+
+        gap = 28
+        cardWidth = (width - gap * (columns - 1)) // columns
+        labelFont = self.getFont("medium", 30)
+        valueFont = self.getFont("bold", 62)
+        metaFont = self.getFont("medium", 28)
+
+        for i, item in enumerate(items[:columns]):
+            accent = self.toRgb(item.get("color", self.primaryColor))
+            cardX = x + i * (cardWidth + gap)
+            iconName = item.get("icon")
+            self.drawPanel(cardX, y, cardWidth, cardHeight, accent=accent, fill=self.tintedSurface(accent, 0.08), radius=44, shadowAlpha=48)
+
+            self.draw.rounded_rectangle(
+                (cardX + 28, y + 34, cardX + 144, y + 150),
+                radius=30,
+                fill=self.withAlpha(self.surfaceInsetColor, 235)
+            )
+
+            if iconName:
+                try:
+                    img = Image.open(f"{self.assetPath}/{iconName}.png").convert("RGBA")
+                    widthRaw, heightRaw = img.size
+                    imageHeight = 74
+                    imageWidth = int(widthRaw * (imageHeight / max(heightRaw, 1)))
+                    img = img.resize((imageWidth, imageHeight), Image.LANCZOS)
+                    self.canvas.paste(
+                        img,
+                        (cardX + 86 - imageWidth // 2, y + 92 - imageHeight // 2),
+                        img
+                    )
+                except Exception:
+                    pass
+
+            label = str(item.get("label", "")).upper()
+            value = str(item.get("value", "0"))
+            meta = str(item.get("meta", "")).strip()
+            self.draw.text((cardX + 168, y + 40), label, fill=self.mutedColor, font=labelFont)
+            self.draw.text((cardX + 28, y + 156), value, fill=self.bodyColor, font=valueFont)
+            if meta:
+                self.draw.text((cardX + 28, y + 234), meta, fill=accent, font=metaFont)
+
+        return cardHeight
 
     def getGradientColorAtRatio(self, ratio, gradientSpec):
         #calculates the RGBA color from gradientSpec at a given vertical ratio (0=bottom, 1=top)
@@ -1027,144 +1074,144 @@ class HourlyReportDrawer:
 
 
     def drawGraph(self, graphX, graphY, width, height, xData, datasets, maxY = None, showXAxisLabels=True, showYAxisLabels=True, ticks=5, yLabelFunc=None, xLabelFunc=None):
-        # Validate data lengths
+        pointCount = len(xData) if xData else max((len(dataset.get("data", [])) for dataset in datasets), default=1)
+        pointCount = max(pointCount, 1)
+        if not xData:
+            xData = list(range(pointCount))
+
+        normalizedDatasets = []
+        derivedMaxY = 0
         for dataset in datasets:
+            data = list(dataset.get("data", []))
+            if len(data) < pointCount:
+                data = [0] * (pointCount - len(data)) + data
+            elif len(data) > pointCount:
+                data = data[-pointCount:]
+            derivedMaxY = max(derivedMaxY, max(data) if data else 0)
+            normalized = dataset.copy()
+            normalized["data"] = data
+            normalizedDatasets.append(normalized)
+
+        if maxY is None:
+            maxY = derivedMaxY or 1
+        else:
+            maxY = max(maxY, 1)
+            for dataset in normalizedDatasets:
+                dataset["data"] = [min(maxY, value) for value in dataset["data"]]
+
+        xInterval = width / max(pointCount - 1, 1)
+        font = self.getFont("medium", 40)
+        fontColor = self.mutedColor
+        gridColor = self.withAlpha(self.gridColor, 210)
+
+        self.draw.rounded_rectangle(
+            (graphX, graphY - height, graphX + width, graphY),
+            radius=34,
+            fill=self.withAlpha(self.surfaceInsetColor, 242),
+            outline=self.withAlpha(self.innerBorderColor, 82),
+            width=2
+        )
+
+        xDivisions = min(6, max(pointCount - 1, 1))
+        for division in range(xDivisions + 1):
+            x = graphX + width * division / max(xDivisions, 1)
+            self.draw.line((x, graphY - height, x, graphY), fill=self.withAlpha(self.gridColor, 96), width=2)
+
+        yInterval = height / max(ticks - 1, 1)
+        yValInterval = maxY / max(ticks - 1, 1)
+        for i in range(ticks):
+            y = graphY - yInterval * i
+            if showYAxisLabels:
+                text = yValInterval * i
+                text = yLabelFunc(i, text) if yLabelFunc else text
+                if text is not None:
+                    text = str(text)
+                    bbox = self.draw.textbbox((0, 0), text, font=font)
+                    textWidth = bbox[2] - bbox[0]
+                    textHeight = bbox[3] - bbox[1]
+                    self.draw.text((graphX - textWidth - 74, y - textHeight / 2), text, font=font, fill=fontColor)
+            self.draw.line((graphX, y, graphX + width, y), fill=gridColor, width=2)
+
+        if showXAxisLabels:
+            labelIndices = []
+            for division in range(xDivisions + 1):
+                idx = round((pointCount - 1) * division / max(xDivisions, 1))
+                if idx not in labelIndices:
+                    labelIndices.append(idx)
+            for idx in labelIndices:
+                labelValue = xData[idx] if idx < len(xData) else idx
+                labelText = xLabelFunc(idx, labelValue) if xLabelFunc else labelValue
+                if labelText is None:
+                    continue
+                labelText = str(labelText)
+                bbox = self.draw.textbbox((0, 0), labelText, font=font)
+                textWidth = bbox[2] - bbox[0]
+                self.draw.text((graphX + xInterval * idx - textWidth / 2, graphY + 22), labelText, font=font, fill=fontColor)
+
+        for dataset in normalizedDatasets:
             data = dataset["data"]
-            #pad the data
-            data = [0]*(len(xData) - len(data)) + data
-        
-            # Prevent division by zero with minimal data
-            xInterval = width / max(len(data) - 1, 1)
-            if not maxY:
-                maxY = max(data) if data else 1
-                if not maxY:
-                    maxY = 1
-            else:
-                data = [maxY if y > maxY else y for y in data]
-
-            font = self.getFont("medium", 48)
-            fontColor = self.mutedColor
-            gridColor = self.gridColor
-            #draw xaxis
-            if showXAxisLabels:
-                for i, val in enumerate(xData):
-                    val = xLabelFunc(i, val) if xLabelFunc else val
-                    if val:
-                        val = str(val)
-                        #get the text width, so the text can be centered with the x axis point
-                        bbox = self.draw.textbbox((0, 0), val, font=font)
-                        textWidth = bbox[2] - bbox[0]
-                        self.draw.text((graphX+xInterval*i - textWidth/2, graphY+24), val, font=font, fill= fontColor)
-            
-            #draw y labels and y grid
-            #calculating ticks
-            yInterval = height/max(ticks-1, 1)
-            yValInterval = maxY/max(ticks-1, 1)
-
-            for i in range(ticks):
-                y = graphY - yInterval*i
-                if showYAxisLabels:
-                    text = yValInterval*i
-                    text = yLabelFunc(i, text) if yLabelFunc else text
-                    if text:
-                        text = str(text)
-                        bbox = self.draw.textbbox((0, 0), text, font=font)
-                        textWidth = bbox[2] - bbox[0]
-                        textHeight = bbox[3] - bbox[1]
-                        self.draw.text((graphX - textWidth - 90, y - textHeight/2), text, font=font, fill= fontColor)
-                self.draw.line((graphX-24, y, graphX+24+width, y), fill=gridColor, width=3)
-
-
-            # Collect curve points
             points = []
             for i, val in enumerate(data):
                 px = graphX + i * xInterval
                 py = graphY - (val / maxY * height)
                 points.append((px, py))
-            # Close polygon at bottom
-            points.append((graphX + (len(xData) - 1) * xInterval, graphY))
-            points.append((graphX, graphY))
 
-            #make gradient
+            polygonPoints = points + [
+                (graphX + (pointCount - 1) * xInterval, graphY),
+                (graphX, graphY)
+            ]
+
             gradientSpec = dataset.get("gradientFill", None)
-            gradient = Image.new('RGBA', (int(width), int(height)), (0, 0, 0, 0))
             if gradientSpec:
                 gradient = Image.new('RGBA', (int(width), int(height)), (0, 0, 0, 0))
-                grad_draw = ImageDraw.Draw(gradient)
-                sorted_stops = sorted(gradientSpec.items())  # list of (position, color)
+                gradDraw = ImageDraw.Draw(gradient)
+                sortedStops = sorted(gradientSpec.items())
 
                 for i in range(height):
-                    # Normalize position (0 to 1)
                     ratio = i / float(max(height - 1, 1))
-
-                    # Find which two stops this ratio is between
-                    for j in range(len(sorted_stops) - 1):
-                        pos1, col1 = sorted_stops[j]
-                        pos2, col2 = sorted_stops[j + 1]
+                    for j in range(len(sortedStops) - 1):
+                        pos1, col1 = sortedStops[j]
+                        pos2, col2 = sortedStops[j + 1]
                         if pos1 <= ratio <= pos2:
-                            local_ratio = (ratio - pos1) / (pos2 - pos1)
-                            r = int(col1[0] + (col2[0] - col1[0]) * local_ratio)
-                            g = int(col1[1] + (col2[1] - col1[1]) * local_ratio)
-                            b = int(col1[2] + (col2[2] - col1[2]) * local_ratio)
-                            a = int(col1[3] + (col2[3] - col1[3]) * local_ratio)
-                            grad_draw.line([(0, height - i), (width, height - i)], fill=(r, g, b, a))
+                            localRatio = (ratio - pos1) / max(pos2 - pos1, 1e-9)
+                            r = int(col1[0] + (col2[0] - col1[0]) * localRatio)
+                            g = int(col1[1] + (col2[1] - col1[1]) * localRatio)
+                            b = int(col1[2] + (col2[2] - col1[2]) * localRatio)
+                            a = int(col1[3] + (col2[3] - col1[3]) * localRatio)
+                            gradDraw.line([(0, height - i), (width, height - i)], fill=(r, g, b, a))
                             break
-                
 
-            #create a mask with polygon in the shape of the graph
-            mask = Image.new('L', (int(width), int(height)), 0)
-            mask_draw = ImageDraw.Draw(mask)
-            rel_pts = [(px - graphX, py - (graphY - height)) for px, py in points]
-            mask_draw.polygon(rel_pts, fill=255)
-
-            #paste the gradient and mask onto the canvas
-            self.canvas.paste(gradient, (graphX, graphY - height), mask)
+                mask = Image.new('L', (int(width), int(height)), 0)
+                maskDraw = ImageDraw.Draw(mask)
+                relativePoints = [(px - graphX, py - (graphY - height)) for px, py in polygonPoints]
+                maskDraw.polygon(relativePoints, fill=255)
+                self.canvas.paste(gradient, (graphX, graphY - height), mask)
 
             lineColor = dataset["lineColor"]
-            #gradient color.
             if gradientSpec and lineColor == "gradient":
-                #draw the line
-                for i in range(len(points) - 3):
-                    #Since line doesnt accept gradients, we will break the line down into segments, 
-                    #and assign each segment a color
+                for i in range(len(points) - 1):
                     x0, y0 = points[i]
-                    x1, y1 = points[i+1]
-
-                    #calculate length of the line
+                    x1, y1 = points[i + 1]
                     dx = x1 - x0
                     dy = y1 - y0
-                    length = math.sqrt(dx*dx + dy*dy)
+                    length = math.sqrt(dx * dx + dy * dy)
+                    if length == 0:
+                        continue
 
-                    if length == 0: continue # Skip zero-length segments
-
-                    #get the number of segments
                     segmentCount = max(1, int(length / 10))
-
                     for k in range(segmentCount):
                         t0 = k / segmentCount
                         t1 = (k + 1) / segmentCount
-
-                        sub_x0 = x0 + dx * t0
-                        sub_y0 = y0 + dy * t0
-                        sub_x1 = x0 + dx * t1
-                        sub_y1 = y0 + dy * t1
-                        mid_y = (sub_y0 + sub_y1) / 2.0
-                        # Convert Y coord to ratio (0=bottom, 1=top)
-                        mid_yRatio = (graphY - mid_y) / height if height > 0 else 0.0
-
-                        # Get color for this ratio
-                        r, g, b, a = self.getGradientColorAtRatio(mid_yRatio, gradientSpec)
-
-                        self.draw.line(
-                            (int(sub_x0), int(sub_y0), int(sub_x1), int(sub_y1)),
-                            fill=(r, g, b), # Use opaque RGB for line
-                            width=8
-                        )
-
+                        subX0 = x0 + dx * t0
+                        subY0 = y0 + dy * t0
+                        subX1 = x0 + dx * t1
+                        subY1 = y0 + dy * t1
+                        midY = (subY0 + subY1) / 2.0
+                        midYRatio = (graphY - midY) / height if height > 0 else 0.0
+                        r, g, b, _ = self.getGradientColorAtRatio(midYRatio, gradientSpec)
+                        self.draw.line((int(subX0), int(subY0), int(subX1), int(subY1)), fill=(r, g, b), width=6)
             else:
-                # Draw the entire line with a solid color
-                # Use points[:len(data)] to only draw line over actual data points, not polygon closing points
-                self.draw.line(points[:len(data)], fill=lineColor, width=8, joint="curve")
+                self.draw.line(points, fill=lineColor, width=6, joint="curve")
 
     def drawDoughnutChart(self, x, y, size, datasets, holeRatio = 0.6):
 
@@ -1984,17 +2031,37 @@ class HourlyReportDrawer:
         self.sidebarInnerInset = 46
         self.sidebarContentWidth = self.sidebarPanelWidth - self.sidebarInnerInset * 2
 
+        currentHoney = onlyValidHourlyHoney[-1] if onlyValidHourlyHoney else 0
+        headerY = 80
+        headerHeight = 300
         self.drawHeroCard(
             self.leftPadding,
-            80,
+            headerY,
             self.availableSpace,
-            350,
+            headerHeight,
             "FINAL REPORT" if isFinalReport else "HOURLY REPORT",
-            "Session Summary" if isFinalReport else "Past Hour In Focus",
-            "Full-session performance in the same Fuzzy Macro report language." if isFinalReport else "Past hour performance, surfaced in the Fuzzy Macro palette.",
+            "Session Dashboard" if isFinalReport else "Hourly Dashboard",
+            "Dense session snapshot built for fast scanning." if isFinalReport else "Condensed performance snapshot for the last completed hour.",
             accent=self.primaryColor
         )
-        self.drawBrandCard(self.sidebarX, 80, self.sidebarPanelWidth, 350)
+        self.drawBrandCard(self.sidebarX, headerY, self.sidebarPanelWidth, headerHeight)
+
+        overviewY = headerY + headerHeight + 46
+        if isFinalReport:
+            overviewItems = [
+                {"icon": "session_honey_icon", "label": "Total Honey", "value": self.millify(totalHoney), "meta": "Session gain", "color": self.honeyColor},
+                {"icon": "average_icon", "label": "Average / Hour", "value": self.millify(avgHoneyPerHour), "meta": "Normalized over runtime", "color": self.primaryColor},
+                {"icon": "time_icon", "label": "Total Runtime", "value": self.displayTime(sessionTime, ['d', 'h', 'm']), "meta": "Tracked session length", "color": self.bodyColor},
+                {"icon": "history_icon", "label": "Peak Honey / Sec", "value": f"{self.millify(peakRate)}/s", "meta": "Recorded peak", "color": self.secondaryAccentColor},
+            ]
+        else:
+            overviewItems = [
+                {"icon": "session_honey_icon", "label": "Honey This Hour", "value": self.millify(honeyThisHour), "meta": "Hourly slice", "color": self.honeyColor},
+                {"icon": "average_icon", "label": "Average / Hour", "value": self.millify(avgHoneyPerHour), "meta": "Current session pace", "color": self.primaryColor},
+                {"icon": "time_icon", "label": "Session Time", "value": self.displayTime(sessionTime, ['d', 'h', 'm']), "meta": "Current run length", "color": self.bodyColor},
+                {"icon": "honey_icon", "label": "Current Honey", "value": self.millify(currentHoney), "meta": "Latest total", "color": self.secondaryAccentColor},
+            ]
+        self.drawOverviewCards(self.leftPadding, overviewY, self.availableSpace, overviewItems)
 
         def sessionTimeLabel(i, val):
             if val == 0:
@@ -2017,14 +2084,14 @@ class HourlyReportDrawer:
 
         panelWidth = self.availableSpace
 
-        y = 470
-        self.drawPanel(self.leftPadding, y, panelWidth, 1120, accent=self.honeyColor, fill=self.tintedSurface(self.primaryColor, 0.1))
+        y = 780
+        self.drawPanel(self.leftPadding, y, panelWidth, 980, accent=self.honeyColor, fill=self.tintedSurface(self.primaryColor, 0.1))
         headerBottom = self.drawSectionHeader(
             self.leftPadding + 60,
             y + 56,
             panelWidth - 120,
-            "Honey / Sec Over Session" if isFinalReport else "Honey / Sec",
-            "Trend line across the full runtime, scaled to the recorded sample cadence." if isFinalReport else "Minute-by-minute collection rate across the last completed hour.",
+            "HONEY / SEC",
+            "Full-session collection rate sampled across the run." if isFinalReport else "Per-minute collection rate across the last completed hour.",
             meta=f"Peak {self.millify(peakRate)}/s",
             accent=self.honeyColor
         )
@@ -2037,12 +2104,12 @@ class HourlyReportDrawer:
                 1: (*self.honeyColor, 140)
             }
         }]
-        graphTop = headerBottom + 72
+        graphTop = headerBottom + 46
         self.drawGraph(
             self.leftPadding + 430,
-            graphTop + 700,
+            graphTop + 620,
             self.availableSpace - 540,
-            700,
+            620,
             mins,
             dataset,
             xLabelFunc=sessionTimeLabel if isFinalReport else self.transformXLabelTime,
@@ -2051,14 +2118,14 @@ class HourlyReportDrawer:
 
         # Keep the main-column sections on a single vertical rhythm so later panels
         # cannot drift into the previous graph area when hourly/final variants diverge.
-        y = 1650
-        self.drawPanel(self.leftPadding, y, panelWidth, 1120, accent=self.primaryColor, fill=self.tintedSurface(self.primaryColor, 0.08))
+        y = 1810
+        self.drawPanel(self.leftPadding, y, panelWidth, 980, accent=self.primaryColor, fill=self.tintedSurface(self.primaryColor, 0.08))
         headerBottom = self.drawSectionHeader(
             self.leftPadding + 60,
             y + 56,
             panelWidth - 120,
-            "Backpack Utilization",
-            "Session-wide pressure curve to show where capacity starts clipping the run." if isFinalReport else "Storage pressure over the hour so spikes are easy to spot.",
+            "BACKPACK",
+            "Capacity pressure over the full run." if isFinalReport else "Storage pressure over the last hour.",
             meta="0-100%",
             accent=self.primarySoftColor
         )
@@ -2080,12 +2147,12 @@ class HourlyReportDrawer:
                 1: (255, 65, 84, 90),
             }
         }]
-        graphTop = headerBottom + 72
+        graphTop = headerBottom + 46
         self.drawGraph(
             self.leftPadding + 430,
-            graphTop + 700,
+            graphTop + 620,
             self.availableSpace - 540,
-            700,
+            620,
             mins,
             dataset,
             maxY=100,
@@ -2093,14 +2160,14 @@ class HourlyReportDrawer:
             yLabelFunc=lambda i, x: f"{int(x)}%"
         )
 
-        y = 2830
-        self.drawPanel(self.leftPadding, y, panelWidth, 4600, accent=self.secondaryAccentColor, fill=self.tintedSurface(self.secondaryAccentColor, 0.06))
+        y = 2840
+        self.drawPanel(self.leftPadding, y, panelWidth, 4320, accent=self.secondaryAccentColor, fill=self.tintedSurface(self.secondaryAccentColor, 0.06))
         headerBottom = self.drawSectionHeader(
             self.leftPadding + 60,
             y + 56,
             panelWidth - 120,
-            "Average Buff Uptime" if isFinalReport else "Buff Uptime",
-            "Gathering-window averages across the session, followed by binary coverage charts." if isFinalReport else "Stackable averages while gathering, followed by binary buff coverage.",
+            "BUFF UPTIME",
+            "Gathering-window averages first, then binary coverage charts." if isFinalReport else "Gathering-window averages first, then binary buff coverage.",
             meta="Session average" if isFinalReport else "Past hour",
             accent=self.secondaryAccentColor
         )
@@ -2204,14 +2271,14 @@ class HourlyReportDrawer:
             xLabelFunc=buffTimeLabel if isFinalReport else None
         )
 
-        y2 = 470
+        y2 = overviewY
         sectionGap = 90
         if isFinalReport:
             totalSessionTime = sessionStats.get("total_session_time", 0)
-            finalHoney = onlyValidHourlyHoney[-1] if onlyValidHourlyHoney else 0
+            finalHoney = currentHoney
             snapshotPanelHeight = 1220
             self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, snapshotPanelHeight, accent=self.primaryColor, fill=self.tintedSurface(self.primaryColor, 0.08))
-            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Session Snapshot", "High-level totals for the completed run.", accent=self.primarySoftColor)
+            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "SESSION", "High-level totals for the completed run.", accent=self.primarySoftColor)
             statY = headerBottom + 18
             self.drawSessionStat(statY, "time_icon", "Total Runtime", self.displayTime(totalSessionTime, ['d', 'h', 'm']), self.bodyColor)
             statY += 238
@@ -2231,13 +2298,13 @@ class HourlyReportDrawer:
             ]
             glancePanelHeight = self.getSidebarMetricPanelHeight(len(glanceItems))
             self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, glancePanelHeight, accent=self.primaryColor, fill=self.tintedSurface(self.primaryColor, 0.08))
-            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Session At A Glance", "Total honey, averages, bugs, and vicious bees in one grid.", accent=self.primarySoftColor)
+            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "STATS", "Total honey, averages, bugs, and vicious bees.", accent=self.primarySoftColor)
             self.drawSidebarMetricGrid(headerBottom + 24, glanceItems)
 
             y2 += glancePanelHeight + sectionGap
             taskPanelHeight = self.getTaskTimesPanelHeight(4)
             self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, taskPanelHeight, accent=self.secondaryAccentColor, fill=self.tintedSurface(self.secondaryAccentColor, 0.06))
-            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Time Breakdown", "Where the macro spent the session.", accent=self.secondaryAccentColor)
+            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "ACTIVITY", "Where the macro spent the session.", accent=self.secondaryAccentColor)
             self.drawTaskTimes(headerBottom + 18, [
                 {"label": "Gathering", "data": sessionStats.get("gathering_time", 0), "color": self.primarySoftColor},
                 {"label": "Converting", "data": sessionStats.get("converting_time", 0), "color": self.honeyColor},
@@ -2249,14 +2316,13 @@ class HourlyReportDrawer:
             questGroups = self.summarizeQuestCompletions(questCompletions)
             questPanelHeight = self.getQuestSummaryPanelHeight(len(questGroups))
             self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, questPanelHeight, accent=(103, 253, 153), fill=self.tintedSurface((103, 253, 153), 0.08))
-            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Completed Quests", "Turn-ins grouped by bee or bear for the whole session.", accent=(103, 253, 153))
+            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "QUESTS", "Turn-ins grouped by bee or bear for the whole session.", accent=(103, 253, 153))
             self.drawQuestSummary(headerBottom + 24, questGroups, accent=(103, 253, 153), emptyMessage="No completed quests were recorded this session.")
             y2 += questPanelHeight + sectionGap
         else:
-            currentHoney = onlyValidHourlyHoney[-1] if onlyValidHourlyHoney else 0
             sessionPanelHeight = 980
             self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, sessionPanelHeight, accent=self.primaryColor, fill=self.tintedSurface(self.primaryColor, 0.08))
-            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Session Snapshot", "Current run totals outside the hourly slice.", accent=self.primarySoftColor)
+            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "SESSION", "Current run totals outside the hourly slice.", accent=self.primarySoftColor)
             statY = headerBottom + 18
             self.drawSessionStat(statY, "time_icon", "Session Time", self.displayTime(sessionTime, ['d', 'h', 'm']), self.bodyColor)
             statY += 238
@@ -2273,13 +2339,13 @@ class HourlyReportDrawer:
             ]
             glancePanelHeight = self.getSidebarMetricPanelHeight(len(glanceItems))
             self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, glancePanelHeight, accent=self.primaryColor, fill=self.tintedSurface(self.primaryColor, 0.08))
-            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Past Hour At A Glance", "The hourly overview cards moved here for faster scanning.", accent=self.primarySoftColor)
+            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "LAST HOUR", "Hourly totals, bugs, and averages.", accent=self.primarySoftColor)
             self.drawSidebarMetricGrid(headerBottom + 24, glanceItems)
 
             y2 += glancePanelHeight + sectionGap
             taskPanelHeight = self.getTaskTimesPanelHeight(4)
             self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, taskPanelHeight, accent=self.secondaryAccentColor, fill=self.tintedSurface(self.secondaryAccentColor, 0.06))
-            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Task Breakdown", "How the macro spent the last hour.", accent=self.secondaryAccentColor)
+            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "ACTIVITY", "How the macro spent the last hour.", accent=self.secondaryAccentColor)
             self.drawTaskTimes(headerBottom + 18, [
                 {"label": "Gathering", "data": hourlyReportStats["gathering_time"], "color": self.primarySoftColor},
                 {"label": "Converting", "data": hourlyReportStats["converting_time"], "color": self.honeyColor},
@@ -2291,7 +2357,7 @@ class HourlyReportDrawer:
             questGroups = self.summarizeQuestCompletions(questCompletions)
             questPanelHeight = self.getQuestSummaryPanelHeight(len(questGroups))
             self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, questPanelHeight, accent=(103, 253, 153), fill=self.tintedSurface((103, 253, 153), 0.08))
-            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Quest Bears / Bees", "All recorded turn-ins grouped by quest owner for the past hour.", accent=(103, 253, 153))
+            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "QUESTS", "All recorded turn-ins grouped by quest owner for the past hour.", accent=(103, 253, 153))
             self.drawQuestSummary(headerBottom + 24, questGroups, accent=(103, 253, 153), emptyMessage="No completed quests were recorded this hour.")
             y2 += questPanelHeight + sectionGap
 
@@ -2312,7 +2378,7 @@ class HourlyReportDrawer:
                 self.sidebarX + 50,
                 y2 + 44,
                 self.sidebarPanelWidth - 100,
-                "Planters",
+                "PLANTERS",
                 "Current placements carried into the final snapshot." if isFinalReport else "Current placements and ready times.",
                 accent=self.primaryColor
             )
@@ -2321,20 +2387,20 @@ class HourlyReportDrawer:
 
         buffPanelHeight = 860
         self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, buffPanelHeight, accent=self.secondaryAccentColor, fill=self.tintedSurface(self.secondaryAccentColor, 0.05))
-        headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Buffs", "Final captured stack values." if isFinalReport else "Latest captured stack values.", accent=self.secondaryAccentColor)
+        headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "BUFFS", "Final captured stack values." if isFinalReport else "Latest captured stack values.", accent=self.secondaryAccentColor)
         self.drawBuffs(headerBottom + 30, buffQuantity)
 
         y2 += buffPanelHeight + sectionGap
         nectarPanelHeight = 960
         self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, nectarPanelHeight, accent=self.honeyColor, fill=self.tintedSurface(self.honeyColor, 0.05))
-        headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Nectars", "Session-end field nectar percentages." if isFinalReport else "Field nectar percentages at render time.", accent=self.honeyColor)
+        headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "NECTARS", "Session-end field nectar percentages." if isFinalReport else "Field nectar percentages at render time.", accent=self.honeyColor)
         self.drawNectars(headerBottom + 38, nectarQuantity)
 
         if not isFinalReport and enabled_fields:
             y2 += nectarPanelHeight + sectionGap
             fieldPanelHeight = self.getFieldsPanelHeight(len(enabled_fields))
             self.drawPanel(self.sidebarX, y2, self.sidebarPanelWidth, fieldPanelHeight, accent=self.primarySoftColor, fill=self.tintedSurface(self.primaryColor, 0.05))
-            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "Fields", "Enabled fields and their active patterns.", accent=self.primarySoftColor)
+            headerBottom = self.drawSectionHeader(self.sidebarX + 50, y2 + 44, self.sidebarPanelWidth - 100, "FIELDS", "Enabled fields and their active patterns.", accent=self.primarySoftColor)
             self.drawFields(headerBottom + 24, enabled_fields, field_patterns)
 
         return self.canvas

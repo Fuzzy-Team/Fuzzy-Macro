@@ -1,6 +1,8 @@
 import time as timeModule
 import threading
 import queue
+import os
+import pickle
 from modules.screen.screenshot import screenshotRobloxWindow, mssScreenshot
 import modules.logging.webhook as logWebhook
 import mss
@@ -60,6 +62,109 @@ class log:
 
         if not self.blocking:
             self.webhookQueue = webhookQueue()
+
+    def _millify(self, n):
+        try:
+            n = float(n)
+        except (TypeError, ValueError):
+            return "0"
+
+        if n < 1000:
+            return str(int(n))
+        if n < 1000000:
+            return f"{n/1000:.1f}K"
+        if n < 1000000000:
+            return f"{n/1000000:.1f}M"
+        if n < 1000000000000:
+            return f"{n/1000000000:.1f}B"
+        return f"{n/1000000000000:.1f}T"
+
+    def _formatDurationShort(self, seconds):
+        seconds = max(0, int(seconds or 0))
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+        if hours > 0:
+            return f"{hours}h {minutes}m"
+        return f"{minutes}m"
+
+    def _loadHourlyReportSnapshot(self):
+        statsPath = os.path.join("data", "user", "hourly_report_stats.pkl")
+        try:
+            with open(statsPath, "rb") as f:
+                return pickle.load(f)
+        except Exception:
+            return {}
+
+    def _buildHourlyReportDescription(self, baseDesc=""):
+        snapshot = self._loadHourlyReportSnapshot()
+        hourlyStats = snapshot.get("hourlyReportStats", {})
+        honeySeries = list(hourlyStats.get("honey_per_min", []) or [])
+        if not honeySeries:
+            return baseDesc
+
+        if len(set(honeySeries)) <= 1:
+            validHoney = honeySeries
+        else:
+            validHoney = [x for x in honeySeries if x]
+
+        if not validHoney:
+            return baseDesc
+
+        startHoney = hourlyStats.get("start_honey", 0) or 0
+        startTime = hourlyStats.get("start_time", 0) or 0
+        honeyThisHour = max(0, validHoney[-1] - validHoney[0]) if len(validHoney) > 1 else 0
+        sessionHoney = max(0, validHoney[-1] - startHoney) if startHoney else 0
+        sessionTime = timeModule.time() - startTime if startTime else 0
+        avgHoneyPerHour = max(0, (sessionHoney / (sessionTime / 3600)) if sessionTime > 0 else 0)
+
+        lines = []
+        if baseDesc.strip():
+            lines.append(baseDesc.strip())
+        lines.extend([
+            f"Honey This Hour: {self._millify(honeyThisHour)}",
+            f"Avg/Hour: {self._millify(avgHoneyPerHour)}",
+            f"Session Time: {self._formatDurationShort(sessionTime)}",
+            f"Bugs: {hourlyStats.get('bugs', 0)} | Vic: {hourlyStats.get('vicious_bees', 0)}",
+        ])
+        return "\n".join(lines)
+
+    def _buildFinalReportDescription(self, baseDesc=""):
+        snapshot = self._loadHourlyReportSnapshot()
+        hourlyStats = snapshot.get("hourlyReportStats", {})
+        sessionStats = snapshot.get("sessionReportStats", {})
+        sourceStats = sessionStats if sessionStats.get("honey_per_min") else hourlyStats
+        honeySeries = list(sourceStats.get("honey_per_min", []) or [])
+        startHoney = hourlyStats.get("start_honey", 0) or 0
+        startTime = hourlyStats.get("start_time", 0) or 0
+
+        if len(set(honeySeries)) <= 1:
+            validHoney = honeySeries
+        else:
+            validHoney = [x for x in honeySeries if x]
+
+        totalHoney = max(0, validHoney[-1] - startHoney) if validHoney and startHoney else 0
+        sessionTime = timeModule.time() - startTime if startTime else 0
+        avgHoneyPerHour = max(0, (totalHoney / (sessionTime / 3600)) if sessionTime > 0 else 0)
+
+        extraLines = [
+            f"Runtime: {self._formatDurationShort(sessionTime)}",
+            f"Total Honey: {self._millify(totalHoney)}",
+            f"{'Est. Avg/Hour' if sessionTime and sessionTime < 3600 else 'Avg/Hour'}: {self._millify(avgHoneyPerHour)}",
+            f"Bugs: {sourceStats.get('bugs', 0)} | Vic: {sourceStats.get('vicious_bees', 0)} | Quests: {sourceStats.get('quests_completed', 0)}",
+        ]
+
+        if baseDesc.strip():
+            existingLines = [line.strip() for line in baseDesc.splitlines() if line.strip()]
+            existingPrefixes = {line.split(":", 1)[0].strip() for line in existingLines if ":" in line}
+            for line in extraLines:
+                prefix = line.split(":", 1)[0].strip() if ":" in line else line
+                if prefix in existingPrefixes:
+                    continue
+                existingLines.append(line)
+                existingPrefixes.add(prefix)
+            return "\n".join(existingLines)
+
+        return "\n".join(extraLines)
 
     def log(self, msg):
         # Display in GUI or macro logs (to be implemented)
@@ -158,6 +263,7 @@ class log:
         if self.enableDiscordPing and self.discordUserID and self.pingSettings.get("ping_hourly_reports", False):
             ping_user_id = self.discordUserID
 
+        desc = self._buildHourlyReportDescription(desc)
         logWebhook.webhook(self.webhookURL, title, desc, timeModule.strftime("%H:%M:%S", timeModule.localtime()), colors[color], "hourlyReport.png", ping_user_id, time_format)
     
     def finalReport(self, title, desc, color, time_format=None):
@@ -177,4 +283,5 @@ class log:
         if self.enableDiscordPing and self.discordUserID and self.pingSettings.get("ping_hourly_reports", False):
             ping_user_id = self.discordUserID
 
+        desc = self._buildFinalReportDescription(desc)
         logWebhook.webhook(self.webhookURL, title, desc, timeModule.strftime("%H:%M:%S", timeModule.localtime()), colors[color], "finalReport.png", ping_user_id, time_format) 
