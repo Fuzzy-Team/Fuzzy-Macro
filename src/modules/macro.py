@@ -1961,7 +1961,8 @@ class macro:
                             joinPS = False
                         else:
                             if is_share:
-                                deeplink = f"roblox://navigation/share_links?code={code_val}&type=Server"
+                                type_val = qs.get('type', ['Server'])[0]
+                                deeplink = f"roblox://navigation/share_links?code={code_val}&type={type_val}"
                             else:
                                 deeplink += f"&linkCode={code_val}"
                     except Exception as e:
