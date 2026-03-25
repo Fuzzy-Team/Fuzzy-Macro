@@ -24,6 +24,7 @@ import webbrowser
 from pynput.keyboard import Controller
 import cv2
 from modules.screen.color_check import get_sample_colors, percent_pixels_similar_to_color
+from modules.screen.bloom_detector import BloomDetector
 from datetime import timedelta, datetime
 from modules.misc.imageManipulation import *
 from PIL import Image
@@ -527,6 +528,7 @@ class macro:
         self.buffDetector = BuffDetector(self.robloxWindow)
         self.hourlyReport = HourlyReport(self.buffDetector, self.setdat.get("hourly_report_time_format", 24))
         self.memoryMatch = MemoryMatch(self.robloxWindow)
+        self.bloomDetector = BloomDetector()
 
         #setup an internal cooldown tracker. The cooldowns can be modified
         self.collectCooldowns = dict([(k, v[2]) for k,v in mergedCollectData.items()])
@@ -564,6 +566,17 @@ class macro:
         self.stop = False
 
         self.hiveDistance = 1.32 #distance between hives (in seconds)
+        self._petalCalibration = {
+            "ready": False,
+            "vf_x": 0.0,
+            "vf_y": 0.0,
+            "vr_x": 0.0,
+            "vr_y": 0.0,
+            "forward_pos_key": "w",
+            "forward_neg_key": "s",
+            "strafe_pos_key": "d",
+            "strafe_neg_key": "a",
+        }
 
 
         self.setRobloxWindowInfo(setYOffset=False)
@@ -2231,6 +2244,8 @@ class macro:
         normalized_field = str(field).replace('_', ' ').strip()
         if not normalized_field:
             return
+        fieldSetting = self.fieldSettings[normalized_field]
+        self._petalCalibration["ready"] = False
 
         # Match requested nm_Reset(2) behavior with full reset/convert before travel.
         self.reset(convert=True)
@@ -2245,43 +2260,39 @@ class macro:
         self.logger.webhook("", f"Travelling: {normalized_field.title()} (Petal)", "dark brown")
         self.goToField(normalized_field)
 
+        startLocation = fieldSetting["start_location"]
+        moveSpeedFactor = 18 / self.setdat["movespeed"]
+        flen, fwid = [x * fieldSetting["distance"] / 10 for x in startLocationDimensions[normalized_field]]
+        if "upper" in startLocation or "top" in startLocation:
+            self.sleepMSMove("w", flen * moveSpeedFactor)
+        elif "lower" in startLocation or "bottom" in startLocation:
+            self.sleepMSMove("s", flen * moveSpeedFactor)
+        if "left" in startLocation:
+            self.sleepMSMove("a", fwid * moveSpeedFactor)
+        elif "right" in startLocation:
+            self.sleepMSMove("d", fwid * moveSpeedFactor)
+
+        time.sleep(0.4)
+        if not self.placeSprinkler():
+            self.logger.webhook("", f"Failed to land in field for {normalized_field.title()} petal run", "red", "screen", ping_category="ping_critical_errors")
+            self.reset()
+            return
+
         try:
             self.set_task_status(f"gatherpetal_{normalized_field.replace(' ', '_')}", task="gatherpetal", field=normalized_field)
         except Exception:
             pass
         self.logger.webhook("Petal Farming", normalized_field.title(), "light green")
 
-        # Camera/setup sequence from AHK:
-        # Send "{" RotUp " 4}{" RotLeft " 2}{" SC_1 "}"
+        # Match the AHK petal pattern setup before detection starts.
         for _ in range(4):
             self.keyboard.press("pageup")
-        for _ in range(2):
-            self.keyboard.press(",")
         self.keyboard.press("1")
+        time.sleep(0.1)
 
-        center_x = self.robloxWindow.mw / 2
-        center_y = self.robloxWindow.mh / 2
-        dead_x = self.robloxWindow.mw * 0.035
-        dead_y = self.robloxWindow.mh * 0.035
-
-        # AHK target color: 0xCC9C5C with tolerance 16.
-        target_rgb = (204, 156, 92)
-        target_variance = 16
-
-        # Run for quest gather mins if configured; otherwise do a short focused pass.
         max_scan_time = int(self.setdat.get("quest_gather_mins", 0) * 60) if self.setdat.get("quest_gather_mins", 0) else 45
         start = time.time()
-
-        pwm_ms = 50
-        miss = 0
-        last_pos = None
-        held_keys = {"w": False, "a": False, "s": False, "d": False}
-
-        def release_held_keys():
-            for key, is_held in held_keys.items():
-                if is_held:
-                    self.keyboard.keyUp(key, False)
-                    held_keys[key] = False
+        misses = 0
 
         while time.time() - start < max_scan_time:
             if self.checkPauseAndWait():
@@ -2293,80 +2304,210 @@ class macro:
                 break
 
             try:
-                screen = mssScreenshotNP(self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw, self.robloxWindow.mh)
-                bgr = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
-
-                found = None
-
-                # Fast local scan around previous location first (AHK-style).
-                if last_pos is not None:
-                    scan_w = max(5, int(round(self.robloxWindow.mw * 0.1)))
-                    scan_h = max(5, int(round(self.robloxWindow.mh * 0.1)))
-                    scan_x = max(0, min(int(last_pos[0] - (scan_w // 2)), self.robloxWindow.mw - scan_w))
-                    scan_y = max(0, min(int(last_pos[1] - (scan_h // 2)), self.robloxWindow.mh - scan_h))
-
-                    roi = bgr[scan_y:scan_y + scan_h, scan_x:scan_x + scan_w]
-                    if roi.size:
-                        local_found = findColorObjectRGB(roi, target_rgb, variance=target_variance, mode="point")
-                        if local_found:
-                            found = (scan_x + local_found[0], scan_y + local_found[1])
-
-                # Fallback: full-window scan.
-                if found is None:
-                    full_found = findColorObjectRGB(bgr, target_rgb, variance=target_variance, mode="point")
-                    if full_found:
-                        found = full_found
-
-                if found is None:
-                    last_pos = None
-                    miss += 1
-                    release_held_keys()
-                    if miss > 3:
+                bloom = self._petalAcquireBloomTarget()
+                if bloom is None:
+                    misses += 1
+                    if misses >= 4:
                         break
-                    time.sleep(0.02)
+                    time.sleep(0.25)
                     continue
 
-                miss = 0
-                last_pos = found
-                vec_x = found[0] - center_x
-                vec_y = found[1] - center_y
+                misses = 0
+                if not self._petalCalibration["ready"]:
+                    self._petalTryCalibrate(bloom)
 
-                if abs(vec_x) < dead_x and abs(vec_y) < dead_y:
-                    break
-
-                max_dist = max(abs(vec_x), abs(vec_y), 1)
-                duty_x = abs(vec_x) / max_dist
-                duty_y = abs(vec_y) / max_dist
-
-                target_x = "d" if vec_x > 0 else "a"
-                target_y = "s" if vec_y > 0 else "w"
-
-                cycle = int((time.time() * 1000) % pwm_ms)
-                should_hold_x = (cycle < (pwm_ms * duty_x)) and (abs(vec_x) > dead_x)
-                should_hold_y = (cycle < (pwm_ms * duty_y)) and (abs(vec_y) > dead_y)
-
-                desired = {"w": False, "a": False, "s": False, "d": False}
-                if should_hold_x:
-                    desired[target_x] = True
-                if should_hold_y:
-                    desired[target_y] = True
-
-                for key in held_keys:
-                    if desired[key] and not held_keys[key]:
-                        self.keyboard.keyDown(key, False)
-                        held_keys[key] = True
-                    elif not desired[key] and held_keys[key]:
-                        self.keyboard.keyUp(key, False)
-                        held_keys[key] = False
-
-                time.sleep(0.02)
+                moved = self._petalChaseAndSweep()
+                if not moved:
+                    time.sleep(0.15)
             except Exception:
-                release_held_keys()
-                time.sleep(0.05)
+                time.sleep(0.1)
 
-        release_held_keys()
         self.clear_task_status()
         self.reset(convert=False)
+
+    def _petalCaptureCandidates(self):
+        screen = mssScreenshotNP(self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw, self.robloxWindow.mh)
+        bgr = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
+        return self.bloomDetector.detect_candidates(bgr)
+
+    def _petalAcquireBloomTarget(self):
+        candidates = self._petalCaptureCandidates()
+        if not candidates:
+            return None
+        center_x = self.robloxWindow.mw / 2.0
+        center_y = self.robloxWindow.mh / 2.0
+        return max(
+            candidates,
+            key=lambda candidate: (
+                candidate.score,
+                -((candidate.x - center_x) ** 2 + (candidate.y - center_y) ** 2),
+            ),
+        )
+
+    def _petalWalkTiles(self, key, tiles):
+        tiles = float(tiles)
+        if abs(tiles) < 0.15:
+            return
+        self.keyboard.tileWalk(key, abs(tiles))
+
+    def _petalTryCalibrate(self, target, calib_tiles=3.0):
+        forward_probe = self._petalChooseProbe(target, [("w", "s"), ("s", "w")], calib_tiles)
+        strafe_probe = self._petalChooseProbe(target, [("d", "a"), ("a", "d")], calib_tiles)
+
+        if forward_probe is None or strafe_probe is None:
+            return False
+
+        vf_x = forward_probe["shift_x"] / calib_tiles
+        vf_y = forward_probe["shift_y"] / calib_tiles
+        vr_x = strafe_probe["shift_x"] / calib_tiles
+        vr_y = strafe_probe["shift_y"] / calib_tiles
+        det = (vf_x * vr_y) - (vf_y * vr_x)
+        if abs(det) < 1e-6:
+            return False
+
+        self._petalCalibration = {
+            "ready": True,
+            "vf_x": vf_x,
+            "vf_y": vf_y,
+            "vr_x": vr_x,
+            "vr_y": vr_y,
+            "forward_pos_key": forward_probe["move_key"],
+            "forward_neg_key": forward_probe["undo_key"],
+            "strafe_pos_key": strafe_probe["move_key"],
+            "strafe_neg_key": strafe_probe["undo_key"],
+        }
+        return True
+
+    def _petalMeasureShift(self, move_key, undo_key, tiles, target):
+        self._petalWalkTiles(move_key, tiles)
+        time.sleep(0.08)
+        moved_target = self._petalFindNearestToPoint(target.x, target.y)
+        self._petalWalkTiles(undo_key, tiles)
+        time.sleep(0.06)
+        if moved_target is None:
+            return None
+        return moved_target.x - target.x, moved_target.y - target.y
+
+    def _petalProbeDirection(self, move_key, undo_key, tiles, target):
+        shift = self._petalMeasureShift(move_key, undo_key, tiles, target)
+        if shift is None:
+            return None
+        center_x = self.robloxWindow.mw / 2.0
+        center_y = self.robloxWindow.mh / 2.0
+        base_dx = target.x - center_x
+        base_dy = target.y - center_y
+        moved_dx = base_dx + shift[0]
+        moved_dy = base_dy + shift[1]
+        base_d2 = (base_dx * base_dx) + (base_dy * base_dy)
+        moved_d2 = (moved_dx * moved_dx) + (moved_dy * moved_dy)
+        return {
+            "move_key": move_key,
+            "undo_key": undo_key,
+            "shift_x": shift[0],
+            "shift_y": shift[1],
+            "improvement": base_d2 - moved_d2,
+        }
+
+    def _petalChooseProbe(self, target, options, tiles):
+        probes = []
+        for move_key, undo_key in options:
+            probe = self._petalProbeDirection(move_key, undo_key, tiles, target)
+            if probe is not None:
+                probes.append(probe)
+        if not probes:
+            return None
+        return max(
+            probes,
+            key=lambda probe: (
+                probe["improvement"],
+                abs(probe["shift_x"]) + abs(probe["shift_y"]),
+            ),
+        )
+
+    def _petalFindNearestToPoint(self, target_x, target_y):
+        candidates = self._petalCaptureCandidates()
+        if not candidates:
+            return None
+        return min(candidates, key=lambda candidate: (candidate.x - target_x) ** 2 + (candidate.y - target_y) ** 2)
+
+    def _petalComputeStep(self, target):
+        if not self._petalCalibration["ready"]:
+            return None
+
+        center_x = self.robloxWindow.mw / 2.0
+        center_y = self.robloxWindow.mh / 2.0
+        dx = target.x - center_x
+        dy = target.y - center_y
+
+        vf_x = self._petalCalibration["vf_x"]
+        vf_y = self._petalCalibration["vf_y"]
+        vr_x = self._petalCalibration["vr_x"]
+        vr_y = self._petalCalibration["vr_y"]
+        det = (vf_x * vr_y) - (vf_y * vr_x)
+        if abs(det) < 1e-6:
+            self._petalCalibration["ready"] = False
+            return None
+
+        forward_tiles = (((-dx) * vr_y) - ((-dy) * vr_x)) / det
+        strafe_tiles = ((vf_x * (-dy)) - (vf_y * (-dx))) / det
+        return {
+            "forward_tiles": forward_tiles,
+            "strafe_tiles": strafe_tiles,
+            "distance_px": math.hypot(dx, dy),
+        }
+
+    def _petalApplyStep(self, forward_tiles, strafe_tiles):
+        forward_tiles = max(min(forward_tiles, 4.5), -4.5)
+        strafe_tiles = max(min(strafe_tiles, 4.5), -4.5)
+        forward_pos_key = self._petalCalibration["forward_pos_key"]
+        forward_neg_key = self._petalCalibration["forward_neg_key"]
+        strafe_pos_key = self._petalCalibration["strafe_pos_key"]
+        strafe_neg_key = self._petalCalibration["strafe_neg_key"]
+
+        if forward_tiles > 0:
+            self._petalWalkTiles(forward_pos_key, forward_tiles)
+        elif forward_tiles < 0:
+            self._petalWalkTiles(forward_neg_key, -forward_tiles)
+
+        if strafe_tiles > 0:
+            self._petalWalkTiles(strafe_pos_key, strafe_tiles)
+        elif strafe_tiles < 0:
+            self._petalWalkTiles(strafe_neg_key, -strafe_tiles)
+
+        time.sleep(0.1)
+
+    def _petalChaseAndSweep(self, max_steps=5, settle_px=70.0):
+        if not self._petalCalibration["ready"]:
+            return False
+
+        last_target = None
+        for _ in range(max_steps):
+            target = self._petalAcquireBloomTarget()
+            if target is None:
+                break
+            last_target = target
+            step = self._petalComputeStep(target)
+            if step is None:
+                return False
+            if step["distance_px"] <= settle_px or (
+                abs(step["forward_tiles"]) < 0.2 and abs(step["strafe_tiles"]) < 0.2
+            ):
+                self._petalSweepArea()
+                return True
+            self._petalApplyStep(step["forward_tiles"], step["strafe_tiles"])
+
+        if last_target is not None:
+            self._petalSweepArea()
+            return True
+        return True
+
+    def _petalSweepArea(self, radius_tiles=5.0):
+        self.keyboard.multiWalk(["w", "d"], radius_tiles / 8.3)
+        self.keyboard.multiWalk(["s", "d"], radius_tiles / 8.3)
+        self.keyboard.multiWalk(["s", "a"], radius_tiles / 8.3)
+        self.keyboard.multiWalk(["w", "a"], radius_tiles / 8.3)
+        self._petalWalkTiles("w", radius_tiles * 0.6)
+        self._petalWalkTiles("s", radius_tiles * 0.6)
     
     def gather(self, field, settingsOverride = {}, questGumdrops=False):
         # Normalize field name to handle both space and underscore formats
@@ -5247,7 +5388,7 @@ class macro:
         # Define patterns for different action types
         patterns = [
             # Petal token catch patterns (new for petal quests)
-            (r'.*\b(catch)\b.*\b(red bloom petals?)\b.*\b(in|from)\b.*\b([a-z ]+?)\b field', 'gatherpetal', r'(clover|spider|bamboo|blue flower|cactus|clover|coconut|dandelion|mountain top|mushroom|pepper|pine tree|pineapple|pumpkin|rose|spider|strawberry|stump|sunflower)'),
+            (r'.*\b(catch|collect|get|gather|harvest)\b.*\b((red|blue|white|pink|green|cyan|yellow)\s+)?bloom\s+petals?\b.*\b(in|from)\b.*\b([a-z ]+?)\b field', 'gatherpetal', r'(clover|spider|bamboo|blue flower|cactus|coconut|dandelion|mountain top|mushroom|pepper|pine tree|pineapple|pumpkin|rose|strawberry|stump|sunflower)'),
             # Catch patterns (special catching mechanics)
             (r'.*\b(catch|chase)\b.*', 'catch', r'.*'),
             # Craft patterns (check first - specific crafting actions)
