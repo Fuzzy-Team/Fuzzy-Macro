@@ -2082,6 +2082,9 @@ class macro:
             # self.keyboard.walk("d",5,0)
             # self.keyboard.walk("s",0.3,0)
             hiveNumber = self.setdat["hive_number"]
+            excludedHiveSlot = int(self.setdat.get("hive_exclude_slot", 0) or 0)
+            if excludedHiveSlot < 0 or excludedHiveSlot > 6:
+                excludedHiveSlot = 0
             rejoinSuccess = False
             availableSlots = [] #store hive slots that are claimable
             newHiveNumber = 0
@@ -2108,6 +2111,9 @@ class macro:
             def isHiveAvailable():
                 return self.isBesideE(["claim", "hive"], ["send", "trade"], log=True)
 
+            def isExcludedSlot(slot):
+                return excludedHiveSlot != 0 and slot == excludedHiveSlot
+
             # Go directly to the selected hive first. If that fails, scan all hives as a fallback.
             self.logger.webhook("", f'Claiming hive {hiveNumber}', "dark brown")
             # Move directly to the selected hive (slot 1 is nearest cannon)
@@ -2115,7 +2121,9 @@ class macro:
                 self.keyboard.walk("a", self.hiveDistance * (hiveNumber - 1))
             time.sleep(0.4)
             # Check selected hive first
-            if isHiveAvailable():
+            if isExcludedSlot(hiveNumber):
+                self.logger.webhook("", f'Hive {hiveNumber} is excluded, scanning other hives', 'dark brown', "screen")
+            elif isHiveAvailable():
                 newHiveNumber = hiveNumber
                 rejoinSuccess = True
             else:
@@ -2130,6 +2138,8 @@ class macro:
                     if j > 1:
                         self.keyboard.walk("a", self.hiveDistance)
                     time.sleep(0.4)
+                    if isExcludedSlot(j):
+                        continue
                     if isHiveAvailable():
                         newHiveNumber = j
                         rejoinSuccess = True
