@@ -193,13 +193,27 @@ class AutoClickerRunner:
         }
 
     def stop(self):
-        self._stop_event.set()
-        self._update_status(
-            running=False,
-            state="stopping",
-            message="Stopping auto clicker.",
-        )
-        thread = self._thread
+        with self._lock:
+            thread = self._thread
+            is_running = bool(
+                (thread and thread.is_alive())
+                or self._status.get("running")
+                or self._status.get("state") == "stopping"
+            )
+            if not is_running:
+                self._stop_event.set()
+                self._status = self._fresh_status()
+                return {"ok": True, "message": "Auto clicker is already stopped."}
+
+            self._stop_event.set()
+            self._status.update(
+                {
+                    "running": False,
+                    "state": "stopping",
+                    "message": "Stopping auto clicker.",
+                }
+            )
+
         if thread and thread.is_alive():
             thread.join(timeout=0.3)
         return {"ok": True, "message": "Auto clicker stop requested."}
