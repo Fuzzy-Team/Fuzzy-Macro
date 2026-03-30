@@ -61,6 +61,160 @@ def clear_settings_cache():
     _settings_cache = {}
     _cache_timestamp = 0
 
+AUTO_PLANTER_OPTIONS = [
+    ("paper", "auto_planter_paper", "Paper"),
+    ("ticket", "auto_planter_ticket", "Ticket"),
+    ("festive", "auto_planter_festive", "Festive"),
+    ("sticker", "auto_planter_sticker", "Sticker"),
+    ("plastic", "auto_planter_plastic", "Plastic"),
+    ("candy", "auto_planter_candy", "Candy"),
+    ("red_clay", "auto_planter_red_clay", "Red Clay"),
+    ("blue_clay", "auto_planter_blue_clay", "Blue Clay"),
+    ("tacky", "auto_planter_tacky", "Tacky"),
+    ("pesticide", "auto_planter_pesticide", "Pesticide"),
+    ("heat_treated", "auto_planter_heat-treated", "Heat-Treated"),
+    ("hydroponic", "auto_planter_hydroponic", "Hydroponic"),
+    ("petal", "auto_planter_petal", "Petal"),
+    ("planter_of_plenty", "auto_planter_planter_of_plenty", "Planter Of Plenty"),
+]
+
+
+def _canonicalize_planter_name(name: str) -> str:
+    if not name:
+        return ""
+    return str(name).strip().lower().replace("-", "_").replace(" ", "_")
+
+
+def _format_planter_name(name: str) -> str:
+    canonical = _canonicalize_planter_name(name)
+    for option_canonical, _, display_name in AUTO_PLANTER_OPTIONS:
+        if option_canonical == canonical:
+            return display_name
+    return canonical.replace("_", " ").title() if canonical else ""
+
+
+def _load_manual_planter_data() -> Dict:
+    manual_data = {"planters": [], "fields": [], "harvestTimes": []}
+    manual_path = "./data/user/manualplanters.txt"
+    try:
+        with open(manual_path, "r") as manual_file:
+            raw = manual_file.read().strip()
+        if not raw:
+            return manual_data
+        parsed = ast.literal_eval(raw)
+        if isinstance(parsed, dict):
+            manual_data.update(parsed)
+    except Exception:
+        pass
+    return manual_data
+
+
+def _load_auto_planter_data() -> Dict:
+    auto_data = {"planters": []}
+    auto_path = "./data/user/auto_planters.json"
+    try:
+        with open(auto_path, "r") as auto_file:
+            parsed = json.load(auto_file)
+        if isinstance(parsed, dict):
+            auto_data.update(parsed)
+    except Exception:
+        pass
+    return auto_data
+
+
+def _get_enabled_manual_planters(settings: Dict) -> List[str]:
+    enabled_planters = []
+    for cycle in range(1, 6):
+        for slot in range(1, 4):
+            planter = settings.get(f"cycle{cycle}_{slot}_planter", "none")
+            canonical = _canonicalize_planter_name(planter)
+            if canonical and canonical != "none" and canonical not in enabled_planters:
+                enabled_planters.append(canonical)
+    return enabled_planters
+
+
+def _get_enabled_auto_planters(settings: Dict) -> List[str]:
+    enabled_planters = []
+    for canonical, setting_key, _ in AUTO_PLANTER_OPTIONS:
+        if settings.get(setting_key, False):
+            enabled_planters.append(canonical)
+    return enabled_planters
+
+
+def _get_active_planter_choices(settings: Dict) -> List[Tuple[str, int]]:
+    mode = int(settings.get("planters_mode", 0) or 0)
+    choices = []
+
+    if mode == 1:
+        enabled_manual = set(_get_enabled_manual_planters(settings))
+        manual_data = _load_manual_planter_data()
+        for index, planter in enumerate(manual_data.get("planters", [])):
+            canonical = _canonicalize_planter_name(planter)
+            if canonical and canonical in enabled_manual and canonical not in [choice[0] for choice in choices]:
+                choices.append((canonical, index))
+    elif mode == 2:
+        enabled_auto = set(_get_enabled_auto_planters(settings))
+        auto_data = _load_auto_planter_data()
+        for index, planter_slot in enumerate(auto_data.get("planters", [])):
+            planter_name = planter_slot.get("planter", "") if isinstance(planter_slot, dict) else ""
+            canonical = _canonicalize_planter_name(planter_name)
+            if canonical and canonical in enabled_auto and canonical not in [choice[0] for choice in choices]:
+                choices.append((canonical, index))
+
+    return choices
+
+
+def _reset_planter_timer_by_name(settings: Dict, planter_name: str) -> Tuple[bool, str]:
+    canonical = _canonicalize_planter_name(planter_name)
+    mode = int(settings.get("planters_mode", 0) or 0)
+
+    if mode == 0:
+        return False, "❌ Planters are currently disabled."
+
+    active_choices = _get_active_planter_choices(settings)
+    target_index = next((index for name, index in active_choices if name == canonical), None)
+
+    if target_index is None:
+        return False, f"❌ No active timer was found for {_format_planter_name(planter_name)}."
+
+    if mode == 1:
+        manual_data = _load_manual_planter_data()
+        if target_index >= len(manual_data.get("planters", [])):
+            return False, "❌ Manual planter data is out of sync."
+        manual_data["planters"][target_index] = ""
+        if target_index < len(manual_data.get("fields", [])):
+            manual_data["fields"][target_index] = ""
+        if target_index < len(manual_data.get("harvestTimes", [])):
+            manual_data["harvestTimes"][target_index] = 0
+        try:
+            with open("./data/user/manualplanters.txt", "w") as manual_file:
+                manual_file.write(str(manual_data))
+        except Exception as error:
+            return False, f"❌ Failed to reset planter timer: {error}"
+    elif mode == 2:
+        auto_data = _load_auto_planter_data()
+        planters = auto_data.get("planters", [])
+        if target_index >= len(planters) or not isinstance(planters[target_index], dict):
+            return False, "❌ Auto planter data is out of sync."
+        planters[target_index] = {
+            "planter": "",
+            "nectar": "",
+            "field": "",
+            "harvest_time": 0,
+            "nectar_est_percent": 0,
+        }
+        try:
+            with open("./data/user/auto_planters.json", "w") as auto_file:
+                json.dump(auto_data, auto_file, indent=3)
+        except Exception as error:
+            return False, f"❌ Failed to reset planter timer: {error}"
+    else:
+        return False, "❌ Unsupported planter mode."
+
+    clear_settings_cache()
+    mode_name = "manual" if mode == 1 else "auto"
+    return True, f"✅ Reset {_format_planter_name(planter_name)} planter timer in {mode_name} mode."
+
 def update_setting(setting_key, value):
     """Update a specific setting"""
     try:
@@ -2751,6 +2905,18 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         ]
         return modes
 
+    async def planter_reset_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice]:
+        """Auto-complete active planter timers that can be reset"""
+        settings = get_cached_settings()
+        choices = []
+
+        for canonical, _ in _get_active_planter_choices(settings):
+            display_name = _format_planter_name(canonical)
+            if current.lower() in canonical.lower() or current.lower() in display_name.lower():
+                choices.append(app_commands.Choice(name=display_name, value=canonical))
+
+        return choices[:25]
+
     async def use_when_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice]:
         """Auto-complete function for hotbar use_when options"""
         options = [
@@ -3025,6 +3191,18 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         success, message = update_setting("auto_max_planters", count)
         await interaction.response.send_message(message)
     '''
+    @bot.tree.command(name="planterreset", description="Reset the timer for one active planter")
+    @app_commands.describe(planter="Choose one of the currently active enabled planters")
+    @app_commands.autocomplete(planter=planter_reset_autocomplete)
+    async def planter_reset(interaction: discord.Interaction, planter: str):
+        """Reset the timer for one active planter"""
+        try:
+            settings = get_cached_settings()
+            success, message = _reset_planter_timer_by_name(settings, planter)
+            await interaction.response.send_message(message)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error resetting planter timer: {str(e)}")
+
     # === MOB RUN COMMANDS ===
 
     @bot.tree.command(name="mobs", description="View mob run configuration")
@@ -3217,7 +3395,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         embed.add_field(name="🎁 **Collectibles**", value="`/collectibles` - View collectibles\n`/collectible <item> <true/false>` - Enable or disable collectible", inline=False)
 
-        # embed.add_field(name="🌱 **Planters**", value="`/planters` - View planter config\n`/setplantermode <mode>` - Set planter mode\n`/setmaxplanters <count>` - Set max planters", inline=False)
+        embed.add_field(name="🌱 **Planters**", value="`/planterreset <planter>` - Reset the timer for one active enabled planter", inline=False)
 
         embed.add_field(name="🐛 **Mob Runs**", value="`/mobs` - View mob configuration\n`/mob <mob> <true/false>` - Enable or disable mob run", inline=False)
 
