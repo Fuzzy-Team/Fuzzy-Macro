@@ -2496,6 +2496,11 @@ def watch_for_hotkeys(run):
                 if is_stop_keybind_held():
                     if not stop_key_held:
                         stop_key_held = True
+                    try:
+                        import gui
+                        gui.stopAllTools()
+                    except Exception:
+                        pass
                     # Force stop immediately when stop keybind is held
                     if run.value != 0:  # Only if not already stopped
                         run.value = 0
@@ -2515,6 +2520,13 @@ def watch_for_hotkeys(run):
                 if current_combo == start_keybind:
                     if run.value == 2: #already running
                         return
+                    try:
+                        import gui
+                        if gui.isAnyToolRunning():
+                            messageBox.msgBox(title="Tool Running", text="Stop the running tool before starting the macro.")
+                            return
+                    except Exception:
+                        pass
                     # Check debounce with error handling
                     try:
                         if current_time - last_trigger_time["start"] < debounce_duration:
@@ -2532,8 +2544,6 @@ def watch_for_hotkeys(run):
                     except:
                         pass  # If gui is not ready, continue
                 elif current_combo == stop_keybind and not stop_key_held:
-                    if run.value == 3: #already stopped
-                        return
                     # Check debounce with error handling
                     try:
                         if current_time - last_trigger_time["stop"] < debounce_duration:
@@ -2542,6 +2552,13 @@ def watch_for_hotkeys(run):
                         # Reset trigger time if there's a comparison error
                         last_trigger_time["stop"] = 0.0
                     last_trigger_time["stop"] = current_time
+                    try:
+                        import gui
+                        gui.stopAllTools()
+                    except Exception:
+                        pass
+                    if run.value == 3: #already stopped
+                        return
                     run.value = 0
                     # Update GUI immediately (optimistically show stopped state)
                     try:
@@ -2682,6 +2699,7 @@ if __name__ == "__main__":
     pin_requests = manager.Queue()  # Shared queue for pin requests
     start_keyboard_listener_fn = watch_for_hotkeys(run)
     logger = logModule.log(logQueue, False, None, False, blocking=False)
+    gui.configureToolRuntime(logger=logger, status=status, presence=presence)
 
     disconnectCooldownUntil = 0 #only for running disconnect check on low performance
 
