@@ -3712,15 +3712,14 @@ class macro:
 
         for attempt in range(attempts):
             if not self.goToPlanter(planter, field, "collect"):
-                if check_enabled:
-                    # If we cannot find the planter in-field, verify inventory before failing.
-                    # If it is already in inventory, treat this as collected so callers reset timers/state.
-                    self.planterCoords = None
-                    self.findPlanterInInventory(name)
-                    if self.planterCoords is not None:
-                        self.logger.webhook("", f"{planter.title()} not found in field, but found in inventory. Marking as collected.", "orange", "screen")
-                        updateHourlyTime()
-                        return True
+                # If we cannot find the planter in-field, verify inventory before failing.
+                # If it is already in inventory, treat this as collected so callers reset timers/state.
+                self.planterCoords = None
+                self.findPlanterInInventory(name)
+                if self.planterCoords is not None:
+                    self.logger.webhook("", f"{planter.title()} not found in field, but found in inventory. Marking as collected.", "orange", "screen")
+                    updateHourlyTime()
+                    return True
                 self.logger.webhook("", f"Unable to find Planter: {planter.title()}", "dark brown", "screen")
                 self.reset()
                 # if this was the last attempt, update time and return False
