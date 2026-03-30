@@ -5,6 +5,7 @@ let toolSessionSynced = false;
 const TOOL_SESSION_ID = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const AUTOCLICKER_MIN_INTERVAL = 10;
 const AUTOCLICKER_DEFAULT_INTERVAL = 100;
+const AUTOCLICKER_DEFAULT_START_DELAY = 3;
 const AUTO_GIFTED_BASIC_BEE_DEFAULT_DELAY = 3;
 
 const TREAT_COST_HONEY = 10000;
@@ -212,6 +213,18 @@ function getAutoClickerInterval() {
   return interval;
 }
 
+function getAutoClickerStartDelay() {
+  const input = document.getElementById("autoclicker_start_delay_seconds");
+  if (!input) return AUTOCLICKER_DEFAULT_START_DELAY;
+
+  let delay = parseInt(input.value, 10);
+  if (Number.isNaN(delay)) delay = AUTOCLICKER_DEFAULT_START_DELAY;
+  delay = Math.min(10, Math.max(0, delay));
+
+  input.value = delay;
+  return delay;
+}
+
 async function refreshToolStopHotkey() {
   if (typeof loadAllSettings !== "function") return;
 
@@ -235,6 +248,10 @@ async function refreshToolStopHotkey() {
 
 function onAutoClickerIntervalChange() {
   getAutoClickerInterval();
+}
+
+function onAutoClickerStartDelayChange() {
+  getAutoClickerStartDelay();
 }
 
 function renderAutoClickerStatus(status) {
@@ -303,7 +320,10 @@ async function startAutoClicker() {
   }
 
   try {
-    const result = await eel.startAutoClickerTool(getAutoClickerInterval())();
+    const result = await eel.startAutoClickerTool(
+      getAutoClickerInterval(),
+      getAutoClickerStartDelay()
+    )();
     const statusElement = document.getElementById("autoclicker_status");
     if (statusElement && result && result.message) {
       statusElement.textContent = result.message;
@@ -335,6 +355,10 @@ function initializeAutoClickerTool() {
   const intervalInput = document.getElementById("autoclicker_interval_ms");
   if (intervalInput && !intervalInput.value) {
     intervalInput.value = AUTOCLICKER_DEFAULT_INTERVAL;
+  }
+  const startDelayInput = document.getElementById("autoclicker_start_delay_seconds");
+  if (startDelayInput && !startDelayInput.value) {
+    startDelayInput.value = AUTOCLICKER_DEFAULT_START_DELAY;
   }
 
   if (!autoClickerStatusTimer) {

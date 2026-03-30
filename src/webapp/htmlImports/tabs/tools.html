@@ -21,9 +21,20 @@
           },
         },
         {
+          id: "autoclicker_start_delay_seconds",
+          title: "Start Delay (seconds)",
+          desc: "Wait time before the auto clicker begins. Default is 3 seconds.",
+          type: {
+            name: "textbox",
+            inputType: "int",
+            inputLimit: 2,
+            triggerFunction: "onAutoClickerStartDelayChange(this)",
+          },
+        },
+        {
           id: "autoclicker_start",
           title: "Start Auto Clicker",
-          desc: "Begins clicking after a 3-second delay.",
+          desc: "Begins clicking after the configured start delay.",
           type: {
             name: "button",
             text: "Start",
