@@ -1,6 +1,8 @@
 let autoClickerTimer = null;
 let autoClickerStatusTimer = null;
 let autoGiftedBasicBeeStatusTimer = null;
+let toolSessionSynced = false;
+const TOOL_SESSION_ID = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const AUTOCLICKER_MIN_INTERVAL = 10;
 const AUTOCLICKER_DEFAULT_INTERVAL = 100;
 const AUTO_GIFTED_BASIC_BEE_DEFAULT_DELAY = 3;
@@ -270,6 +272,26 @@ async function refreshAutoClickerStatus() {
   }
 }
 
+async function syncToolSessionState() {
+  if (toolSessionSynced) return;
+  if (!window.eel || typeof eel.syncToolSession !== "function") return;
+
+  try {
+    const result = await eel.syncToolSession(TOOL_SESSION_ID)();
+    toolSessionSynced = true;
+
+    if (result?.status?.auto_clicker) {
+      renderAutoClickerStatus(result.status.auto_clicker);
+    }
+
+    if (result?.status?.auto_gifted_basic_bee) {
+      renderAutoGiftedBasicBeeStatus(result.status.auto_gifted_basic_bee);
+    }
+  } catch (error) {
+    console.error("Failed to sync tool session:", error);
+  }
+}
+
 async function startAutoClicker() {
   if (!window.eel || typeof eel.startAutoClickerTool !== "function") return;
   if (autoClickerTimer) return;
@@ -458,6 +480,7 @@ function switchToolsTab(target) {
 }
 
 function loadTools() {
+  syncToolSessionState();
   refreshToolStopHotkey();
   initializeAutoClickerTool();
   initializeBondTreatCalculator();

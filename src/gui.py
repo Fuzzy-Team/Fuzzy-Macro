@@ -19,6 +19,7 @@ _tool_logger = None
 _tool_status = None
 _tool_presence = None
 _active_tool_presence_key = None
+_tool_session_id = None
 
 
 def _refresh_tool_logger_settings():
@@ -707,6 +708,40 @@ def stopAllTools():
         "auto_gifted_basic_bee": stopAutoGiftedBasicBeeTool(),
     }
     return {"ok": True, "results": results}
+
+@eel.expose
+def syncToolSession(session_id):
+    """Reset GUI-scoped manual tools when the frontend is reloaded."""
+    global _tool_session_id
+
+    current_session = str(session_id or "").strip()
+    if not current_session:
+        return {
+            "ok": False,
+            "message": "Missing tool session id.",
+            "status": {
+                "auto_clicker": getAutoClickerStatus(),
+                "auto_gifted_basic_bee": getAutoGiftedBasicBeeStatus(),
+            },
+        }
+
+    is_new_session = current_session != _tool_session_id
+    _tool_session_id = current_session
+
+    if is_new_session:
+        try:
+            stopAllTools()
+        except Exception:
+            pass
+
+    return {
+        "ok": True,
+        "reloaded": is_new_session,
+        "status": {
+            "auto_clicker": getAutoClickerStatus(),
+            "auto_gifted_basic_bee": getAutoGiftedBasicBeeStatus(),
+        },
+    }
 
 @eel.expose
 def update():
