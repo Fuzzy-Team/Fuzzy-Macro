@@ -104,6 +104,7 @@ class AutoClickerRunner:
         self._stop_event = threading.Event()
         self._thread = None
         self._interval_ms = 100
+        self._start_delay_seconds = 3
         self._status = self._fresh_status()
 
     def _fresh_status(self):
@@ -112,6 +113,7 @@ class AutoClickerRunner:
             "state": "idle",
             "message": "Ready. Stop it with the macro's configured stop hotkey.",
             "interval_ms": self._interval_ms,
+            "start_delay_seconds": self._start_delay_seconds,
         }
 
     def get_status(self):
@@ -130,12 +132,17 @@ class AutoClickerRunner:
         with self._lock:
             self._status.update(kwargs)
 
-    def start(self, interval_ms=100, run_state=3):
+    def start(self, interval_ms=100, start_delay_seconds=3, run_state=3):
         try:
             interval_ms = int(interval_ms or 100)
         except Exception:
             interval_ms = 100
         interval_ms = max(10, interval_ms)
+        try:
+            start_delay_seconds = int(start_delay_seconds or 0)
+        except Exception:
+            start_delay_seconds = 3
+        start_delay_seconds = max(0, min(start_delay_seconds, 10))
 
         thread_to_join = None
         with self._lock:
@@ -158,19 +165,32 @@ class AutoClickerRunner:
                 return {"ok": False, "message": "Stop the macro before starting this tool."}
             self._stop_event.clear()
             self._interval_ms = interval_ms
+            self._start_delay_seconds = start_delay_seconds
             self._status = self._fresh_status()
             self._status.update(
                 {
                     "running": True,
-                    "state": "running",
-                    "message": "Auto clicker running. Stop it with the macro's configured stop hotkey.",
+                    "state": "starting" if self._start_delay_seconds else "running",
+                    "message": (
+                        f"Auto clicker starting in {self._start_delay_seconds}s. Stop it with the macro's configured stop hotkey."
+                        if self._start_delay_seconds
+                        else "Auto clicker running. Stop it with the macro's configured stop hotkey."
+                    ),
                     "interval_ms": self._interval_ms,
+                    "start_delay_seconds": self._start_delay_seconds,
                 }
             )
             self._thread = threading.Thread(target=self._run, daemon=True)
             self._thread.start()
 
-        return {"ok": True, "message": "Auto clicker started."}
+        return {
+            "ok": True,
+            "message": (
+                f"Auto clicker will start in {self._start_delay_seconds}s."
+                if self._start_delay_seconds
+                else "Auto clicker started."
+            ),
+        }
 
     def stop(self):
         self._stop_event.set()
@@ -186,7 +206,27 @@ class AutoClickerRunner:
 
     def _run(self):
         try:
+            for remaining in range(self._start_delay_seconds, 0, -1):
+                if self._stop_event.is_set():
+                    return
+                self._update_status(
+                    running=True,
+                    state="starting",
+                    message=f"Auto clicker starting in {remaining}s. Stop it with the macro's configured stop hotkey.",
+                    interval_ms=self._interval_ms,
+                    start_delay_seconds=self._start_delay_seconds,
+                )
+                if self._stop_event.wait(1):
+                    return
+
             interval_seconds = self._interval_ms / 1000.0
+            self._update_status(
+                running=True,
+                state="running",
+                message="Auto clicker running. Stop it with the macro's configured stop hotkey.",
+                interval_ms=self._interval_ms,
+                start_delay_seconds=self._start_delay_seconds,
+            )
             while not self._stop_event.is_set():
                 mouseControl.fastClick()
                 if self._stop_event.wait(interval_seconds):
@@ -665,8 +705,8 @@ def autoClickerClick():
         return False
 
 @eel.expose
-def startAutoClickerTool(interval_ms=100):
-    result = _auto_clicker_runner.start(interval_ms, getRunState())
+def startAutoClickerTool(interval_ms=100, start_delay_seconds=3):
+    result = _auto_clicker_runner.start(interval_ms, start_delay_seconds, getRunState())
     if result.get("ok"):
         _set_tool_presence("tool_auto_clicker")
         _send_tool_webhook("Tool Started", "Auto Clicker started.", "purple")
