@@ -114,20 +114,19 @@ def _run_install_dependencies_if_needed(destination, should_reinstall_deps):
         pass
 
 
-# Recursively copy from src to dst, overwriting files. Skip protected names.
-def _merge_overwrite(src, dst, protected_folders, protected_files):
+# Recursively copy from src to dst, adding missing files and only replacing changed files.
+def _merge_changed_only(src, dst, protected_folders, protected_files):
+    norm_protected = [os.path.normpath(p) for p in protected_folders]
+
     for root, dirs, files in os.walk(src):
         rel_root = os.path.relpath(root, src)
 
-        # compute destination root
         dest_root = os.path.join(dst, rel_root) if rel_root != "." else dst
-        if not os.path.exists(dest_root):
-            os.makedirs(dest_root, exist_ok=True)
+        os.makedirs(dest_root, exist_ok=True)
 
         # filter dirs in-place to avoid descending into protected dirs
         # compare using relative paths so nested protected paths like
         # 'src/data' or 'data/user' are honored
-        norm_protected = [os.path.normpath(p) for p in protected_folders]
         filtered = []
         for d in dirs:
             candidate = (
@@ -142,9 +141,18 @@ def _merge_overwrite(src, dst, protected_folders, protected_files):
         for f in files:
             if f in protected_files:
                 continue
+
             src_file = os.path.join(root, f)
             dest_file = os.path.join(dest_root, f)
-            shutil.copy2(src_file, dest_file)
+
+            # Add missing files
+            if not os.path.exists(dest_file):
+                shutil.copy2(src_file, dest_file)
+                continue
+
+            # Replace only if contents differ
+            if _files_differ(src_file, dest_file):
+                shutil.copy2(src_file, dest_file)
 
 
 # Create a zip backup of `destination`, excluding protected folders/files.
@@ -433,7 +441,7 @@ def update(t="main", update_channel="stable"):
 
     # merge files, overwriting existing, but skip protected folders
     try:
-        _merge_overwrite(extracted, destination, protected_folders, protected_files)
+        _merge_changed_only(extracted, destination, protected_folders, protected_files)
     except Exception:
         msgBox("Update failed", "Error while applying update files.")
         return False
@@ -585,7 +593,7 @@ def update_from_commit(commit_hash):
     should_reinstall_deps = _should_reinstall_dependencies(destination, extracted)
 
     try:
-        _merge_overwrite(extracted, destination, protected_folders, protected_files)
+        _merge_changed_only(extracted, destination, protected_folders, protected_files)
     except Exception:
         msgBox("Update failed", "Error while applying update files.")
         return False
