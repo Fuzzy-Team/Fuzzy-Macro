@@ -3647,16 +3647,9 @@ class macro:
                 else:
                     # Final attempt failed — give up immediately.
                     self.logger.webhook("", f"[Planter Placement] Could not find {planter.title()} in inventory after {max_attempts} attempts. Giving up.", "red", "screen", ping_category="ping_critical_errors")
-                    # Disable this planter for the rest of the session so the macro won't try it again
-                    setting_key = f"auto_planter_{planter.replace(' ', '_').lower()}"
-                    try:
-                        if setting_key in self.setdat:
-                            self.setdat[setting_key] = False
-                            # Notify the user that we disabled it for the session
-                            self.logger.webhook("", f"[Planter Placement] Disabled {planter.title()} for this session (not in inventory).", "orange", "screen")
-                    except Exception:
-                        # If anything goes wrong setting the flag, still return False
-                        pass
+                    # Do not auto-disable planter settings here.
+                    # A temporary state desync (already placed / stale planter data)
+                    # can also make the planter unavailable in inventory.
                     updateHourlyTime()
                     return False
             #place planter
@@ -3841,8 +3834,8 @@ class macro:
             time.sleep(1)
 
         # Exhausted attempts — move on but warn the user
-        self.logger.webhook("", f"Planter {planter.title()} still not found in inventory after {attempts} attempts. Continuing.", "orange", "screen")
-        return True
+        self.logger.webhook("", f"Planter {planter.title()} still not found in inventory after {attempts} attempts. Keeping planter state and retrying later.", "orange", "screen")
+        return False
         
     
     def placePlanterInCycle(self, slot, cycle):
