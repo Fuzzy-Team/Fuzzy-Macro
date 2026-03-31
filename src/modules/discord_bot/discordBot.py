@@ -184,6 +184,8 @@ def _reset_planter_timer_by_name(settings: Dict, planter_name: str) -> Tuple[boo
         manual_data["planters"][target_index] = ""
         if target_index < len(manual_data.get("fields", [])):
             manual_data["fields"][target_index] = ""
+        if target_index < len(manual_data.get("gatherFields", [])):
+            manual_data["gatherFields"][target_index] = ""
         if target_index < len(manual_data.get("harvestTimes", [])):
             manual_data["harvestTimes"][target_index] = 0
         try:
@@ -202,6 +204,9 @@ def _reset_planter_timer_by_name(settings: Dict, planter_name: str) -> Tuple[boo
             "field": "",
             "harvest_time": 0,
             "nectar_est_percent": 0,
+            "placed_time": 0,
+            "grow_duration": 0,
+            "natural_grow_duration": 0,
         }
         try:
             with open("./data/user/auto_planters.json", "w") as auto_file:

@@ -1439,7 +1439,7 @@ class macro:
             self.logger.webhook("", f"Could not find {itemName} in inventory", "dark brown")
             return None
         ''' 
-        if not bestY:   
+        if bestY is None:
             self.logger.webhook("", f"Could not find {itemName} in inventory", "dark brown")
             return
         #return (bestX+20, bestY+80+20)
@@ -3624,6 +3624,15 @@ class macro:
         def updateHourlyTime():
             self.hourlyReport.addHourlyStat("misc_time", time.time()-st)
 
+        def recoverAlreadyPlacedPlanterState():
+            try:
+                if self.isBesideE(["harvest", "planter"]):
+                    return True
+                self.moveToPlanter()
+                return bool(self.isBesideE(["harvest", "planter"]))
+            except Exception:
+                return False
+
         max_attempts = 2
         cooldown_seconds = 3  # Wait 3 seconds before retrying if planter is missing
         for attempt in range(max_attempts):
@@ -3646,6 +3655,10 @@ class macro:
                     continue
                 else:
                     # Final attempt failed — give up immediately.
+                    if recoverAlreadyPlacedPlanterState():
+                        self.logger.webhook("", f"[Planter Placement] Recovered planter state for {planter.title()} in {field.title()} after inventory desync.", "orange", "screen")
+                        updateHourlyTime()
+                        return True
                     self.logger.webhook("", f"[Planter Placement] Could not find {planter.title()} in inventory after {max_attempts} attempts. Giving up.", "red", "screen", ping_category="ping_critical_errors")
                     # Do not auto-disable planter settings here.
                     # A temporary state desync (already placed / stale planter data)
@@ -3658,8 +3671,14 @@ class macro:
             #check if planter is placed
             time.sleep(0.5)
             placedPlanter = True
+            placementError = None
             for _ in range(7):
-                if self.blueTextImageSearch("notinfield") or self.blueTextImageSearch("maxplanters"):
+                if self.blueTextImageSearch("notinfield"):
+                    placementError = "notinfield"
+                    placedPlanter = False
+                    break
+                if self.blueTextImageSearch("maxplanters"):
+                    placementError = "maxplanters"
                     placedPlanter = False
                     break
                 time.sleep(0.3)
@@ -3668,6 +3687,10 @@ class macro:
                 #use glitter
                 if glitter: 
                     self.useItemInInventory("glitter")
+                updateHourlyTime()
+                return True
+            if placementError == "maxplanters" and recoverAlreadyPlacedPlanterState():
+                self.logger.webhook("", f"[Planter Placement] Recovered planter state for {planter.title()} in {field.title()} after max-planters desync.", "orange", "screen")
                 updateHourlyTime()
                 return True
             self.logger.webhook("",f"Failed to Place Planter: {planter.title()}", "red", "screen", ping_category="ping_critical_errors")
