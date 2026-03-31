@@ -470,7 +470,7 @@ def update_from_commit(commit_hash):
     backup_path = os.path.join(destination, "backup_macro.zip")
 
     try:
-        _create_backup(destination, backup_path, protected_folders, protected_files)
+        _create_backup(destination, backup_path, [], protected_files)
         _mark_backup_pending(destination)
     except Exception:
         pass
