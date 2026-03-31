@@ -1,10 +1,13 @@
-import stat
+import hashlib
 import os
 import re
-import requests
-import zipfile
 import shutil
+import stat
+import zipfile
 from io import BytesIO
+
+import requests
+
 from modules.misc.messageBox import msgBox
 
 
@@ -27,6 +30,7 @@ def _is_remote_newer(local_v, remote_v):
     for i in range(3):
         if rv[i] != lv[i]:
             return rv[i] > lv[i]
+
     # numeric parts equal, compare letter: a suffix (letter) denotes
     # a prerelease and is considered older than the same version
     # without a letter. Examples:
@@ -34,34 +38,107 @@ def _is_remote_newer(local_v, remote_v):
     #   1.1.0b > 1.1.0a
     if lv[3] == rv[3]:
         return False
+
     # local has a letter and remote does not -> remote is newer
     if lv[3] != "" and rv[3] == "":
         return True
+
     # local has no letter and remote does -> remote is older
     if lv[3] == "" and rv[3] != "":
         return False
+
     # both have letters: compare lexicographically
     return rv[3] > lv[3]
+
+
+def _file_sha256(path):
+    try:
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(8192), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except Exception:
+        return None
+
+
+def _files_differ(path1, path2):
+    h1 = _file_sha256(path1)
+    h2 = _file_sha256(path2)
+    # If either file cannot be read, play it safe and assume different
+    if h1 is None or h2 is None:
+        return True
+    return h1 != h2
+
+
+def _should_reinstall_dependencies(destination, extracted):
+    local_install_script = os.path.join(destination, "install_dependencies.command")
+    remote_install_script = os.path.join(extracted, "install_dependencies.command")
+
+    if not os.path.exists(remote_install_script):
+        return False
+
+    if not os.path.exists(local_install_script):
+        return True
+
+    return _files_differ(local_install_script, remote_install_script)
+
+
+def _run_install_dependencies_if_needed(destination, should_reinstall_deps):
+    if not should_reinstall_deps:
+        return
+
+    try:
+        import subprocess
+
+        install_script = os.path.join(destination, "install_dependencies.command")
+        if os.path.exists(install_script):
+            try:
+                st = os.stat(install_script)
+                os.chmod(install_script, st.st_mode | stat.S_IEXEC)
+            except Exception:
+                pass
+
+            try:
+                subprocess.Popen(
+                    ["sh", install_script],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL,
+                    start_new_session=True,
+                    close_fds=True,
+                )
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 
 # Recursively copy from src to dst, overwriting files. Skip protected names.
 def _merge_overwrite(src, dst, protected_folders, protected_files):
     for root, dirs, files in os.walk(src):
         rel_root = os.path.relpath(root, src)
+
         # compute destination root
         dest_root = os.path.join(dst, rel_root) if rel_root != "." else dst
         if not os.path.exists(dest_root):
             os.makedirs(dest_root, exist_ok=True)
+
         # filter dirs in-place to avoid descending into protected dirs
         # compare using relative paths so nested protected paths like
         # 'src/data' or 'data/user' are honored
         norm_protected = [os.path.normpath(p) for p in protected_folders]
         filtered = []
         for d in dirs:
-            candidate = os.path.normpath(os.path.join(rel_root, d)) if rel_root != "." else os.path.normpath(d)
+            candidate = (
+                os.path.normpath(os.path.join(rel_root, d))
+                if rel_root != "."
+                else os.path.normpath(d)
+            )
             if candidate not in norm_protected:
                 filtered.append(d)
         dirs[:] = filtered
+
         for f in files:
             if f in protected_files:
                 continue
@@ -80,6 +157,7 @@ def _create_backup(destination, backup_path, protected_folders, protected_files)
                 os.unlink(backup_path)
             except Exception:
                 pass
+
     with zipfile.ZipFile(backup_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for root, dirs, files in os.walk(destination):
             # skip the backup file itself and src extraction folders
@@ -88,6 +166,7 @@ def _create_backup(destination, backup_path, protected_folders, protected_files)
                 rl = ""
             else:
                 rl = rel_root
+
             # skip protected folders
             skip_root = False
             for p in protected_folders:
@@ -96,6 +175,7 @@ def _create_backup(destination, backup_path, protected_folders, protected_files)
                     break
             if skip_root:
                 continue
+
             for f in files:
                 if f in protected_files:
                     continue
@@ -122,23 +202,32 @@ def _mark_backup_pending(destination):
 def delete_backup_if_pending(destination=None):
     import sys
     from modules.misc.messageBox import msgBoxOkCancel
+
     # Try both root and /src for marker and backup
     paths_to_check = []
     if destination is not None:
         paths_to_check.append(destination)
+
     cwd = os.getcwd()
     root = cwd.replace("/src", "")
     paths_to_check.extend([cwd, root])
+
     checked = set()
     for base in paths_to_check:
         if not base or base in checked:
             continue
         checked.add(base)
+
         marker = os.path.join(base, ".backup_pending")
         backup = os.path.join(base, "backup_macro.zip")
+
         try:
             if os.path.exists(marker) or os.path.exists(backup):
-                prompt = "A backup from a previous update was found.\nDo you want to delete the backup now? (Recommended if the macro is working fine.)"
+                prompt = (
+                    "A backup from a previous update was found.\n"
+                    "Do you want to delete the backup now? "
+                    "(Recommended if the macro is working fine.)"
+                )
                 response = msgBoxOkCancel("Delete Backup?", prompt)
                 if response:
                     if os.path.exists(marker):
@@ -155,12 +244,14 @@ def delete_backup_if_pending(destination=None):
 
 
 def _discover_remote_version(remote_version_url, timeout=15):
-    """Discover the latest non-prerelease tag from GitHub, falling back to
+    """
+    Discover the latest non-prerelease tag from GitHub, falling back to
     the tags endpoint and finally to `remote_version_url` if all else fails.
     Returns the version string (without a leading 'v') or None on failure.
     """
     github_releases_api = "https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/releases?per_page=100"
     github_tags_api = "https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/tags?per_page=100"
+
     try:
         headers = {
             "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -171,9 +262,11 @@ def _discover_remote_version(remote_version_url, timeout=15):
         r = requests.get(github_releases_api, timeout=timeout, headers=headers)
         r.raise_for_status()
         releases = r.json()
+
         for rel in releases:
             if not rel.get("prerelease") and rel.get("tag_name"):
                 return rel.get("tag_name").lstrip("v")
+
         # fallback to tags endpoint
         rt = requests.get(github_tags_api, timeout=timeout, headers=headers)
         rt.raise_for_status()
@@ -182,13 +275,18 @@ def _discover_remote_version(remote_version_url, timeout=15):
             return tags[0].get("name", "").lstrip("v")
     except Exception:
         pass
+
     # final fallback: read provided remote_version_url
     try:
-        r = requests.get(remote_version_url, timeout=timeout, headers={
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0",
-        })
+        r = requests.get(
+            remote_version_url,
+            timeout=timeout,
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            },
+        )
         r.raise_for_status()
         rv = r.text.strip()
         return rv
@@ -198,6 +296,7 @@ def _discover_remote_version(remote_version_url, timeout=15):
 
 def update(t="main", update_channel="stable"):
     msgBox("Update in progress", "Updating... Do not close terminal")
+
     # Important: preserve user data and profiles. Protect pattern folder
     # during the generic overwrite so we can merge new/old patterns safely.
     protected_folders = [
@@ -208,7 +307,6 @@ def update(t="main", update_channel="stable"):
     protected_files = [".git"]
     destination = os.getcwd().replace("/src", "")
 
-    # remote version URL and zip link
     # Attempt to fetch the latest `update.py` from upstream and replace the
     # local copy before performing the rest of the update. This allows bug
     # fixes in the updater itself to take effect immediately for this run.
@@ -226,6 +324,7 @@ def update(t="main", update_channel="stable"):
         target_dir = os.path.dirname(target_update)
         os.makedirs(target_dir, exist_ok=True)
         tmp_path = target_update + ".tmp"
+
         try:
             with open(tmp_path, "w", encoding="utf-8") as fh:
                 fh.write(upd_code)
@@ -240,8 +339,6 @@ def update(t="main", update_channel="stable"):
         # non-fatal: continue with current updater if fetch fails
         pass
 
-    # remote version URL and zip link
-    import time
     # Use GitHub releases API with channel filtering
     github_releases_api = "https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/releases?per_page=100"
     backup_path = os.path.join(destination, "backup_macro.zip")
@@ -272,18 +369,16 @@ def update(t="main", update_channel="stable"):
         "Expires": "0",
         "Accept": "application/vnd.github.v3+json",
     }
-    
+
     remote_version = None
     try:
         r = requests.get(github_releases_api, timeout=10, headers=headers)
         r.raise_for_status()
         releases = r.json()
-        
+
         if releases:
-            # Filter releases based on channel preference
             if update_channel == "beta":
                 # Beta channel: accept any release (prerelease or stable)
-                # Get the first one (most recent)
                 if releases[0].get("tag_name"):
                     remote_version = releases[0].get("tag_name").lstrip("v")
             else:
@@ -294,7 +389,7 @@ def update(t="main", update_channel="stable"):
                         break
     except Exception:
         pass
-    
+
     if not remote_version:
         msgBox("Update failed", "Could not fetch remote version. Update aborted.")
         return False
@@ -316,22 +411,25 @@ def update(t="main", update_channel="stable"):
         msgBox("Update failed", "Could not download or extract update zip.")
         return False
 
-    # find extracted folder (likely starts with 'Fuzzy-Macro')
+    # find extracted folder
     extracted = None
     for f in os.listdir(destination):
         if f.startswith("Fuzzy-Macro") and os.path.isdir(os.path.join(destination, f)):
             extracted = os.path.join(destination, f)
             break
+
     if not extracted:
-        # fallback: try any new directory containing 'src'
         for f in os.listdir(destination):
             p = os.path.join(destination, f)
             if os.path.isdir(p) and os.path.exists(os.path.join(p, "src")):
                 extracted = p
                 break
+
     if not extracted:
         msgBox("Update failed", "Could not locate extracted update folder.")
         return False
+
+    should_reinstall_deps = _should_reinstall_dependencies(destination, extracted)
 
     # merge files, overwriting existing, but skip protected folders
     try:
@@ -345,14 +443,15 @@ def update(t="main", update_channel="stable"):
     # so the generic merge didn't overwrite them. Here we perform a union
     # copy: copy new files, and if a filename collides, keep the existing
     # file and write the incoming file with a suffix to avoid data loss.
+    dst_patterns = os.path.join(destination, "settings", "patterns")
     try:
         src_patterns = os.path.join(extracted, "settings", "patterns")
-        dst_patterns = os.path.join(destination, "settings", "patterns")
         if os.path.exists(src_patterns):
             for root, dirs, files in os.walk(src_patterns):
                 rel_root = os.path.relpath(root, src_patterns)
                 dest_root = os.path.join(dst_patterns, rel_root) if rel_root != "." else dst_patterns
                 os.makedirs(dest_root, exist_ok=True)
+
                 for f in files:
                     src_file = os.path.join(root, f)
                     dest_file = os.path.join(dest_root, f)
@@ -383,23 +482,22 @@ def update(t="main", update_channel="stable"):
     # the `.newN` file; otherwise rename it to the base name (remove suffix).
     try:
         import re as _re
+
         if os.path.exists(dst_patterns):
             for root, dirs, files in os.walk(dst_patterns):
                 for f in files:
                     m = _re.match(r"^(?P<base>.+?)\.new\d+(?P<ext>\..+)?$", f)
                     if not m:
                         continue
-                    base = m.group('base')
-                    ext = m.group('ext') or ''
+                    base = m.group("base")
+                    ext = m.group("ext") or ""
                     candidate = base + ext
                     src_new = os.path.join(root, f)
                     target = os.path.join(root, candidate)
                     try:
                         if os.path.exists(target):
-                            # base exists — remove the .new file
                             os.remove(src_new)
                         else:
-                            # rename .newN -> base
                             os.replace(src_new, target)
                     except Exception:
                         pass
@@ -420,6 +518,7 @@ def update(t="main", update_channel="stable"):
             os.chmod(run_macroPath, st.st_mode | stat.S_IEXEC)
         except Exception:
             pass
+
     # Remove any leftover commit marker since this was a normal update
     try:
         webapp_commit = os.path.join(destination, "src", "webapp", "updated_commit.txt")
@@ -427,29 +526,8 @@ def update(t="main", update_channel="stable"):
             os.remove(webapp_commit)
     except Exception:
         pass
-    # Attempt to run install dependencies script (non-blocking). Fail silently.
-    try:
-        install_script = os.path.join(destination, "install_dependencies.command")
-        if os.path.exists(install_script):
-            try:
-                st = os.stat(install_script)
-                os.chmod(install_script, st.st_mode | stat.S_IEXEC)
-            except Exception:
-                pass
-            try:
-                import subprocess
-                # Detached, fully silent run: redirect stdin/stdout/stderr and
-                # start a new session so the process isn't tied to this updater.
-                subprocess.Popen(["sh", install_script],
-                                 stdout=subprocess.DEVNULL,
-                                 stderr=subprocess.DEVNULL,
-                                 stdin=subprocess.DEVNULL,
-                                 start_new_session=True,
-                                 close_fds=True)
-            except Exception:
-                pass
-    except Exception:
-        pass
+
+    _run_install_dependencies_if_needed(destination, should_reinstall_deps)
 
     msgBox("Update success", "Update complete. You can now relaunch the macro")
     return True
@@ -458,6 +536,7 @@ def update(t="main", update_channel="stable"):
 def update_from_commit(commit_hash):
     """Update the macro from a specific commit hash (zip at /archive/<hash>.zip)."""
     msgBox("Update in progress", f"Updating to commit {commit_hash}... Do not close terminal")
+
     protected_folders = [
         os.path.join("src", "data", "user"),
         os.path.join("settings", "profiles"),
@@ -491,15 +570,19 @@ def update_from_commit(commit_hash):
         if f.startswith("Fuzzy-Macro") and os.path.isdir(os.path.join(destination, f)):
             extracted = os.path.join(destination, f)
             break
+
     if not extracted:
         for f in os.listdir(destination):
             p = os.path.join(destination, f)
             if os.path.isdir(p) and os.path.exists(os.path.join(p, "src")):
                 extracted = p
                 break
+
     if not extracted:
         msgBox("Update failed", "Could not locate extracted update folder.")
         return False
+
+    should_reinstall_deps = _should_reinstall_dependencies(destination, extracted)
 
     try:
         _merge_overwrite(extracted, destination, protected_folders, protected_files)
@@ -508,14 +591,15 @@ def update_from_commit(commit_hash):
         return False
 
     # merge patterns similar to update()
+    dst_patterns = os.path.join(destination, "settings", "patterns")
     try:
         src_patterns = os.path.join(extracted, "settings", "patterns")
-        dst_patterns = os.path.join(destination, "settings", "patterns")
         if os.path.exists(src_patterns):
             for root, dirs, files in os.walk(src_patterns):
                 rel_root = os.path.relpath(root, src_patterns)
                 dest_root = os.path.join(dst_patterns, rel_root) if rel_root != "." else dst_patterns
                 os.makedirs(dest_root, exist_ok=True)
+
                 for f in files:
                     src_file = os.path.join(root, f)
                     dest_file = os.path.join(dest_root, f)
@@ -545,23 +629,22 @@ def update_from_commit(commit_hash):
     # the base name (remove suffix).
     try:
         import re as _re
+
         if os.path.exists(dst_patterns):
             for root, dirs, files in os.walk(dst_patterns):
                 for f in files:
                     m = _re.match(r"^(?P<base>.+?)\.new\d+(?P<ext>\..+)?$", f)
                     if not m:
                         continue
-                    base = m.group('base')
-                    ext = m.group('ext') or ''
+                    base = m.group("base")
+                    ext = m.group("ext") or ""
                     candidate = base + ext
                     src_new = os.path.join(root, f)
                     target = os.path.join(root, candidate)
                     try:
                         if os.path.exists(target):
-                            # base exists — remove the .new file
                             os.remove(src_new)
                         else:
-                            # rename .newN -> base
                             os.replace(src_new, target)
                     except Exception:
                         pass
@@ -590,28 +673,8 @@ def update_from_commit(commit_hash):
             fh.write(commit_hash[:7])
     except Exception:
         pass
-    # Attempt to run install dependencies script (non-blocking). Fail silently.
-    try:
-        install_script = os.path.join(destination, "install_dependencies.command")
-        if os.path.exists(install_script):
-            try:
-                st = os.stat(install_script)
-                os.chmod(install_script, st.st_mode | stat.S_IEXEC)
-            except Exception:
-                pass
-            try:
-                import subprocess
-                # Detached, fully silent run
-                subprocess.Popen(["sh", install_script],
-                                 stdout=subprocess.DEVNULL,
-                                 stderr=subprocess.DEVNULL,
-                                 stdin=subprocess.DEVNULL,
-                                 start_new_session=True,
-                                 close_fds=True)
-            except Exception:
-                pass
-    except Exception:
-        pass
+
+    _run_install_dependencies_if_needed(destination, should_reinstall_deps)
 
     msgBox("Update success", "Update complete. You can now relaunch the macro")
     return True
@@ -621,16 +684,16 @@ def check_for_updates_silent(update_channel="stable"):
     """
     Silently check if an update is available without downloading or showing popups.
     Uses GitHub releases API to find the latest version based on the update channel.
-    
+
     Args:
         update_channel: "stable" (non-prerelease) or "beta" (includes prerelease)
-    
+
     Returns a dict with 'available' (bool), 'current_version' (str), and 'latest_version' (str).
     Returns None on error.
     """
     try:
         destination = os.getcwd().replace("/src", "")
-        
+
         # Read local version
         local_version = "0.0.0"
         local_version_path = os.path.join(destination, "src", "webapp", "version.txt")
@@ -642,7 +705,7 @@ def check_for_updates_silent(update_channel="stable"):
                     local_version = fh.read().strip()
         except Exception:
             local_version = "0.0.0"
-        
+
         # Query GitHub releases API
         github_releases_api = "https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/releases?per_page=100"
         headers = {
@@ -651,19 +714,18 @@ def check_for_updates_silent(update_channel="stable"):
             "Expires": "0",
             "Accept": "application/vnd.github.v3+json",
         }
-        
+
         r = requests.get(github_releases_api, timeout=10, headers=headers)
         r.raise_for_status()
         releases = r.json()
-        
+
         if not releases:
             return None
-        
+
         # Filter releases based on channel preference
         remote_version = None
         if update_channel == "beta":
             # Beta channel: accept any release (prerelease or stable)
-            # Just get the first one (most recent)
             if releases[0].get("tag_name"):
                 remote_version = releases[0].get("tag_name").lstrip("v")
         else:
@@ -672,17 +734,17 @@ def check_for_updates_silent(update_channel="stable"):
                 if not rel.get("prerelease") and rel.get("tag_name"):
                     remote_version = rel.get("tag_name").lstrip("v")
                     break
-        
+
         if not remote_version:
             return None
-        
+
         # Check if remote is newer
         is_newer = _is_remote_newer(local_version, remote_version)
-        
+
         return {
-            'available': is_newer,
-            'current_version': local_version,
-            'latest_version': remote_version
+            "available": is_newer,
+            "current_version": local_version,
+            "latest_version": remote_version,
         }
     except Exception as e:
         print(f"Error checking for updates: {e}")
