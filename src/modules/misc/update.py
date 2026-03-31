@@ -248,7 +248,7 @@ def update(t="main", update_channel="stable"):
 
     # create a silent backup (overwrite previous backup)
     try:
-        _create_backup(destination, backup_path, protected_folders, protected_files)
+        _create_backup(destination, backup_path, [], protected_files)
         _mark_backup_pending(destination)
     except Exception:
         pass
