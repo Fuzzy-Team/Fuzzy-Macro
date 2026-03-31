@@ -519,6 +519,8 @@ def resetManualPlanterTimer(index):
             planterData["planters"][index] = ""
         if "fields" in planterData and len(planterData["fields"]) > index:
             planterData["fields"][index] = ""
+        if "gatherFields" in planterData and len(planterData["gatherFields"]) > index:
+            planterData["gatherFields"][index] = ""
         if "harvestTimes" in planterData and len(planterData["harvestTimes"]) > index:
             planterData["harvestTimes"][index] = 0
         
