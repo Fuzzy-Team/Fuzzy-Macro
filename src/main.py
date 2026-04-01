@@ -1119,6 +1119,58 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     return cycle
             else: 
                 return False
+
+        def emptyManualPlanterData():
+            return {
+                "cycles": [1, 1, 1],
+                "planters": ["", "", ""],
+                "fields": ["", "", ""],
+                "gatherFields": ["", "", ""],
+                "harvestTimes": [0, 0, 0]
+            }
+
+        def normalizeManualPlanterData(rawData):
+            normalized = emptyManualPlanterData()
+            if not isinstance(rawData, dict):
+                return normalized
+
+            for key, defaultValues in normalized.items():
+                values = rawData.get(key, defaultValues)
+                if not isinstance(values, list):
+                    values = defaultValues
+
+                cleaned = list(values[:3])
+                while len(cleaned) < 3:
+                    cleaned.append(defaultValues[len(cleaned)])
+
+                if key == "cycles":
+                    normalized[key] = []
+                    for value in cleaned:
+                        try:
+                            cycle = int(value)
+                        except Exception:
+                            cycle = 1
+                        normalized[key].append(min(5, max(1, cycle)))
+                elif key == "harvestTimes":
+                    normalized[key] = []
+                    for value in cleaned:
+                        try:
+                            harvestTime = float(value or 0)
+                        except Exception:
+                            harvestTime = 0
+                        normalized[key].append(harvestTime)
+                else:
+                    normalized[key] = [str(value or "") for value in cleaned]
+
+            return normalized
+
+        def saveManualPlanterData(planterData):
+            nonlocal planterDataRaw
+            normalized = normalizeManualPlanterData(planterData)
+            planterDataRaw = str(normalized)
+            with open("./data/user/manualplanters.txt", "w") as f:
+                f.write(planterDataRaw)
+            return normalized
         
         # Get priority order from settings, or use empty list if not set
         priorityOrder = get_task_list_order(macro.setdat)
@@ -1350,13 +1402,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         f.close()
                     
                     if not planterDataRaw.strip():
-                        planterData = {
-                            "cycles": [1,1,1],
-                            "planters": ["","",""],
-                            "fields": ["","",""],
-                            "gatherFields": ["","",""],
-                            "harvestTimes": [0,0,0]
-                        }
+                        planterData = emptyManualPlanterData()
                         for i in range(3):
                             if macro.setdat[f"cycle1_{i+1}_planter"] == "none" or macro.setdat[f"cycle1_{i+1}_field"] == "none":
                                 continue
@@ -1366,23 +1412,24 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                 planterData["fields"][i] = planter[1]
                                 planterData["harvestTimes"][i] = planter[2]
                                 planterData["gatherFields"][i] = planter[1] if planter[3] else ""
-                                with open("./data/user/manualplanters.txt", "w") as f:
-                                    f.write(str(planterData))
-                                f.close()
+                                planterData = saveManualPlanterData(planterData)
                         executedTasks.add(taskId)
                         return True
                     else:
-                        planterData = ast.literal_eval(planterDataRaw)
+                        try:
+                            planterData = normalizeManualPlanterData(ast.literal_eval(planterDataRaw))
+                        except Exception:
+                            planterData = emptyManualPlanterData()
+                            planterData = saveManualPlanterData(planterData)
                         for i in range(3):
                             cycle = planterData["cycles"][i]
                             if planterData["planters"][i] and time.time() > planterData["harvestTimes"][i]:
                                 if runTask(macro.collectPlanter, args=(planterData["planters"][i], planterData["fields"][i])):
-                                    planterData["harvestTimes"][i] = ""
+                                    planterData["harvestTimes"][i] = 0
                                     planterData["planters"][i] = ""
                                     planterData["fields"][i] = ""
-                                    with open("./data/user/manualplanters.txt", "w") as f:
-                                        f.write(str(planterData))
-                                    f.close()
+                                    planterData["gatherFields"][i] = ""
+                                    planterData = saveManualPlanterData(planterData)
                                     updateGUI.value = 1
                         
                         for i in range(3):
@@ -1410,9 +1457,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                 planterData["fields"][i] = planter[1]
                                 planterData["harvestTimes"][i] = planter[2]
                                 planterData["gatherFields"][i] = planter[1] if planter[3] else ""
-                                with open("./data/user/manualplanters.txt", "w") as f:
-                                    f.write(str(planterData))
-                                f.close()
+                                planterData = saveManualPlanterData(planterData)
                                 updateGUI.value = 1
                         executedTasks.add(taskId)
                         return True
@@ -2303,7 +2348,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         # Handle planter gather fields (if not already gathered)
         if planterDataRaw:
             try:
-                planterGatherFields = [x for x in ast.literal_eval(planterDataRaw)["gatherFields"] if x]
+                planterGatherFields = [x for x in normalizeManualPlanterData(ast.literal_eval(planterDataRaw))["gatherFields"] if x]
                 for field in planterGatherFields:
                     if field not in allGatheredFields:
                         runTask(macro.gather, args=(field,), resetAfter=False)
@@ -2496,6 +2541,11 @@ def watch_for_hotkeys(run):
                 if is_stop_keybind_held():
                     if not stop_key_held:
                         stop_key_held = True
+                    try:
+                        import gui
+                        gui.stopAllTools()
+                    except Exception:
+                        pass
                     # Force stop immediately when stop keybind is held
                     if run.value != 0:  # Only if not already stopped
                         run.value = 0
@@ -2515,6 +2565,13 @@ def watch_for_hotkeys(run):
                 if current_combo == start_keybind:
                     if run.value == 2: #already running
                         return
+                    try:
+                        import gui
+                        if gui.isAnyToolRunning():
+                            messageBox.msgBox(title="Tool Running", text="Stop the running tool before starting the macro.")
+                            return
+                    except Exception:
+                        pass
                     # Check debounce with error handling
                     try:
                         if current_time - last_trigger_time["start"] < debounce_duration:
@@ -2532,8 +2589,6 @@ def watch_for_hotkeys(run):
                     except:
                         pass  # If gui is not ready, continue
                 elif current_combo == stop_keybind and not stop_key_held:
-                    if run.value == 3: #already stopped
-                        return
                     # Check debounce with error handling
                     try:
                         if current_time - last_trigger_time["stop"] < debounce_duration:
@@ -2542,6 +2597,13 @@ def watch_for_hotkeys(run):
                         # Reset trigger time if there's a comparison error
                         last_trigger_time["stop"] = 0.0
                     last_trigger_time["stop"] = current_time
+                    try:
+                        import gui
+                        gui.stopAllTools()
+                    except Exception:
+                        pass
+                    if run.value == 3: #already stopped
+                        return
                     run.value = 0
                     # Update GUI immediately (optimistically show stopped state)
                     try:
@@ -2682,6 +2744,7 @@ if __name__ == "__main__":
     pin_requests = manager.Queue()  # Shared queue for pin requests
     start_keyboard_listener_fn = watch_for_hotkeys(run)
     logger = logModule.log(logQueue, False, None, False, blocking=False)
+    gui.configureToolRuntime(logger=logger, status=status, presence=presence)
 
     disconnectCooldownUntil = 0 #only for running disconnect check on low performance
 

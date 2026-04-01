@@ -1439,7 +1439,7 @@ class macro:
             self.logger.webhook("", f"Could not find {itemName} in inventory", "dark brown")
             return None
         ''' 
-        if not bestY:   
+        if bestY is None:
             self.logger.webhook("", f"Could not find {itemName} in inventory", "dark brown")
             return
         #return (bestX+20, bestY+80+20)
@@ -1961,7 +1961,8 @@ class macro:
                             joinPS = False
                         else:
                             if is_share:
-                                deeplink = f"roblox://navigation/share_links?code={code_val}&type=Server"
+                                type_val = qs.get('type', ['Server'])[0]
+                                deeplink = f"roblox://navigation/share_links?code={code_val}&type={type_val}"
                             else:
                                 deeplink += f"&linkCode={code_val}"
                     except Exception as e:
@@ -2081,6 +2082,9 @@ class macro:
             # self.keyboard.walk("d",5,0)
             # self.keyboard.walk("s",0.3,0)
             hiveNumber = self.setdat["hive_number"]
+            excludedHiveSlot = int(self.setdat.get("hive_exclude_slot", 0) or 0)
+            if excludedHiveSlot < 0 or excludedHiveSlot > 6:
+                excludedHiveSlot = 0
             rejoinSuccess = False
             availableSlots = [] #store hive slots that are claimable
             newHiveNumber = 0
@@ -2107,6 +2111,9 @@ class macro:
             def isHiveAvailable():
                 return self.isBesideE(["claim", "hive"], ["send", "trade"], log=True)
 
+            def isExcludedSlot(slot):
+                return excludedHiveSlot != 0 and slot == excludedHiveSlot
+
             # Go directly to the selected hive first. If that fails, scan all hives as a fallback.
             self.logger.webhook("", f'Claiming hive {hiveNumber}', "dark brown")
             # Move directly to the selected hive (slot 1 is nearest cannon)
@@ -2114,7 +2121,9 @@ class macro:
                 self.keyboard.walk("a", self.hiveDistance * (hiveNumber - 1))
             time.sleep(0.4)
             # Check selected hive first
-            if isHiveAvailable():
+            if isExcludedSlot(hiveNumber):
+                self.logger.webhook("", f'Hive {hiveNumber} is excluded, scanning other hives', 'dark brown', "screen")
+            elif isHiveAvailable():
                 newHiveNumber = hiveNumber
                 rejoinSuccess = True
             else:
@@ -2129,6 +2138,8 @@ class macro:
                     if j > 1:
                         self.keyboard.walk("a", self.hiveDistance)
                     time.sleep(0.4)
+                    if isExcludedSlot(j):
+                        continue
                     if isHiveAvailable():
                         newHiveNumber = j
                         rejoinSuccess = True
@@ -2232,6 +2243,29 @@ class macro:
         # Convert underscores to spaces for fieldSettings lookup
         normalized_field = field.replace('_', ' ')
         fieldSetting = {**self.fieldSettings[normalized_field], **settingsOverride}
+        def shouldUseHoneyWreathReturn():
+            if not self.setdat.get("wreath", False):
+                return False
+
+            fields_enabled = list(self.setdat.get("fields_enabled", []))
+            configured_fields = list(self.setdat.get("fields", []))
+            for index, enabled in enumerate(fields_enabled[:5]):
+                if not enabled or index >= len(configured_fields):
+                    continue
+                configured_field = str(configured_fields[index]).replace("_", " ").strip().lower()
+                if configured_field == normalized_field.lower():
+                    return True
+            return False
+
+        def isHoneyWreathReady():
+            cooldown = self.collectCooldowns.get("wreath", collectData["wreath"][2])
+            return self.hasRespawned("wreath", cooldown)
+
+        def isHoneyWreathBackpackReady(backpack=None):
+            if backpack is None:
+                backpack = self.getBackpack()
+            return backpack >= fieldSetting["backpack"]
+
         for i in range(3):
             self.waitForBees()
             #go to field
@@ -2321,6 +2355,9 @@ class macro:
         lastGumdropTime = 0  # Track when gumdrop was last used
         gooTimerActive = True  # Flag to control goo timer thread
         gumdropTimerActive = True  # Flag to control gumdrop timer thread
+        honeyWreathReturnEnabled = shouldUseHoneyWreathReturn()
+        honeyWreathPending = False
+        honeyWreathWaitLogged = False
 
         # Add goo status to webhook message
         gooStatus = " - Goo Enabled" if fieldSetting["goo"] else ""
@@ -2450,12 +2487,53 @@ class macro:
                 self.reset()
                 break
             elif getGatherTime() > maxGatherTime:
-                self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Time Limit - Return: {returnType.title()}", "light green", "screen")
-                keepGathering = False
+                if honeyWreathReturnEnabled and isHoneyWreathReady():
+                    backpack = self.getBackpack()
+                    if isHoneyWreathBackpackReady(backpack):
+                        self.logger.webhook(
+                            "Gathering: Ended",
+                            f"Time: {gatherTime} - Time Limit - Backpack Full - Return: Honey Wreath",
+                            "light green",
+                            "screen"
+                        )
+                        honeyWreathPending = True
+                        keepGathering = False
+                    elif not honeyWreathWaitLogged:
+                        self.logger.webhook(
+                            "Gathering: Extended",
+                            "Time limit reached. Waiting for backpack to fill before claiming Honey Wreath",
+                            "light green",
+                            "screen"
+                        )
+                        honeyWreathWaitLogged = True
+                else:
+                    self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Time Limit - Return: {returnType.title()}", "light green", "screen")
+                    keepGathering = False
             #check backpack
-            elif self.getBackpack() >= fieldSetting["backpack"]:
-                self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Backpack - Return: {returnType.title()}", "light green", "screen")
-                keepGathering = False
+            else:
+                backpack = self.getBackpack()
+                if backpack >= fieldSetting["backpack"]:
+                    if honeyWreathReturnEnabled and isHoneyWreathReady():
+                        if isHoneyWreathBackpackReady(backpack):
+                            self.logger.webhook(
+                                "Gathering: Ended",
+                                f"Time: {gatherTime} - Backpack Full - Return: Honey Wreath",
+                                "light green",
+                                "screen"
+                            )
+                            honeyWreathPending = True
+                            keepGathering = False
+                        elif not honeyWreathWaitLogged:
+                            self.logger.webhook(
+                                "Gathering: Extended",
+                                f"Honey Wreath is ready. Waiting for the configured backpack limit ({fieldSetting['backpack']}%) before claiming",
+                                "light green",
+                                "screen"
+                            )
+                            honeyWreathWaitLogged = True
+                    else:
+                        self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Backpack - Return: {returnType.title()}", "light green", "screen")
+                        keepGathering = False
 
         #gathering was interrupted
         if keepGathering:
@@ -2466,7 +2544,7 @@ class macro:
         #goo timer continues via background thread during return process
 
         #go back to hive
-        def walkToHive():
+        def walkToHive(convertAtHive=True):
             nonlocal self
             #walk to hive
             #face correct direction (towards hive)
@@ -2497,10 +2575,18 @@ class macro:
             self.keyboard.keyUp("a")
             #in case we overrun
             time.sleep(0.4)
+            if self.isBesideEImage("makehoney"):
+                if not convertAtHive:
+                    return True
+            elif not convertAtHive:
+                self.logger.webhook("","Can't find hive, resetting", "dark brown", "screen")
+                self.reset()
+                return False
+
             for _ in range(7):
                 #goo timer continues via background thread during conversion attempts
                 if self.convert(forced_convert_balloon=(str(self.setdat.get("convert_balloon","")).lower().replace(" ","_")=="every_gather")):
-                    break
+                    return True
                 self.keyboard.walk("d",0.1)
                 time.sleep(0.2) #add a delay so that the E can popup
             else:
@@ -2518,6 +2604,16 @@ class macro:
                 else:
                     self.logger.webhook("","Can't find hive, resetting", "dark brown", "screen")
                     self.reset()
+                return False
+            return True
+
+        if honeyWreathPending:
+            if walkToHive(convertAtHive=False):
+                self.logger.webhook("", "Claiming Honey Wreath before converting", "dark brown", "screen")
+                self.collect("wreath")
+                self.reset(convert=True)
+            gooTimerActive = False
+            return
 
         if returnType == "reset":
             #goo timer continues via background thread during reset
@@ -3528,6 +3624,15 @@ class macro:
         def updateHourlyTime():
             self.hourlyReport.addHourlyStat("misc_time", time.time()-st)
 
+        def recoverAlreadyPlacedPlanterState():
+            try:
+                if self.isBesideE(["harvest", "planter"]):
+                    return True
+                self.moveToPlanter()
+                return bool(self.isBesideE(["harvest", "planter"]))
+            except Exception:
+                return False
+
         max_attempts = 2
         cooldown_seconds = 3  # Wait 3 seconds before retrying if planter is missing
         for attempt in range(max_attempts):
@@ -3550,17 +3655,14 @@ class macro:
                     continue
                 else:
                     # Final attempt failed — give up immediately.
+                    if recoverAlreadyPlacedPlanterState():
+                        self.logger.webhook("", f"[Planter Placement] Recovered planter state for {planter.title()} in {field.title()} after inventory desync.", "orange", "screen")
+                        updateHourlyTime()
+                        return True
                     self.logger.webhook("", f"[Planter Placement] Could not find {planter.title()} in inventory after {max_attempts} attempts. Giving up.", "red", "screen", ping_category="ping_critical_errors")
-                    # Disable this planter for the rest of the session so the macro won't try it again
-                    setting_key = f"auto_planter_{planter.replace(' ', '_').lower()}"
-                    try:
-                        if setting_key in self.setdat:
-                            self.setdat[setting_key] = False
-                            # Notify the user that we disabled it for the session
-                            self.logger.webhook("", f"[Planter Placement] Disabled {planter.title()} for this session (not in inventory).", "orange", "screen")
-                    except Exception:
-                        # If anything goes wrong setting the flag, still return False
-                        pass
+                    # Do not auto-disable planter settings here.
+                    # A temporary state desync (already placed / stale planter data)
+                    # can also make the planter unavailable in inventory.
                     updateHourlyTime()
                     return False
             #place planter
@@ -3569,8 +3671,14 @@ class macro:
             #check if planter is placed
             time.sleep(0.5)
             placedPlanter = True
+            placementError = None
             for _ in range(7):
-                if self.blueTextImageSearch("notinfield") or self.blueTextImageSearch("maxplanters"):
+                if self.blueTextImageSearch("notinfield"):
+                    placementError = "notinfield"
+                    placedPlanter = False
+                    break
+                if self.blueTextImageSearch("maxplanters"):
+                    placementError = "maxplanters"
                     placedPlanter = False
                     break
                 time.sleep(0.3)
@@ -3579,6 +3687,10 @@ class macro:
                 #use glitter
                 if glitter: 
                     self.useItemInInventory("glitter")
+                updateHourlyTime()
+                return True
+            if placementError == "maxplanters" and recoverAlreadyPlacedPlanterState():
+                self.logger.webhook("", f"[Planter Placement] Recovered planter state for {planter.title()} in {field.title()} after max-planters desync.", "orange", "screen")
                 updateHourlyTime()
                 return True
             self.logger.webhook("",f"Failed to Place Planter: {planter.title()}", "red", "screen", ping_category="ping_critical_errors")
@@ -3701,6 +3813,14 @@ class macro:
 
         for attempt in range(attempts):
             if not self.goToPlanter(planter, field, "collect"):
+                # If we cannot find the planter in-field, verify inventory before failing.
+                # If it is already in inventory, treat this as collected so callers reset timers/state.
+                self.planterCoords = None
+                self.findPlanterInInventory(name)
+                if self.planterCoords is not None:
+                    self.logger.webhook("", f"{planter.title()} not found in field, but found in inventory. Marking as collected.", "orange", "screen")
+                    updateHourlyTime()
+                    return True
                 self.logger.webhook("", f"Unable to find Planter: {planter.title()}", "dark brown", "screen")
                 self.reset()
                 # if this was the last attempt, update time and return False
@@ -3737,8 +3857,8 @@ class macro:
             time.sleep(1)
 
         # Exhausted attempts — move on but warn the user
-        self.logger.webhook("", f"Planter {planter.title()} still not found in inventory after {attempts} attempts. Continuing.", "orange", "screen")
-        return True
+        self.logger.webhook("", f"Planter {planter.title()} still not found in inventory after {attempts} attempts. Keeping planter state and retrying later.", "orange", "screen")
+        return False
         
     
     def placePlanterInCycle(self, slot, cycle):
