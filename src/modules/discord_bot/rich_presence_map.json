@@ -129,8 +129,8 @@
   },
   "exact": {
     "idle_main_menu": {
-      "state": "On Main Menu",
-      "details": "Configuring settings",
+      "state": "Idle",
+      "details": "Waiting on next action...",
       "large_image": "fuzzy_macro",
       "large_text": "Fuzzy Macro",
       "small_image": null,

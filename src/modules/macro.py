@@ -1615,13 +1615,29 @@ class macro:
             self.logger.webhook("", "Unable to detect that player respawned at hive", "dark brown", "screen")
 
     def cannon(self, fast = False):
-        # number of attempts to try reaching the cannon before rejoining can be configured
-        try:
-            max_attempts = int(self.setdat.get("max_cannon_attempts", 3))
-            if max_attempts < 1:
-                max_attempts = 1
-        except Exception:
-            max_attempts = 3
+        def detect_rejoin_mode_color():
+            try:
+                percent_threshold = float(self.setdat.get("rejoin_color_percent", 0.6))
+                color_tolerance = int(self.setdat.get("rejoin_color_tolerance", 40))
+                sample_colors = get_sample_colors()
+                for col in sample_colors:
+                    pct = percent_pixels_similar_to_color(
+                        self.robloxWindow.mx,
+                        self.robloxWindow.my,
+                        self.robloxWindow.mw,
+                        self.robloxWindow.mh,
+                        col,
+                        tolerance=color_tolerance,
+                    )
+                    if pct >= percent_threshold:
+                        return col
+            except Exception:
+                pass
+            return None
+
+        # Retry cannon search once after a reset, then rejoin on the second failed attempt.
+        max_attempts = 2
+        first_attempt_color = None
         for i in range(max_attempts):
             #Move to canon:
             fieldDist = 0.9
@@ -1663,26 +1679,24 @@ class macro:
                         return
                     self.keyboard.walk("a",0.2)
             self.logger.webhook("Notice", f"Could not find cannon", "dark brown", "screen")
-            # If cannon not found, also check for full-screen light/dark mode colors
-            try:
-                percent_threshold = float(self.setdat.get("rejoin_color_percent", 0.6))
-                color_tolerance = int(self.setdat.get("rejoin_color_tolerance", 40))
-                sample_colors = get_sample_colors()
-                for col in sample_colors:
-                    pct = percent_pixels_similar_to_color(self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw, self.robloxWindow.mh, col, tolerance=color_tolerance)
-                    if pct >= percent_threshold:
-                        self.logger.webhook("", "Detected light/dark-mode screen while searching for cannon — restarting Roblox and rejoining", "dark brown", "screen")
-                        try:
-                            appManager.forceCloseApp("Roblox")
-                        except Exception:
-                            appManager.closeApp("Roblox")
-                        # give the OS a moment to close
-                        time.sleep(2)
-                        self.rejoin()
-                        return
-            except Exception:
-                pass
-            self.reset(convert=False)
+            detected_color = detect_rejoin_mode_color()
+
+            # First failure: reset and rerun cannon search once.
+            if i == 0:
+                first_attempt_color = detected_color
+                if detected_color is not None:
+                    self.logger.webhook("", "Detected light/dark-mode screen while searching for cannon. Resetting and retrying cannon search once.", "dark brown", "screen")
+                self.reset(convert=False)
+                continue
+
+            # Second failure: rejoin. If the same color persists after reset, call it out.
+            if detected_color is not None and first_attempt_color is not None and tuple(detected_color) == tuple(first_attempt_color):
+                self.logger.webhook("", "Detected the same light/dark-mode color again after reset while searching for cannon. Rejoining.", "dark brown", "screen")
+            elif detected_color is not None:
+                self.logger.webhook("", "Detected light/dark-mode screen again while searching for cannon. Rejoining.", "dark brown", "screen")
+            self.logger.webhook("Notice", "Failed to reach cannon on retry; rejoining", "red", ping_category="ping_critical_errors")
+            self.rejoin()
+            return
         else:
             self.logger.webhook("Notice", f"Failed to reach cannon too many times", "red", ping_category="ping_critical_errors")
             self.rejoin()
@@ -3982,13 +3996,15 @@ class macro:
                 uptimeBuffsColors = self.hourlyReport.uptimeBuffsColors
                 uptimeBearBuffs = self.hourlyReport.uptimeBearBuffs
 
+                sampleValues = {}
+
                 for j in ["baby_love"]:
                     if self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors[j][0], uptimeBuffsColors[j][1], y1=30*self.multi, searchDirection=7):
-                        self.hourlyReport.uptimeBuffsValues[j][i] = 1
+                        sampleValues[j] = 1
 
                 bearBuffRes = [int(x) for x in self.buffDetector.getBuffsWithImage(uptimeBearBuffs, screen=screen, threshold=0.78)]
                 if any(bearBuffRes):
-                    self.hourlyReport.uptimeBuffsValues["bear"][i] = 1
+                    sampleValues["bear"] = 1
 
                 for j in ["focus", "bomb_combo", "balloon_aura", "inspire"]:
                     res = self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors[j][0], uptimeBuffsColors[j][1], y1=30*self.multi, y2=50*self.multi, searchDirection=7)
@@ -3997,7 +4013,7 @@ class macro:
                         x1 = max(0, int(x-25*self.multi))
                         x2 = min(width, int(x+5*self.multi))
                         buffImg = screen[15*self.multi:50*self.multi , x1:x2]
-                        self.hourlyReport.uptimeBuffsValues[j][i] = int(self.buffDetector.getBuffQuantityFromImgTight(buffImg))
+                        sampleValues[j] = int(self.buffDetector.getBuffQuantityFromImgTight(buffImg))
 
                 x = 0
                 for _ in range(3):
@@ -4006,12 +4022,12 @@ class macro:
                         break
                     x = res[0]
                     if self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["melody"][0], uptimeBuffsColors["melody"][1], x+2*self.multi, 30, x+34*self.multi, 40*self.multi, 12):
-                        self.hourlyReport.uptimeBuffsValues["melody"][i] = 1
-                    elif not self.hourlyReport.uptimeBuffsValues["haste"][i]:
+                        sampleValues["melody"] = 1
+                    elif not sampleValues.get("haste", 0):
                         x1 = max(0, int(x+6*self.multi))
                         x2 = min(width, int(x+44*self.multi))
                         buffImg = screen[15*self.multi:50*self.multi , x1:x2]
-                        self.hourlyReport.uptimeBuffsValues["haste"][i] = int(self.buffDetector.getBuffQuantityFromImgTight(buffImg))
+                        sampleValues["haste"] = int(self.buffDetector.getBuffQuantityFromImgTight(buffImg))
                     x += 44*self.multi
                 #print(bd.detectBuffColorInImage(screen, 0xff242424, variation=12, minSize=(3*2,2*2), show=True))
 
@@ -4032,14 +4048,14 @@ class macro:
 
                     x1 = max(0, x-25*self.multi)
                     buffImg = screen[15*self.multi: 50*self.multi, x1: x]
-                    self.hourlyReport.uptimeBuffsValues[buffType][i] = int(self.buffDetector.getBuffQuantityFromImgTight(buffImg))
+                    sampleValues[buffType] = int(self.buffDetector.getBuffQuantityFromImgTight(buffImg))
 
                     x -= 40*self.multi
                 
                 self.prevSec = currSec
 
-                if "gather_" in self.status.value:
-                    self.hourlyReport.buffGatherIntervals[i] = 1
+                isGathering = "gather_" in self.status.value
+                self.hourlyReport.recordUptimeSample(i, sampleValues, isGathering=isGathering)
                 self.hourlyReport.saveHourlyReportData()
         except Exception:
             self.logger.webhook("Hourly Report Error", traceback.format_exc(), "red", ping_category="ping_critical_errors")

@@ -1405,148 +1405,233 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 
                 # Auto planters
                 elif macro.setdat["planters_mode"] == 2:
-                    with open("./data/user/auto_planters.json", "r") as f:
-                        data = json.load(f)
-                        planterData = data.get("planters", [])
-                        nectarLastFields = data.get("nectar_last_field", {})
-                        gatherFlag = data.get("gather", False)
-                    f.close()
+                    try:
+                        with open("./data/user/auto_planters.json", "r") as f:
+                            data = json.load(f)
+                    except Exception:
+                        data = {}
+
+                    fieldToNectar = {}
+                    for nectarName, nectarFields in macroModule.nectarFields.items():
+                        for fieldName in nectarFields:
+                            fieldToNectar[fieldName] = nectarName
+
+                    planterData = data.get("planters", [])
+                    nectarLastFields = data.get("nectar_last_field", {})
+                    gatherFlag = data.get("gather", False)
+                    fieldDegradation = data.get("field_degradation", {})
+
+                    priorityMap = {}
+                    for i in range(5):
+                        nectar = macro.setdat[f"auto_priority_{i}_nectar"]
+                        if nectar == "none":
+                            continue
+                        priorityMap[nectar] = {
+                            "min": float(macro.setdat[f"auto_priority_{i}_min"]),
+                            "index": i,
+                            "weight": max(0.5, 1.35 - (i * 0.12))
+                        }
+
+                    def emptyAutoPlanterSlot():
+                        return {
+                            "planter": "",
+                            "nectar": "",
+                            "field": "",
+                            "harvest_time": 0,
+                            "nectar_est_percent": 0,
+                            "placed_time": 0,
+                            "grow_duration": 0,
+                            "natural_grow_duration": 0
+                        }
+
+                    def emptyFieldDegradationState():
+                        return {
+                            fieldName: {
+                                "hours": 0.0,
+                                "updated_at": 0.0
+                            }
+                            for fieldName in fieldToNectar
+                        }
+
+                    def getDecayedDegradationEntry(fieldName, defaultNow=None):
+                        now = time.time() if defaultNow is None else defaultNow
+                        rawEntry = fieldDegradation.get(fieldName, {})
+
+                        if isinstance(rawEntry, dict):
+                            hours = float(rawEntry.get("hours", rawEntry.get("value", 0) or 0))
+                            updatedAt = float(rawEntry.get("updated_at", now) or now)
+                        else:
+                            hours = float(rawEntry or 0)
+                            updatedAt = now
+
+                        elapsedHours = max(0.0, (now - updatedAt) / 3600.0)
+                        remainingHours = max(0.0, min(48.0, hours - elapsedHours))
+                        return {
+                            "hours": remainingHours,
+                            "updated_at": now
+                        }
+
+                    def normalizeFieldDegradation():
+                        nonlocal fieldDegradation
+                        now = time.time()
+                        normalized = emptyFieldDegradationState()
+                        for fieldName in normalized:
+                            normalized[fieldName] = getDecayedDegradationEntry(fieldName, defaultNow=now)
+                        fieldDegradation = normalized
 
                     def saveAutoPlanterData():
                         data = {
                             "planters": planterData,
                             "nectar_last_field": nectarLastFields,
-                            "gather": gatherFlag
+                            "gather": gatherFlag,
+                            "field_degradation": fieldDegradation
                         }
                         with open("./data/user/auto_planters.json", "w") as f:
                             json.dump(data, f, indent=3)
                         f.close()
                         updateGUI.value = 1
-                    
-                    def getCurrentNectarPercent(nectar):
-                        res = macro.buffDetector.getNectar(nectar)
-                        print(f"Current {nectar} Nectar: {res}%")
-                        return res
 
-                    # Estimates removed; rely solely on live detection for percentages
+                    def getPlanterRanking(field, planterName):
+                        for planterObj in macroModule.autoPlanterRankings.get(field, []):
+                            if planterObj["name"] == planterName:
+                                return planterObj
+                        return None
+
+                    def estimateNectarGain(planterObj, growTimeSeconds):
+                        growTimeSeconds = max(0, growTimeSeconds)
+                        return min(100.0, round((growTimeSeconds * planterObj["nectar_bonus"] * planterObj["grow_bonus"] / 864), 1))
+
+                    def getEffectiveNaturalGrowTimeSeconds(fieldName, planterObj):
+                        return max(0.0, (planterObj["grow_time"] + getFieldDegradationHours(fieldName)) * 60 * 60)
+
+                    def normalizeAutoPlanterSlot(slot):
+                        normalized = emptyAutoPlanterSlot()
+                        if isinstance(slot, dict):
+                            for key in normalized:
+                                normalized[key] = slot.get(key, normalized[key])
+
+                        if normalized["field"]:
+                            normalized["field"] = normalized["field"].replace("_", " ")
+                        if normalized["planter"] and not normalized["nectar"]:
+                            normalized["nectar"] = fieldToNectar.get(normalized["field"], "")
+
+                        ranking = None
+                        if normalized["planter"] and normalized["field"]:
+                            ranking = getPlanterRanking(normalized["field"], normalized["planter"])
+
+                        if normalized["planter"] and ranking:
+                            if normalized["grow_duration"] <= 0:
+                                normalized["grow_duration"] = ranking["grow_time"] * 60 * 60
+                            if normalized["natural_grow_duration"] <= 0:
+                                normalized["natural_grow_duration"] = ranking["grow_time"] * 60 * 60
+                            if normalized["placed_time"] <= 0 and normalized["harvest_time"] > 0:
+                                normalized["placed_time"] = max(0, normalized["harvest_time"] - normalized["grow_duration"])
+                            if normalized["nectar_est_percent"] <= 0:
+                                normalized["nectar_est_percent"] = estimateNectarGain(ranking, normalized["grow_duration"])
+
+                        return normalized
+
+                    normalizeFieldDegradation()
+                    planterData = [normalizeAutoPlanterSlot(slot) for slot in planterData[:3]]
+                    while len(planterData) < 3:
+                        planterData.append(emptyAutoPlanterSlot())
+                    for nectarName in macroModule.nectarNames:
+                        nectarLastFields.setdefault(nectarName, "")
+
+                    currentNectarCache = {}
+
+                    def getCurrentNectarPercent(nectar):
+                        if nectar not in currentNectarCache:
+                            try:
+                                currentNectarCache[nectar] = macro.buffDetector.getNectar(nectar)
+                            except Exception:
+                                currentNectarCache[nectar] = 0.0
+                            print(f"Current {nectar} Nectar: {currentNectarCache[nectar]}%")
+                        return currentNectarCache[nectar]
+
+                    def getPriorityInfo(nectar):
+                        return priorityMap.get(nectar, {"min": 100.0, "index": len(priorityMap), "weight": 0.35})
+
                     def getEstimateNectarPercent(nectar):
-                        return 0
+                        return sum(
+                            max(0, planter.get("nectar_est_percent", 0))
+                            for planter in planterData
+                            if planter["planter"] and planter.get("nectar") == nectar
+                        )
 
                     def getTotalNectarPercent(nectar):
-                        # Return the detected current nectar percentage
-                        return getCurrentNectarPercent(nectar)
+                        return getCurrentNectarPercent(nectar) + getEstimateNectarPercent(nectar)
 
-                    def getNextField(nectar):
-                        availableFields = []
-                        occupiedFields = [planter["field"] for planter in planterData]
-                        for field in macroModule.nectarFields[nectar]:
-                            if macro.setdat[f"auto_field_{field.replace(' ','_')}"] and not field in occupiedFields:
-                                availableFields.append(field)
-                        if not availableFields:
-                            return None
-                        for i, field in enumerate(availableFields):
-                            if field == nectarLastFields[nectar]:
-                                nextFieldIndex = i+1
-                                if nextFieldIndex >= len(availableFields):
-                                    nextFieldIndex = 0
-                                return availableFields[nextFieldIndex]
-                        return availableFields[1] if len(availableFields) > 1 else availableFields[0]
-                    
-                    def getBestPlanter(field):
-                        bestPlanterObj = None
-                        occupiedPlanters = [planter["planter"] for planter in planterData]
-                        for planterObj in macroModule.autoPlanterRankings[field]:
-                            planter = planterObj["name"]
-                            settingPlanter = planter.replace(" ", "_")
-                            # Check if this planter is allowed globally and for this specific field.
-                            # New per-planter field restriction settings use keys of the form:
-                            #   auto_planter_<planter_name>_field_<field_name>
-                            # If the per-planter-field key is missing, default to True (allow).
-                            global_key = f"auto_planter_{settingPlanter}"
-                            field_key = f"auto_planter_{settingPlanter}_field_{field.replace(' ', '_')}"
-                            allowed_globally = macro.setdat.get(global_key, False)
-                            allowed_for_field = macro.setdat.get(field_key, True)
-                            if not planter in occupiedPlanters and allowed_globally and allowed_for_field:
-                                bestPlanterObj = planterObj
-                                return bestPlanterObj
-                    
-                    def savePlacedPlanter(slot, field, planter, nectar):
-                        nonlocal planterData, nectarLastFields
-                        estimatedNectarPercent = getTotalNectarPercent(nectar)
+                    def calculatePlacementPlan(fieldName, planterObj, nectar, projectedNectarPercent):
+                        now = time.time()
+                        projectedNectarPercent = max(0.0, projectedNectarPercent)
+                        minPercent = max(getPriorityInfo(nectar)["min"], projectedNectarPercent)
+                        naturalGrowTimeSeconds = getEffectiveNaturalGrowTimeSeconds(fieldName, planterObj)
+                        naturalGrowTimeHours = naturalGrowTimeSeconds / 3600.0
 
-                        for i in range(5):
-                            if macro.setdat[f"auto_priority_{i}_nectar"] == nectar:
-                                minPercent = max(macro.setdat[f"auto_priority_{i}_min"], estimatedNectarPercent)
-                                break
-                        
                         if macro.setdat["auto_planters_collect_auto"]:
-                            totalBonus = planter["nectar_bonus"] * planter["grow_bonus"]
-                            timeToCap = max(0.25, ((max(0, (100 - estimatedNectarPercent) / planter["nectar_bonus"]) * 0.24) / planter["grow_bonus"]))
+                            nectarBonus = max(planterObj["nectar_bonus"], 0.1)
+                            growBonus = max(planterObj["grow_bonus"], 0.1)
+                            totalBonus = max(nectarBonus * growBonus, 0.1)
+                            timeToCap = max(0.25, ((max(0, 100 - projectedNectarPercent) / nectarBonus) * 0.24) / growBonus)
 
                             if totalBonus < 1.2:
-                                growTime = min(timeToCap, 0.5)
-                            elif minPercent > estimatedNectarPercent and estimatedNectarPercent <=90:
-                                if estimatedNectarPercent > 20:
-                                    bonusTime = (100/estimatedNectarPercent)*totalBonus
-                                    growTime = (((minPercent - estimatedNectarPercent + bonusTime) / planter["nectar_bonus"]) * 0.24) / planter["grow_bonus"]
-                                elif estimatedNectarPercent > 10:
-                                    growTime = min(planter["grow_time"], 4)
+                                growTimeHours = min(timeToCap, 0.5)
+                            elif minPercent > projectedNectarPercent and projectedNectarPercent <= 90:
+                                if projectedNectarPercent > 20:
+                                    bonusTime = (100 / projectedNectarPercent) * totalBonus
+                                    growTimeHours = (((minPercent - projectedNectarPercent + bonusTime) / nectarBonus) * 0.24) / growBonus
+                                elif projectedNectarPercent > 10:
+                                    growTimeHours = min(naturalGrowTimeHours, 4)
                                 else:
-                                    growTime = min(planter["grow_time"], 2)
+                                    growTimeHours = min(naturalGrowTimeHours, 2)
                             else:
-                                growTime = timeToCap
+                                growTimeHours = timeToCap
 
-                            finalGrowTime = min(planter["grow_time"], (growTime + growTime/totalBonus), timeToCap + timeToCap/totalBonus)*60*60
-                            planterHarvestTime = time.time() + finalGrowTime
+                            finalGrowTime = min(
+                                naturalGrowTimeHours,
+                                (growTimeHours + growTimeHours / totalBonus),
+                                (timeToCap + timeToCap / totalBonus)
+                            ) * 60 * 60
+                            planterHarvestTime = now + finalGrowTime
                         elif macro.setdat["auto_planters_collect_full"]:
-                            finalGrowTime = planter["grow_time"]*60*60
-                            planterHarvestTime = time.time() + finalGrowTime
+                            finalGrowTime = naturalGrowTimeSeconds
+                            planterHarvestTime = now + finalGrowTime
                         else:
-                            finalGrowTime = min(planter["grow_time"], macro.setdat["auto_planters_collect_every"])*60*60
-                            lowestHarvestTime = time.time() + finalGrowTime
-                            for i in range(3):
-                                harvestTime = planterData[i]["harvest_time"]
-                                if harvestTime > time.time() and lowestHarvestTime > harvestTime:
-                                    lowestHarvestTime = harvestTime
+                            finalGrowTime = min(naturalGrowTimeHours, macro.setdat["auto_planters_collect_every"]) * 60 * 60
+                            planterHarvestTime = now + finalGrowTime
+                            for activePlanter in planterData:
+                                harvestTime = activePlanter["harvest_time"]
+                                if harvestTime > now and planterHarvestTime > harvestTime:
+                                    planterHarvestTime = harvestTime
+                            finalGrowTime = max(0, planterHarvestTime - now)
 
-                            planterHarvestTime = lowestHarvestTime
-                            finalGrowTime = lowestHarvestTime - time.time()
-                        
-                        planterEstPerc = round((finalGrowTime * planter["nectar_bonus"]/864), 1)
-
-                        planterData[slot] = {
-                            "planter": planter["name"],
-                            "nectar": nectar,
-                            "field": field,
+                        return {
+                            "grow_duration": finalGrowTime,
                             "harvest_time": planterHarvestTime,
-                            "nectar_est_percent": planterEstPerc
+                            "placed_time": now,
+                            "nectar_est_percent": estimateNectarGain(planterObj, finalGrowTime),
+                            "natural_grow_duration": naturalGrowTimeSeconds
                         }
-                        planterReady = time.strftime("%H:%M:%S", time.gmtime(finalGrowTime))
-                        macro.logger.webhook("", f"Planter will be ready in: {planterReady}", "light blue")
-                        nectarLastFields[nectar] = field
-                        saveAutoPlanterData()
-                        # Send a nectar percentage menu so users don't have to wait for the hourly report
+
+                    def sendNectarPercentageWebhook():
                         try:
-                            nectar_percentages = []
-                            # Use BuffDetector to get current nectar percentages
-                            for nectar_name in macroModule.nectarNames:
+                            nectarPercentages = []
+                            for nectarName in macroModule.nectarNames:
                                 try:
-                                    total_percent = macro.buffDetector.getNectar(nectar_name)
+                                    totalPercent = macro.buffDetector.getNectar(nectarName)
                                 except Exception:
-                                    total_percent = 0.0
-                                nectar_percentages.append((nectar_name, total_percent))
+                                    totalPercent = 0.0
+                                nectarPercentages.append((nectarName, totalPercent))
 
-                            # Format the menu
-                            menu_lines = [f"**{name.title()}**: {round(percent,1)}%" for name, percent in nectar_percentages]
-                            menu_text = "\n".join(menu_lines)
+                            menuLines = [f"**{name.title()}**: {round(percent,1)}%" for name, percent in nectarPercentages]
+                            menuText = "\n".join(menuLines)
 
-                            # Try to attach a screenshot of the game for context
                             try:
                                 from modules.screen.screenshot import screenshotRobloxWindow
                                 img = screenshotRobloxWindow()
                                 img_path = "webhook_nectar.png"
                                 try:
-                                    # overlay nectar percentages on screenshot
                                     from PIL import ImageDraw, ImageFont
                                     draw = ImageDraw.Draw(img)
                                     try:
@@ -1554,180 +1639,297 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                     except Exception:
                                         font = ImageFont.load_default()
 
-                                    lines = [f"{name.title()}: {round(percent,1)}%" for name, percent in nectar_percentages]
+                                    lines = [f"{name.title()}: {round(percent,1)}%" for name, percent in nectarPercentages]
                                     padding = 8
                                     line_h = font.getsize("Tg")[1] + 4
-                                    box_w = max(font.getsize(l)[0] for l in lines) + padding*2
-                                    box_h = line_h * len(lines) + padding*2
-                                    draw.rectangle([(10,10),(10+box_w,10+box_h)], fill=(0,0,0,180))
-                                    for idx, l in enumerate(lines):
-                                        draw.text((10+padding, 10+padding + idx*line_h), l, font=font, fill=(255,255,255))
+                                    box_w = max(font.getsize(line)[0] for line in lines) + padding * 2
+                                    box_h = line_h * len(lines) + padding * 2
+                                    draw.rectangle([(10, 10), (10 + box_w, 10 + box_h)], fill=(0, 0, 0, 180))
+                                    for idx, line in enumerate(lines):
+                                        draw.text((10 + padding, 10 + padding + idx * line_h), line, font=font, fill=(255, 255, 255))
 
                                     img.save(img_path)
-                                    macro.logger.webhook("Nectar Percentages", menu_text, "white", imagePath=img_path)
+                                    macro.logger.webhook("Nectar Percentages", menuText, "white", imagePath=img_path)
                                 except Exception:
-                                    # if saving fails, fall back to webhook without image
-                                    macro.logger.webhook("Nectar Percentages", menu_text, "white")
+                                    macro.logger.webhook("Nectar Percentages", menuText, "white")
                             except Exception:
-                                # If screenshotting fails, just send the webhook text
-                                macro.logger.webhook("Nectar Percentages", menu_text, "white")
-
+                                macro.logger.webhook("Nectar Percentages", menuText, "white")
                         except Exception:
-                            # Non-fatal: don't block planter placement on failures
                             pass
 
+                    def savePlacedPlanter(slot, field, planterObj, nectar, placementPlan):
+                        nonlocal planterData, nectarLastFields
+                        planterData[slot] = {
+                            "planter": planterObj["name"],
+                            "nectar": nectar,
+                            "field": field,
+                            "harvest_time": placementPlan["harvest_time"],
+                            "nectar_est_percent": placementPlan["nectar_est_percent"],
+                            "placed_time": placementPlan["placed_time"],
+                            "grow_duration": placementPlan["grow_duration"],
+                            "natural_grow_duration": placementPlan["natural_grow_duration"]
+                        }
+                        planterReady = time.strftime("%H:%M:%S", time.gmtime(placementPlan["grow_duration"]))
+                        macro.logger.webhook("", f"Planter will be ready in: {planterReady}", "light blue")
+                        nectarLastFields[nectar] = field
+                        saveAutoPlanterData()
+                        sendNectarPercentageWebhook()
+
+                    def getFieldDegradationHours(fieldName):
+                        entry = getDecayedDegradationEntry(fieldName)
+                        fieldDegradation[fieldName] = entry
+                        return entry["hours"]
+
+                    def getNaturalPlanterProgress(planter):
+                        if not planter["planter"]:
+                            return 0.0
+                        naturalGrowDuration = planter.get("natural_grow_duration", 0)
+                        placedTime = planter.get("placed_time", 0)
+                        if naturalGrowDuration > 0 and placedTime > 0:
+                            return max(0.0, min(1.0, (time.time() - placedTime) / naturalGrowDuration))
+                        if planter["harvest_time"] <= time.time():
+                            return 1.0
+                        return 0.0
+
+                    def getPlanterProgress(planter):
+                        return getNaturalPlanterProgress(planter)
+
+                    def recordFieldDegradation(planter):
+                        fieldName = planter.get("field")
+                        planterName = planter.get("planter")
+                        if not fieldName or not planterName:
+                            return
+
+                        ranking = getPlanterRanking(fieldName, planterName)
+                        if not ranking:
+                            return
+
+                        naturalGrowHours = max(
+                            ranking["grow_time"],
+                            (planter.get("natural_grow_duration", 0) or 0) / 3600.0
+                        )
+                        progress = getNaturalPlanterProgress(planter)
+                        degradationToAdd = 1.0 + (naturalGrowHours * max(0.0, progress))
+                        currentHours = getFieldDegradationHours(fieldName)
+                        fieldDegradation[fieldName] = {
+                            "hours": min(48.0, currentHours + degradationToAdd),
+                            "updated_at": time.time()
+                        }
+
                     planterSlotsToHarvest = []
-                    for i in range(5):
-                        nectar = macro.setdat[f"auto_priority_{i}_nectar"]
-                        if nectar == "none":
-                            continue
-                        currentNectarPerc = macro.buffDetector.getNectar(nectar)
-                        estimateNectarPerc = getEstimateNectarPercent(nectar) 
-                        if (macro.setdat["auto_planters_collect_auto"] and (
-                            (currentNectarPerc > 99) or
-                            (currentNectarPerc > 90 and currentNectarPerc + estimateNectarPerc > 110) or
-                            (currentNectarPerc + estimateNectarPerc > 120)
-                            )):
-                            for j in range(3):
-                                if (nectar == planterData[j]["nectar"]):
-                                    planterSlotsToHarvest.append(j)
-                    
-                    for i in range(3):
-                        planter = planterData[i]
+                    if macro.setdat["auto_planters_collect_auto"]:
+                        for nectarName in macroModule.nectarNames:
+                            matchingPlanters = []
+                            currentNectarPercent = getCurrentNectarPercent(nectarName)
+                            projectedNectarPercent = getTotalNectarPercent(nectarName)
+
+                            if currentNectarPercent >= 99:
+                                requiredProgress = 0.0
+                            elif projectedNectarPercent >= 120:
+                                requiredProgress = 0.55
+                            elif currentNectarPercent >= 90 and projectedNectarPercent >= 110:
+                                requiredProgress = 0.75
+                            else:
+                                continue
+
+                            for slot, planter in enumerate(planterData):
+                                if planter["planter"] and planter.get("nectar") == nectarName:
+                                    matchingPlanters.append((slot, planter, getNaturalPlanterProgress(planter)))
+
+                            matchingPlanters.sort(key=lambda item: (-item[2], item[1]["harvest_time"]))
+                            remainingProjected = projectedNectarPercent
+                            targetProjected = max(getPriorityInfo(nectarName)["min"] + 5, 100)
+
+                            for slot, planter, progress in matchingPlanters:
+                                timeRemaining = max(0, planter["harvest_time"] - time.time())
+                                if currentNectarPercent < 99 and progress < requiredProgress and timeRemaining > 45 * 60:
+                                    continue
+                                planterSlotsToHarvest.append(slot)
+                                remainingProjected -= max(0, planter.get("nectar_est_percent", 0))
+                                if remainingProjected <= targetProjected:
+                                    break
+
+                    for slot, planter in enumerate(planterData):
                         if planter["planter"] and time.time() > planter["harvest_time"]:
-                            planterSlotsToHarvest.append(i)
-                    
-                    planterSlotsToHarvest = list(set(planterSlotsToHarvest))
+                            planterSlotsToHarvest.append(slot)
+
+                    planterSlotsToHarvest = sorted(set(planterSlotsToHarvest))
                     for slot in planterSlotsToHarvest:
                         planter = planterData[slot]
+                        if not planter["planter"]:
+                            continue
                         if runTask(macro.collectPlanter, args=(planter["planter"], planter["field"])):
-                            planterData[slot] = {
-                                "planter": "",
-                                "nectar": "",
-                                "field": "",
-                                "harvest_time": 0,
-                                "nectar_est_percent": 0
-                            }
+                            recordFieldDegradation(planter)
+                            planterData[slot] = emptyAutoPlanterSlot()
+                            currentNectarCache.clear()
                             saveAutoPlanterData()
-                    
+
                     maxAllowedPlanters = 0
-                    for x in macroModule.allPlanters:
-                        x = x.replace(" ","_")
-                        if macro.setdat[f"auto_planter_{x}"]:
+                    for planterName in macroModule.allPlanters:
+                        settingName = planterName.replace(" ", "_")
+                        if macro.setdat.get(f"auto_planter_{settingName}", False):
                             maxAllowedPlanters += 1
                     maxAllowedPlanters = min(maxAllowedPlanters, macro.setdat["auto_max_planters"])
 
-                    plantersPlaced = sum(bool(p["planter"]) for p in planterData)
+                    blockedPlacements = set()
 
-                    for i in range(5):
+                    def getAvailableFields(occupiedFields):
+                        return [
+                            field for field in fieldToNectar
+                            if macro.setdat.get(f"auto_field_{field.replace(' ', '_')}", False) and field not in occupiedFields
+                        ]
+
+                    def buildPlacementCandidates(occupiedFields, occupiedPlanters):
+                        candidates = []
+                        for field in getAvailableFields(occupiedFields):
+                            addedForField = 0
+                            for planterObj in macroModule.autoPlanterRankings.get(field, []):
+                                planterName = planterObj["name"]
+                                if planterName in occupiedPlanters or (planterName, field) in blockedPlacements:
+                                    continue
+
+                                settingPlanter = planterName.replace(" ", "_")
+                                if not macro.setdat.get(f"auto_planter_{settingPlanter}", False):
+                                    continue
+                                if not macro.setdat.get(f"auto_planter_{settingPlanter}_field_{field.replace(' ', '_')}", True):
+                                    continue
+
+                                candidates.append({
+                                    "field": field,
+                                    "nectar": fieldToNectar[field],
+                                    "planter": planterName,
+                                    "planter_obj": planterObj
+                                })
+                                addedForField += 1
+                                if addedForField >= 4:
+                                    break
+                        return candidates
+
+                    def evaluateCandidate(candidate, projectedNectarPercentages, availableFieldCounts):
+                        nectar = candidate["nectar"]
+                        priorityInfo = getPriorityInfo(nectar)
+                        projectedPercent = projectedNectarPercentages[nectar]
+                        if projectedPercent >= max(priorityInfo["min"] + 20, 110):
+                            return None
+
+                        placementPlan = calculatePlacementPlan(candidate["field"], candidate["planter_obj"], nectar, projectedPercent)
+                        if placementPlan["nectar_est_percent"] <= 0:
+                            return None
+
+                        deficitToMin = max(0.0, priorityInfo["min"] - projectedPercent)
+                        if deficitToMin > 0:
+                            needWeight = 1.0 + (deficitToMin / 18.0)
+                        elif projectedPercent < 100:
+                            needWeight = 0.45 + ((100 - projectedPercent) / 160.0)
+                        else:
+                            needWeight = max(0.05, 0.18 - ((projectedPercent - 100) / 120.0))
+
+                        score = candidate["planter_obj"]["nectar_bonus"] * candidate["planter_obj"]["grow_bonus"]
+                        score *= priorityInfo["weight"] * needWeight
+
+                        if availableFieldCounts.get(nectar, 0) > 1 and nectarLastFields.get(nectar) == candidate["field"]:
+                            score *= 0.97
+
+                        degradationHours = getFieldDegradationHours(candidate["field"])
+                        degradationPenalty = 1 / (1 + (degradationHours / 12.0))
+                        score *= degradationPenalty
+                        score *= max(0.1, candidate["planter_obj"]["grow_time"] / max(0.1, placementPlan["natural_grow_duration"] / 3600.0))
+
+                        return {
+                            "score": score,
+                            "plan": placementPlan
+                        }
+
+                    def findBestPlacements(slotsRemaining, occupiedFields, occupiedPlanters, projectedNectarPercentages):
+                        if slotsRemaining <= 0:
+                            return 0.0, []
+
+                        candidates = buildPlacementCandidates(occupiedFields, occupiedPlanters)
+                        if not candidates:
+                            return 0.0, []
+
+                        availableFieldCounts = {}
+                        for candidate in candidates:
+                            nectar = candidate["nectar"]
+                            availableFieldCounts[nectar] = availableFieldCounts.get(nectar, 0) + 1
+
+                        scoredCandidates = []
+                        for candidate in candidates:
+                            evaluation = evaluateCandidate(candidate, projectedNectarPercentages, availableFieldCounts)
+                            if evaluation and evaluation["score"] > 0:
+                                scoredCandidates.append((evaluation["score"], candidate, evaluation["plan"]))
+
+                        if not scoredCandidates:
+                            return 0.0, []
+
+                        scoredCandidates.sort(key=lambda item: item[0], reverse=True)
+                        scoredCandidates = scoredCandidates[:36]
+
+                        bestScore = 0.0
+                        bestPlacements = []
+
+                        for score, candidate, placementPlan in scoredCandidates:
+                            updatedProjected = projectedNectarPercentages.copy()
+                            updatedProjected[candidate["nectar"]] += placementPlan["nectar_est_percent"]
+
+                            futureScore, futurePlacements = findBestPlacements(
+                                slotsRemaining - 1,
+                                occupiedFields | {candidate["field"]},
+                                occupiedPlanters | {candidate["planter"]},
+                                updatedProjected
+                            )
+
+                            totalScore = score + futureScore
+                            if totalScore > bestScore:
+                                bestScore = totalScore
+                                bestPlacements = [(candidate, placementPlan)] + futurePlacements
+
+                        return bestScore, bestPlacements
+
+                    while True:
+                        plantersPlaced = sum(bool(planter["planter"]) for planter in planterData)
                         if plantersPlaced >= maxAllowedPlanters:
                             break
-                        nectar = macro.setdat[f"auto_priority_{i}_nectar"]
-                        for j in range(3):
-                            # Stop placing if we've reached the allowed maximum
-                            if plantersPlaced >= maxAllowedPlanters:
-                                break
-                            planter = planterData[j]
-                            if planter["planter"]:
-                                continue
 
-                            nextField = getNextField(nectar)
-                            if nextField is None:
-                                break
+                        openSlots = [idx for idx, planter in enumerate(planterData) if not planter["planter"]]
+                        if not openSlots:
+                            break
 
-                            minPerc = macro.setdat[f"auto_priority_{i}_min"]
-                            totalNectarPercent = getTotalNectarPercent(nectar)
-                            if totalNectarPercent > minPerc:
-                                break
+                        projectedNectarPercentages = {
+                            nectarName: getTotalNectarPercent(nectarName)
+                            for nectarName in macroModule.nectarNames
+                        }
+                        occupiedFields = {planter["field"] for planter in planterData if planter["field"]}
+                        occupiedPlanters = {planter["planter"] for planter in planterData if planter["planter"]}
+                        _, plannedPlacements = findBestPlacements(
+                            min(len(openSlots), maxAllowedPlanters - plantersPlaced),
+                            occupiedFields,
+                            occupiedPlanters,
+                            projectedNectarPercentages
+                        )
 
-                            planterToPlace = getBestPlanter(nextField)
-                            if planterToPlace is None:
-                                break
-                                if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False, allowAFB=False):
-                                    savePlacedPlanter(j, nextField, planterToPlace, nectar)
-                                    # If global gather is enabled, gather the field immediately so it is harvested while planter grows
-                                    try:
-                                        if gatherFlag:
-                                            runTask(macro.gather, args=(nextField,), resetAfter=False)
-                                    except NameError:
-                                        pass
-                                    plantersPlaced += 1
-                                    # If we've reached the allowed number, stop trying more placements
-                                    if plantersPlaced >= maxAllowedPlanters:
-                                        break
-                    
-                    if plantersPlaced < maxAllowedPlanters:
-                        nectarPercentages = []
-                        # Build nectar percentages using the detector
-                        for nectar in macroModule.nectarFields:
-                            try:
-                                nectarPercentages.append((nectar, macro.buffDetector.getNectar(nectar)))
-                            except Exception:
-                                nectarPercentages.append((nectar, 0.0))
-                        nectarPercentages.sort(key=lambda x: x[1])
+                        if not plannedPlacements:
+                            break
 
-                        for nectar, totalNectarPercent in nectarPercentages:
-                            if plantersPlaced >= maxAllowedPlanters:
-                                break
-                            for j in range(3):
-                                # Stop placing if we've reached the allowed maximum
-                                if plantersPlaced >= maxAllowedPlanters:
-                                    break
-                                planter = planterData[j]
-                                if planter["planter"]:
-                                    continue
+                        slot = openSlots[0]
+                        candidate, placementPlan = plannedPlacements[0]
+                        macro.logger.webhook(
+                            "",
+                            f"Auto-planter chose {candidate['planter'].title()} in {candidate['field'].title()} for {candidate['nectar'].title()}",
+                            "dark brown"
+                        )
 
-                                nextField = getNextField(nectar)
-                                if nextField is None:
-                                    break
-
-                                if totalNectarPercent > 110:
-                                    break
-
-                                planterToPlace = getBestPlanter(nextField)
-                                if planterToPlace is None:
-                                    break
-                                if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False, allowAFB=False):
-                                    savePlacedPlanter(j, nextField, planterToPlace, nectar)
-                                    try:
-                                        if gatherFlag:
-                                            runTask(macro.gather, args=(nextField,), resetAfter=False)
-                                    except NameError:
-                                        pass
-                                    plantersPlaced += 1
-                                    if plantersPlaced >= maxAllowedPlanters:
-                                        break
-                    
-                    if plantersPlaced < maxAllowedPlanters:
-                        for i in range(5):
-                            if plantersPlaced >= maxAllowedPlanters:
-                                break
-                            nectar = macro.setdat[f"auto_priority_{i}_nectar"]
-                            for j in range(3):
-                                # Stop placing if we've reached the allowed maximum
-                                if plantersPlaced >= maxAllowedPlanters:
-                                    break
-                                planter = planterData[j]
-                                if planter["planter"]:
-                                    continue
-
-                                nextField = getNextField(nectar)
-                                if nextField is None:
-                                    break
-
-                                planterToPlace = getBestPlanter(nextField)
-                                if planterToPlace is None:
-                                    break
-                                if runTask(macro.placePlanter, args=(planterToPlace["name"], nextField, False), convertAfter=False, allowAFB=False):
-                                    savePlacedPlanter(j, nextField, planterToPlace, nectar)
-                                    try:
-                                        if gatherFlag:
-                                            runTask(macro.gather, args=(nextField,), resetAfter=False)
-                                    except NameError:
-                                        pass
-                                    plantersPlaced += 1
-                                    if plantersPlaced >= maxAllowedPlanters:
-                                        break
+                        if runTask(
+                            macro.placePlanter,
+                            args=(candidate["planter"], candidate["field"], False),
+                            convertAfter=False,
+                            allowAFB=False
+                        ):
+                            savePlacedPlanter(slot, candidate["field"], candidate["planter_obj"], candidate["nectar"], placementPlan)
+                            if gatherFlag:
+                                runTask(macro.gather, args=(candidate["field"],), resetAfter=False)
+                        else:
+                            blockedPlacements.add((candidate["planter"], candidate["field"]))
                     
                     executedTasks.add(taskId)
                     return True
