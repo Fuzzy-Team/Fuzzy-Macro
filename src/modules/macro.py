@@ -5840,8 +5840,8 @@ class macro:
         }
 
         normalized = self._normalizeAFBText(rawBlueTexts)
-        tokens = set(normalized.split())
         boostedLines = [line for line in rawBlueTexts.split("\n") if "boosted" in line.lower()]
+        tokens = set(normalized.split()) if not boostedLines else set()
         boostedFields = []
         for candidate in candidateFields:
             fieldPatterns = fields.get(candidate, [[x for x in candidate.split() if x]])
@@ -5853,7 +5853,7 @@ class macro:
                     continue
                 for pattern in fieldPatterns:
                     patternSet = set(pattern)
-                    if patternSet.issubset(tokens) or patternSet.issubset(lineTokens):
+                    if patternSet.issubset(lineTokens) or (not boostedLines and patternSet.issubset(tokens)):
                         if candidate not in boostedFields:
                             boostedFields.append(candidate)
                         break
@@ -5870,11 +5870,10 @@ class macro:
             self.logger.webhook("AFB", "Time limit reached: Skipping", "red")
             self.AFBLIMIT = True
 
-        goToField = threading.Thread(target=self.goToField, args=(self.setdat["AFB_field"],))
-        Glitter = threading.Thread(target=self.useItemInInventory, args=("glitter",))
-
         attempts = max(1, int(self.setdat.get("AFB_attempts", 0) or self.setdat.get("attempts", 1) or 1))
         targetFields = self._getAFBTargetFields()
+        goToField = threading.Thread(target=self.goToField, args=(targetFields[0],))
+        Glitter = threading.Thread(target=self.useItemInInventory, args=("glitter",))
         rebuff = self.setdat["AFB_rebuff"]
         dice = self.setdat["AFB_dice"]
         glitter = self.setdat["AFB_glitter"]
