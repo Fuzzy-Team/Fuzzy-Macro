@@ -6019,7 +6019,7 @@ class macro:
                 self.keyboard.press("pagedown")
                 for _ in range(3):
                     self.keyboard.press("o")
-                self.logger.webhook("", f"Failed to boost {targetFields}", "red")
+                self.logger.webhook("", f"Failed to boost {', '.join(targetFields)}", "red")
                 self.saveAFB("AFB_dice_cd")
                 if glitter:
                     self.saveAFB("AFB_glitter_cd")
