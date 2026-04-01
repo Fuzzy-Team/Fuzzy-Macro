@@ -5870,7 +5870,7 @@ class macro:
             self.logger.webhook("AFB", "Time limit reached: Skipping", "red")
             self.AFBLIMIT = True
 
-        attempts = max(1, int(self.setdat.get("AFB_attempts", 0) or self.setdat.get("attempts", 1) or 1))
+        attempts = max(1, int(self.setdat.get("AFB_attempts", 10) or self.setdat.get("attempts", 10) or 10))
         targetFields = self._getAFBTargetFields()
         goToField = threading.Thread(target=self.goToField, args=(targetFields[0],))
         Glitter = threading.Thread(target=self.useItemInInventory, args=("glitter",))
