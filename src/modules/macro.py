@@ -5938,42 +5938,46 @@ class macro:
                         for _ in range(8):
                             bluetexts += ocr.imToString("blue") + "\n"
 
-                        boostedFields = self._extractAFBBoostedFields(bluetexts, targetFields)
-                        boostedField = boostedFields[0] if boostedFields else None
+                                    allCandidateFields = list(startLocationDimensions.keys())
 
-                        if "field" in dice:
-                            if boostedField is not None:
-                                self.logger.webhook("", f"Boosted Field: {boostedField}", "bright green", "blue")
-                                returnVal = targetFields
-                                self.keyboard.press("pagedown")
-                                for _ in range(3):
-                                    self.keyboard.press("o")
-                                if diceslot == 0:
-                                    self.toggleInventory("close")
-                                self.saveAFB("AFB_dice_cd")
-                                if glitter:
-                                    self.AFBglitter = True
-                                return returnVal
-                            continue
+            if "field" in dice:
+                boostedFields = self._extractAFBBoostedFields(bluetexts, targetFields)
+                boostedField = boostedFields[0] if boostedFields else None
 
-                        if any(targetField in boostedFields for targetField in targetFields):
-                            self.logger.webhook("", f"Boosted Fields: {', '.join(boostedFields)}", "blue")
-                            returnVal = targetFields
-                            self.keyboard.press("pagedown")
-                            for _ in range(3):
-                                self.keyboard.press("o")
-                            if diceslot == 0:
-                                self.toggleInventory("close")
-                            self.saveAFB("AFB_dice_cd")
-                            if glitter:
-                                self.AFBglitter = True
-                            return returnVal
+                if boostedField is not None:
+                    self.logger.webhook("", f"Boosted Field: {boostedField}", "bright green", "blue")
+                    returnVal = targetFields
+                    self.keyboard.press("pagedown")
+                    for _ in range(3):
+                        self.keyboard.press("o")
+                    if diceslot == 0:
+                        self.toggleInventory("close")
+                    self.saveAFB("AFB_dice_cd")
+                    if glitter:
+                        self.AFBglitter = True
+                    return returnVal
+                continue
 
-                        if boostedFields:
-                            self.logger.webhook("", f"Boosted Fields: {', '.join(boostedFields)}", "red")
-                        else:
-                            self.logger.webhook("", "Boosted Fields: None", "red")
-                        time.sleep(0.5)
+            boostedFields = self._extractAFBBoostedFields(bluetexts, allCandidateFields)
+            targetBoostedFields = [field for field in boostedFields if field in targetFields]
+
+            if targetBoostedFields:
+                self.logger.webhook("", f"Boosted Fields: {', '.join(targetBoostedFields)}", "blue")
+                returnVal = targetFields
+                self.keyboard.press("pagedown")
+                for _ in range(3):
+                    self.keyboard.press("o")
+                if diceslot == 0:
+                    self.toggleInventory("close")
+                self.saveAFB("AFB_dice_cd")
+                if glitter:
+                    self.AFBglitter = True
+                return returnVal
+
+            if boostedFields:
+                self.logger.webhook("", f"Boosted Fields: {', '.join(boostedFields)}", "red")
+            else:
+                self.logger.webhook("", "Boosted Fields: None", "red")
 
                 if glitter and not self.failed and self.hasAFBRespawned("AFB_glitter_cd", rebuff*60):
                     if self.AFBglitter:
