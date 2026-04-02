@@ -7,6 +7,27 @@ import tempfile
 from datetime import datetime
 import re
 
+FUZZY_AI_FIELD_DEFAULTS = {
+    "goo": False,
+    "goo_interval": 3,
+    "use_whirlwig_fallback": False,
+    "fuzzy_ai_confidence_threshold": 0.4,
+    "fuzzy_ai_sprinkler_confidence_threshold": 0.6,
+    "fuzzy_ai_min_token_distance": 0.3,
+    "fuzzy_ai_idle_return_interval": 1.5,
+    "fuzzy_ai_no_token_recalibration_timeout": 12.0,
+    "fuzzy_ai_movements_before_recalibration": 10,
+    "fuzzy_ai_sprinkler_arrival_threshold": 0.8,
+    "fuzzy_ai_max_sprinkler_distance": 10.0,
+    "fuzzy_ai_sprinkler_rescan_attempts": 3,
+    "fuzzy_ai_sprinkler_rescan_delay": 0.3,
+    "fuzzy_ai_target_sprinkler_label": "",
+    "fuzzy_ai_preferred_tokens": "Token Link,Focus,Melody,Blue Boost,Honey Mark,Honey Mark Token,Pollen Mark,Pollen Mark Token,Haste",
+    "fuzzy_ai_ignored_tokens": "Honey,Blueberry",
+    "fuzzy_ai_calibration_path": "settings/patterns/ai_gather_points.txt",
+    "fuzzy_ai_capture_backend": "auto",
+}
+
 #returns a dictionary containing the settings
 profileName = "a"
 # Track profile changes for running macro processes
@@ -68,6 +89,47 @@ def getSettingsDir():
 def getPatternsDir():
     """Get the patterns directory path"""
     return os.path.join(getProjectRoot(), "settings", "patterns")
+
+def getFuzzyAIModelPath(model_filename):
+    """Get the fixed fuzzy AI model path under src/data/models."""
+    return os.path.join(getProjectRoot(), "src", "data", "models", model_filename)
+
+def resolveProjectPath(path_value):
+    """Resolve a path relative to the project root."""
+    if path_value is None:
+        return None
+
+    path_text = str(path_value).strip()
+    if not path_text:
+        return None
+
+    if os.path.isabs(path_text):
+        return os.path.normpath(path_text)
+
+    return os.path.normpath(os.path.join(getProjectRoot(), path_text))
+
+def loadDefaultFields():
+    """Load default field settings from the bundled defaults."""
+    defaults_path = os.path.join(getDefaultSettingsPath(), "fields.txt")
+    with open(defaults_path) as f:
+        out = ast.literal_eval(f.read())
+    return out
+
+def normalizeFieldSettings(field_name, settings, default_fields=None):
+    """Merge bundled defaults into a field settings object."""
+    if default_fields is None:
+        default_fields = loadDefaultFields()
+
+    normalized = dict(FUZZY_AI_FIELD_DEFAULTS)
+
+    default_field_settings = default_fields.get(field_name)
+    if isinstance(default_field_settings, dict):
+        normalized.update(default_field_settings)
+
+    if isinstance(settings, dict):
+        normalized.update(settings)
+
+    return normalized
 
 def getMacroVersion():
     """Get the macro version from version.txt file"""
@@ -410,11 +472,25 @@ def _loadFieldsFile(fields_path, repair=True):
 
 def loadFields():
     fields_path = os.path.join(getProfilePath(), "fields.txt")
-    return _loadFieldsFile(fields_path)
+    out = _loadFieldsFile(fields_path)
+
+    default_fields = loadDefaultFields()
+    fieldsUpdated = False
+    for field, settings in out.items():
+        normalized = normalizeFieldSettings(field, settings, default_fields)
+        if normalized != settings:
+            out[field] = normalized
+            fieldsUpdated = True
+
+    if fieldsUpdated:
+        with open(fields_path, "w") as f:
+            f.write(str(out))
+
+    return out
 
 def saveField(field, settings):
     fieldsData = loadFields()
-    fieldsData[field] = settings
+    fieldsData[field] = normalizeFieldSettings(field, settings)
     fields_path = os.path.join(getProfilePath(), "fields.txt")
     with open(fields_path, "w") as f:
         f.write(str(fieldsData))
@@ -458,8 +534,11 @@ def importFieldSettings(field_name, json_settings):
         if not isinstance(settings, dict):
             raise ValueError("Invalid JSON format: expected object")
 
+        settings = normalizeFieldSettings(field_name, settings)
+
         # Check for missing patterns and replace with defaults
         missing_patterns = []
+        warnings = []
         available_patterns = getAvailablePatterns()
 
         if "shape" in settings:
@@ -470,6 +549,18 @@ def importFieldSettings(field_name, json_settings):
                 settings["shape"] = default_pattern
                 missing_patterns.append(f"'{requested_pattern}' → '{default_pattern}'")
 
+        if settings.get("shape") == "fuzzy_ai_gather":
+            blue_model = getFuzzyAIModelPath("blue.onnx")
+            sprinkler_model = getFuzzyAIModelPath("sprinkler.onnx")
+            calibration_path = resolveProjectPath(settings.get("fuzzy_ai_calibration_path"))
+
+            if not os.path.exists(blue_model):
+                warnings.append("Missing blue model: src/data/models/blue.onnx")
+            if not os.path.exists(sprinkler_model):
+                warnings.append("Missing sprinkler model: src/data/models/sprinkler.onnx")
+            if calibration_path and not os.path.exists(calibration_path):
+                warnings.append(f"Missing calibration file: {settings.get('fuzzy_ai_calibration_path')}")
+
         # Save the imported settings
         saveField(field_name, settings)
 
@@ -477,6 +568,7 @@ def importFieldSettings(field_name, json_settings):
         result = {
             "success": True,
             "missing_patterns": missing_patterns,
+            "warnings": warnings,
             "imported_from_field": exported_field,
             "macro_version": macro_version
         }
@@ -489,7 +581,12 @@ def getAvailablePatterns():
     """Get list of available pattern names"""
     patterns_dir = getPatternsDir()
     if os.path.exists(patterns_dir):
-        return [f.replace(".py", "") for f in os.listdir(patterns_dir) if f.endswith(".py")]
+        out = []
+        for filename in os.listdir(patterns_dir):
+            root, ext = os.path.splitext(filename)
+            if ext.lower() in (".py", ".ahk"):
+                out.append(root)
+        return sorted(out)
     return []
 
 def syncFieldSettings(setting, value):
