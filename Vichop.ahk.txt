@@ -1,0 +1,2369 @@
+; ============================================================================
+; DEBUG LOGGING - Add this entire block to the top of your script
+; ============================================================================
+global LOG_FILE_PATH := A_ScriptDir . "\vichop_debug.log"
+
+global VichopAccountType
+global useServerFetching
+global SpiderEnabled
+global vichop_alt_WEBHOOK_URL
+
+global vichop_main_CHANNEL_ID
+global SpeedHopEnabled
+global Use3rdPartyJoin
+
+global USER_AGENT := "BSSAI"
+global API_URL := "https://bssservers.bssmvalues.com"
+
+; shared global variables
+global serverIds := []
+global JoinAttempts := 0
+global SearcherJoinID := ""
+
+global SessionNightsDetected := 0
+global SessionVicsKilled := 0
+global SessionServersJoined := 0
+global SessionVicsSpotted := 0
+; Write initial session stats (reset to 0)
+IniWrite(0, "settings\settings.ini", "Vichop", "session_vics_killed")
+IniWrite(0, "settings\settings.ini", "Vichop", "session_nights_detected")
+IniWrite(0, "settings\settings.ini", "Vichop", "session_servers_joined")
+IniWrite(0, "settings\settings.ini", "Vichop", "session_vics_spotted")
+
+vichop_main_lastTimestamp := DateDiff(A_Now, "19700101000000", "Seconds")
+
+global VichopTimeSpent := 0
+global LastVichopHour := -1
+
+/**
+ * join random bee swarm simulator server
+ * automatically chooses between old roblox api or new bss server api
+ * based on useServerFetching global variable
+ */
+JoinRandomServer() {
+    global JoinAttempts, serverIds, SearcherJoinID, useServerFetching, Use3rdPartyJoin
+    static retryDelay := 15000, failCount := 0
+    
+    if (serverIds.Length > 0) {
+        Index := Random(1, serverIds.Length)
+        RandomServer := serverIds[Index]
+        serverIds.RemoveAt(Index)
+        SearcherJoinID := RandomServer
+        JoinAttempts++
+        try {
+            if (Use3rdPartyJoin)
+                run '"roblox://placeId=108137290948605&launchData=1537690962/' RandomServer '"'
+            else
+                run '"roblox://placeId=1537690962&gameInstanceId=' RandomServer '"'
+            failCount := 0
+            retryDelay := 15000
+            return true
+        } catch Error as e {
+            return false
+        }
+    }
+    
+    if GetServerIds() {
+        if (serverIds.Length > 0) {
+            Index := Random(1, serverIds.Length)
+            RandomServer := serverIds[Index]
+            serverIds.RemoveAt(Index)
+            SearcherJoinID := RandomServer
+            JoinAttempts++
+            try {
+                if (Use3rdPartyJoin)
+                    run '"roblox://placeId=108137290948605&launchData=1537690962/' RandomServer '"'
+                else
+                    run '"roblox://placeId=1537690962&gameInstanceId=' RandomServer '"'
+                failCount := 0
+                retryDelay := 15000
+                return true
+            } catch Error as e {
+                return false
+            }
+        }
+    }
+    
+    if (useServerFetching) {
+        if FetchServersFromAPI() {
+            if (serverIds.Length > 0) {
+                Index := Random(1, serverIds.Length)
+                RandomServer := serverIds[Index]
+                serverIds.RemoveAt(Index)
+                SearcherJoinID := RandomServer
+                JoinAttempts++
+                try {
+                    if (Use3rdPartyJoin)
+                        run '"roblox://placeId=108137290948605&launchData=1537690962/' RandomServer '"'
+                    else
+                        run '"roblox://placeId=1537690962&gameInstanceId=' RandomServer '"'
+                    failCount := 0
+                    retryDelay := 15000
+                    return true
+                } catch Error as e {
+                    return false
+                }
+            }
+        }
+    }
+    
+    failCount++
+    if (failCount == 1)
+        retryDelay := 15000
+    else if (failCount == 2)
+        retryDelay := 30000
+    else
+        retryDelay := 60000
+    
+    SetStatus("Vichop", "Failed to get servers. Retrying in " (retryDelay/1000) "s...")
+    Sleep retryDelay
+    
+    if (JoinAttempts >= 15) {
+        if !GetServerIds() {
+            if (useServerFetching) {
+                FetchServersFromAPI()
+            }
+        }
+        JoinAttempts := 0
+    }
+    
+    return false
+}
+
+
+GetServerIds() {
+    global serverIds
+    
+    DllCall("AllocConsole")
+    hConsole := DllCall("GetConsoleWindow", "ptr")
+    if (hConsole) {
+        WinHide("ahk_id " hConsole)
+    }
+    
+    try {
+        psCommand := 'powershell.exe -NoProfile -Command "try { (Invoke-RestMethod -Uri `'https://games.roblox.com/v1/games/1537690962/servers/0?sortOrder=1&excludeFullGames=true&limit=100`').data.id } catch { `'`' }"'
+        
+        Shell := ComObject("WScript.Shell")
+        Process := Shell.Exec(psCommand)
+        
+        serverListOutput := Process.StdOut.ReadAll()
+        
+        if !Trim(serverListOutput) {
+            DllCall("FreeConsole")
+            return false
+        }
+        
+        serverIds := []
+        Loop Parse, serverListOutput, "`r`n" {
+            if (A_LoopField) {
+                serverIds.Push(A_LoopField)
+            }
+        }
+        
+        DllCall("FreeConsole")
+        
+        if (serverIds.Length > 0) {
+            return true
+        } else {
+            return false
+        }
+        
+    } catch Error as e {
+        DllCall("FreeConsole")
+        return false
+    }
+}
+
+CreateUnixTimestamp() {
+    utcTime := A_NowUTC
+    unixEpoch := "19700101000000"
+    return DateDiff(utcTime, unixEpoch, "Seconds")
+}
+
+ParseAPIResponse(text) {
+    result := Map()
+    result["servers"] := []
+    
+    try {
+        if RegExMatch(text, '"servers":\s*\[(.*?)\]', &serversMatch) {
+            serversString := serversMatch[1]
+            servers := []
+            
+            pos := 1
+            while RegExMatch(serversString, '"([^"]+)"', &serverMatch, pos) {
+                server := serverMatch[1]
+                if (StrLen(server) > 10) {
+                    servers.Push(server)
+                }
+                pos := serverMatch.Pos + serverMatch.Len
+            }
+            
+            result["servers"] := servers
+        }
+    } catch {
+        ; silent fail
+    }
+    
+    return result
+}
+
+FetchServersFromAPI() {
+    global serverIds, API_URL, USER_AGENT
+    
+    try {
+        req := ComObject("WinHttp.WinHttpRequest.5.1")
+        req.SetTimeouts(5000, 5000, 15000, 45000)
+        
+        url := API_URL "/api/servers"
+        req.Open("GET", url, true)
+        
+        req.SetRequestHeader("User-Agent", USER_AGENT)
+        
+        req.Send()
+        req.WaitForResponse()
+
+        if (req.Status == 200) {
+            response := ParseAPIResponse(req.ResponseText)
+            
+            if (response.Has("servers") && response["servers"].Length > 0) {
+                serverIds := response["servers"]
+                return true
+            }
+        }
+        return false
+        
+    } catch Error as e {
+        return false
+    }
+}
+
+; ============================================================================
+; utility functions
+; ============================================================================
+
+/**
+ * toggle between server fetching methods
+ * @param {boolean} useBSSAPI - true for bss server api, false for direct roblox api
+ */
+SetServerFetchingMethod(useBSSAPI) {
+    global useServerFetching
+    useServerFetching := useBSSAPI
+    
+    ; clear existing server cache when switching methods
+    global serverIds := []
+    global JoinAttempts := 0
+}
+
+/**
+ * get current server fetching method
+ * @return {string} method description
+ */
+GetCurrentMethod() {
+    global useServerFetching
+    return useServerFetching ? "BSS Server API" : "Direct Roblox API"
+}
+
+/**
+ * get current server count in cache
+ * @return {integer} number of servers cached
+ */
+GetCachedServerCount() {
+    global serverIds
+    return serverIds.Length
+}
+
+/**
+ * force refresh server list using current method
+ */
+RefreshServerList() {
+    global useServerFetching, serverIds, JoinAttempts
+    
+    serverIds := []
+    JoinAttempts := 0
+    
+    if (useServerFetching) {
+        FetchServersFromAPI()
+    } else {
+        GetServerIds()
+    }
+}
+
+ClaimHiveVichop() {
+    GetBitmap() {
+        pBMScreen := Gdip_BitmapFromScreen(windowX + windowWidth // 2 - 200 "|" windowY + offsetY "|400|125")
+        while ((A_Index <= 20) && (Gdip_ImageSearch(pBMScreen, bitmaps["FriendJoin"], , , , , , 6) = 1)) {
+            Gdip_DisposeImage(pBMScreen)
+            MouseMove windowX + windowWidth // 2 - 3, windowY + 24
+            Click
+            MouseMove windowX + 350, windowY + offsetY + 100
+            Sleep 500
+            pBMScreen := Gdip_BitmapFromScreen(windowX + windowWidth // 2 - 200 "|" windowY + offsetY "|400|125")
+        }
+        return pBMScreen
+    }
+
+    loop 2 {
+        Rotate("up", 10)
+        loop 10 {
+            send "{" ZoomOut "}"
+            Sleep 10 + KeyDelay
+        }
+        
+        ; Clear friend join popup
+        pBMScreen := GetBitmap()
+        Gdip_DisposeImage(pBMScreen)
+
+        yCoords := GetRelativeY(94, 109)
+        y1 := yCoords.Min
+        y2 := yCoords.Max
+
+        x1Coords := GetRelativeX(1492, 1525)
+        x1_1 := x1Coords.Min
+        x1_2 := x1Coords.Max
+        x2Coords := GetRelativeX(1220, 1245)
+        x2_1 := x2Coords.Min
+        x2_2 := x2Coords.Max
+        x3Coords := GetRelativeX(945, 965)
+        x3_1 := x3Coords.Min
+        x3_2 := x3Coords.Max
+        x4Coords := GetRelativeX(665, 690)
+        x4_1 := x4Coords.Min
+        x4_2 := x4Coords.Max
+        x5Coords := GetRelativeX(380, 420)
+        x5_1 := x5Coords.Min
+        x5_2 := x5Coords.Max
+        x6Coords := GetRelativeX(100, 150)
+        x6_1 := x6Coords.Min
+        x6_2 := x6Coords.Max
+
+        DayColor := 0xE53C16      ; day color
+        NightColor := 0x6F1605    ; night color
+        ColorVariation := 30
+
+        hiveslots := [
+            {x1: x1_1, x2: x1_2, name: "Hiveslot 1"},
+            {x1: x2_1, x2: x2_2, name: "Hiveslot 2"},
+            {x1: x3_1, x2: x3_2, name: "Hiveslot 3"},
+            {x1: x4_1, x2: x4_2, name: "Hiveslot 4"},
+            {x1: x5_1, x2: x5_2, name: "Hiveslot 5"},
+            {x1: x6_1, x2: x6_2, name: "Hiveslot 6"}
+        ]
+
+        targetHiveSlot := 0
+        for index, slot in hiveslots {
+            if (PixelSearch(&foundX, &foundY, slot.x1, y1, slot.x2, y2, DayColor, ColorVariation) || 
+                PixelSearch(&foundX, &foundY, slot.x1, y1, slot.x2, y2, NightColor, ColorVariation)) {
+                targetHiveSlot := index
+                break
+            }
+        }
+
+        if (targetHiveSlot > 0) {
+            switch targetHiveSlot {
+                case 1:
+                    gt_hiveslot1()
+                case 2:
+                    gt_hiveslot2()
+                case 3:
+                    gt_hiveslot3()
+                case 4:
+                    gt_hiveslot4()
+                case 5:
+                    gt_hiveslot5()
+                case 6:
+                    gt_hiveslot6()
+            }
+            
+            if (CheckIfHiveIsClaimable()) {
+                PressE()
+                startTime := A_TickCount
+                Sleep(500)
+                while (A_TickCount - startTime < 4000) {
+                    if (IsAtHive()) {
+                        global Hiveslot := targetHiveSlot
+                        return true
+                    }
+                    Sleep(200)
+                }
+            }
+        } else {
+            gt_hiveslot1()
+            currentSlot := 1
+            loop 5 {
+                if (CheckIfHiveIsClaimable()) {
+                    PressE()
+                    startTime := A_TickCount
+                    Sleep(500)
+                    while (A_TickCount - startTime < 4000) {
+                        if (IsAtHive()) {
+                            global Hiveslot := currentSlot
+                            return true
+                        }
+                        Sleep(200)
+                    }
+                }
+                movement :=
+                    (
+                        '
+                BSSWalk(9, LeftKey)
+                HyperSleep(400)
+                '
+                    )
+                CreatePath(movement)
+                KeyWait "F14", "D T5 L"
+                KeyWait "F14", "T60 L"
+                EndWalk()
+                currentSlot++
+            }
+            ; Check final slot (6) without moving further
+            if (CheckIfHiveIsClaimable()) {
+                PressE()
+                startTime := A_TickCount
+                HyperSleep(500)
+                while (A_TickCount - startTime < 4000) {
+                    if (IsAtHive()) {
+                        global Hiveslot := 6
+                        return true
+                    }
+                    HyperSleep(200)
+                }
+            }
+        }
+        
+        if (targetHiveSlot > 0) {
+            movement :=
+                (
+                    '
+            BSSWalk(4, FwdKey)
+            BSSWalk(2, BackKey)
+            BSSWalk(' . (9.5 * targetHiveSlot) . ', RightKey)
+            BSSWalk(2, BackKey)
+            BSSWalk(3.5, LeftKey)
+            '
+                )
+            CreatePath(movement)
+            KeyWait "F14", "D T5 L"
+            KeyWait "F14", "T60 L"
+            EndWalk()
+            
+            currentSlot := 1
+            loop 5 {
+                if (CheckIfHiveIsClaimable()) {
+                    PressE()
+                    startTime := A_TickCount
+                    HyperSleep(500)
+                    while (A_TickCount - startTime < 4000) {
+                        if (IsAtHive()) {
+                            global Hiveslot := currentSlot
+                            return true
+                        }
+                        HyperSleep(200)
+                    }
+                }
+                movement :=
+                    (
+                        '
+                BSSWalk(9.3, LeftKey)
+                HyperSleep(400)
+                '
+                    )
+                CreatePath(movement)
+                KeyWait "F14", "D T5 L"
+                KeyWait "F14", "T60 L"
+                EndWalk()
+                currentSlot++
+            }
+            ; Check final slot (6)
+            if (CheckIfHiveIsClaimable()) {
+                PressE()
+                startTime := A_TickCount
+                HyperSleep(500)
+                while (A_TickCount - startTime < 4000) {
+                    if (IsAtHive()) {
+                        global Hiveslot := 6
+                        return true
+                    }
+                    HyperSleep(200)
+                }
+            }
+        }
+        
+        if (A_Index = 1) {
+            ResetCharacter()
+            HyperSleep(10000)
+        } else {
+            return false
+        }
+    }
+    
+    return false
+}
+
+CheckIfHiveIsClaimable() {
+    searchPhrase := "Claim"
+    result := OCR.FromDesktop(, 2)
+    found := result.FindStrings(searchPhrase)
+    if found.Length {
+        return true
+    } else {
+        return false
+    }
+}
+
+IsAtHive() {
+    global bitmaps
+    hwnd := GetRobloxHWND()
+    offsetY := GetYOffset(hwnd)
+    GetRobloxClientPos(hwnd)
+    
+    pBMScreen := Gdip_BitmapFromScreen(windowX + windowWidth // 2 - 200 "|" windowY + offsetY "|400|125")
+    isAtHive := ((Gdip_ImageSearch(pBMScreen, bitmaps["makehoney"], , , , , , 2, , 2) = 1) || (Gdip_ImageSearch(pBMScreen, bitmaps["collectpollen"], , , , , , 2, , 2) = 1))
+    Gdip_DisposeImage(pBMScreen)
+    
+    return isAtHive
+}
+
+Vichop_Hive_to_Pepper() {
+    global function, FwdKey, LeftKey, BackKey, RightKey, RotUp, RotDown, ZoomOut, KeyDelay
+    function := A_ThisFunc
+    gt_ramp() 
+    movement :=
+        (
+            '
+    Jump()
+    BSSWalk(3, RightKey)
+    BSSWalk(1.5, FwdKey, RightKey)
+    BSSWalk(25.29, RightKey)
+    Jump()
+    HyperSleep(303)
+    BSSWalk(0.91, RightKey)
+    BSSWalk(9.83, FwdKey, RightKey)
+    Jump()
+    HyperSleep(270)
+    BSSWalk(16, FwdKey)
+    Jump()
+    HyperSleep(219)
+    BSSWalk(4.18, FwdKey)
+    HyperSleep(100)
+    Jump()
+    HyperSleep(235)
+    BSSWalk(2.95, FwdKey)
+    HyperSleep(100)
+    Jump()
+    HyperSleep(237)
+    BSSWalk(3, FwdKey)
+    BSSWalk(11, FwdKey, RightKey)
+    BSSWalk(3, FwdKey)
+    Jump()
+    HyperSleep(267)
+    BSSWalk(2.66, FwdKey)
+    BSSWalk(13, FwdKey, RightKey)
+    Jump()
+    HyperSleep(230)
+    BSSWalk(10, RightKey)
+    BSSWalk(5, BackKey, RightKey)
+    SetShiftLock(1)
+    Loop 13 {
+        Send "{' . RotDown . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    Loop 5 {
+        Send "{' . RotUp . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    Loop 5 {
+        Send "{' . ZoomOut . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    '
+        )
+    CreatePath(movement)
+    KeyWait "F14", "D T5 L"
+    KeyWait "F14", "T60 L"
+    EndWalk()
+}
+
+Vichop_Pepper_to_Mountaintop() {
+    global function, FwdKey, LeftKey, BackKey, RightKey, RotLeft, RotRight, RotUp, RotDown, ZoomOut, KeyDelay, SC_E, accountType
+    function := A_ThisFunc
+    
+    movement :=
+        (
+            '
+    Loop 4 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    Loop 2 {
+        Send "{' . RotUp . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    Jump()
+    HyperSleep(300)
+    Send "{' . LeftKey . ' down}"
+    HyperSleep(300)
+    Send "{' . LeftKey . ' up}"
+    HyperSleep(300)
+    Loop 1 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    ActivateGlider()
+    HyperSleep(3010)
+    Loop 1 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    HyperSleep(600)
+    Jump()
+    HyperSleep(1200)
+    '
+        )
+    CreatePath(movement)
+    KeyWait "F14", "D T5 L"
+    KeyWait "F14", "T60 L"
+    EndWalk()
+
+    searchPhraseCannon := "Fire"  ; check if your on cannon
+    result := OCR.FromDesktop(, 2)
+    found := result.FindStrings(searchPhraseCannon)
+    if found.Length {
+        ; Continue
+    } else {
+        SetShiftLock(0)
+        
+        if (accountType = "main") {
+            ResetToHive(, , 0) ; 0 = dont convert
+            Loop 6 {
+                Send "{" ZoomOut "}"
+                Sleep(10 + KeyDelay)
+            }
+            gt_ramp()
+            gt_redcannon()
+        } else { ; alts
+            ResetCharacterAltVichop() ; Simple reset without hive check
+            Loop 6 {
+                Send "{" ZoomOut "}"
+                Sleep(10 + KeyDelay)
+            }
+            SpawnToCannon()
+        }
+        
+        SetShiftLock(1)
+        ; Small path for the rotation correction inside the else block
+        movement_fix :=
+            (
+                '
+        Loop 2 {
+            Send "{' . RotLeft . '}"
+            Sleep(10 + ' . KeyDelay . ')
+        }
+                '
+            )
+        CreatePath(movement_fix)
+        KeyWait "F14", "D T5 L"
+        KeyWait "F14", "T60 L"
+        EndWalk()
+    }
+
+    movement :=
+        (
+            '
+    Send "{' . SC_E . ' down}"
+    Sleep(50 + ' . KeyDelay . ')
+    Send "{' . SC_E . ' up}"
+    HyperSleep(1800)
+    Jump()
+    HyperSleep(50)
+    Jump()
+    HyperSleep(1300)
+    Loop 2 {
+        Send "{' . RotLeft . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    HyperSleep(440)
+    Jump()
+    HyperSleep(700)
+    BSSWalk(5.5, LeftKey)
+    BSSWalk(9, FwdKey)
+    Loop 4 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    BSSWalk(6, FwdKey)
+    Loop 13 {
+        Send "{' . RotUp . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    Loop 5 {
+        Send "{' . RotDown . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    BSSWalk(1.2, RightKey)
+    Loop 7 {
+        Send "{' . ZoomOut . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    SetShiftLock(0)
+    '
+        )
+    CreatePath(movement)
+    KeyWait "F14", "D T5 L"
+    KeyWait "F14", "T60 L"
+    EndWalk()
+
+    Sleep 50
+    RotateCameraDown(25)
+    Sleep 50
+    RotateCameraLeft(40)
+    Sleep 50
+    SetShiftLock(1)
+    Loop 7 {
+        Send "{" ZoomOut "}"
+        Sleep(10 + KeyDelay)
+    }
+    ; vic detection here
+}
+
+Vichop_Mountaintop_to_edge() {
+    global function, FwdKey, ZoomOut, KeyDelay
+    function := A_ThisFunc
+    movement :=
+        (
+            '
+    Loop 4 {
+        Send "{' . ZoomOut . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    BSSWalk(9, FwdKey)
+    '
+        )
+    CreatePath(movement)
+    KeyWait "F14", "D T5 L"
+    KeyWait "F14", "T60 L"
+    EndWalk()
+}
+
+Vichop_Edge_to_Cactus() {
+    global function, BackKey, RightKey, RotRight, KeyDelay
+    function := A_ThisFunc
+    movement :=
+        (
+            '
+    ActivateGlider()
+    HyperSleep(1800)
+    Loop 2 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    HyperSleep(4000)
+    Jump()
+    HyperSleep(750)
+    BSSWalk(1, BackKey, RightKey)
+    BSSWalk(13, RightKey)
+    '
+        )
+    CreatePath(movement)
+    KeyWait "F14", "D T5 L"
+    KeyWait "F14", "T60 L"
+    EndWalk()
+}
+
+Vichop_edge_to_Spider() {
+    global function, FwdKey, RightKey, RotRight, KeyDelay
+    function := A_ThisFunc
+    movement :=
+        (
+            '
+    ActivateGlider()
+    HyperSleep(2800)
+    Loop 1 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    HyperSleep(1000)
+    Loop 1 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    HyperSleep(300)
+    Jump()
+    HyperSleep(1500)
+    BSSWalk(7, FwdKey)
+    BSSWalk(16, RightKey)
+    '
+        )
+    CreatePath(movement)
+    KeyWait "F14", "D T5 L"
+    KeyWait "F14", "T60 L"
+    EndWalk()
+}
+
+Vichopspider_to_cactus() {
+    global function, FwdKey, LeftKey, BackKey, RightKey, RotLeft, RotRight, KeyDelay
+    function := A_ThisFunc
+    movement :=
+        (
+            '
+    Jump()
+    HyperSleep(200)
+    Send "{' . FwdKey . ' down}"
+    HyperSleep(500)
+    Send "{' . FwdKey . ' up}"
+    Loop 1 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    BSSWalk(13, FwdKey)
+    Loop 1 {
+        Send "{' . RotLeft . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    ActivateGlider()
+    HyperSleep(1000)
+    BSSWalk(9, FwdKey)
+    Loop 1 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    ActivateGlider()
+    HyperSleep(1000)
+    BSSWalk(2, FwdKey)
+    Loop 1 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    ActivateGlider()
+    HyperSleep(1000)
+    Loop 2 {
+        Send "{' . RotLeft . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    BSSWalk(6, RightKey)
+    BSSWalk(3, FwdKey)
+    '
+        )
+    CreatePath(movement)
+    KeyWait "F14", "D T5 L"
+    KeyWait "F14", "T60 L"
+    EndWalk()
+}
+
+Vichop_Cactus_Align() {
+    ; set the camera properly for both paths the same now
+    ; camera align
+
+    Loop 10 {
+        send "{" RotDown "}"
+        Sleep(10 + keyDelay)
+    }
+
+    Loop 2 {
+        send "{" RotUp "}"
+        Sleep(10 + keyDelay)
+    }
+}
+
+Vichop_Cactus_To_rose() {
+    global function, FwdKey, LeftKey, BackKey, RightKey, RotLeft, RotRight, RotUp, RotDown, ZoomOut, KeyDelay
+    function := A_ThisFunc
+    movement :=
+        (
+            '
+    Loop 1 {
+        Send "{' . RotLeft . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    Loop 6 {
+        Send "{' . RotUp . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    ActivateGlider()
+    HyperSleep(1000)
+    Loop 1 {
+        Send "{' . RotLeft . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    ActivateGlider()
+    HyperSleep(1000)
+    BSSWalk(9, FwdKey, RightKey)
+    BSSWalk(1.5, FwdKey)
+    Jump()
+    HyperSleep(300)
+    Send "{' . FwdKey . ' down}"
+    Sleep(400)
+    Send "{' . FwdKey . ' up}"
+    BSSWalk(17, FwdKey, RightKey)
+    BSSWalk(2, FwdKey)
+    HyperSleep(600)
+    BSSWalk(10, BackKey)
+    BSSWalk(1.5, BackKey, RightKey)
+    Loop 10 {
+        Send "{' . RotDown . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    Loop 6 {
+        Send "{' . RotUp . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    Loop 7 {
+        Send "{' . ZoomOut . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    BSSWalk(1.5, BackKey, RightKey)
+    '
+        )
+    CreatePath(movement)
+    KeyWait "F14", "D T5 L"
+    KeyWait "F14", "T60 L"
+    EndWalk()
+}
+
+
+
+PepperMainKillVic() {
+    global function, FwdKey, LeftKey, BackKey, RightKey, RotLeft, RotRight, KeyDelay
+    function := A_ThisFunc
+    movement :=
+        (
+            '
+    Jump()
+    HyperSleep(300)
+    BSSWalk(7, RightKey)
+    ActivateGlider()
+    HyperSleep(1000)
+    BSSWalk(7, FwdKey)
+    BSSWalk(6, RightKey)
+    Loop 4 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    ActivateGlider()
+    HyperSleep(1000)
+    BSSWalk(8, FwdKey)
+    BSSWalk(6, LeftKey)
+    Loop 4 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    ActivateGlider()
+    HyperSleep(1000)
+    BSSWalk(9, FwdKey)
+    SetShiftLock(0)
+    '
+        )
+    CreatePath(movement)
+    KeyWait "F14", "D T5 L"
+    KeyWait "F14", "T60 L"
+    EndWalk()
+
+    if (CheckIfVicSummoned()) {
+        movement :=
+            (
+                '
+        BSSWalk(7, LeftKey, BackKey)
+        BSSWalk(6, BackKey)
+        '
+            )
+        CreatePath(movement)
+        KeyWait "F14", "D T5 L"
+        KeyWait "F14", "T60 L"
+        EndWalk()
+        return KillPatternVic()
+    }
+    return false
+}
+
+MountainTopKillVic() {
+    global function, FwdKey, LeftKey, BackKey, RightKey, RotLeft, RotRight, KeyDelay
+    function := A_ThisFunc
+    movement :=
+        (
+            '
+    Jump()
+    HyperSleep(250)
+    BSSWalk(8, BackKey, RightKey)
+    ActivateGlider()
+    HyperSleep(1000)
+    BSSWalk(7, FwdKey)
+    BSSWalk(5.5, RightKey)
+    Loop 4 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    ActivateGlider()
+    HyperSleep(1000)
+    BSSWalk(9, FwdKey)
+    BSSWalk(5.5, LeftKey)
+    Loop 4 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    ActivateGlider()
+    HyperSleep(1000)
+    BSSWalk(9, FwdKey)
+    BSSWalk(5.5, RightKey)
+    Loop 4 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    ActivateGlider()
+    HyperSleep(1000)
+    BSSWalk(5, FwdKey)
+    SetShiftLock(0)
+    '
+        )
+    CreatePath(movement)
+    KeyWait "F14", "D T5 L"
+    KeyWait "F14", "T60 L"
+    EndWalk()
+
+    if (CheckIfVicSummoned()) {
+        movement :=
+            (
+                '
+        BSSWalk(8, BackKey, RightKey)
+        BSSWalk(2, RightKey)
+        '
+            )
+        CreatePath(movement)
+        KeyWait "F14", "D T5 L"
+        KeyWait "F14", "T60 L"
+        EndWalk()
+        return KillPatternVic()
+    }
+    return false
+}
+
+SpiderKillVic() {
+    global function, FwdKey, LeftKey, BackKey, RightKey, RotLeft, RotRight, KeyDelay
+    function := A_ThisFunc
+    movement :=
+        (
+            '
+    Jump()
+    HyperSleep(200)
+    Send "{' . FwdKey . ' down}"
+    HyperSleep(500)
+    Send "{' . FwdKey . ' up}"
+    Loop 1 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    BSSWalk(6, FwdKey)
+    Loop 1 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    BSSWalk(8, FwdKey)
+    ActivateGlider()
+    HyperSleep(1000)
+    BSSWalk(6, FwdKey)
+    BSSWalk(5, LeftKey)
+    Loop 4 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    ActivateGlider()
+    HyperSleep(1000)
+    BSSWalk(8, FwdKey)
+    BSSWalk(5, RightKey)
+    Loop 4 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    ActivateGlider()
+    HyperSleep(1000)
+    BSSWalk(8, FwdKey)
+    BSSWalk(5, LeftKey)
+    Loop 4 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    ActivateGlider()
+    HyperSleep(1000)
+    BSSWalk(8, FwdKey)
+    SetShiftLock(0)
+    '
+        )
+    CreatePath(movement)
+    KeyWait "F14", "D T5 L"
+    KeyWait "F14", "T60 L"
+    EndWalk()
+
+    if (CheckIfVicSummoned()) {
+        movement :=
+            (
+                '
+        BSSWalk(15, BackKey, LeftKey)
+        '
+            )
+        CreatePath(movement)
+        KeyWait "F14", "D T5 L"
+        KeyWait "F14", "T60 L"
+        EndWalk()
+        return KillPatternVic()
+    }
+    return false
+}
+
+CactusKillVic() {
+    global function, FwdKey, LeftKey, BackKey, RightKey, RotLeft, RotRight, KeyDelay
+    function := A_ThisFunc
+    movement :=
+        (
+            '
+    Loop 9 {
+        Send "{' . RotUp . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    Loop 1 {
+        Send "{' . RotLeft . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    ActivateGlider()
+    HyperSleep(1000)
+    Loop 1 {
+        Send "{' . RotLeft . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    ActivateGlider()
+    HyperSleep(1000)
+    Loop 1 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    BSSWalk(10, FwdKey)
+    Jump()
+    HyperSleep(300)
+    BSSWalk(3.5, FwdKey)
+    Loop 3 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    BSSWalk(41.5, FwdKey)
+    Loop 2 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    ActivateGlider()
+    HyperSleep(1000)
+    ActivateGlider()
+    HyperSleep(1000)
+    BSSWalk(6.5, LeftKey)
+    Loop 4 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    ActivateGlider()
+    HyperSleep(1000)
+    ActivateGlider()
+    HyperSleep(1000)
+    SetShiftLock(0)
+    '
+        )
+    CreatePath(movement)
+    KeyWait "F14", "D T5 L"
+    KeyWait "F14", "T60 L"
+    EndWalk()
+
+    if (CheckIfVicSummoned()) {
+        movement :=
+            (
+                '
+        BSSWalk(10, BackKey)
+        '
+            )
+        CreatePath(movement)
+        KeyWait "F14", "D T5 L"
+        KeyWait "F14", "T60 L"
+        EndWalk()
+        return KillPatternVic()
+    }
+    return false
+}
+
+RoseKillVic() {
+    global function, FwdKey, LeftKey, BackKey, RightKey, RotLeft, RotRight, KeyDelay
+    function := A_ThisFunc
+    movement :=
+        (
+            '
+    BSSWalk(24, FwdKey)
+    Loop 2 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    Jump()
+    HyperSleep(340)
+    BSSWalk(4, FwdKey)
+    BSSWalk(6.5, FwdKey, RightKey)
+    ActivateGlider()
+    HyperSleep(1000)
+    BSSWalk(7, FwdKey)
+    BSSWalk(6, RightKey)
+    Loop 4 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    ActivateGlider()
+    HyperSleep(1000)
+    BSSWalk(10, FwdKey)
+    BSSWalk(6, LeftKey)
+    Loop 4 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    ActivateGlider()
+    HyperSleep(1000)
+    BSSWalk(10, FwdKey)
+    SetShiftLock(0)
+    '
+        )
+    CreatePath(movement)
+    KeyWait "F14", "D T5 L"
+    KeyWait "F14", "T60 L"
+    EndWalk()
+
+    if (CheckIfVicSummoned()) {
+        movement :=
+            (
+                '
+        BSSWalk(8, BackKey)
+        BSSWalk(8, BackKey, LeftKey)
+        '
+            )
+        CreatePath(movement)
+        KeyWait "F14", "D T5 L"
+        KeyWait "F14", "T60 L"
+        EndWalk()
+        return KillPatternVic()
+    }
+    return false
+}
+
+TotalPath(accountType := "main") {
+    global SpiderEnabled, VicsKilled, SessionVicsKilled, SessionVicsSpotted, SearcherJoinID
+
+    VicFoundAction(field) {
+        if (accountType = "main") {
+            SetStatus("Vichop", field " - Vicious bee found!")
+            ; After detecting the bee, call the appropriate approach-and-kill function.
+            switch field {
+                case "Pepper": return PepperMainKillVic()
+                case "Mountaintop": return MountainTopKillVic()
+                case "Spider": return SpiderKillVic()
+                case "Cactus", "Cactus (Back)": return CactusKillVic()
+                case "Rose": return RoseKillVic()
+            }
+            return false ; Failsafe
+        } else if (accountType = "alt") {
+            SetStatus("Vichop", field " - Vicious bee spotted")
+            vichop_alt_SendLink(SearcherJoinID, field)
+            ; Update both alltime and session stats for vics spotted
+            AlltimeVicsSpotted := IniRead("settings\settings.ini", "Vichop", "alltime_vics_spotted", 0) + 1
+            SessionVicsSpotted++
+            IniWrite(AlltimeVicsSpotted, "settings\settings.ini", "Vichop", "alltime_vics_spotted")
+            IniWrite(SessionVicsSpotted, "settings\settings.ini", "Vichop", "session_vics_spotted")
+            Sleep(500)
+            return true
+        }
+        return false
+    }
+
+    SetStatus("Vichop", "Going to Pepper")
+    if (accountType = "main") {
+        Vichop_Hive_to_Pepper()
+    } else {
+        alt_Vichop_Spawn_to_Pepper()
+    }
+    if (CheckForVicious()) {
+        VicFoundAction("Pepper")
+        CloseRoblox()
+        return
+    }
+    SetStatus("Vichop", "Pepper - No vicious bee detected")
+    
+    SetStatus("Vichop", "Going to Mountain Top")
+    Vichop_Pepper_to_Mountaintop()
+    if (CheckForVicious()) {
+        Rotate("right", 1)
+        VicFoundAction("Mountaintop")
+        CloseRoblox()
+        return
+    }
+    SetStatus("Vichop", "Mountain Top - No vicious bee detected")
+    Rotate("right", 1)
+    Vichop_Mountaintop_to_edge()
+    
+    if (SpiderEnabled) {
+        SetStatus("Vichop", "Going to Spider")
+        Vichop_edge_to_Spider()
+        if (CheckForVicious()) {
+            VicFoundAction("Spider")
+            CloseRoblox()
+            return
+        }
+        SetStatus("Vichop", "Spider - No vicious bee detected")
+        Vichopspider_to_cactus()
+    } else {
+        Vichop_edge_to_Cactus()
+    }
+    
+    SetStatus("Vichop", "Going to Cactus")
+    Vichop_Cactus_Align()
+    if (CheckForVicious()) {
+        VicFoundAction("Cactus")
+        CloseRoblox()
+        return
+    }
+    SetStatus("Vichop", "Cactus - No vicious bee detected")
+    
+    Loop 5 {
+        Send("{" RotDown " down}")
+        Sleep(10 + keyDelay)
+        Send("{" RotDown " up}")
+        Sleep(10 + keyDelay)
+    }
+    
+    if (CheckForVicious()) {
+        VicFoundAction("Cactus (Back)")
+        CloseRoblox()
+        return
+    }
+    
+    SetStatus("Vichop", "Going to Rose")
+    Vichop_Cactus_To_rose()
+    if (CheckForVicious()) {
+        VicFoundAction("Rose")
+        SetShiftLock(0)
+        CloseRoblox()
+        return
+    }
+    SetStatus("Vichop", "Rose - No vicious bee detected")
+    SetShiftLock(0)
+}
+
+CheckForVicious() {
+    
+    try {
+        result := RequestVicDetection(10000)  ; 10 second timeout
+        return result
+    } catch as err {
+        throw Error("VIC detection failed: " . err.Message)
+    }
+}
+
+vichop(accountType := VichopAccountType) {
+    global SessionServersJoined, SessionNightsDetected, SearcherJoinID, SpeedHopEnabled
+    global AlltimeServersJoined, AlltimeNightsDetected
+    global VichopTimeSpent, LastVichopHour, VichopEnabled
+    global VichopExclusive, VichopActivePercent, VichopSessionDuration
+
+    if (!VichopEnabled) {
+        return false
+    }
+
+    if (LastVichopHour != A_Hour) {
+        VichopTimeSpent := 0
+        LastVichopHour := A_Hour
+    }
+
+    isExclusive := (VichopExclusive = "true" || VichopExclusive = true)
+
+    if (!isExclusive) {
+        hourlyLimitMs := (VichopActivePercent / 100) * 60 * 60 * 1000
+        if (VichopTimeSpent >= hourlyLimitMs) {
+            return "SKIP"
+        }
+    }
+
+    SetStatus("Vichop", "Vichop Started")
+    FullyCloseRoblox()
+    Sleep 1000
+
+    SessionStartTime := A_TickCount
+
+    if (isExclusive) {
+        sessionLimitMs := VichopSessionDuration * 60 * 1000
+    } else {
+        hourlyLimitMs := (VichopActivePercent / 100) * 60 * 60 * 1000
+    }
+
+    loop {
+        elapsedMs := A_TickCount - SessionStartTime
+        
+        if (isExclusive) {
+            if (elapsedMs >= sessionLimitMs) {
+                FullyCloseRoblox()
+                DisconnectCheck()
+                return "EXCLUSIVE_RESTART"
+            }
+        } else {
+            if (VichopTimeSpent + elapsedMs >= hourlyLimitMs) {
+                VichopTimeSpent += elapsedMs
+                FullyCloseRoblox()
+                DisconnectCheck()
+                return "SKIP"
+            }
+        }
+
+        try {
+            if (!SpeedHopEnabled) {
+                if IsInGame() {
+                    CloseRoblox()
+                } else if GetRobloxClientPos() {
+                }
+            }
+
+            serverInfo_from_alt := ""
+            if (accountType = "main") {
+                if (bottoken != "" && vichop_main_CHANNEL_ID != "") {
+                    serverInfo_from_alt := vichop_main_checkserver()
+                }
+            }
+
+            local retriesForLoad := 1 
+            local serverIdToLoad := ""
+
+            if (IsObject(serverInfo_from_alt) && serverInfo_from_alt.Has("link") && serverInfo_from_alt.Has("field")) {
+                SetStatus("Vichop", "Joining server from alt - Field: " serverInfo_from_alt["field"])
+                retriesForLoad := 2 
+                serverIdToLoad := serverInfo_from_alt["link"]
+                JoinPublicServerID(serverIdToLoad)
+            } else {
+                SetStatus("Vichop", "Joining server")
+                if (!JoinRandomServer()) {
+                    continue
+                }
+                serverIdToLoad := SearcherJoinID 
+            }
+
+            if (!WaitTillLoadedVichop()) {
+                if (IsInGame() or GetRobloxHWND()) {
+                    CloseRoblox()
+                }
+                continue
+            }
+
+
+            AlltimeServersJoined++
+            SessionServersJoined++
+            IniWrite(AlltimeServersJoined, "settings\settings.ini", "Vichop", "alltime_servers_joined")
+            IniWrite(SessionServersJoined, "settings\settings.ini", "Vichop", "session_servers_joined")
+
+            joinedViaAlt := (IsObject(serverInfo_from_alt) && serverInfo_from_alt.Has("link"))
+
+            if (!joinedViaAlt && !NightDetection()) {
+                SetStatus("Vichop", "Daytime - skipping")
+                
+                if (!SpeedHopEnabled) {
+                    if IsInGame() {
+                        CloseRoblox()
+                    } 
+                }
+                continue
+            }
+
+            if (!joinedViaAlt) {
+                SetStatus("Vichop", "Night detected")
+            }
+            AlltimeNightsDetected++
+            SessionNightsDetected++
+            IniWrite(AlltimeNightsDetected, "settings\settings.ini", "Vichop", "alltime_nights_detected")
+            IniWrite(SessionNightsDetected, "settings\settings.ini", "Vichop", "session_nights_detected")
+
+            if (IsObject(serverInfo_from_alt) && serverInfo_from_alt.Has("field")) {
+                ClaimHiveVichop()
+                SetStatus("Vichop", "Going to " serverInfo_from_alt["field"] " (Summoned)")
+                
+                killSuccess := false
+                switch serverInfo_from_alt["field"] {
+                    case "Pepper": killSuccess := Vichop_Main_HiveTo_Pepper()
+                    case "Mountaintop": killSuccess := Vichop_Main_HiveTo_Mountaintop()
+                    case "Spider": killSuccess := Vichop_Main_HiveTo_Spider()
+                    case "Cactus", "Cactus (Back)": killSuccess := Vichop_Main_HiveTo_Cactus()
+                    case "Rose": killSuccess := Vichop_Main_HiveTo_Rose()
+                }
+                
+                if (!SpeedHopEnabled) {
+                    CloseRoblox()
+                }
+            } else {
+                if (accountType = "main") {
+                    ClaimHiveVichop()
+                }
+                TotalPath(accountType)
+                
+                if (!SpeedHopEnabled) {
+                    CloseRoblox()
+                }
+            }
+
+        } catch as e {
+            SetStatus("Vichop", "Error: " . e.Message)
+            if IsInGame() {
+                CloseRoblox()
+            }
+            continue
+        }
+    }
+}
+
+/* 
+    Data Transmit 
+*/
+
+vichop_main_checkserver() {
+    global vichop_main_lastTimestamp
+    
+    response := vichop_main_GetMessages()
+    if (response == "") {
+        return false
+    }
+    
+    try {
+        if (RegExMatch(response, '\{\\"type\\":\s*\\"link\\",\s*\\"data\\":\s*\\"([^\\"]*)\\",\s*\\"field\\":\s*\\"([^\\"]*)\\",\s*\\"timestamp\\":\s*(\d+),\s*\\"sender\\":\s*\\"alt_account\\"\}', &match)) {
+            link := match[1]
+            field := match[2]
+            msgTimestamp := Integer(match[3])
+
+            if (msgTimestamp > vichop_main_lastTimestamp) {
+                vichop_main_lastTimestamp := msgTimestamp
+                return Map("link", link, "field", field)
+            }
+        }
+        return false
+        
+    } catch Error as e {
+        MsgBox("vichop_main Parse Error: " . e.Message)
+        return false
+    }
+}
+
+vichop_main_GetMessages() {
+    global bottoken, vichop_main_CHANNEL_ID
+    try {
+        url := "https://discord.com/api/v9/channels/" . vichop_main_CHANNEL_ID . "/messages?limit=10"
+        
+        whr := ComObject("WinHttp.WinHttpRequest.5.1")
+        whr.Open("GET", url, false)
+        whr.SetRequestHeader("Authorization", "Bot " . bottoken)
+        whr.SetRequestHeader("User-Agent", "DiscordBot (AutoHotkey, 1.0)")
+        whr.SetTimeouts(5000, 5000, 10000, 20000)
+        whr.Send()
+        
+        if (whr.Status == 200) {
+            return whr.ResponseText
+        } else {
+            MsgBox("vichop_main HTTP Error: " . whr.Status . "`n" . SubStr(whr.ResponseText, 1, 200))
+            return ""
+        }
+    } catch Error as e {
+        MsgBox("vichop_main Request Error: " . e.Message)
+        return ""
+    }
+}
+
+vichop_alt_SendLink(link, field := "") {
+    global vichop_alt_WEBHOOK_URL
+
+    unixTime := DateDiff(A_Now, "19700101000000", "Seconds")
+    isoTime := FormatTime(A_NowUTC, "yyyy-MM-dd'T'HH:mm:ss.000'Z'")
+
+    cleanField := StrLower(field)
+    cleanField := StrReplace(cleanField, " (back)", "")
+    cleanField := StrReplace(cleanField, " ", "") 
+    imageFilename := cleanField . "_field.png"
+    
+    imagePath := A_ScriptDir . "\Assets\images\" . imageFilename
+    if !FileExist(imagePath) {
+        imagePath := A_ScriptDir . "\Assets\" . imageFilename
+    }
+
+    deepLink := "https://www.roblox.com/games/start?placeId=108319274518516&launchData=1537690962/" . link
+
+    logicData := '{"type": "link", "data": "' . link . '", "field": "' . field . '", "timestamp": ' . unixTime . ', "sender": "alt_account"}'
+
+    embed := Map()
+
+    embed["title"] := "<:viciousbee:1395147088005824614> Vicious Bee Detected!"
+    embed["color"] := 65280 ; Lime Green
+    embed["timestamp"] := isoTime
+
+    desc := "📍 **Location:** " . field . "`n"
+    desc .= "🔗 [**Click Here to Join Server**](" . deepLink . ")`n`n"
+    desc .= "``````json`n"
+    desc .= logicData . "`n"
+    desc .= "``````"
+    embed["description"] := desc
+
+    footer := Map()
+    footer["text"] := "Powered by BSSAI"
+    footer["icon_url"] := "https://cdn.discordapp.com/emojis/1337998696670826496.png"
+    embed["footer"] := footer
+
+    fd := FormData()
+
+    if FileExist(imagePath) {
+        thumbnail := Map()
+        thumbnail["url"] := "attachment://" . imageFilename
+        embed["thumbnail"] := thumbnail
+        fd.AppendFile(imagePath)
+    }
+
+    payload := Map()
+    payload["embeds"] := [embed]
+    payload["username"] := "Vichop Searcher 🕵️"
+
+    fd.AppendJSON("payload_json", payload)
+
+    try {
+        whr := ComObject("WinHttp.WinHttpRequest.5.1")
+        whr.Open("POST", vichop_alt_WEBHOOK_URL, false)
+        whr.SetRequestHeader("Content-Type", fd.contentType)
+        whr.SetRequestHeader("User-Agent", "BSSAI-Macro/1.0")
+        whr.Send(fd.data())
+        return (whr.Status >= 200 && whr.Status < 300)
+    } catch {
+        return false
+    }
+}
+
+alt_Vichop_Spawn_to_Pepper() {
+    global function, FwdKey, LeftKey, BackKey, RightKey, RotUp, RotDown, ZoomOut, KeyDelay
+    function := A_ThisFunc
+    
+    ; This loop is before the movement starts
+    Loop 6 {
+        Send "{" ZoomOut "}"
+        Sleep(10 + KeyDelay)
+    }
+    
+    gt_hiveslot1()
+
+    movement :=
+        (
+            '
+    BSSWalk(5, FwdKey)
+    BSSWalk(5.2, RightKey)
+    SetShiftLock(0)
+    Jump()
+    BSSWalk(3, RightKey)
+    BSSWalk(1.5, FwdKey, RightKey)
+    BSSWalk(25.29, RightKey)
+    Jump()
+    HyperSleep(303)
+    BSSWalk(0.91, RightKey)
+    BSSWalk(9.83, FwdKey, RightKey)
+    Jump()
+    HyperSleep(270)
+    BSSWalk(16, FwdKey)
+    Jump()
+    HyperSleep(219)
+    BSSWalk(4.18, FwdKey)
+    HyperSleep(100)
+    Jump()
+    HyperSleep(235)
+    BSSWalk(2.95, FwdKey)
+    HyperSleep(100)
+    Jump()
+    HyperSleep(237)
+    BSSWalk(3, FwdKey)
+    BSSWalk(11, FwdKey, RightKey)
+    BSSWalk(3, FwdKey)
+    Jump()
+    HyperSleep(267)
+    BSSWalk(2.66, FwdKey)
+    BSSWalk(13, FwdKey, RightKey)
+    Jump()
+    HyperSleep(230)
+    BSSWalk(10, RightKey)
+    BSSWalk(5, BackKey, RightKey)
+    SetShiftLock(1)
+    Loop 13 {
+        Send "{' . RotDown . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    Loop 5 {
+        Send "{' . RotUp . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    Loop 5 {
+        Send "{' . ZoomOut . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    '
+        )
+    CreatePath(movement)
+    KeyWait "F14", "D T5 L"
+    KeyWait "F14", "T60 L"
+    EndWalk()
+}
+
+Vichop_Main_HiveTo_Pepper() {
+    global function, FwdKey, LeftKey, BackKey, RightKey
+    function := A_ThisFunc
+    gt_ramp() 
+    movement :=
+        (
+            '
+    Jump()
+    BSSWalk(3, RightKey)
+    BSSWalk(1.5, FwdKey, RightKey)
+    BSSWalk(25.29, RightKey)
+    Jump()
+    HyperSleep(303)
+    BSSWalk(0.91, RightKey)
+    BSSWalk(9.83, FwdKey, RightKey)
+    Jump()
+    HyperSleep(270)
+    BSSWalk(2.36, FwdKey)
+    BSSWalk(1.48, FwdKey, LeftKey)
+    BSSWalk(13.36, FwdKey)
+    BSSWalk(4.44, FwdKey, RightKey)
+    Jump()
+    HyperSleep(219)
+    BSSWalk(4.18, FwdKey)
+    HyperSleep(100)
+    Jump()
+    HyperSleep(235)
+    BSSWalk(2.95, FwdKey)
+    HyperSleep(100)
+    Jump()
+    HyperSleep(237)
+    BSSWalk(3, FwdKey)
+    BSSWalk(11, FwdKey, RightKey)
+    BSSWalk(3, FwdKey)
+    Jump()
+    HyperSleep(267)
+    BSSWalk(2.66, FwdKey)
+    BSSWalk(5, RightKey)
+    ActivateGlider()
+    HyperSleep(1500)
+    BSSWalk(5, RightKey)
+    BSSWalk(4, FwdKey)
+    BSSWalk(1, FwdKey, RightKey)
+    Jump()
+    HyperSleep(223)
+    BSSWalk(2.66, FwdKey)
+    BSSWalk(4.34, RightKey)
+    SetShiftLock(1)
+    '
+        )
+    CreatePath(movement)
+    KeyWait "F14", "D T5 L"
+    KeyWait "F14", "T60 L"
+    EndWalk()
+    
+    return PepperMainKillVic()
+}
+
+Vichop_Main_HiveTo_Mountaintop() {
+    global function, FwdKey, LeftKey, BackKey, RightKey, RotLeft, RotRight, KeyDelay
+    function := A_ThisFunc
+    gt_ramp()
+    gt_redcannon()
+    movement :=
+        (
+            '
+    Send "{e}"
+    HyperSleep(3300)
+    SetShiftLock(1)
+    ActivateGlider()
+    HyperSleep(1000)
+    BSSWalk(2, FwdKey)
+    BSSWalk(7, RightKey)
+    Loop 4 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    ActivateGlider()
+    HyperSleep(1000)
+    BSSWalk(7, FwdKey)
+    Loop 2 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    ActivateGlider()
+    HyperSleep(1000)
+    BSSWalk(2, FwdKey)
+    Loop 2 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    ActivateGlider()
+    HyperSleep(1000)
+    ActivateGlider()
+    HyperSleep(1000)
+    SetShiftLock(0)
+    '
+        )
+    CreatePath(movement)
+    KeyWait "F14", "D T5 L"
+    KeyWait "F14", "T60 L"
+    EndWalk()
+
+    if (CheckIfVicSummoned()) {
+        movement :=
+            (
+                '
+        BSSWalk(6, BackKey)
+        BSSWalk(8, BackKey, RightKey)
+        BSSWalk(2, RightKey)
+        '
+            )
+        CreatePath(movement)
+        KeyWait "F14", "D T5 L"
+        KeyWait "F14", "T60 L"
+        EndWalk()
+        return KillPatternVic()
+    }
+    return false
+}
+
+Vichop_Main_HiveTo_Spider() {
+    global function, FwdKey, LeftKey, BackKey, RightKey, RotLeft, RotRight, KeyDelay
+    function := A_ThisFunc
+    gt_spider()
+    movement :=
+        (
+            '
+    SetShiftLock(1)
+    BSSWalk(5, FwdKey, LeftKey)
+    BSSWalk(4, LeftKey)
+    Loop 4 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    ActivateGlider()
+    HyperSleep(1000)
+    BSSWalk(6, LeftKey)
+    Loop 4 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    ActivateGlider()
+    HyperSleep(1000)
+    BSSWalk(2, FwdKey)
+    BSSWalk(6, RightKey)
+    Loop 4 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    ActivateGlider()
+    HyperSleep(1000)
+    BSSWalk(2, FwdKey)
+    BSSWalk(6, LeftKey)
+    Loop 4 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    ActivateGlider()
+    HyperSleep(1000)
+    '
+        )
+    CreatePath(movement)
+    KeyWait "F14", "D T5 L"
+    KeyWait "F14", "T60 L"
+    EndWalk()
+
+    if (CheckIfVicSummoned()) {
+        movement :=
+            (
+                '
+        BSSWalk(15, BackKey, LeftKey)
+        '
+            )
+        CreatePath(movement)
+        KeyWait "F14", "D T5 L"
+        KeyWait "F14", "T60 L"
+        EndWalk()
+        return KillPatternVic()
+    }
+    return false
+}
+
+Vichop_Main_HiveTo_Cactus() {
+    global function, FwdKey, LeftKey, BackKey, RightKey, RotLeft, RotRight, KeyDelay
+    function := A_ThisFunc
+    gt_cactus()
+    movement :=
+        (
+            '
+    BSSWalk(2.25, BackKey)
+    Loop 2 {
+        Send "{' . RotLeft . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    SetShiftLock(1)
+    ActivateGlider()
+    HyperSleep(1000)
+    BSSWalk(6.5, RightKey)
+    Loop 4 {
+        Send "{' . RotLeft . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    ActivateGlider()
+    HyperSleep(1000)
+    BSSWalk(9, FwdKey)
+    BSSWalk(8, RightKey)
+    SetShiftLock(0)
+    '
+        )
+    CreatePath(movement)
+    KeyWait "F14", "D T5 L"
+    KeyWait "F14", "T60 L"
+    EndWalk()
+
+    if (CheckIfVicSummoned()) {
+        movement :=
+            (
+                '
+        BSSWalk(10, BackKey)
+        BSSWalk(2.5, LeftKey, BackKey)
+        '
+            )
+        CreatePath(movement)
+        KeyWait "F14", "D T5 L"
+        KeyWait "F14", "T60 L"
+        EndWalk()
+        return KillPatternVic()
+    }
+    return false
+}
+
+Vichop_Main_HiveTo_Rose() {
+    global function, FwdKey, LeftKey, BackKey, RightKey, RotLeft, RotRight, KeyDelay
+    function := A_ThisFunc
+    gt_ramp()
+    gt_redcannon()
+    movement :=
+        (
+            '
+    Send "{e down}"
+    HyperSleep(100)
+    Send "{e up}{' . RightKey . ' down}"
+    HyperSleep(470)
+    Send "{space 2}"
+    HyperSleep(1300)
+    Send "{' . RightKey . ' up}"
+    HyperSleep(1000)
+    Send "{space}"
+    Loop 2 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    Sleep(1000)
+    Loop 2 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    SetShiftLock(1)
+    ActivateGlider()
+    HyperSleep(1000)
+    BSSWalk(6, FwdKey)
+    BSSWalk(5, RightKey)
+    Loop 4 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    ActivateGlider()
+    HyperSleep(1000)
+    BSSWalk(7, FwdKey)
+    BSSWalk(5, LeftKey)
+    Loop 4 {
+        Send "{' . RotRight . '}"
+        Sleep(10 + ' . KeyDelay . ')
+    }
+    ActivateGlider()
+    HyperSleep(1000)
+    BSSWalk(7, FwdKey)
+    SetShiftLock(0)
+    '
+        )
+    CreatePath(movement)
+    KeyWait "F14", "D T5 L"
+    KeyWait "F14", "T60 L"
+    EndWalk()
+
+    if (CheckIfVicSummoned()) {
+        movement :=
+            (
+                '
+        BSSWalk(10, BackKey)
+        BSSWalk(3, BackKey, LeftKey)
+        '
+            )
+        CreatePath(movement)
+        KeyWait "F14", "D T5 L"
+        KeyWait "F14", "T60 L"
+        EndWalk()
+        return KillPatternVic()
+    }
+    return false
+}
+
+KillPatternVic() {
+    global AlltimeVicsKilled, SessionVicsKilled
+    Loop 12 { ; Try to kill for a maximum of 12 cycles (~40 seconds)
+        movement :=
+            (
+                '
+        BSSWalk(4, FwdKey)
+        Sleep(800)
+        BSSWalk(4, LeftKey)
+        Sleep(800)
+        BSSWalk(4, BackKey)
+        Sleep(800)
+        BSSWalk(4, RightKey)
+        Sleep(800)
+        '
+            )
+        CreatePath(movement)
+        KeyWait "F14", "D T5 L"
+        KeyWait "F14", "T60 L"
+        EndWalk()
+
+        if (CheckIfViciousDied()) {
+            AlltimeVicsKilled++
+            SessionVicsKilled++
+            IniWrite(AlltimeVicsKilled, "settings\settings.ini", "Vichop", "alltime_vics_killed")
+            IniWrite(SessionVicsKilled, "settings\settings.ini", "Vichop", "session_vics_killed")
+            SetStatus("Vichop", "Killed! (Session: " SessionVicsKilled ")")
+            return true ; SUCCESS: Bee was killed
+        }
+    }
+    
+    SetStatus("Vichop", "Vic despawned")
+    return false ; FAILURE: Bee despawned or kill timed out
+}
+
+NightDetection() {
+    global bitmaps, windowX, windowY, windowWidth, windowHeight, offsetY, RotDown, beesmas
+
+    hwnd := GetRobloxHWND()
+    offsetY := GetYOffset(hwnd)
+    GetRobloxClientPos(hwnd)
+
+    ; check ground
+    pBMScreen := Gdip_BitmapFromScreen(windowX + windowWidth // 2 - 200 "|" windowY + offsetY "|400|" windowHeight - offsetY)
+    
+    if (beesmas) {
+        ; Beesmas detection - check for nightground or nightground2
+        for i, k in ["nightground", "nightground2"] {
+            if (Gdip_ImageSearch(pBMScreen, bitmaps[k], , , , , , 6) = 1) {
+                Gdip_DisposeImage(pBMScreen)
+                return 1
+            }
+        }
+    } else {
+        ; Non-beesmas detection
+        if (Gdip_ImageSearch(pBMScreen, bitmaps["nightground"], , , , , , 6) = 1) {
+            groundFound := (Gdip_ImageSearch(pBMScreen, bitmaps["ground"], , , , , , 6) = 1)
+            ground2Found := (Gdip_ImageSearch(pBMScreen, bitmaps["ground2"], , , , , , 6) = 1)
+            if (!groundFound && !ground2Found) {
+                Gdip_DisposeImage(pBMScreen)
+                return 1
+            }
+        }
+    }
+
+    Gdip_DisposeImage(pBMScreen)
+
+    ; check sky if ground wasnt detected
+    Send "{" RotDown "}"
+    Loop 5 {
+        Send "{" ZoomOut "}"
+        Sleep(10 + KeyDelay)
+    }
+
+    searchX := windowX + (windowWidth // 2) - 15
+    searchY := windowY + offsetY
+
+    pBMScreen := Gdip_BitmapFromScreen(searchX "|" searchY "|30|20")
+
+    if (Gdip_ImageSearch(pBMScreen, bitmaps["nightvic"], &pos, 0, 0, 0, 0, 25) = 1) {
+        Gdip_DisposeImage(pBMScreen)
+        Send "{" RotUp "}"
+        return 1
+    }
+
+    Gdip_DisposeImage(pBMScreen)
+    return 0
+}
+
+IsInGame() {
+    global bitmaps, windowX, windowY, windowWidth, windowHeight
+    
+    if !GetRobloxClientPos() {
+        return false
+    }
+    
+    pBMScreen := Gdip_BitmapFromScreen(windowX "|" windowY + 30 "|" windowWidth "|" windowHeight - 30)
+    isInGame := (Gdip_ImageSearch(pBMScreen, bitmaps["science"], , , , , 150, 2) = 1)
+    Gdip_DisposeImage(pBMScreen)
+    
+    return isInGame
+}
+
+/**
+ * Simple reset for vichop alts - resets character and waits for respawn
+ * Does NOT check for hive position (useful for alts that don't claim hives)
+ */
+ResetCharacterAltVichop() {
+    global bitmaps, KeyDelay
+    
+    DisconnectCheck()
+    SetShiftLock(0)
+    OpenMenu()
+    
+    hwnd := GetRobloxHWND()
+    offsetY := GetYOffset(hwnd)
+    
+    ; Close any open dialogs/windows (same as ResetToHive)
+    Loop 500
+    {
+        GetRobloxClientPos(hwnd)
+        pBMScreen := Gdip_BitmapFromScreen(windowX + windowWidth // 2 - 50 "|" windowY + 2 * windowHeight // 3 "|100|" windowHeight // 3)
+        if (Gdip_ImageSearch(pBMScreen, bitmaps["dialog"], &pos, , , , , 10, , 3) != 1) {
+            Gdip_DisposeImage(pBMScreen)
+            break
+        }
+        Gdip_DisposeImage(pBMScreen)
+        MouseMove windowX + windowWidth // 2, windowY + 2 * windowHeight // 3 + SubStr(pos, InStr(pos, ",") + 1) - 15
+        Click
+        Sleep 150
+    }
+    MouseMove windowX + 350, windowY + offsetY + 100
+    
+    ; Check for yes/no prompts
+    GetRobloxClientPos(hwnd)
+    pBMScreen := Gdip_BitmapFromScreen(windowX + windowWidth // 2 - 250 "|" windowY + windowHeight // 2 - 52 "|500|150")
+    if (Gdip_ImageSearch(pBMScreen, bitmaps["no"], &pos, , , , , 2, , 3) = 1) {
+        MouseMove windowX + windowWidth // 2 - 250 + SubStr(pos, 1, InStr(pos, ",") - 1), windowY + windowHeight // 2 - 52 + SubStr(pos, InStr(pos, ",") + 1)
+        Click
+        MouseMove windowX + 350, windowY + offsetY + 100
+    }
+    Gdip_DisposeImage(pBMScreen)
+    
+    ; Close any open windows
+    imgPos := ImgSearch("cancel.png", 30)
+    If (imgPos[1] = 0) {
+        MouseMove windowX + (imgPos[2]), windowY + (imgPos[3])
+        Click
+        MouseMove windowX + 350, windowY + offsetY + 100
+    }
+    
+    searchRet := ImgSearch("close.png", 30, "full")
+    If (searchRet[1] = 0) {
+        MouseMove windowX + searchRet[2], windowY + searchRet[3]
+        click
+        MouseMove windowX + 350, windowY + offsetY + 100
+        Sleep 1000
+    }
+    
+    ; Perform the reset
+    SetStatus("Resetting", "Character")
+    MouseMove windowX + 350, windowY + offsetY + 100
+    PrevKeyDelay := A_KeyDelay
+    SetKeyDelay 250 + keyDelay
+    
+    resetTime := nowUnix()
+    ActivateRoblox()
+    GetRobloxClientPos()
+    send "{" SC_Esc "}"
+    Sleep 100 + keyDelay
+    send "{" SC_R "}"
+    Sleep 100 + keyDelay
+    send "{" SC_Enter "}"
+    
+    ; Wait for character to die and respawn (check for empty health bar)
+    n := 0
+    while ((n < 2) && (A_Index <= 80))
+    {
+        Sleep 100
+        pBMScreen := Gdip_BitmapFromScreen(windowX "|" windowY "|" windowWidth "|50")
+        n += (Gdip_ImageSearch(pBMScreen, bitmaps["emptyhealth"], , , , , , 10) = (n = 0))
+        Gdip_DisposeImage(pBMScreen)
+    }
+    Sleep 1000
+    
+    SetKeyDelay PrevKeyDelay
+    
+    ; Zoom out
+    Loop 5 {
+        Send "{" ZoomOut "}"
+        Sleep 100
+    }
+    
+    SetStatus("Reset", "Complete")
+}
+
+/**
+ * ===================================================================================
+ * BSS VICIOUS BEE HUNTER - FULL WORKFLOW & FUNCTION GUIDE
+ * ===================================================================================
+ * This document provides a complete overview of the script's architecture, logic flow,
+ * and function responsibilities. It is intended for developers to quickly understand
+ * the system, identify the correct function to edit, and recognize potential weaknesses.
+ *
+ * --------------------------------
+ * I. HIGH-LEVEL WORKFLOW
+ * --------------------------------
+ * The system uses two accounts: an Alt ("Searcher") and a Main ("Hunter").
+ *
+ * 1. Alt Account (The "Searcher"):
+ *    - The Alt's sole purpose is to find a Vicious Bee and report its location.
+ *    - It joins random servers at night, runs a full search path, and if a bee is
+ *      found, it sends the server link and field name to a Discord channel. It then
+ *      immediately leaves to search a new server.
+ *
+ * 2. Main Account (The "Hunter"):
+ *    - The Main account is the killer. It first listens for a signal from the Alt.
+ *
+ *    - SCENARIO A (Signal Found): If the Alt has reported a bee, the Main account
+ *      joins that specific server, travels directly to the reported field, kills
+ *      the bee, and leaves. This is the primary, most efficient mode of operation.
+ *
+ *    - SCENARIO B (No Signal): If no signal is found, the Main account acts as a
+ *      backup searcher. It joins a random server and performs the full search-and-destroy
+ *      path on its own. After finishing, it restarts its loop, listening for the
+ *      Alt again.
+ *
+ * ===================================================================================
+ * II. FUNCTION RESPONSIBILITY GUIDE & DEV NOTES
+ * ===================================================================================
+ * Functions are grouped by their purpose.
+ *
+ * --------------------------------
+ * A. CORE CONTROL & ENTRY POINTS
+ * --------------------------------
+ *
+ * vichop(leave, accountType)
+ *   - RESPONSIBILITY: The main entry point and master controller for the entire process.
+ *     It orchestrates the entire sequence: checking for signals, joining servers,
+ *     initiating paths, and closing Roblox. The `accountType` ("main" or "alt")
+ *     determines its behavior.
+ *   - DEV NOTES / WEAKNESSES: This function's logic is highly sequential. If any
+ *     sub-function it calls hangs or fails without erroring (e.g., `waitTillLoaded`),
+ *     the entire script will halt for that session.
+ *
+ * TotalPath(accountType)
+ *   - RESPONSIBILITY: The "master search routine" for a full server sweep. It sequences
+ *     the navigation functions (e.g., `Vichop_Hive_to_Pepper`, `Vichop_Pepper_to_Mountaintop`, etc.)
+ *     and calls `CheckForVicious` after each one. It decides whether to kill (main) or
+ *     report (alt) via the `VicFoundAction` sub-function.
+ *   - DEV NOTES / WEAKNESSES: This is only used when no signal is found (Main) or always (Alt).
+ *     Its rigidity is its weakness; if any single navigation step fails, the rest of
+ *     the path for that server is abandoned.
+ *
+ * --------------------------------
+ * B. PLAYER NAVIGATION & MOVEMENT
+ * --------------------------------
+ *
+ * Vichop_Hive_to_Pepper(), Vichop_Pepper_to_Mountaintop(), etc.
+ *   - RESPONSIBILITY: These are fixed-path navigation functions. Each one contains a
+ *     hard-coded sequence of movements (`Move`, `Jump`, `Rotate`, `ActivateGlider`) to
+ *     travel between two specific points on the map.
+ *   - DEV NOTES / WEAKNESSES: **EXTREMELY BRITTLE.** These functions are the most likely
+ *     to break after any game update that changes map geometry, character speed, or physics.
+ *     They rely on fixed `Hypersleep` durations and movement distances, with no feedback
+ *     mechanism to confirm if a movement was successful.
+ *
+ * Vichop_Main_HiveTo_Pepper(), Vichop_Main_HiveTo_Cactus(), etc.
+ *   - RESPONSIBILITY: Direct, point-to-point pathing for the Main account when a signal
+ *     is received. They are optimized to go from the hive directly to the target field,
+ *     bypassing all others. They conclude by calling the appropriate field-specific kill function.
+ *   - DEV NOTES / WEAKNESSES: Suffer from the same brittleness as the standard navigation
+ *     functions. A game update will likely require these to be re-recorded.
+ *
+ * --------------------------------
+ * C. COMBAT & DETECTION
+ * --------------------------------
+ *
+ * CheckForVicious()
+ *   - RESPONSIBILITY: Detects the Vicious Bee. It does **not** use `PixelSearch`. Instead,
+ *     it communicates with an external detection program. It works by creating a file
+ *     (`vic_signal.txt`) to signal the external app to perform a screen capture and analysis.
+ *     It then waits for a result file (`vic_result.txt`) to be created by that app.
+ *   - DEV NOTES / WEAKNESSES: This creates a critical dependency on an external executable.
+ *     If the detection app is missing, crashes, or has a bug, this function will time out and
+ *     throw an error, stopping the hunt. File I/O permissions can also cause failures.
+ *
+ * PepperMainKillVic(), MountainTopKillVic(), CactusKillVic(), etc.
+ *   - RESPONSIBILITY: These are the "final approach" functions. Once the main pathing gets
+ *     the player to the *entrance* of a field, this function executes the last few movements
+ *     to get into attack range of the bee. It then calls `KillPatternVic`.
+ *   - DEV NOTES / WEAKNESSES: Also based on hard-coded movements. If the bee spawns in an
+ *     unusual spot within the field, this final approach might fail.
+ *
+ * KillPatternVic()
+ *   - RESPONSIBILITY: Executes the actual attack. It puts the character into a circular
+ *     strafing pattern (W-A-S-D) to attack the bee while dodging. It continuously checks for
+ *     the "Vicious Bee has been defeated!" message on screen using `PixelSearch` for its
+ *     distinct red color (`0xDD2E44`).
+ *   - DEV NOTES / WEAKNESSES: The success condition is fragile. If Roblox changes the color,
+ *     font, or position of the defeat message, the script will never confirm the kill and will
+ *     eventually time out, assuming it failed. The attack pattern itself may not be optimal.
+ *
+ * --------------------------------
+ * D. SERVER & API HANDLING
+ * --------------------------------
+ *
+ * JoinRandomServer()
+ *   - RESPONSIBILITY: Joins a random Bee Swarm Simulator server. It contains logic to switch
+ *     between the old Roblox API (`GetServerIds`) and a new custom BSS server API
+ *     (`FetchServersFromAPI`) based on the `useServerFetching` global variable.
+ *   - DEV NOTES / WEAKNESSES: Relies on external APIs that can change, become deprecated, or go
+ *     down. Error handling is present but may not cover all edge cases (e.g., rate limiting).
+ *     The custom API requires valid keys (`API_KEY`, `SECRET_KEY`).
+ *
+ * GetServerIds() / FetchServersFromAPI()
+ *   - RESPONSIBILITY: These are the functions that do the actual work of getting a list
+ *     of joinable server IDs from their respective APIs.
+ *   - DEV NOTES / WEAKNESSES: These are direct network requests. They can fail due to internet
+ *     issues, firewall blocks, or changes to the API endpoints or response structures.
+ *
+ * --------------------------------
+ * E. DISCORD COMMUNICATION (Data Transmit)
+ * --------------------------------
+ *
+ * vichop_alt_SendLink(link, field)
+ *   - RESPONSIBILITY: Used by the Alt account to send data. It formats a JSON payload
+ *     containing the server link, field name, and a timestamp, then sends it to the
+ *     pre-defined Discord webhook URL (`vichop_alt_WEBHOOK_URL`).
+ *   - DEV NOTES / WEAKNESSES: Will fail if the webhook URL is invalid or deleted. Relies
+ *     on Discord's services being available.
+ *
+ * vichop_main_checkserver()
+ *   - RESPONSIBILITY: Used by the Main account to receive data. It makes an authenticated
+ *     GET request to the Discord API to fetch the latest messages from the channel
+ *     (`vichop_main_CHANNEL_ID`) using a bot token (`vichop_main_BOT_TOKEN`). It parses
+ *     the messages to find a valid JSON signal from the Alt.
+ *   - DEV NOTES / WEAKNESSES: This is a critical point of failure. If the bot token is
+ *     invalid, expires, or lacks permissions, the Main will **never** receive signals.
+ *     It also relies on a specific JSON structure in the message content.
+ *
+ * --------------------------------
+ * F. UTILITY & MISCELLANEOUS
+ * --------------------------------
+ *
+ * ClaimHiveVichop()
+ *   - RESPONSIBILITY: Navigates the player to their hive and finds an empty slot to claim.
+ *     This is done to activate hive bonuses. It uses `PixelSearch` to find the red color
+ *     of an "unclaimed" hive slot button.
+ *   - DEV NOTES / WEAKNESSES: Relies on `PixelSearch` and fixed screen coordinates relative
+ *     to the game window. Changes in lighting, resolution, or game UI can break it.
+ *
+ * VichopCheckForNight()
+ *   - RESPONSIBILITY: Checks a small, specific area of the screen for the dark green color
+ *     of the in-game clock's "night" indicator.
+ *   - DEV NOTES / WEAKNESSES: Very simple `PixelSearch`. If the game's UI for the clock
+ *     is ever moved or its color palette changed, this will fail.
+ *
+ * CloseRoblox() / waitTillLoaded() / CheckIfJoined()
+ *   - RESPONSIBILITY: Basic process and window management for the Roblox client.
+ *   - DEV NOTES / WEAKNESSES: Generally robust, but can be tripped up by Roblox client
+ *     updates that change the window title (`ahk_class RobloxPlayerBeta`) or loading behavior.
+ */
