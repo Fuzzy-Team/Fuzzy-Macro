@@ -541,6 +541,9 @@ class macro:
         self.vicFields = ["pepper", "mountain top", "rose", "cactus", "spider", "clover"]
         #filter it to only include fields the player has enabled
         self.vicFields = [x for x in self.vicFields if self.setdat["stinger_{}".format(x.replace(" ","_"))]]
+        self._vicDetectionVotes = {}
+        self._vicLastDetectedField = None
+        self._vicLastDetectedAt = 0.0
 
         self.newUI = False
 
@@ -618,17 +621,43 @@ class macro:
             self.logger.webhook("Profile Changed", f"Switched to profile: {old_profile}", "blue")
 
     def detectVicStatus(self, currField=None):
-        for th in (0.82, 0.78, 0.74):
-            for field in self.vicFields:
-                if self.blueTextImageSearch(f"vic{field}", th):
-                    return ("field", field)
-        if currField in self.vicFields and self.blueTextImageSearch("foundvic", 0.72):
-            return ("field", currField)
-
         if self.blueTextImageSearch("vicdefeat", 0.75):
             return ("defeated", None)
         if self.blueTextImageSearch("died", 0.8):
             return ("died", None)
+
+        now = time.time()
+        detected_scores = {}
+        for th in (0.82, 0.78, 0.74):
+            for field in self.vicFields:
+                if self.blueTextImageSearch(f"vic{field}", th):
+                    detected_scores[field] = detected_scores.get(field, 0) + th
+
+        # "foundvic" confirmation only applies when we already know current field context.
+        if currField in self.vicFields and self.blueTextImageSearch("foundvic", 0.72):
+            detected_scores[currField] = detected_scores.get(currField, 0) + 0.9
+
+        # decay previous votes
+        for field in list(self._vicDetectionVotes.keys()):
+            self._vicDetectionVotes[field] *= 0.7
+            if self._vicDetectionVotes[field] < 0.5:
+                self._vicDetectionVotes.pop(field, None)
+
+        # accumulate votes from this tick
+        for field, score in detected_scores.items():
+            self._vicDetectionVotes[field] = self._vicDetectionVotes.get(field, 0) + score
+
+        if self._vicDetectionVotes:
+            bestField, bestVote = max(self._vicDetectionVotes.items(), key=lambda x: x[1])
+            if bestVote >= 1.6:
+                self._vicLastDetectedField = bestField
+                self._vicLastDetectedAt = now
+                return ("field", bestField)
+
+        # short grace period to avoid jitter when text briefly disappears
+        if self._vicLastDetectedField and now - self._vicLastDetectedAt <= 1.25:
+            return ("field", self._vicLastDetectedField)
+
         return (None, None)
 
     #get the size of the roblox window and update the relevant variables
@@ -3276,6 +3305,9 @@ class macro:
         self.vicStatus = None
         self.vicField = None
         self.stopVic = False
+        self._vicDetectionVotes = {}
+        self._vicLastDetectedField = None
+        self._vicLastDetectedAt = 0.0
         currField = None
         self.clear_task_status()
 
@@ -3286,6 +3318,13 @@ class macro:
         def updateHourlyTime():
             self.hourlyReport.addHourlyStat("bug_run_time", time.time()-vicStartTime)
 
+        if not self.vicFields:
+            self.logger.webhook("", "No stinger hunt fields enabled", "red", "screen", ping_category="ping_critical_errors")
+            self.night = False
+            self.stopVic = True
+            updateHourlyTime()
+            return
+
         for currField in self.vicFields:
             #go to field
             self.cannon()
@@ -3293,13 +3332,15 @@ class macro:
             self.goToField(currField, "south")
             time.sleep(0.8)
             try:
-                exec(open(f"../paths/vic/find_vic/{currField}.py").read())
+                with open(f"../paths/vic/find_vic/{currField}.py") as f:
+                    exec(f.read())
+            except FileNotFoundError:
+                self.logger.webhook("", f"Missing vic find path for {currField}", "red", "screen", ping_category="ping_critical_errors")
             except VicStopPathException:
                 pass
             if self.vicField:
                 self.logger.webhook("",f"Vicious Bee detected ({self.vicField})", "light blue", "screen") 
                 break
-            print(self.vicField)
             self.reset(convert=False)
         else: #unable to find vic
             self.stopVic = True
@@ -3324,7 +3365,17 @@ class macro:
         
         #run the dodge pattern
         #similar to the search pattern, between each line of code, check if vic has been defeated/player died
-        pathLines = open(f"../paths/vic/kill_vic/{self.vicField}.py").read().split("\n")
+        try:
+            with open(f"../paths/vic/kill_vic/{self.vicField}.py") as f:
+                pathLines = f.read().split("\n")
+        except FileNotFoundError:
+            self.logger.webhook("", f"Missing vic kill path for {self.vicField}", "red", "screen", ping_category="ping_critical_errors")
+            self.night = False
+            updateHourlyTime()
+            self.stopVic = True
+            stingerHuntThread.join()
+            self.reset()
+            return
         loop = True
         self.died = False
         st = time.time() 
@@ -3337,6 +3388,8 @@ class macro:
                 updateHourlyTime()
                 return
             for code in pathLines:
+                if not code.strip() or code.strip().startswith("#"):
+                    continue
                 exec(code)
                 #run checks
                 if self.died or self.vicStatus is not None: break
@@ -3359,22 +3412,31 @@ class macro:
 
     def vicHop(self):
         self.set_task_status("vic_hop", activity="vicious")
-        self.logger.webhook("", "Vic Hop started", "dark brown", "screen")
+        mode = str(self.setdat.get("vic_hop_mode", "same_server")).lower()
+        useServerHop = mode in ("server_hop", "hop", "rejoin") or bool(self.setdat.get("vic_hop_use_server_hop", False))
+        modeLabel = "server hop" if useServerHop else "same-server cycles"
+        self.logger.webhook("", f"Vic Hop started ({modeLabel})", "dark brown", "screen")
         maxHops = max(1, int(self.setdat.get("vic_hop_max_servers", 20)))
         hops = 0
         kills = 0
+        waitBetweenCycles = max(3, int(self.setdat.get("vic_hop_cycle_wait", 20)))
         try:
             while hops < maxHops:
                 if self.checkPauseAndWait():
                     return
                 hops += 1
-                self.logger.webhook("", f"Vic Hop: joining server {hops}/{maxHops}", "dark brown")
-                self.rejoin(rejoinMsg="Vic Hop: Rejoining server")
+                if useServerHop:
+                    self.logger.webhook("", f"Vic Hop: joining server {hops}/{maxHops}", "dark brown")
+                    self.rejoin(rejoinMsg="Vic Hop: Rejoining server")
+                else:
+                    self.logger.webhook("", f"Vic Hunt cycle {hops}/{maxHops} in current server", "dark brown")
                 self.stingerHunt()
                 if self.vicStatus == "defeated":
                     kills += 1
                     if not self.setdat.get("vic_hop_continue_after_kill", False):
                         break
+                elif not useServerHop and hops < maxHops:
+                    time.sleep(waitBetweenCycles)
             self.logger.webhook("", f"Vic Hop finished (servers: {hops}, kills: {kills})", "light blue", "screen")
         finally:
             self.clear_task_status()
