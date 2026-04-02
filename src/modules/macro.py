@@ -617,6 +617,20 @@ class macro:
             # Log the profile change
             self.logger.webhook("Profile Changed", f"Switched to profile: {old_profile}", "blue")
 
+    def detectVicStatus(self, currField=None):
+        for th in (0.82, 0.78, 0.74):
+            for field in self.vicFields:
+                if self.blueTextImageSearch(f"vic{field}", th):
+                    return ("field", field)
+        if currField in self.vicFields and self.blueTextImageSearch("foundvic", 0.72):
+            return ("field", currField)
+
+        if self.blueTextImageSearch("vicdefeat", 0.75):
+            return ("defeated", None)
+        if self.blueTextImageSearch("died", 0.8):
+            return ("died", None)
+        return (None, None)
+
     #get the size of the roblox window and update the relevant variables
     def setRobloxWindowInfo(self, setYOffset=True):
         self.robloxWindow.setRobloxWindowBounds(setYOffset=setYOffset)
@@ -3239,17 +3253,14 @@ class macro:
     def stingerHuntBackground(self):
         #find vic
         while not self.stopVic:
-            #detect which field the vic is in
-            if self.vicField is None:
-                for field in self.vicFields:
-                    if self.blueTextImageSearch(f"vic{field}", 0.75):
-                        self.vicField = field
-                        break
-            else:
-                if self.blueTextImageSearch("died"): self.died = True
-            
-            if self.blueTextImageSearch("vicdefeat"):
+            status, field = self.detectVicStatus(currField=self.vicField)
+            if status == "field" and self.vicField is None:
+                self.vicField = field
+            elif status == "died":
+                self.died = True
+            elif status == "defeated":
                 self.vicStatus = "defeated"
+            time.sleep(0.08)
                 
     def stingerHunt(self):
         self.set_task_status("stinger_hunt", activity="vicious")
@@ -3345,6 +3356,28 @@ class macro:
         self.stopVic = True
         stingerHuntThread.join()
         self.reset()
+
+    def vicHop(self):
+        self.set_task_status("vic_hop", activity="vicious")
+        self.logger.webhook("", "Vic Hop started", "dark brown", "screen")
+        maxHops = max(1, int(self.setdat.get("vic_hop_max_servers", 20)))
+        hops = 0
+        kills = 0
+        try:
+            while hops < maxHops:
+                if self.checkPauseAndWait():
+                    return
+                hops += 1
+                self.logger.webhook("", f"Vic Hop: joining server {hops}/{maxHops}", "dark brown")
+                self.rejoin(rejoinMsg="Vic Hop: Rejoining server")
+                self.stingerHunt()
+                if self.vicStatus == "defeated":
+                    kills += 1
+                    if not self.setdat.get("vic_hop_continue_after_kill", False):
+                        break
+            self.logger.webhook("", f"Vic Hop finished (servers: {hops}, kills: {kills})", "light blue", "screen")
+        finally:
+            self.clear_task_status()
 
     def stumpSnail(self):
         for _ in range(3):

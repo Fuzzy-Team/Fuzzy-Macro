@@ -951,6 +951,9 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 elif taskId == "stinger_hunt":
                     if macro.setdat.get("stinger_hunt", False):
                         bugOnlyTasks.append(taskId)
+                elif taskId == "vic_hop":
+                    if macro.setdat.get("vic_hop", False):
+                        bugOnlyTasks.append(taskId)
                 elif taskId.startswith("kill_"):
                     mob = taskId.replace("kill_", "")
                     if macro.setdat.get(mob, False):
@@ -971,6 +974,11 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 if taskId == "stinger_hunt":
                     if macro.setdat.get("stinger_hunt", False):
                         runTask(macro.stingerHunt, resetAfter=False)
+                        executedTasks.add(taskId)
+                    continue
+                if taskId == "vic_hop":
+                    if macro.setdat.get("vic_hop", False):
+                        runTask(macro.vicHop, resetAfter=False)
                         executedTasks.add(taskId)
                     continue
 
