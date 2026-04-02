@@ -66,6 +66,42 @@
           </div>
         `
       );
+
+      buildStandardContainer(
+        toolsParent,
+        "Vic Hop Tool",
+        "Server hop for Vicious Bee using the improved Vic detection flow.",
+        [
+          {
+            id: "vic_hop",
+            title: "Enable Task",
+            desc: "Continuously rejoin servers and run Vic search/kill logic.",
+            type: {
+              name: "checkbox",
+              triggerFunction: saveProfileTriggerFunction,
+            },
+          },
+          {
+            id: "vic_hop_max_servers",
+            title: "Max Servers",
+            desc: "Maximum number of servers to hop per Vic Hop run.",
+            type: {
+              name: "textbox",
+              inputType: "int",
+              triggerFunction: saveProfileTriggerFunction,
+            },
+          },
+          {
+            id: "vic_hop_continue_after_kill",
+            title: "Continue After Kill",
+            desc: "Keep hopping after a successful Vic kill.",
+            type: {
+              name: "checkbox",
+              triggerFunction: saveProfileTriggerFunction,
+            },
+          },
+        ]
+      );
     </script>
   </div>
 
