@@ -4,6 +4,114 @@ Gather Tab
 =============================================
 */
 var fieldNo = 1;
+const gatherFieldProperties = [
+  "shift_lock",
+  "field_drift_compensation",
+  "shape",
+  "size",
+  "width",
+  "invert_lr",
+  "invert_fb",
+  "turn",
+  "turn_times",
+  "mins",
+  "backpack",
+  "return",
+  "use_whirlwig_fallback",
+  "start_location",
+  "distance",
+  "goo",
+  "goo_interval",
+  "fuzzy_ai_calibration_path",
+  "fuzzy_ai_capture_backend",
+  "fuzzy_ai_confidence_threshold",
+  "fuzzy_ai_sprinkler_confidence_threshold",
+  "fuzzy_ai_min_token_distance",
+  "fuzzy_ai_idle_return_interval",
+  "fuzzy_ai_no_token_recalibration_timeout",
+  "fuzzy_ai_movements_before_recalibration",
+  "fuzzy_ai_sprinkler_arrival_threshold",
+  "fuzzy_ai_max_sprinkler_distance",
+  "fuzzy_ai_sprinkler_rescan_attempts",
+  "fuzzy_ai_sprinkler_rescan_delay",
+  "fuzzy_ai_target_sprinkler_label",
+  "fuzzy_ai_preferred_tokens",
+  "fuzzy_ai_ignored_tokens",
+];
+let gatherPatternMetadata = {};
+
+function getSelectedGatherPattern() {
+  const shapeDropdown = document.getElementById("shape");
+  if (!shapeDropdown) return "";
+  return getDropdownValue(shapeDropdown);
+}
+
+function renderFuzzyAIValidationResult(result) {
+  const container = document.getElementById("fuzzy-ai-validation-results");
+  if (!container) return;
+
+  if (!result) {
+    container.innerHTML = "";
+    return;
+  }
+
+  const errors = Array.isArray(result.errors) ? result.errors : [];
+  const warnings = Array.isArray(result.warnings) ? result.warnings : [];
+  const details = result.details || {};
+  const statusColor = result.ok ? "#8ad48a" : "#ff8b8b";
+  const sections = [
+    `<div style="font-weight:600; color:${statusColor};">${result.ok ? "Environment ready" : "Environment issues found"}</div>`,
+  ];
+
+  if (errors.length > 0) {
+    sections.push(`<div><strong>Errors:</strong><br>${errors.join("<br>")}</div>`);
+  }
+  if (warnings.length > 0) {
+    sections.push(`<div><strong>Warnings:</strong><br>${warnings.join("<br>")}</div>`);
+  }
+
+  const detailLines = [];
+  if (details.resolved_capture_backend) {
+    detailLines.push(`Capture backend: ${details.resolved_capture_backend}`);
+  }
+  if (details.blue_model) {
+    detailLines.push(`Blue model: ${details.blue_model}`);
+  }
+  if (details.sprinkler_model) {
+    detailLines.push(`Sprinkler model: ${details.sprinkler_model}`);
+  }
+  if (details.calibration_path) {
+    detailLines.push(`Calibration: ${details.calibration_path}`);
+  }
+  if (detailLines.length > 0) {
+    sections.push(`<div><strong>Details:</strong><br>${detailLines.join("<br>")}</div>`);
+  }
+
+  container.innerHTML = sections.join("<div style=\"margin-top:0.5rem;\"></div>");
+}
+
+function updateGatherPatternUI() {
+  const pattern = getSelectedGatherPattern();
+  const fuzzySection = document.getElementById("fuzzy-ai-gather-section");
+  const validateButton = document.getElementById("validate-fuzzy-ai-button");
+  const description = document.getElementById("gather-pattern-metadata");
+  const metadata = gatherPatternMetadata[pattern] || {};
+  const isFuzzyAI = pattern === "fuzzy_ai_gather";
+
+  if (fuzzySection) {
+    fuzzySection.style.display = isFuzzyAI ? "block" : "none";
+  }
+  if (validateButton) {
+    validateButton.style.display = isFuzzyAI ? "inline-flex" : "none";
+  }
+  if (description) {
+    description.innerText = metadata.description || "";
+    description.style.display = metadata.description ? "block" : "none";
+  }
+  if (!isFuzzyAI) {
+    renderFuzzyAIValidationResult(null);
+  }
+}
 //save the enabled status for the fields
 async function saveEnabled() {
   const fields = (await loadSettings()).fields;
@@ -11,26 +119,6 @@ async function saveEnabled() {
   eel.saveProfileSetting("fields", fields);
 }
 function saveField() {
-  const fieldProperties = [
-    "shift_lock",
-    "field_drift_compensation",
-    "shape",
-    "size",
-    "width",
-    "invert_lr",
-    "invert_fb",
-    "turn",
-    "turn_times",
-    "mins",
-    "backpack",
-    "return",
-    "use_whirlwig_fallback",
-    "start_location",
-    "distance",
-    "goo",
-    "goo_interval",
-  ];
-
   // Validate goo_interval minimum value
   const gooIntervalElement = document.getElementById("goo_interval");
   if (gooIntervalElement && gooIntervalElement.value) {
@@ -40,8 +128,9 @@ function saveField() {
     }
   }
 
-  const fieldData = generateSettingObject(fieldProperties);
+  const fieldData = generateSettingObject(gatherFieldProperties);
   eel.saveField(getInputValue("field"), fieldData);
+  updateGatherPatternUI();
 }
 //save the fields_enabled
 async function updateFieldEnable(ele) {
@@ -55,6 +144,7 @@ async function updateFieldEnable(ele) {
 async function loadAndSaveField(ele) {
   const data = (await eel.loadFields()())[getDropdownValue(ele)];
   loadInputs(data);
+  updateGatherPatternUI();
   //save
   const fields = (await loadSettings()).fields;
   fields[fieldNo - 1] = getDropdownValue(ele);
@@ -85,6 +175,10 @@ async function switchGatherTab(target) {
     settings.fields_enabled[fieldNo - 1];
   //get the pattern list
   const patterns = await eel.getPatterns()();
+  gatherPatternMetadata = {};
+  patterns.forEach((pattern) => {
+    gatherPatternMetadata[pattern.value || pattern.name || pattern] = pattern;
+  });
   setDropdownData("shape", patterns);
   //load the inputs
   loadAndSaveField(fieldDropdown);
@@ -127,7 +221,12 @@ $("#gather-placeholder")
         alert(msg);
         // refresh pattern dropdown
         const patternsList = await eel.getPatterns()();
+        gatherPatternMetadata = {};
+        patternsList.forEach((pattern) => {
+          gatherPatternMetadata[pattern.value || pattern.name || pattern] = pattern;
+        });
         setDropdownData('shape', patternsList);
+        updateGatherPatternUI();
       } catch (err) {
         console.error(err);
         alert('Failed to import patterns.');
@@ -164,6 +263,7 @@ $("#gather-placeholder")
         // Reload the field data and update the UI
         const data = (await eel.loadFields()())[currentFieldName];
         loadInputs(data);
+        updateGatherPatternUI();
         alert(
           `Successfully reset "${currentFieldName}" field settings to defaults.`
         );
@@ -268,6 +368,7 @@ $("#gather-placeholder")
         // Reload the field data and update the UI
         const data = (await eel.loadFields()())[currentFieldName];
         loadInputs(data);
+        updateGatherPatternUI();
         // Hide the modal
         document.getElementById("import-modal").style.display = "none";
 
@@ -287,6 +388,9 @@ $("#gather-placeholder")
           const patternMsg = result.missing_patterns.join(", ");
           successMsg += `\n\nNote: Some patterns were not found and were replaced:\n${patternMsg}`;
         }
+        if (result.warnings && result.warnings.length > 0) {
+          successMsg += `\n\nWarnings:\n${result.warnings.join("\n")}`;
+        }
         
         alert(successMsg);
       } else {
@@ -296,6 +400,13 @@ $("#gather-placeholder")
       console.error("Error importing field settings:", error);
       alert("An error occurred while importing field settings. Please check your JSON format.");
     }
+  })
+  .on("click", "#validate-fuzzy-ai-button", async (event) => {
+    event.preventDefault();
+    const result = await eel.validateGatherPatternEnvironment(
+      generateSettingObject(gatherFieldProperties)
+    )();
+    renderFuzzyAIValidationResult(result);
   })
   .on("click", "#import-modal", function(event) {
     // Close modal when clicking outside the modal content

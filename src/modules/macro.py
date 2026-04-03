@@ -2337,6 +2337,21 @@ class macro:
         gatherTimeLimit = self.convertSecsToMinsAndSecs(maxGatherTime)
         returnType = fieldSetting["return"]
         pattern = fieldSetting['shape']
+        pattern_calibration_path = settingsManager.resolveProjectPath(fieldSetting.get("fuzzy_ai_calibration_path"))
+        pattern_capture_backend = fieldSetting.get("fuzzy_ai_capture_backend", "auto")
+        pattern_confidence_threshold = fieldSetting.get("fuzzy_ai_confidence_threshold")
+        pattern_sprinkler_confidence_threshold = fieldSetting.get("fuzzy_ai_sprinkler_confidence_threshold")
+        pattern_min_token_distance = fieldSetting.get("fuzzy_ai_min_token_distance")
+        pattern_idle_return_interval = fieldSetting.get("fuzzy_ai_idle_return_interval")
+        pattern_no_token_recalibration_timeout = fieldSetting.get("fuzzy_ai_no_token_recalibration_timeout")
+        pattern_movements_before_recalibration = fieldSetting.get("fuzzy_ai_movements_before_recalibration")
+        pattern_sprinkler_arrival_threshold = fieldSetting.get("fuzzy_ai_sprinkler_arrival_threshold")
+        pattern_max_sprinkler_distance = fieldSetting.get("fuzzy_ai_max_sprinkler_distance")
+        pattern_sprinkler_rescan_attempts = fieldSetting.get("fuzzy_ai_sprinkler_rescan_attempts")
+        pattern_sprinkler_rescan_delay = fieldSetting.get("fuzzy_ai_sprinkler_rescan_delay")
+        pattern_target_sprinkler_label = fieldSetting.get("fuzzy_ai_target_sprinkler_label", "")
+        pattern_preferred_tokens = fieldSetting.get("fuzzy_ai_preferred_tokens", "")
+        pattern_ignored_tokens = fieldSetting.get("fuzzy_ai_ignored_tokens", "")
         st = time.time()
         keepGathering = True
         self.died = False
@@ -2345,6 +2360,10 @@ class macro:
         self.set_task_status(f"gather_{field}", task="gather", field=field)
         self.isGathering = True
         firstPattern = True
+        fuzzyAIInitStartedLogged = False
+        fuzzyAIInitLogged = False
+        fuzzyAILastError = ""
+        fuzzyAIFallbackLogged = False
         lastGooTime = 0  # Track when goo was last used
         lastGumdropTime = 0  # Track when gumdrop was last used
         gooTimerActive = True  # Flag to control goo timer thread
@@ -2434,9 +2453,59 @@ class macro:
 
             #ensure that the pattern works
             try:
+                if pattern == "fuzzy_ai_gather" and not fuzzyAIInitStartedLogged:
+                    self.logger.webhook(
+                        "Fuzzy AI Gather",
+                        "Initialization started.",
+                        "light blue",
+                    )
+                    fuzzyAIInitStartedLogged = True
                 exec(open(f"../settings/patterns/{pattern}.py").read(), gatherNameSpace)
+                if pattern == "fuzzy_ai_gather":
+                    fuzzy_state = gatherNameSpace.get("_FUZZY_AI_GATHER_STATE")
+                    if not isinstance(fuzzy_state, dict):
+                        fuzzy_state = getattr(self, "_fuzzy_ai_gather_state", {})
+                    if isinstance(fuzzy_state, dict) and fuzzy_state.get("ready"):
+                        if not fuzzyAIInitLogged:
+                            self.logger.webhook(
+                                "Fuzzy AI Gather",
+                                "Initialization succeeded.",
+                                "bright green",
+                            )
+                            fuzzyAIInitLogged = True
+                            fuzzyAILastError = ""
+                            fuzzyAIFallbackLogged = False
+                    else:
+                        runtime_error = ""
+                        if isinstance(fuzzy_state, dict):
+                            runtime_error = str(fuzzy_state.get("error", "") or "")
+                        if runtime_error and runtime_error != fuzzyAILastError:
+                            self.logger.webhook(
+                                "Fuzzy AI Gather",
+                                f"Runtime failed: {runtime_error}",
+                                "red",
+                            )
+                            fuzzyAILastError = runtime_error
+                        if runtime_error and not fuzzyAIFallbackLogged:
+                            self.logger.webhook(
+                                "Fuzzy AI Gather",
+                                "Fallback behavior engaged.",
+                                "orange",
+                            )
+                            fuzzyAIFallbackLogged = True
             except Exception as e:
                 print(traceback.format_exc())
+                if pattern == "fuzzy_ai_gather":
+                    self.logger.webhook(
+                        "Fuzzy AI Gather",
+                        f"Runtime failed: {e}",
+                        "red",
+                    )
+                    self.logger.webhook(
+                        "Fuzzy AI Gather",
+                        "Fallback behavior engaged.",
+                        "orange",
+                    )
                 if firstPattern:
                     self.logger.webhook("Incompatible pattern", f"The pattern {pattern} is incompatible with the macro. Defaulting to e_lol instead.\
                                         Avoid using this pattern in the future. If you are the creator of this pattern, the error can be found in terminal", "red")
