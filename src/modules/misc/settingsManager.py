@@ -11,6 +11,7 @@ import re
 profileName = "a"
 # Track profile changes for running macro processes
 _profile_change_counter = 0
+_settings_key_file_cache = None
 
 # File to store current profile persistence (defined after getProjectRoot)
 CURRENT_PROFILE_FILE = None
@@ -278,6 +279,42 @@ def readSettingsFile(path):
             out[k] = v
     return out
 
+def _getDefaultSettingsKeySets():
+    """Return known keys for profile and general settings defaults."""
+    global _settings_key_file_cache
+
+    if _settings_key_file_cache is not None:
+        return _settings_key_file_cache
+
+    profile_keys = set()
+    general_keys = set()
+
+    try:
+        profile_keys = set(readSettingsFile(os.path.join(getDefaultSettingsPath(), "settings.txt")).keys())
+    except Exception:
+        pass
+
+    try:
+        general_keys = set(readSettingsFile(os.path.join(getDefaultSettingsPath(), "generalsettings.txt")).keys())
+    except Exception:
+        pass
+
+    _settings_key_file_cache = {
+        "profile": profile_keys,
+        "general": general_keys,
+    }
+    return _settings_key_file_cache
+
+def _resolveSettingsFileType(setting, requested_type):
+    """Prefer the file that owns this setting in defaults, falling back to the requested type."""
+    key_sets = _getDefaultSettingsKeySets()
+
+    if setting in key_sets["profile"] and setting not in key_sets["general"]:
+        return "profile"
+    if setting in key_sets["general"] and setting not in key_sets["profile"]:
+        return "general"
+    return requested_type
+
 def saveDict(path, data):
     out = "\n".join([f"{k}={v}" for k,v in data.items()])
     # Ensure file ends with a newline to avoid accidental concatenation
@@ -439,6 +476,10 @@ def syncFieldSettingsToProfile(setting, value):
         print(f"Warning: Could not sync field settings to profile settings: {e}")
 
 def saveProfileSetting(setting, value):
+    if _resolveSettingsFileType(setting, "profile") == "general":
+        saveGeneralSetting(setting, value)
+        return
+
     settings_path = os.path.join(getProfilePath(), "settings.txt")
     saveSettingFile(setting, value, settings_path)
     # Synchronize field settings with general settings
@@ -461,6 +502,10 @@ def incrementProfileSetting(setting, incrValue):
     return data
 
 def saveGeneralSetting(setting, value):
+    if _resolveSettingsFileType(setting, "general") == "profile":
+        saveProfileSetting(setting, value)
+        return
+
     generalsettings_path = os.path.join(getProfilePath(), "generalsettings.txt")
     saveSettingFile(setting, value, generalsettings_path)
     # Synchronize field settings with profile settings
@@ -471,9 +516,43 @@ def removeGeneralSetting(setting):
     generalsettings_path = os.path.join(getProfilePath(), "generalsettings.txt")
     removeSettingFile(setting, generalsettings_path)
 
+def _moveMisplacedSettings(settings_path, generalsettings_path):
+    """Move settings written to the wrong file back to their expected owner."""
+    key_sets = _getDefaultSettingsKeySets()
+
+    try:
+        settings_data = readSettingsFile(settings_path)
+    except FileNotFoundError:
+        settings_data = {}
+
+    try:
+        general_data = readSettingsFile(generalsettings_path)
+    except FileNotFoundError:
+        general_data = {}
+
+    moved_to_profile = {
+        key: general_data.pop(key)
+        for key in list(general_data.keys())
+        if key in key_sets["profile"] and key not in key_sets["general"]
+    }
+    moved_to_general = {
+        key: settings_data.pop(key)
+        for key in list(settings_data.keys())
+        if key in key_sets["general"] and key not in key_sets["profile"]
+    }
+
+    if moved_to_profile:
+        settings_data.update(moved_to_profile)
+        saveDict(settings_path, settings_data)
+    if moved_to_general or moved_to_profile:
+        general_data.update(moved_to_general)
+        saveDict(generalsettings_path, general_data)
+
 def loadSettings():
     settings_path = os.path.join(getProfilePath(), "settings.txt")
+    generalsettings_path = os.path.join(getProfilePath(), "generalsettings.txt")
     default_settings_path = os.path.join(getDefaultSettingsPath(), "settings.txt")
+    _moveMisplacedSettings(settings_path, generalsettings_path)
     # Read the profile settings if present (capture raw profile to detect legacy keys)
     try:
         profile_raw = readSettingsFile(settings_path)
@@ -569,12 +648,13 @@ def loadAllSettings():
     migrateProfilesToGeneralSettings()
 
     generalsettings_path = os.path.join(getProfilePath(), "generalsettings.txt")
+    settings_path = os.path.join(getProfilePath(), "settings.txt")
+    _moveMisplacedSettings(settings_path, generalsettings_path)
     try:
         generalSettings = readSettingsFile(generalsettings_path)
     except FileNotFoundError:
-        # Fall back to global generalsettings if profile-specific one doesn't exist
-        print(f"Warning: Profile '{profileName}' generalsettings file not found, using global generalsettings")
-        generalSettings = readSettingsFile(generalsettings_path)
+        print(f"Warning: Profile '{profileName}' generalsettings file not found, using defaults")
+        generalSettings = readSettingsFile(os.path.join(getDefaultSettingsPath(), "generalsettings.txt"))
 
     # Merge any new default general settings keys into the profile.
     general_defaults_path = os.path.join(getDefaultSettingsPath(), "generalsettings.txt")
