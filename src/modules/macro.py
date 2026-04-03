@@ -5879,23 +5879,31 @@ class macro:
 
         normalized = self._normalizeAFBText(rawBlueTexts)
         boostedLines = [line for line in rawBlueTexts.split("\n") if "boosted" in line.lower()]
+        latestBoostText = boostedLines[-1] if boostedLines else rawBlueTexts
         tokens = set(normalized.split()) if not boostedLines else set()
+        if boostedLines:
+            lineNormalized = self._normalizeAFBText(latestBoostText)
+            orderedMatches = []
+            for candidate in candidateFields:
+                fieldPatterns = fields.get(candidate, [[x for x in candidate.split() if x]])
+                for pattern in fieldPatterns:
+                    phrasePattern = r"\b" + r"\s+".join(re.escape(word) for word in pattern) + r"\b"
+                    match = re.search(phrasePattern, lineNormalized)
+                    if match:
+                        orderedMatches.append((match.start(), candidate))
+                        break
+            orderedMatches.sort(key=lambda x: x[0])
+            return [candidate for _, candidate in orderedMatches]
+
         boostedFields = []
         for candidate in candidateFields:
             fieldPatterns = fields.get(candidate, [[x for x in candidate.split() if x]])
             candidateCompact = candidate.replace(" ", "")
-            for line in boostedLines if boostedLines else [rawBlueTexts]:
-                lineNormalized = self._normalizeAFBText(line)
-                lineTokens = set(lineNormalized.split())
-                if any((word in lineTokens and word not in candidateCompact) for word in ignore):
-                    continue
-                for pattern in fieldPatterns:
-                    patternSet = set(pattern)
-                    if patternSet.issubset(lineTokens) or (not boostedLines and patternSet.issubset(tokens)):
-                        if candidate not in boostedFields:
-                            boostedFields.append(candidate)
-                        break
-                if candidate in boostedFields:
+            if any((word in tokens and word not in candidateCompact) for word in ignore):
+                continue
+            for pattern in fieldPatterns:
+                if set(pattern).issubset(tokens):
+                    boostedFields.append(candidate)
                     break
         return boostedFields
 
@@ -5981,10 +5989,17 @@ class macro:
                             bluetexts += ocr.imToString("blue") + "\n"
 
                         allCandidateFields = list(startLocationDimensions.keys())
+                        detectedBoostedFields = self._extractAFBBoostedFields(bluetexts, allCandidateFields)
+                        latestDetectedBoost = detectedBoostedFields[-1] if detectedBoostedFields else None
+                        detectedBoostText = latestDetectedBoost if latestDetectedBoost else "None"
+                        self.logger.webhook(
+                            "",
+                            f"{str(dice).title()}, Attempt: {attempt+1}/{attempts} - Detected: {detectedBoostText}",
+                            "white"
+                        )
 
                         if "field" in dice:
-                            boostedFields = self._extractAFBBoostedFields(bluetexts, targetFields)
-                            boostedField = boostedFields[0] if boostedFields else None
+                            boostedField = latestDetectedBoost if latestDetectedBoost in targetFields else None
 
                             if boostedField is not None:
                                 self.logger.webhook("", f"Boosted Field: {boostedField}", "bright green", "blue")
@@ -6001,7 +6016,7 @@ class macro:
                                 return returnVal
                             continue
 
-                        boostedFields = self._extractAFBBoostedFields(bluetexts, allCandidateFields)
+                        boostedFields = detectedBoostedFields
                         targetBoostedFields = [field for field in boostedFields if field in targetFields]
 
                         if targetBoostedFields:
