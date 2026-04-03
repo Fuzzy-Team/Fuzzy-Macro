@@ -290,8 +290,17 @@ def start():
     
 @eel.expose
 def stop():
-    if run.value == 3: return #already stopped
+    try:
+        stopAllTools()
+    except Exception:
+        pass
+
+    if run.value == 3:
+        setRunState(3)
+        return {"ok": True}
+
     run.value = 0
+    setRunState(0)
     return {"ok": True}
 
 @eel.expose
