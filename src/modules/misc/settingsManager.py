@@ -268,16 +268,42 @@ def readSettingsFile(path):
     #convert to a dict
     out = {}
     for k,v in data:
-        try:
-            out[k] = ast.literal_eval(v)
-        except:
-            #check if integer
-            if v.isdigit():
-                out[k] = int(v)
-            elif v.replace(".","",1).isdigit():
-                out[k] = float(v)
-            out[k] = v
+        out[k] = _parseSettingValue(v)
     return out
+
+def _parseSettingValue(value):
+    """Parse a settings-file value while preserving unquoted strings."""
+    try:
+        return ast.literal_eval(value)
+    except Exception:
+        if value.isdigit():
+            return int(value)
+        if value.replace(".", "", 1).isdigit():
+            return float(value)
+        return value
+
+def _coerceScalarValue(value):
+    """Normalize numeric strings loaded from legacy profile files."""
+    if isinstance(value, str):
+        return _parseSettingValue(value)
+    return value
+
+def _coerceNestedValues(value):
+    if isinstance(value, dict):
+        return {k: _coerceNestedValues(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_coerceNestedValues(v) for v in value]
+    return _coerceScalarValue(value)
+
+def _chooseRepairValue(existing_value, incoming_value, default_value):
+    """Prefer explicit user values over defaults when repairing misplaced keys."""
+    if existing_value is None:
+        return incoming_value
+    if existing_value == incoming_value:
+        return existing_value
+    if existing_value == default_value and incoming_value != default_value:
+        return incoming_value
+    return existing_value
 
 def _getDefaultSettingsKeySets():
     """Return known keys for profile and general settings defaults."""
@@ -341,37 +367,50 @@ def removeSettingFile(setting, path):
         #write it back
         saveDict(path, data)
 
+def _getDefaultProfileFieldsPath():
+    return os.path.join(getProjectRoot(), "settings", "defaults", "profiles", "a", "fields.txt")
+
+def _readFieldsFile(fields_path):
+    with open(fields_path) as f:
+        return ast.literal_eval(f.read())
+
+def _repairFieldsData(fields_data, default_fields):
+    repaired = _coerceNestedValues(fields_data)
+    updated = False
+
+    for field_name, default_field_settings in default_fields.items():
+        if field_name not in repaired or not isinstance(repaired[field_name], dict):
+            repaired[field_name] = dict(default_field_settings)
+            updated = True
+            continue
+
+        field_settings = repaired[field_name]
+        for key, default_value in default_field_settings.items():
+            if key not in field_settings:
+                field_settings[key] = default_value
+                updated = True
+
+    return repaired, updated
+
+def _loadFieldsFile(fields_path, repair=True):
+    fields_data = _readFieldsFile(fields_path)
+    if not repair:
+        return _coerceNestedValues(fields_data)
+
+    try:
+        default_fields = _readFieldsFile(_getDefaultProfileFieldsPath())
+    except Exception:
+        default_fields = {}
+
+    fields_data, updated = _repairFieldsData(fields_data, default_fields)
+    if updated:
+        with open(fields_path, "w") as f:
+            f.write(str(fields_data))
+    return fields_data
+
 def loadFields():
     fields_path = os.path.join(getProfilePath(), "fields.txt")
-    with open(fields_path) as f:
-        out = ast.literal_eval(f.read())
-    f.close()
-    
-    # Auto-add missing goo settings for backward compatibility
-    # This ensures users upgrading from older versions get the new goo functionality
-    fieldsUpdated = False
-    for field, settings in out.items():
-        # Add missing goo settings if they don't exist
-        if "goo" not in settings:
-            settings["goo"] = False  # Default to disabled
-            fieldsUpdated = True
-        if "goo_interval" not in settings:
-            settings["goo_interval"] = 3  # Default to 3 seconds (minimum allowed)
-            fieldsUpdated = True
-    
-    # Save the updated fields if any were modified
-    if fieldsUpdated:
-        with open(fields_path, "w") as f:
-            f.write(str(out))
-        f.close()
-    
-    for field,settings in out.items():
-        for k,v in settings.items():
-            #check if integer
-            if isinstance(v,str): 
-                if v.isdigit(): out[field][k] = int(v)
-                elif v.replace(".","",1).isdigit(): out[field][k] = float(v)
-    return out
+    return _loadFieldsFile(fields_path)
 
 def saveField(field, settings):
     fieldsData = loadFields()
@@ -519,33 +558,67 @@ def removeGeneralSetting(setting):
 def _moveMisplacedSettings(settings_path, generalsettings_path):
     """Move settings written to the wrong file back to their expected owner."""
     key_sets = _getDefaultSettingsKeySets()
+    default_profile_settings = {}
+    default_general_settings = {}
+
+    try:
+        default_profile_settings = readSettingsFile(os.path.join(getDefaultSettingsPath(), "settings.txt"))
+    except Exception:
+        pass
+
+    try:
+        default_general_settings = readSettingsFile(os.path.join(getDefaultSettingsPath(), "generalsettings.txt"))
+    except Exception:
+        pass
+
+    changed = False
 
     try:
         settings_data = readSettingsFile(settings_path)
     except FileNotFoundError:
-        settings_data = {}
+        settings_data = dict(default_profile_settings)
+        changed = True
 
     try:
         general_data = readSettingsFile(generalsettings_path)
     except FileNotFoundError:
-        general_data = {}
+        general_data = dict(default_general_settings)
+        changed = True
 
-    moved_to_profile = {
-        key: general_data.pop(key)
-        for key in list(general_data.keys())
-        if key in key_sets["profile"] and key not in key_sets["general"]
-    }
-    moved_to_general = {
-        key: settings_data.pop(key)
-        for key in list(settings_data.keys())
-        if key in key_sets["general"] and key not in key_sets["profile"]
-    }
+    for key in list(general_data.keys()):
+        if key not in key_sets["profile"] or key in key_sets["general"]:
+            continue
+        moved_value = general_data.pop(key)
+        settings_data[key] = _chooseRepairValue(
+            settings_data.get(key),
+            moved_value,
+            default_profile_settings.get(key),
+        )
+        changed = True
 
-    if moved_to_profile:
-        settings_data.update(moved_to_profile)
+    for key in list(settings_data.keys()):
+        if key not in key_sets["general"] or key in key_sets["profile"]:
+            continue
+        moved_value = settings_data.pop(key)
+        general_data[key] = _chooseRepairValue(
+            general_data.get(key),
+            moved_value,
+            default_general_settings.get(key),
+        )
+        changed = True
+
+    for key, value in default_profile_settings.items():
+        if key not in settings_data:
+            settings_data[key] = value
+            changed = True
+
+    for key, value in default_general_settings.items():
+        if key not in general_data:
+            general_data[key] = value
+            changed = True
+
+    if changed:
         saveDict(settings_path, settings_data)
-    if moved_to_general or moved_to_profile:
-        general_data.update(moved_to_general)
         saveDict(generalsettings_path, general_data)
 
 def loadSettings():
@@ -756,8 +829,9 @@ def exportProfile(profile_name):
         if not os.path.exists(settings_file) or not os.path.exists(fields_file) or not os.path.exists(generalsettings_file):
             return False, f"Profile '{profile_name}' is missing required files"
 
+        _moveMisplacedSettings(settings_file, generalsettings_file)
         settings_data = readSettingsFile(settings_file)
-        fields_data = loadFields() if profile_name == getCurrentProfile() else ast.literal_eval(open(fields_file).read())
+        fields_data = loadFields() if profile_name == getCurrentProfile() else _loadFieldsFile(fields_file)
         generalsettings_data = readSettingsFile(generalsettings_file)
 
         # Ensure sensitive fields are removed from export
