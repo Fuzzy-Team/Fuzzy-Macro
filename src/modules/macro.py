@@ -5789,6 +5789,44 @@ class macro:
             mobRespawnBonus -= self.setdat["icicles_beequip"]/100 
 
         return time.time() - timing >= cooldown*mobRespawnBonus
+
+    def _AFBApplyGlitter(self, targetField, glitterslot):
+        self.logger.webhook("", "Rebuffing: Glitter", "white")
+
+        glitterCoords = None
+        if glitterslot == 0:
+            try:
+                glitterCoords = self.findItemInInventory("glitter")
+            except Exception:
+                glitterCoords = None
+
+        self.cannon()
+
+        if glitterslot == 0 and glitterCoords:
+            self.useItemInInventory(x=glitterCoords[0], y=glitterCoords[1], closeInventoryAfter=False)
+            self.goToField(targetField)
+            self.clickYes()
+            self.toggleInventory("close")
+        elif glitterslot == 0:
+            glitterThread = threading.Thread(target=self.useItemInInventory, args=("glitter",))
+            fieldThread = threading.Thread(target=self.goToField, args=(targetField,))
+            glitterThread.start()
+            fieldThread.start()
+            fieldThread.join()
+            glitterThread.join()
+            self.clickYes()
+        else:
+            self.goToField(targetField)
+            time.sleep(0.5)
+            self.keyboard.press(str(glitterslot))
+
+        self.logger.webhook("", "Rebuffed: Glitter", "white")
+        self.saveAFB("AFB_dice_cd")
+        self.saveAFB("AFB_glitter_cd")
+        self.AFBglitter = False
+        self.cAFBglitter = False
+        self.afb = False
+        self.reset()
     
 
     def _normalizeAFBText(self, text):
@@ -5872,17 +5910,17 @@ class macro:
 
         attempts = max(1, int(self.setdat.get("AFB_attempts", 10) or self.setdat.get("attempts", 10) or 10))
         targetFields = self._getAFBTargetFields()
-        goToField = threading.Thread(target=self.goToField, args=(targetFields[0],))
-        Glitter = threading.Thread(target=self.useItemInInventory, args=("glitter",))
         rebuff = self.setdat["AFB_rebuff"]
         dice = self.setdat["AFB_dice"]
         glitter = self.setdat["AFB_glitter"]
         diceslot = self.setdat["AFB_slotD"]
         glitterslot = self.setdat["AFB_slotG"]
+        diceReady = self.hasAFBRespawned("AFB_dice_cd", rebuff * 60)
+        glitterReady = glitter and self.hasAFBRespawned("AFB_glitter_cd", rebuff * 60)
 
         if gatherInterrupt:
-            canUseGlitter = glitter and self.hasAFBRespawned("AFB_glitter_cd", rebuff * 60) and self.AFBglitter
-            canUseDice = self.hasAFBRespawned("AFB_dice_cd", rebuff * 60) and not self.AFBglitter
+            canUseGlitter = glitterReady and self.AFBglitter
+            canUseDice = diceReady and not self.AFBglitter
             if (canUseGlitter or canUseDice) and not self.failed:
                 self.clear_task_status()
                 self.afb = True
@@ -5894,10 +5932,14 @@ class macro:
                 else:
                     self.reset(AFB=True)
 
-        if self.hasAFBRespawned("AFB_dice_cd", rebuff*60) or self.hasAFBRespawned("AFB_glitter_cd", rebuff*60):
+        if diceReady or (glitterReady and self.AFBglitter):
             self.failed = False
             if self.setdat["Auto_Field_Boost"]:
-                if self.cAFBDice or (self.hasAFBRespawned("AFB_dice_cd", rebuff*60) and not self.AFBglitter):
+                if self.AFBglitter and glitterReady:
+                    self._AFBApplyGlitter(targetFields[0], glitterslot)
+                    return targetFields
+
+                if self.cAFBDice or (diceReady and not self.AFBglitter):
                     self.cAFBDice = False
                     self.logger.webhook("", "Auto Field Boost", "white")
                     for _ in range(2):
@@ -5955,6 +5997,7 @@ class macro:
                                 self.saveAFB("AFB_dice_cd")
                                 if glitter:
                                     self.AFBglitter = True
+                                    self.saveAFB("AFB_glitter_cd")
                                 return returnVal
                             continue
 
@@ -5972,6 +6015,7 @@ class macro:
                             self.saveAFB("AFB_dice_cd")
                             if glitter:
                                 self.AFBglitter = True
+                                self.saveAFB("AFB_glitter_cd")
                             return returnVal
 
                         if boostedFields:
@@ -5981,41 +6025,8 @@ class macro:
 
                             if glitter and not self.failed and self.hasAFBRespawned("AFB_glitter_cd", rebuff*60):
                                 if self.AFBglitter:
-                                    self.logger.webhook("", "Rebuffing: Glitter", "white")
-                                    glitterCoords = None
-                                    if glitterslot == 0:
-                                        try:
-                                            glitterCoords = self.findItemInInventory("glitter")
-                                        except Exception:
-                                            glitterCoords = None
-
-                                    self.cannon()
-
-                                    if glitterslot == 0 and glitterCoords:
-                                        self.useItemInInventory(x=glitterCoords[0], y=glitterCoords[1], closeInventoryAfter=False)
-                                        self.goToField(targetFields[0])
-                                        self.clickYes()
-                                        self.toggleInventory("close")
-                                    else:
-                                        if glitterslot == 0:
-                                            Glitter.start()
-                                            goToField.start()
-                                            goToField.join()
-                                            Glitter.join()
-                                            self.clickYes()
-                                        else:
-                                            self.goToField(targetFields[0])
-                                            time.sleep(0.5)
-                                            self.keyboard.press(str(glitterslot))
-
-                                    self.logger.webhook("", "Rebuffed: Glitter", "white")
-                                    self.saveAFB("AFB_dice_cd")
-                                    self.saveAFB("AFB_glitter_cd")
-                                    self.reset()
-                                    self.AFBglitter = False
-                                    self.cAFBglitter = False
-                                    self.afb = False
-                                    return returnVal
+                                    self._AFBApplyGlitter(targetFields[0], glitterslot)
+                                    return targetFields
 
             if returnVal is None:
                 self.failed = True
