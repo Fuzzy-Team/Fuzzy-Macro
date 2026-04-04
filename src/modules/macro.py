@@ -1620,10 +1620,6 @@ class macro:
             #mouse.teleport(self.robloxWindow.mw/(self.xsm*4.11)+40,(self.robloxWindow.mh/(9*self.ysm))+yOffset)
             self.canDetectNight = False
             st = time.time()
-            #close any menus if they exist
-            self.clickPermissionPopup()
-            print(f"checked permission popup: {time.time()-st}")
-            
             closeImg = self.adjustImage("./images/menu", "close") #sticker printer
             print(f"adjusted sticker printer image: {time.time()-st}")
             if locateImageOnScreen(closeImg, self.robloxWindow.mx+(self.robloxWindow.mw/4), self.robloxWindow.my+(100), self.robloxWindow.mw/4, self.robloxWindow.mh/3.5, 0.7):
@@ -2160,7 +2156,6 @@ class macro:
             #             time.sleep(0.4)
             #             if self.isBesideEImage("claimhive"): break
             #             self.keyboard.walk("d",0.2)
-            #         self.clickPermissionPopup()
             #         self.keyboard.press("e")
             #         return True
             #     return False
@@ -2190,7 +2185,6 @@ class macro:
             #             break
             #claim hive and convert
             if rejoinSuccess and isHiveAvailable():
-                self.clickPermissionPopup()
                 self.keyboard.press("e")
                 time.sleep(1)
                 self.logger.webhook("",f'Claimed hive {newHiveNumber}', "bright green", "screen", ping_category="ping_critical_errors")
@@ -2458,7 +2452,6 @@ class macro:
 
             #cycle ends
             mouse.mouseUp()
-            self.clickPermissionPopup()
             #add gather time stat
             self.hourlyReport.addHourlyStat("gathering_time", time.time()-patternStartTime)
             gatherTime = self.convertSecsToMinsAndSecs(getGatherTime())
@@ -4177,33 +4170,6 @@ class macro:
             f.write(str(finalTime))
         f.close()
     
-    #click the "allow for one month" on the "terminal is requesting to bypass" popup
-    #Source: https://github.com/sevmanash/sevs-modified-macro/blob/main/src/modules/macro.py
-    def clickPermissionPopup(self):
-        permissionPopup = self.adjustImage("./images/mac", "allow")
-        permissionPopup2 = self.adjustImage("./images/mac", "allowfor")
-        permissionPopup3 = self.adjustImage("./images/mac", "cancel")
-        x = self.robloxWindow.mw/4
-        y = self.robloxWindow.mh/3
-        res = locateImageOnScreen(permissionPopup, x, y, self.robloxWindow.mw/2, self.robloxWindow.mh/3, 0.8)
-        res2 = locateImageOnScreen(permissionPopup2, x, y, self.robloxWindow.mw/2, self.robloxWindow.mh/3, 0.8)
-        res3 = locateImageOnScreen(permissionPopup3, x, y, self.robloxWindow.mw/2, self.robloxWindow.mh/3, 0.8)
-        if res or res2 or res3:
-            if res or res2:
-                self.logger.webhook("", "Detected: Terminal permission popup", "orange")
-            else:
-                self.logger.webhook("", "Detected: Screen permission popup", "orange")
-            reses = res or res2 or res3  
-            x2, y2 = reses[1]
-            if self.display_type == "retina":
-                x2 /= 2
-                y2 /= 2
-            mouse.moveTo(x+x2, y+y2)
-            time.sleep(0.08)
-            mouse.moveBy(1,1)
-            time.sleep(0.1)
-            mouse.click()
-
     def backgroundOnce(self):
         with open("./data/user/hotbar_timings.txt", "r") as f:
             hotbarSlotTimings = ast.literal_eval(f.read())

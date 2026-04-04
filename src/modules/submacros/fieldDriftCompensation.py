@@ -60,7 +60,7 @@ class fieldDriftCompensation():
         saturatorLocation = self.getSaturatorInImage(pillowToCv2(mssScreenshot(self.robloxWindow.mx,self.robloxWindow.my+100, self.robloxWindow.mw, self.robloxWindow.mh-100)))
         if saturatorLocation is None: return None
         x,y = saturatorLocation
-        if self.isRetina:
+        if self.robloxWindow.isRetina:
             x /= 2
             y /= 2
         y += 100
