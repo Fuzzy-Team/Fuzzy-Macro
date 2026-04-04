@@ -1387,6 +1387,13 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 return False
             
             # Handle special tasks
+            if taskId == "vic_hop":
+                if macro.setdat.get("vic_hop", False):
+                    runTask(macro.vicHop, resetAfter=False)
+                    executedTasks.add(taskId)
+                    return True
+                return False
+
             if taskId == "blender":
                 if macro.setdat["blender_enable"]:
                     with open("./data/user/blender.txt", "r") as f:
