@@ -3360,21 +3360,29 @@ class macro:
     def vicHop(self):
         self.set_task_status("vic_hop", activity="vicious")
         self.logger.webhook("", "Vic Hop started", "dark brown", "screen")
-        maxHops = max(1, int(self.setdat.get("vic_hop_max_servers", 20)))
+        try:
+            maxHops = int(self.setdat.get("vic_hop_max_servers", 20))
+        except Exception:
+            maxHops = 20
+        maxHops = max(0, maxHops)
+        maxHopsLabel = "unlimited" if maxHops == 0 else str(maxHops)
         hops = 0
         kills = 0
         try:
-            while hops < maxHops:
+            while maxHops == 0 or hops < maxHops:
                 if self.checkPauseAndWait():
                     return
                 hops += 1
-                self.logger.webhook("", f"Vic Hop: joining server {hops}/{maxHops}", "dark brown")
+                self.logger.webhook("", f"Vic Hop: joining server {hops}/{maxHopsLabel}", "dark brown")
                 self.rejoin(rejoinMsg="Vic Hop: Rejoining server")
                 self.stingerHunt()
                 if self.vicStatus == "defeated":
                     kills += 1
                     if not self.setdat.get("vic_hop_continue_after_kill", False):
                         break
+
+            if str(self.setdat.get("private_server_link", "") or "").strip():
+                self.rejoin(rejoinMsg="Vic Hop finished: Rejoining private server")
             self.logger.webhook("", f"Vic Hop finished (servers: {hops}, kills: {kills})", "light blue", "screen")
         finally:
             self.clear_task_status()

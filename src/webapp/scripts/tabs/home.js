@@ -281,6 +281,8 @@ async function loadTasks() {
         if (setdat["ant_challenge"]) bugOnlyTasks.push(taskId);
       } else if (taskId === "stinger_hunt") {
         if (setdat["stinger_hunt"]) bugOnlyTasks.push(taskId);
+      } else if (taskId === "vic_hop") {
+        if (setdat["vic_hop"]) bugOnlyTasks.push(taskId);
       } else if (taskId.startsWith("kill_")) {
         const mob = taskId.replace("kill_", "");
         if (setdat[mob]) {
@@ -296,6 +298,9 @@ async function loadTasks() {
       } else if (taskId === "stinger_hunt") {
         const emoji = killEmojis["stinger_hunt"] || "";
         out += taskHTML("Kill", `${emoji} Stinger Hunt`);
+      } else if (taskId === "vic_hop") {
+        const emoji = killEmojis["stinger_hunt"] || "";
+        out += taskHTML("Kill", `${emoji} Vic Hop`);
       } else {
         const mob = taskId.replace("kill_", "");
         const displayName = mob === "rhinobeetle" ? "rhino beetle" : mob;
@@ -430,6 +435,15 @@ async function loadTasks() {
         enabled: true,
         title: "Kill",
         desc: `${killEmojis.stinger_hunt || ""} ${toTitleCase("stinger hunt")}`,
+      };
+    }
+
+    if (taskId === "vic_hop") {
+      if (!setdat.vic_hop) return { enabled: false };
+      return {
+        enabled: true,
+        title: "Kill",
+        desc: `${killEmojis.stinger_hunt || ""} ${toTitleCase("vic hop")}`,
       };
     }
 

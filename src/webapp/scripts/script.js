@@ -442,6 +442,9 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
     if (taskId === "stinger_hunt") {
       return settings.stinger_hunt || false;
     }
+    if (taskId === "vic_hop") {
+      return settings.vic_hop || false;
+    }
     if (taskId === "auto_field_boost") {
       return settings.auto_field_boost || false;
     }
@@ -514,6 +517,7 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
 
     if (taskId === "mondo_buff") return settingsObj.mondo_buff || false;
     if (taskId === "stinger_hunt") return settingsObj.stinger_hunt || false;
+    if (taskId === "vic_hop") return settingsObj.vic_hop || false;
     if (taskId === "auto_field_boost") return settingsObj.auto_field_boost || false;
     if (taskId === "ant_challenge") return settingsObj.ant_challenge || false;
     if (taskId === "blender") return settingsObj.blender_enable || settingsObj.blender || false;
@@ -585,6 +589,7 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
       kill_tunnel_bear: "Kill: Tunnel Bear",
       mondo_buff: "Collect: Mondo Buff",
       stinger_hunt: "Stinger Hunt",
+      vic_hop: "Vic Hop",
       auto_field_boost: "Auto Field Boost",
       ant_challenge: "Ant Challenge",
       quest_polar_bear: "Quest: Polar Bear",
