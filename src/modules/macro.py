@@ -5878,9 +5878,15 @@ class macro:
         returnVal = None
         if self.AFBLIMIT:
             return True
-        if not self.AFBLIMIT and self.setdat["AFB_limit_on"] and self.hasAFBRespawned("AFB_limit", self.setdat["AFB_limit"]*60*60):
-            self.logger.webhook("AFB", "Time limit reached: Skipping", "red")
-            self.AFBLIMIT = True
+        limitHours = float(self.setdat.get("AFB_limit", 0) or 0)
+        if not self.AFBLIMIT and self.setdat["AFB_limit_on"] and limitHours > 0:
+            limitTiming = self.getAFBtiming("AFB_limit")
+            if not limitTiming or limitTiming <= 0:
+                self.saveAFB("AFB_limit")
+            elif self.hasAFBRespawned("AFB_limit", limitHours * 60 * 60, timing=limitTiming):
+                self.logger.webhook("AFB", "Time limit reached: Skipping", "red")
+                self.AFBLIMIT = True
+                return True
 
         attempts = max(1, int(self.setdat.get("AFB_attempts", 10) or self.setdat.get("attempts", 10) or 10))
         targetFields = self._getAFBTargetFields()
