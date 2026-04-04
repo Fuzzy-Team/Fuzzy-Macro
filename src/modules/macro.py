@@ -41,6 +41,8 @@ import pygetwindow as gw
 from modules.submacros.hasteCompensation import HasteCompensationRevamped
 from modules import bitmap_matcher
 import json
+import random
+import requests
 
 _shift_lock_template_cache = None
 
@@ -533,7 +535,9 @@ class macro:
         self.collectCooldowns["sticker_printer"] = 1*60*60
 
         #night detection variables
-        self.enableNightDetection = True if self.setdat["stinger_hunt"] else False
+        self.enableNightDetection = bool(
+            self.setdat.get("stinger_hunt", False) or self.setdat.get("vic_hop", False)
+        )
         self.canDetectNight = True
         self.night = False
         self.location = "spawn"
@@ -541,6 +545,8 @@ class macro:
         self.vicFields = ["pepper", "mountain top", "rose", "cactus", "spider", "clover"]
         #filter it to only include fields the player has enabled
         self.vicFields = [x for x in self.vicFields if self.setdat["stinger_{}".format(x.replace(" ","_"))]]
+        self.vicHopServerIds = []
+        self.vicHopJoinAttempts = 0
 
         self.newUI = False
 
@@ -610,7 +616,9 @@ class macro:
             self.collectCooldowns = dict([(k, v[2]) for k,v in mergedCollectData.items()])
             self.collectCooldowns["sticker_printer"] = 1*60*60
             # Update night detection
-            self.enableNightDetection = True if self.setdat["stinger_hunt"] else False
+            self.enableNightDetection = bool(
+                self.setdat.get("stinger_hunt", False) or self.setdat.get("vic_hop", False)
+            )
             # Update vic fields
             self.vicFields = ["pepper", "mountain top", "rose", "cactus", "spider", "clover"]
             self.vicFields = [x for x in self.vicFields if self.setdat["stinger_{}".format(x.replace(" ","_"))]]
@@ -891,105 +899,65 @@ class macro:
     #night detection is done by converting the screenshot to hsv and checking the average brightness
     #TODO:
     # MAYBE this doesnt actually need to be a thread? Check for night after each reset, when converting and when gathering
-    def detectNight(self):
-        #detects the average brightness of the screen. This isn't very reliable since things like lights can mess it up
-        #the threshold isnt accurate
-        def isNightBrightness(hsv):
-            hsv = hsv[int(hsv.shape[0]/3):hsv.shape[0]]
-            vValues = np.sum(hsv[:, :, 2])
-            area = hsv.shape[0] * hsv.shape[1]
-            avg_brightness = vValues/area
-            #threshold for night. It must be > 10 to deal with cases where the player is inside a fruit or stuck against a wall 
-            return 10 < avg_brightness < 80 
-
-        #Detect the color of the floor at spawn
-        #Useful when resetting/converting
-        def isSpawnFloorNight(hsv):
-            hsv = hsv[int(hsv.shape[0]/2):hsv.shape[0]]
-            lower = np.array([99, 45, 102])
-            upper = np.array([105, 51, 112])
-
-            #might increase kernel size on retina
-            kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(15,15))
-
-            mask = cv2.inRange(hsv, lower, upper)   
-            mask = cv2.erode(mask, kernel, 2)
-
-            #if np.mean = 0, no color ranges are detected, is day, hence return false
-            return np.mean(mask)
-        
+    def isNightNow(self):
         def isNightSky(bgr):
-            y = 30*self.robloxWindow.multi
-            #crop the image to only the area above buff
-            bgr = bgr[0:y, 180*self.robloxWindow.multi:int(self.robloxWindow.mw)]
-            w,h = bgr.shape[:2]
-            #check if a 15x15 area that is entirely black
-            for x in range(w-15):
-                for y in range(h-15):
-                    area = bgr[x:x+15, y:y+15]
+            y = 30 * self.robloxWindow.multi
+            bgr = bgr[0:y, 180 * self.robloxWindow.multi:int(self.robloxWindow.mw)]
+            h, w = bgr.shape[:2]
+            for row in range(max(0, h - 15)):
+                for col in range(max(0, w - 15)):
+                    area = bgr[row:row + 15, col:col + 15]
                     if np.all(area == [0, 0, 0]):
                         return True
             return False
-        
-        #detect the color of the grass in fields
-        #useful when gathering
-        def isGrassNight(bgr):       
+
+        def isGrassNight(bgr):
             dayColors = [
-                [(47, 117, 57), cv2.getStructuringElement(cv2.MORPH_RECT, (6, 6))], #ground
-                [(46, 117, 58), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))], #dande
-                [(60, 156, 74), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))], #stump
-                [(38, 114, 51), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))], #pa
-                [(66, 123, 40), cv2.getStructuringElement(cv2.MORPH_RECT, (6, 6))], #clov
-                [(32, 211, 22), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))], #ant
+                [(47, 117, 57), cv2.getStructuringElement(cv2.MORPH_RECT, (6, 6))],
+                [(46, 117, 58), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))],
+                [(60, 156, 74), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))],
+                [(38, 114, 51), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))],
+                [(66, 123, 40), cv2.getStructuringElement(cv2.MORPH_RECT, (6, 6))],
+                [(32, 211, 22), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))],
             ]
-
             nightColors = [
-                [(23, 72, 30), cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))], #a
-                [(17, 71, 28), cv2.getStructuringElement(cv2.MORPH_RECT, (6, 6))], #dande
+                [(23, 72, 30), cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))],
+                [(17, 71, 28), cv2.getStructuringElement(cv2.MORPH_RECT, (6, 6))],
             ]
 
-            bgr = bgr[0:bgr.shape[0]- (100*self.robloxWindow.multi)]
-            dayScreen = bgr[int(bgr.shape[0]*2/5):bgr.shape[0]].copy()
-            #detect day
+            bgr = bgr[0:bgr.shape[0] - (100 * self.robloxWindow.multi)]
+            dayScreen = bgr[int(bgr.shape[0] * 2 / 5):bgr.shape[0]].copy()
             for color, kernel in dayColors:
                 if findColorObjectRGB(dayScreen, color, variance=6, kernel=kernel, mode="box"):
                     return False
-            #day not found, detect Night
-            nightScreen = bgr[int(bgr.shape[0]/2):bgr.shape[0]].copy()
+
+            nightScreen = bgr[int(bgr.shape[0] / 2):bgr.shape[0]].copy()
             for color, kernel in nightColors:
                 if findColorObjectRGB(nightScreen, color, variance=6, kernel=kernel, mode="box"):
                     return True
-                
             return False
 
-        def isNight():
-            screen = mssScreenshotNP(self.robloxWindow.mx,self.robloxWindow.my, self.robloxWindow.mw, self.robloxWindow.mh)
-            # Convert the image from BGRA to HSV
-            bgr = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
-            hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+        screen = mssScreenshotNP(
+            self.robloxWindow.mx,
+            self.robloxWindow.my,
+            self.robloxWindow.mw,
+            self.robloxWindow.mh,
+        )
+        bgr = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
+        if self.converting:
+            return isNightSky(bgr)
+        return isGrassNight(bgr)
 
-            if self.converting:
-                nightDetected = isNightSky(bgr)
-            else:
-                nightDetected = isGrassNight(bgr)
+    def detectNight(self):
+        if not self.canDetectNight:
+            return
 
-            #night detected
-            if nightDetected:
-                self.nightDetectStreaks += 1
-                #self.logger.webhook("", f"Night Detected? ({self.nightDetectStreaks})", "red", "screen")
-                #im = Image.fromarray(cv2.cvtColor(screen, cv2.COLOR_BGR2RGB))
-                #im.save(f"night-{time.time()}.png")
-            else: 
-                #failed to detect night, reset streak counter
-                self.nightDetectStreaks = 0
+        if self.isNightNow():
+            self.nightDetectStreaks += 1
+        else:
+            self.nightDetectStreaks = 0
 
-            #detected night consecutively for 5 times or more
-            if self.nightDetectStreaks >= 5:
-                return True
-            
-            return False
-        
-        if self.canDetectNight and isNight():
+        if self.nightDetectStreaks >= 5:
             self.night = True
             self.logger.webhook("","Night detected","dark brown", "screen")
             time.sleep(200) #wait for night to end
@@ -1921,17 +1889,79 @@ class macro:
             self.logger.webhook("Notice", f"Failed to reach cannon too many times", "red", ping_category="ping_critical_errors")
             self.rejoin()
     
-    def rejoin(self, rejoinMsg = "Rejoining"):
+    def _fetchVicHopRobloxServers(self):
+        try:
+            response = requests.get(
+                "https://games.roblox.com/v1/games/1537690962/servers/0",
+                params={
+                    "sortOrder": 1,
+                    "excludeFullGames": "true",
+                    "limit": 100,
+                },
+                timeout=20,
+            )
+            response.raise_for_status()
+            serverIds = [
+                x.get("id")
+                for x in response.json().get("data", [])
+                if x.get("id")
+            ]
+            random.shuffle(serverIds)
+            return serverIds
+        except Exception:
+            return []
+
+    def _fetchVicHopBssServers(self):
+        try:
+            response = requests.get(
+                "https://bssservers.bssmvalues.com/api/servers",
+                timeout=20,
+                headers={"User-Agent": "FuzzyMacro"},
+            )
+            response.raise_for_status()
+            serverIds = [
+                x
+                for x in response.json().get("servers", [])
+                if isinstance(x, str) and len(x) > 10
+            ]
+            random.shuffle(serverIds)
+            return serverIds
+        except Exception:
+            return []
+
+    def getVicHopServerId(self):
+        if not self.vicHopServerIds:
+            self.vicHopServerIds = self._fetchVicHopRobloxServers()
+        if not self.vicHopServerIds:
+            self.vicHopServerIds = self._fetchVicHopBssServers()
+        if not self.vicHopServerIds:
+            self.logger.webhook(
+                "",
+                "Vic Hop: failed to fetch random public servers",
+                "red",
+                "screen",
+                ping_category="ping_disconnects",
+            )
+            return None
+
+        self.vicHopJoinAttempts += 1
+        return self.vicHopServerIds.pop()
+
+    def rejoin(self, rejoinMsg="Rejoining", publicServerId=None, privateServerLink=None):
         self.canDetectNight = False
-        psLink = self.setdat.get("private_server_link", "")
+        psLink = self.setdat.get("private_server_link", "") if privateServerLink is None else privateServerLink
         self.logger.webhook("",rejoinMsg, "dark brown")
         self.set_task_status("rejoining", activity="rejoining")
         mouse.mouseUp()
         keyboard.releaseMovement()
         for i in range(3):
-            joinPS = bool(psLink and psLink.strip()) #join private server?
+            publicServerId = str(publicServerId or "").strip()
+            joinPublicServer = bool(publicServerId)
+            joinPS = bool(psLink and str(psLink).strip()) and not joinPublicServer
             rejoinMethod = self.setdat.get("rejoin_method", "deeplink")
             browserLink = "https://www.roblox.com/games/4189852503?privateServerLinkCode=87708969133388638466933925137129"
+            if joinPublicServer:
+                browserLink = f"https://www.roblox.com/games/1537690962?gameInstanceId={publicServerId}"
             if i == 2 and joinPS: 
                 self.logger.webhook("", "Failed rejoining too many times, falling back to a public server", "red", "screen", ping_category="ping_disconnects")
                 joinPS = False
@@ -1948,7 +1978,9 @@ class macro:
                 appManager.openApp("Roblox")
                 time.sleep(2)
                 deeplink = "roblox://placeID=1537690962"
-                if joinPS:
+                if joinPublicServer:
+                    deeplink = f"roblox://placeID=1537690962&gameInstanceId={publicServerId}"
+                elif joinPS:
                     # Parse the provided private server link robustly using url parsing
                     from urllib.parse import urlparse, parse_qs
                     try:
@@ -2218,9 +2250,10 @@ class macro:
                 #no need to reset
                 self.canDetectNight = True
                 self.clear_task_status()
-                return
+                return True
             self.logger.webhook("",f'Rejoin unsuccessful, attempt {i+2}','dark brown', "screen")
         self.clear_task_status()
+        return False
     
     def blueTextImageSearch(self, text, threshold=0.7):
         target = self.adjustImage("./images/blue", text)
@@ -3358,6 +3391,20 @@ class macro:
         self.reset()
 
     def vicHop(self):
+        def isNightServer():
+            nightStreaks = 0
+            for _ in range(8):
+                if self.checkPauseAndWait():
+                    return False
+                if self.isNightNow():
+                    nightStreaks += 1
+                    if nightStreaks >= 3:
+                        return True
+                else:
+                    nightStreaks = 0
+                time.sleep(0.35)
+            return False
+
         self.set_task_status("vic_hop", activity="vicious")
         self.logger.webhook("", "Vic Hop started", "dark brown", "screen")
         try:
@@ -3368,13 +3415,33 @@ class macro:
         maxHopsLabel = "unlimited" if maxHops == 0 else str(maxHops)
         hops = 0
         kills = 0
+        prevCanDetectNight = self.canDetectNight
+        self.canDetectNight = False
+        self.night = False
         try:
             while maxHops == 0 or hops < maxHops:
                 if self.checkPauseAndWait():
                     return
+
+                publicServerId = self.getVicHopServerId()
+                if not publicServerId:
+                    time.sleep(15)
+                    continue
+
+                self.logger.webhook("", f"Vic Hop: joining server {hops + 1}/{maxHopsLabel}", "dark brown")
+                if not self.rejoin(
+                    rejoinMsg="Vic Hop: Rejoining public server",
+                    publicServerId=publicServerId,
+                    privateServerLink="",
+                ):
+                    continue
+
                 hops += 1
-                self.logger.webhook("", f"Vic Hop: joining server {hops}/{maxHopsLabel}", "dark brown")
-                self.rejoin(rejoinMsg="Vic Hop: Rejoining server")
+                if not isNightServer():
+                    self.logger.webhook("", "Vic Hop: daytime server, skipping", "dark brown")
+                    continue
+
+                self.logger.webhook("", "Vic Hop: night detected, searching fields", "light blue", "screen")
                 self.stingerHunt()
                 if self.vicStatus == "defeated":
                     kills += 1
@@ -3385,6 +3452,7 @@ class macro:
                 self.rejoin(rejoinMsg="Vic Hop finished: Rejoining private server")
             self.logger.webhook("", f"Vic Hop finished (servers: {hops}, kills: {kills})", "light blue", "screen")
         finally:
+            self.canDetectNight = prevCanDetectNight
             self.clear_task_status()
 
     def stumpSnail(self):
