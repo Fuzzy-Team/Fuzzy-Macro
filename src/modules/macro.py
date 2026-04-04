@@ -29,6 +29,7 @@ from modules.misc.imageManipulation import *
 from PIL import Image
 from modules.misc import messageBox
 from modules.submacros.memoryMatch import MemoryMatch
+from modules.submacros.vicDetector import VicDetector
 import math
 import re
 import ast
@@ -529,6 +530,7 @@ class macro:
         self.buffDetector = BuffDetector(self.robloxWindow)
         self.hourlyReport = HourlyReport(self.buffDetector, self.setdat.get("hourly_report_time_format", 24))
         self.memoryMatch = MemoryMatch(self.robloxWindow)
+        self.vicDetector = VicDetector(logger=self.logger)
 
         #setup an internal cooldown tracker. The cooldowns can be modified
         self.collectCooldowns = dict([(k, v[2]) for k,v in mergedCollectData.items()])
@@ -545,6 +547,7 @@ class macro:
         self.vicFields = ["pepper", "mountain top", "rose", "cactus", "spider", "clover"]
         #filter it to only include fields the player has enabled
         self.vicFields = [x for x in self.vicFields if self.setdat["stinger_{}".format(x.replace(" ","_"))]]
+        self.currentVicSearchField = None
         self.vicHopServerIds = []
         self.vicHopJoinAttempts = 0
 
@@ -626,6 +629,16 @@ class macro:
             self.logger.webhook("Profile Changed", f"Switched to profile: {old_profile}", "blue")
 
     def detectVicStatus(self, currField=None):
+        if currField in self.vicFields:
+            vicScreen = mssScreenshotNP(
+                self.robloxWindow.mx,
+                self.robloxWindow.my,
+                self.robloxWindow.mw,
+                self.robloxWindow.mh,
+            )
+            if self.vicDetector.detect(vicScreen):
+                return ("field", currField)
+
         for th in (0.82, 0.78, 0.74):
             for field in self.vicFields:
                 if self.blueTextImageSearch(f"vic{field}", th):
@@ -899,44 +912,44 @@ class macro:
     #night detection is done by converting the screenshot to hsv and checking the average brightness
     #TODO:
     # MAYBE this doesnt actually need to be a thread? Check for night after each reset, when converting and when gathering
-    def isNightNow(self):
-        def isNightSky(bgr):
-            y = 30 * self.robloxWindow.multi
-            bgr = bgr[0:y, 180 * self.robloxWindow.multi:int(self.robloxWindow.mw)]
-            h, w = bgr.shape[:2]
-            for row in range(max(0, h - 15)):
-                for col in range(max(0, w - 15)):
-                    area = bgr[row:row + 15, col:col + 15]
-                    if np.all(area == [0, 0, 0]):
-                        return True
-            return False
-
-        def isGrassNight(bgr):
-            dayColors = [
-                [(47, 117, 57), cv2.getStructuringElement(cv2.MORPH_RECT, (6, 6))],
-                [(46, 117, 58), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))],
-                [(60, 156, 74), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))],
-                [(38, 114, 51), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))],
-                [(66, 123, 40), cv2.getStructuringElement(cv2.MORPH_RECT, (6, 6))],
-                [(32, 211, 22), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))],
-            ]
-            nightColors = [
-                [(23, 72, 30), cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))],
-                [(17, 71, 28), cv2.getStructuringElement(cv2.MORPH_RECT, (6, 6))],
-            ]
-
-            bgr = bgr[0:bgr.shape[0] - (100 * self.robloxWindow.multi)]
-            dayScreen = bgr[int(bgr.shape[0] * 2 / 5):bgr.shape[0]].copy()
-            for color, kernel in dayColors:
-                if findColorObjectRGB(dayScreen, color, variance=6, kernel=kernel, mode="box"):
-                    return False
-
-            nightScreen = bgr[int(bgr.shape[0] / 2):bgr.shape[0]].copy()
-            for color, kernel in nightColors:
-                if findColorObjectRGB(nightScreen, color, variance=6, kernel=kernel, mode="box"):
+    def _isNightSky(self, bgr):
+        y = 30 * self.robloxWindow.multi
+        bgr = bgr[0:y, 180 * self.robloxWindow.multi:int(self.robloxWindow.mw)]
+        h, w = bgr.shape[:2]
+        for row in range(max(0, h - 15)):
+            for col in range(max(0, w - 15)):
+                area = bgr[row:row + 15, col:col + 15]
+                if np.all(area == [0, 0, 0]):
                     return True
-            return False
+        return False
 
+    def _isGrassNight(self, bgr):
+        dayColors = [
+            [(47, 117, 57), cv2.getStructuringElement(cv2.MORPH_RECT, (6, 6))],
+            [(46, 117, 58), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))],
+            [(60, 156, 74), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))],
+            [(38, 114, 51), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))],
+            [(66, 123, 40), cv2.getStructuringElement(cv2.MORPH_RECT, (6, 6))],
+            [(32, 211, 22), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))],
+        ]
+        nightColors = [
+            [(23, 72, 30), cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))],
+            [(17, 71, 28), cv2.getStructuringElement(cv2.MORPH_RECT, (6, 6))],
+        ]
+
+        bgr = bgr[0:bgr.shape[0] - (100 * self.robloxWindow.multi)]
+        dayScreen = bgr[int(bgr.shape[0] * 2 / 5):bgr.shape[0]].copy()
+        for color, kernel in dayColors:
+            if findColorObjectRGB(dayScreen, color, variance=6, kernel=kernel, mode="box"):
+                return False
+
+        nightScreen = bgr[int(bgr.shape[0] / 2):bgr.shape[0]].copy()
+        for color, kernel in nightColors:
+            if findColorObjectRGB(nightScreen, color, variance=6, kernel=kernel, mode="box"):
+                return True
+        return False
+
+    def isNightNow(self):
         screen = mssScreenshotNP(
             self.robloxWindow.mx,
             self.robloxWindow.my,
@@ -945,8 +958,34 @@ class macro:
         )
         bgr = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
         if self.converting:
-            return isNightSky(bgr)
-        return isGrassNight(bgr)
+            return self._isNightSky(bgr)
+        return self._isGrassNight(bgr)
+
+    def isVicHopNightNow(self):
+        screen = mssScreenshotNP(
+            self.robloxWindow.mx,
+            self.robloxWindow.my,
+            self.robloxWindow.mw,
+            self.robloxWindow.mh,
+        )
+        bgr = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
+        # Mirror BSS-AI's night check order for vichop: inspect ground first,
+        # then fall back to the sky if ground is inconclusive.
+        return self._isGrassNight(bgr) or self._isNightSky(bgr)
+
+    def waitForVicHopNight(self, requiredStreaks=3, maxSamples=8, sampleDelay=0.35):
+        nightStreaks = 0
+        for _ in range(maxSamples):
+            if self.checkPauseAndWait():
+                return False
+            if self.isVicHopNightNow():
+                nightStreaks += 1
+                if nightStreaks >= requiredStreaks:
+                    return True
+            else:
+                nightStreaks = 0
+            time.sleep(sampleDelay)
+        return False
 
     def detectNight(self):
         if not self.canDetectNight:
@@ -1947,7 +1986,7 @@ class macro:
         self.vicHopJoinAttempts += 1
         return self.vicHopServerIds.pop()
 
-    def rejoin(self, rejoinMsg="Rejoining", publicServerId=None, privateServerLink=None):
+    def rejoin(self, rejoinMsg="Rejoining", publicServerId=None, privateServerLink=None, requireNightBeforeHiveClaim=False):
         self.canDetectNight = False
         psLink = self.setdat.get("private_server_link", "") if privateServerLink is None else privateServerLink
         self.logger.webhook("",rejoinMsg, "dark brown")
@@ -2121,6 +2160,10 @@ class macro:
             #find hive
             time.sleep(7) #wait for the joined friend popup to disappear
             mouse.click()
+            if requireNightBeforeHiveClaim and not self.waitForVicHopNight():
+                self.logger.webhook("", "Vic Hop: daytime server, skipping hive claim", "dark brown", "screen")
+                self.clear_task_status()
+                return False
             # self.keyboard.press("space")
             # time.sleep(0.5)
             # self.keyboard.walk("w",5+(i*0.5),0)
@@ -3286,7 +3329,8 @@ class macro:
     def stingerHuntBackground(self):
         #find vic
         while not self.stopVic:
-            status, field = self.detectVicStatus(currField=self.vicField)
+            searchField = self.currentVicSearchField or self.vicField
+            status, field = self.detectVicStatus(currField=searchField)
             if status == "field" and self.vicField is None:
                 self.vicField = field
             elif status == "died":
@@ -3308,6 +3352,7 @@ class macro:
 
         self.vicStatus = None
         self.vicField = None
+        self.currentVicSearchField = None
         self.stopVic = False
         currField = None
         self.clear_task_status()
@@ -3320,6 +3365,7 @@ class macro:
             self.hourlyReport.addHourlyStat("bug_run_time", time.time()-vicStartTime)
 
         for currField in self.vicFields:
+            self.currentVicSearchField = currField
             #go to field
             self.cannon()
             self.logger.webhook("",f"Travelling to {currField} (stinger hunt)","dark brown")
@@ -3335,6 +3381,7 @@ class macro:
             print(self.vicField)
             self.reset(convert=False)
         else: #unable to find vic
+            self.currentVicSearchField = None
             self.stopVic = True
             stingerHuntThread.join()
             self.convert()
@@ -3385,26 +3432,13 @@ class macro:
                 self.logger.webhook("","Took too long to kill Vicious Bee","red", "screen", ping_category="ping_critical_errors")
                 break
         self.night = False
+        self.currentVicSearchField = None
         updateHourlyTime()
         self.stopVic = True
         stingerHuntThread.join()
         self.reset()
 
     def vicHop(self):
-        def isNightServer():
-            nightStreaks = 0
-            for _ in range(8):
-                if self.checkPauseAndWait():
-                    return False
-                if self.isNightNow():
-                    nightStreaks += 1
-                    if nightStreaks >= 3:
-                        return True
-                else:
-                    nightStreaks = 0
-                time.sleep(0.35)
-            return False
-
         self.set_task_status("vic_hop", activity="vicious")
         self.logger.webhook("", "Vic Hop started", "dark brown", "screen")
         try:
@@ -3433,13 +3467,11 @@ class macro:
                     rejoinMsg="Vic Hop: Rejoining public server",
                     publicServerId=publicServerId,
                     privateServerLink="",
+                    requireNightBeforeHiveClaim=True,
                 ):
                     continue
 
                 hops += 1
-                if not isNightServer():
-                    self.logger.webhook("", "Vic Hop: daytime server, skipping", "dark brown")
-                    continue
 
                 self.logger.webhook("", "Vic Hop: night detected, searching fields", "light blue", "screen")
                 self.stingerHunt()
