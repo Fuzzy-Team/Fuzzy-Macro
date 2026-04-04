@@ -5923,6 +5923,9 @@ class macro:
         glitter = self.setdat["AFB_glitter"]
         diceslot = self.setdat["AFB_slotD"]
         glitterslot = self.setdat["AFB_slotG"]
+        if not glitter:
+            self.AFBglitter = False
+            self.cAFBglitter = False
         diceReady = self.hasAFBRespawned("AFB_dice_cd", rebuff * 60)
         glitterReady = glitter and self.hasAFBRespawned("AFB_glitter_cd", rebuff * 60)
 
