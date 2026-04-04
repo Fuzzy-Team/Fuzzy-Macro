@@ -949,6 +949,24 @@ class macro:
                 return True
         return False
 
+    def _isHiveSpawnNight(self, bgr):
+        h, w = bgr.shape[:2]
+        samples = [
+            bgr[int(h * 0.62):int(h * 0.78), int(w * 0.08):int(w * 0.22)],
+            bgr[int(h * 0.62):int(h * 0.78), int(w * 0.78):int(w * 0.92)],
+        ]
+        brightness = []
+        for sample in samples:
+            if sample.size == 0:
+                continue
+            hsv = cv2.cvtColor(sample, cv2.COLOR_BGR2HSV)
+            brightness.append(float(np.mean(hsv[:, :, 2])))
+
+        if not brightness:
+            return False
+
+        return sum(brightness) / len(brightness) < 135
+
     def isNightNow(self):
         screen = mssScreenshotNP(
             self.robloxWindow.mx,
@@ -971,7 +989,7 @@ class macro:
         bgr = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
         # Mirror BSS-AI's night check order for vichop: inspect ground first,
         # then fall back to the sky if ground is inconclusive.
-        return self._isGrassNight(bgr) or self._isNightSky(bgr)
+        return self._isGrassNight(bgr) or self._isHiveSpawnNight(bgr) or self._isNightSky(bgr)
 
     def waitForVicHopNight(self, requiredStreaks=3, maxSamples=8, sampleDelay=0.35):
         nightStreaks = 0
