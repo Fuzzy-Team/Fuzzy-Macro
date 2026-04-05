@@ -493,13 +493,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         
         #auto field boost (can be disabled per-call via allowAFB)
         if allowAFB and macro.setdat["Auto_Field_Boost"] and not macro.AFBLIMIT:
-            diceReady = macro.hasAFBRespawned("AFB_dice_cd", macro.setdat["AFB_rebuff"]*60)
-            glitterReady = (
-                macro.setdat["AFB_glitter"]
-                and macro.AFBglitter
-                and macro.hasAFBRespawned("AFB_glitter_cd", macro.setdat["AFB_rebuff"]*60-30)
-            )
-            if diceReady or glitterReady:
+            if macro.hasAFBRespawned("AFB_dice_cd", macro.setdat["AFB_rebuff"]*60) or macro.hasAFBRespawned("AFB_glitter_cd", macro.setdat["AFB_rebuff"]*60-30):
                 macro.AFB(gatherInterrupt=False)
 
         macro.clear_task_status()
