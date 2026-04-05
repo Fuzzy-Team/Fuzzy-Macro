@@ -19,8 +19,8 @@ import time
 import cv2
 import numpy as np
 from datetime import datetime, timedelta
-import queue  # <-- Add this import
 from typing import List, Optional, Dict, Tuple
+from modules.controls.sleep import INTERRUPT_SKIP, INTERRUPT_RESET
 
 # Import settings manager functions
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'misc'))
@@ -2230,24 +2230,19 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
     @bot.tree.command(name = "reset", description = "Reset the character and return to hive")
     async def reset(interaction: discord.Interaction):
-        await interaction.response.defer()
-        try:
-            keyboard.releaseMovement()
-            # Request reset in the macro process using a special run value
-            import modules.macro as macroModule
-            # Use a dummy queue if recentLogs is not a queue
-            logQueue = recentLogs if hasattr(recentLogs, "put") else queue.Queue()
-            macro = macroModule.macro(reset, logQueue, updateGUI)
-            macro.status.value = ""
-            if hasattr(macro, 'stopGather'):
-                macro.stopGather()
-            if hasattr(macro, 'logger') and hasattr(macro.logger, 'webhook'):
-                macro.logger.webhook("", "Player died (Reset Command)", "dark brown", "screen", ping_category="ping_character_deaths")
-            time.sleep(0.4)
-            macro.reset(convert=True)
-            await interaction.followup.send("✅ Reset completed.")
-        except Exception as e:
-            await interaction.followup.send(f"❌ Failed to request reset: {str(e)}")
+        if run.value != 2:
+            await interaction.response.send_message("Macro is not running")
+            return
+        skipTask.value = INTERRUPT_RESET
+        await interaction.response.send_message("Interrupting the current task. The macro will reset, convert, and retry it.")
+
+    @bot.tree.command(name = "skip", description = "Skip the current task and move to the next one")
+    async def skip(interaction: discord.Interaction):
+        if run.value != 2:
+            await interaction.response.send_message("Macro is not running")
+            return
+        skipTask.value = INTERRUPT_SKIP
+        await interaction.response.send_message("Interrupting the current task. The macro will reset, convert, and move to the next task.")
     
     @bot.tree.command(name = "logs", description = "Show recent macro actions (optionally specify count)")
     @app_commands.describe(count="Number of recent log entries to show (1-50)")

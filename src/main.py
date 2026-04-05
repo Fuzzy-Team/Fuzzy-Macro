@@ -32,6 +32,12 @@ import modules.misc.settingsManager as settingsManager
 import modules.macro as macroModule
 import modules.controls.mouse as mouse
 import json
+from modules.controls.sleep import (
+    InterruptRequested,
+    INTERRUPT_NONE,
+    INTERRUPT_SKIP,
+    INTERRUPT_RESET,
+)
 # delete backup from previous update if pending
 try:
     from modules.misc.update import delete_backup_if_pending
@@ -461,40 +467,54 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
     #makes it easy to do any checks after a task is complete (like stinger hunt, rejoin every, etc)
     def runTask(func = None, args = (), resetAfter = True, convertAfter = True, allowAFB = True):
         nonlocal taskCompleted
-        # Check if skip was requested
-        if skipTask.value == 1:
-            skipTask.value = 0  # Reset skip flag
-            macro.logger.webhook("Task Skipped", f"Skipped: {status.value.replace('_', ' ').title()}", "orange")
+
+        def handle_interrupt(action):
+            skipTask.value = INTERRUPT_NONE
+            macro.keyboard.releaseMovement()
+            mouse.mouseUp()
+            interrupted_status = status.value.replace('_', ' ').title() if status.value else "Current Task"
             macro.clear_task_status()
             taskCompleted = True
-            if resetAfter:
-                macro.reset(convert=False)
+            if action == INTERRUPT_SKIP:
+                macro.logger.webhook("Task Skipped", f"Skipped: {interrupted_status}", "orange")
+            elif action == INTERRUPT_RESET:
+                macro.logger.webhook("Task Reset", f"Resetting and retrying: {interrupted_status}", "orange")
+            macro.reset(convert=True)
+            if action == INTERRUPT_RESET and func:
+                return runTask(func, args=args, resetAfter=resetAfter, convertAfter=convertAfter, allowAFB=allowAFB)
             return None
+
+        pending_action = int(skipTask.value)
+        if pending_action != INTERRUPT_NONE:
+            return handle_interrupt(pending_action)
         
-        #execute the task
-        if func:
-            returnVal = func(*args) 
-            taskCompleted = True
-        else:
-            returnVal = None
-        #task done
-        if resetAfter: 
-            macro.reset(convert=convertAfter)
-        
-        #do priority tasks
-        if macro.night and macro.setdat["stinger_hunt"]:
-            macro.stingerHunt()
-        if macro.setdat["mondo_buff"] and macro.hasMondoRespawned():
-            macro.collectMondoBuff()
-        if macro.setdat["rejoin_every"]:
-            if macro.hasRespawned("rejoin_every", macro.setdat["rejoin_every"]*60*60):
-                macro.rejoin("Rejoining (Scheduled)")
-                macro.saveTiming("rejoin_every")
-        
-        #auto field boost (can be disabled per-call via allowAFB)
-        if allowAFB and macro.setdat["Auto_Field_Boost"] and not macro.AFBLIMIT:
-            if macro.hasAFBRespawned("AFB_dice_cd", macro.setdat["AFB_rebuff"]*60) or macro.hasAFBRespawned("AFB_glitter_cd", macro.setdat["AFB_rebuff"]*60-30):
-                macro.AFB(gatherInterrupt=False)
+        try:
+            #execute the task
+            if func:
+                returnVal = func(*args) 
+                taskCompleted = True
+            else:
+                returnVal = None
+            #task done
+            if resetAfter: 
+                macro.reset(convert=convertAfter)
+            
+            #do priority tasks
+            if macro.night and macro.setdat["stinger_hunt"]:
+                macro.stingerHunt()
+            if macro.setdat["mondo_buff"] and macro.hasMondoRespawned():
+                macro.collectMondoBuff()
+            if macro.setdat["rejoin_every"]:
+                if macro.hasRespawned("rejoin_every", macro.setdat["rejoin_every"]*60*60):
+                    macro.rejoin("Rejoining (Scheduled)")
+                    macro.saveTiming("rejoin_every")
+            
+            #auto field boost (can be disabled per-call via allowAFB)
+            if allowAFB and macro.setdat["Auto_Field_Boost"] and not macro.AFBLIMIT:
+                if macro.hasAFBRespawned("AFB_dice_cd", macro.setdat["AFB_rebuff"]*60) or macro.hasAFBRespawned("AFB_glitter_cd", macro.setdat["AFB_rebuff"]*60-30):
+                    macro.AFB(gatherInterrupt=False)
+        except InterruptRequested as interrupt:
+            return handle_interrupt(interrupt.action)
 
         macro.clear_task_status()
         return returnVal
@@ -2737,7 +2757,7 @@ if __name__ == "__main__":
     recentLogs = manager.list()  # Shared list to store recent log entries for discord bot
     gui.setRecentLogs(recentLogs)
     updateGUI = multiprocessing.Value('i', 0)
-    skipTask = multiprocessing.Value('i', 0)  # 0 = don't skip, 1 = skip current task
+    skipTask = multiprocessing.Value('i', INTERRUPT_NONE)  # interrupt action for the running task
     status = manager.Value(ctypes.c_wchar_p, "none")
     presence = manager.Value(ctypes.c_wchar_p, "")
     logQueue = manager.Queue()

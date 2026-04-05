@@ -8,7 +8,15 @@ import pyautogui as pag
 # This will be initialized when the macro class is created
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP, benchmarkMSS, mssScreenshotPillowRGBA
 from modules.controls.keyboard import keyboard
-from modules.controls.sleep import sleep, set_run_state, pauseable_sleep
+from modules.controls.sleep import (
+    sleep,
+    set_run_state,
+    pauseable_sleep,
+    set_interrupt_action,
+    get_interrupt_action,
+    InterruptRequested,
+    INTERRUPT_NONE,
+)
 import modules.controls.mouse as mouse
 import modules.logging.log as logModule
 from modules.submacros.fieldDriftCompensation import fieldDriftCompensation as fieldDriftCompensationClass
@@ -498,6 +506,8 @@ class macro:
         # Set the run state for pause-aware sleep functions
         if run is not None:
             set_run_state(run)
+        if skipTask is not None:
+            set_interrupt_action(skipTask)
         
         self.setdat = settingsManager.loadAllSettings()
         self.fieldSettings = settingsManager.loadFields()
@@ -859,17 +869,31 @@ class macro:
 
     def clear_task_status(self):
         self.set_task_status(None)
+
+    def getInterruptAction(self):
+        return get_interrupt_action()
+
+    def clearInterruptAction(self):
+        if self.skipTask is not None:
+            self.skipTask.value = INTERRUPT_NONE
+
+    def raiseIfInterrupted(self):
+        action = self.getInterruptAction()
+        if action != INTERRUPT_NONE:
+            raise InterruptRequested(action)
     
     def checkPauseAndWait(self):
         """Check if macro is paused and wait until resumed. Returns True if stop was requested."""
         if self.run is None:
             return False
+        self.raiseIfInterrupted()
         # Wait while paused (state 6)
         while self.run.value == 6:
             # Keep inputs released while paused
             self.keyboard.releaseMovement()
             mouse.mouseUp()
             time.sleep(0.1)
+            self.raiseIfInterrupted()
         # Check if stop was requested (state 0)
         return self.run.value == 0
     
@@ -2417,13 +2441,7 @@ class macro:
                 stopGather()
                 return
             
-            # Check if skip was requested
-            if self.skipTask is not None and self.skipTask.value == 1:
-                self.skipTask.value = 0  # Reset skip flag
-                stopGather()
-                self.logger.webhook("Task Skipped", f"Skipped gathering in {field.title()}", "orange")
-                self.reset(convert=False)
-                return
+            self.raiseIfInterrupted()
             
             # goo and gumdrop timers are now handled by background threads
 
