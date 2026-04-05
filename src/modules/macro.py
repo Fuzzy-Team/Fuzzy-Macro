@@ -2443,9 +2443,6 @@ class macro:
                     pattern = "e_lol"
             firstPattern = False
 
-            #mob respawn check
-            self.setMobTimer(field)
-
             #field drift compensation
             if fieldSetting["field_drift_compensation"]:
                 self.fieldDriftCompensation.run()
