@@ -5727,24 +5727,6 @@ class macro:
 
     def saveAFB(self, name):
         return settingsManager.saveSettingFile(name, time.time(), "./data/user/AFB.txt")
-
-    def resetAFBSessionTimings(self):
-        try:
-            data = settingsManager.readSettingsFile("./data/user/AFB.txt")
-        except Exception:
-            data = {}
-
-        now = time.time()
-        rebuffCooldown = max(0, float(self.setdat.get("AFB_rebuff", 0) or 0) * 60)
-
-        # Start the AFB time-limit window fresh on each macro run.
-        data["AFB_limit"] = now
-        # Make startup behave as "ready after the configured rebuff interval"
-        # instead of "just used right now", which can skew the dice/glitter order.
-        data["AFB_dice_cd"] = now - rebuffCooldown
-        data["AFB_glitter_cd"] = now - rebuffCooldown
-
-        settingsManager.saveDict("./data/user/AFB.txt", data)
     
     def getAFBtiming(self,name = None):
         for _ in range(3):
@@ -5770,281 +5752,247 @@ class macro:
             mobRespawnBonus -= self.setdat["icicles_beequip"]/100 
 
         return time.time() - timing >= cooldown*mobRespawnBonus
-
-    def _AFBApplyGlitter(self, targetField, glitterslot):
-        self.logger.webhook("", "Rebuffing: Glitter", "white")
-
-        glitterCoords = None
-        if glitterslot == 0:
-            try:
-                glitterCoords = self.findItemInInventory("glitter")
-            except Exception:
-                glitterCoords = None
-
-        self.cannon()
-
-        if glitterslot == 0 and glitterCoords:
-            self.useItemInInventory(x=glitterCoords[0], y=glitterCoords[1], closeInventoryAfter=False)
-            self.goToField(targetField)
-            self.clickYes()
-            self.toggleInventory("close")
-        elif glitterslot == 0:
-            glitterThread = threading.Thread(target=self.useItemInInventory, args=("glitter",))
-            fieldThread = threading.Thread(target=self.goToField, args=(targetField,))
-            glitterThread.start()
-            fieldThread.start()
-            fieldThread.join()
-            glitterThread.join()
-            self.clickYes()
-        else:
-            self.goToField(targetField)
-            time.sleep(0.5)
-            self.keyboard.press(str(glitterslot))
-
-        self.logger.webhook("", "Rebuffed: Glitter", "white")
-        self.saveAFB("AFB_dice_cd")
-        self.saveAFB("AFB_glitter_cd")
-        self.AFBglitter = False
-        self.cAFBglitter = False
-        self.afb = False
-        self.reset()
     
-
-    def _normalizeAFBText(self, text):
-        text = text.lower()
-        text = re.sub(r"[^a-z\s]", " ", text)
-        text = re.sub(r"\s+", " ", text).strip()
-        return text
-
-    def _getAFBTargetFields(self):
-        raw = str(self.setdat.get("AFB_field", "sunflower")).lower().replace("_", " ")
-        chunks = [x.strip() for x in re.split(r"[,/|]", raw) if x.strip()]
-        if not chunks:
-            chunks = [raw.strip()] if raw.strip() else []
-        if not chunks:
-            chunks = ["sunflower"]
-        return chunks
-
-    def _extractAFBBoostedFields(self, rawBlueTexts, candidateFields):
-        fields = {
-            "rose": [["rose"]],
-            "strawberry": [["strawberry"]],
-            "mushroom": [["mushroom"]],
-            "pepper": [["pepper"]],
-            "sunflower": [["sunflower"]],
-            "dandelion": [["dandelion"]],
-            "spider": [["spider"]],
-            "coconut": [["coconut"]],
-            "pine tree": [["pine", "tree"]],
-            "blue flower": [["blue", "flower"]],
-            "bamboo": [["bamboo"]],
-            "stump": [["stump"]],
-            "clover": [["clover"]],
-            "pineapple": [["pineapple"]],
-            "pumpkin": [["pumpkin"]],
-            "cactus": [["cactus"]],
-            "mountain top": [["mountain", "top"]],
-        }
-        ignore = {
-            "strawberry",
-            "strawberries",
-            "blueberry",
-            "blueberries",
-            "seed",
-            "seeds",
-            "pineapple",
-            "pineapples",
-            "honey",
-            "from",
-        }
-
-        normalized = self._normalizeAFBText(rawBlueTexts)
-        boostedLines = [line for line in rawBlueTexts.split("\n") if "boosted" in line.lower()]
-        latestBoostText = boostedLines[-1] if boostedLines else rawBlueTexts
-        tokens = set(normalized.split()) if not boostedLines else set()
-        if boostedLines:
-            lineNormalized = self._normalizeAFBText(latestBoostText)
-            orderedMatches = []
-            for candidate in candidateFields:
-                fieldPatterns = fields.get(candidate, [[x for x in candidate.split() if x]])
-                for pattern in fieldPatterns:
-                    phrasePattern = r"\b" + r"\s+".join(re.escape(word) for word in pattern) + r"\b"
-                    match = re.search(phrasePattern, lineNormalized)
-                    if match:
-                        orderedMatches.append((match.start(), candidate))
-                        break
-            orderedMatches.sort(key=lambda x: x[0])
-            return [candidate for _, candidate in orderedMatches]
-
-        boostedFields = []
-        for candidate in candidateFields:
-            fieldPatterns = fields.get(candidate, [[x for x in candidate.split() if x]])
-            candidateCompact = candidate.replace(" ", "")
-            if any((word in tokens and word not in candidateCompact) for word in ignore):
-                continue
-            for pattern in fieldPatterns:
-                if set(pattern).issubset(tokens):
-                    boostedFields.append(candidate)
-                    break
-        return boostedFields
-
     def AFB(self, gatherInterrupt = False, turnOffShiftLock = False):  # Auto Field Boost - WOOHOO
-
+        
+        def normalize(text):
+            text = text.lower()
+            text = re.sub(r'[^a-z\s]', ' ', text)  # remove symbols
+            text = re.sub(r'\s+', ' ', text).strip()
+            return text
+        
         returnVal = None
-        if self.AFBLIMIT:
-            return True
-        limitHours = float(self.setdat.get("AFB_limit", 0) or 0)
-        if not self.AFBLIMIT and self.setdat["AFB_limit_on"] and limitHours > 0:
-            limitTiming = self.getAFBtiming("AFB_limit")
-            if not limitTiming or limitTiming <= 0:
-                self.saveAFB("AFB_limit")
-            elif self.hasAFBRespawned("AFB_limit", limitHours * 60 * 60, timing=limitTiming):
-                self.logger.webhook("AFB", "Time limit reached: Skipping", "red")
-                self.AFBLIMIT = True
-                return True
+        # time limit - :(
+        if self.AFBLIMIT: return True
+        if not self.AFBLIMIT and self.setdat["AFB_limit_on"] and self.hasAFBRespawned("AFB_limit", self.setdat["AFB_limit"]*60*60):
+            self.logger.webhook("AFB", "Time limit reached: Skipping", "red")
+            self.AFBLIMIT = True
 
-        attempts = max(1, int(self.setdat.get("AFB_attempts", 10) or self.setdat.get("attempts", 10) or 10))
-        targetFields = self._getAFBTargetFields()
+        goToField = threading.Thread(target=self.goToField, args=(self.setdat["AFB_field"],))
+        Glitter = threading.Thread(target=self.useItemInInventory, args=("glitter",))
+
+        x = self.setdat["AFB_attempts"]
+        field = [f.replace("_", " ") for f in self.setdat["AFB_field"].lower().split(" ")]
         rebuff = self.setdat["AFB_rebuff"]
         dice = self.setdat["AFB_dice"]
         glitter = self.setdat["AFB_glitter"]
         diceslot = self.setdat["AFB_slotD"]
         glitterslot = self.setdat["AFB_slotG"]
-        if not glitter:
-            self.AFBglitter = False
-            self.cAFBglitter = False
-        diceReady = self.hasAFBRespawned("AFB_dice_cd", rebuff * 60)
-        glitterReady = glitter and self.hasAFBRespawned("AFB_glitter_cd", rebuff * 60)
 
         if gatherInterrupt:
-            canUseGlitter = glitterReady and self.AFBglitter
-            canUseDice = diceReady and not self.AFBglitter
-            if (canUseGlitter or canUseDice) and not self.failed:
+            if ((glitter and self.hasAFBRespawned("AFB_glitter_cd", rebuff * 60) and self.AFBglitter) or (self.hasAFBRespawned("AFB_dice_cd", self.setdat["AFB_rebuff"] * 60) and not self.AFBglitter)) and not self.failed:                
                 self.clear_task_status()
                 self.afb = True
-                if turnOffShiftLock:
-                    self.keyboard.press("shift")
+                if turnOffShiftLock: self.keyboard.press("shift")
                 self.logger.webhook("Gathering: interrupted", "Automatic Field Boost", "brown")
-                if self.AFBglitter:
-                    self.reset(convert=False)
-                else:
+                if self.AFBglitter: 
+                    self.reset(convert=False) 
+                else: 
                     self.reset(AFB=True)
 
-        if diceReady or (glitterReady and self.AFBglitter):
+        if self.hasAFBRespawned("AFB_dice_cd", rebuff*60) or self.hasAFBRespawned("AFB_glitter_cd", rebuff*60):
             self.failed = False
             if self.setdat["Auto_Field_Boost"]:
-                if self.AFBglitter and glitterReady:
-                    self._AFBApplyGlitter(targetFields[0], glitterslot)
-                    return targetFields
-
-                if self.cAFBDice or (diceReady and not self.AFBglitter):
+                # dice
+                if self.cAFBDice or (self.hasAFBRespawned("AFB_dice_cd", rebuff*60) and not self.AFBglitter):
                     self.cAFBDice = False
-                    self.logger.webhook("", "Auto Field Boost", "white")
-                    for _ in range(2):
-                        self.keyboard.press("i")
-                    self.keyboard.press("pageup")
+                    # get all fields
+                    fields = {
+                        "rose": [["rose"]],
+                        "strawberry": [["strawberry"]],
+                        "mushroom": [["mushroom"]],
+                        "pepper": [["pepper"]],
+                        "sunflower": [["sunflower"]],
+                        "dandelion": [["dandelion"]],
+                        "spider": [["spider"]],
+                        "coconut": [["coconut"]],
+                        "pine tree": [["pine", "tree"]],
+                        "blue flower": [["blue", "flower"]],
+                        "bamboo": [["bamboo"]],
+                        "stump": [["stump"]],
+                        "clover": [["clover"]],
+                        "pineapple": [["pineapple"]],
+                        "pumpkin": [["pumpkin"]],
+                        "cactus": [["cactus"]],
+                        "mountain top": [["mountain", "top"]],
+                    }
+                    # ignore detected lines with these words, reduces false positives
+                    ignore = {"strawberry", "strawberries", "blueberry", "blueberries", 
+                    "seed", "seeds", "pineapple", "pineapples", "honey", "from"}
 
+                    def ignore2(field, text):
+                        for word in ignore:
+                            # allow the word if it is part of the field name
+                            if word in field.replace(" ", ""):
+                                continue
+                            if word in text.split():
+                                return True
+                        return False
+
+                    #begin
+                    self.logger.webhook("", f"Auto Field Boost", "white")
+                    for i in range(2):
+                        self.keyboard.press("i") # to avoid clicking on bees
+                    self.keyboard.press("pageup") # to avoid clicking on stickers
+                    # go to field if loaded, chance of field being boosted: 25% - 100%
                     if "loaded" in dice:
                         self.cannon()
-                        self.goToField(targetFields[0])
+                        self.goToField(field)
 
-                    diceCoords = None
-                    if diceslot == 0:
+                    # using inv instead
+                    if diceslot == 0: 
                         diceCoords = self.findItemInInventory(self.setdat['AFB_dice'])
 
-                    for attempt in range(attempts):
+                    for i in range(x):
                         bluetexts = ""
-                        self.logger.webhook("", f"{str(dice).title()}, Attempt: {attempt+1}/{attempts}", "white")
+                        self.logger.webhook("", f"{str(dice).title()}, Attempt: {i+1}/{x}", "white")
 
-                        if diceslot == 0:
+                        # using inv instead
+                        if diceslot == 0: 
                             if diceCoords:
-                                self.useItemInInventory(x=diceCoords[0], y=diceCoords[1], closeInventoryAfter=False)
-                        else:
-                            self.keyboard.press(str(diceslot))
+                                self.useItemInInventory(x=diceCoords[0], y=diceCoords[1], closeInventoryAfter=False) 
+                            # use
+                        else: self.keyboard.press(str(diceslot))
 
-                        timeout = 0
+                        #timeout: (IN CASE OF) failed detection or high lag
+                        timeout = 0 
                         for _ in range(300):
-                            if self.blueTextImageSearch("boosted"):
+                            if self.blueTextImageSearch("boosted"): # if message contains "boosted", continue
                                 time.sleep(2)
                                 break
-                            timeout += 1
-                            if timeout == 300:
+                            timeout += 1    
+                            if timeout == 300: # else try again after other tasks
                                 self.logger.webhook("", "Auto Field Boost: Timeout", "white")
                                 self.toggleInventory("close")
                                 self.saveAFB("AFB_dice_cd")
                                 self.AFBglitter = False
                                 return
-
                         for _ in range(8):
                             bluetexts += ocr.imToString("blue") + "\n"
 
-                        allCandidateFields = list(startLocationDimensions.keys())
-                        detectedBoostedFields = self._extractAFBBoostedFields(bluetexts, allCandidateFields)
-                        latestDetectedBoost = detectedBoostedFields[-1] if detectedBoostedFields else None
-                        detectedBoostText = latestDetectedBoost if latestDetectedBoost else "None"
-                        self.logger.webhook(
-                            "",
-                            f"{str(dice).title()}, Attempt: {attempt+1}/{attempts} - Detected: {detectedBoostText}",
-                            "white"
-                        )
+                        bluetexts = normalize(bluetexts)
+                        tokens = set(bluetexts.split())
 
+                        # smooth/loaded
+                        clean = normalize(bluetexts)
+                        # "and the" appears when using loaded and smooth
+                        and_the = [line for line in bluetexts.split("\n") if "boosted" in line]
+                        
+                        the = bluetexts.split()  # get each line of detected text
+                        boostedField = []
+
+                        # for field dice only
                         if "field" in dice:
-                            boostedField = latestDetectedBoost if latestDetectedBoost in targetFields else None
+                            boostedField = None
+                            for cf in field:
+                                for pattern in fields[cf]:  
+                                    if set(pattern).issubset(tokens):
+                                        if not ignore2(cf, bluetexts):
+                                            boostedField = cf
+                                            break
+                                if boostedField:
+                                    break
+                            
+                        #other die
+                        else:
+                            boostedFields = []
+                            for cf in field:
+                                cf_tokens = cf.split()
+                                for sentence in and_the:
+                                    sentence_tokens = set(normalize(sentence).split())
+                                    for pattern in fields[cf]:
+                                        if set(pattern).issubset(sentence_tokens) and not ignore2(cf, sentence):
+                                            if cf not in boostedFields:
+                                                boostedFields.append(cf)
 
+                        # field user selected is detected
+                        if "field" in dice:
                             if boostedField is not None:
                                 self.logger.webhook("", f"Boosted Field: {boostedField}", "bright green", "blue")
-                                returnVal = targetFields
+                                returnVal = field
                                 self.keyboard.press("pagedown")
-                                for _ in range(3):
+                                for i in range(3):
                                     self.keyboard.press("o")
-                                if diceslot == 0:
-                                    self.toggleInventory("close")
+                                if diceslot == 0: self.toggleInventory("close")
                                 self.saveAFB("AFB_dice_cd")
-                                if glitter:
+                                if glitter: 
                                     self.AFBglitter = True
-                                    self.saveAFB("AFB_glitter_cd")
                                 return returnVal
-                            continue
-
-                        boostedFields = detectedBoostedFields
-                        targetBoostedFields = [field for field in boostedFields if field in targetFields]
-
-                        if targetBoostedFields:
-                            self.logger.webhook("", f"Boosted Fields: {', '.join(targetBoostedFields)}", "blue")
-                            returnVal = targetFields
-                            self.keyboard.press("pagedown")
-                            for _ in range(3):
-                                self.keyboard.press("o")
-                            if diceslot == 0:
-                                self.toggleInventory("close")
-                            self.saveAFB("AFB_dice_cd")
-                            if glitter:
-                                self.AFBglitter = True
-                                self.saveAFB("AFB_glitter_cd")
-                            return returnVal
-
-                        if boostedFields:
-                            self.logger.webhook("", f"Boosted Fields: {', '.join(boostedFields)}", "red")
+                            else:
+                                continue
                         else:
-                            self.logger.webhook("", "Boosted Fields: None", "red")
+                            if field in boostedFields:
+                                self.logger.webhook("", f"Boosted Fields: {', '.join(boostedFields)}", "blue")
+                                returnVal = field
+                                self.keyboard.press("pagedown")
+                                for i in range(3):
+                                    self.keyboard.press("o")
+                                if diceslot == 0: self.toggleInventory("close")
+                                self.saveAFB("AFB_dice_cd")
+                                if glitter: 
+                                    self.AFBglitter = True
+                                return returnVal
+                            else:
+                                if boostedFields:
+                                    self.logger.webhook("", f"Boosted Fields: {', '.join(boostedFields)}", "red")
+                                else:
+                                    self.logger.webhook("", "Boosted Fields: None", "red")
+                                time.sleep(0.5)
 
-                            if glitter and not self.failed and self.hasAFBRespawned("AFB_glitter_cd", rebuff*60):
-                                if self.AFBglitter:
-                                    self._AFBApplyGlitter(targetFields[0], glitterslot)
-                                    return targetFields
+                # glitter
+                if glitter and not self.failed and self.hasAFBRespawned("AFB_glitter_cd", rebuff*60):
+                    if self.AFBglitter:
+                        self.logger.webhook("", "Rebuffing: Glitter", "white")
+                        # If glitter is set to use inventory slot 0, try to locate it first
+                        glitterCoords = None
+                        if glitterslot == 0:
+                            try:
+                                glitterCoords = self.findItemInInventory("glitter")
+                            except Exception:
+                                glitterCoords = None
 
-            if returnVal is None:
+                        # Move to cannon first
+                        self.cannon()
+
+                        # If we found glitter in inventory, use it sequentially (avoid concurrent threads)
+                        if glitterslot == 0 and glitterCoords:
+                            self.useItemInInventory(x=glitterCoords[0], y=glitterCoords[1], closeInventoryAfter=False)
+                            self.goToField(field)
+                            self.clickYes()
+                            self.toggleInventory("close")
+                        else:
+                            # fall back to previous threaded behavior for non-zero slots or if not found
+                            if glitterslot == 0:
+                                Glitter.start()
+                                goToField.start()
+                                goToField.join()
+                                Glitter.join()
+                                self.clickYes()
+                            else:
+                                self.goToField(field)
+                                time.sleep(0.5)
+                                self.keyboard.press(str(glitterslot))
+
+                        self.logger.webhook("", "Rebuffed: Glitter", "white")
+                        self.saveAFB("AFB_dice_cd")
+                        self.saveAFB("AFB_glitter_cd")
+                        self.reset()
+                        self.AFBglitter = False
+                        self.cAFBglitter = False
+                        self.afb = False
+                        return returnVal
+
+            if returnVal == None:
                 self.failed = True
                 self.keyboard.press("pagedown")
-                for _ in range(3):
+                for i in range(3):
                     self.keyboard.press("o")
-                self.logger.webhook("", f"Failed to boost {', '.join(targetFields)}", "red")
+                self.logger.webhook("", f"Failed to boost {field}", "red")
                 self.saveAFB("AFB_dice_cd")
-                if glitter:
+                if glitter: 
                     self.saveAFB("AFB_glitter_cd")
                     self.AFBglitter = False
-                if diceslot == 0:
-                    self.toggleInventory("close")
+                if diceslot == 0: self.toggleInventory("close")
                 return
 
     def startDetect(self):
@@ -6107,7 +6055,6 @@ class macro:
 
     def start(self):
         print("macro object started")
-        self.resetAFBSessionTimings()
 
         #enable background threads
         self.nightDetectStreaks = 0
