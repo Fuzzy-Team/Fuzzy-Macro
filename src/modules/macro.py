@@ -2354,7 +2354,7 @@ class macro:
         honeyWreathWaitLogged = False
 
         # Add goo status to webhook message
-        gooStatus = " - Goo Enabled" if fieldSetting["goo"] else ""
+        gooStatus = " - Goo Enabled" if fieldSetting.get("goo", False) else ""
         self.logger.webhook(f"Gathering: {field.title()}", f"Limit: {gatherTimeLimit} - {fieldSetting['shape']} - Backpack: {fieldSetting['backpack']}%{gooStatus}", "light green")
 
         import threading
@@ -2363,8 +2363,8 @@ class macro:
             nonlocal lastGooTime, gooTimerActive
             while gooTimerActive:
                 currentTime = time.time()
-                gooInterval = 3 if questGumdrops else int(fieldSetting["goo_interval"])
-                if fieldSetting["goo"] and (currentTime - lastGooTime) >= gooInterval:
+                gooInterval = 3 if questGumdrops else int(fieldSetting.get("goo_interval", 3))
+                if fieldSetting.get("goo", False) and (currentTime - lastGooTime) >= gooInterval:
                     self.keyboard.press(str(self.setdat["goo_slot"]))
                     time.sleep(0.05)
                     lastGooTime = currentTime
