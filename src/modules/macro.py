@@ -5730,6 +5730,24 @@ class macro:
 
     def saveAFB(self, name):
         return settingsManager.saveSettingFile(name, time.time(), "./data/user/AFB.txt")
+
+    def resetAFBSessionTimings(self):
+        try:
+            data = settingsManager.readSettingsFile("./data/user/AFB.txt")
+        except Exception:
+            data = {}
+
+        now = time.time()
+        rebuffCooldown = max(0, float(self.setdat.get("AFB_rebuff", 0) or 0) * 60)
+
+        # Start the AFB time-limit window fresh on each macro run.
+        data["AFB_limit"] = now
+        # Make startup behave as "ready after the configured rebuff interval"
+        # instead of "just used right now", which can skew the dice/glitter order.
+        data["AFB_dice_cd"] = now - rebuffCooldown
+        data["AFB_glitter_cd"] = now - rebuffCooldown
+
+        settingsManager.saveDict("./data/user/AFB.txt", data)
     
     def getAFBtiming(self,name = None):
         for _ in range(3):
@@ -6092,6 +6110,7 @@ class macro:
 
     def start(self):
         print("macro object started")
+        self.resetAFBSessionTimings()
 
         #enable background threads
         self.nightDetectStreaks = 0
