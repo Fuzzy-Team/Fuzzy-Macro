@@ -709,6 +709,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         # Check if stop was requested while paused
         if run.value == 0:
             break  # Exit macro loop if stop requested
+
+        # Quest scans should be cached only within a single outer loop pass.
+        # Clearing here guarantees the board is re-read after the task list recycles.
+        questCache.clear()
         
         macro.setdat = get_cached_settings()
         # Check if profile has changed and reload settings if needed
