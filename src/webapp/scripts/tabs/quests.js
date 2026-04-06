@@ -22,7 +22,7 @@ function switchQuestsTab(target){
 }
 
 function loadQuests(){
-    switchQuestsTab(document.getElementById("quests-settings"))
+    switchQuestsTab(document.getElementById("quests-quests"))
 }
 
 $("#quests-placeholder")
