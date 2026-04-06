@@ -26,6 +26,20 @@ def openAppMac(app="Roblox"):
             break
     return True
 
+def isAppFocusedMac(app="Roblox"):
+    try:
+        workspace = NSWorkspace.sharedWorkspace()
+        frontmost = workspace.frontmostApplication()
+        if not frontmost:
+            return False
+        frontmost_name = frontmost.localizedName() or ""
+        app_name = app or ""
+        frontmost_name = frontmost_name.lower()
+        app_name = app_name.lower()
+        return app_name in frontmost_name or frontmost_name in app_name
+    except Exception:
+        return False
+
 def openDeeplink(link):
     subprocess.call(["open", link])
 
@@ -113,5 +127,6 @@ def maximiseAppWindowMac(app="Roblox"):
 # Set the functions to use macOS implementations
 openApp = openAppMac
 isAppOpen = isAppOpenMac
+isAppFocused = isAppFocusedMac
 maximiseAppWindow = maximiseAppWindowMac
 setAppFullscreen = setAppFullscreenMac
