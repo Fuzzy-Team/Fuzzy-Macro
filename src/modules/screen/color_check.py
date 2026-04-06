@@ -28,10 +28,13 @@ def percent_pixels_similar_to_color(x, y, w, h, target_color, tolerance=40):
             return 0.0
         # downsample for speed
         small = rgb[::max(1, rgb.shape[0]//120), ::max(1, rgb.shape[1]//120), :]
-        tc = np.array(target_color, dtype=np.int16)
-        diff = np.sqrt(np.sum((small.astype(np.int16) - tc) ** 2, axis=2))
-        cnt = np.sum(diff <= tolerance)
-        total = diff.size
+        # Use squared-distance math in wider integer types to avoid overflow.
+        tc = np.array(target_color, dtype=np.int32)
+        delta = small.astype(np.int32) - tc
+        dist2 = np.sum(delta * delta, axis=2, dtype=np.int64)
+        tol2 = int(tolerance) * int(tolerance)
+        cnt = np.sum(dist2 <= tol2)
+        total = dist2.size
         return float(cnt) / float(total) if total else 0.0
     except Exception:
         return 0.0
