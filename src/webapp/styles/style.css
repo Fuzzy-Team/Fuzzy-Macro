@@ -223,6 +223,7 @@ select:focus {
 .sub-nav-bar .kill-tab-item,
 .sub-nav-bar .quests-tab-item,
 .sub-nav-bar .config-tab-item,
+.sub-nav-bar .collect-tab-item,
 .sub-nav-bar .planters-tab-item,
 .sub-nav-bar .tools-tab-item {
   padding: 0.45rem 0.75rem;
@@ -240,6 +241,7 @@ select:focus {
 .sub-nav-bar .kill-tab-item:hover,
 .sub-nav-bar .quests-tab-item:hover,
 .sub-nav-bar .config-tab-item:hover,
+.sub-nav-bar .collect-tab-item:hover,
 .sub-nav-bar .planters-tab-item:hover,
 .sub-nav-bar .tools-tab-item:hover {
   background-color: var(--surface-hover);
@@ -252,11 +254,198 @@ select:focus {
 .sub-nav-bar .kill-tab-item.active,
 .sub-nav-bar .quests-tab-item.active,
 .sub-nav-bar .config-tab-item.active,
+.sub-nav-bar .collect-tab-item.active,
 .sub-nav-bar .planters-tab-item.active,
 .sub-nav-bar .tools-tab-item.active {
   background: rgba(var(--primary-rgb), 0.12);
   color: var(--primary);
   border-color: rgba(var(--primary-rgb), 0.15);
+}
+
+.boost-hotbar-shell {
+  display: block;
+  justify-items: unset;
+  padding-top: 1rem;
+}
+
+.boost-hotbar-strip {
+  display: flex;
+  gap: 0.75rem;
+  margin: 0.25rem 0 1.5rem;
+  flex-wrap: wrap;
+}
+
+.boost-hotbar-slot {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.boost-hotbar-slot-number {
+  font-size: 0.8rem;
+  line-height: 1;
+  color: var(--text-dim);
+  font-weight: 700;
+}
+
+.boost-hotbar-slot-frame {
+  width: 4rem;
+  height: 4rem;
+  border-radius: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04));
+  box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.2), 0 8px 20px rgba(0, 0, 0, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.boost-hotbar-slot-frame img {
+  width: 2.4rem;
+  height: 2.4rem;
+  object-fit: contain;
+}
+
+.boost-hotbar-slot-empty {
+  width: 2rem;
+  height: 2rem;
+  border: 2px dashed rgba(255, 255, 255, 0.28);
+  border-radius: 10px;
+  display: block;
+  position: relative;
+}
+
+.boost-hotbar-slot-empty::before,
+.boost-hotbar-slot-empty::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0.85rem;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.28);
+  transform: translate(-50%, -50%);
+}
+
+.boost-hotbar-slot-empty::after {
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+
+.boost-hotbar-slot:hover .boost-hotbar-slot-frame,
+.boost-hotbar-slot.active .boost-hotbar-slot-frame {
+  border-color: rgba(var(--primary-rgb), 0.5);
+  box-shadow: inset 0 2px 6px rgba(255, 255, 255, 0.24), 0 10px 24px rgba(var(--primary-rgb), 0.18);
+  transform: translateY(-1px);
+}
+
+.boost-hotbar-slot.active .boost-hotbar-slot-number {
+  color: var(--primary);
+}
+
+.boost-hotbar-panels {
+  display: block;
+}
+
+.boost-hotbar-panel {
+  display: none;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 1.2rem 1.25rem;
+}
+
+.boost-hotbar-panel.active {
+  display: block;
+}
+
+.boost-hotbar-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.boost-hotbar-panel-header h3 {
+  margin: 0;
+}
+
+.boost-hotbar-panel-header p {
+  margin: 0.25rem 0 0;
+  color: var(--text-dim);
+}
+
+.boost-hotbar-panel-icon {
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 14px;
+  background: rgba(var(--primary-rgb), 0.08);
+  border: 1px solid rgba(var(--primary-rgb), 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.boost-hotbar-panel-icon img {
+  width: 2rem;
+  height: 2rem;
+  object-fit: contain;
+}
+
+.boost-hotbar-panel-icon-empty {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.boost-hotbar-form-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.boost-hotbar-form-row + .boost-hotbar-form-row {
+  margin-top: 1rem;
+}
+
+.boost-hotbar-form-copy {
+  width: 70%;
+}
+
+.boost-hotbar-form-copy label {
+  display: block;
+}
+
+.boost-hotbar-form-copy p {
+  margin: 0.35rem 0 0;
+}
+
+.boost-hotbar-frequency {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+@media (max-width: 900px) {
+  .boost-hotbar-form-row {
+    flex-direction: column;
+  }
+
+  .boost-hotbar-form-copy {
+    width: 100%;
+  }
+
+  .boost-hotbar-frequency {
+    width: 100%;
+    flex-wrap: wrap;
+  }
 }
 
 .import-export-button {

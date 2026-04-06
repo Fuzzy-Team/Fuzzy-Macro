@@ -1,5 +1,4 @@
 
-
 function switchBoostTab(target){
     //hide all tabs
 
@@ -21,8 +20,25 @@ function switchBoostTab(target){
     tab.scrollTo(0,0); 
 }
 
+function switchBoostHotbarSlot(slot) {
+    Array.from(document.getElementsByClassName("boost-hotbar-slot")).forEach((button) => {
+        button.classList.remove("active")
+    })
+    Array.from(document.getElementsByClassName("boost-hotbar-panel")).forEach((panel) => {
+        panel.classList.remove("active")
+    })
+
+    const button = document.getElementById(`boost-slot-${slot}`)
+    const panel = document.getElementById(`boost-hotbar-slot-${slot}-panel`)
+    if (!button || !panel) return
+
+    button.classList.add("active")
+    panel.classList.add("active")
+}
+
 function loadBoost(){
     switchBoostTab(document.getElementById("boost-hotbar"))
+    switchBoostHotbarSlot(1)
 }
 
 
