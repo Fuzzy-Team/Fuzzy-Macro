@@ -1822,7 +1822,9 @@ class macro:
     def cannon(self, fast = False):
         def detect_rejoin_mode_color():
             try:
-                percent_threshold = float(self.setdat.get("rejoin_color_percent", 0.6))
+                if not appManager.isAppFocused("Roblox"):
+                    return None
+                percent_threshold = float(self.setdat.get("rejoin_color_percent", 0.7754))
                 color_tolerance = int(self.setdat.get("rejoin_color_tolerance", 40))
                 sample_colors = get_sample_colors()
                 for col in sample_colors:
@@ -2015,7 +2017,7 @@ class macro:
                 sample_colors = get_sample_colors()
             except Exception:
                 sample_colors = [(250, 250, 250), (20, 20, 20)]
-            percent_threshold = float(self.setdat.get("rejoin_color_percent", 0.6))
+            percent_threshold = float(self.setdat.get("rejoin_color_percent", 0.7))
             sustain_seconds = int(self.setdat.get("rejoin_color_duration", 60))
             color_tolerance = int(self.setdat.get("rejoin_color_tolerance", 40))
             sustained_start = 0
@@ -2043,19 +2045,22 @@ class macro:
 
                 # Check for sustained dominant color (light/dark) that indicates a stuck screen.
                 try:
-                    matched = False
-                    for col in sample_colors:
-                        pct = percent_pixels_similar_to_color(self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw, self.robloxWindow.mh, col, tolerance=color_tolerance)
-                        if pct >= percent_threshold:
-                            matched = True
-                            break
-                    if matched:
-                        if sustained_start == 0:
-                            sustained_start = time.time()
-                        elif time.time() - sustained_start >= sustain_seconds:
-                            self.logger.webhook("","Detected sustained screen color — retrying rejoin","dark brown","screen")
-                            rejoinSuccess = False
-                            break
+                    if appManager.isAppFocused("Roblox"):
+                        matched = False
+                        for col in sample_colors:
+                            pct = percent_pixels_similar_to_color(self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw, self.robloxWindow.mh, col, tolerance=color_tolerance)
+                            if pct >= percent_threshold:
+                                matched = True
+                                break
+                        if matched:
+                            if sustained_start == 0:
+                                sustained_start = time.time()
+                            elif time.time() - sustained_start >= sustain_seconds:
+                                self.logger.webhook("","Detected sustained screen color — retrying rejoin","dark brown","screen")
+                                rejoinSuccess = False
+                                break
+                        else:
+                            sustained_start = 0
                     else:
                         sustained_start = 0
                 except Exception:
