@@ -1384,6 +1384,11 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             # Handle gather tasks
             if taskId.startswith("gather_"):
                 fieldName = taskId.replace("gather_", "").replace("_", " ")
+
+                # When a field is needed for an active quest, let the quest resolver handle it
+                # in quest order instead of the global gather priority queue.
+                if fieldName in questGatherFields or fieldName in questGumdropGatherFields:
+                    return False
                 
                 # Check if this field is enabled in gather tab
                 for i in range(len(macro.setdat["fields_enabled"])):
@@ -1391,14 +1396,6 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         runTask(macro.gather, args=(fieldName,), resetAfter=False)
                         executedTasks.add(taskId)
                         return True
-                
-                # Check if it's a quest gather field
-                if fieldName in questGatherFields or fieldName in questGumdropGatherFields:
-                    isGumdrop = fieldName in questGumdropGatherFields
-                    questGatherOverrides = questGumdropFieldOverrides.get(fieldName, {}) if isGumdrop else questGatherFieldOverrides.get(fieldName, {})
-                    runTask(macro.gather, args=(fieldName, questGatherOverrides, isGumdrop), resetAfter=False)
-                    executedTasks.add(taskId)
-                    return True
                 
                 return False
             
