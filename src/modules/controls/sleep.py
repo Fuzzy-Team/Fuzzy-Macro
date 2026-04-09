@@ -3,11 +3,52 @@ import time
 
 # Module-level reference to the run state (multiprocessing.Value)
 _run_state = None
+_interrupt_action = None
+
+INTERRUPT_NONE = 0
+INTERRUPT_SKIP = 1
+INTERRUPT_RESET = 2
+
+
+class InterruptRequested(Exception):
+    def __init__(self, action):
+        self.action = action
+        super().__init__(f"Interrupt requested: {action}")
 
 def set_run_state(run):
     """Set the shared run state for pause checking"""
     global _run_state
     _run_state = run
+
+
+def set_interrupt_action(interrupt_action):
+    """Set the shared interrupt action for task interruption checks."""
+    global _interrupt_action
+    _interrupt_action = interrupt_action
+
+
+def get_interrupt_action():
+    if _interrupt_action is None:
+        return INTERRUPT_NONE
+    try:
+        return int(_interrupt_action.value)
+    except Exception:
+        return INTERRUPT_NONE
+
+
+def clear_interrupt_action():
+    if _interrupt_action is None:
+        return
+    try:
+        _interrupt_action.value = INTERRUPT_NONE
+    except Exception:
+        pass
+
+
+def raise_if_interrupted():
+    action = get_interrupt_action()
+    if action != INTERRUPT_NONE:
+        raise InterruptRequested(action)
 
 def is_paused():
     """Check if macro is currently paused (state 6)"""
@@ -32,6 +73,8 @@ def sleep(duration, get_now=time.perf_counter):
     if duration <= 0:
         return
 
+    raise_if_interrupted()
+
     # Check for pause before sleeping
     if wait_while_paused():
         return  # Stop was requested
@@ -39,6 +82,7 @@ def sleep(duration, get_now=time.perf_counter):
     now = get_now()
     end = now + duration
     while now < end:
+        raise_if_interrupted()
         if is_stopped():
             return
         if is_paused() and wait_while_paused():
@@ -52,6 +96,8 @@ def sleep(duration, get_now=time.perf_counter):
 
 def high_precision_sleep(duration):
     """Pause-aware high precision sleep"""
+    raise_if_interrupted()
+
     # Check for pause before sleeping
     if wait_while_paused():
         return  # Stop was requested
@@ -62,6 +108,7 @@ def high_precision_sleep(duration):
         remaining_time = duration - elapsed_time
         if remaining_time <= 0:
             break
+        raise_if_interrupted()
         if remaining_time > 0.02:  # Sleep for 5ms if remaining time is greater
             time.sleep(max(remaining_time/2, 0.0001))  # Sleep for the remaining time or minimum sleep interval
         else:
@@ -76,6 +123,8 @@ def pauseable_sleep(duration):
     if duration <= 0:
         return
 
+    raise_if_interrupted()
+
     # Check for pause before sleeping
     if wait_while_paused():
         return  # Stop was requested
@@ -83,6 +132,7 @@ def pauseable_sleep(duration):
     # Sleep in short chunks so pause interrupts quickly
     start = time.perf_counter()
     while time.perf_counter() - start < duration:
+        raise_if_interrupted()
         if is_stopped():
             return
         if is_paused() and wait_while_paused():

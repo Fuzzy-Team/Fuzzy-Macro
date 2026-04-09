@@ -42,15 +42,6 @@ install_pip_package() {
 	fi
 }
 
-reset_opencv_packages() {
-	# Remove any previously installed opencv variants so pip cannot leave a mismatched binary behind.
-	if [ "$chip" = "arm64" ]; then
-		arch -arm64 pip uninstall -y opencv opencv-python opencv-python-headless opencv-contrib-python opencv-contrib-python-headless 2>/dev/null || true
-	else
-		pip uninstall -y opencv opencv-python opencv-python-headless opencv-contrib-python opencv-contrib-python-headless 2>/dev/null || true
-	fi
-}
-
 upgrade_pip_tools() {
     if [ "$chip" = "arm64" ]; then
         arch -arm64 python"${python_ver}" -m pip install --upgrade pip setuptools wheel
@@ -187,10 +178,8 @@ printf "\033[1;35mInstalling libraries\033[0m\n\n"
 if [ "$python_ver" = '3.9' ]; then
 	# Use pip --force-reinstall to ensure a compatible opencv and numpy
 	# This installs the latest opencv-headless below 4.11 and enforces numpy<2
-	reset_opencv_packages
-    install_pip_package "numpy<2" "--force-reinstall"
-    install_pip_package "opencv-python==4.6.0.66" "--no-cache-dir --force-reinstall"
-    install_pip_package "ocrmac"
+	install_pip_package "opencv-python-headless<4.11 numpy<2" "--force-reinstall"
+	install_pip_package "ocrmac"
 	install_pip_package "pyobjc-framework-ColorSync<12.0"
 	install_pip_package "pyobjc-framework-ApplicationServices"
 
@@ -199,9 +188,7 @@ elif echo -e "$os_ver \n10.15.0" | sort -V | tail -n1 | grep -Fq "10.15.0"; then
 	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 	source "$HOME/.cargo/env"
 
-	reset_opencv_packages
-	install_pip_package "opencv-python==4.4.0.46 opencv-contrib-python==4.4.0.46 numpy==1.19.1" "--force-reinstall"
-	install_pip_package "Polygon3"
+	install_pip_package "opencv-python==4.4.0.46 opencv-contrib-python==4.4.0.46 numpy==1.19.1 Polygon3"
 	install_pip_package "easyocr" "--no-deps"
 	install_pip_package "torch"
 	install_pip_package "torchvision>=0.5"
@@ -214,8 +201,7 @@ else
 	install_pip_package "pyobjc-framework-Cocoa<11.0"
 	install_pip_package "pyobjc-framework-ColorSync<11.0" "--no-deps"
 	install_pip_package "pyobjc-framework-ApplicationServices<11.0" "--no-deps"
-	reset_opencv_packages
-	install_pip_package "opencv-python==4.6.0.66" "--force-reinstall"
+	install_pip_package "opencv-python==4.6.0.66"
 	#python"${python_ver}" -m pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org paddlepaddle==2.4.2 -i https://pypi.tuna.tsinghua.edu.cn/simple
 	#python"${python_ver}" -m pip install --no-deps --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org paddleocr==2.6.1.3
 	#printf "\033[31;1mInstalling lxml, this can take a while \033[0m\n"

@@ -32,6 +32,12 @@ import modules.misc.settingsManager as settingsManager
 import modules.macro as macroModule
 import modules.controls.mouse as mouse
 import json
+from modules.controls.sleep import (
+    InterruptRequested,
+    INTERRUPT_NONE,
+    INTERRUPT_SKIP,
+    INTERRUPT_RESET,
+)
 # delete backup from previous update if pending
 try:
     from modules.misc.update import delete_backup_if_pending
@@ -461,40 +467,54 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
     #makes it easy to do any checks after a task is complete (like stinger hunt, rejoin every, etc)
     def runTask(func = None, args = (), resetAfter = True, convertAfter = True, allowAFB = True):
         nonlocal taskCompleted
-        # Check if skip was requested
-        if skipTask.value == 1:
-            skipTask.value = 0  # Reset skip flag
-            macro.logger.webhook("Task Skipped", f"Skipped: {status.value.replace('_', ' ').title()}", "orange")
+
+        def handle_interrupt(action):
+            skipTask.value = INTERRUPT_NONE
+            macro.keyboard.releaseMovement()
+            mouse.mouseUp()
+            interrupted_status = status.value.replace('_', ' ').title() if status.value else "Current Task"
             macro.clear_task_status()
             taskCompleted = True
-            if resetAfter:
-                macro.reset(convert=False)
+            if action == INTERRUPT_SKIP:
+                macro.logger.webhook("Task Skipped", f"Skipped: {interrupted_status}", "orange")
+            elif action == INTERRUPT_RESET:
+                macro.logger.webhook("Task Reset", f"Resetting and retrying: {interrupted_status}", "orange")
+            macro.reset(convert=True)
+            if action == INTERRUPT_RESET and func:
+                return runTask(func, args=args, resetAfter=resetAfter, convertAfter=convertAfter, allowAFB=allowAFB)
             return None
+
+        pending_action = int(skipTask.value)
+        if pending_action != INTERRUPT_NONE:
+            return handle_interrupt(pending_action)
         
-        #execute the task
-        if func:
-            returnVal = func(*args) 
-            taskCompleted = True
-        else:
-            returnVal = None
-        #task done
-        if resetAfter: 
-            macro.reset(convert=convertAfter)
-        
-        #do priority tasks
-        if macro.night and macro.setdat["stinger_hunt"]:
-            macro.stingerHunt()
-        if macro.setdat["mondo_buff"] and macro.hasMondoRespawned():
-            macro.collectMondoBuff()
-        if macro.setdat["rejoin_every"]:
-            if macro.hasRespawned("rejoin_every", macro.setdat["rejoin_every"]*60*60):
-                macro.rejoin("Rejoining (Scheduled)")
-                macro.saveTiming("rejoin_every")
-        
-        #auto field boost (can be disabled per-call via allowAFB)
-        if allowAFB and macro.setdat["Auto_Field_Boost"] and not macro.AFBLIMIT:
-            if macro.hasAFBRespawned("AFB_dice_cd", macro.setdat["AFB_rebuff"]*60) or macro.hasAFBRespawned("AFB_glitter_cd", macro.setdat["AFB_rebuff"]*60-30):
-                macro.AFB(gatherInterrupt=False)
+        try:
+            #execute the task
+            if func:
+                returnVal = func(*args) 
+                taskCompleted = True
+            else:
+                returnVal = None
+            #task done
+            if resetAfter: 
+                macro.reset(convert=convertAfter)
+            
+            #do priority tasks
+            if macro.night and macro.setdat["stinger_hunt"]:
+                macro.stingerHunt()
+            if macro.setdat["mondo_buff"] and macro.hasMondoRespawned():
+                macro.collectMondoBuff()
+            if macro.setdat["rejoin_every"]:
+                if macro.hasRespawned("rejoin_every", macro.setdat["rejoin_every"]*60*60):
+                    macro.rejoin("Rejoining (Scheduled)")
+                    macro.saveTiming("rejoin_every")
+            
+            #auto field boost (can be disabled per-call via allowAFB)
+            if allowAFB and macro.setdat["Auto_Field_Boost"] and not macro.AFBLIMIT:
+                if macro.hasAFBRespawned("AFB_dice_cd", macro.setdat["AFB_rebuff"]*60) or macro.hasAFBRespawned("AFB_glitter_cd", macro.setdat["AFB_rebuff"]*60-30):
+                    macro.AFB(gatherInterrupt=False)
+        except InterruptRequested as interrupt:
+            return handle_interrupt(interrupt.action)
 
         macro.clear_task_status()
         return returnVal
@@ -689,6 +709,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         # Check if stop was requested while paused
         if run.value == 0:
             break  # Exit macro loop if stop requested
+
+        # Quest scans should be cached only within a single outer loop pass.
+        # Clearing here guarantees the board is re-read after the task list recycles.
+        questCache.clear()
         
         macro.setdat = get_cached_settings()
         # Check if profile has changed and reload settings if needed
@@ -1368,6 +1392,11 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             # Handle gather tasks
             if taskId.startswith("gather_"):
                 fieldName = taskId.replace("gather_", "").replace("_", " ")
+
+                # When a field is needed for an active quest, let the quest resolver handle it
+                # in quest order instead of the global gather priority queue.
+                if fieldName in questGatherFields or fieldName in questGumdropGatherFields:
+                    return False
                 
                 # Check if this field is enabled in gather tab
                 for i in range(len(macro.setdat["fields_enabled"])):
@@ -1375,14 +1404,6 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         runTask(macro.gather, args=(fieldName,), resetAfter=False)
                         executedTasks.add(taskId)
                         return True
-                
-                # Check if it's a quest gather field
-                if fieldName in questGatherFields or fieldName in questGumdropGatherFields:
-                    isGumdrop = fieldName in questGumdropGatherFields
-                    questGatherOverrides = questGumdropFieldOverrides.get(fieldName, {}) if isGumdrop else questGatherFieldOverrides.get(fieldName, {})
-                    runTask(macro.gather, args=(fieldName, questGatherOverrides, isGumdrop), resetAfter=False)
-                    executedTasks.add(taskId)
-                    return True
                 
                 return False
             
@@ -2752,7 +2773,7 @@ if __name__ == "__main__":
     recentLogs = manager.list()  # Shared list to store recent log entries for discord bot
     gui.setRecentLogs(recentLogs)
     updateGUI = multiprocessing.Value('i', 0)
-    skipTask = multiprocessing.Value('i', 0)  # 0 = don't skip, 1 = skip current task
+    skipTask = multiprocessing.Value('i', INTERRUPT_NONE)  # interrupt action for the running task
     status = manager.Value(ctypes.c_wchar_p, "none")
     presence = manager.Value(ctypes.c_wchar_p, "")
     logQueue = manager.Queue()
@@ -3065,68 +3086,76 @@ if __name__ == "__main__":
             except:
                 pass  # If eel is not ready, continue
         elif run.value == 0:
-            if macroProc:
-                # Stop macro and release all inputs first
+            had_macro_proc = bool(macroProc)
+
+            # Stop macro/tools and release all inputs first.
+            if had_macro_proc:
                 logger.webhook("Macro Stopped", "Fuzzy Macro", "red")
+            try:
+                gui.stopAllTools()
+            except Exception:
+                pass
+
+            run.value = 3
+            gui.setRunState(3)
+            try:
+                gui.toggleStartStop()
+            except:
+                pass
+
+            stopApp()
+
+            if not had_macro_proc:
+                continue
+
+            # Generate and send final report AFTER stopping inputs
+            try:
+                print("Generating final report...")
+                from modules.submacros.finalReport import FinalReport
+                import os
                 
-                run.value = 3
-                gui.setRunState(3)  # Update the global run state
-                try:
-                    gui.toggleStartStop()  # Update UI
-                except:
-                    pass  # If eel is not ready, continue
+                # Create final report object
+                finalReportObj = FinalReport()
+                sessionStats = finalReportObj.generateFinalReport(setdat)
                 
-                # Stop all inputs and processes
-                stopApp()
-                
-                # Generate and send final report AFTER stopping inputs
-                try:
-                    print("Generating final report...")
-                    from modules.submacros.finalReport import FinalReport
-                    import os
+                # Check if report was generated successfully
+                if sessionStats and os.path.exists("finalReport.png"):
+                    # Format session summary for webhook
+                    sessionTime = sessionStats.get("total_session_time", 0)
+                    hours = int(sessionTime / 3600)
+                    minutes = int((sessionTime % 3600) / 60)
+                    timeStr = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
                     
-                    # Create final report object
-                    finalReportObj = FinalReport()
-                    sessionStats = finalReportObj.generateFinalReport(setdat)
+                    totalHoney = sessionStats.get("total_honey", 0)
+                    avgHoneyPerHour = sessionStats.get("avg_honey_per_hour", 0)
                     
-                    # Check if report was generated successfully
-                    if sessionStats and os.path.exists("finalReport.png"):
-                        # Format session summary for webhook
-                        sessionTime = sessionStats.get("total_session_time", 0)
-                        hours = int(sessionTime / 3600)
-                        minutes = int((sessionTime % 3600) / 60)
-                        timeStr = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
-                        
-                        totalHoney = sessionStats.get("total_honey", 0)
-                        avgHoneyPerHour = sessionStats.get("avg_honey_per_hour", 0)
-                        
-                        def millify(n):
-                            """Format large numbers with suffixes"""
-                            if n < 1000:
-                                return str(int(n))
-                            elif n < 1000000:
-                                return f"{n/1000:.1f}K"
-                            elif n < 1000000000:
-                                return f"{n/1000000:.1f}M"
-                            elif n < 1000000000000:
-                                return f"{n/1000000000:.1f}B"
-                            else:
-                                return f"{n/1000000000000:.1f}T"
-                        
-                        # Add "Estimated" label if session was less than 1 hour
-                        avgLabel = "Est. Avg/Hour" if sessionTime < 3600 else "Avg/Hour"
-                        description = f"Runtime: {timeStr}\nTotal Honey: {millify(totalHoney)}\n{avgLabel}: {millify(avgHoneyPerHour)}"
-                        
-                        # Send final report webhook
-                        logger.finalReport("Session Complete", description, "purple")
-                        print("Final report sent successfully")
-                    else:
-                        print("Failed to generate final report - no data available")
-                        
-                except Exception as e:
-                    print(f"Error generating final report: {e}")
-                    import traceback
-                    traceback.print_exc()
+                    def millify(n):
+                        """Format large numbers with suffixes"""
+                        if n < 1000:
+                            return str(int(n))
+                        elif n < 1000000:
+                            return f"{n/1000:.1f}K"
+                        elif n < 1000000000:
+                            return f"{n/1000000:.1f}M"
+                        elif n < 1000000000000:
+                            return f"{n/1000000000:.1f}B"
+                        else:
+                            return f"{n/1000000000000:.1f}T"
+                    
+                    # Add "Estimated" label if session was less than 1 hour
+                    avgLabel = "Est. Avg/Hour" if sessionTime < 3600 else "Avg/Hour"
+                    description = f"Runtime: {timeStr}\nTotal Honey: {millify(totalHoney)}\n{avgLabel}: {millify(avgHoneyPerHour)}"
+                    
+                    # Send final report webhook
+                    logger.finalReport("Session Complete", description, "purple")
+                    print("Final report sent successfully")
+                else:
+                    print("Failed to generate final report - no data available")
+                    
+            except Exception as e:
+                print(f"Error generating final report: {e}")
+                import traceback
+                traceback.print_exc()
         elif run.value == 4: #disconnected
             if macroProc and macroProc.is_alive():
                 macroProc.kill()
