@@ -15,6 +15,7 @@ from modules.submacros.autoGiftedBasicBee import AutoGiftedBasicBeeRunner
 eel.init('webapp')
 run = None
 _recent_logs = []
+_terminal_logs = []
 _tool_logger = None
 _tool_status = None
 _tool_presence = None
@@ -810,15 +811,25 @@ def syncToolSession(session_id):
 
 @eel.expose
 def update():
+    def _progress(percent=0, stage="", detail=""):
+        try:
+            eel.updateProgress(percent, stage, detail)
+        except Exception:
+            pass
+
     try:
         # Get the update channel preference
         generalsettings_path = os.path.join(settingsManager.getProfilePath(), "generalsettings.txt")
         settings = settingsManager.readSettingsFile(generalsettings_path)
         update_channel = settings.get("update_channel", "stable")
         
-        updated = updateModule.update(update_channel=update_channel)
+        updated = updateModule.update(update_channel=update_channel, progress_callback=_progress)
     except Exception:
         updated = False
+    try:
+        eel.updateProgress(100 if updated else 0, "Update complete" if updated else "Update finished", "")
+    except Exception:
+        pass
     if updated:
         eel.closeWindow()
         sys.exit()
@@ -832,10 +843,20 @@ def update():
 
 @eel.expose
 def updateFromHash(commit_hash):
+    def _progress(percent=0, stage="", detail=""):
+        try:
+            eel.updateProgress(percent, stage, detail)
+        except Exception:
+            pass
+
     try:
-        updated = updateModule.update_from_commit(commit_hash)
+        updated = updateModule.update_from_commit(commit_hash, progress_callback=_progress)
     except Exception:
         updated = False
+    try:
+        eel.updateProgress(100 if updated else 0, "Update complete" if updated else "Update finished", commit_hash[:7])
+    except Exception:
+        pass
     if updated:
         eel.closeWindow()
         sys.exit()
@@ -970,10 +991,18 @@ def setRecentLogs(logs):
     global _recent_logs
     _recent_logs = logs
 
+def setTerminalLogs(logs):
+    global _terminal_logs
+    _terminal_logs = logs
+
 @eel.expose
 def getRecentLogs():
     # Return as a list of dicts for the frontend
     return list(_recent_logs)
+
+@eel.expose
+def getTerminalLogs():
+    return list(_terminal_logs)
 
 @eel.expose
 def clearRecentLogs():
@@ -989,6 +1018,21 @@ def clearRecentLogs():
         print(f"Error clearing logs: {e}")
         # Fallback to re-initializing if clear fails
         _recent_logs = []
+
+@eel.expose
+def clearTerminalLogs():
+    global _terminal_logs
+    try:
+        if hasattr(_terminal_logs, 'clear'):
+            _terminal_logs.clear()
+        else:
+            del _terminal_logs[:]
+    except Exception as e:
+        print(f"Error clearing terminal logs: {e}")
+        _terminal_logs = []
+
+def logTerminal(time = "", msg = "", level = "info"):
+    eel.logTerminal(time, msg, level)
 
 def launch():
 

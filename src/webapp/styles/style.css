@@ -1212,6 +1212,34 @@ select:focus {
   text-align: center;
 }
 
+.update-progress-container {
+  margin-top: 0.75rem;
+  width: 100%;
+}
+
+.update-progress-stage {
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  margin-bottom: 0.3rem;
+  text-align: left;
+}
+
+.update-progress-track {
+  width: 100%;
+  height: 0.35rem;
+  background-color: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.update-progress-fill {
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(var(--primary-rgb), 0.6), var(--primary));
+  transition: width 0.2s ease;
+}
+
 .task-list-scroll {
   overflow-y: auto;
 }
@@ -1220,6 +1248,32 @@ select:focus {
   flex: 1 1 0%;
   min-height: 0;
   /* Prevents overflow issues in flex containers */
+}
+
+.log-panel {
+  display: none;
+  height: 100%;
+}
+
+.log-panel.active {
+  display: flex;
+}
+
+.log-msg {
+  display: flex;
+  gap: 0.45rem;
+  align-items: flex-start;
+  color: var(--text-main);
+  font-size: 0.85rem;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.log-msg span {
+  width: 0.35rem;
+  min-width: 0.35rem;
+  border-radius: 999px;
+  min-height: 1rem;
 }
 
 /* Drag Action Buttons */

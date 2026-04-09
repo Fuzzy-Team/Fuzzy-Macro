@@ -28,6 +28,7 @@ from modules.screen.imageSearch import locateImageOnScreen
 import pyautogui as pag
 from modules.misc.appManager import getWindowSize
 import traceback
+from datetime import datetime
 import modules.misc.settingsManager as settingsManager
 import modules.macro as macroModule
 import modules.controls.mouse as mouse
@@ -70,6 +71,101 @@ try:
 except ImportError:
     PYPRESENCE_AVAILABLE = False
     print("pypresence not installed - Discord Rich Presence will not be available")
+
+try:
+    from rich.console import Console
+    from rich.text import Text
+    RICH_AVAILABLE = True
+except ImportError:
+    RICH_AVAILABLE = False
+
+_terminal_streams_installed = False
+
+def _enqueue_terminal_log(logQueue, level, message):
+    if logQueue is None:
+        return
+    text = (message or "").strip()
+    if not text:
+        return
+    try:
+        logQueue.put({
+            "time": datetime.now().strftime("%H:%M:%S"),
+            "level": level,
+            "msg": text,
+        })
+    except Exception:
+        pass
+
+class RichTerminalStream:
+    def __init__(self, stream, console, level, logQueue=None):
+        self._stream = stream
+        self._console = console
+        self._level = level
+        self._logQueue = logQueue
+        self._buffer = ""
+
+    @property
+    def encoding(self):
+        return getattr(self._stream, "encoding", "utf-8")
+
+    def isatty(self):
+        return bool(getattr(self._stream, "isatty", lambda: False)())
+
+    def fileno(self):
+        return self._stream.fileno()
+
+    def write(self, data):
+        if not isinstance(data, str):
+            data = str(data)
+        self._buffer += data
+        while "\n" in self._buffer:
+            line, self._buffer = self._buffer.split("\n", 1)
+            self._emit_line(line)
+        return len(data)
+
+    def flush(self):
+        if self._buffer:
+            self._emit_line(self._buffer)
+            self._buffer = ""
+        try:
+            self._stream.flush()
+        except Exception:
+            pass
+
+    def _emit_line(self, line):
+        clean_line = line.rstrip("\r")
+        if clean_line == "":
+            return
+
+        _enqueue_terminal_log(self._logQueue, self._level, clean_line)
+
+        if self._console is None:
+            self._stream.write(f"{clean_line}\n")
+            return
+
+        time_text = datetime.now().strftime("%H:%M:%S")
+        color = "cyan" if self._level == "stdout" else "bold red"
+        formatted = Text.assemble(
+            (f"[{time_text}] ", "dim"),
+            (clean_line, color),
+        )
+        self._console.print(formatted, highlight=False, soft_wrap=True)
+
+def setup_terminal_logging(logQueue=None):
+    global _terminal_streams_installed
+    if _terminal_streams_installed:
+        return
+
+    if not RICH_AVAILABLE:
+        _enqueue_terminal_log(logQueue, "stderr", "Rich is not installed; terminal styling is disabled.")
+        return
+
+    stdout_console = Console(file=sys.__stdout__, force_terminal=True, soft_wrap=True)
+    stderr_console = Console(file=sys.__stderr__, force_terminal=True, soft_wrap=True)
+    sys.stdout = RichTerminalStream(sys.__stdout__, stdout_console, "stdout", logQueue)
+    sys.stderr = RichTerminalStream(sys.__stderr__, stderr_console, "stderr", logQueue)
+    _terminal_streams_installed = True
+    _enqueue_terminal_log(logQueue, "stdout", "Rich terminal logging enabled.")
 
 class RichPresenceManager:
     """Manages Discord Rich Presence updates based on macro status"""
@@ -441,7 +537,8 @@ def canClaimTimedBearQuest(name):
     
 # (set_enabled moved into RichPresenceManager class)
 #controller for the macro
-def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
+def macro(status, logQueue, updateGUI, run, skipTask, presence=None, terminalLogQueue=None):
+    setup_terminal_logging(terminalLogQueue)
     macro = macroModule.macro(status, logQueue, updateGUI, run, skipTask, presence)
     #invert the regularMobsInFields dict
     #instead of storing mobs in field, store the fields associated with each mob
@@ -2756,14 +2853,18 @@ if __name__ == "__main__":
     run = multiprocessing.Value('i', 3)
     gui.setRunState(3)  # Initialize the global run state
     recentLogs = manager.list()  # Shared list to store recent log entries for discord bot
+    terminalLogs = manager.list()  # Shared list for terminal output shown in GUI
     gui.setRecentLogs(recentLogs)
+    gui.setTerminalLogs(terminalLogs)
     updateGUI = multiprocessing.Value('i', 0)
     skipTask = multiprocessing.Value('i', INTERRUPT_NONE)  # interrupt action for the running task
     status = manager.Value(ctypes.c_wchar_p, "none")
     presence = manager.Value(ctypes.c_wchar_p, "")
     logQueue = manager.Queue()
+    terminalLogQueue = manager.Queue()
     pin_requests = manager.Queue()  # Shared queue for pin requests
     start_keyboard_listener_fn = watch_for_hotkeys(run)
+    setup_terminal_logging(terminalLogQueue)
     logger = logModule.log(logQueue, False, None, False, blocking=False)
     gui.configureToolRuntime(logger=logger, status=status, presence=presence)
 
@@ -3055,7 +3156,7 @@ if __name__ == "__main__":
                                     but there are no more items left to craft.\n\
 				                    Check the 'repeat' setting on your blender items and reset blender data.")
             #macro proc
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, terminalLogQueue), daemon=True)
             macroProc.start()
 
             macro_version = settingsManager.getMacroVersion()
@@ -3149,7 +3250,7 @@ if __name__ == "__main__":
             appManager.closeApp("Roblox")
             keyboardModule.releaseMovement()
             mouse.mouseUp()
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, terminalLogQueue), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state
@@ -3182,7 +3283,7 @@ if __name__ == "__main__":
             keyboardModule.releaseMovement()
             mouse.mouseUp()
             # restart macro process
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, terminalLogQueue), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state
@@ -3233,6 +3334,28 @@ if __name__ == "__main__":
 
             #add it to gui
             gui.log(logData["time"], msg, logData["color"])
+
+        while not terminalLogQueue.empty():
+            terminalEntry = terminalLogQueue.get()
+            terminalLogs.append(terminalEntry)
+            if len(terminalLogs) > 500:
+                try:
+                    terminalLogs[:] = terminalLogs[-500:]
+                except Exception:
+                    try:
+                        snapshot = list(terminalLogs)[-500:]
+                        del terminalLogs[:]
+                        terminalLogs.extend(snapshot)
+                    except Exception:
+                        pass
+            try:
+                gui.logTerminal(
+                    terminalEntry.get("time", ""),
+                    terminalEntry.get("msg", ""),
+                    terminalEntry.get("level", "stdout"),
+                )
+            except Exception:
+                pass
         
         #detect if the gui needs to be updated
         if updateGUI.value:

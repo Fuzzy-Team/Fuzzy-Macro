@@ -7,6 +7,64 @@ import shutil
 from io import BytesIO
 from modules.misc.messageBox import msgBox
 
+try:
+    from rich.progress import Progress, BarColumn, TextColumn, TaskProgressColumn, TimeElapsedColumn
+    RICH_PROGRESS_AVAILABLE = True
+except ImportError:
+    RICH_PROGRESS_AVAILABLE = False
+
+
+class _UpdateProgressReporter:
+    def __init__(self, callback=None):
+        self.callback = callback
+        self._progress = None
+        self._task_id = None
+        self._started = False
+
+    def __enter__(self):
+        if RICH_PROGRESS_AVAILABLE:
+            try:
+                self._progress = Progress(
+                    TextColumn("[bold cyan]{task.description}"),
+                    BarColumn(bar_width=40),
+                    TaskProgressColumn(),
+                    TimeElapsedColumn(),
+                    transient=True,
+                )
+                self._progress.start()
+                self._task_id = self._progress.add_task("Update", total=100, completed=0)
+                self._started = True
+            except Exception:
+                self._progress = None
+                self._task_id = None
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        if self._started and self._progress is not None:
+            try:
+                self._progress.stop()
+            except Exception:
+                pass
+
+    def emit(self, percent, stage="", detail=""):
+        try:
+            percent = max(0, min(100, int(percent)))
+        except Exception:
+            percent = 0
+        stage_text = stage or "Updating"
+
+        if self.callback:
+            try:
+                self.callback(percent, stage_text, detail or "")
+            except Exception:
+                pass
+
+        if self._progress is not None and self._task_id is not None:
+            try:
+                self._progress.update(self._task_id, completed=percent, description=stage_text)
+            except Exception:
+                pass
+
 
 # Helper: parse version strings like 1.2.3 or 1.2.3a
 def _parse_version(v):
@@ -196,8 +254,11 @@ def _discover_remote_version(remote_version_url, timeout=15):
         return None
 
 
-def update(t="main", update_channel="stable"):
+def update(t="main", update_channel="stable", progress_callback=None):
     msgBox("Update in progress", "Updating... Do not close terminal")
+    progress = _UpdateProgressReporter(progress_callback)
+    progress.__enter__()
+    progress.emit(3, "Preparing update")
     # Important: preserve user data and profiles. Protect pattern folder
     # during the generic overwrite so we can merge new/old patterns safely.
     protected_folders = [
@@ -248,6 +309,7 @@ def update(t="main", update_channel="stable"):
 
     # create a silent backup (overwrite previous backup)
     try:
+        progress.emit(10, "Creating backup")
         _create_backup(destination, backup_path, [], protected_files)
         _mark_backup_pending(destination)
     except Exception:
@@ -275,6 +337,7 @@ def update(t="main", update_channel="stable"):
     
     remote_version = None
     try:
+        progress.emit(18, "Checking latest version")
         r = requests.get(github_releases_api, timeout=10, headers=headers)
         r.raise_for_status()
         releases = r.json()
@@ -296,6 +359,8 @@ def update(t="main", update_channel="stable"):
         pass
     
     if not remote_version:
+        progress.emit(100, "Update failed")
+        progress.__exit__(None, None, None)
         msgBox("Update failed", "Could not fetch remote version. Update aborted.")
         return False
 
@@ -303,16 +368,22 @@ def update(t="main", update_channel="stable"):
     zip_link = f"https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/tags/{remote_version}.zip"
 
     if not _is_remote_newer(local_version, remote_version):
+        progress.emit(100, "Already up to date")
+        progress.__exit__(None, None, None)
         msgBox("Up to date", "No update available. Remote version is not newer.")
         return False
 
     # download zip
     try:
+        progress.emit(35, "Downloading update")
         req = requests.get(zip_link, timeout=60)
         req.raise_for_status()
+        progress.emit(55, "Extracting update")
         zipf = zipfile.ZipFile(BytesIO(req.content))
         zipf.extractall(destination)
     except Exception:
+        progress.emit(100, "Update failed")
+        progress.__exit__(None, None, None)
         msgBox("Update failed", "Could not download or extract update zip.")
         return False
 
@@ -330,13 +401,18 @@ def update(t="main", update_channel="stable"):
                 extracted = p
                 break
     if not extracted:
+        progress.emit(100, "Update failed")
+        progress.__exit__(None, None, None)
         msgBox("Update failed", "Could not locate extracted update folder.")
         return False
 
     # merge files, overwriting existing, but skip protected folders
     try:
+        progress.emit(70, "Applying files")
         _merge_overwrite(extracted, destination, protected_folders, protected_files)
     except Exception:
+        progress.emit(100, "Update failed")
+        progress.__exit__(None, None, None)
         msgBox("Update failed", "Error while applying update files.")
         return False
 
@@ -346,6 +422,7 @@ def update(t="main", update_channel="stable"):
     # copy: copy new files, and if a filename collides, keep the existing
     # file and write the incoming file with a suffix to avoid data loss.
     try:
+        progress.emit(80, "Merging patterns")
         src_patterns = os.path.join(extracted, "settings", "patterns")
         dst_patterns = os.path.join(destination, "settings", "patterns")
         if os.path.exists(src_patterns):
@@ -408,6 +485,7 @@ def update(t="main", update_channel="stable"):
 
     # cleanup the extracted folder
     try:
+        progress.emit(90, "Cleaning up")
         shutil.rmtree(extracted)
     except Exception:
         pass
@@ -429,6 +507,7 @@ def update(t="main", update_channel="stable"):
         pass
     # Attempt to run install dependencies script (non-blocking). Fail silently.
     try:
+        progress.emit(95, "Finishing update")
         install_script = os.path.join(destination, "install_dependencies.command")
         if os.path.exists(install_script):
             try:
@@ -451,13 +530,18 @@ def update(t="main", update_channel="stable"):
     except Exception:
         pass
 
+    progress.emit(100, "Update complete")
+    progress.__exit__(None, None, None)
     msgBox("Update success", "Update complete. You can now relaunch the macro")
     return True
 
 
-def update_from_commit(commit_hash):
+def update_from_commit(commit_hash, progress_callback=None):
     """Update the macro from a specific commit hash (zip at /archive/<hash>.zip)."""
     msgBox("Update in progress", f"Updating to commit {commit_hash}... Do not close terminal")
+    progress = _UpdateProgressReporter(progress_callback)
+    progress.__enter__()
+    progress.emit(3, "Preparing update", f"Commit {commit_hash[:7]}")
     protected_folders = [
         os.path.join("src", "data", "user"),
         os.path.join("settings", "profiles"),
@@ -470,6 +554,7 @@ def update_from_commit(commit_hash):
     backup_path = os.path.join(destination, "backup_macro.zip")
 
     try:
+        progress.emit(10, "Creating backup")
         _create_backup(destination, backup_path, [], protected_files)
         _mark_backup_pending(destination)
     except Exception:
@@ -477,11 +562,15 @@ def update_from_commit(commit_hash):
 
     # download zip for the commit
     try:
+        progress.emit(35, "Downloading commit", commit_hash[:7])
         req = requests.get(remote_zip, timeout=60)
         req.raise_for_status()
+        progress.emit(55, "Extracting update")
         zipf = zipfile.ZipFile(BytesIO(req.content))
         zipf.extractall(destination)
     except Exception:
+        progress.emit(100, "Update failed")
+        progress.__exit__(None, None, None)
         msgBox("Update failed", "Could not download or extract update zip for the specified commit.")
         return False
 
@@ -498,17 +587,23 @@ def update_from_commit(commit_hash):
                 extracted = p
                 break
     if not extracted:
+        progress.emit(100, "Update failed")
+        progress.__exit__(None, None, None)
         msgBox("Update failed", "Could not locate extracted update folder.")
         return False
 
     try:
+        progress.emit(70, "Applying files")
         _merge_overwrite(extracted, destination, protected_folders, protected_files)
     except Exception:
+        progress.emit(100, "Update failed")
+        progress.__exit__(None, None, None)
         msgBox("Update failed", "Error while applying update files.")
         return False
 
     # merge patterns similar to update()
     try:
+        progress.emit(80, "Merging patterns")
         src_patterns = os.path.join(extracted, "settings", "patterns")
         dst_patterns = os.path.join(destination, "settings", "patterns")
         if os.path.exists(src_patterns):
@@ -570,6 +665,7 @@ def update_from_commit(commit_hash):
 
     # cleanup the extracted folder
     try:
+        progress.emit(90, "Cleaning up")
         shutil.rmtree(extracted)
     except Exception:
         pass
@@ -592,6 +688,7 @@ def update_from_commit(commit_hash):
         pass
     # Attempt to run install dependencies script (non-blocking). Fail silently.
     try:
+        progress.emit(95, "Finishing update")
         install_script = os.path.join(destination, "install_dependencies.command")
         if os.path.exists(install_script):
             try:
@@ -613,6 +710,8 @@ def update_from_commit(commit_hash):
     except Exception:
         pass
 
+    progress.emit(100, "Update complete", commit_hash[:7])
+    progress.__exit__(None, None, None)
     msgBox("Update success", "Update complete. You can now relaunch the macro")
     return True
 

@@ -115,16 +115,48 @@ async function toggleStartStop() {
 }
 
 eel.expose(log);
-function log(time = "", msg = "", color = "") {
-  document.getElementById("log");
+eel.expose(logTerminal);
+let currentLogTab = "task";
+
+function appendLog(containerId, time = "", msg = "", color = "", isTerminal = false) {
+  const logs = document.getElementById(containerId);
+  if (!logs) return;
+
   let timeText = "";
   if (time) timeText = `[${time}]`;
+  const pillColor = isTerminal
+    ? (color === "stderr" ? "#D22B2B" : "#3fc1c3")
+    : `#${color || "FFFFFF"}`;
+  const safeMessage = isTerminal ? String(msg).replace(/</g, "&lt;").replace(/>/g, "&gt;") : msg;
+
   const html = `
-    <div class = "log-msg"><span style="background-color: #${color}; align-self: start"></span>${timeText} ${msg}</div>
+    <div class="log-msg"><span style="background-color: ${pillColor}; align-self: start"></span>${timeText} ${safeMessage}</div>
     `;
-  const logs = document.getElementById("logs");
   logs.innerHTML += html;
   logs.scrollTop = logs.scrollHeight;
+}
+
+function log(time = "", msg = "", color = "") {
+  appendLog("task-logs", time, msg, color, false);
+}
+
+function logTerminal(time = "", msg = "", level = "stdout") {
+  appendLog("terminal-logs", time, msg, level, true);
+}
+
+function setActiveLogTab(tab) {
+  currentLogTab = tab === "terminal" ? "terminal" : "task";
+  const taskPanel = document.getElementById("task-logs");
+  const terminalPanel = document.getElementById("terminal-logs");
+  const taskBtn = document.getElementById("task-logs-tab-btn");
+  const terminalBtn = document.getElementById("terminal-logs-tab-btn");
+  if (!taskPanel || !terminalPanel || !taskBtn || !terminalBtn) return;
+
+  const showingTask = currentLogTab === "task";
+  taskPanel.classList.toggle("active", showingTask);
+  terminalPanel.classList.toggle("active", !showingTask);
+  taskBtn.classList.toggle("active", showingTask);
+  terminalBtn.classList.toggle("active", !showingTask);
 }
 
 //returns a html string for the task
@@ -718,6 +750,19 @@ $("#home-placeholder")
       console.error("Error loading recent logs:", error);
     }
 
+    try {
+      const terminalLogs = await eel.getTerminalLogs()();
+      if (terminalLogs && terminalLogs.length > 0) {
+        terminalLogs.forEach((logEntry) => {
+          logTerminal(logEntry.time, logEntry.msg, logEntry.level || "stdout");
+        });
+      }
+    } catch (error) {
+      console.error("Error loading terminal logs:", error);
+    }
+
+    setActiveLogTab("task");
+
     // Initialize macro mode dropdown
     const settings = await loadAllSettings();
     const macroModeDropdown = document.getElementById("macro_mode");
@@ -874,28 +919,44 @@ $("#home-placeholder")
   })
   .on("click", "#clear-logs-btn", async (event) => {
     if (confirm("Are you sure you want to clear all logs?")) {
-      await eel.clearRecentLogs()();
-      const logs = document.getElementById("logs");
+      if (currentLogTab === "terminal") {
+        await eel.clearTerminalLogs()();
+      } else {
+        await eel.clearRecentLogs()();
+      }
+      const logs = document.getElementById(currentLogTab === "terminal" ? "terminal-logs" : "task-logs");
       if (logs) logs.innerHTML = "";
     }
   })
   .on("click", "#export-logs-btn", async (event) => {
     try {
-      const recentLogs = await eel.getRecentLogs()();
-      if (!recentLogs || recentLogs.length === 0) {
+      const isTerminalTab = currentLogTab === "terminal";
+      const logsToExport = isTerminalTab
+        ? await eel.getTerminalLogs()()
+        : await eel.getRecentLogs()();
+      if (!logsToExport || logsToExport.length === 0) {
         alert("No logs to export.");
         return;
       }
 
-      let logText = "Fuzzy Macro Logs\n";
+      let logText = isTerminalTab ? "Fuzzy Macro Terminal Logs\n" : "Fuzzy Macro Task Logs\n";
       logText += "================\n\n";
 
-      recentLogs.forEach((logEntry) => {
-        const time = logEntry.time || "";
-        const title = logEntry.title || "";
-        const desc = logEntry.desc ? logEntry.desc.replace(/<br>/g, "\n") : "";
-        logText += `[${time}] ${title}\n${desc}\n\n`;
-      });
+      if (isTerminalTab) {
+        logsToExport.forEach((logEntry) => {
+          const time = logEntry.time || "";
+          const level = (logEntry.level || "stdout").toUpperCase();
+          const msg = logEntry.msg || "";
+          logText += `[${time}] [${level}] ${msg}\n`;
+        });
+      } else {
+        logsToExport.forEach((logEntry) => {
+          const time = logEntry.time || "";
+          const title = logEntry.title || "";
+          const desc = logEntry.desc ? logEntry.desc.replace(/<br>/g, "\n") : "";
+          logText += `[${time}] ${title}\n${desc}\n\n`;
+        });
+      }
 
       const blob = new Blob([logText], { type: "text/plain" });
       const url = window.URL.createObjectURL(blob);
@@ -913,4 +974,10 @@ $("#home-placeholder")
       console.error("Error exporting logs:", error);
       alert("Failed to export logs.");
     }
+  })
+  .on("click", "#task-logs-tab-btn", () => {
+    setActiveLogTab("task");
+  })
+  .on("click", "#terminal-logs-tab-btn", () => {
+    setActiveLogTab("terminal");
   });

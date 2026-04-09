@@ -5,8 +5,34 @@ window.updateButtonReset = function () {
     updateBtn.classList.remove("active");
     updateBtn.innerText = "Update";
   }
+  const progressContainer = document.getElementById("update-progress-container");
+  const progressFill = document.getElementById("update-progress-fill");
+  const progressStage = document.getElementById("update-progress-stage");
+  if (progressFill) progressFill.style.width = "0%";
+  if (progressStage) progressStage.textContent = "Preparing update…";
+  if (progressContainer) progressContainer.classList.add("d-none");
 };
 if (window.eel) eel.expose(window.updateButtonReset, 'updateButtonReset');
+
+window.updateProgress = function (percent = 0, stage = "", detail = "") {
+  const progressContainer = document.getElementById("update-progress-container");
+  const progressFill = document.getElementById("update-progress-fill");
+  const progressStage = document.getElementById("update-progress-stage");
+  if (!progressContainer || !progressFill || !progressStage) return;
+
+  const pct = Math.max(0, Math.min(100, Number(percent) || 0));
+  if (pct <= 0 && !stage) {
+    progressContainer.classList.add("d-none");
+    progressFill.style.width = "0%";
+    progressStage.textContent = "Preparing update…";
+    return;
+  }
+
+  progressContainer.classList.remove("d-none");
+  progressFill.style.width = `${pct}%`;
+  progressStage.textContent = detail ? `${stage} • ${detail}` : (stage || `Updating... ${pct}%`);
+};
+if (window.eel) eel.expose(window.updateProgress, "updateProgress");
 
 // Auto-update check functionality
 async function checkForUpdatesOnStartup() {
@@ -118,6 +144,7 @@ async function startUpdate() {
   const updateBtn = document.getElementById("update-btn");
   if (updateBtn && !updateBtn.classList.contains("active")) {
     purpleButtonToggle(updateBtn, ["Update", "Updating"]);
+    window.updateProgress(1, "Starting update");
     if (window.eel && typeof eel.update === "function") {
       await eel.update();
     }
@@ -131,6 +158,7 @@ document.addEventListener("DOMContentLoaded", function () {
     updateBtn.addEventListener("click", async function (event) {
       if (!event.currentTarget.classList.contains("active")) {
         purpleButtonToggle(event.currentTarget, ["Update", "Updating"]);
+        window.updateProgress(1, "Starting update");
         if (window.eel && typeof eel.update === "function") {
           await eel.update();
         }
