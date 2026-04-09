@@ -1222,6 +1222,32 @@ select:focus {
   /* Prevents overflow issues in flex containers */
 }
 
+.log-panel {
+  display: none;
+  height: 100%;
+}
+
+.log-panel.active {
+  display: flex;
+}
+
+.log-msg {
+  display: flex;
+  gap: 0.45rem;
+  align-items: flex-start;
+  color: var(--text-main);
+  font-size: 0.85rem;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.log-msg span {
+  width: 0.35rem;
+  min-width: 0.35rem;
+  border-radius: 999px;
+  min-height: 1rem;
+}
+
 /* Drag Action Buttons */
 .drag-actions {
   margin-left: auto;

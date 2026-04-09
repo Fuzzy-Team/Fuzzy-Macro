@@ -45,14 +45,23 @@
         <div class="flex-row space-between align-items-center mb-05 border-bottom">
           <h2 style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">Logs</h2>
           <div class="flex-row gap-xs">
+            <button class="purple-button active log-tab-btn" id="task-logs-tab-btn"
+              style="margin-top: 0; padding: 0.3rem 0.6rem; font-size: 0.8rem;">Task Logs</button>
+            <button class="purple-button log-tab-btn" id="terminal-logs-tab-btn"
+              style="margin-top: 0; padding: 0.3rem 0.6rem; font-size: 0.8rem;">Terminal Logs</button>
             <button class="purple-button" id="export-logs-btn"
               style="margin-top: 0; padding: 0.3rem 0.6rem; font-size: 0.8rem;">Export</button>
             <button class="purple-button" id="clear-logs-btn"
               style="margin-top: 0; padding: 0.3rem 0.6rem; font-size: 0.8rem;">Clear</button>
           </div>
         </div>
-        <div id="logs" class="flex-col gap-xs overflow-y-auto flex-grow-1">
-          <!-- Logs will be appended here -->
+        <div id="logs" class="overflow-y-auto flex-grow-1">
+          <div id="task-logs" class="flex-col gap-xs log-panel active">
+            <!-- Task logs will be appended here -->
+          </div>
+          <div id="terminal-logs" class="flex-col gap-xs log-panel">
+            <!-- Terminal logs will be appended here -->
+          </div>
         </div>
       </div>
     </div>

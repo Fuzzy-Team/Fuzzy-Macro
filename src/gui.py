@@ -15,6 +15,7 @@ from modules.submacros.autoGiftedBasicBee import AutoGiftedBasicBeeRunner
 eel.init('webapp')
 run = None
 _recent_logs = []
+_terminal_logs = []
 _tool_logger = None
 _tool_status = None
 _tool_presence = None
@@ -970,10 +971,18 @@ def setRecentLogs(logs):
     global _recent_logs
     _recent_logs = logs
 
+def setTerminalLogs(logs):
+    global _terminal_logs
+    _terminal_logs = logs
+
 @eel.expose
 def getRecentLogs():
     # Return as a list of dicts for the frontend
     return list(_recent_logs)
+
+@eel.expose
+def getTerminalLogs():
+    return list(_terminal_logs)
 
 @eel.expose
 def clearRecentLogs():
@@ -989,6 +998,21 @@ def clearRecentLogs():
         print(f"Error clearing logs: {e}")
         # Fallback to re-initializing if clear fails
         _recent_logs = []
+
+@eel.expose
+def clearTerminalLogs():
+    global _terminal_logs
+    try:
+        if hasattr(_terminal_logs, 'clear'):
+            _terminal_logs.clear()
+        else:
+            del _terminal_logs[:]
+    except Exception as e:
+        print(f"Error clearing terminal logs: {e}")
+        _terminal_logs = []
+
+def logTerminal(time = "", msg = "", level = "info"):
+    eel.logTerminal(time, msg, level)
 
 def launch():
 
