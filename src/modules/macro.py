@@ -4805,6 +4805,7 @@ class macro:
             pass
 
         objectives = quest_data[questGiver][questTitle]
+        maxObjectiveScanHeight = int(((len(objectives) * 110) + 60) * self.robloxWindow.multi)
 
         #merge the texts into chunks. Using those chunks, compare it with the known objectives
         #assume that the merging is done properly, so 1st chunk = 1st objective
@@ -4844,6 +4845,7 @@ class macro:
         #crop
         if endIndex:
             screen = screen[endIndex:, :]
+        screen = screen[:min(screen.shape[0], maxObjectiveScanHeight), :]
 
         #convert to grayscale
         screenGray = cv2.cvtColor(screen, cv2.COLOR_BGR2GRAY)
@@ -4861,10 +4863,16 @@ class macro:
         maxArea = 40000*self.robloxWindow.multi     #too big = background or large UI elements
         maxHeight = 75*self.robloxWindow.multi       #cap height to filter out title bar
 
+        indexedContours = []
+        for contour in contours:
+            x, y, w, h = cv2.boundingRect(contour)
+            indexedContours.append((y, contour))
+        indexedContours.sort(key=lambda item: item[0])
+
         completedObjectives = []
         incompleteObjectives = []
         i = 0
-        for contour in contours[::-1]:
+        for _, contour in indexedContours:
             x, y, w, h = cv2.boundingRect(contour)
             #check if contour meets size requirements
             area = w*h
