@@ -362,7 +362,8 @@
 
       const blenderItemsArray = toImgArray(blenderIcons);
       const blenderParent = document.getElementById("blender").parentElement;
-      for (let i = 1; i < 4; i++) {
+      const blenderItemSlots = 5;
+      for (let i = 1; i <= blenderItemSlots; i++) {
         const blenderItemHTML = `
                     <div class="seperator" style="margin-bottom: 1rem;"></div>
                     <h3 class="poppins-semibold" style = "margin-bottom: 0.9rem;">Item ${i}</h3>

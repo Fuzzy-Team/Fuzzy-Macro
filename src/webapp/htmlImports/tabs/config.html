@@ -375,13 +375,50 @@
           },
         },
         {
+          id: "rejoin_schedule_type",
+          title: "Scheduled Rejoin Mode",
+          desc: "Choose whether the macro rejoins after a set number of hours or once per day at a specific time.",
+          type: {
+            name: "dropdown",
+            data: [
+              { label: "Every X Hours", value: "hours" },
+              { label: "Daily Time", value: "daily" },
+            ],
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
           id: "rejoin_every",
           title: "Rejoin Every X hours",
-          desc: "How often the macro should rejoin. Set it as 0 to disable this feature.",
+          desc: "How often the macro should rejoin when Scheduled Rejoin Mode is Every X Hours. Set it as 0 to disable interval rejoining.",
           type: {
             name: "textbox",
             inputType: "float",
             inputLimit: 4,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "rejoin_at_time",
+          title: "Rejoin At Time",
+          desc: "Daily time for scheduled rejoin when Scheduled Rejoin Mode is Daily Time. Use 24-hour HH:MM format, for example 00:00.",
+          type: {
+            name: "textbox",
+            inputType: "string",
+            inputLimit: 5,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "rejoin_timezone",
+          title: "Rejoin Time Zone",
+          desc: "Choose whether Rejoin At Time is interpreted as your local time or UTC.",
+          type: {
+            name: "dropdown",
+            data: [
+              { label: "Local", value: "local" },
+              { label: "UTC", value: "utc" },
+            ],
             triggerFunction: saveGeneralTriggerFunction,
           },
         },

@@ -392,7 +392,8 @@ async function loadTasks() {
     if (taskId === "blender") {
       if (!setdat.blender_enable) return { enabled: false };
       const selectedBlenderItems = {};
-      for (let i = 1; i < 4; i++) {
+      const blenderItemSlots = 5;
+      for (let i = 1; i <= blenderItemSlots; i++) {
         const item = setdat[`blender_item_${i}`]?.replaceAll(" ", "_");
         if (item == "none" || !item) continue;
         selectedBlenderItems[toTitleCase(item.replaceAll("_", " "))] =
@@ -517,9 +518,10 @@ async function loadTasks() {
     //blender
     if (setdat["blender_enable"]) {
       const selectedBlenderItems = {};
-      for (let i = 1; i < 4; i++) {
-        const item = setdat[`blender_item_${i}`].replaceAll(" ", "_");
-        if (item == "none") continue;
+      const blenderItemSlots = 5;
+      for (let i = 1; i <= blenderItemSlots; i++) {
+        const item = setdat[`blender_item_${i}`]?.replaceAll(" ", "_");
+        if (item == "none" || !item) continue;
         selectedBlenderItems[toTitleCase(item.replaceAll("_", " "))] =
           blenderIcons[item];
       }
