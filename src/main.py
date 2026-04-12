@@ -504,10 +504,9 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 macro.stingerHunt()
             if macro.setdat["mondo_buff"] and macro.hasMondoRespawned():
                 macro.collectMondoBuff()
-            if macro.setdat["rejoin_every"]:
-                if macro.hasRespawned("rejoin_every", macro.setdat["rejoin_every"]*60*60):
-                    macro.rejoin("Rejoining (Scheduled)")
-                    macro.saveTiming("rejoin_every")
+            if macro.hasScheduledRejoinArrived():
+                macro.rejoin("Rejoining (Scheduled)")
+                macro.saveTiming("rejoin_every")
             
             #auto field boost (can be disabled per-call via allowAFB)
             if allowAFB and macro.setdat["Auto_Field_Boost"] and not macro.AFBLIMIT:
@@ -3047,7 +3046,7 @@ if __name__ == "__main__":
                     break
             #check if blender is enabled but there are no items to craft
             validBlender = not setdat["blender_enable"] #valid blender set to false if blender is enabled, else its true since blender is disabled
-            for i in range(1,4):
+            for i in range(1, macroModule.BLENDER_ITEM_SLOTS + 1):
                 if setdat[f"blender_item_{i}"] != "none" and (setdat[f"blender_repeat_{i}"] or setdat[f"blender_repeat_inf_{i}"]):
                     validBlender = True
             if not validBlender:
