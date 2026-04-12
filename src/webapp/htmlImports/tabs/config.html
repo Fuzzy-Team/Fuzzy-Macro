@@ -435,6 +435,20 @@
         },
       ]);
 
+      buildStandardContainer(parentOther, "Auto Stop", "", [
+        {
+          id: "auto_stop_after",
+          title: "Stop Macro After X Hours",
+          desc: "Automatically stop the macro after this many hours from startup. Set to 0 to disable auto stop.",
+          type: {
+            name: "textbox",
+            inputType: "float",
+            inputLimit: 5,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+      ]);
+
       buildStandardContainer(parentOther, "Haste Compensation", "", [
         {
           id: "haste_compensation",

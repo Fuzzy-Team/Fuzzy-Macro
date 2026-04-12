@@ -10,6 +10,7 @@ rejoin_method=deeplink
 rejoin_schedule_type=hours
 rejoin_at_time=00:00
 rejoin_timezone=local
+auto_stop_after=0
 max_cannon_attempts=3
 webhook_link=
 enable_webhook=False
