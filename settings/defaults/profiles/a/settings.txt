@@ -107,6 +107,7 @@ memory_match=False
 mega_memory_match=False
 extreme_memory_match=False
 winter_memory_match=False
+memory_match_rewards=[]
 blender_enable=False
 blender_item_1=blue extract
 blender_quantity_1=1

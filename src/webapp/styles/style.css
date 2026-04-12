@@ -973,6 +973,70 @@ select:focus {
   display: block;
 }
 
+.multi-checklist {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 4.9rem);
+  justify-content: center;
+  gap: 0.9rem;
+  max-height: 31rem;
+  overflow-y: auto;
+  width: min(48rem, 100%);
+  padding: 1.25rem;
+  background: #ead04d;
+  border: 1px solid #5e4b20;
+  border-radius: 8px;
+  box-sizing: border-box;
+}
+
+.multi-check-option {
+  display: block;
+  margin: 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.multi-check-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.multi-check-tile {
+  width: 4.9rem;
+  aspect-ratio: 1 / 1;
+  padding: 0.45rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-sizing: border-box;
+  background: #a67833;
+  border: 2px solid #8a642c;
+  border-radius: 8px;
+  color: #1f211a;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.standard-container .multi-check-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  margin-right: 0;
+}
+
+.multi-check-option input:checked~.multi-check-tile {
+  background: #5fae9c;
+  border-color: #2f756b;
+  box-shadow: inset 0 0 0 2px #dff7ed;
+}
+
+.multi-check-option:hover .multi-check-tile {
+  border-color: #4f3a19;
+}
+
 /* Drag List */
 .drag-list {
   background: var(--surface);

@@ -35,6 +35,12 @@ const slotArray = [1, 2, 3, 4, 5, 6, 7];
         text: "reset" //button text
         length: 10, //in rem units, defaults to 5 if not included
     }
+    multicheck:
+    type: {
+        name: "multicheck",
+        data: ["a", "b"],
+        triggerFunction: "saveData()"
+    }
 */
 
 //create option elements in a already existing dropdown
@@ -68,6 +74,17 @@ function setDropdownData(id, data) {
   if (container && container.children[1] && container.children[1].children[0]) {
     container.children[1].children[0].innerHTML = html;
   }
+}
+
+function toggleMultiCheckOption(option, event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  const input = option.querySelector("input[type='checkbox']");
+  if (!input) return;
+  input.checked = !input.checked;
+  input.dispatchEvent(new Event("change"));
 }
 
 function buildInput(id, type) {
@@ -165,6 +182,34 @@ function buildInput(id, type) {
     }
     html += `</div></div>`;
     return html;
+  } else if (type.name == "multicheck") {
+    const triggerFunction = type.triggerFunction
+      ? type.triggerFunction.replaceAll("this", `document.getElementById('${id}')`)
+      : "";
+    let html = `<div id="${id}" class="multi-checklist" style="margin-top: 0.6rem;">`;
+    for (let i = 0; i < type.data.length; i++) {
+      const item = type.data[i];
+      let value = item;
+      let display = item;
+      let image = "";
+      if (item && typeof item === "object") {
+        if (item.hasOwnProperty("value")) value = item.value;
+        if (item.hasOwnProperty("label")) display = item.label;
+        if (item.hasOwnProperty("image")) image = item.image;
+      }
+      if ($.type(value) === "string") {
+        value = stripHTMLTags(value);
+        value = value.replace(/[^\p{L}\p{N}\p{P}\p{Z}^$\n]/gu, "");
+        value = value.trim().toLowerCase();
+      }
+      const imageHtml = image ? `<img src="${image}" alt="${display}" draggable="false">` : `<span>${display}</span>`;
+      html += `<div class="multi-check-option" onclick="toggleMultiCheckOption(this, event)" onmousedown="event.stopPropagation()">
+        <input type="checkbox" value="${value}" onchange="${triggerFunction}" tabindex="-1">
+        <span class="multi-check-tile" title="${display}">${imageHtml}</span>
+      </div>`;
+    }
+    html += `</div>`;
+    return html;
   }
 }
 
@@ -196,6 +241,7 @@ function buildStandardContainer(parentElement, title, desc, settings) {
     textbox: "5%",
     button: "5%",
     keybind: "5%",
+    multicheck: "5%",
   };
 
   //add each setting
@@ -203,17 +249,22 @@ function buildStandardContainer(parentElement, title, desc, settings) {
     //note: if i > 0, set a margin-top
     //if the control is a standalone button, vertically center the left text block
     const isSingleButton = e.type && e.type.name === 'button';
+    const isMultiCheck = e.type && e.type.name === 'multicheck';
     const alignItems = isSingleButton ? 'center' : 'flex-start';
     const leftDivStyle = isSingleButton ? 'display:flex; flex-direction:column; justify-content:center;' : '';
+    const formDirection = isMultiCheck ? 'column' : 'row';
+    const formPaddingRight = isMultiCheck ? '0' : inputPadding[e.type.name];
+    const leftWidth = isMultiCheck ? '100%' : '70%';
+    const elementTag = isMultiCheck ? "div" : "form";
     out += `
-      <form style="display: flex; align-items:${alignItems}; justify-content: space-between; padding-right: ${inputPadding[e.type.name]
+      <${elementTag} style="display: flex; flex-direction:${formDirection}; align-items:${alignItems}; justify-content: space-between; padding-right: ${formPaddingRight
       }; ${i ? "margin-top:1rem" : ""};">
-        <div style="width: 70%; ${leftDivStyle}">
+        <div style="width: ${leftWidth}; ${leftDivStyle}">
           <label>${e.title}</label>
           <p>${e.desc}</p>
         </div>
         ${buildInput(e.id, e.type)}
-      </form>
+      </${elementTag}>
       `;
   });
 
