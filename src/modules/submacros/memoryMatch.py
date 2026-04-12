@@ -425,10 +425,7 @@ class MemoryMatch:
         # If we found a match on first tile, click the matching tile
         match_found = self._lookup_seen(first_tile_hash, claimed_coords, exclude_index=first_tile_index)
         if match_found is not None:
-            if preferred_rewards and not (
-                self._is_preferred_reward(tile_rewards[first_tile_index], preferred_rewards)
-                or self._is_preferred_reward(tile_rewards[match_found], preferred_rewards)
-            ):
+            if not self._should_claim_match(tile_rewards[first_tile_index], tile_rewards[match_found], preferred_rewards):
                 match_found = None
             else:
                 print("Match found, clicking matching tile")
@@ -473,10 +470,7 @@ class MemoryMatch:
                         print(f"[MM] Match found on second tile: indices {i} & {match_found}")
                     else:
                         print("Match found on second tile")
-                    if preferred_rewards and not (
-                        self._is_preferred_reward(tile_reward, preferred_rewards)
-                        or self._is_preferred_reward(tile_rewards[match_found], preferred_rewards)
-                    ):
+                    if not self._should_claim_match(tile_reward, tile_rewards[match_found], preferred_rewards):
                         mm_data[i] = tile_hash
                         tile_rewards[i] = tile_reward
                         self._record_seen(tile_hash, i)
@@ -534,6 +528,16 @@ class MemoryMatch:
 
     def _is_preferred_reward(self, reward: Optional[str], preferred_rewards: Set[str]) -> bool:
         return reward is not None and self._normalize_reward_name(reward) in preferred_rewards
+
+    def _should_claim_match(self, reward_a: Optional[str], reward_b: Optional[str], preferred_rewards: Set[str]) -> bool:
+        """Return whether a known matching pair should be claimed now."""
+        if not preferred_rewards:
+            return True
+        if self._is_preferred_reward(reward_a, preferred_rewards) or self._is_preferred_reward(reward_b, preferred_rewards):
+            return True
+        # Avoid only when at least one side was recognized as a non-preferred reward.
+        # If both sides are unknown, fall back to normal match behavior.
+        return reward_a is None and reward_b is None
 
     def _find_known_preferred_pair(self, tile_rewards: List[Optional[str]], preferred_rewards: Set[str], claimed_coords: Set[int]) -> Optional[Tuple[int, int]]:
         if not preferred_rewards:
