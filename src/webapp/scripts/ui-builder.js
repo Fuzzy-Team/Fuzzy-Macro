@@ -192,10 +192,14 @@ function buildInput(id, type) {
       let value = item;
       let display = item;
       let image = "";
+      let firstType = "";
+      let types = [];
       if (item && typeof item === "object") {
         if (item.hasOwnProperty("value")) value = item.value;
         if (item.hasOwnProperty("label")) display = item.label;
         if (item.hasOwnProperty("image")) image = item.image;
+        if (item.hasOwnProperty("first_type")) firstType = item.first_type;
+        if (Array.isArray(item.types)) types = item.types;
       }
       if ($.type(value) === "string") {
         value = stripHTMLTags(value);
@@ -203,9 +207,28 @@ function buildInput(id, type) {
         value = value.trim().toLowerCase();
       }
       const imageHtml = image ? `<img src="${image}" alt="${display}" draggable="false">` : `<span>${display}</span>`;
+      const typeLabels = {
+        normal: "Memory Match",
+        mega: "Mega Memory Match",
+        extreme: "Extreme Memory Match",
+        winter: "Winter Memory Match",
+      };
+      const typeBadges = {
+        normal: "N",
+        mega: "M",
+        extreme: "E",
+        winter: "W",
+      };
+      const badgeText = types.length
+        ? types.map((type) => typeBadges[type] || type).join("/")
+        : (firstType ? String(firstType).replace(" Memory Match", "").trim() : "");
+      const title = types.length
+        ? `${display} - found in ${types.map((type) => typeLabels[type] || type).join(", ")}`
+        : (firstType ? `${display} - first found in ${firstType}` : display);
+      const badgeHtml = badgeText ? `<span class="multi-check-badge">${badgeText}</span>` : "";
       html += `<div class="multi-check-option" onclick="toggleMultiCheckOption(this, event)" onmousedown="event.stopPropagation()">
         <input type="checkbox" value="${value}" onchange="${triggerFunction}" tabindex="-1">
-        <span class="multi-check-tile" title="${display}">${imageHtml}</span>
+        <span class="multi-check-tile" title="${title}">${imageHtml}${badgeHtml}</span>
       </div>`;
     }
     html += `</div>`;
