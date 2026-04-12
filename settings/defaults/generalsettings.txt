@@ -33,6 +33,7 @@ stream_resolution=0.75
 stream_fps=30
 enable_stream=False
 low_performance=False
+virtual_monitor=False
 ngrok_auth=
 stream_quality=1920x1080
 start_keybind=F1

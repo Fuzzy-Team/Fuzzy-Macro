@@ -19,6 +19,7 @@ from modules.controls.sleep import (
 )
 import modules.controls.mouse as mouse
 import modules.logging.log as logModule
+import modules.misc.virtualDisplay as virtualDisplay
 from modules.submacros.fieldDriftCompensation import fieldDriftCompensation as fieldDriftCompensationClass
 from modules.screen.robloxWindow import RobloxWindowBounds
 import sys
@@ -632,6 +633,19 @@ class macro:
         self.robloxWindow.setRobloxWindowBounds(setYOffset=setYOffset)
         if setYOffset:
             self.logger.webhook("", f"Detect Y Offset: {self.robloxWindow.contentYOffset}", "dark brown")
+
+    def moveRobloxToVirtualMonitor(self):
+        if not virtualDisplay.isVirtualMonitorEnabled(self.setdat):
+            return False
+        try:
+            frame = virtualDisplay.ensureVirtualMonitor()
+            moved = virtualDisplay.moveRobloxToVirtualMonitor(frame)
+            if moved:
+                self.setRobloxWindowInfo(setYOffset=False)
+            return moved
+        except Exception as e:
+            self.logger.webhook("", f"Virtual monitor setup failed: {e}", "red", ping_category="ping_critical_errors")
+            return False
 
     
     def _load_shift_lock_template(self):
@@ -2005,6 +2019,7 @@ class macro:
                     self.keyboard.keyUp("command")
                 else:
                     self.keyboard.keyUp("ctrl")
+            self.moveRobloxToVirtualMonitor()
             #wait for bss to load
             #if sprinkler image is found, bss is loaded
             #max 80s of waiting
@@ -2069,6 +2084,7 @@ class macro:
                     self.setRobloxWindowInfo(setYOffset=False)
 
             appManager.openApp("Roblox")
+            self.moveRobloxToVirtualMonitor()
             if not rejoinSuccess:
                 continue
             #run fullscreen check
@@ -2095,6 +2111,7 @@ class macro:
                         self.keyboard.keyUp("ctrl")
                     time.sleep(0.5)
                 appManager.openApp("Roblox")
+                self.moveRobloxToVirtualMonitor()
             
             self.startDetect()
             #find hive
@@ -6083,7 +6100,7 @@ class macro:
         time.sleep(1)
         #check roblox scaling
         #this is done by checking if all pixels at the top of the screen are black
-        topScreen = mssScreenshot(0, 0, self.robloxWindow.mw, 2)
+        topScreen = mssScreenshot(self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw, 2)
         extrema = topScreen.convert("L").getextrema()
         #all are black
         if extrema == (0, 0):
@@ -6161,6 +6178,7 @@ class macro:
         if not appManager.openApp("Roblox"):
             self.rejoin()
         else:
+            self.moveRobloxToVirtualMonitor()
             #toggle fullscreen
             # if not self.isFullScreen():
             #     self.toggleFullScreen()

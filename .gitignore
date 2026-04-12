@@ -3,6 +3,9 @@ __pycache__/
 .DS_STORE
 macroLogs.log
 bin
+!src/data/bin/
+!src/data/bin/virtual_display_helper
+!src/data/bin/virtual_display_helper_bin
 include
 lib
 share

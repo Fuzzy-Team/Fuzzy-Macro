@@ -2734,6 +2734,7 @@ if __name__ == "__main__":
     import modules.logging.log as logModule
     import modules.misc.appManager as appManager
     import modules.misc.settingsManager as settingsManager
+    import modules.misc.virtualDisplay as virtualDisplay
     from modules.discord_bot.discordBot import discordBot
     from modules.submacros.convertAhkPattern import ahkPatternToPython
     from modules.submacros.stream import cloudflaredStream
@@ -2844,6 +2845,10 @@ if __name__ == "__main__":
             macroProc.join()
             macroProc = None
         stream.stop()
+        try:
+            virtualDisplay.stopVirtualMonitor()
+        except Exception:
+            pass
         #if discordBotProc.is_alive(): discordBotProc.kill()
         keyboardModule.releaseMovement()
         mouse.mouseUp()
@@ -2996,6 +3001,16 @@ if __name__ == "__main__":
             logger.webhookURL = setdat.get("webhook_link", "")
             logger.sendScreenshots = setdat.get("send_screenshot", True)
             stopThreads = False
+
+            if virtualDisplay.isVirtualMonitorEnabled(setdat):
+                try:
+                    virtualMonitorFrame = virtualDisplay.ensureVirtualMonitor()
+                    screenData.setScreenData(virtualMonitorFrame)
+                    screenInfo = screenData.getScreenData()
+                    if virtualDisplay.moveRobloxToVirtualMonitor(virtualMonitorFrame):
+                        logger.webhook("", "Roblox moved to the virtual monitor", "light blue")
+                except Exception as e:
+                    logger.webhook("", f"Virtual monitor setup failed: {e}", "red", ping_category="ping_critical_errors")
 
             #reset hourly report data
             hourlyReport = HourlyReport()

@@ -72,12 +72,23 @@ def scaleRegion(left, top, width, height, anchor_x="left", anchor_y="top", scree
     return (scaled_left, scaled_top, scaled_width, scaled_height)
 
 
-def setScreenData():
+def _apply_screen_data_scale(screenData):
+    screenData["x_scale"], screenData["y_scale"] = _get_reference_scale(screenData)
+    screenData["x_multiplier"] = BASE_SCREEN_WIDTH / screenData["screen_width"]
+    screenData["y_multiplier"] = BASE_SCREEN_HEIGHT / screenData["screen_height"]
+    screenData["x_length_multiplier"] = screenData["x_multiplier"]
+    screenData["y_length_multiplier"] = screenData["y_multiplier"]
+    return screenData
+
+
+def setScreenData(virtual_monitor_frame=None):
     wwd, whd = pag.size()
     screenData = {
         "display_type": "built-in",
         "screen_width": wwd,
         "screen_height": whd,
+        "screen_x": 0,
+        "screen_y": 0,
         "reference_width": BASE_SCREEN_WIDTH,
         "reference_height": BASE_SCREEN_HEIGHT,
         "x_scale": 1,
@@ -87,6 +98,15 @@ def setScreenData():
         "y_length_multiplier": 1,
         "x_length_multiplier": 1
     }
+
+    if virtual_monitor_frame:
+        screenData["display_type"] = "built-in"
+        screenData["screen_width"] = int(virtual_monitor_frame["width"])
+        screenData["screen_height"] = int(virtual_monitor_frame["height"])
+        screenData["screen_x"] = int(virtual_monitor_frame["x"])
+        screenData["screen_y"] = int(virtual_monitor_frame["y"])
+        settingsManager.saveDict(screenPath, _apply_screen_data_scale(screenData))
+        return
 
     #for macs: check if its reina, set the screen width and height, set multipliers
     #get a screenshot. The size of the screenshot is the true screen size
@@ -120,11 +140,7 @@ def setScreenData():
         screenData["screen_width"] = wwd
         screenData["screen_height"] = whd
 
-    screenData["x_scale"], screenData["y_scale"] = _get_reference_scale(screenData)
-    screenData["x_multiplier"] = BASE_SCREEN_WIDTH / screenData["screen_width"]
-    screenData["y_multiplier"] = BASE_SCREEN_HEIGHT / screenData["screen_height"]
-    screenData["x_length_multiplier"] = screenData["x_multiplier"]
-    screenData["y_length_multiplier"] = screenData["y_multiplier"]
+    _apply_screen_data_scale(screenData)
 
     #save the data
     settingsManager.saveDict(screenPath, screenData)

@@ -457,6 +457,18 @@
         },
       ]);
 
+      buildStandardContainer(parentOther, "Virtual Monitor", "", [
+        {
+          id: "virtual_monitor",
+          title: "Enable Virtual Monitor",
+          desc: "Start a 1920x1080 built-in style virtual display and move Roblox there while macroing.",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+      ]);
+
       buildStandardContainer(parentOther, "Time Format", "", [
         {
           id: "hourly_report_time_format",

@@ -124,9 +124,36 @@ def maximiseAppWindowMac(app="Roblox"):
     AXUIElementSetAttributeValue(windowRef, "AXPosition", pos)
     AXUIElementSetAttributeValue(windowRef, "AXSize", size)
 
+def setAppWindowFrameMac(app="Roblox", x=0, y=0, w=None, h=None):
+    if w is None:
+        w = mw
+    if h is None:
+        h = mh
+
+    workspace = NSWorkspace.sharedWorkspace()
+    for runningApp in workspace.runningApplications():
+        if runningApp.localizedName() == app:
+            pid = runningApp.processIdentifier()
+            break
+    else:
+        return False
+
+    appRef = AXUIElementCreateApplication(pid)
+    _, windowRef = AXUIElementCopyAttributeValue(appRef, "AXMainWindow", None)
+    if not windowRef:
+        return False
+
+    AXUIElementSetAttributeValue(windowRef, "AXFullScreen", False)
+    pos = AXValueCreate(kAXValueCGPointType, CGPoint(x, y))
+    size = AXValueCreate(kAXValueCGSizeType, CGSize(w, h))
+    posResult = AXUIElementSetAttributeValue(windowRef, "AXPosition", pos)
+    sizeResult = AXUIElementSetAttributeValue(windowRef, "AXSize", size)
+    return posResult == kAXErrorSuccess and sizeResult == kAXErrorSuccess
+
 # Set the functions to use macOS implementations
 openApp = openAppMac
 isAppOpen = isAppOpenMac
 isAppFocused = isAppFocusedMac
 maximiseAppWindow = maximiseAppWindowMac
 setAppFullscreen = setAppFullscreenMac
+setAppWindowFrame = setAppWindowFrameMac
