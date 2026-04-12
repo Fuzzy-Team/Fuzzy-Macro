@@ -2910,6 +2910,9 @@ if __name__ == "__main__":
     discordBotProc = None
     prevDiscordBotToken = None
     prevRunState = run.value  # Track previous run state for GUI updates
+    autoStopStartTime = None
+    autoStopDeadline = None
+    autoStopHours = 0.0
     
     # Initialize Rich Presence Manager
     richPresenceManager = None
@@ -2918,6 +2921,13 @@ if __name__ == "__main__":
     gui_settings_cache = {}
     last_gui_settings_load = 0
     gui_settings_cache_duration = 1.0  # Reload settings every 1 second max
+
+    def parseAutoStopHours(settings):
+        try:
+            hours = float(settings.get("auto_stop_after", 0) or 0)
+        except (TypeError, ValueError):
+            return 0.0
+        return max(0.0, hours)
 
     while True:
         eel.sleep(0.5)
@@ -2928,6 +2938,20 @@ if __name__ == "__main__":
             gui_settings_cache = settingsManager.loadAllSettings()
             last_gui_settings_load = current_time
         setdat = gui_settings_cache
+
+        if autoStopStartTime is not None and run.value in (2, 4, 6):
+            latestAutoStopHours = parseAutoStopHours(setdat)
+            if latestAutoStopHours != autoStopHours:
+                autoStopHours = latestAutoStopHours
+                autoStopDeadline = autoStopStartTime + (autoStopHours * 3600) if autoStopHours > 0 else None
+
+        if autoStopDeadline is not None and run.value in (2, 4, 6) and current_time >= autoStopDeadline:
+            logger.webhook(
+                "Macro Auto Stopped",
+                f"Stopped after {autoStopHours:g} hour{'s' if autoStopHours != 1 else ''}.",
+                "orange",
+            )
+            run.value = 0
 
         #discord bot. Look for changes in the bot token
         currentDiscordBotToken = setdat.get("discord_bot_token", "")
@@ -3060,6 +3084,9 @@ if __name__ == "__main__":
             macro_version = settingsManager.getMacroVersion()
             logger.webhook("Macro Started", f'Fuzzy Macro v{macro_version}\nDisplay: {screenInfo["display_type"]}, {screenInfo["screen_width"]}x{screenInfo["screen_height"]}', "purple")
             run.value = 2
+            autoStopStartTime = time.time()
+            autoStopHours = parseAutoStopHours(setdat)
+            autoStopDeadline = autoStopStartTime + (autoStopHours * 3600) if autoStopHours > 0 else None
             gui.setRunState(2)  # Update the global run state
             try:
                 gui.toggleStartStop()  # Update UI
@@ -3071,6 +3098,9 @@ if __name__ == "__main__":
                 pass  # If eel is not ready, continue
         elif run.value == 0:
             had_macro_proc = bool(macroProc)
+            autoStopStartTime = None
+            autoStopDeadline = None
+            autoStopHours = 0.0
 
             # Stop macro/tools and release all inputs first.
             if had_macro_proc:
