@@ -1002,6 +1002,7 @@ select:focus {
 }
 
 .multi-check-tile {
+  position: relative;
   width: 4.9rem;
   aspect-ratio: 1 / 1;
   padding: 0.45rem;
@@ -1018,6 +1019,24 @@ select:focus {
   font-weight: 700;
   line-height: 1.05;
   overflow-wrap: anywhere;
+}
+
+.multi-check-badge {
+  position: absolute;
+  left: 0.25rem;
+  bottom: 0.25rem;
+  max-width: calc(100% - 0.5rem);
+  padding: 0.12rem 0.28rem;
+  border-radius: 6px;
+  background: rgba(31, 33, 26, 0.86);
+  color: #f3f4f0;
+  font-size: 0.56rem;
+  font-weight: 700;
+  line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-sizing: border-box;
 }
 
 .standard-container .multi-check-tile img {

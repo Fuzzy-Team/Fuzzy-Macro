@@ -242,6 +242,57 @@
         "Festive Bean",
       ];
 
+      const memoryMatchRewardTypes = {
+        "blueberries": ["normal", "mega", "extreme"],
+        "enzymes": ["normal", "mega", "extreme", "winter"],
+        "field dice": ["normal", "mega", "winter"],
+        "glitter": ["normal", "mega", "extreme", "winter"],
+        "gumdrops": ["normal", "mega", "extreme", "winter"],
+        "honeysuckles": ["normal", "mega", "extreme", "winter"],
+        "jelly beans": ["normal", "mega", "extreme", "winter"],
+        "magic bean": ["normal", "mega", "extreme", "winter"],
+        "micro-converter": ["normal", "mega", "extreme", "winter"],
+        "moon charms": ["normal", "mega"],
+        "oil": ["normal", "mega", "extreme", "winter"],
+        "pineapples": ["normal", "mega", "extreme"],
+        "royal jelly": ["normal", "mega", "extreme"],
+        "strawberries": ["normal", "mega", "extreme"],
+        "sunflower seeds": ["normal", "mega", "extreme"],
+        "tickets": ["normal", "mega", "extreme", "winter"],
+        "treats": ["normal", "mega", "extreme"],
+        "coconuts": ["mega", "extreme"],
+        "glue": ["mega"],
+        "cyan decorative border sticker": ["mega"],
+        "star jelly": ["mega", "extreme", "winter"],
+        "blue extract": ["extreme"],
+        "cloud vial": ["extreme"],
+        "diamond egg": ["extreme", "winter"],
+        "gold egg": ["extreme", "winter"],
+        "sideways spirit bear sticker": ["extreme"],
+        "red extract": ["extreme"],
+        "star treat": ["extreme", "winter"],
+        "stingers": ["extreme"],
+        "tropical drink": ["extreme", "winter"],
+        "festive bean": ["winter"],
+        "gingerbread bear": ["winter"],
+        "hard wax": ["winter"],
+        "mythic egg": ["winter"],
+        "night bell": ["winter"],
+        "silver egg": ["winter"],
+        "smooth dice": ["winter"],
+        "soft wax": ["winter"],
+        "super smoothie": ["winter"],
+        "swirled wax": ["winter"],
+      };
+
+      const memoryMatchRewardOptions = memoryMatchRewards.map((reward) => {
+        if (!reward || typeof reward !== "object") return reward;
+        return {
+          ...reward,
+          types: memoryMatchRewardTypes[reward.value] || [],
+        };
+      });
+
       buildStandardContainer(parentCollectActivities, "Memory Match 💭", "", [
         {
           id: "memory_match",
@@ -282,10 +333,10 @@
         {
           id: "memory_match_rewards",
           title: "Preferred Rewards",
-          desc: "When any rewards are selected, known matching pairs for those rewards are prioritized. Leave empty to solve normally.",
+          desc: "When any rewards are selected, known matching pairs for those rewards are prioritized. Tile badges show where each reward can appear: N = normal, M = mega, E = extreme, W = winter. Leave empty to solve normally.",
           type: {
             name: "multicheck",
-            data: memoryMatchRewards,
+            data: memoryMatchRewardOptions,
             triggerFunction: saveProfileTriggerFunction,
           },
         },
