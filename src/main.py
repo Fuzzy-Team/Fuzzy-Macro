@@ -2752,12 +2752,12 @@ if __name__ == "__main__":
     #3: already stopped (do nothing)
     #4: disconnected (rejoin)
     manager = multiprocessing.Manager()
-    run = multiprocessing.Value('i', 3)
+    run = manager.Value('i', 3)
     gui.setRunState(3)  # Initialize the global run state
     recentLogs = manager.list()  # Shared list to store recent log entries for discord bot
     gui.setRecentLogs(recentLogs)
-    updateGUI = multiprocessing.Value('i', 0)
-    skipTask = multiprocessing.Value('i', INTERRUPT_NONE)  # interrupt action for the running task
+    updateGUI = manager.Value('i', 0)
+    skipTask = manager.Value('i', INTERRUPT_NONE)  # interrupt action for the running task
     status = manager.Value(ctypes.c_wchar_p, "none")
     presence = manager.Value(ctypes.c_wchar_p, "")
     logQueue = manager.Queue()
