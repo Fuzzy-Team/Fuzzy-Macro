@@ -32,7 +32,7 @@ import webbrowser
 from pynput.keyboard import Controller
 import cv2
 from modules.screen.color_check import get_sample_colors, percent_pixels_similar_to_color
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime, timezone
 from modules.misc.imageManipulation import *
 from PIL import Image
 from modules.misc import messageBox
@@ -208,6 +208,7 @@ planterGrowthData = {
 }
 
 #a list of all items that can be crafted by the blender in order
+BLENDER_ITEM_SLOTS = 5
 blenderItems = ["red extract", "blue extract", "enzymes", "oil", "glue", "tropical drink", "gumdrops", "moon charm",
     "glitter",
     "star jelly",
@@ -1159,6 +1160,41 @@ class macro:
             mobRespawnBonus -= self.setdat["icicles_beequip"]/100 
     
         return time.time() - timing >= cooldown*mobRespawnBonus
+
+    def _parseRejoinAtTime(self):
+        value = str(self.setdat.get("rejoin_at_time", "00:00")).strip()
+        match = re.fullmatch(r"(\d{1,2}):(\d{2})(?::(\d{2}))?", value)
+        if not match:
+            return None
+
+        hour = int(match.group(1))
+        minute = int(match.group(2))
+        second = int(match.group(3) or 0)
+        if hour > 23 or minute > 59 or second > 59:
+            return None
+
+        return hour, minute, second
+
+    def hasScheduledRejoinArrived(self):
+        scheduleType = str(self.setdat.get("rejoin_schedule_type", "hours")).strip().lower()
+        if scheduleType == "daily":
+            rejoinTime = self._parseRejoinAtTime()
+            if rejoinTime is None:
+                print(f"Invalid rejoin_at_time setting: {self.setdat.get('rejoin_at_time')}")
+                return False
+
+            timeZone = str(self.setdat.get("rejoin_timezone", "local")).strip().lower()
+            now = datetime.now(timezone.utc) if timeZone == "utc" else datetime.now().astimezone()
+            target = now.replace(
+                hour=rejoinTime[0],
+                minute=rejoinTime[1],
+                second=rejoinTime[2],
+                microsecond=0,
+            )
+            return self.getTiming("rejoin_every") < target.timestamp() <= now.timestamp()
+
+        rejoinEvery = self.setdat.get("rejoin_every", 0)
+        return bool(rejoinEvery) and self.hasRespawned("rejoin_every", rejoinEvery*60*60)
 
     def isInBlueTexts(self, includeList = [], excludeList = []):
         return self.isInOCR("blue", includeList, excludeList)
@@ -3997,9 +4033,9 @@ class macro:
         
         def getNextItem():
             nextItem = itemNo
-            for _ in range(4):
+            for _ in range(BLENDER_ITEM_SLOTS + 1):
                 nextItem += 1
-                if nextItem > 3:
+                if nextItem > BLENDER_ITEM_SLOTS:
                     nextItem = 1
                 #item must be set and have repeats
                 if (self.setdat[f"blender_item_{nextItem}"] != "none") and (self.setdat[f"blender_repeat_{nextItem}"] > 0 or self.setdat[f"blender_repeat_inf_{nextItem}"]):

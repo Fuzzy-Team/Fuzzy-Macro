@@ -3,7 +3,6 @@ import cv2
 import numpy as np
 import mss
 import mss.darwin
-mss.darwin.IMAGE_OPTIONS = 0
 import threading
 import subprocess
 import time
@@ -266,7 +265,7 @@ class cloudflaredStream:
             except:
                 pass
         
-        with mss.mss() as sct:
+        with mss.mss(with_cursor=True) as sct:
             monitor = sct.monitors[1]
             
             while self.streaming:

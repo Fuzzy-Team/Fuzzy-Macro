@@ -654,7 +654,7 @@ function loadInputs(obj, save = "") {
     eel.saveDictProfileSettings(obj);
   }
   // Update visibility of any dependent fields after loading inputs
-  try { updateReturnDependentFields(); } catch (e) { /* ignore */ }
+  try { updateDependentFields(); } catch (e) { /* ignore */ }
 
   // Ensure the beta commit input is never pre-filled from saved settings
   try {
@@ -684,6 +684,11 @@ function applyTheme(theme) {
 }
 
 // Show/hide inputs that depend on the 'return' dropdown value
+function updateDependentFields() {
+  updateReturnDependentFields();
+  updateScheduledRejoinDependentFields();
+}
+
 function updateReturnDependentFields() {
   const returnEle = document.getElementById("return");
   if (!returnEle) return;
@@ -697,6 +702,20 @@ function updateReturnDependentFields() {
   } else {
     form.style.display = "none";
   }
+}
+
+function updateScheduledRejoinDependentFields() {
+  const scheduleEle = document.getElementById("rejoin_schedule_type");
+  if (!scheduleEle) return;
+
+  const val = getDropdownValue(scheduleEle) || "hours";
+  const everyForm = document.getElementById("rejoin_every")?.closest("form");
+  const atTimeForm = document.getElementById("rejoin_at_time")?.closest("form");
+  const timeZoneForm = document.getElementById("rejoin_timezone")?.closest("form");
+
+  if (everyForm) everyForm.style.display = val === "daily" ? "none" : "flex";
+  if (atTimeForm) atTimeForm.style.display = val === "daily" ? "flex" : "none";
+  if (timeZoneForm) timeZoneForm.style.display = val === "daily" ? "flex" : "none";
 }
 /*
 =============================================
@@ -824,7 +843,7 @@ function updateDropDownDisplay(optionEle) {
   //set the display to match the option
   selectEle.innerHTML = optionEle.innerHTML;
   // Ensure dependent fields reflect this change
-  try { updateReturnDependentFields(); } catch (e) { /* ignore */ }
+  try { updateDependentFields(); } catch (e) { /* ignore */ }
 }
 //document click event
 function dropdownClicked(event) {
