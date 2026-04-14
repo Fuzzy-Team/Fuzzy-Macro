@@ -85,7 +85,12 @@ function getBondCalcElements() {
 }
 
 function calculateTreatsForBond(bond, bonusPercent) {
-  const bondPerTreat = 10 * (1 + bonusPercent / 100);
+  // Treat 100% as the base (no bonus). Any input is interpreted as total
+  // Bond from Treats %. We compute the effective bonus relative to 100%
+  // (e.g., input 120 -> effective 20). Ensure the effective bonus
+  // never goes below 0.
+  const effectiveBonus = Math.max(0, (Number(bonusPercent) || 0) - 100);
+  const bondPerTreat = 10 * (1 + effectiveBonus / 100);
   return Math.ceil(bond / bondPerTreat);
 }
 
