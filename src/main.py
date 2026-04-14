@@ -1,3 +1,101 @@
+import os
+import multiprocessing
+import shutil
+import subprocess
+import sys
+import traceback
+
+if getattr(sys, "frozen", False):
+    multiprocessing.freeze_support()
+
+
+def _run_webview_window_if_requested():
+    if len(sys.argv) < 3 or sys.argv[1] != "--webview-url":
+        return
+    try:
+        import webview
+
+        webview.create_window("Fuzzy Macro", sys.argv[2], width=1280, height=900)
+        webview.start(private_mode=True)
+    except Exception as e:
+        print(f"Could not open embedded app window: {e}")
+    sys.exit(0)
+
+
+def _configure_frozen_logging():
+    if not getattr(sys, "frozen", False):
+        return
+    log_file = None
+    for log_dir in (
+        os.path.join(os.path.expanduser("~/Library/Logs"), "Fuzzy Macro"),
+        os.path.join("/tmp", "Fuzzy Macro Logs"),
+    ):
+        try:
+            os.makedirs(log_dir, exist_ok=True)
+            log_path = os.path.join(log_dir, "app.log")
+            log_file = open(log_path, "a", buffering=1)
+            break
+        except Exception:
+            log_file = None
+    if log_file is None:
+        return
+    sys.stdout = log_file
+    sys.stderr = log_file
+    try:
+        import faulthandler
+
+        faulthandler.enable(log_file)
+    except Exception:
+        pass
+    sys.excepthook = lambda exc_type, exc, tb: traceback.print_exception(exc_type, exc, tb)
+    print("\n--- Fuzzy Macro app launch ---", flush=True)
+
+
+def _configure_runtime_directory():
+    """Keep relative macro paths working from a bundled .app."""
+    if getattr(sys, "frozen", False):
+        base_dir = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
+        resources_dir = os.path.abspath(os.path.join(base_dir, "..", "Resources"))
+        support_dir = os.path.join(os.path.expanduser("~/Library/Application Support"), "Fuzzy Macro", "runtime")
+        try:
+            if not os.path.isdir(os.path.join(support_dir, "src", "webapp")):
+                os.makedirs(support_dir, exist_ok=True)
+                for name in ("src", "paths", "settings"):
+                    source = os.path.join(resources_dir, name)
+                    if not os.path.exists(source):
+                        source = os.path.join(base_dir, name)
+                    destination = os.path.join(support_dir, name)
+                    if os.path.exists(source) and not os.path.exists(destination):
+                        shutil.copytree(source, destination)
+                for name in ("README.md", "LICENSE", "HELP.txt", "install_dependencies.command"):
+                    source = os.path.join(resources_dir, name)
+                    if not os.path.exists(source):
+                        source = os.path.join(base_dir, name)
+                    destination = os.path.join(support_dir, name)
+                    if os.path.exists(source) and not os.path.exists(destination):
+                        shutil.copy2(source, destination)
+        except Exception as e:
+            print(f"Could not prepare app support runtime directory: {e}")
+        candidates = [
+            os.path.join(resources_dir, "src"),
+            os.path.join(support_dir, "src"),
+            os.path.join(base_dir, "src"),
+            os.path.join(os.path.dirname(sys.executable), "src"),
+            base_dir,
+        ]
+    else:
+        candidates = [os.path.dirname(os.path.abspath(__file__))]
+
+    for candidate in candidates:
+        if os.path.isdir(os.path.join(candidate, "webapp")) and os.path.isdir(os.path.join(candidate, "data")):
+            os.chdir(candidate)
+            return
+
+
+_configure_frozen_logging()
+_run_webview_window_if_requested()
+_configure_runtime_directory()
+
 from modules.misc import messageBox
 #check if installing dependencies was ran
 try:
@@ -13,15 +111,11 @@ except ModuleNotFoundError:
         pass
     sys.exit(0)
 from pynput import keyboard
-import multiprocessing
 import ctypes
 from threading import Thread
 import eel
 import time
-import sys
-import os
 import ast
-import subprocess
 import atexit
 from modules.misc.imageManipulation import adjustImage
 from modules.screen.imageSearch import locateImageOnScreen
@@ -2725,6 +2819,7 @@ def watch_for_hotkeys(run):
     return start_keyboard_listener
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     print("Loading gui...")
     global stopThreads, macroProc
     import gui

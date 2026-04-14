@@ -1,5 +1,6 @@
 import ast
 import os
+import sys
 import shutil
 import json
 import zipfile
@@ -41,6 +42,11 @@ def saveCurrentProfile():
 # Get the project root directory (4 levels up from this file: src/modules/misc/settingsManager.py)
 def getProjectRoot():
     """Get the project root directory path"""
+    if getattr(sys, "frozen", False):
+        cwd_parent = os.path.dirname(os.getcwd()) if os.path.basename(os.getcwd()) == "src" else os.getcwd()
+        if os.path.isdir(os.path.join(cwd_parent, "settings")):
+            return cwd_parent
+        return getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
     return os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 # File to store current profile persistence

@@ -10,9 +10,23 @@ import json
 import webbrowser
 import time
 import threading
+import subprocess
 from modules.submacros.autoGiftedBasicBee import AutoGiftedBasicBeeRunner
 
-eel.init('webapp')
+def _webapp_dir():
+    base_dir = getattr(sys, "_MEIPASS", os.getcwd())
+    candidates = [
+        os.path.join(base_dir, "webapp"),
+        os.path.join(base_dir, "src", "webapp"),
+        os.path.join(os.getcwd(), "webapp"),
+    ]
+    for candidate in candidates:
+        if os.path.isdir(candidate):
+            return candidate
+    return "webapp"
+
+
+eel.init(_webapp_dir())
 run = None
 _recent_logs = []
 _tool_logger = None
@@ -1013,6 +1027,20 @@ def launch():
     except Exception:
         # ignore if already exposed or if exposure fails at import time
         pass
+
+    if getattr(sys, "frozen", False) or os.environ.get("FUZZY_MACRO_WEBVIEW") == "1":
+        try:
+            eel.start('index.html', block=False, mode=False, port=port)
+            time.sleep(1)
+            subprocess.Popen(
+                [sys.executable, "--webview-url", f"{port_url}/index.html"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+            )
+            return
+        except Exception as e:
+            print(f"Embedded app window failed: {e}")
 
     try:
         eel.start('index.html', mode = "chrome", app_mode = True, block = False, port=port, cmdline_args=["--incognito", f"--app={port_url}"])

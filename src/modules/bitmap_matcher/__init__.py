@@ -32,6 +32,13 @@ def find_compatible_so():
     py_version = get_python_version()
     arch = get_architecture()
     current_dir = Path(__file__).parent
+    extra_dirs = []
+    if getattr(sys, "frozen", False):
+        base_dir = Path(getattr(sys, "_MEIPASS", ""))
+        extra_dirs.extend([
+            base_dir / ".." / "Resources" / "src" / "modules" / "bitmap_matcher",
+            Path.cwd() / "modules" / "bitmap_matcher",
+        ])
     
     # Search patterns in order of preference
     search_patterns = [
@@ -63,6 +70,7 @@ def find_compatible_so():
         current_dir / f"py{py_version.replace('.', '')}",
         current_dir / "dist" / f"py{py_version.replace('.', '')}",
     ]
+    search_dirs.extend(extra_dirs)
     
     for directory in search_dirs:
         if not directory.exists():
