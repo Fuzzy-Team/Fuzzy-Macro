@@ -21,7 +21,9 @@ TODO.md
 
 .github
 src/data/user
-settings/profiles
+settings/profiles/*
+!settings/profiles/a/
+!settings/profiles/a/**
 .backup_pending
 backup_macro.zip
 backups/
