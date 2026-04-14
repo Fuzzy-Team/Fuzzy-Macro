@@ -9,7 +9,18 @@ from ..misc import settingsManager
 BASE_SCREEN_WIDTH = 2880
 BASE_SCREEN_HEIGHT = 1800
 
-screenPath = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../data/user/screen.txt'))
+screenPath = os.path.join(settingsManager.getProjectRoot(), "src", "data", "user", "screen.txt")
+
+
+def _valid_dimension_pair(width, height):
+    return width and height and width > 0 and height > 0
+
+
+def _normalize_dimensions(width, height):
+    if _valid_dimension_pair(width, height):
+        return width, height
+
+    return BASE_SCREEN_WIDTH, BASE_SCREEN_HEIGHT
 
 
 def _get_reference_scale(screen_data=None):
@@ -74,6 +85,7 @@ def scaleRegion(left, top, width, height, anchor_x="left", anchor_y="top", scree
 
 def setScreenData():
     wwd, whd = pag.size()
+    wwd, whd = _normalize_dimensions(wwd, whd)
     screenData = {
         "display_type": "built-in",
         "screen_width": wwd,
@@ -88,26 +100,28 @@ def setScreenData():
         "x_length_multiplier": 1
     }
 
-    #for macs: check if its reina, set the screen width and height, set multipliers
-    #get a screenshot. The size of the screenshot is the true screen size
-    sct=mss.mss()
-    region={'top':0,'left':0,'width':150,'height':150}
-    shot=sct.grab(region)
-    sw, sh = shot.width, shot.height
-    if sw == 300: #check if retina (screenshot size is twice)
-        screenData["screen_width"] *= 2
-        screenData["screen_height"] *= 2
-        screenData["display_type"] = "retina"
-    ndisplay = "{}x{}".format(sw,sh)
-    # Determine the true (physical) screen resolution using mss monitors
-    sct = mss.mss()
+    # For Macs, mss gives the true physical screen size, but it can fail before
+    # Screen Recording permission is granted. Fall back so the GUI can still open.
     try:
-        mon = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
-        physical_w, physical_h = mon['width'], mon['height']
-    except Exception:
-        # fallback: grab a full-screen shot
-        shot = sct.grab({'top': 0, 'left': 0, 'width': wwd, 'height': whd})
-        physical_w, physical_h = shot.width, shot.height
+        sct = mss.mss()
+        region = {'top': 0, 'left': 0, 'width': 150, 'height': 150}
+        shot = sct.grab(region)
+        sw, sh = shot.width, shot.height
+        if sw == 300:
+            screenData["screen_width"] *= 2
+            screenData["screen_height"] *= 2
+            screenData["display_type"] = "retina"
+
+        try:
+            mon = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
+            physical_w, physical_h = mon['width'], mon['height']
+        except Exception:
+            shot = sct.grab({'top': 0, 'left': 0, 'width': wwd, 'height': whd})
+            physical_w, physical_h = shot.width, shot.height
+    except Exception as e:
+        print(f"Warning: Could not capture screen data, using display size fallback: {e}")
+        physical_w, physical_h = wwd, whd
+    physical_w, physical_h = _normalize_dimensions(physical_w, physical_h)
 
     detected_resolution = f"{physical_w}x{physical_h}"
 
