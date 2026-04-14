@@ -121,6 +121,7 @@ _run_webview_window_if_requested()
 _configure_runtime_directory()
 
 from modules.misc import messageBox
+from modules.misc import macPermissions
 #check if installing dependencies was ran
 try:
     import requests
@@ -2518,6 +2519,33 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         mouse.click()
 
 
+def has_input_monitoring_permission():
+    if sys.platform != "darwin":
+        return True
+    try:
+        import Quartz
+
+        mask = 1 << Quartz.kCGEventKeyDown
+        tap = Quartz.CGEventTapCreate(
+            Quartz.kCGSessionEventTap,
+            Quartz.kCGHeadInsertEventTap,
+            Quartz.kCGEventTapOptionListenOnly,
+            mask,
+            lambda proxy, event_type, event, refcon: event,
+            None,
+        )
+        if tap is None:
+            return False
+        try:
+            Quartz.CFMachPortInvalidate(tap)
+        except Exception:
+            pass
+        return True
+    except Exception as e:
+        print(f"Could not check Input Monitoring permission: {e}")
+        return True
+
+
 def watch_for_hotkeys(run):
     # Track currently pressed keys for combination detection
     pressed_keys = set()
@@ -2818,12 +2846,26 @@ def watch_for_hotkeys(run):
                 main_thread = threading.main_thread()
                 if current_thread is not main_thread:
                     print("Warning: Keyboard listener should be started on main thread on macOS")
+                if not has_input_monitoring_permission():
+                    macPermissions.show_permission_message(
+                        "Input Monitoring",
+                        "Input Monitoring",
+                        title="Input Monitoring Permission",
+                        details="This is required for global start, pause, and stop hotkeys.",
+                    )
             
             listener = keyboard.Listener(on_press=on_press, on_release=on_release)
             listener.start()
             return listener
         except Exception as e:
             print(f"Failed to start keyboard listener: {e}")
+            if sys.platform == "darwin":
+                macPermissions.show_permission_message(
+                    "Input Monitoring",
+                    "Input Monitoring",
+                    title="Input Monitoring Permission",
+                    details="This is required for global start, pause, and stop hotkeys.",
+                )
             # Try to restart after a short delay
             import threading
             def restart_listener():
@@ -3012,7 +3054,6 @@ if __name__ == "__main__":
     
     #check screen recording permissions
     try:
-        app_name = "Fuzzy Macro" if getattr(sys, "frozen", False) else "Terminal"
         cg = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
         try:
             cg.CGPreflightScreenCaptureAccess.restype = ctypes.c_bool
@@ -3023,7 +3064,11 @@ if __name__ == "__main__":
         if not has_screen_recording:
             cg.CGRequestScreenCaptureAccess.restype = ctypes.c_bool
             cg.CGRequestScreenCaptureAccess()
-            messageBox.msgBox(title="Screen Recording Permission", text=f'{app_name} does not have screen recording permission. The macro will not work properly.\n\nTo fix it, go to System Settings -> Privacy and Security -> Screen Recording -> add and enable {app_name}. After that, restart the macro.')
+            macPermissions.show_permission_message(
+                "Screen Recording",
+                "Screen & System Audio Recording",
+                title="Screen Recording Permission",
+            )
     except AttributeError:
         pass
     #check full keyboard access

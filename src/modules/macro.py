@@ -37,6 +37,7 @@ from datetime import timedelta, datetime, timezone
 from modules.misc.imageManipulation import *
 from PIL import Image
 from modules.misc import messageBox
+from modules.misc import macPermissions
 from modules.submacros.memoryMatch import MemoryMatch
 import math
 import re
@@ -6259,7 +6260,6 @@ class macro:
         #check for accessibility
         #this is done by taking 2 different screenshots
         #if they are both the same, we assume that the keypress didnt go through and hence accessibility is not enabled
-        app_name = "Fuzzy Macro" if getattr(sys, "frozen", False) else "Terminal"
         accessibility_trusted = False
         if sys.platform == "darwin":
             try:
@@ -6273,7 +6273,12 @@ class macro:
             newX = mouse.getPos()[0]
             accessibility_trusted = originalX != newX
         if not accessibility_trusted:
-            messageBox.msgBox(text=f'It seems like {app_name} does not have Accessibility permission. The macro will not work properly.\n\nTo fix it, go to System Settings -> Privacy and Security -> Accessibility -> add and enable {app_name}.\n\nVisit https://fuzzy-team.gitbook.io/fuzzy-macro/common-fixes/terminal-permissions for detailed instructions\n\nNOTE: This popup might be incorrect. If the macro is able to input keypresses and interact with the game, you can dismiss this popup', title='Accessibility Permission')
+            macPermissions.show_permission_message(
+                "Accessibility",
+                "Accessibility",
+                title="Accessibility Permission",
+                details="This is required for keyboard and mouse control in Roblox.",
+            )
         time.sleep(1)
         # img1 = pillowToHash(mssScreenshot())
         # self.keyboard.press("esc")
