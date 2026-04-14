@@ -32,8 +32,8 @@ except:
         easyocrReader = easyocr.Reader(['en'])
         ocrLib = "easyocr"
 
-mw, mh = pag.size()
 screenInfo = getScreenData()
+mw, mh = screenInfo["screen_width"], screenInfo["screen_height"]
 ww = screenInfo["screen_width"]
 wh = screenInfo["screen_height"]
 newUI = False
@@ -174,4 +174,3 @@ elif ocrLib == "paddleocr":
     ocrFunc = ocrPaddle
 elif ocrLib == "easyocr":
     ocrFunc = ocrEasy
-

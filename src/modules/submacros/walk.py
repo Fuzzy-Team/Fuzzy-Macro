@@ -24,7 +24,8 @@ class Walk():
             self.bearMorphs.append(self.adjustBuffImage(f"./images/buffs/bearmorph{i+1}.png"))
 
         self.hastePlus = self.adjustBuffImage(f"./images/buffs/haste+.png")         
-        self.mw, self.mh = pag.size()                 
+        screenInfo = getScreenData()
+        self.mw, self.mh = screenInfo["screen_width"], screenInfo["screen_height"]
         self.prevHaste = 0         
         self.prevHaste368 = 0 #tracking the previous haste to accurately determine if the haste stack is 3,6 or 8
         self.hasteEnds = 0
@@ -116,4 +117,3 @@ class Walk():
             prev_v = v
             s, f, v = self.hasteCompensation()  # Get new timestamps and speed
             d += ((prev_v + v) / 2) * (f - s)  # Apply trapezoidal integration
-

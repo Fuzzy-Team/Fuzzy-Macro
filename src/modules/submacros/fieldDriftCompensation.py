@@ -19,8 +19,10 @@ try:
     import coremltools as ct
 except Exception:
     ct = None
+from modules.screen.screenData import getScreenData
 
-mw, mh = pag.size()
+screenInfo = getScreenData()
+mw, mh = screenInfo["screen_width"], screenInfo["screen_height"]
 
 class fieldDriftCompensation():
     def __init__(self, robloxWindow: RobloxWindowBounds):
