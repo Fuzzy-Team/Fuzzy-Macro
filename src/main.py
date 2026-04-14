@@ -66,15 +66,29 @@ def _configure_runtime_directory():
         resources_dir = os.path.abspath(os.path.join(base_dir, "..", "Resources"))
         support_dir = os.path.join(os.path.expanduser("~/Library/Application Support"), "Fuzzy Macro", "runtime")
         try:
-            if not os.path.isdir(os.path.join(support_dir, "src", "webapp")):
+            required_runtime_paths = (
+                os.path.join(support_dir, "src", "webapp"),
+                os.path.join(support_dir, "src", "data"),
+                os.path.join(support_dir, "paths"),
+                os.path.join(support_dir, "settings"),
+            )
+            if not all(os.path.isdir(path) for path in required_runtime_paths):
                 os.makedirs(support_dir, exist_ok=True)
                 for name in ("src", "paths", "settings"):
                     source = os.path.join(resources_dir, name)
                     if not os.path.exists(source):
                         source = os.path.join(base_dir, name)
                     destination = os.path.join(support_dir, name)
-                    if os.path.exists(source) and not os.path.exists(destination):
+                    if os.path.isdir(source) and not os.path.exists(destination):
                         shutil.copytree(source, destination)
+                    elif os.path.isdir(source) and os.path.isdir(destination):
+                        for child_name in os.listdir(source):
+                            child_source = os.path.join(source, child_name)
+                            child_destination = os.path.join(destination, child_name)
+                            if os.path.isdir(child_source) and not os.path.exists(child_destination):
+                                shutil.copytree(child_source, child_destination)
+                            elif os.path.isfile(child_source) and not os.path.exists(child_destination):
+                                shutil.copy2(child_source, child_destination)
                 for name in ("README.md", "LICENSE", "HELP.txt", "install_dependencies.command"):
                     source = os.path.join(resources_dir, name)
                     if not os.path.exists(source):
