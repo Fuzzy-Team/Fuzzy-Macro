@@ -320,12 +320,27 @@ async function saveSetting(ele, type) {
   const value = getInputValue(id);
   // Enforce limits for specific settings before saving
   let valueToSave = value;
-  if (type == "general" && id === "max_cannon_attempts") {
-    // Ensure numeric and clamp between 1 and 25
+  if (type == "general" && (id === "max_cannon_attempts" || id === "cannon_hive_resync_attempts")) {
+    // Ensure numeric and clamp cannon retry settings.
     let n = parseInt(value, 10);
-    if (Number.isNaN(n)) n = 1;
-    if (n < 1) n = 1;
+    const min = id === "cannon_hive_resync_attempts" ? 0 : 1;
+    if (Number.isNaN(n)) n = min;
+    if (n < min) n = min;
     if (n > 25) n = 25;
+    const maxCannonInput = document.getElementById("max_cannon_attempts");
+    const hiveResyncInput = document.getElementById("cannon_hive_resync_attempts");
+    if (id === "cannon_hive_resync_attempts") {
+      const maxAttempts = parseInt(maxCannonInput?.value, 10);
+      if (!Number.isNaN(maxAttempts) && n >= maxAttempts) n = Math.max(0, maxAttempts - 1);
+    } else if (hiveResyncInput) {
+      let hiveResyncAttempts = parseInt(hiveResyncInput.value, 10);
+      if (Number.isNaN(hiveResyncAttempts)) hiveResyncAttempts = 0;
+      if (hiveResyncAttempts >= n) {
+        hiveResyncAttempts = Math.max(0, n - 1);
+        hiveResyncInput.value = hiveResyncAttempts;
+        try { await eel.saveGeneralSetting("cannon_hive_resync_attempts", hiveResyncAttempts)(); } catch (e) { /* ignore */ }
+      }
+    }
     valueToSave = n;
     // Update the displayed input to reflect clamped value
     const inputEl = document.getElementById(id);
