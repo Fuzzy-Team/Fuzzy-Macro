@@ -50,10 +50,7 @@ def closeApp(app):
         subprocess.call(["pkill", app], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception:
         pass
-    cmd = """
-        osascript -e 'quit application "Roblox"'
-    """
-    os.system(cmd)
+    runAppleScript(f'quit application "{app}"')
 
 def forceQuitApp(app):
     """Forcefully terminate an app/process. More aggressive than closeApp.
