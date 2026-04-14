@@ -1127,6 +1127,11 @@ class macro:
         template = self.adjustImage("./images/menu",name)
         return locateTransparentImageOnScreen(template, self.robloxWindow.mx+(self.robloxWindow.mw//2-200), self.robloxWindow.my+self.robloxWindow.yOffset+34, 400, 140, 0.75)
 
+    def isMakeHoneyPrompt(self, log=False):
+        text = self.getTextBesideE()
+        if log: print(f"output text: {text}")
+        return ("make" in text and "honey" in text) or self.isBesideEImage("makehoney")
+
     def getTiming(self,name = None):
         for _ in range(3):
             data = settingsManager.readSettingsFile("./data/user/timings.txt")
@@ -1855,7 +1860,56 @@ class macro:
         else:
             self.logger.webhook("", "Unable to detect that player respawned at hive", "dark brown", "screen")
 
-    def cannon(self, fast = False):
+    def resyncHiveSlotFromHive(self):
+        self.logger.webhook("", "Rechecking hive slot before rejoining", "dark brown", "screen")
+        if not self.reset(convert=False):
+            return False
+
+        def alignWithCannonSideFromHive():
+            self.setRobloxWindowInfo()
+            self.keyboard.walk("w", 0.8)
+            self.keyboard.walk("d", 1.2 * 6)
+
+        def isHivePromptVisible():
+            return self.isMakeHoneyPrompt(log=True) or self.isBesideE(["claim", "hive", "send", "trad", "trade", "has"], log=True)
+
+        def stopAndCheckHiveSlot():
+            time.sleep(0.4)
+            for _ in range(3):
+                if self.isMakeHoneyPrompt(log=True):
+                    return True
+                time.sleep(0.25)
+            return False
+
+        alignWithCannonSideFromHive()
+        for _ in range(4):
+            time.sleep(0.4)
+            if isHivePromptVisible():
+                break
+            self.keyboard.walk("w", 0.1)
+        else:
+            self.logger.webhook("", "Could not find hive prompts while rechecking hive slot", "dark brown", "screen")
+            return False
+
+        hiveNumber = 0
+        for slot in range(1, 7):
+            if slot > 1:
+                self.keyboard.walk("a", self.hiveDistance)
+            if stopAndCheckHiveSlot():
+                hiveNumber = slot
+                break
+
+        if hiveNumber == 0:
+            self.logger.webhook("", "Could not find Make Honey while rechecking hive slot", "dark brown", "screen")
+            return False
+
+        self.setdat["hive_number"] = hiveNumber
+        settingsManager.saveGeneralSetting("hive_number", hiveNumber)
+        self.cannonFromHive = True
+        self.logger.webhook("", f"Updated hive slot to {hiveNumber}; retrying cannon", "bright green", "screen")
+        return True
+
+    def cannon(self, fast = False, allowHiveResync = True):
         def detect_rejoin_mode_color():
             try:
                 if not appManager.isAppFocused("Roblox"):
@@ -1884,6 +1938,13 @@ class macro:
         except (TypeError, ValueError):
             max_attempts = 3
         max_attempts = max(1, max_attempts)
+        try:
+            hive_resync_attempts = int(self.setdat.get("cannon_hive_resync_attempts", 0))
+        except (TypeError, ValueError):
+            hive_resync_attempts = 0
+        hive_resync_attempts = max(0, hive_resync_attempts)
+        if hive_resync_attempts >= max_attempts:
+            hive_resync_attempts = max(0, max_attempts - 1)
         first_attempt_color = None
         for i in range(max_attempts):
             #Move to canon:
@@ -1932,6 +1993,13 @@ class macro:
                 "screen",
             )
             detected_color = detect_rejoin_mode_color()
+            if allowHiveResync and hive_resync_attempts and i + 1 >= hive_resync_attempts:
+                if self.resyncHiveSlotFromHive():
+                    self.cannon(fast=fast, allowHiveResync=False)
+                    return
+                self.logger.webhook("", "Hive slot recheck failed; rejoining", "dark brown", "screen")
+                self.rejoin()
+                return
 
             # Reset between failed attempts until the configured limit is exhausted.
             if i < max_attempts - 1:
@@ -2149,6 +2217,7 @@ class macro:
             rejoinSuccess = False
             availableSlots = [] #store hive slots that are claimable
             newHiveNumber = 0
+            hiveAlreadyClaimed = False
         
             # self.keyboard.keyDown("d", False)
             # self.keyboard.tileWait(4)
@@ -2172,6 +2241,9 @@ class macro:
             def isHiveAvailable():
                 return self.isBesideE(["claim", "hive"], ["send", "trade"], log=True)
 
+            def isOtherHive():
+                return self.isBesideE(["send", "trad", "trade"], ["claim"], log=True)
+
             def isExcludedSlot(slot):
                 return excludedHiveSlot != 0 and slot == excludedHiveSlot
 
@@ -2184,18 +2256,42 @@ class macro:
             # Check selected hive first
             if isExcludedSlot(hiveNumber):
                 self.logger.webhook("", f'Hive {hiveNumber} is excluded, scanning other hives', 'dark brown', "screen")
+            elif self.isMakeHoneyPrompt(log=True):
+                newHiveNumber = hiveNumber
+                rejoinSuccess = True
+                hiveAlreadyClaimed = True
             elif isHiveAvailable():
                 newHiveNumber = hiveNumber
                 rejoinSuccess = True
             else:
                 # Selected hive unavailable — fallback to scanning all hive slots.
-                self.logger.webhook("", f'Hive {hiveNumber} is already claimed, scanning all hives','dark brown', "screen")
+                if isOtherHive():
+                    self.logger.webhook("", f'Hive {hiveNumber} belongs to another player, scanning hives for your slot','dark brown', "screen")
+                else:
+                    self.logger.webhook("", f'Hive {hiveNumber} is already claimed, scanning all hives','dark brown', "screen")
                 # Backtrack to slot 1 before scanning
                 if hiveNumber > 1:
                     self.keyboard.walk("d", self.hiveDistance * (hiveNumber - 1))
                     time.sleep(0.4)
-                # Scan slots 1..6 sequentially
+                # Scan for an already claimed hive first so we update the saved slot instead of claiming a new hive.
                 for j in range(1, 7):
+                    if j > 1:
+                        self.keyboard.walk("a", self.hiveDistance)
+                    time.sleep(0.4)
+                    if self.isMakeHoneyPrompt(log=True):
+                        newHiveNumber = j
+                        rejoinSuccess = True
+                        hiveAlreadyClaimed = True
+                        break
+
+                if not rejoinSuccess:
+                    self.keyboard.walk("d", self.hiveDistance * 5)
+                    time.sleep(0.4)
+
+                # If no existing hive was found, scan slots 1..6 sequentially for a claimable hive.
+                for j in range(1, 7):
+                    if rejoinSuccess:
+                        break
                     if j > 1:
                         self.keyboard.walk("a", self.hiveDistance)
                     time.sleep(0.4)
@@ -2249,9 +2345,20 @@ class macro:
             #             self.setdat["hive_number"] = hiveClaim
             #             break
             #claim hive and convert
-            if rejoinSuccess and isHiveAvailable():
-                self.keyboard.press("e")
-                time.sleep(1)
+            if rejoinSuccess:
+                claimedHive = False
+                if hiveAlreadyClaimed:
+                    claimedHive = True
+                elif isHiveAvailable():
+                    self.keyboard.press("e")
+                    for _ in range(6):
+                        time.sleep(0.5)
+                        if self.isMakeHoneyPrompt(log=True):
+                            claimedHive = True
+                            break
+                if not claimedHive:
+                    self.logger.webhook("",f'Claimed hive {newHiveNumber} prompt not detected; retrying rejoin','dark brown', "screen")
+                    continue
                 self.logger.webhook("",f'Claimed hive {newHiveNumber}', "bright green", "screen", ping_category="ping_critical_errors")
                 self.setdat["hive_number"] = newHiveNumber
                 settingsManager.saveGeneralSetting("hive_number", newHiveNumber)
@@ -2259,7 +2366,7 @@ class macro:
                     self.keyboard.press("o")
                 self.moveMouseToDefault()
                 time.sleep(1)
-                self.convert()
+                self.convert(bypass=True)
                 #no need to reset
                 self.canDetectNight = True
                 self.clear_task_status()

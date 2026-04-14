@@ -11,6 +11,7 @@ rejoin_schedule_type=hours
 rejoin_at_time=00:00
 rejoin_timezone=local
 auto_stop_after=0
+cannon_hive_resync_attempts=0
 webhook_link=
 send_screenshot=True
 enable_webhook=False

@@ -433,6 +433,17 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
+        {
+          id: "cannon_hive_resync_attempts",
+          title: "Cannon Misses Before Hive Slot Recheck",
+          desc: "After this many missed cannon attempts, reset to the hive, recheck the hive slot number, and try the cannon again before rejoining. Set to 0 to disable.",
+          type: {
+            name: "textbox",
+            inputType: "int",
+            inputLimit: 2,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
       ]);
 
       buildStandardContainer(parentOther, "Auto Stop", "", [
