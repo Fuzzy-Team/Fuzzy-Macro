@@ -13,6 +13,7 @@ import mss
 import mss.darwin
 mss.darwin.IMAGE_OPTIONS = 0
 from modules.screen.robloxWindow import RobloxWindowBounds
+from modules.screen.screenData import getScreenData
 
 class HasteCompensation():
     def __init__(self, isRetina, baseMoveSpeed):
@@ -108,7 +109,8 @@ class HasteCompensation():
         return out
 
 class HasteCompensationOptimized():
-    mw, mh = pag.size() 
+    screenInfo = getScreenData()
+    mw, mh = screenInfo["screen_width"], screenInfo["screen_height"]
     BUFF_REGION = (0, 30, int(mw / 1.8), 70)
 
     def __init__(self, isRetina, baseMoveSpeed):
@@ -237,7 +239,8 @@ class HasteCompensationOptimized():
         return final_speed
     
 class HasteCompensationFastest():
-    mw, mh = pag.size() 
+    screenInfo = getScreenData()
+    mw, mh = screenInfo["screen_width"], screenInfo["screen_height"]
     BUFF_REGION = (0, 30, int(mw / 1.8), 70)
 
     def __init__(self, isRetina, baseMoveSpeed):

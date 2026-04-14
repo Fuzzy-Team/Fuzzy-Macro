@@ -19,8 +19,10 @@ from modules.screen.robloxWindow import RobloxWindowBounds
 import pickle
 import json
 from modules.misc.settingsManager import getCurrentProfile, loadFields, getMacroVersion
+from modules.screen.screenData import getScreenData
 
-ww, wh = pag.size()
+screenInfo = getScreenData()
+ww, wh = screenInfo["screen_width"], screenInfo["screen_height"]
 
 def versionTuple(v):
     return tuple(map(int, (v.split("."))))

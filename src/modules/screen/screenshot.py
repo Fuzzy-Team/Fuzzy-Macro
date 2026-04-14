@@ -15,13 +15,31 @@ import Quartz.CoreGraphics as CG
 from modules.screen.screenData import getScreenData
 from modules.misc.appManager import getWindowSize
 
-mw, mh = pag.size()
-multi = 2 if getScreenData()["display_type"] == "retina" else 1
+screenInfo = getScreenData()
+mw, mh = screenInfo["screen_width"], screenInfo["screen_height"]
+multi = 2 if screenInfo["display_type"] == "retina" else 1
 '''
 Theres an issue for a few people where the mss screenshot takes almost a minute to run in the macro process.
 This seems to affect any screenshots taken with quartz, but not those taken with filepath
 '''
 usePillow = False
+
+
+def _safe_region(x, y, w, h):
+    return (
+        int(x or 0),
+        int(y or 0),
+        max(1, int(w or 1)),
+        max(1, int(h or 1)),
+    )
+
+
+def _blank_rgb(width, height):
+    return Image.new("RGB", (max(1, int(width)), max(1, int(height))), "black")
+
+
+def _blank_rgba(width, height):
+    return Image.new("RGBA", (max(1, int(width)), max(1, int(height))), (0, 0, 0, 255))
 
 def pillowGrab(x,y,w,h):
     fh, filepath = tempfile.mkstemp(".png")
@@ -73,6 +91,7 @@ def cgGrab(region=None):
 #returns an NP array, useful for cv2
 def mssScreenshotNP(x,y,w,h, save = False):
     #return cgGrab((x,y,w,h))
+    x, y, w, h = _safe_region(x, y, w, h)
     if usePillow:
         screen = pillowGrab(int(x*multi),int(y*multi),int(w*multi),int(h*multi))
         screen = np.array(screen)
@@ -80,16 +99,21 @@ def mssScreenshotNP(x,y,w,h, save = False):
         return screen_bgra
 
     else:
-        with mss.mss() as sct:
-            # The screen part to capture
-            monitor = {"left": int(x), "top": int(y), "width": int(w), "height": int(h)}
-            # Grab the data and convert to opencv img
-            sct_img = sct.grab(monitor)
-            if save: mss.tools.to_png(sct_img.rgb, sct_img.size, output=f"screen-{time.time()}.png")
-            return np.array(sct_img)
+        try:
+            with mss.mss() as sct:
+                # The screen part to capture
+                monitor = {"left": x, "top": y, "width": w, "height": h}
+                # Grab the data and convert to opencv img
+                sct_img = sct.grab(monitor)
+                if save: mss.tools.to_png(sct_img.rgb, sct_img.size, output=f"screen-{time.time()}.png")
+                return np.array(sct_img)
+        except Exception as e:
+            print(f"[ERROR] Screenshot capture failed: {e}")
+            return np.array(_blank_rgba(w, h))
 
 
 def mssScreenshot(x=0,y=0,w=mw,h=mh, save = False, filename=None):
+    x, y, w, h = _safe_region(x, y, w, h)
     # img = cgGrab((x,y,w,h))
     # img = img[:, :, [2, 1, 0]]
     # img = Image.fromarray(img, 'RGB')
@@ -97,14 +121,18 @@ def mssScreenshot(x=0,y=0,w=mw,h=mh, save = False, filename=None):
     if usePillow:
         return pillowGrab(int(x*multi),int(y*multi),int(w*multi),int(h*multi))
     else:
-        with mss.mss() as sct:
-            # The screen part to capture
-            monitor = {"left": int(x), "top": int(y), "width": int(w), "height": int(h)}
-            # Grab the data and convert to pillow img
-            sct_img = sct.grab(monitor)
-            img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
-            if save: mss.tools.to_png(sct_img.rgb, sct_img.size, output=filename if filename else f"screen-{time.time()}.png")
-            return img
+        try:
+            with mss.mss() as sct:
+                # The screen part to capture
+                monitor = {"left": x, "top": y, "width": w, "height": h}
+                # Grab the data and convert to pillow img
+                sct_img = sct.grab(monitor)
+                img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
+                if save: mss.tools.to_png(sct_img.rgb, sct_img.size, output=filename if filename else f"screen-{time.time()}.png")
+                return img
+        except Exception as e:
+            print(f"[ERROR] Screenshot capture failed: {e}")
+            return _blank_rgb(w, h)
 
 def screenshotRobloxWindow(filename = None, regionMultipliers = None):
     res = getWindowSize("roblox roblox")
@@ -144,9 +172,14 @@ def benchmarkMSS():
 
 #returns a rgba pillow screenshot
 def mssScreenshotPillowRGBA(x=0,y=0,w=mw,h=mh):   
-    with mss.mss() as sct:
-        monitor = {"left": int(x), "top": int(y), "width": int(w), "height": int(h)}
-        sct_img = sct.grab(monitor)
-        img = Image.frombytes("RGBA", sct_img.size, sct_img.bgra, "raw", "BGRA")
-        #img.save(f"buff_area.png")
-        return img
+    x, y, w, h = _safe_region(x, y, w, h)
+    try:
+        with mss.mss() as sct:
+            monitor = {"left": x, "top": y, "width": w, "height": h}
+            sct_img = sct.grab(monitor)
+            img = Image.frombytes("RGBA", sct_img.size, sct_img.bgra, "raw", "BGRA")
+            #img.save(f"buff_area.png")
+            return img
+    except Exception as e:
+        print(f"[ERROR] RGBA screenshot capture failed: {e}")
+        return _blank_rgba(w, h)

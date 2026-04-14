@@ -7,8 +7,10 @@ import cv2
 import time
 import pyautogui as pag
 from modules.screen.robloxWindow import RobloxWindowBounds
+from modules.screen.screenData import getScreenData
 
-mw, mh = pag.size()
+screenInfo = getScreenData()
+mw, mh = screenInfo["screen_width"], screenInfo["screen_height"]
 
 class fieldDriftCompensation():
     def __init__(self, robloxWindow: RobloxWindowBounds):

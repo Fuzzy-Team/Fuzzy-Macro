@@ -9,7 +9,9 @@ from AppKit import NSWorkspace
 from ApplicationServices import AXUIElementIsAttributeSettable, AXUIElementCreateApplication, kAXErrorSuccess, AXUIElementSetAttributeValue, AXUIElementCopyAttributeValue, AXValueCreate, kAXValueCGPointType, kAXValueCGSizeType, AXUIElementCopyAttributeNames
 from Quartz import CGPoint, CGSize
 from CoreFoundation import CFRelease
-mw,mh = pag.size()
+from modules.screen.screenData import getScreenData
+screenInfo = getScreenData()
+mw,mh = screenInfo["screen_width"], screenInfo["screen_height"]
 
 def isAppOpenMac(app="roblox"):
     tmp = os.popen("ps -Af").read()
@@ -75,6 +77,8 @@ def getWindowSize(windowName):
         Quartz.kCGWindowListExcludeDesktopElements | Quartz.kCGWindowListOptionOnScreenOnly, 
         Quartz.kCGNullWindowID
     )
+    if not windowList:
+        return 0, 0, mw, mh
     
     for win in windowList:
         owner = win.get(Quartz.kCGWindowOwnerName, '')

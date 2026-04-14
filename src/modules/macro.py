@@ -24,6 +24,7 @@ from modules.screen.robloxWindow import RobloxWindowBounds
 import sys
 import platform
 import os
+import ctypes
 import numpy as np
 import threading
 from modules.submacros.backpack import bpc
@@ -6258,12 +6259,21 @@ class macro:
         #check for accessibility
         #this is done by taking 2 different screenshots
         #if they are both the same, we assume that the keypress didnt go through and hence accessibility is not enabled
-        originalX = mouse.getPos()[0]
-        mouse.moveBy(100, 0)
-        time.sleep(0.15)
-        newX = mouse.getPos()[0]
-        if originalX == newX:
-            messageBox.msgBox(text='It seems like terminal does not have the accessibility permission. The macro will not work properly.\n\nTo fix it, go to System Settings -> Privacy and Security -> Accessibility -> add and enable Terminal.\n\nVisit https://fuzzy-team.gitbook.io/fuzzy-macro/common-fixes/terminal-permissions for detailed instructions\n\n NOTE: This popup might be incorrect. If the macro is able to input keypresses and interact with the game, you can dismiss this popup', title='Accessibility Permission')
+        app_name = "Fuzzy Macro" if getattr(sys, "frozen", False) else "Terminal"
+        accessibility_trusted = False
+        if sys.platform == "darwin":
+            try:
+                accessibility_trusted = bool(ctypes.cdll.LoadLibrary("/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices").AXIsProcessTrusted())
+            except Exception:
+                accessibility_trusted = False
+        if not accessibility_trusted:
+            originalX = mouse.getPos()[0]
+            mouse.moveBy(100, 0)
+            time.sleep(0.15)
+            newX = mouse.getPos()[0]
+            accessibility_trusted = originalX != newX
+        if not accessibility_trusted:
+            messageBox.msgBox(text=f'It seems like {app_name} does not have Accessibility permission. The macro will not work properly.\n\nTo fix it, go to System Settings -> Privacy and Security -> Accessibility -> add and enable {app_name}.\n\nVisit https://fuzzy-team.gitbook.io/fuzzy-macro/common-fixes/terminal-permissions for detailed instructions\n\nNOTE: This popup might be incorrect. If the macro is able to input keypresses and interact with the game, you can dismiss this popup', title='Accessibility Permission')
         time.sleep(1)
         # img1 = pillowToHash(mssScreenshot())
         # self.keyboard.press("esc")

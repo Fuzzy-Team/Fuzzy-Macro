@@ -5,18 +5,26 @@ import subprocess
 import sys
 import traceback
 
-if getattr(sys, "frozen", False):
-    multiprocessing.freeze_support()
-
 
 def _run_webview_window_if_requested():
     if len(sys.argv) < 3 or sys.argv[1] != "--webview-url":
         return
     try:
+        def hide_helper_from_dock():
+            if sys.platform != "darwin":
+                return
+            try:
+                from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
+
+                NSApplication.sharedApplication().setActivationPolicy_(NSApplicationActivationPolicyAccessory)
+            except Exception as e:
+                print(f"Could not hide embedded window helper from Dock: {e}")
+
+        hide_helper_from_dock()
         import webview
 
         webview.create_window("Fuzzy Macro", sys.argv[2], width=1280, height=900)
-        webview.start(private_mode=True)
+        webview.start(hide_helper_from_dock, private_mode=True)
     except Exception as e:
         print(f"Could not open embedded app window: {e}")
     sys.exit(0)
@@ -77,8 +85,8 @@ def _configure_runtime_directory():
         except Exception as e:
             print(f"Could not prepare app support runtime directory: {e}")
         candidates = [
-            os.path.join(resources_dir, "src"),
             os.path.join(support_dir, "src"),
+            os.path.join(resources_dir, "src"),
             os.path.join(base_dir, "src"),
             os.path.join(os.path.dirname(sys.executable), "src"),
             base_dir,
@@ -93,6 +101,8 @@ def _configure_runtime_directory():
 
 
 _configure_frozen_logging()
+if getattr(sys, "frozen", False):
+    multiprocessing.freeze_support()
 _run_webview_window_if_requested()
 _configure_runtime_directory()
 
@@ -121,10 +131,12 @@ from modules.misc.imageManipulation import adjustImage
 from modules.screen.imageSearch import locateImageOnScreen
 import pyautogui as pag
 from modules.misc.appManager import getWindowSize
+from modules.screen.screenData import getScreenData
 import traceback
 import modules.misc.settingsManager as settingsManager
 import modules.macro as macroModule
 import modules.controls.mouse as mouse
+from macro_process import macro_process_entry
 import json
 from modules.controls.sleep import (
     InterruptRequested,
@@ -152,7 +164,8 @@ except ModuleNotFoundError:
         pass
     quit()
 from modules.submacros.hourlyReport import HourlyReport
-mw, mh = pag.size()
+screenInfoForWindow = getScreenData()
+mw, mh = screenInfoForWindow["screen_width"], screenInfoForWindow["screen_height"]
 
 # Hardcoded petal quest titles to ignore (lowercase)
 HARDCODED_PETAL_IGNORE_TITLES = {"petal tabbouleh", "petals", "mashed blooms"}
@@ -2833,7 +2846,10 @@ if __name__ == "__main__":
     from modules.submacros.stream import cloudflaredStream
     import os
 
-    if sys.version_info[1] <= 7:
+    if getattr(sys, "frozen", False) and sys.platform == "darwin":
+        print("start method set to spawn for packaged macOS app")
+        multiprocessing.set_start_method("spawn", force=True)
+    elif sys.version_info[1] <= 7:
         print("start method set to spawn")
         multiprocessing.set_start_method("spawn")
     macroProc = None
@@ -2982,10 +2998,18 @@ if __name__ == "__main__":
     
     #check screen recording permissions
     try:
+        app_name = "Fuzzy Macro" if getattr(sys, "frozen", False) else "Terminal"
         cg = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
-        cg.CGRequestScreenCaptureAccess.restype = ctypes.c_bool
-        if not cg.CGRequestScreenCaptureAccess():
-            messageBox.msgBox(title="Screen Recording Permission", text='Terminal does not have the screen recording permission. The macro will not work properly.\n\nTo fix it, go to System Settings -> Privacy and Security -> Screen Recording -> add and enable Terminal. After that, restart the macro')
+        try:
+            cg.CGPreflightScreenCaptureAccess.restype = ctypes.c_bool
+            has_screen_recording = cg.CGPreflightScreenCaptureAccess()
+        except AttributeError:
+            cg.CGRequestScreenCaptureAccess.restype = ctypes.c_bool
+            has_screen_recording = cg.CGRequestScreenCaptureAccess()
+        if not has_screen_recording:
+            cg.CGRequestScreenCaptureAccess.restype = ctypes.c_bool
+            cg.CGRequestScreenCaptureAccess()
+            messageBox.msgBox(title="Screen Recording Permission", text=f'{app_name} does not have screen recording permission. The macro will not work properly.\n\nTo fix it, go to System Settings -> Privacy and Security -> Screen Recording -> add and enable {app_name}. After that, restart the macro.')
     except AttributeError:
         pass
     #check full keyboard access
@@ -3008,6 +3032,7 @@ if __name__ == "__main__":
     autoStopStartTime = None
     autoStopDeadline = None
     autoStopHours = 0.0
+    macroCrashTimes = []
     
     # Initialize Rich Presence Manager
     richPresenceManager = None
@@ -3173,7 +3198,7 @@ if __name__ == "__main__":
                                     but there are no more items left to craft.\n\
 				                    Check the 'repeat' setting on your blender items and reset blender data.")
             #macro proc
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
+            macroProc = multiprocessing.Process(target=macro_process_entry, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
             macroProc.start()
 
             macro_version = settingsManager.getMacroVersion()
@@ -3273,7 +3298,7 @@ if __name__ == "__main__":
             appManager.closeApp("Roblox")
             keyboardModule.releaseMovement()
             mouse.mouseUp()
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
+            macroProc = multiprocessing.Process(target=macro_process_entry, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state
@@ -3299,14 +3324,28 @@ if __name__ == "__main__":
                     extra = ""
             except Exception:
                 extra = ""
-            print(f"Macro process exited{extra}")
+            print(f"Macro process exited with exit code {exitcode}{extra}")
+            now = time.time()
+            macroCrashTimes = [crash_time for crash_time in macroCrashTimes if now - crash_time < 60]
+            macroCrashTimes.append(now)
             logger.webhook("","Macro Crashed{0}".format(extra), "red", "screen", ping_category="ping_critical_errors")
             macroProc.join()
             appManager.openApp("Roblox")
             keyboardModule.releaseMovement()
             mouse.mouseUp()
+            if len(macroCrashTimes) >= 5:
+                print("Macro crashed 5 times within 60 seconds; stopping automatic restart.")
+                logger.webhook("", "Macro stopped after repeated crashes. Check the app log before restarting.", "red", ping_category="ping_critical_errors")
+                macroProc = None
+                run.value = 3
+                gui.setRunState(3)
+                try:
+                    gui.toggleStartStop()
+                except:
+                    pass
+                continue
             # restart macro process
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
+            macroProc = multiprocessing.Process(target=macro_process_entry, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state
