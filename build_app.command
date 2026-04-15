@@ -6,10 +6,8 @@ cd "$(dirname "$0")"
 VENV_NAME="${FUZZY_VENV_NAME:-fuzzy-macro-env}"
 VENV_PATH="${FUZZY_VENV_PATH:-$HOME/$VENV_NAME}"
 
-if [ ! -x "$VENV_PATH/bin/python" ]; then
-    printf "Virtual environment not found. Running dependency installer first...\n"
-    /bin/bash "./install_dependencies.command"
-fi
+printf "Refreshing dependencies via install_dependencies.command...\n"
+/bin/bash "./install_dependencies.command"
 
 PYTHON="$VENV_PATH/bin/python"
 export PYINSTALLER_CONFIG_DIR="${TMPDIR:-/tmp}/fuzzy-macro-pyinstaller"
