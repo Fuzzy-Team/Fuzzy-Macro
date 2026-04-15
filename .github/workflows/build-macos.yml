@@ -1,0 +1,79 @@
+name: Build macOS Packages
+
+on:
+  push:
+    branches:
+      - "**"
+  workflow_dispatch:
+  # Switch to this later when you want release builds instead of commit builds:
+  # release:
+  #   types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Intel
+            runner: macos-15-intel
+            python-architecture: x64
+            target-arch: x86_64
+            suffix: Intel
+          - name: Apple Silicon
+            runner: macos-15
+            python-architecture: arm64
+            target-arch: arm64
+            suffix: Apple-Silicon
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.9.8
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9.8"
+          architecture: ${{ matrix.python-architecture }}
+          cache: pip
+
+      - name: Show build machine
+        run: |
+          sw_vers
+          uname -m
+          python3.9 --version
+          python3.9 -c 'import os, platform, sys, sysconfig; print(os.path.realpath(sys.executable)); print(platform.machine()); print(sysconfig.get_platform())'
+          file "$(python3.9 -c 'import os, sys; print(os.path.realpath(sys.executable))')"
+
+      - name: Install dependencies
+        env:
+          FUZZY_BOOTSTRAP_PYTHON: python3.9
+          FUZZY_VENV_PATH: ${{ runner.temp }}/fuzzy-macro-env
+        run: /bin/bash ./install_dependencies.command
+
+      - name: Build package
+        env:
+          FUZZY_TARGET_ARCH: ${{ matrix.target-arch }}
+          FUZZY_VENV_PATH: ${{ runner.temp }}/fuzzy-macro-env
+          FUZZY_RELEASE_SUFFIX: ${{ matrix.suffix }}
+        run: /bin/bash ./build_release.command
+
+      - name: Verify package
+        run: |
+          pkgutil --check-signature "dist/Fuzzy Macro ${{ matrix.suffix }}.pkg" || true
+          pkgutil --payload-files "dist/Fuzzy Macro ${{ matrix.suffix }}.pkg" | head -20
+          file "dist/Fuzzy Macro.app/Contents/MacOS/Fuzzy Macro"
+          vtool -show-build "dist/Fuzzy Macro.app/Contents/MacOS/Fuzzy Macro" || true
+          codesign --verify --deep --strict --verbose=2 "dist/Fuzzy Macro.app"
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Fuzzy-Macro-${{ matrix.suffix }}-pkg
+          path: dist/Fuzzy Macro ${{ matrix.suffix }}.pkg
+          if-no-files-found: error

@@ -19,7 +19,9 @@ src/latest-quest.png
 src/webhook_nectar.png
 TODO.md
 
-.github
+.github/*
+!.github/workflows/
+!.github/workflows/**
 src/data/user
 settings/profiles/*
 !settings/profiles/a/
