@@ -22,11 +22,13 @@ jobs:
         include:
           - name: Intel
             runner: macos-15-intel
+            python-version: "3.9.8"
             python-architecture: x64
             target-arch: x86_64
             suffix: Intel
           - name: Apple Silicon
             runner: macos-15
+            python-version: "3.9.13"
             python-architecture: arm64
             target-arch: arm64
             suffix: Apple-Silicon
@@ -35,12 +37,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.9.8
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
-          python-version: "3.9.8"
+          python-version: ${{ matrix.python-version }}
           architecture: ${{ matrix.python-architecture }}
-          cache: pip
 
       - name: Show build machine
         run: |
