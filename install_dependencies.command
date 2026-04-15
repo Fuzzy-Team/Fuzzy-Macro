@@ -1,12 +1,13 @@
 #!/bin/bash
 
-VENV_NAME="fuzzy-macro-env"
-VENV_PATH="$HOME/$VENV_NAME"
+VENV_NAME="${FUZZY_VENV_NAME:-fuzzy-macro-env}"
+VENV_PATH="${FUZZY_VENV_PATH:-$HOME/$VENV_NAME}"
+PYTHON_BOOTSTRAP="${FUZZY_BOOTSTRAP_PYTHON:-}"
 
 create_virtual_env() {
     if [ ! -d "$VENV_PATH" ]; then
         printf "\033[1;35mCreating virtual environment at $VENV_PATH\033[0m\n"
-        python"${python_ver}" -m venv "$VENV_PATH"
+        "$PYTHON_CMD" -m venv "$VENV_PATH"
     else
         printf "\033[1;32mVirtual environment already exists at $VENV_PATH\033[0m\n"
     fi
@@ -44,9 +45,9 @@ install_pip_package() {
 
 upgrade_pip_tools() {
     if [ "$chip" = "arm64" ]; then
-        arch -arm64 python"${python_ver}" -m pip install --upgrade pip setuptools wheel
+        arch -arm64 "$PYTHON_CMD" -m pip install --upgrade pip setuptools wheel
     else
-        python"${python_ver}" -m pip install --upgrade pip setuptools wheel
+        "$PYTHON_CMD" -m pip install --upgrade pip setuptools wheel
     fi
 }
 
@@ -90,18 +91,20 @@ if [ "$chip" = 'i386' ]; then
 	fi
 fi
 
+PYTHON_CMD="${PYTHON_BOOTSTRAP:-python${python_ver}}"
+
 filename=$(echo "${python_link}" | sed -e 's/\/.*\///g')
 
-if python"${python_ver}" --version; then
+if "$PYTHON_CMD" --version; then
 	printf "\033[1;32mPython is already installed\033[0m\n"
 		if [ "$chip" = "arm64" ]; then
 			# Resolve the real python executable (pyenv shims may point to a shim script)
-			python_exec=$(python"${python_ver}" -c 'import sys; print(sys.executable)' 2>/dev/null || true)
+			python_exec=$("$PYTHON_CMD" -c 'import sys; print(sys.executable)' 2>/dev/null || true)
 			if [ -n "$python_exec" ] && [ -x "$python_exec" ]; then
 				arch_output=$(file "$python_exec" 2>/dev/null || true)
-				py_platform=$(python"${python_ver}" -c 'import platform; print(platform.machine())' 2>/dev/null || true)
+				py_platform=$("$PYTHON_CMD" -c 'import platform; print(platform.machine())' 2>/dev/null || true)
 			else
-				python_exec=$(which python${python_ver} 2>/dev/null || true)
+				python_exec=$(command -v "$PYTHON_CMD" 2>/dev/null || true)
 				arch_output=$(file "$python_exec" 2>/dev/null || true)
 				py_platform=
 			fi
@@ -117,7 +120,7 @@ else
 	printf "\033[1;35mPython is not installed, installing python ${python_ver}\nThere should be a popup for the python installer.\n\033[0m"
 	curl -O "https:/${python_link}" && open "${filename}"
 	# Wait until python installation has finished.
-	until python"${python_ver}" --version &> /dev/null; do
+	until "$PYTHON_CMD" --version &> /dev/null; do
 	  sleep 5;
 	done
 	#printf "\033[1;35mPress enter to continue when python is installed\033[0m"
@@ -138,8 +141,8 @@ fi
 #echo "Enter your password (the password used to log into the admin user). Note: the password is not visible"
 #sudo xcode-select --switch /Library/Developer/CommandLineTools
 printf "\033[1;35mMaking sure pip is installed\033[0m\n\n"
-python"${python_ver}" -m ensurepip
-python"${python_ver}" -m pip cache purge
+"$PYTHON_CMD" -m ensurepip
+"$PYTHON_CMD" -m pip cache purge
 upgrade_pip_tools
 
 printf "\033[1;35mInstalling SSL certificates for Python\033[0m\n"
@@ -181,7 +184,7 @@ if [ "$python_ver" = '3.9' ]; then
 	install_pip_package "opencv-python-headless<4.11 numpy<2" "--force-reinstall"
 	install_pip_package "ocrmac"
 	install_pip_package "pyobjc-framework-ColorSync<12.0"
-	install_pip_package "pyobjc-framework-ApplicationServices"
+	install_pip_package "pyobjc-framework-ApplicationServices<12.0"
 
 elif echo -e "$os_ver \n10.15.0" | sort -V | tail -n1 | grep -Fq "10.15.0"; then
 	printf "\033[1;35mInstalling rust\n\n\033[0m"
