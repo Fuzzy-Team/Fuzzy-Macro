@@ -16,6 +16,11 @@ jobs:
   build:
     name: Build ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "10.12"
+      CFLAGS: "-mmacosx-version-min=10.12"
+      CXXFLAGS: "-mmacosx-version-min=10.12"
+      LDFLAGS: "-mmacosx-version-min=10.12"
     strategy:
       fail-fast: false
       matrix:
@@ -50,6 +55,13 @@ jobs:
           python3.9 --version
           python3.9 -c 'import os, platform, sys, sysconfig; print(os.path.realpath(sys.executable)); print(platform.machine()); print(sysconfig.get_platform())'
           file "$(python3.9 -c 'import os, sys; print(os.path.realpath(sys.executable))')"
+
+      - name: Show deployment-target env
+        run: |
+          echo "MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET}"
+          echo "CFLAGS=${CFLAGS}"
+          echo "CXXFLAGS=${CXXFLAGS}"
+          echo "LDFLAGS=${LDFLAGS}"
 
       - name: Install dependencies
         env:
