@@ -12,9 +12,7 @@ Requirements:
 - mss or Pillow
 - blue.onnx and sprinkler.onnx somewhere near the macro root or this pattern file
 
-Optional calibration:
-- Put four x,y points in ai_gather_points.txt or settings.txt beside the pattern or macro root.
-- If no calibration file is found, the pattern falls back to the normalized points ported from this repo.
+Calibration uses normalized fallback points ported from this repo.
 """
 
 import math
@@ -167,22 +165,6 @@ def _ignored_token_names(value, default_names):
     return set(names)
 
 
-def _configured_path(global_name):
-    path_value = globals().get(global_name)
-    if path_value is None:
-        return None
-
-    path_text = str(path_value).strip()
-    if not path_text:
-        return None
-
-    candidate = Path(path_text)
-    if candidate.is_absolute():
-        return candidate
-
-    return (Path.cwd() / candidate).resolve()
-
-
 def _project_root():
     try:
         return Path(__file__).resolve().parents[2]
@@ -229,7 +211,6 @@ TARGET_SPRINKLER_LABEL = _coerce_text(
     "",
 ) or None
 CAPTURE_BACKEND = _coerce_text(globals().get("pattern_capture_backend"), "auto").lower()
-CALIBRATION_PATH = _configured_path("pattern_calibration_path")
 PREFERRED_TOKENS = _preferred_token_weights(globals().get("pattern_preferred_tokens"), PREFERRED_TOKENS)
 IGNORED_TOKENS = _ignored_token_names(globals().get("pattern_ignored_tokens"), IGNORED_TOKENS)
 
@@ -252,68 +233,6 @@ try:
     width = int(width)
 except Exception:
     width = 1
-
-
-def _search_roots():
-    roots = []
-
-    try:
-        roots.append(Path(__file__).resolve().parent)
-    except Exception:
-        pass
-
-    cwd = Path.cwd().resolve()
-    parent_roots = list(cwd.parents)[:4]
-    roots.extend([cwd, cwd / "settings" / "patterns"])
-    roots.extend(parent_roots)
-    roots.extend(root / "settings" / "patterns" for root in parent_roots)
-
-    deduped = []
-    seen = set()
-    for root in roots:
-        root = root.resolve()
-        if root not in seen:
-            deduped.append(root)
-            seen.add(root)
-    return deduped
-
-
-def _find_file(filename):
-    for root in _search_roots():
-        candidate = root / filename
-        if candidate.exists():
-            return candidate
-    return None
-
-
-def _load_points_file():
-    search_paths = []
-    if CALIBRATION_PATH is not None:
-        search_paths.append(CALIBRATION_PATH)
-    for name in ("ai_gather_points.txt", "settings.txt"):
-        path = _find_file(name)
-        if path is not None:
-            search_paths.append(path)
-
-    for path in search_paths:
-        if not path or not path.exists():
-            continue
-
-        rows = []
-        try:
-            for line in path.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if not line or "," not in line:
-                    continue
-                left, right = line.split(",", 1)
-                rows.append([int(left.strip()), int(right.strip())])
-        except Exception:
-            rows = []
-
-        if len(rows) >= 4:
-            return np.array(rows[:4], dtype=np.float32)
-
-    return None
 
 
 def _default_points(screen_w, screen_h):
@@ -700,9 +619,7 @@ def _initialise_runtime():
     sprinkler_path = sprinkler_candidate if sprinkler_candidate.exists() else None
 
     capture = _build_capture()
-    points = _load_points_file()
-    if points is None:
-        points = _default_points(capture["width"], capture["height"])
+    points = _default_points(capture["width"], capture["height"])
 
     destination = np.array(
         [[-5, -5], [5, -5], [-5, 5], [5, 5]],

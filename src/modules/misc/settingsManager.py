@@ -24,7 +24,6 @@ FUZZY_AI_FIELD_DEFAULTS = {
     "fuzzy_ai_target_sprinkler_label": "",
     "fuzzy_ai_preferred_tokens": "Token Link,Focus,Melody,Blue Boost,Honey Mark,Honey Mark Token,Pollen Mark,Pollen Mark Token,Haste",
     "fuzzy_ai_ignored_tokens": "Honey,Blueberry",
-    "fuzzy_ai_calibration_path": "settings/patterns/ai_gather_points.txt",
     "fuzzy_ai_capture_backend": "auto",
 }
 
@@ -129,6 +128,7 @@ def normalizeFieldSettings(field_name, settings, default_fields=None):
     if isinstance(settings, dict):
         normalized.update(settings)
 
+    normalized.pop("fuzzy_ai_calibration_path", None)
     return normalized
 
 def getMacroVersion():
@@ -552,14 +552,10 @@ def importFieldSettings(field_name, json_settings):
         if settings.get("shape") == "fuzzy_ai_gather":
             blue_model = getFuzzyAIModelPath("blue.onnx")
             sprinkler_model = getFuzzyAIModelPath("sprinkler.onnx")
-            calibration_path = resolveProjectPath(settings.get("fuzzy_ai_calibration_path"))
-
             if not os.path.exists(blue_model):
                 warnings.append("Missing blue model: src/data/models/blue.onnx")
             if not os.path.exists(sprinkler_model):
                 warnings.append("Missing sprinkler model: src/data/models/sprinkler.onnx")
-            if calibration_path and not os.path.exists(calibration_path):
-                warnings.append(f"Missing calibration file: {settings.get('fuzzy_ai_calibration_path')}")
 
         # Save the imported settings
         saveField(field_name, settings)

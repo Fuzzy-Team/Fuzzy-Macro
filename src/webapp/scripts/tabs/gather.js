@@ -22,23 +22,182 @@ const gatherFieldProperties = [
   "distance",
   "goo",
   "goo_interval",
-  "fuzzy_ai_calibration_path",
-  "fuzzy_ai_capture_backend",
-  "fuzzy_ai_confidence_threshold",
-  "fuzzy_ai_sprinkler_confidence_threshold",
-  "fuzzy_ai_min_token_distance",
-  "fuzzy_ai_idle_return_interval",
-  "fuzzy_ai_no_token_recalibration_timeout",
-  "fuzzy_ai_movements_before_recalibration",
-  "fuzzy_ai_sprinkler_arrival_threshold",
-  "fuzzy_ai_max_sprinkler_distance",
-  "fuzzy_ai_sprinkler_rescan_attempts",
-  "fuzzy_ai_sprinkler_rescan_delay",
-  "fuzzy_ai_target_sprinkler_label",
   "fuzzy_ai_preferred_tokens",
   "fuzzy_ai_ignored_tokens",
 ];
 let gatherPatternMetadata = {};
+const fuzzyAITokenNames = [
+  "Baby Love",
+  "Beamstorm",
+  "Beesmas Cheer",
+  "Black Bear Morph",
+  "Blue Bomb",
+  "Blue Bomb Sync",
+  "Blue Boost",
+  "Blue Pulse",
+  "Blueberry",
+  "Brown Bear Morph",
+  "Buzz Bomb",
+  "Festive Blessing",
+  "Festive Gift",
+  "Festive Mark",
+  "Festive Mark Token",
+  "Fetch",
+  "Focus",
+  "Fuzz Bomb Field",
+  "Fuzz Bombs Token",
+  "Glitch Token",
+  "Glob",
+  "Gumdrop Barrage",
+  "Haste",
+  "Honey",
+  "Honey Mark",
+  "Honey Mark Token",
+  "Impale",
+  "Inflate Balloons",
+  "Inspire",
+  "Map Corruption",
+  "Melody",
+  "Mind Hack",
+  "Mother Bear Morph",
+  "Panda Bear Morph",
+  "Pineapple",
+  "Polar Bear Morph",
+  "Pollen Haze",
+  "Pollen Mark",
+  "Pollen Mark Token",
+  "Puppy Ball",
+  "Puppy Love",
+  "Rain Cloud",
+  "Red Bomb",
+  "Red Boost",
+  "Science Bear Morph",
+  "Scratch",
+  "Snowflake",
+  "Snowglobe Shake",
+  "Strawberry",
+  "Summon Frog",
+  "Sunflower Seed",
+  "Surprise Party",
+  "Tabby Love",
+  "Token Link",
+  "Tornado",
+  "White Boost",
+];
+
+function parseFuzzyAITokenList(value) {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((token) => token.trim())
+    .filter(Boolean);
+}
+
+function getFuzzyAITokenState() {
+  const preferred = parseFuzzyAITokenList(
+    document.getElementById("fuzzy_ai_preferred_tokens")?.value || ""
+  );
+  const ignored = new Set(
+    parseFuzzyAITokenList(document.getElementById("fuzzy_ai_ignored_tokens")?.value || "")
+  );
+  const ordered = [];
+  preferred.forEach((token) => {
+    if (fuzzyAITokenNames.includes(token) && !ordered.includes(token)) {
+      ordered.push(token);
+    }
+  });
+  fuzzyAITokenNames.forEach((token) => {
+    if (!ordered.includes(token)) ordered.push(token);
+  });
+  return ordered.map((token) => ({
+    name: token,
+    enabled: !ignored.has(token),
+  }));
+}
+
+function renderFuzzyAITokenList() {
+  const container = document.getElementById("fuzzy-ai-token-list");
+  if (!container) return;
+
+  const tokenState = getFuzzyAITokenState();
+  container.innerHTML = tokenState
+    .map(
+      (token, index) => `
+        <div class="fuzzy-ai-token-row" data-token="${token.name}" draggable="true" style="display:flex; align-items:center; justify-content:space-between; gap:0.75rem; padding:0.45rem 0; border-bottom:1px solid rgba(255,255,255,0.08);">
+          <label style="display:flex; align-items:center; gap:0.5rem; flex:1;">
+            <span class="fuzzy-ai-token-drag-handle" title="Drag to reorder" style="cursor:grab; user-select:none; opacity:0.75;">::</span>
+            <input type="checkbox" class="fuzzy-ai-token-enabled" ${token.enabled ? "checked" : ""}>
+            <span>${index + 1}. ${token.name}</span>
+          </label>
+          <div style="display:flex; gap:0.35rem;">
+            <button class="import-export-button fuzzy-ai-token-up" ${index === 0 ? "disabled" : ""}>Up</button>
+            <button class="import-export-button fuzzy-ai-token-down" ${index === tokenState.length - 1 ? "disabled" : ""}>Down</button>
+          </div>
+        </div>
+      `
+    )
+    .join("");
+}
+
+function getFuzzyAITokenDragAfterElement(container, y) {
+  const rows = Array.from(
+    container.querySelectorAll(".fuzzy-ai-token-row:not(.dragging)")
+  );
+
+  return rows.reduce(
+    (closest, row) => {
+      const box = row.getBoundingClientRect();
+      const offset = y - box.top - box.height / 2;
+      if (offset < 0 && offset > closest.offset) {
+        return { offset, element: row };
+      }
+      return closest;
+    },
+    { offset: Number.NEGATIVE_INFINITY, element: null }
+  ).element;
+}
+
+function renderFuzzyAITokenListFromRows() {
+  const rows = Array.from(document.querySelectorAll(".fuzzy-ai-token-row"));
+  rows.forEach((row, index) => {
+    const tokenLabel = row.querySelector("label span:last-child");
+    if (tokenLabel) tokenLabel.textContent = `${index + 1}. ${row.dataset.token}`;
+    const upButton = row.querySelector(".fuzzy-ai-token-up");
+    const downButton = row.querySelector(".fuzzy-ai-token-down");
+    if (upButton) upButton.disabled = index === 0;
+    if (downButton) downButton.disabled = index === rows.length - 1;
+  });
+}
+
+function saveFuzzyAITokenPopup() {
+  const rows = Array.from(document.querySelectorAll(".fuzzy-ai-token-row"));
+  const preferred = [];
+  const ignored = [];
+
+  rows.forEach((row) => {
+    const token = row.dataset.token;
+    const enabled = row.querySelector(".fuzzy-ai-token-enabled")?.checked;
+    if (enabled) preferred.push(token);
+    else ignored.push(token);
+  });
+
+  const preferredInput = document.getElementById("fuzzy_ai_preferred_tokens");
+  const ignoredInput = document.getElementById("fuzzy_ai_ignored_tokens");
+  if (preferredInput) preferredInput.value = preferred.join(",");
+  if (ignoredInput) ignoredInput.value = ignored.join(",");
+  saveField();
+}
+
+function openFuzzyAITokenPopup() {
+  renderFuzzyAITokenList();
+  const modal = document.getElementById("fuzzy-ai-token-modal");
+  if (modal) modal.style.display = "flex";
+}
+
+function closeFuzzyAITokenPopup() {
+  const modal = document.getElementById("fuzzy-ai-token-modal");
+  if (modal) modal.style.display = "none";
+}
 
 function getSelectedGatherPattern() {
   const shapeDropdown = document.getElementById("shape");
@@ -46,54 +205,9 @@ function getSelectedGatherPattern() {
   return getDropdownValue(shapeDropdown);
 }
 
-function renderFuzzyAIValidationResult(result) {
-  const container = document.getElementById("fuzzy-ai-validation-results");
-  if (!container) return;
-
-  if (!result) {
-    container.innerHTML = "";
-    return;
-  }
-
-  const errors = Array.isArray(result.errors) ? result.errors : [];
-  const warnings = Array.isArray(result.warnings) ? result.warnings : [];
-  const details = result.details || {};
-  const statusColor = result.ok ? "#8ad48a" : "#ff8b8b";
-  const sections = [
-    `<div style="font-weight:600; color:${statusColor};">${result.ok ? "Environment ready" : "Environment issues found"}</div>`,
-  ];
-
-  if (errors.length > 0) {
-    sections.push(`<div><strong>Errors:</strong><br>${errors.join("<br>")}</div>`);
-  }
-  if (warnings.length > 0) {
-    sections.push(`<div><strong>Warnings:</strong><br>${warnings.join("<br>")}</div>`);
-  }
-
-  const detailLines = [];
-  if (details.resolved_capture_backend) {
-    detailLines.push(`Capture backend: ${details.resolved_capture_backend}`);
-  }
-  if (details.blue_model) {
-    detailLines.push(`Blue model: ${details.blue_model}`);
-  }
-  if (details.sprinkler_model) {
-    detailLines.push(`Sprinkler model: ${details.sprinkler_model}`);
-  }
-  if (details.calibration_path) {
-    detailLines.push(`Calibration: ${details.calibration_path}`);
-  }
-  if (detailLines.length > 0) {
-    sections.push(`<div><strong>Details:</strong><br>${detailLines.join("<br>")}</div>`);
-  }
-
-  container.innerHTML = sections.join("<div style=\"margin-top:0.5rem;\"></div>");
-}
-
 function updateGatherPatternUI() {
   const pattern = getSelectedGatherPattern();
   const fuzzySection = document.getElementById("fuzzy-ai-gather-section");
-  const validateButton = document.getElementById("validate-fuzzy-ai-button");
   const description = document.getElementById("gather-pattern-metadata");
   const metadata = gatherPatternMetadata[pattern] || {};
   const isFuzzyAI = pattern === "fuzzy_ai_gather";
@@ -101,15 +215,9 @@ function updateGatherPatternUI() {
   if (fuzzySection) {
     fuzzySection.style.display = isFuzzyAI ? "block" : "none";
   }
-  if (validateButton) {
-    validateButton.style.display = isFuzzyAI ? "inline-flex" : "none";
-  }
   if (description) {
-    description.innerText = metadata.description || "";
-    description.style.display = metadata.description ? "block" : "none";
-  }
-  if (!isFuzzyAI) {
-    renderFuzzyAIValidationResult(null);
+    description.innerText = "";
+    description.style.display = "none";
   }
 }
 //save the enabled status for the fields
@@ -401,12 +509,73 @@ $("#gather-placeholder")
       alert("An error occurred while importing field settings. Please check your JSON format.");
     }
   })
-  .on("click", "#validate-fuzzy-ai-button", async (event) => {
+  .on("click", "#configure-fuzzy-ai-tokens-button", (event) => {
     event.preventDefault();
-    const result = await eel.validateGatherPatternEnvironment(
-      generateSettingObject(gatherFieldProperties)
-    )();
-    renderFuzzyAIValidationResult(result);
+    openFuzzyAITokenPopup();
+  })
+  .on("click", "#cancel-fuzzy-ai-tokens-button", (event) => {
+    event.preventDefault();
+    closeFuzzyAITokenPopup();
+  })
+  .on("click", "#save-fuzzy-ai-tokens-button", (event) => {
+    event.preventDefault();
+    saveFuzzyAITokenPopup();
+    closeFuzzyAITokenPopup();
+  })
+  .on("click", "#fuzzy-ai-token-modal", function(event) {
+    if (event.target === this) {
+      closeFuzzyAITokenPopup();
+    }
+  })
+  .on("dragstart", ".fuzzy-ai-token-row", function(event) {
+    event.currentTarget.classList.add("dragging");
+    event.currentTarget.style.opacity = "0.45";
+    if (event.originalEvent?.dataTransfer) {
+      event.originalEvent.dataTransfer.effectAllowed = "move";
+      event.originalEvent.dataTransfer.setData("text/plain", event.currentTarget.dataset.token || "");
+    }
+  })
+  .on("dragend", ".fuzzy-ai-token-row", function(event) {
+    event.currentTarget.classList.remove("dragging");
+    event.currentTarget.style.opacity = "";
+    renderFuzzyAITokenListFromRows();
+  })
+  .on("dragover", "#fuzzy-ai-token-list", function(event) {
+    event.preventDefault();
+    const draggingRow = document.querySelector(".fuzzy-ai-token-row.dragging");
+    if (!draggingRow) return;
+
+    const afterElement = getFuzzyAITokenDragAfterElement(
+      event.currentTarget,
+      event.originalEvent.clientY
+    );
+    if (afterElement == null) {
+      event.currentTarget.appendChild(draggingRow);
+    } else {
+      event.currentTarget.insertBefore(draggingRow, afterElement);
+    }
+  })
+  .on("drop", "#fuzzy-ai-token-list", function(event) {
+    event.preventDefault();
+    renderFuzzyAITokenListFromRows();
+  })
+  .on("click", ".fuzzy-ai-token-up", function(event) {
+    event.preventDefault();
+    const row = event.currentTarget.closest(".fuzzy-ai-token-row");
+    const previous = row?.previousElementSibling;
+    if (row && previous) {
+      row.parentElement.insertBefore(row, previous);
+      renderFuzzyAITokenListFromRows();
+    }
+  })
+  .on("click", ".fuzzy-ai-token-down", function(event) {
+    event.preventDefault();
+    const row = event.currentTarget.closest(".fuzzy-ai-token-row");
+    const next = row?.nextElementSibling;
+    if (row && next) {
+      row.parentElement.insertBefore(next, row);
+      renderFuzzyAITokenListFromRows();
+    }
   })
   .on("click", "#import-modal", function(event) {
     // Close modal when clicking outside the modal content
