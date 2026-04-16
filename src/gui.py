@@ -7,7 +7,6 @@ import modules.controls.mouse as mouseControl
 import sys
 import ast
 import json
-import importlib.util
 import webbrowser
 import time
 import threading
@@ -322,7 +321,8 @@ def getPatterns():
         "fuzzy_ai_gather": {
             "ai_backed": True,
             "requires_models": True,
-            "description": "Model-backed token-targeting gather pattern",
+            "label": "AI Gathering",
+            "description": "",
         }
     }
     patterns = []
@@ -335,7 +335,7 @@ def getPatterns():
             patterns.append(
                 {
                     "name": root,
-                    "label": f"{root} (AI)" if metadata.get("ai_backed") else root,
+                    "label": metadata.get("label", root),
                     "value": root,
                     "type": ext.lstrip(".").lower(),
                     "ai_backed": metadata.get("ai_backed", False),
@@ -347,96 +347,6 @@ def getPatterns():
         # folder may not exist yet
         pass
     return sorted(patterns, key=lambda pattern: pattern["name"].lower())
-
-
-def _package_importable(module_name):
-    return importlib.util.find_spec(module_name) is not None
-
-
-def _detect_capture_backend(requested_backend):
-    backend = str(requested_backend or "auto").strip().lower()
-    available_mss = _package_importable("mss")
-    available_pillow = _package_importable("PIL")
-
-    if backend == "mss":
-        return ("mss" if available_mss else None), available_mss, available_pillow
-    if backend in ("pil", "pillow"):
-        return ("pillow" if available_pillow else None), available_mss, available_pillow
-    if available_mss:
-        return "mss", available_mss, available_pillow
-    if available_pillow:
-        return "pillow", available_mss, available_pillow
-    return None, available_mss, available_pillow
-
-
-@eel.expose
-def validateGatherPatternEnvironment(field_settings=None):
-    settings = settingsManager.normalizeFieldSettings(
-        "__validation__",
-        field_settings if isinstance(field_settings, dict) else {},
-    )
-    shape = settings.get("shape")
-    if shape != "fuzzy_ai_gather":
-        return {
-            "ok": True,
-            "errors": [],
-            "warnings": [],
-            "details": {
-                "pattern": shape,
-                "message": "Validation is only required for fuzzy_ai_gather.",
-            },
-        }
-
-    errors = []
-    warnings = []
-    details = {
-        "pattern": shape,
-        "capture_backend": settings.get("fuzzy_ai_capture_backend", "auto"),
-    }
-
-    required_packages = {
-        "onnxruntime": "onnxruntime",
-        "opencv-python": "cv2",
-        "numpy": "numpy",
-    }
-    for package_name, module_name in required_packages.items():
-        if not _package_importable(module_name):
-            errors.append(f"Missing package: {package_name}")
-
-    backend, has_mss, has_pillow = _detect_capture_backend(settings.get("fuzzy_ai_capture_backend"))
-    details["available_capture_backends"] = {
-        "mss": has_mss,
-        "pillow": has_pillow,
-    }
-    details["resolved_capture_backend"] = backend or "unavailable"
-    if backend is None:
-        errors.append("No supported capture backend found. Install mss or Pillow.")
-
-    blue_model = settingsManager.getFuzzyAIModelPath("blue.onnx")
-    sprinkler_model = settingsManager.getFuzzyAIModelPath("sprinkler.onnx")
-    calibration_path = settingsManager.resolveProjectPath(settings.get("fuzzy_ai_calibration_path"))
-
-    details["blue_model"] = blue_model
-    details["sprinkler_model"] = sprinkler_model
-    details["calibration_path"] = calibration_path
-
-    if not os.path.exists(blue_model):
-        errors.append("Missing file: src/data/models/blue.onnx")
-    if not os.path.exists(sprinkler_model):
-        warnings.append(
-            "Missing file: src/data/models/sprinkler.onnx (sprinkler recentering will be disabled)"
-        )
-    if calibration_path and not os.path.exists(calibration_path):
-        warnings.append(
-            f"Missing file: {settings.get('fuzzy_ai_calibration_path')} (default calibration points will be used)"
-        )
-
-    return {
-        "ok": not errors,
-        "errors": errors,
-        "warnings": warnings,
-        "details": details,
-    }
 
 
 @eel.expose

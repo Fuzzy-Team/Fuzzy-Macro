@@ -2402,7 +2402,6 @@ class macro:
         gatherTimeLimit = self.convertSecsToMinsAndSecs(maxGatherTime)
         returnType = fieldSetting["return"]
         pattern = fieldSetting['shape']
-        pattern_calibration_path = settingsManager.resolveProjectPath(fieldSetting.get("fuzzy_ai_calibration_path"))
         pattern_capture_backend = fieldSetting.get("fuzzy_ai_capture_backend", "auto")
         pattern_confidence_threshold = fieldSetting.get("fuzzy_ai_confidence_threshold")
         pattern_sprinkler_confidence_threshold = fieldSetting.get("fuzzy_ai_sprinkler_confidence_threshold")
@@ -2414,7 +2413,19 @@ class macro:
         pattern_max_sprinkler_distance = fieldSetting.get("fuzzy_ai_max_sprinkler_distance")
         pattern_sprinkler_rescan_attempts = fieldSetting.get("fuzzy_ai_sprinkler_rescan_attempts")
         pattern_sprinkler_rescan_delay = fieldSetting.get("fuzzy_ai_sprinkler_rescan_delay")
-        pattern_target_sprinkler_label = fieldSetting.get("fuzzy_ai_target_sprinkler_label", "")
+        sprinklerLabelMap = {
+            "basic": "Basic",
+            "silver": "Silver",
+            "golden": "Gold",
+            "gold": "Gold",
+            "diamond": "Diamond",
+            "saturator": "Supreme",
+            "supreme": "Supreme",
+        }
+        pattern_target_sprinkler_label = sprinklerLabelMap.get(
+            str(self.setdat.get("sprinkler_type", "")).strip().lower(),
+            "",
+        )
         pattern_preferred_tokens = fieldSetting.get("fuzzy_ai_preferred_tokens", "")
         pattern_ignored_tokens = fieldSetting.get("fuzzy_ai_ignored_tokens", "")
         st = time.time()

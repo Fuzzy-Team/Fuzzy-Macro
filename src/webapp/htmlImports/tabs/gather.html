@@ -267,187 +267,45 @@
       parentElement.appendChild(fuzzyAIContainer);
       buildStandardContainer(
         fuzzyAIContainer,
-        "Fuzzy AI Gather",
-        "Model-backed gather settings used only when the shape is fuzzy_ai_gather. Models are loaded from src/data/models.",
+        "AI Gathering",
+        "",
         [
           {
-            id: "fuzzy_ai_calibration_path",
-            title: "Calibration Path",
-            desc: "Path to the calibration points file used for movement mapping.",
-            type: {
-              name: "textbox",
-              inputType: "string",
-              inputLimit: 0,
-              triggerFunction: triggerFunction,
-            },
-          },
-          {
-            id: "fuzzy_ai_capture_backend",
-            title: "Capture Backend",
-            desc: "Preferred screen capture backend.",
-            type: {
-              name: "dropdown",
-              data: [
-                { label: "Auto", value: "auto" },
-                { label: "MSS", value: "mss" },
-                { label: "Pillow", value: "pillow" },
-              ],
-              triggerFunction: triggerFunction,
-            },
-          },
-          {
-            id: "fuzzy_ai_confidence_threshold",
-            title: "Confidence Threshold",
-            desc: "Minimum confidence required to target a token.",
-            type: {
-              name: "textbox",
-              inputType: "float",
-              inputLimit: 5,
-              triggerFunction: triggerFunction,
-            },
-          },
-          {
-            id: "fuzzy_ai_sprinkler_confidence_threshold",
-            title: "Sprinkler Confidence Threshold",
-            desc: "Minimum confidence required to detect a sprinkler.",
-            type: {
-              name: "textbox",
-              inputType: "float",
-              inputLimit: 5,
-              triggerFunction: triggerFunction,
-            },
-          },
-          {
-            id: "fuzzy_ai_min_token_distance",
-            title: "Min Token Distance",
-            desc: "Ignore tokens closer than this field distance.",
-            type: {
-              name: "textbox",
-              inputType: "float",
-              inputLimit: 5,
-              triggerFunction: triggerFunction,
-            },
-          },
-          {
-            id: "fuzzy_ai_idle_return_interval",
-            title: "Idle Return Interval",
-            desc: "How long to wait before returning toward the sprinkler when idle.",
-            type: {
-              name: "textbox",
-              inputType: "float",
-              inputLimit: 6,
-              triggerFunction: triggerFunction,
-            },
-          },
-          {
-            id: "fuzzy_ai_no_token_recalibration_timeout",
-            title: "No-Token Recalibration Timeout",
-            desc: "Recalibrate if no tokens are found for this many seconds.",
-            type: {
-              name: "textbox",
-              inputType: "float",
-              inputLimit: 6,
-              triggerFunction: triggerFunction,
-            },
-          },
-          {
-            id: "fuzzy_ai_movements_before_recalibration",
-            title: "Movements Before Recalibration",
-            desc: "Maximum movements before forcing a recalibration pass.",
-            type: {
-              name: "textbox",
-              inputType: "int",
-              inputLimit: 4,
-              triggerFunction: triggerFunction,
-            },
-          },
-          {
-            id: "fuzzy_ai_sprinkler_arrival_threshold",
-            title: "Sprinkler Arrival Threshold",
-            desc: "Distance threshold considered close enough to the sprinkler.",
-            type: {
-              name: "textbox",
-              inputType: "float",
-              inputLimit: 5,
-              triggerFunction: triggerFunction,
-            },
-          },
-          {
-            id: "fuzzy_ai_max_sprinkler_distance",
-            title: "Max Sprinkler Distance",
-            desc: "Ignore sprinkler detections beyond this field distance.",
-            type: {
-              name: "textbox",
-              inputType: "float",
-              inputLimit: 6,
-              triggerFunction: triggerFunction,
-            },
-          },
-          {
-            id: "fuzzy_ai_sprinkler_rescan_attempts",
-            title: "Sprinkler Rescan Attempts",
-            desc: "How many times to rescan for a sprinkler before giving up.",
-            type: {
-              name: "textbox",
-              inputType: "int",
-              inputLimit: 4,
-              triggerFunction: triggerFunction,
-            },
-          },
-          {
-            id: "fuzzy_ai_sprinkler_rescan_delay",
-            title: "Sprinkler Rescan Delay",
-            desc: "Delay between sprinkler rescans in seconds.",
-            type: {
-              name: "textbox",
-              inputType: "float",
-              inputLimit: 5,
-              triggerFunction: triggerFunction,
-            },
-          },
-          {
-            id: "fuzzy_ai_target_sprinkler_label",
-            title: "Target Sprinkler Label",
-            desc: "Optional sprinkler label to target, for example Supreme.",
-            type: {
-              name: "textbox",
-              inputType: "string",
-              inputLimit: 40,
-              triggerFunction: triggerFunction,
-            },
-          },
-          {
-            id: "fuzzy_ai_preferred_tokens",
+            id: "configure-fuzzy-ai-tokens-button",
             title: "Preferred Tokens",
-            desc: "Comma-separated token names, ordered from highest to lowest priority.",
+            desc: "Choose which tokens AI Gathering should chase and sort them by priority.",
             type: {
-              name: "textbox",
-              inputType: "string",
-              inputLimit: 0,
-              triggerFunction: triggerFunction,
-            },
-          },
-          {
-            id: "fuzzy_ai_ignored_tokens",
-            title: "Ignored Tokens",
-            desc: "Comma-separated token names to ignore entirely.",
-            type: {
-              name: "textbox",
-              inputType: "string",
-              inputLimit: 0,
-              triggerFunction: triggerFunction,
+              name: "button",
+              text: "Customize Tokens",
+              length: 10,
+              triggerFunction: "openFuzzyAITokenPopup()",
             },
           },
         ]
+      );
+      fuzzyAIContainer.insertAdjacentHTML(
+        "beforeend",
+        `
+          <input type="hidden" id="fuzzy_ai_preferred_tokens">
+          <input type="hidden" id="fuzzy_ai_ignored_tokens">
+          <div id="fuzzy-ai-token-modal" class="modal-overlay" style="display:none;">
+            <div class="modal-dialog poppins-regular" style="max-width: 42rem; width: 90%; max-height: 85vh; overflow: hidden; display:flex; flex-direction:column;">
+              <h3>Preferred Tokens</h3>
+              <p>Enable tokens AI Gathering should chase. Drag tokens to sort them from highest to lowest priority; disabled tokens are ignored.</p>
+              <div id="fuzzy-ai-token-list" style="overflow:auto; padding-right:0.5rem; margin-top:0.5rem;"></div>
+              <div class="modal-actions" style="margin-top:1rem;">
+                <button id="cancel-fuzzy-ai-tokens-button" class="btn-cancel">Cancel</button>
+                <button id="save-fuzzy-ai-tokens-button" class="btn-confirm">Save Tokens</button>
+              </div>
+            </div>
+          </div>
+        `
       );
 
       // Add control buttons at the bottom
       const buttonContainer = document.createElement('div');
       buttonContainer.style.cssText = 'display: flex; justify-content: center; gap: 10px; margin-top: 20px; margin-bottom: 20px;';
       buttonContainer.innerHTML = `
-        <button id="validate-fuzzy-ai-button" class="import-export-button" style="display:none;">
-          Validate Environment
-        </button>
         <button id="export-field-button" class="import-export-button">
           Export Settings
         </button>
@@ -459,12 +317,6 @@
         </button>
       `;
       parentElement.appendChild(buttonContainer);
-
-      const fuzzyAIValidation = document.createElement("div");
-      fuzzyAIValidation.id = "fuzzy-ai-validation-results";
-      fuzzyAIValidation.className = "poppins-regular";
-      fuzzyAIValidation.style.cssText = "margin-top: 0.5rem; margin-bottom: 1rem;";
-      parentElement.appendChild(fuzzyAIValidation);
 
       // Add import modal (hidden by default)
       const importModal = document.createElement('div');
