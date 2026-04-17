@@ -733,6 +733,14 @@ def importFieldSettings(field_name, json_settings):
     except Exception as e:
         print(f"Error importing field settings: {e}")
         return False
+
+@eel.expose
+def loadFuzzyAITokenRanking(field_name):
+    return settingsManager.loadFuzzyAITokenRanking(field_name)
+
+@eel.expose
+def saveFuzzyAITokenRanking(field_name, ranking):
+    return settingsManager.saveFuzzyAITokenRanking(field_name, ranking)
         
 @eel.expose
 def getMacroVersion():
