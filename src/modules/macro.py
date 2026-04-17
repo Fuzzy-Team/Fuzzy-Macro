@@ -3543,6 +3543,10 @@ class macro:
                 ix, iy = [j//self.robloxWindow.multi for j in res[1]]
                 mouse.moveTo(x + ix + 5, y + iy + 5)
                 mouse.click()
+                return
+            if keepOldData is not None:
+                mouse.moveTo(keepOldData[0] + 170, keepOldData[1])
+                mouse.click()
         amulet = self.setdat["stump_snail_amulet"]
         if amulet == "keep":
             keepOld()

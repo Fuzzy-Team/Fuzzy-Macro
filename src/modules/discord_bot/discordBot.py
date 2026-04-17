@@ -2217,8 +2217,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
     @bot.tree.command(name = "start", description = "Start")
     async def start(interaction: discord.Interaction):
-        if run.value == 2: 
-            await interaction.response.send_message("Macro is already running")
+        if run.value != 3:
+            await interaction.response.send_message("Macro is not fully stopped yet")
             return 
         try:
             # Press F1 to start the macro (simulating keyboard input)

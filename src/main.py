@@ -2583,7 +2583,7 @@ def watch_for_hotkeys(run):
                 current_time = time.time()
                 
                 if current_combo == start_keybind:
-                    if run.value == 2: #already running
+                    if run.value != 3: #only start from fully stopped state
                         return
                     try:
                         import gui
@@ -2841,7 +2841,7 @@ if __name__ == "__main__":
         if macroProc and macroProc.is_alive():
             macroProc.kill()
             macroProc.join()
-            macroProc = None
+        macroProc = None
         stream.stop()
         #if discordBotProc.is_alive(): discordBotProc.kill()
         keyboardModule.releaseMovement()
