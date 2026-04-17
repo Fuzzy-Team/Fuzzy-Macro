@@ -10,7 +10,7 @@ Requirements:
 - opencv-python
 - numpy
 - mss or Pillow
-- blue.onnx and sprinkler.onnx somewhere near the macro root or this pattern file
+- blue.onnx and sprinkler.onnx
 
 Calibration uses normalized fallback points ported from this repo.
 """
