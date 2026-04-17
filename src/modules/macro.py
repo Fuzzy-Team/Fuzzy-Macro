@@ -33,6 +33,7 @@ from pynput.keyboard import Controller
 import cv2
 from modules.screen.color_check import get_sample_colors, percent_pixels_similar_to_color
 from modules.screen.bloom_detector import BloomDetector
+from modules.screen.sprinkler_detector import SprinklerDetector
 from datetime import timedelta, datetime, timezone
 from modules.misc.imageManipulation import *
 from PIL import Image
@@ -546,6 +547,7 @@ class macro:
         self.hourlyReport = HourlyReport(self.buffDetector, self.setdat.get("hourly_report_time_format", 24))
         self.memoryMatch = MemoryMatch(self.robloxWindow)
         self.bloomDetector = BloomDetector()
+        self.sprinklerDetector = SprinklerDetector()
 
         #setup an internal cooldown tracker. The cooldowns can be modified
         self.collectCooldowns = dict([(k, v[2]) for k,v in mergedCollectData.items()])
@@ -593,6 +595,12 @@ class macro:
             "forward_neg_key": "s",
             "strafe_pos_key": "d",
             "strafe_neg_key": "a",
+        }
+        self._petalSprinklerHome = {
+            "ready": False,
+            "error_logged": False,
+            "last_label": None,
+            "last_confidence": 0.0,
         }
 
 
@@ -2501,6 +2509,8 @@ class macro:
             return
         fieldSetting = self.fieldSettings[normalized_field]
         self._petalCalibration["ready"] = False
+        self._petalSprinklerHome["ready"] = False
+        self._petalSprinklerHome["error_logged"] = False
 
         # Match requested nm_Reset(2) behavior with full reset/convert before travel.
         self.reset(convert=True)
@@ -2544,6 +2554,7 @@ class macro:
             self.keyboard.press("pageup")
         self.keyboard.press("1")
         time.sleep(0.1)
+        self._petalReturnToSprinkler()
 
         max_scan_time = int(self.setdat.get("quest_gather_mins", 0) * 60) if self.setdat.get("quest_gather_mins", 0) else 45
         start = time.time()
@@ -2562,9 +2573,8 @@ class macro:
                 bloom = self._petalAcquireBloomTarget()
                 if bloom is None:
                     misses += 1
-                    if misses >= 4:
-                        break
-                    time.sleep(0.25)
+                    self._petalReturnToSprinkler(max_steps=1)
+                    time.sleep(0.35 if misses < 8 else 0.6)
                     continue
 
                 misses = 0
@@ -2572,6 +2582,9 @@ class macro:
                     self._petalTryCalibrate(bloom)
 
                 moved = self._petalChaseAndSweep()
+                if moved:
+                    if not self._petalReturnToSprinkler():
+                        self._petalCalibration["ready"] = False
                 if not moved:
                     time.sleep(0.15)
             except Exception:
@@ -2580,10 +2593,12 @@ class macro:
         self.clear_task_status()
         self.reset(convert=False)
 
-    def _petalCaptureCandidates(self):
+    def _petalCaptureBGR(self):
         screen = mssScreenshotNP(self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw, self.robloxWindow.mh)
-        bgr = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
-        return self.bloomDetector.detect_candidates(bgr)
+        return cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
+
+    def _petalCaptureCandidates(self):
+        return self.bloomDetector.detect_candidates(self._petalCaptureBGR())
 
     def _petalAcquireBloomTarget(self):
         candidates = self._petalCaptureCandidates()
@@ -2604,6 +2619,67 @@ class macro:
         if abs(tiles) < 0.15:
             return
         self.keyboard.tileWalk(key, abs(tiles))
+
+    def _petalWalkVector(self, tx, ty):
+        diagonal_component = min(abs(tx), abs(ty))
+        diagonal_distance = math.sqrt(2) * diagonal_component
+        axial_distance = abs(abs(tx) - abs(ty))
+        forward_key = "w" if ty >= 0 else "s"
+        strafe_key = "d" if tx >= 0 else "a"
+
+        if diagonal_distance >= 0.05:
+            self.keyboard.keyDown(forward_key, False)
+            self.keyboard.keyDown(strafe_key, False)
+            self.keyboard.tileWait(diagonal_distance)
+            self.keyboard.keyUp(strafe_key, False)
+            self.keyboard.keyUp(forward_key, False)
+
+        if axial_distance >= 0.05:
+            if abs(ty) >= abs(tx):
+                self._petalWalkTiles(forward_key, axial_distance)
+            else:
+                self._petalWalkTiles(strafe_key, axial_distance)
+
+    def _petalFindSprinklerTarget(self, attempts=3, delay=0.25):
+        attempts = max(1, int(attempts))
+        if not self.sprinklerDetector.ensure_loaded():
+            if not self._petalSprinklerHome.get("error_logged"):
+                self._petalSprinklerHome["error_logged"] = True
+                try:
+                    self.logger.webhook(
+                        "Petal Sprinkler Detection Disabled",
+                        self.sprinklerDetector.error,
+                        "orange",
+                    )
+                except Exception:
+                    pass
+            return None
+
+        for attempt in range(attempts):
+            target = self.sprinklerDetector.find_nearest(self._petalCaptureBGR())
+            if target is not None:
+                self._petalSprinklerHome["ready"] = True
+                self._petalSprinklerHome["last_label"] = target.candidate.label
+                self._petalSprinklerHome["last_confidence"] = target.candidate.confidence
+                return target
+            if attempt < attempts - 1:
+                time.sleep(delay)
+        return None
+
+    def _petalReturnToSprinkler(self, max_steps=3, arrival_tiles=0.8):
+        target = None
+        for _ in range(max(1, int(max_steps))):
+            target = self._petalFindSprinklerTarget()
+            if target is None:
+                return False
+            if target.distance <= arrival_tiles:
+                self._petalSprinklerHome["ready"] = True
+                return True
+            self._petalWalkVector(target.tx, target.ty)
+            time.sleep(0.12)
+
+        target = self._petalFindSprinklerTarget(attempts=1)
+        return bool(target is not None and target.distance <= arrival_tiles)
 
     def _petalTryCalibrate(self, target, calib_tiles=3.0):
         forward_probe = self._petalChooseProbe(target, [("w", "s"), ("s", "w")], calib_tiles)
