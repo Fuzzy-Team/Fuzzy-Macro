@@ -282,7 +282,8 @@ def openLink(link):
     
 @eel.expose
 def start():
-    if run.value == 2: return #already running
+    if run.value != 3:
+        return {"ok": False, "message": "The macro is not fully stopped yet."}
     if isAnyToolRunning():
         return {"ok": False, "message": "Stop the running tool before starting the macro."}
     run.value = 1
