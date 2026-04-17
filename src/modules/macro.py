@@ -2402,17 +2402,19 @@ class macro:
         gatherTimeLimit = self.convertSecsToMinsAndSecs(maxGatherTime)
         returnType = fieldSetting["return"]
         pattern = fieldSetting['shape']
-        pattern_capture_backend = fieldSetting.get("fuzzy_ai_capture_backend", "auto")
-        pattern_confidence_threshold = fieldSetting.get("fuzzy_ai_confidence_threshold")
-        pattern_sprinkler_confidence_threshold = fieldSetting.get("fuzzy_ai_sprinkler_confidence_threshold")
-        pattern_min_token_distance = fieldSetting.get("fuzzy_ai_min_token_distance")
-        pattern_idle_return_interval = fieldSetting.get("fuzzy_ai_idle_return_interval")
-        pattern_no_token_recalibration_timeout = fieldSetting.get("fuzzy_ai_no_token_recalibration_timeout")
-        pattern_movements_before_recalibration = fieldSetting.get("fuzzy_ai_movements_before_recalibration")
-        pattern_sprinkler_arrival_threshold = fieldSetting.get("fuzzy_ai_sprinkler_arrival_threshold")
-        pattern_max_sprinkler_distance = fieldSetting.get("fuzzy_ai_max_sprinkler_distance")
-        pattern_sprinkler_rescan_attempts = fieldSetting.get("fuzzy_ai_sprinkler_rescan_attempts")
-        pattern_sprinkler_rescan_delay = fieldSetting.get("fuzzy_ai_sprinkler_rescan_delay")
+        fuzzyAIRuntimeDefaults = settingsManager.FUZZY_AI_RUNTIME_DEFAULTS
+        fuzzyAITokenRanking = settingsManager.loadFuzzyAITokenRanking(field)
+        pattern_capture_backend = fuzzyAIRuntimeDefaults["fuzzy_ai_capture_backend"]
+        pattern_confidence_threshold = fuzzyAIRuntimeDefaults["fuzzy_ai_confidence_threshold"]
+        pattern_sprinkler_confidence_threshold = fuzzyAIRuntimeDefaults["fuzzy_ai_sprinkler_confidence_threshold"]
+        pattern_min_token_distance = fuzzyAIRuntimeDefaults["fuzzy_ai_min_token_distance"]
+        pattern_idle_return_interval = fuzzyAIRuntimeDefaults["fuzzy_ai_idle_return_interval"]
+        pattern_no_token_recalibration_timeout = fuzzyAIRuntimeDefaults["fuzzy_ai_no_token_recalibration_timeout"]
+        pattern_movements_before_recalibration = fuzzyAIRuntimeDefaults["fuzzy_ai_movements_before_recalibration"]
+        pattern_sprinkler_arrival_threshold = fuzzyAIRuntimeDefaults["fuzzy_ai_sprinkler_arrival_threshold"]
+        pattern_max_sprinkler_distance = fuzzyAIRuntimeDefaults["fuzzy_ai_max_sprinkler_distance"]
+        pattern_sprinkler_rescan_attempts = fuzzyAIRuntimeDefaults["fuzzy_ai_sprinkler_rescan_attempts"]
+        pattern_sprinkler_rescan_delay = fuzzyAIRuntimeDefaults["fuzzy_ai_sprinkler_rescan_delay"]
         sprinklerLabelMap = {
             "basic": "Basic",
             "silver": "Silver",
@@ -2426,8 +2428,8 @@ class macro:
             str(self.setdat.get("sprinkler_type", "")).strip().lower(),
             "",
         )
-        pattern_preferred_tokens = fieldSetting.get("fuzzy_ai_preferred_tokens", "")
-        pattern_ignored_tokens = fieldSetting.get("fuzzy_ai_ignored_tokens", "")
+        pattern_preferred_tokens = fuzzyAITokenRanking.get("preferred_tokens", "")
+        pattern_ignored_tokens = fuzzyAITokenRanking.get("ignored_tokens", "")
         st = time.time()
         keepGathering = True
         self.died = False

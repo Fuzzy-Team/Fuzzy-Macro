@@ -608,8 +608,27 @@ def _fallback_pattern():
 
 
 def _initialise_runtime():
-    if cv2 is None or np is None or ort is None:
-        raise RuntimeError("Install opencv-python, numpy, and onnxruntime before using this pattern.")
+    global ort
+    if ort is None:
+        # Try to install onnxruntime into the active Python environment and import it.
+        try:
+            import subprocess
+            import sys
+            import importlib
+
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "onnxruntime"])
+            ort = importlib.import_module("onnxruntime")
+            globals()["ort"] = ort
+        except Exception as exc:
+            raise RuntimeError(
+                "onnxruntime is required but automatic install failed: " + str(exc) + ". Please install onnxruntime before using AI Gathering, then restart the macro."
+            )
+
+    if cv2 is None or np is None:
+        raise RuntimeError(
+            "Must install opencv-python and numpy before using AI Gathering, please run install dependencies before continuing."
+        )
+
 
     token_path = MODEL_DIR / "blue.onnx"
     if not token_path.exists():

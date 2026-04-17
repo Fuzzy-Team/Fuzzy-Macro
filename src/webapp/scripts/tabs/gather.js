@@ -22,8 +22,6 @@ const gatherFieldProperties = [
   "distance",
   "goo",
   "goo_interval",
-  "fuzzy_ai_preferred_tokens",
-  "fuzzy_ai_ignored_tokens",
 ];
 let gatherPatternMetadata = {};
 const fuzzyAITokenNames = [
@@ -169,7 +167,7 @@ function renderFuzzyAITokenListFromRows() {
   });
 }
 
-function saveFuzzyAITokenPopup() {
+async function saveFuzzyAITokenPopup() {
   const rows = Array.from(document.querySelectorAll(".fuzzy-ai-token-row"));
   const preferred = [];
   const ignored = [];
@@ -181,14 +179,26 @@ function saveFuzzyAITokenPopup() {
     else ignored.push(token);
   });
 
-  const preferredInput = document.getElementById("fuzzy_ai_preferred_tokens");
-  const ignoredInput = document.getElementById("fuzzy_ai_ignored_tokens");
-  if (preferredInput) preferredInput.value = preferred.join(",");
-  if (ignoredInput) ignoredInput.value = ignored.join(",");
-  saveField();
+  const fieldDropdown = document.getElementById("field");
+  const fieldName = fieldDropdown ? getDropdownValue(fieldDropdown) : "";
+  if (!fieldName) return;
+
+  await eel.saveFuzzyAITokenRanking(fieldName, {
+    preferred_tokens: preferred.join(","),
+    ignored_tokens: ignored.join(","),
+  })();
 }
 
-function openFuzzyAITokenPopup() {
+async function openFuzzyAITokenPopup() {
+  const fieldDropdown = document.getElementById("field");
+  const fieldName = fieldDropdown ? getDropdownValue(fieldDropdown) : "";
+  if (fieldName) {
+    const ranking = await eel.loadFuzzyAITokenRanking(fieldName)();
+    const preferredInput = document.getElementById("fuzzy_ai_preferred_tokens");
+    const ignoredInput = document.getElementById("fuzzy_ai_ignored_tokens");
+    if (preferredInput) preferredInput.value = ranking.preferred_tokens || "";
+    if (ignoredInput) ignoredInput.value = ranking.ignored_tokens || "";
+  }
   renderFuzzyAITokenList();
   const modal = document.getElementById("fuzzy-ai-token-modal");
   if (modal) modal.style.display = "flex";
@@ -517,9 +527,9 @@ $("#gather-placeholder")
     event.preventDefault();
     closeFuzzyAITokenPopup();
   })
-  .on("click", "#save-fuzzy-ai-tokens-button", (event) => {
+  .on("click", "#save-fuzzy-ai-tokens-button", async (event) => {
     event.preventDefault();
-    saveFuzzyAITokenPopup();
+    await saveFuzzyAITokenPopup();
     closeFuzzyAITokenPopup();
   })
   .on("click", "#fuzzy-ai-token-modal", function(event) {
