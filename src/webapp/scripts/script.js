@@ -655,8 +655,9 @@ function loadInputs(obj, save = "") {
       setDropdownValue(ele, v);
     } else if (ele.className.includes("keybind-input")) {
       // Handle keybind elements
-      ele.dataset.keybind = v;
-      const displayText = v ? v.replace(/\+/g, " + ") : "Click to record";
+      const keybind = normalizeKeybindString(v);
+      ele.dataset.keybind = keybind;
+      const displayText = keybind ? keybindDisplayText(keybind) : "Click to record";
       ele.querySelector(".keybind-display").textContent = displayText;
     } else if (ele.className.includes("drag-list")) {
       // Handle drag list elements
@@ -770,41 +771,89 @@ window.oncontextmenu = function(event) {
     return false;
 };
 */
+const keybindModifierOrder = ["Ctrl", "Alt", "Shift", "Cmd"];
+
+function normalizeKeybindKey(key) {
+  if (!key) return "";
+  const aliases = {
+    " ": "Space",
+    Spacebar: "Space",
+    Control: "Ctrl",
+    Ctrl: "Ctrl",
+    Alt: "Alt",
+    Option: "Alt",
+    Shift: "Shift",
+    Meta: "Cmd",
+    Command: "Cmd",
+    Cmd: "Cmd",
+    Esc: "Escape",
+    Escape: "Escape",
+    Del: "Delete",
+    Delete: "Delete",
+    ArrowLeft: "ArrowLeft",
+    ArrowRight: "ArrowRight",
+    ArrowUp: "ArrowUp",
+    ArrowDown: "ArrowDown",
+    PageUp: "PageUp",
+    PageDown: "PageDown",
+    CapsLock: "CapsLock",
+    Fn: "Fn",
+  };
+  if (aliases[key]) return aliases[key];
+  if (/^F\d{1,2}$/i.test(key)) return key.toUpperCase();
+  if (key.length === 1) return key.toUpperCase();
+  return key;
+}
+
+function sortKeybindKeys(keys) {
+  const uniqueKeys = Array.from(new Set(keys.filter((key) => key && key !== "Fn")));
+  const modifiers = keybindModifierOrder.filter((key) => uniqueKeys.includes(key));
+  const normalKeys = uniqueKeys
+    .filter((key) => !keybindModifierOrder.includes(key))
+    .sort();
+  return modifiers.concat(normalKeys);
+}
+
+function normalizeKeybindString(keybind) {
+  return sortKeybindKeys(
+    String(keybind || "")
+      .split("+")
+      .map((key) => normalizeKeybindKey(key.trim()))
+  ).join("+");
+}
+
+function keybindDisplayText(keybind) {
+  return normalizeKeybindString(keybind).replace(/\+/g, " + ");
+}
+
+function keybindFromEvent(event) {
+  const keys = [];
+  if (event.ctrlKey) keys.push("Ctrl");
+  if (event.altKey) keys.push("Alt");
+  if (event.shiftKey) keys.push("Shift");
+  if (event.metaKey) keys.push("Cmd");
+
+  const mainKey = normalizeKeybindKey(event.key);
+  if (!keybindModifierOrder.includes(mainKey)) keys.push(mainKey);
+  return sortKeybindKeys(keys).join("+");
+}
+
 // Function to check if current key combination matches a configured keybind
 function isConfiguredKeybind(event) {
   // Get current keybinds from settings
-  const startKeybind =
-    document.getElementById("start_keybind")?.dataset.keybind;
-  const pauseKeybind =
-    document.getElementById("pause_keybind")?.dataset.keybind;
-  const stopKeybind = document.getElementById("stop_keybind")?.dataset.keybind;
+  const startKeybind = normalizeKeybindString(
+    document.getElementById("start_keybind")?.dataset.keybind
+  );
+  const pauseKeybind = normalizeKeybindString(
+    document.getElementById("pause_keybind")?.dataset.keybind
+  );
+  const stopKeybind = normalizeKeybindString(
+    document.getElementById("stop_keybind")?.dataset.keybind
+  );
 
   if (!startKeybind && !pauseKeybind && !stopKeybind) return false;
 
-  // Build current key combination
-  let currentCombo = [];
-  if (event.ctrlKey) currentCombo.push("Ctrl");
-  if (event.altKey) currentCombo.push("Alt");
-  if (event.shiftKey) currentCombo.push("Shift");
-  if (event.metaKey) currentCombo.push("Cmd");
-
-  // Add the main key
-  let mainKey = event.key;
-  if (mainKey === " ") mainKey = "Space";
-  else if (mainKey === "Control") mainKey = "Ctrl";
-  else if (mainKey === "Alt") mainKey = "Alt";
-  else if (mainKey === "Shift") mainKey = "Shift";
-  else if (mainKey === "Meta") mainKey = "Cmd";
-  else if (mainKey.startsWith("F") && mainKey.length <= 3) {
-    // Function keys (F1, F2, etc.)
-    mainKey = mainKey;
-  } else if (mainKey.length === 1) {
-    // Regular character keys
-    mainKey = mainKey.toUpperCase();
-  }
-
-  currentCombo.push(mainKey);
-  const currentComboString = currentCombo.join("+");
+  const currentComboString = keybindFromEvent(event);
 
   // Check if it matches either configured keybind
   return (
@@ -1032,7 +1081,7 @@ async function updateKeybindDisplay() {
       startKeybindElement.querySelector(".keybind-display")
     ) {
       startKeybindElement.querySelector(".keybind-display").textContent =
-        startKey.replace(/\+/g, " + ");
+        keybindDisplayText(startKey);
     }
 
     if (
@@ -1040,7 +1089,7 @@ async function updateKeybindDisplay() {
       pauseKeybindElement.querySelector(".keybind-display")
     ) {
       pauseKeybindElement.querySelector(".keybind-display").textContent =
-        pauseKey.replace(/\+/g, " + ");
+        keybindDisplayText(pauseKey);
     }
 
     if (
@@ -1048,7 +1097,7 @@ async function updateKeybindDisplay() {
       stopKeybindElement.querySelector(".keybind-display")
     ) {
       stopKeybindElement.querySelector(".keybind-display").textContent =
-        stopKey.replace(/\+/g, " + ");
+        keybindDisplayText(stopKey);
     }
   } catch (error) {
     // Silently handle errors
@@ -1080,27 +1129,8 @@ function handleKeybindKeyDown(event) {
   event.preventDefault();
   event.stopPropagation();
 
-  // Get the key name
-  let keyName = event.key;
-
-  // Handle special keys
-  if (event.key === " ") {
-    keyName = "Space";
-  } else if (event.key === "Control") {
-    keyName = "Ctrl";
-  } else if (event.key === "Alt") {
-    keyName = "Alt";
-  } else if (event.key === "Shift") {
-    keyName = "Shift";
-  } else if (event.key === "Meta") {
-    keyName = "Cmd";
-  } else if (event.key.startsWith("F") && event.key.length <= 3) {
-    // Function keys (F1, F2, etc.)
-    keyName = event.key;
-  } else if (event.key.length === 1) {
-    // Regular character keys
-    keyName = event.key.toUpperCase();
-  }
+  const keyName = normalizeKeybindKey(event.key);
+  if (!keyName || keyName === "Fn") return;
 
   // Add to sequence if not already present
   if (!keybindSequence.includes(keyName)) {
@@ -1108,7 +1138,7 @@ function handleKeybindKeyDown(event) {
   }
 
   // Update display
-  const displayText = keybindSequence.join(" + ");
+  const displayText = sortKeybindKeys(keybindSequence).join(" + ");
   currentKeybindElement.querySelector(".keybind-display").textContent =
     displayText;
 }
@@ -1117,11 +1147,11 @@ function finalizeKeybind() {
   if (!keybindRecording || !currentKeybindElement) return;
 
   // Save the keybind combination
-  const keybindString = keybindSequence.join("+");
+  const keybindString = sortKeybindKeys(keybindSequence).join("+");
   currentKeybindElement.dataset.keybind = keybindString;
 
   // Update the display to show the saved keybind
-  const displayText = keybindString.replace(/\+/g, " + ");
+  const displayText = keybindDisplayText(keybindString);
   currentKeybindElement.querySelector(".keybind-display").textContent =
     displayText;
 
