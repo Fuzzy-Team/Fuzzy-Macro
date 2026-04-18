@@ -2569,11 +2569,11 @@ def watch_for_hotkeys(run):
                     # Force stop immediately when stop keybind is held
                     if run.value != 0:  # Only if not already stopped
                         run.value = 0
-                        # Update GUI immediately (optimistically show stopped state)
+                        # Update GUI immediately so the app shows cleanup in progress.
                         try:
                             import gui
-                            gui.setRunState(3)  # Update GUI state optimistically to stopped
-                            gui.toggleStartStop()  # Update UI immediately
+                            gui.setRunState(0)
+                            gui.toggleStartStop()
                         except:
                             pass  # If gui is not ready, continue
                 else:
@@ -2625,11 +2625,11 @@ def watch_for_hotkeys(run):
                     if run.value == 3: #already stopped
                         return
                     run.value = 0
-                    # Update GUI immediately (optimistically show stopped state)
+                    # Update GUI immediately so the app shows cleanup in progress.
                     try:
                         import gui
-                        gui.setRunState(3)  # Update GUI state optimistically to stopped
-                        gui.toggleStartStop()  # Update UI immediately
+                        gui.setRunState(0)
+                        gui.toggleStartStop()
                     except:
                         pass  # If gui is not ready, continue
                 elif current_combo == pause_keybind:
@@ -2839,8 +2839,11 @@ if __name__ == "__main__":
         stopThreads = True
         #print(sockets)
         if macroProc and macroProc.is_alive():
-            macroProc.kill()
-            macroProc.join()
+            macroProc.terminate()
+            macroProc.join(timeout=2)
+            if macroProc.is_alive():
+                macroProc.kill()
+                macroProc.join(timeout=2)
         macroProc = None
         stream.stop()
         #if discordBotProc.is_alive(): discordBotProc.kill()
@@ -3103,6 +3106,12 @@ if __name__ == "__main__":
             autoStopHours = 0.0
 
             # Stop macro/tools and release all inputs first.
+            gui.setRunState(0)
+            try:
+                gui.toggleStartStop()
+            except:
+                pass
+
             if had_macro_proc:
                 logger.webhook("Macro Stopped", "Fuzzy Macro", "red")
             try:
@@ -3110,14 +3119,14 @@ if __name__ == "__main__":
             except Exception:
                 pass
 
+            stopApp()
+
             run.value = 3
             gui.setRunState(3)
             try:
                 gui.toggleStartStop()
             except:
                 pass
-
-            stopApp()
 
             if not had_macro_proc:
                 continue
