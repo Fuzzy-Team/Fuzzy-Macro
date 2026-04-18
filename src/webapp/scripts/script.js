@@ -805,6 +805,16 @@ function normalizeKeybindKey(key) {
   return key;
 }
 
+function keybindKeyFromEvent(event) {
+  if (!event) return "";
+  const code = event.code || "";
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+  if (/^Digit\d$/.test(code)) return code.slice(5);
+  if (/^Numpad\d$/.test(code)) return code.replace("Numpad", "Numpad");
+  if (/^F\d{1,2}$/.test(code)) return code;
+  return normalizeKeybindKey(event.key);
+}
+
 function sortKeybindKeys(keys) {
   const uniqueKeys = Array.from(new Set(keys.filter((key) => key && key !== "Fn")));
   const modifiers = keybindModifierOrder.filter((key) => uniqueKeys.includes(key));
@@ -833,7 +843,7 @@ function keybindFromEvent(event) {
   if (event.shiftKey) keys.push("Shift");
   if (event.metaKey) keys.push("Cmd");
 
-  const mainKey = normalizeKeybindKey(event.key);
+  const mainKey = keybindKeyFromEvent(event);
   if (!keybindModifierOrder.includes(mainKey)) keys.push(mainKey);
   return sortKeybindKeys(keys).join("+");
 }
@@ -1129,7 +1139,7 @@ function handleKeybindKeyDown(event) {
   event.preventDefault();
   event.stopPropagation();
 
-  const keyName = normalizeKeybindKey(event.key);
+  const keyName = keybindKeyFromEvent(event);
   if (!keyName || keyName === "Fn") return;
 
   // Add to sequence if not already present
