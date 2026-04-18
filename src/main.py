@@ -2427,6 +2427,32 @@ def watch_for_hotkeys(run):
     recording_cache = {"start": False, "pause": False, "stop": False}
     last_recording_check = 0
     recording_cache_duration = 0.5  # Check recording state every 0.5 seconds max
+
+    modifier_keys = ["Ctrl", "Alt", "Shift", "Cmd"]
+    ignored_keys = {"Fn"}
+    key_aliases = {
+        "ctrl_l": "Ctrl", "ctrl_r": "Ctrl", "control": "Ctrl", "ctrl": "Ctrl",
+        "alt_l": "Alt", "alt_r": "Alt", "option": "Alt", "alt": "Alt",
+        "shift_l": "Shift", "shift_r": "Shift", "shift": "Shift",
+        "cmd_l": "Cmd", "cmd_r": "Cmd", "cmd": "Cmd", "meta": "Cmd", "command": "Cmd",
+        "space": "Space", "spacebar": "Space",
+        "enter": "Enter", "return": "Enter",
+        "tab": "Tab",
+        "backspace": "Backspace",
+        "delete": "Delete", "del": "Delete",
+        "esc": "Escape", "escape": "Escape",
+        "caps_lock": "CapsLock", "capslock": "CapsLock",
+        "left": "ArrowLeft", "arrowleft": "ArrowLeft",
+        "right": "ArrowRight", "arrowright": "ArrowRight",
+        "up": "ArrowUp", "arrowup": "ArrowUp",
+        "down": "ArrowDown", "arrowdown": "ArrowDown",
+        "home": "Home",
+        "end": "End",
+        "page_up": "PageUp", "pageup": "PageUp",
+        "page_down": "PageDown", "pagedown": "PageDown",
+        "insert": "Insert",
+        "fn": "Fn",
+    }
     
     def get_cached_settings():
         nonlocal settings_cache, last_settings_load
@@ -2450,59 +2476,61 @@ def watch_for_hotkeys(run):
                 recording_cache = {"start": False, "pause": False, "stop": False}
             return recording_cache["start"] or recording_cache["pause"] or recording_cache["stop"]
     
+    def normalize_key_name(key_name):
+        key_name = str(key_name or "").strip()
+        if not key_name:
+            return ""
+        if key_name.startswith("Key."):
+            key_name = key_name[4:]
+        if key_name.startswith("'") and key_name.endswith("'") and len(key_name) >= 2:
+            key_name = key_name[1:-1]
+
+        alias = key_aliases.get(key_name.lower())
+        if alias:
+            return alias
+        if key_name.lower().startswith("f") and key_name[1:].isdigit():
+            return key_name.upper()
+        if len(key_name) == 1:
+            return key_name.upper()
+        return key_name
+
+    def parse_keybind(keybind):
+        keys = []
+        for raw_key in str(keybind or "").split("+"):
+            key_name = normalize_key_name(raw_key)
+            if key_name and key_name not in ignored_keys and key_name not in keys:
+                keys.append(key_name)
+        return tuple(order_keys(keys))
+
+    def order_keys(keys):
+        ordered = [key for key in modifier_keys if key in keys]
+        ordered.extend(sorted(key for key in keys if key not in modifier_keys))
+        return ordered
+
+    def keys_match_keybind(keybind):
+        expected_keys = parse_keybind(keybind)
+        if not expected_keys:
+            return False
+        active_keys = {key for key in pressed_keys if key not in ignored_keys}
+        return active_keys == set(expected_keys)
+
+    def keybind_is_held(keybind):
+        expected_keys = parse_keybind(keybind)
+        if not expected_keys:
+            return False
+        return all(key in pressed_keys for key in expected_keys)
+
     def convert_key_to_string(key):
-        """Optimized key conversion with minimal string operations and error handling"""
+        """Convert pynput key objects to the same canonical names saved by the UI."""
         try:
-            key_str = str(key)
-            if key_str.startswith("Key."):
-                key_str = key_str[4:]  # Remove "Key." prefix
-            
-            # Use dictionary lookup for better performance
-            key_mapping = {
-                "ctrl_l": "Ctrl", "ctrl_r": "Ctrl",
-                "alt_l": "Alt", "alt_r": "Alt", 
-                "shift_l": "Shift", "shift_r": "Shift",
-                "cmd_l": "Cmd", "cmd_r": "Cmd", "cmd": "Cmd",
-                "space": "Space",
-                "enter": "Enter", "return": "Enter",
-                "tab": "Tab", "backspace": "Backspace",
-                "delete": "Delete", "esc": "Escape"
-            }
-            
-            if key_str in key_mapping:
-                return key_mapping[key_str]
-            elif key_str.startswith("f") and len(key_str) <= 3:
-                return key_str.upper()  # F1, F2, etc.
-            elif key_str.startswith("'") and key_str.endswith("'"):
-                return key_str[1:-1].upper()  # Remove quotes and uppercase
-            elif len(key_str) == 1:
-                return key_str.upper()  # A, B, C, etc.
-            else:
-                return key_str
+            key_char = getattr(key, "char", None)
+            if key_char:
+                return normalize_key_name(key_char)
+            return normalize_key_name(str(key))
         except Exception as e:
             # Log error but don't crash the listener
             print(f"Error converting key {key}: {e}")
-            return str(key)
-    
-    def build_key_combination():
-        """Build current key combination string in consistent order"""
-        modifier_keys = ['Ctrl', 'Alt', 'Shift', 'Cmd']
-        sorted_keys = []
-        
-        # Add modifiers first in consistent order
-        for mod in modifier_keys:
-            if mod in pressed_keys:
-                sorted_keys.append(mod)
-        
-        # Add non-modifier keys (sorted alphabetically)
-        non_modifier_keys = []
-        for key in pressed_keys:
-            if key not in modifier_keys:
-                non_modifier_keys.append(key)
-        non_modifier_keys.sort()
-        sorted_keys.extend(non_modifier_keys)
-        
-        return "+".join(sorted_keys)
+            return normalize_key_name(str(key))
     
     def is_stop_keybind_held():
         """Check if the stop keybind is currently held down"""
@@ -2515,14 +2543,7 @@ def watch_for_hotkeys(run):
             if not stop_keybind:
                 return False
             
-            # Parse the stop keybind to get individual keys
-            stop_keys = stop_keybind.split("+")
-            
-            # Check if all keys in the stop keybind are currently pressed
-            for key in stop_keys:
-                if key not in pressed_keys:
-                    return False
-            return True
+            return keybind_is_held(stop_keybind)
         except Exception as e:
             print(f"Error checking stop keybind: {e}")
             return False
@@ -2549,9 +2570,6 @@ def watch_for_hotkeys(run):
                 # Convert key to string for comparison
                 key_str = convert_key_to_string(key)
                 pressed_keys.add(key_str)
-                
-                # Build current key combination
-                current_combo = build_key_combination()
                 
                 # Don't start/stop macro if we're recording a keybind
                 if is_recording_keybind():
@@ -2582,7 +2600,7 @@ def watch_for_hotkeys(run):
                 # Add debouncing to prevent duplicate triggers
                 current_time = time.time()
                 
-                if current_combo == start_keybind:
+                if keys_match_keybind(start_keybind):
                     if run.value != 3: #only start from fully stopped state
                         return
                     try:
@@ -2608,7 +2626,7 @@ def watch_for_hotkeys(run):
                         gui.toggleStartStop()  # Update UI immediately
                     except:
                         pass  # If gui is not ready, continue
-                elif current_combo == stop_keybind and not stop_key_held:
+                elif keys_match_keybind(stop_keybind) and not stop_key_held:
                     # Check debounce with error handling
                     try:
                         if current_time - last_trigger_time["stop"] < debounce_duration:
@@ -2632,7 +2650,7 @@ def watch_for_hotkeys(run):
                         gui.toggleStartStop()
                     except:
                         pass  # If gui is not ready, continue
-                elif current_combo == pause_keybind:
+                elif keys_match_keybind(pause_keybind):
                     # Check debounce with error handling
                     try:
                         if current_time - last_trigger_time["pause"] < debounce_duration:
