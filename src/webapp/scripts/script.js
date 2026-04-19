@@ -839,7 +839,7 @@ function keybindKeyFromEvent(event) {
   const code = event.code || "";
   if (/^Key[A-Z]$/.test(code)) return code.slice(3);
   if (/^Digit\d$/.test(code)) return code.slice(5);
-  if (/^Numpad\d$/.test(code)) return code.replace("Numpad", "Numpad");
+  if (/^Numpad\d$/.test(code)) return code;
   if (/^F\d{1,2}$/.test(code)) return code;
   return normalizeKeybindKey(event.key);
 }
