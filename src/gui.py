@@ -1023,13 +1023,19 @@ def syncToolSession(session_id):
 
 @eel.expose
 def update():
+    def send_update_progress(percent, message):
+        try:
+            eel.updateProgress(percent, message)()
+        except Exception:
+            pass
+
     try:
         # Get the update channel preference
         generalsettings_path = os.path.join(settingsManager.getProfilePath(), "generalsettings.txt")
         settings = settingsManager.readSettingsFile(generalsettings_path)
         update_channel = settings.get("update_channel", "stable")
         
-        updated = updateModule.update(update_channel=update_channel)
+        updated = updateModule.update(update_channel=update_channel, progress_callback=send_update_progress)
     except Exception:
         updated = False
     if updated:
@@ -1045,8 +1051,14 @@ def update():
 
 @eel.expose
 def updateFromHash(commit_hash):
+    def send_update_progress(percent, message):
+        try:
+            eel.updateProgress(percent, message)()
+        except Exception:
+            pass
+
     try:
-        updated = updateModule.update_from_commit(commit_hash)
+        updated = updateModule.update_from_commit(commit_hash, progress_callback=send_update_progress)
     except Exception:
         updated = False
     if updated:

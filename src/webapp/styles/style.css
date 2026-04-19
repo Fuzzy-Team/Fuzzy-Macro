@@ -592,6 +592,42 @@ select:focus {
   color: white;
 }
 
+.update-progress {
+  width: 100%;
+  margin-top: 0.6rem;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+}
+
+.update-progress-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+}
+
+#update-progress-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.update-progress-track {
+  width: 100%;
+  height: 0.45rem;
+  background-color: var(--surface-hover);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.update-progress-bar {
+  width: 0%;
+  height: 100%;
+  background-color: var(--primary);
+  transition: width 0.2s ease;
+}
+
 .bond-calc-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
