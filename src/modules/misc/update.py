@@ -243,7 +243,7 @@ def _discover_remote_version(remote_version_url, timeout=15):
 
 def update(t="main", update_channel="stable", progress_callback=None):
     _report_update_progress(progress_callback, 0, "Starting update")
-    msgBox("Update in progress", "Updating... Do not close terminal, press \"ok\" to start update.")
+    msgBox("Update in progress", "Updating... Do not close terminal, press ok to start update.")
     # Important: preserve user data and profiles. Protect pattern folder
     # during the generic overwrite so we can merge new/old patterns safely.
     protected_folders = [
