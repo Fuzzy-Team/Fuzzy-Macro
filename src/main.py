@@ -2402,7 +2402,7 @@ def watch_for_hotkeys(run):
     pressed_keys = set()
     
     # Add debouncing to prevent duplicate triggers
-    last_trigger_time = {"start": 0.0, "stop": 0.0, "pause": 0.0}
+    last_trigger_time = {"start": 0.0, "stop": 0.0, "pause": 0.0, "hotbar_buff_start": 0.0}
     debounce_duration = 0.3  # 300ms debounce
     
     # Add threading lock for synchronization
@@ -2424,7 +2424,7 @@ def watch_for_hotkeys(run):
     settings_cache_duration = 1.0  # Reload settings every 1 second max
     
     # Cache Eel recording state to avoid repeated calls
-    recording_cache = {"start": False, "pause": False, "stop": False}
+    recording_cache = {"start": False, "pause": False, "stop": False, "hotbar_buff_start": False}
     last_recording_check = 0
     recording_cache_duration = 0.5  # Check recording state every 0.5 seconds max
 
@@ -2478,10 +2478,11 @@ def watch_for_hotkeys(run):
                 recording_cache["start"] = eel.getElementProperty("start_keybind", "dataset.recording")() == "true"
                 recording_cache["pause"] = eel.getElementProperty("pause_keybind", "dataset.recording")() == "true"
                 recording_cache["stop"] = eel.getElementProperty("stop_keybind", "dataset.recording")() == "true"
+                recording_cache["hotbar_buff_start"] = eel.getElementProperty("hotbar_buff_start_keybind", "dataset.recording")() == "true"
                 last_recording_check = current_time
             except:
-                recording_cache = {"start": False, "pause": False, "stop": False}
-            return recording_cache["start"] or recording_cache["pause"] or recording_cache["stop"]
+                recording_cache = {"start": False, "pause": False, "stop": False, "hotbar_buff_start": False}
+            return recording_cache["start"] or recording_cache["pause"] or recording_cache["stop"] or recording_cache["hotbar_buff_start"]
     
     def normalize_key_name(key_name):
         key_name = str(key_name or "").strip()
@@ -2573,6 +2574,7 @@ def watch_for_hotkeys(run):
                 start_keybind = settings.get("start_keybind", "F1")
                 stop_keybind = settings.get("stop_keybind", "F3")
                 pause_keybind = settings.get("pause_keybind", "F2")
+                hotbar_buff_start_keybind = settings.get("hotbar_buff_start_keybind", "F4")
                 
                 # Convert key to string for comparison
                 key_str = convert_key_to_string(key)
@@ -2657,6 +2659,22 @@ def watch_for_hotkeys(run):
                         gui.toggleStartStop()
                     except:
                         pass  # If gui is not ready, continue
+                elif keys_match_keybind(hotbar_buff_start_keybind):
+                    if run.value != 3:
+                        return
+                    try:
+                        if current_time - last_trigger_time["hotbar_buff_start"] < debounce_duration:
+                            return
+                    except (TypeError, ValueError):
+                        last_trigger_time["hotbar_buff_start"] = 0.0
+                    last_trigger_time["hotbar_buff_start"] = current_time
+                    try:
+                        import gui
+                        result = gui.startHotbarBuffTool()
+                        if not result.get("ok") and not gui.isAnyToolRunning():
+                            messageBox.msgBox(title="Hotbar Buff", text=result.get("message", "Could not start Hotbar Buff."))
+                    except Exception:
+                        pass
                 elif keys_match_keybind(pause_keybind):
                     # Check debounce with error handling
                     try:

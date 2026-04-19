@@ -860,8 +860,11 @@ function isConfiguredKeybind(event) {
   const stopKeybind = normalizeKeybindString(
     document.getElementById("stop_keybind")?.dataset.keybind
   );
+  const hotbarBuffStartKeybind = normalizeKeybindString(
+    document.getElementById("hotbar_buff_start_keybind")?.dataset.keybind
+  );
 
-  if (!startKeybind && !pauseKeybind && !stopKeybind) return false;
+  if (!startKeybind && !pauseKeybind && !stopKeybind && !hotbarBuffStartKeybind) return false;
 
   const currentComboString = keybindFromEvent(event);
 
@@ -869,7 +872,8 @@ function isConfiguredKeybind(event) {
   return (
     currentComboString === startKeybind ||
     currentComboString === pauseKeybind ||
-    currentComboString === stopKeybind
+    currentComboString === stopKeybind ||
+    currentComboString === hotbarBuffStartKeybind
   );
 }
 
@@ -1075,6 +1079,7 @@ async function updateKeybindDisplay() {
     const startKey = settings.start_keybind || "F1";
     const pauseKey = settings.pause_keybind || "F2";
     const stopKey = settings.stop_keybind || "F3";
+    const hotbarBuffStartKey = settings.hotbar_buff_start_keybind || "F4";
 
     const startButton = document.getElementById("start-btn");
     if (startButton) {
@@ -1085,6 +1090,7 @@ async function updateKeybindDisplay() {
     const startKeybindElement = document.getElementById("start_keybind");
     const pauseKeybindElement = document.getElementById("pause_keybind");
     const stopKeybindElement = document.getElementById("stop_keybind");
+    const hotbarBuffStartKeybindElement = document.getElementById("hotbar_buff_start_keybind");
 
     if (
       startKeybindElement &&
@@ -1108,6 +1114,14 @@ async function updateKeybindDisplay() {
     ) {
       stopKeybindElement.querySelector(".keybind-display").textContent =
         keybindDisplayText(stopKey);
+    }
+
+    if (
+      hotbarBuffStartKeybindElement &&
+      hotbarBuffStartKeybindElement.querySelector(".keybind-display")
+    ) {
+      hotbarBuffStartKeybindElement.querySelector(".keybind-display").textContent =
+        keybindDisplayText(hotbarBuffStartKey);
     }
   } catch (error) {
     // Silently handle errors
