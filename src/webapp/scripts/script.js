@@ -3,10 +3,31 @@ window.updateButtonReset = function () {
   const updateBtn = document.getElementById("update-btn");
   if (updateBtn) {
     updateBtn.classList.remove("active");
-    updateBtn.innerText = "Update";
+    updateBtn.disabled = false;
+    updateBtn.innerText = "Check for Updates";
   }
 };
 if (window.eel) eel.expose(window.updateButtonReset, 'updateButtonReset');
+
+window.updateProgress = function (percent, message) {
+  const progress = document.getElementById("update-progress");
+  const bar = document.getElementById("update-progress-bar");
+  const label = document.getElementById("update-progress-label");
+  const percentLabel = document.getElementById("update-progress-percent");
+  const updateBtn = document.getElementById("update-btn");
+
+  const value = Math.max(0, Math.min(100, Number(percent) || 0));
+  if (progress) progress.classList.remove("d-none");
+  if (bar) bar.style.width = `${value}%`;
+  if (label) label.textContent = message || "Updating";
+  if (percentLabel) percentLabel.textContent = `${Math.round(value)}%`;
+  if (updateBtn) {
+    updateBtn.classList.add("active");
+    updateBtn.disabled = true;
+    updateBtn.innerText = "Updating";
+  }
+};
+if (window.eel) eel.expose(window.updateProgress, "updateProgress");
 
 // Auto-update check functionality
 async function checkForUpdatesOnStartup() {
@@ -118,6 +139,8 @@ async function startUpdate() {
   const updateBtn = document.getElementById("update-btn");
   if (updateBtn && !updateBtn.classList.contains("active")) {
     purpleButtonToggle(updateBtn, ["Update", "Updating"]);
+    updateBtn.disabled = true;
+    window.updateProgress(0, "Starting update");
     if (window.eel && typeof eel.update === "function") {
       await eel.update();
     }
@@ -131,6 +154,8 @@ document.addEventListener("DOMContentLoaded", function () {
     updateBtn.addEventListener("click", async function (event) {
       if (!event.currentTarget.classList.contains("active")) {
         purpleButtonToggle(event.currentTarget, ["Update", "Updating"]);
+        event.currentTarget.disabled = true;
+        window.updateProgress(0, "Starting update");
         if (window.eel && typeof eel.update === "function") {
           await eel.update();
         }

@@ -833,6 +833,8 @@ $("#home-placeholder")
     //start button
     if (!event.currentTarget.classList.contains("active")) {
       purpleButtonToggle(event.currentTarget, ["Update", "Updating"]);
+      event.currentTarget.disabled = true;
+      if (window.updateProgress) window.updateProgress(0, "Starting update");
       await eel.update();
     }
   })
