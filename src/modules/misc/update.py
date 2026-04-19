@@ -243,7 +243,7 @@ def _discover_remote_version(remote_version_url, timeout=15):
 
 def update(t="main", update_channel="stable", progress_callback=None):
     _report_update_progress(progress_callback, 0, "Starting update")
-    msgBox("Update in progress", "Updating... Do not close terminal")
+    msgBox("Update in progress", "Updating... Do not close terminal, press \"ok\" to start update.")
     # Important: preserve user data and profiles. Protect pattern folder
     # during the generic overwrite so we can merge new/old patterns safely.
     protected_folders = [
@@ -292,14 +292,6 @@ def update(t="main", update_channel="stable", progress_callback=None):
     # Use GitHub releases API with channel filtering
     github_releases_api = "https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/releases?per_page=100"
     backup_path = os.path.join(destination, "backup_macro.zip")
-
-    # create a silent backup (overwrite previous backup)
-    try:
-        _report_update_progress(progress_callback, 15, "Creating backup")
-        _create_backup(destination, backup_path, [], protected_files)
-        _mark_backup_pending(destination)
-    except Exception:
-        pass
 
     # read local version
     local_version = "0.0.0"
@@ -356,6 +348,15 @@ def update(t="main", update_channel="stable", progress_callback=None):
         _report_update_progress(progress_callback, 100, "No update available")
         msgBox("Up to date", "No update available. Remote version is not newer.")
         return False
+
+    # create a silent backup (overwrite previous backup) only after confirming
+    # that an update will be applied.
+    try:
+        _report_update_progress(progress_callback, 30, "Creating backup")
+        _create_backup(destination, backup_path, [], protected_files)
+        _mark_backup_pending(destination)
+    except Exception:
+        pass
 
     # download zip
     try:
