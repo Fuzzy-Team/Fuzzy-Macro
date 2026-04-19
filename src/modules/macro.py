@@ -3775,11 +3775,22 @@ class macro:
                 self.logger.webhook("", f"Could not find {name}planter in inventory (attempt {attempt+1}) - invalidating cache and retrying", "red")
                 self.planterCoords = None
                 time.sleep(1)
+
+    def getPlanterHotbarSlot(self, planter):
+        settingName = planter.lower().replace(" ", "_")
+        try:
+            slot = int(self.setdat.get(f"planter_hotbar_{settingName}_slot", 0) or 0)
+        except Exception:
+            return 0
+        if slot < 1 or slot > 5:
+            return 0
+        return slot
             
     #place the planter and return true if successfully placed
     def placePlanter(self, planter, field, glitter):
         st = time.time()
         name = planter.lower().replace(" ","").replace("-","")
+        hotbarSlot = self.getPlanterHotbarSlot(planter)
 
         def updateHourlyTime():
             self.hourlyReport.addHourlyStat("misc_time", time.time()-st)
@@ -3796,17 +3807,26 @@ class macro:
         max_attempts = 2
         cooldown_seconds = 3  # Wait 3 seconds before retrying if planter is missing
         for attempt in range(max_attempts):
-            # Invalidate cached planter coordinates before each attempt
-            self.planterCoords = None
-            findPlanterInventoryThread = threading.Thread(target=self.findPlanterInInventory, args=(name,))
-            findPlanterInventoryThread.daemon = True
-            findPlanterInventoryThread.start()
+            findPlanterInventoryThread = None
+            if hotbarSlot:
+                self.planterCoords = None
+            else:
+                # Invalidate cached planter coordinates before each attempt
+                self.planterCoords = None
+                findPlanterInventoryThread = threading.Thread(target=self.findPlanterInInventory, args=(name,))
+                findPlanterInventoryThread.daemon = True
+                findPlanterInventoryThread.start()
 
             self.goToPlanter(planter, field, "place")
-            #wait for thread to finish
-            findPlanterInventoryThread.join()
+            if hotbarSlot:
+                self.logger.webhook("", f"Using hotbar slot {hotbarSlot} for {planter.title()} planter", "dark brown")
+                self.keyboard.press(str(hotbarSlot))
+            else:
+                #wait for thread to finish
+                findPlanterInventoryThread.join()
+
             #Couldn't find planter
-            if self.planterCoords is None:
+            if not hotbarSlot and self.planterCoords is None:
                 # If not found: retry only if we haven't exhausted attempts.
                 if attempt < max_attempts - 1:
                     self.logger.webhook("", f"[Planter Placement] Could not find {planter.title()} in inventory (attempt {attempt+1}/{max_attempts}). Waiting {cooldown_seconds}s before retry.", "red", "screen", ping_category="ping_critical_errors")
@@ -3826,7 +3846,8 @@ class macro:
                     updateHourlyTime()
                     return False
             #place planter
-            self.useItemInInventory(x=self.planterCoords[0], y=self.planterCoords[1])
+            if not hotbarSlot:
+                self.useItemInInventory(x=self.planterCoords[0], y=self.planterCoords[1])
             
             #check if planter is placed
             time.sleep(0.5)
@@ -3842,6 +3863,29 @@ class macro:
                     placedPlanter = False
                     break
                 time.sleep(0.3)
+            if hotbarSlot and placedPlanter and not recoverAlreadyPlacedPlanterState():
+                self.logger.webhook("", f"[Planter Placement] Hotbar slot {hotbarSlot} did not confirm {planter.title()} placement. Trying inventory fallback.", "orange", "screen")
+                self.planterCoords = None
+                self.findPlanterInInventory(name)
+                if self.planterCoords is None:
+                    placedPlanter = False
+                else:
+                    self.goToPlanter(planter, field, "place")
+                    self.useItemInInventory(x=self.planterCoords[0], y=self.planterCoords[1])
+                    time.sleep(0.5)
+                    placementError = None
+                    for _ in range(7):
+                        if self.blueTextImageSearch("notinfield"):
+                            placementError = "notinfield"
+                            placedPlanter = False
+                            break
+                        if self.blueTextImageSearch("maxplanters"):
+                            placementError = "maxplanters"
+                            placedPlanter = False
+                            break
+                        time.sleep(0.3)
+                    if placedPlanter:
+                        placedPlanter = recoverAlreadyPlacedPlanterState()
             if placedPlanter: 
                 self.logger.webhook("",f"Placed Planter: {planter.title()}", "dark brown", "screen")          
                 #use glitter

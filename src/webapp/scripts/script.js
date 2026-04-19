@@ -185,16 +185,10 @@ function purpleButtonToggle(element, labels) {
 }
 
 //get the value of input elements like checkboxes, dropdown and textboxes
-function getInputValue(id) {
-  const ele = document.getElementById(id);
-  if (!ele) {
-    console.error("Element not found:", id);
-    return "";
-  }
-  //checkbox
+function getInputValueFromElement(ele) {
+  if (!ele) return "";
   if (ele.tagName == "INPUT" && ele.type == "checkbox") {
     return ele.checked;
-    //textbox
   } else if (ele.tagName == "INPUT" && ele.type == "text") {
     const value = ele.value;
     if (
@@ -204,16 +198,24 @@ function getInputValue(id) {
       return 0;
     if (!value) return "";
     return value;
-    //custom dropdown
   } else if (ele.tagName == "DIV" && ele.className.includes("custom-select")) {
     return getDropdownValue(ele).toLowerCase();
-    //slider
+  } else if (ele.tagName == "SELECT") {
+    return ele.value;
   } else if (ele.tagName == "INPUT" && ele.type == "range") {
     return ele.value;
-    //keybind
   } else if (ele.tagName == "DIV" && ele.className.includes("keybind-input")) {
     return ele.dataset.keybind || "";
   }
+}
+
+function getInputValue(id) {
+  const ele = document.getElementById(id);
+  if (!ele) {
+    console.error("Element not found:", id);
+    return "";
+  }
+  return getInputValueFromElement(ele);
 }
 
 async function loadSettings() {
@@ -341,8 +343,8 @@ async function saveSetting(ele, type) {
       try { await eel.saveProfileSetting(bindTargetId, false)(); } catch (e) { /* ignore */ }
     }
   }
-  const id = ele.id;
-  const value = getInputValue(id);
+  const id = ele.dataset && ele.dataset.settingId ? ele.dataset.settingId : ele.id;
+  const value = ele.dataset && ele.dataset.settingId ? getInputValueFromElement(ele) : getInputValue(id);
   // Enforce limits for specific settings before saving
   let valueToSave = value;
   if (type == "general" && (id === "max_cannon_attempts" || id === "cannon_hive_resync_attempts")) {
@@ -676,6 +678,8 @@ function loadInputs(obj, save = "") {
     if (!ele) continue;
     if (ele.type == "checkbox") {
       ele.checked = v;
+    } else if (ele.tagName == "SELECT") {
+      ele.value = v;
     } else if (ele.className.includes("custom-select")) {
       setDropdownValue(ele, v);
     } else if (ele.className.includes("keybind-input")) {
