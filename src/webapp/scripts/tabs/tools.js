@@ -12,6 +12,7 @@ const PRIVATE_SERVER_API_ENDPOINT = "https://servers.fuzzymacro.com/api/servers"
 const PRIVATE_SERVER_API_HEADERS = {
   "x-fuzzy-macro-client": "fuzzy-macro",
 };
+const PRIVATE_SERVER_PAGE_SIZE = 8;
 let privateServerEntries = [];
 let privateServerPage = 1;
 
@@ -718,7 +719,6 @@ function getPrivateServerDataset(payload) {
 
 function getPrivateServerFilters() {
   return {
-    search: (document.getElementById("private-server-search")?.value || "").trim().toLowerCase(),
     field: document.getElementById("private-server-field")?.value || "",
     color: document.getElementById("private-server-color")?.value || "",
     region: document.getElementById("private-server-region")?.value || "",
@@ -734,26 +734,8 @@ function getPrivateServerFilters() {
   };
 }
 
-function privateServerSearchText(server) {
-  return [
-    server.author,
-    server.region,
-    server.hiveColor,
-    server.field,
-    server.minimumSprinkler,
-    server.allowedTasks.join(" "),
-    server.neededTasks.join(" "),
-    server.serverHas.join(" "),
-    server.notes,
-    server.messageText,
-  ]
-    .join(" ")
-    .toLowerCase();
-}
-
 function filterPrivateServers(server) {
   const filters = getPrivateServerFilters();
-  if (filters.search && !privateServerSearchText(server).includes(filters.search)) return false;
   if (filters.field && server.field !== filters.field) return false;
   if (filters.color && server.hiveColor !== filters.color) return false;
   if (filters.region && server.region !== filters.region) return false;
@@ -840,7 +822,7 @@ function renderPrivateServerResults() {
   if (!results) return;
 
   const filteredServers = sortPrivateServers(privateServerEntries.filter(filterPrivateServers));
-  const pageSize = privateServerNumber(document.getElementById("private-server-page-size")?.value, 8);
+  const pageSize = PRIVATE_SERVER_PAGE_SIZE;
   const totalPages = Math.max(1, Math.ceil(filteredServers.length / pageSize));
   privateServerPage = Math.min(Math.max(1, privateServerPage), totalPages);
   const pageStart = (privateServerPage - 1) * pageSize;
@@ -980,7 +962,6 @@ async function refreshPrivateServers() {
 
 function initializePrivateServerFinder() {
   [
-    "private-server-search",
     "private-server-field",
     "private-server-color",
     "private-server-region",
@@ -993,7 +974,6 @@ function initializePrivateServerFinder() {
     "private-server-min-tadpoles",
     "private-server-min-buoyants",
     "private-server-sort",
-    "private-server-page-size",
   ].forEach((id) => {
     const input = document.getElementById(id);
     if (!input) return;

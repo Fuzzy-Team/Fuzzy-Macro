@@ -417,8 +417,9 @@
       <div class="private-server-header">
         <div>
           <h2>Private Server Finder</h2>
-          <p>
+          <p >
             Find private servers by field, color, hive requirements, tadpoles, and buoyants.
+            Powered by: <a href="https://servers.fuzzymacro.com" target="_blank">https://servers.fuzzymacro.com</a>
           </p>
         </div>
         <button id="private-server-refresh" class="purple-button" onclick="refreshPrivateServers()">
@@ -426,11 +427,7 @@
         </button>
       </div>
 
-      <div class="private-server-filters">
-        <div class="bond-calc-input-group">
-          <label for="private-server-search">Search</label>
-          <input id="private-server-search" class="textbox" type="text" placeholder="Field, region, tasks..." />
-        </div>
+      <div class="private-server-filters private-server-primary-filters">
         <div class="bond-calc-input-group">
           <label for="private-server-field">Field</label>
           <select id="private-server-field" class="textbox private-server-select">
@@ -450,48 +447,6 @@
           </select>
         </div>
         <div class="bond-calc-input-group">
-          <label for="private-server-min-bees">Max Minimum Bees</label>
-          <input id="private-server-min-bees" class="textbox" type="number" min="0" max="50" step="1" placeholder="50" />
-        </div>
-        <div class="bond-calc-input-group">
-          <label for="private-server-min-level">Max Minimum Level</label>
-          <input id="private-server-min-level" class="textbox" type="number" min="0" max="25" step="1" placeholder="18" />
-        </div>
-        <div class="bond-calc-input-group">
-          <label for="private-server-min-tadpoles">Minimum Tadpoles</label>
-          <input id="private-server-min-tadpoles" class="textbox" type="number" min="0" max="50" step="1" placeholder="0" />
-        </div>
-        <div class="bond-calc-input-group">
-          <label for="private-server-min-buoyants">Minimum Buoyants</label>
-          <input id="private-server-min-buoyants" class="textbox" type="number" min="0" max="50" step="1" placeholder="0" />
-        </div>
-        <div class="bond-calc-input-group">
-          <label for="private-server-pop-star">Pop Star</label>
-          <select id="private-server-pop-star" class="textbox private-server-select">
-            <option value="">Any</option>
-            <option value="yes">Required</option>
-            <option value="no">Not Required</option>
-          </select>
-        </div>
-        <div class="bond-calc-input-group">
-          <label for="private-server-sprinkler">Minimum Sprinkler</label>
-          <select id="private-server-sprinkler" class="textbox private-server-select">
-            <option value="">Any</option>
-          </select>
-        </div>
-        <div class="bond-calc-input-group">
-          <label for="private-server-allowed-task">Allowed Task</label>
-          <select id="private-server-allowed-task" class="textbox private-server-select">
-            <option value="">Any</option>
-          </select>
-        </div>
-        <div class="bond-calc-input-group">
-          <label for="private-server-needed-task">Needed Task</label>
-          <select id="private-server-needed-task" class="textbox private-server-select">
-            <option value="">Any</option>
-          </select>
-        </div>
-        <div class="bond-calc-input-group">
           <label for="private-server-sort">Sort By</label>
           <select id="private-server-sort" class="textbox private-server-select">
             <option value="newest">Newest</option>
@@ -503,16 +458,55 @@
             <option value="buoyants">Buoyants</option>
           </select>
         </div>
-        <div class="bond-calc-input-group">
-          <label for="private-server-page-size">Results Per Page</label>
-          <select id="private-server-page-size" class="textbox private-server-select">
-            <option value="6">6</option>
-            <option value="8" selected>8</option>
-            <option value="12">12</option>
-            <option value="16">16</option>
-          </select>
-        </div>
       </div>
+
+      <details class="private-server-advanced-filters">
+        <summary>More Filters</summary>
+        <div class="private-server-filters private-server-secondary-filters">
+          <div class="bond-calc-input-group">
+            <label for="private-server-min-bees">Max Minimum Bees</label>
+            <input id="private-server-min-bees" class="textbox" type="number" min="0" max="50" step="1" placeholder="50" />
+          </div>
+          <div class="bond-calc-input-group">
+            <label for="private-server-min-level">Max Minimum Level</label>
+            <input id="private-server-min-level" class="textbox" type="number" min="0" max="25" step="1" placeholder="18" />
+          </div>
+          <div class="bond-calc-input-group">
+            <label for="private-server-min-tadpoles">Minimum Tadpoles</label>
+            <input id="private-server-min-tadpoles" class="textbox" type="number" min="0" max="50" step="1" placeholder="0" />
+          </div>
+          <div class="bond-calc-input-group">
+            <label for="private-server-min-buoyants">Minimum Buoyants</label>
+            <input id="private-server-min-buoyants" class="textbox" type="number" min="0" max="50" step="1" placeholder="0" />
+          </div>
+          <div class="bond-calc-input-group">
+            <label for="private-server-pop-star">Pop Star</label>
+            <select id="private-server-pop-star" class="textbox private-server-select">
+              <option value="">Any</option>
+              <option value="yes">Required</option>
+              <option value="no">Not Required</option>
+            </select>
+          </div>
+          <div class="bond-calc-input-group">
+            <label for="private-server-sprinkler">Minimum Sprinkler</label>
+            <select id="private-server-sprinkler" class="textbox private-server-select">
+              <option value="">Any</option>
+            </select>
+          </div>
+          <div class="bond-calc-input-group">
+            <label for="private-server-allowed-task">Allowed Task</label>
+            <select id="private-server-allowed-task" class="textbox private-server-select">
+              <option value="">Any</option>
+            </select>
+          </div>
+          <div class="bond-calc-input-group">
+            <label for="private-server-needed-task">Needed Task</label>
+            <select id="private-server-needed-task" class="textbox private-server-select">
+              <option value="">Any</option>
+            </select>
+          </div>
+        </div>
+      </details>
 
       <div class="private-server-summary">
         <span id="private-server-count">0 servers</span>

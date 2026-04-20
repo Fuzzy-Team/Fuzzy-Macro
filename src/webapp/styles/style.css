@@ -784,8 +784,46 @@ select:focus {
   margin-top: 1.1rem;
 }
 
+.private-server-primary-filters {
+  grid-template-columns: repeat(4, minmax(110px, 1fr));
+  gap: 0.55rem;
+}
+
+.private-server-secondary-filters {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.55rem;
+  margin-top: 0.65rem;
+}
+
+.private-server-filters .bond-calc-input-group {
+  gap: 0.25rem;
+}
+
+.private-server-filters label {
+  font-size: 0.82rem;
+  margin-top: 0;
+}
+
 .private-server-select {
-  height: 2.35rem;
+  height: 2.1rem;
+}
+
+.private-server-finder .textbox {
+  padding: 0.42rem 0.5rem;
+}
+
+.private-server-advanced-filters {
+  border-top: 1px solid #303030;
+  margin-top: 0.75rem;
+  padding-top: 0.65rem;
+}
+
+.private-server-advanced-filters summary {
+  color: #eeeeee;
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 700;
+  user-select: none;
 }
 
 .private-server-summary {
@@ -949,7 +987,8 @@ select:focus {
 }
 
 @media (max-width: 900px) {
-  .private-server-filters {
+  .private-server-primary-filters,
+  .private-server-secondary-filters {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -965,7 +1004,8 @@ select:focus {
     width: 100%;
   }
 
-  .private-server-filters,
+  .private-server-primary-filters,
+  .private-server-secondary-filters,
   .private-server-details {
     grid-template-columns: 1fr;
   }
