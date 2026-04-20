@@ -8,6 +8,40 @@ const AUTOCLICKER_MIN_INTERVAL = 10;
 const AUTOCLICKER_DEFAULT_INTERVAL = 100;
 const AUTOCLICKER_DEFAULT_START_DELAY = 3;
 const AUTO_GIFTED_BASIC_BEE_DEFAULT_DELAY = 3;
+const PRIVATE_SERVER_API_ENDPOINT = "https://servers.fuzzymacro.com/api/servers";
+const PRIVATE_SERVER_API_HEADERS = {
+  "x-fuzzy-macro-client": "fuzzy-macro",
+};
+let privateServerEntries = [];
+let privateServerPage = 1;
+
+const PRIVATE_SERVER_OPTION_DEFAULTS = {
+  field: [
+    "Any Field",
+    "Sunflower",
+    "Dandelion",
+    "Mushroom",
+    "Blue Flower",
+    "Clover",
+    "Spider",
+    "Bamboo",
+    "Strawberry",
+    "Pineapple",
+    "Stump",
+    "Cactus",
+    "Pumpkin",
+    "Pine Tree",
+    "Rose",
+    "Mountain Top",
+    "Coconut",
+    "Pepper",
+  ],
+  hiveColor: ["Any", "Blue", "Red", "White", "Mixed"],
+  region: ["NA", "EU", "OCE", "ASIA", "SA", "AF"],
+  minimumSprinkler: ["N/A", "Basic Sprinkler", "Silver Soakers", "Golden Gushers", "Diamond Drenchers", "The Supreme Saturator", "Supreme Saturator"],
+  allowedTasks: ["Bug Run", "Boosting", "Quests", "Vic Finder/Night Detection", "Mondo", "Honeystorm", "Snowstorm", "Planters", "Memory Match"],
+  neededTasks: ["Mondo", "Honeystorm", "Snowstorm", "Bug Run", "Boosting", "Quests", "Vic Finder/Night Detection", "Puffshrooms"],
+};
 
 const TREAT_COST_HONEY = 10000;
 const BOND_REQUIREMENTS = [
@@ -578,6 +612,402 @@ function initializeHotbarBuffTool() {
   switchHotbarBuffToolSlot(1);
 }
 
+function privateServerNumber(value, fallback = 0) {
+  if (value === null || value === undefined || value === "") return fallback;
+  if (String(value).trim().toLowerCase() === "n/a") return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function privateServerBoolean(value) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value > 0;
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return ["yes", "true", "needed", "required", "1"].includes(normalized);
+}
+
+function privateServerRequiredBeeCount(requiredBees, beeName) {
+  if (!Array.isArray(requiredBees)) return undefined;
+  const target = requiredBees.find((bee) => String(bee?.name || "").toLowerCase() === beeName);
+  return target ? target.count : undefined;
+}
+
+function privateServerArray(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.filter(Boolean).map((item) => String(item).trim()).filter(Boolean);
+  return String(value)
+    .split(/[;,]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function privateServerEscape(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function privateServerFormatList(items, fallback = "None") {
+  const list = privateServerArray(items);
+  if (!list.length) return fallback;
+  return list.map(privateServerEscape).join(", ");
+}
+
+function privateServerFormatDate(value) {
+  if (!value) return "Unknown date";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function privateServerOptionValue(value) {
+  const normalized = String(value || "").trim();
+  return normalized.toLowerCase() === "any field" || normalized.toLowerCase() === "any" ? "" : normalized;
+}
+
+function normalizePrivateServer(raw, index) {
+  const requirements = raw.requirements || {};
+  const giftedBees = requirements.gifted_bees || raw.gifted_bees || {};
+  const tasks = raw.tasks || {};
+  const slots = raw.slots || {};
+  const requiredBees = requirements.required_bees || raw.required_bees || [];
+
+  return {
+    id: String(raw.id || raw.message_id || `server-${index}`),
+    link: raw.link || raw.url || raw.private_server_link || "",
+    author: raw.author || raw.discord?.author || "",
+    messageText: raw.message_text || raw.discord?.message_text || raw.notes || "",
+    createdAt: raw.created_at || raw.timestamp || raw.discord?.created_at || "",
+    updatedAt: raw.updated_at || "",
+    region: raw.region || "",
+    hiveColor: raw.hive_color || raw.color || "",
+    field: raw.field || "",
+    minimumBees: privateServerNumber(requirements.minimum_bees ?? raw.minimum_bees),
+    minimumLevel: privateServerNumber(requirements.minimum_level ?? raw.minimum_level),
+    minimumSprinkler: requirements.minimum_sprinkler || raw.minimum_sprinkler || "",
+    popStarNeeded: privateServerBoolean(requirements.pop_star_needed ?? raw.pop_star_needed ?? raw.pop_star),
+    fuzzyBees: privateServerNumber(giftedBees.fuzzy ?? giftedBees.fuzzy_bees ?? raw.fuzzy_bees ?? privateServerRequiredBeeCount(requiredBees, "fuzzy bee")),
+    tadpoles: privateServerNumber(giftedBees.tadpole ?? giftedBees.tadpoles ?? raw.tadpoles ?? privateServerRequiredBeeCount(requiredBees, "tadpole bee")),
+    buoyants: privateServerNumber(giftedBees.buoyant ?? giftedBees.buoyants ?? raw.buoyants ?? privateServerRequiredBeeCount(requiredBees, "buoyant bee")),
+    giftedOther: privateServerArray(giftedBees.other || raw.gifted_other),
+    ownerTakesSlots: slots.owner_takes || raw.owner_takes_slots || "",
+    availableSlots: privateServerNumber(slots.available ?? raw.available_slots, null),
+    allowedTasks: privateServerArray(tasks.allowed || raw.allowed_tasks),
+    neededTasks: privateServerArray(tasks.needed || tasks.required || raw.needed_tasks || raw.required_tasks),
+    restartsEveryHours: raw.restarts_every_hours ?? raw.restart_hours ?? "",
+    serverHas: privateServerArray(raw.server_has),
+    notes: raw.notes || "",
+  };
+}
+
+function getPrivateServerDataset(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.servers)) return payload.servers;
+  if (Array.isArray(payload?.data)) return payload.data;
+  return [];
+}
+
+function getPrivateServerFilters() {
+  return {
+    search: (document.getElementById("private-server-search")?.value || "").trim().toLowerCase(),
+    field: document.getElementById("private-server-field")?.value || "",
+    color: document.getElementById("private-server-color")?.value || "",
+    region: document.getElementById("private-server-region")?.value || "",
+    sprinkler: document.getElementById("private-server-sprinkler")?.value || "",
+    popStar: document.getElementById("private-server-pop-star")?.value || "",
+    allowedTask: document.getElementById("private-server-allowed-task")?.value || "",
+    neededTask: document.getElementById("private-server-needed-task")?.value || "",
+    maxMinimumBees: privateServerNumber(document.getElementById("private-server-min-bees")?.value, null),
+    maxMinimumLevel: privateServerNumber(document.getElementById("private-server-min-level")?.value, null),
+    minTadpoles: privateServerNumber(document.getElementById("private-server-min-tadpoles")?.value),
+    minBuoyants: privateServerNumber(document.getElementById("private-server-min-buoyants")?.value),
+    sort: document.getElementById("private-server-sort")?.value || "newest",
+  };
+}
+
+function privateServerSearchText(server) {
+  return [
+    server.author,
+    server.region,
+    server.hiveColor,
+    server.field,
+    server.minimumSprinkler,
+    server.allowedTasks.join(" "),
+    server.neededTasks.join(" "),
+    server.serverHas.join(" "),
+    server.notes,
+    server.messageText,
+  ]
+    .join(" ")
+    .toLowerCase();
+}
+
+function filterPrivateServers(server) {
+  const filters = getPrivateServerFilters();
+  if (filters.search && !privateServerSearchText(server).includes(filters.search)) return false;
+  if (filters.field && server.field !== filters.field) return false;
+  if (filters.color && server.hiveColor !== filters.color) return false;
+  if (filters.region && server.region !== filters.region) return false;
+  if (filters.sprinkler && server.minimumSprinkler !== filters.sprinkler) return false;
+  if (filters.popStar === "yes" && !server.popStarNeeded) return false;
+  if (filters.popStar === "no" && server.popStarNeeded) return false;
+  if (filters.allowedTask && !server.allowedTasks.includes(filters.allowedTask)) return false;
+  if (filters.neededTask && !server.neededTasks.includes(filters.neededTask)) return false;
+  if (filters.maxMinimumBees !== null && server.minimumBees > filters.maxMinimumBees) return false;
+  if (filters.maxMinimumLevel !== null && server.minimumLevel > filters.maxMinimumLevel) return false;
+  if (server.tadpoles < filters.minTadpoles) return false;
+  if (server.buoyants < filters.minBuoyants) return false;
+  return true;
+}
+
+function sortPrivateServers(servers) {
+  const sort = getPrivateServerFilters().sort;
+  const byText = (key) => (a, b) => String(a[key]).localeCompare(String(b[key]));
+  const byNumber = (key) => (a, b) => a[key] - b[key];
+  const byNewest = (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+
+  const sorters = {
+    newest: byNewest,
+    field: byText("field"),
+    color: byText("hiveColor"),
+    minimum_bees: byNumber("minimumBees"),
+    minimum_level: byNumber("minimumLevel"),
+    tadpoles: (a, b) => b.tadpoles - a.tadpoles,
+    buoyants: (a, b) => b.buoyants - a.buoyants,
+  };
+
+  return [...servers].sort(sorters[sort] || byNewest);
+}
+
+function renderPrivateServerOptions() {
+  const optionTargets = [
+    ["private-server-field", "field", PRIVATE_SERVER_OPTION_DEFAULTS.field],
+    ["private-server-color", "hiveColor", PRIVATE_SERVER_OPTION_DEFAULTS.hiveColor],
+    ["private-server-region", "region", PRIVATE_SERVER_OPTION_DEFAULTS.region],
+    ["private-server-sprinkler", "minimumSprinkler", PRIVATE_SERVER_OPTION_DEFAULTS.minimumSprinkler],
+  ];
+
+  optionTargets.forEach(([id, key, defaults]) => {
+    const select = document.getElementById(id);
+    if (!select) return;
+    const currentValue = select.value;
+    const values = [
+      ...new Set([
+        ...(defaults || []),
+        ...privateServerEntries.map((server) => server[key]).filter(Boolean),
+      ]),
+    ].sort((a, b) => a.localeCompare(b));
+    select.innerHTML = `<option value="">Any</option>` + values
+      .filter((value) => privateServerOptionValue(value))
+      .map((value) => `<option value="${privateServerEscape(privateServerOptionValue(value))}">${privateServerEscape(value)}</option>`)
+      .join("");
+    if (values.map(privateServerOptionValue).includes(currentValue)) select.value = currentValue;
+  });
+
+  [
+    ["private-server-allowed-task", "allowedTasks", PRIVATE_SERVER_OPTION_DEFAULTS.allowedTasks],
+    ["private-server-needed-task", "neededTasks", PRIVATE_SERVER_OPTION_DEFAULTS.neededTasks],
+  ].forEach(([id, key, defaults]) => {
+    const select = document.getElementById(id);
+    if (!select) return;
+    const currentValue = select.value;
+    const values = [
+      ...new Set([
+        ...(defaults || []),
+        ...privateServerEntries.flatMap((server) => server[key] || []),
+      ]),
+    ].sort((a, b) => a.localeCompare(b));
+    select.innerHTML = `<option value="">Any</option>` + values
+      .map((value) => `<option value="${privateServerEscape(value)}">${privateServerEscape(value)}</option>`)
+      .join("");
+    if (values.includes(currentValue)) select.value = currentValue;
+  });
+}
+
+function renderPrivateServerResults() {
+  const results = document.getElementById("private-server-results");
+  const count = document.getElementById("private-server-count");
+  const pagination = document.getElementById("private-server-pagination");
+  if (!results) return;
+
+  const filteredServers = sortPrivateServers(privateServerEntries.filter(filterPrivateServers));
+  const pageSize = privateServerNumber(document.getElementById("private-server-page-size")?.value, 8);
+  const totalPages = Math.max(1, Math.ceil(filteredServers.length / pageSize));
+  privateServerPage = Math.min(Math.max(1, privateServerPage), totalPages);
+  const pageStart = (privateServerPage - 1) * pageSize;
+  const pageServers = filteredServers.slice(pageStart, pageStart + pageSize);
+
+  if (count) {
+    count.textContent = `${filteredServers.length} server${filteredServers.length === 1 ? "" : "s"} - Page ${privateServerPage} of ${totalPages}`;
+  }
+
+  if (!filteredServers.length) {
+    results.innerHTML = `<div class="private-server-empty">No private servers match these filters.</div>`;
+    if (pagination) pagination.innerHTML = "";
+    return;
+  }
+
+  results.innerHTML = pageServers
+    .map((server) => {
+      const joinButton = server.link
+        ? `<a class="private-server-card-button private-server-join" href="${privateServerEscape(server.link)}" target="_blank" rel="noopener noreferrer">Join</a>`
+        : `<span class="private-server-missing-link">No link</span>`;
+      const setButton = server.link
+        ? `<button class="private-server-card-button private-server-set" onclick="setPrivateServerLink('${encodeURIComponent(server.id)}')">Set as Private Server</button>`
+        : "";
+      return `
+        <article class="private-server-card">
+          <div class="private-server-card-header">
+            <div>
+              <h3>${privateServerEscape(server.field || "Any Field")} ${server.hiveColor ? `- ${privateServerEscape(server.hiveColor)}` : ""}</h3>
+              <p>${server.region ? privateServerEscape(server.region) : "Any Region"}</p>
+            </div>
+            <div class="private-server-card-actions">
+              ${joinButton}
+              ${setButton}
+            </div>
+          </div>
+          <div class="private-server-requirements">
+            <span>Bees: ${server.minimumBees || "N/A"}+</span>
+            <span>Level: ${server.minimumLevel || "N/A"}+</span>
+            <span>Fuzzy: ${server.fuzzyBees}</span>
+            <span>Tadpoles: ${server.tadpoles}</span>
+            <span>Buoyants: ${server.buoyants}</span>
+            <span>Sprinkler: ${privateServerEscape(server.minimumSprinkler || "N/A")}</span>
+            <span>Pop Star: ${server.popStarNeeded ? "Yes" : "No"}</span>
+          </div>
+          <div class="private-server-details">
+            <p><strong>Allowed:</strong> ${privateServerFormatList(server.allowedTasks, "Any")}</p>
+            <p><strong>Needed:</strong> ${privateServerFormatList(server.neededTasks)}</p>
+            <p><strong>Has:</strong> ${privateServerFormatList(server.serverHas)}</p>
+            <p><strong>Owner slots:</strong> ${privateServerEscape(server.ownerTakesSlots || "N/A")}</p>
+            <p><strong>Restarts:</strong> ${privateServerEscape(server.restartsEveryHours || "N/A")}${server.restartsEveryHours && !["never", "n/a"].includes(String(server.restartsEveryHours).toLowerCase()) ? " hours" : ""}</p>
+          </div>
+          ${server.messageText || server.notes ? `<div class="private-server-discord-text">${privateServerEscape(server.messageText || server.notes)}</div>` : ""}
+          <div class="private-server-meta">
+            <span>${privateServerEscape(server.author || "Unknown poster")}</span>
+            <span>${privateServerFormatDate(server.createdAt)}</span>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+
+  if (pagination) {
+    pagination.innerHTML = `
+      <button class="private-server-page-button" onclick="changePrivateServerPage(-1)" ${privateServerPage <= 1 ? "disabled" : ""}>Previous</button>
+      <span>${pageStart + 1}-${Math.min(pageStart + pageSize, filteredServers.length)} of ${filteredServers.length}</span>
+      <button class="private-server-page-button" onclick="changePrivateServerPage(1)" ${privateServerPage >= totalPages ? "disabled" : ""}>Next</button>
+    `;
+  }
+}
+
+function changePrivateServerPage(delta) {
+  privateServerPage += delta;
+  renderPrivateServerResults();
+}
+
+async function setPrivateServerLink(serverId) {
+  const decodedServerId = decodeURIComponent(serverId);
+  const server = privateServerEntries.find((entry) => entry.id === decodedServerId);
+  const status = document.getElementById("private-server-status");
+
+  if (!server?.link) {
+    if (status) status.textContent = "This server does not have a link.";
+    return;
+  }
+
+  if (!window.eel || typeof eel.saveGeneralSetting !== "function") {
+    if (status) status.textContent = "Settings are not available.";
+    return;
+  }
+
+  try {
+    await eel.saveGeneralSetting("private_server_link", server.link)();
+    const input = document.getElementById("private_server_link");
+    if (input) input.value = server.link;
+    if (status) status.textContent = "Private server link updated.";
+  } catch (error) {
+    console.error("Failed to set private server link:", error);
+    if (status) status.textContent = "Failed to update private server link.";
+  }
+}
+
+async function refreshPrivateServers() {
+  const status = document.getElementById("private-server-status");
+  const refreshButton = document.getElementById("private-server-refresh");
+
+  if (status) status.textContent = "Loading...";
+  if (refreshButton) {
+    refreshButton.classList.add("active");
+    refreshButton.textContent = "Loading";
+  }
+
+  try {
+    const response = await fetch(PRIVATE_SERVER_API_ENDPOINT, {
+      cache: "no-store",
+      headers: PRIVATE_SERVER_API_HEADERS,
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json();
+    privateServerEntries = getPrivateServerDataset(payload).map(normalizePrivateServer);
+    privateServerPage = 1;
+    renderPrivateServerOptions();
+    renderPrivateServerResults();
+    if (status) status.textContent = `Loaded ${privateServerEntries.length} server${privateServerEntries.length === 1 ? "" : "s"}`;
+  } catch (error) {
+    privateServerEntries = [];
+    renderPrivateServerOptions();
+    renderPrivateServerResults();
+    if (status) status.textContent = `Failed to load server list: ${error.message}`;
+    console.error("Failed to load private servers:", error);
+  } finally {
+    if (refreshButton) {
+      refreshButton.classList.remove("active");
+      refreshButton.textContent = "Refresh";
+    }
+  }
+}
+
+function initializePrivateServerFinder() {
+  [
+    "private-server-search",
+    "private-server-field",
+    "private-server-color",
+    "private-server-region",
+    "private-server-sprinkler",
+    "private-server-pop-star",
+    "private-server-allowed-task",
+    "private-server-needed-task",
+    "private-server-min-bees",
+    "private-server-min-level",
+    "private-server-min-tadpoles",
+    "private-server-min-buoyants",
+    "private-server-sort",
+    "private-server-page-size",
+  ].forEach((id) => {
+    const input = document.getElementById(id);
+    if (!input) return;
+    const updateResults = () => {
+      privateServerPage = 1;
+      renderPrivateServerResults();
+    };
+    input.addEventListener("input", updateResults);
+    input.addEventListener("change", updateResults);
+  });
+
+  refreshPrivateServers();
+}
+
 function switchHotbarBuffToolSlot(slot) {
   Array.from(document.getElementsByClassName("hotbar-buff-tool-slot")).forEach((button) => {
     button.classList.remove("active");
@@ -619,6 +1049,7 @@ function loadTools() {
   refreshToolStopHotkey();
   initializeAutoClickerTool();
   initializeBondTreatCalculator();
+  initializePrivateServerFinder();
   initializeAutoGiftedBasicBeeTool();
   initializeHotbarBuffTool();
 

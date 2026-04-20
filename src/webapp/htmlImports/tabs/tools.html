@@ -3,6 +3,7 @@
     <div id="tools-autoclicker" class="tools-tab-item">Auto Clicker</div>
     <div id="tools-hotbar-buff" class="tools-tab-item">Hotbar Buff</div>
     <div id="tools-bond-calculator" class="tools-tab-item">Bond/Treat Calculator</div>
+    <div id="tools-private-server-finder" class="tools-tab-item">Private Server Finder</div>
     <div id="tools-auto-gifted-basic-bee" class="tools-tab-item">Auto Gifted Basic Bee</div>
   </div>
 
@@ -408,6 +409,118 @@
       <p style="font-size:0.9rem; opacity:0.75; margin-top:1rem; font-style: bold; color: #ff6f91;">
         Please note: this is beta, it may mess up, it is not garunteed to work, please watch it run and report any issues you see on the discord. The tool relies on OCR to read the result of each roll, so it may misread sometimes, especially if your game resolution is low or if you have a lot of screen clutter. If it misreads a result, it may do extra rolls or stop when it shouldn't, so it's important to keep an eye on it while it's running.
       </p>
+    </div>
+  </div>
+
+  <div id="tools-private-server-finder-tab" class="standard-container sub-tab-panel">
+    <div class="poppins-medium standard-container private-server-finder">
+      <div class="private-server-header">
+        <div>
+          <h2>Private Server Finder</h2>
+          <p>
+            Find private servers by field, color, hive requirements, tadpoles, and buoyants.
+          </p>
+        </div>
+        <button id="private-server-refresh" class="purple-button" onclick="refreshPrivateServers()">
+          Refresh
+        </button>
+      </div>
+
+      <div class="private-server-filters">
+        <div class="bond-calc-input-group">
+          <label for="private-server-search">Search</label>
+          <input id="private-server-search" class="textbox" type="text" placeholder="Field, region, tasks..." />
+        </div>
+        <div class="bond-calc-input-group">
+          <label for="private-server-field">Field</label>
+          <select id="private-server-field" class="textbox private-server-select">
+            <option value="">Any</option>
+          </select>
+        </div>
+        <div class="bond-calc-input-group">
+          <label for="private-server-color">Hive Color</label>
+          <select id="private-server-color" class="textbox private-server-select">
+            <option value="">Any</option>
+          </select>
+        </div>
+        <div class="bond-calc-input-group">
+          <label for="private-server-region">Region</label>
+          <select id="private-server-region" class="textbox private-server-select">
+            <option value="">Any</option>
+          </select>
+        </div>
+        <div class="bond-calc-input-group">
+          <label for="private-server-min-bees">Max Minimum Bees</label>
+          <input id="private-server-min-bees" class="textbox" type="number" min="0" max="50" step="1" placeholder="50" />
+        </div>
+        <div class="bond-calc-input-group">
+          <label for="private-server-min-level">Max Minimum Level</label>
+          <input id="private-server-min-level" class="textbox" type="number" min="0" max="25" step="1" placeholder="18" />
+        </div>
+        <div class="bond-calc-input-group">
+          <label for="private-server-min-tadpoles">Minimum Tadpoles</label>
+          <input id="private-server-min-tadpoles" class="textbox" type="number" min="0" max="50" step="1" placeholder="0" />
+        </div>
+        <div class="bond-calc-input-group">
+          <label for="private-server-min-buoyants">Minimum Buoyants</label>
+          <input id="private-server-min-buoyants" class="textbox" type="number" min="0" max="50" step="1" placeholder="0" />
+        </div>
+        <div class="bond-calc-input-group">
+          <label for="private-server-pop-star">Pop Star</label>
+          <select id="private-server-pop-star" class="textbox private-server-select">
+            <option value="">Any</option>
+            <option value="yes">Required</option>
+            <option value="no">Not Required</option>
+          </select>
+        </div>
+        <div class="bond-calc-input-group">
+          <label for="private-server-sprinkler">Minimum Sprinkler</label>
+          <select id="private-server-sprinkler" class="textbox private-server-select">
+            <option value="">Any</option>
+          </select>
+        </div>
+        <div class="bond-calc-input-group">
+          <label for="private-server-allowed-task">Allowed Task</label>
+          <select id="private-server-allowed-task" class="textbox private-server-select">
+            <option value="">Any</option>
+          </select>
+        </div>
+        <div class="bond-calc-input-group">
+          <label for="private-server-needed-task">Needed Task</label>
+          <select id="private-server-needed-task" class="textbox private-server-select">
+            <option value="">Any</option>
+          </select>
+        </div>
+        <div class="bond-calc-input-group">
+          <label for="private-server-sort">Sort By</label>
+          <select id="private-server-sort" class="textbox private-server-select">
+            <option value="newest">Newest</option>
+            <option value="field">Field</option>
+            <option value="color">Hive Color</option>
+            <option value="minimum_bees">Minimum Bees</option>
+            <option value="minimum_level">Minimum Level</option>
+            <option value="tadpoles">Tadpoles</option>
+            <option value="buoyants">Buoyants</option>
+          </select>
+        </div>
+        <div class="bond-calc-input-group">
+          <label for="private-server-page-size">Results Per Page</label>
+          <select id="private-server-page-size" class="textbox private-server-select">
+            <option value="6">6</option>
+            <option value="8" selected>8</option>
+            <option value="12">12</option>
+            <option value="16">16</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="private-server-summary">
+        <span id="private-server-count">0 servers</span>
+        <span id="private-server-status">Ready</span>
+      </div>
+
+      <div id="private-server-results" class="private-server-results"></div>
+      <div id="private-server-pagination" class="private-server-pagination"></div>
     </div>
   </div>
 </div>
