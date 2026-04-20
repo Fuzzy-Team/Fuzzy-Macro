@@ -716,13 +716,6 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         ("ant_pass_dispenser", "Ant Pass Dispenser"),
         ("treat_dispenser", "Treat Dispenser"),
         ("glue_dispenser", "Glue Dispenser"),
-        ("stockings", "Stockings"),
-        ("wreath", "Wreath"),
-        ("feast", "Feast"),
-        ("samovar", "Samovar"),
-        ("snow_machine", "Snow Machine"),
-        ("lid_art", "Lid Art"),
-        ("candles", "Candles"),
         ("memory_match", "Memory Match"),
         ("mega_memory_match", "Mega Memory Match"),
         ("extreme_memory_match", "Extreme Memory Match"),
@@ -733,6 +726,16 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         ("blue_booster", "Blue Booster"),
         ("red_booster", "Red Booster"),
         ("mountain_booster", "Mountain Booster"),
+    ]
+
+    BEESMAS_SETTINGS = [
+        ("stockings", "Stockings"),
+        ("wreath", "Wreath"),
+        ("feast", "Feast"),
+        ("samovar", "Samovar"),
+        ("snow_machine", "Snow Machine"),
+        ("lid_art", "Lid Art"),
+        ("candles", "Candles"),
     ]
 
     MOB_SETTINGS = [
@@ -760,6 +763,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         "macro_mode": "Macro Mode",
         "quests": "Quests",
         "collectibles": "Collectibles",
+        "beesmas": "Beesmas",
         "mobs": "Mobs",
         "utility": "Utility",
         "hive_slot": "Hive Slot",
@@ -935,6 +939,16 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                     disabled.append(label)
             _add_enabled_disabled(enabled, disabled)
 
+        elif category_key == "beesmas":
+            enabled = []
+            disabled = []
+            for key, label in BEESMAS_SETTINGS:
+                if settings.get(key, False):
+                    enabled.append(label)
+                else:
+                    disabled.append(label)
+            _add_enabled_disabled(enabled, disabled)
+
         elif category_key == "mobs":
             enabled = []
             disabled = []
@@ -996,6 +1010,13 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         embed.add_field(
             name="Collectibles",
             value=f"Enabled: {collectibles_enabled}/{len(COLLECTIBLE_SETTINGS)}",
+            inline=False,
+        )
+
+        beesmas_enabled = sum(1 for key, _ in BEESMAS_SETTINGS if settings.get(key, False))
+        embed.add_field(
+            name="Beesmas",
+            value=f"Enabled: {beesmas_enabled}/{len(BEESMAS_SETTINGS)}",
             inline=False,
         )
 
@@ -2192,6 +2213,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 self.add_item(ToggleSettingsSelect(settings, QUEST_SETTINGS, "Select enabled quests"))
             elif category_key == "collectibles":
                 self.add_item(ToggleSettingsSelect(settings, COLLECTIBLE_SETTINGS, "Select enabled collectibles"))
+            elif category_key == "beesmas":
+                self.add_item(ToggleSettingsSelect(settings, BEESMAS_SETTINGS, "Select enabled Beesmas tasks"))
             elif category_key == "mobs":
                 self.add_item(ToggleSettingsSelect(settings, MOB_SETTINGS, "Select enabled mobs"))
             elif category_key == "utility":
