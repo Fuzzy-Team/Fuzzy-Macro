@@ -53,7 +53,7 @@ function nectarDropDownHTML(id){
 
 function planterHotbarSlotHTML(settingId, domId){
     let options = `<option value="0">0 - Inventory</option>`
-    for (let slot = 1; slot <= 5; slot++){
+    for (let slot = 1; slot <= 7; slot++){
         options += `<option value="${slot}">${slot}</option>`
     }
     return `
