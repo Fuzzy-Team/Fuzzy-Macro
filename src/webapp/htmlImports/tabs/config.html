@@ -460,6 +460,18 @@
         },
       ]);
 
+      buildStandardContainer(parentOther, "Inactive Honey Reset", "", [
+        {
+          id: "inactive_honey_reset",
+          title: "Inactive Honey Reset (Beta)",
+          desc: "Reset and retry when the macro detects no active honey gain for an extended period while gathering or converting.",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+      ]);
+
       buildStandardContainer(parentOther, "Haste Compensation", "", [
         {
           id: "haste_compensation",

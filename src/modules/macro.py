@@ -1048,6 +1048,25 @@ class macro:
 
     def getBackpack(self):
         return bpc(self.robloxWindow.mx+(self.robloxWindow.mw//2+59+3), self.robloxWindow.my+self.robloxWindow.yOffset+6)
+
+    def isActiveHoney(self):
+        try:
+            x = int(self.robloxWindow.mx + self.robloxWindow.mw//2 - 90)
+            y = int(self.robloxWindow.my + self.robloxWindow.yOffset)
+            screen = mssScreenshotNP(x, y, 70, 34)
+            target_bgr = np.array([128, 226, 255], dtype=np.int16)
+            diff = np.abs(screen[:, :, :3].astype(np.int16) - target_bgr)
+            if np.any(np.all(diff <= 20, axis=2)):
+                return True
+
+            if int(self.setdat.get("bees", 50)) < 25:
+                x = int(self.robloxWindow.mx + self.robloxWindow.mw//2 + 210)
+                screen = mssScreenshotNP(x, y, 70, 34)
+                white_diff = np.abs(screen[:, :, :3].astype(np.int16) - 255)
+                return bool(np.any(np.all(white_diff <= 20, axis=2)))
+        except Exception:
+            return False
+        return False
     
     def faceDirection(self, field, dir):
         keys = fieldFaceNorthKeys[field]
@@ -1562,6 +1581,7 @@ class macro:
                 (conv_setting == "every_gather" and forced_convert_balloon is True)
         
         convertedBackpack = False
+        inactiveHoneyChecks = 0
 
         if self.enableNightDetection:
             self.keyboard.press(",")
@@ -1589,6 +1609,17 @@ class macro:
             if "make" in text and not "stop" in text:
                 self.keyboard.press("e")
                 time.sleep(2)
+
+            if self.setdat.get("inactive_honey_reset", False) and time.time() - st > 60:
+                inactiveHoneyChecks = 0 if self.isActiveHoney() else inactiveHoneyChecks + 1
+                if inactiveHoneyChecks > 30:
+                    self.logger.webhook("Converting: interrupted", "Inactive Honey Reset (Beta)", "orange", "screen")
+                    self.clear_task_status()
+                    if self.enableNightDetection:
+                        self.keyboard.press(".")
+                    self.converting = False
+                    self.reset(convert=False)
+                    return False
 
             mouse.click()
 
@@ -2524,12 +2555,14 @@ class macro:
         honeyWreathReturnEnabled = shouldUseHoneyWreathReturn()
         honeyWreathPending = False
         honeyWreathWaitLogged = False
+        inactiveHoneyResetEnabled = bool(self.setdat.get("inactive_honey_reset", False))
+        inactiveHoneyTimerActive = True
+        inactiveHoneyEvent = threading.Event()
 
         # Add goo status to webhook message
         gooStatus = " - Goo Enabled" if fieldSetting.get("goo", False) else ""
         self.logger.webhook(f"Gathering: {field.title()}", f"Limit: {gatherTimeLimit} - {fieldSetting['shape']} - Backpack: {fieldSetting['backpack']}%{gooStatus}", "light green")
 
-        import threading
         # Goo timer thread: always 3s interval if goo quest, else field setting
         def gooTimerThread():
             nonlocal lastGooTime, gooTimerActive
@@ -2557,10 +2590,29 @@ class macro:
                     lastGumdropTime = currentTime
                 time.sleep(0.5)
 
+        def inactiveHoneyTimerThread():
+            nonlocal inactiveHoneyTimerActive
+            inactiveChecks = 0
+            while inactiveHoneyTimerActive:
+                try:
+                    if self.getBackpack() < fieldSetting["backpack"]:
+                        inactiveChecks = 0 if self.isActiveHoney() else inactiveChecks + 1
+                        if inactiveChecks > 30:
+                            inactiveHoneyEvent.set()
+                            return
+                    else:
+                        inactiveChecks = 0
+                except Exception:
+                    inactiveChecks = 0
+                time.sleep(1)
+
         gooThread = threading.Thread(target=gooTimerThread, daemon=True)
         gooThread.start()
         gumdropThread = threading.Thread(target=gumdropTimerThread, daemon=True)
         gumdropThread.start()
+        if inactiveHoneyResetEnabled:
+            inactiveHoneyThread = threading.Thread(target=inactiveHoneyTimerThread, daemon=True)
+            inactiveHoneyThread.start()
         mouse.moveBy(10,5)
         self.keyboard.releaseMovement()
 
@@ -2568,9 +2620,10 @@ class macro:
             return time.time() - st
         
         def stopGather():
-            nonlocal gooTimerActive, gumdropTimerActive
+            nonlocal gooTimerActive, gumdropTimerActive, inactiveHoneyTimerActive
             gooTimerActive = False  # Stop the goo timer thread
             gumdropTimerActive = False  # Stop the gumdrop timer thread
+            inactiveHoneyTimerActive = False
             if fieldSetting["shift_lock"]: 
                 self.keyboard.press('shift')
             self.moveMouseToDefault()
@@ -2620,7 +2673,12 @@ class macro:
             gatherTime = self.convertSecsToMinsAndSecs(getGatherTime())
 
             #check for AFB
-            if self.setdat["Auto_Field_Boost"] and not self.AFBLIMIT and self.AFB(gatherInterrupt=True, turnOffShiftLock = fieldSetting["shift_lock"]):
+            if inactiveHoneyEvent.is_set():
+                stopGather()
+                self.logger.webhook("Gathering: interrupted", "Inactive Honey Reset (Beta)", "orange", "screen")
+                self.reset()
+                return
+            elif self.setdat["Auto_Field_Boost"] and not self.AFBLIMIT and self.AFB(gatherInterrupt=True, turnOffShiftLock = fieldSetting["shift_lock"]):
                 return
             #check for gather interrupts
             elif self.night and self.setdat["stinger_hunt"]:
