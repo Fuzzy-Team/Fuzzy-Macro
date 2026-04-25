@@ -215,6 +215,8 @@ function getTicketCalcElements() {
     nextPrice: document.getElementById("ticket-calc-next-price"),
     nextPriceUnit: document.getElementById("ticket-calc-next-price-unit"),
     customAmount: document.getElementById("ticket-calc-custom-amount"),
+    budget: document.getElementById("ticket-calc-budget"),
+    budgetUnit: document.getElementById("ticket-calc-budget-unit"),
     warning: document.getElementById("ticket-calc-warning"),
     presetBreakdown: document.getElementById("ticket-calc-presets-breakdown"),
   };
@@ -266,12 +268,29 @@ function calculateTicketPurchase(nextPrice, ticketCount) {
   };
 }
 
+function calculateTicketsForBudget(nextPrice, budget) {
+  const ticketsAlreadyBought = getTicketsBoughtFromNextPrice(nextPrice);
+  const honeyBudget = Math.max(0, Number(budget) || 0);
+  let totalCost = 0;
+  let tickets = 0;
+
+  while (tickets < TICKET_CALC_MAX_TICKETS) {
+    const ticketPrice = tickets === 0 ? nextPrice : getTicketPriceAfterBought(ticketsAlreadyBought + tickets);
+    if (totalCost + ticketPrice > honeyBudget) break;
+    totalCost += ticketPrice;
+    tickets += 1;
+  }
+
+  return { tickets, totalCost };
+}
+
 function updateTicketPriceCalculator() {
   const el = getTicketCalcElements();
-  if (!el.nextPrice || !el.nextPriceUnit || !el.customAmount || !el.presetBreakdown) return;
+  if (!el.nextPrice || !el.nextPriceUnit || !el.customAmount || !el.budget || !el.budgetUnit || !el.presetBreakdown) return;
 
   const rawNextPrice = Number(el.nextPrice.value);
   const nextPrice = normalizeTicketPrice(el.nextPrice.value, el.nextPriceUnit.value);
+  const budget = Math.max(0, (Number(el.budget.value) || 0) * (Number(el.budgetUnit.value) || 1));
   let customAmount = Math.floor(Number(el.customAmount.value) || 1);
 
   if (customAmount < 1) customAmount = 1;
@@ -285,11 +304,13 @@ function updateTicketPriceCalculator() {
     el.warning.textContent = "Ticket prices below 100K are raised to 100K, and prices are rounded to the nearest 1,000 honey.";
   }
 
+  const budgetPurchase = calculateTicketsForBudget(nextPrice, budget);
+
   const rows = [...TICKET_CALC_PRESETS, customAmount].filter(
     (amount, index, amounts) => amounts.indexOf(amount) === index
   );
 
-  el.presetBreakdown.innerHTML = rows.map((amount) => {
+  const presetRows = rows.map((amount) => {
     const preset = calculateTicketPurchase(nextPrice, amount);
     const label = amount === customAmount && !TICKET_CALC_PRESETS.includes(amount) ? `${formatWholeNumber(amount)} Tickets (Custom)` : `${formatWholeNumber(amount)} Tickets`;
     return `
@@ -298,18 +319,29 @@ function updateTicketPriceCalculator() {
         <td>${formatCompactHoney(preset.totalCost)}</td>
       </tr>
     `;
-  }).join("");
+  });
+
+  presetRows.push(`
+    <tr>
+      <td>Max (${formatWholeNumber(budgetPurchase.tickets)} Tickets)</td>
+      <td>${formatCompactHoney(budgetPurchase.totalCost)}</td>
+    </tr>
+  `);
+
+  el.presetBreakdown.innerHTML = presetRows.join("");
 }
 
 function initializeTicketPriceCalculator() {
   const el = getTicketCalcElements();
-  if (!el.nextPrice || !el.nextPriceUnit || !el.customAmount) return;
+  if (!el.nextPrice || !el.nextPriceUnit || !el.customAmount || !el.budget || !el.budgetUnit) return;
 
   if (!el.nextPrice.value) el.nextPrice.value = "100";
   if (!el.nextPriceUnit.value) el.nextPriceUnit.value = "1000000";
   if (!el.customAmount.value) el.customAmount.value = "1";
+  if (!el.budget.value) el.budget.value = "0";
+  if (!el.budgetUnit.value) el.budgetUnit.value = "1000000";
 
-  [el.nextPrice, el.nextPriceUnit, el.customAmount].forEach((input) => {
+  [el.nextPrice, el.nextPriceUnit, el.customAmount, el.budget, el.budgetUnit].forEach((input) => {
     input.addEventListener("change", updateTicketPriceCalculator);
     input.addEventListener("input", updateTicketPriceCalculator);
   });
