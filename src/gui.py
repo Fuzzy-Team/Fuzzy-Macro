@@ -506,15 +506,36 @@ def resume():
 
 @eel.expose
 def getPatterns():
+    pattern_metadata = {
+        "fuzzy_ai_gather": {
+            "ai_backed": True,
+            "requires_models": True,
+            "label": "AI Gathering",
+            "description": "",
+        }
+    }
     patterns = []
     try:
         for x in os.listdir("../settings/patterns"):
-            if x.endswith('.py') or x.endswith('.ahk'):
-                patterns.append(os.path.splitext(x)[0])
+            root, ext = os.path.splitext(x)
+            if ext.lower() not in (".py", ".ahk"):
+                continue
+            metadata = pattern_metadata.get(root, {})
+            patterns.append(
+                {
+                    "name": root,
+                    "label": metadata.get("label", root),
+                    "value": root,
+                    "type": ext.lstrip(".").lower(),
+                    "ai_backed": metadata.get("ai_backed", False),
+                    "requires_models": metadata.get("requires_models", False),
+                    "description": metadata.get("description", ""),
+                }
+            )
     except Exception:
         # folder may not exist yet
         pass
-    return patterns
+    return sorted(patterns, key=lambda pattern: pattern["name"].lower())
 
 
 @eel.expose
@@ -780,13 +801,11 @@ def clearAFB():
 def resetFieldToDefault(field_name):
     """Reset a field's settings to the default values"""
     try:
-        # Load default field settings
-        with open("data/default_settings/fields.txt", "r") as f:
-            default_fields = ast.literal_eval(f.read())
+        default_fields = settingsManager.loadDefaultFields()
 
         # Get the default settings for the specified field
         if field_name in default_fields:
-            default_settings = default_fields[field_name]
+            default_settings = settingsManager.normalizeFieldSettings(field_name, default_fields[field_name], default_fields)
             # Save the default settings for this field
             settingsManager.saveField(field_name, default_settings)
             return True
@@ -905,6 +924,13 @@ def importFieldSettings(field_name, json_settings):
         return False
 
 @eel.expose
+def loadFuzzyAITokenRanking(field_name):
+    return settingsManager.loadFuzzyAITokenRanking(field_name)
+
+@eel.expose
+def saveFuzzyAITokenRanking(field_name, ranking):
+    return settingsManager.saveFuzzyAITokenRanking(field_name, ranking)
+  
 def exportPlanterSettings():
     """Export planter settings as JSON string"""
     try:
