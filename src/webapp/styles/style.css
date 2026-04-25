@@ -810,7 +810,18 @@ select:focus {
   transition: background-color 0.1s;
 }
 
-.custom-select .option:hover {
+.custom-select .option.selected {
+  background-color: var(--primary);
+  color: #121212;
+  font-weight: 600;
+}
+
+.custom-select .option.hovered {
+  background-color: var(--surface-hover);
+  color: var(--text-main);
+}
+
+.custom-select .option.selected.hovered {
   background-color: var(--primary);
   color: #121212;
 }

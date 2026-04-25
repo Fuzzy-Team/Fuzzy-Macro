@@ -17,7 +17,8 @@ const slotArray = [1, 2, 3, 4, 5, 6, 7];
         name: "dropdown",
         data: ["a","b","c"],
         triggerFunction: "saveData()",
-        length: 13 //in rem units, defaults to 10 if not included
+        length: 13, //in rem units, defaults to 10 if not included
+        multiple: true // optional multi-select behavior
     }
     textbox:
     type: {
@@ -76,12 +77,14 @@ function buildInput(id, type) {
                     <span class="checkmark"></span>
                 </label>`;
   } else if (type.name == "dropdown") {
+    const defaultValue = type.multiple ? "None" : "None";
+    const defaultDataValue = type.multiple ? "[]" : "none";
     let html = `
         <div data-onchange="${type.triggerFunction
-      }" id = ${id} class="custom-select poppins-regular" style="width: ${type.length ? type.length : 10
+      }" id = ${id} class="custom-select poppins-regular" data-multiple="${type.multiple ? "true" : "false"}" style="width: ${type.length ? type.length : 10
       }rem; margin-top: 0.6rem;">
             <div class="select-area">
-                <div class = "value" data-value="none">None</div>
+                <div class = "value" data-value='${defaultDataValue}'>${defaultValue}</div>
                 <div class = "chevron">></div>
             </div>
             <div class="select-menu-relative">

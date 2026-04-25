@@ -2242,9 +2242,17 @@ class macro:
             # self.keyboard.walk("d",5,0)
             # self.keyboard.walk("s",0.3,0)
             hiveNumber = self.setdat["hive_number"]
-            excludedHiveSlot = int(self.setdat.get("hive_exclude_slot", 0) or 0)
-            if excludedHiveSlot < 0 or excludedHiveSlot > 6:
-                excludedHiveSlot = 0
+            excludedHiveSlotsRaw = self.setdat.get("hive_exclude_slot", [])
+            if not isinstance(excludedHiveSlotsRaw, (list, tuple, set)):
+                excludedHiveSlotsRaw = [] if excludedHiveSlotsRaw in (None, "", 0, "0") else [excludedHiveSlotsRaw]
+            excludedHiveSlots = set()
+            for slot in excludedHiveSlotsRaw:
+                try:
+                    slotNumber = int(slot)
+                except (TypeError, ValueError):
+                    continue
+                if 1 <= slotNumber <= 6:
+                    excludedHiveSlots.add(slotNumber)
             rejoinSuccess = False
             availableSlots = [] #store hive slots that are claimable
             newHiveNumber = 0
@@ -2276,7 +2284,7 @@ class macro:
                 return self.isBesideE(["send", "trad", "trade"], ["claim"], log=True)
 
             def isExcludedSlot(slot):
-                return excludedHiveSlot != 0 and slot == excludedHiveSlot
+                return slot in excludedHiveSlots
 
             # Go directly to the selected hive first. If that fails, scan all hives as a fallback.
             self.logger.webhook("", f'Claiming hive {hiveNumber}', "dark brown")

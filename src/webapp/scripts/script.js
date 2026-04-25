@@ -199,7 +199,9 @@ function getInputValueFromElement(ele) {
     if (!value) return "";
     return value;
   } else if (ele.tagName == "DIV" && ele.className.includes("custom-select")) {
-    return getDropdownValue(ele).toLowerCase();
+    const value = getDropdownValue(ele);
+    if (Array.isArray(value)) return value;
+    return String(value).toLowerCase();
   } else if (ele.tagName == "SELECT") {
     return ele.value;
   } else if (ele.tagName == "INPUT" && ele.type == "range") {
@@ -941,9 +943,75 @@ Custom Select
 =============================================
 */
 dropdownOpen = false;
+function isMultiSelectDropdown(ele) {
+  return ele?.dataset?.multiple === "true";
+}
+
+function normalizeDropdownOptionValue(value) {
+  if (typeof value === "number") return value;
+  const text = String(value ?? "").trim();
+  if (text === "") return "";
+  const numeric = Number(text);
+  return Number.isNaN(numeric) ? text.toLowerCase() : numeric;
+}
+
+function normalizeDropdownMultiValue(value) {
+  if (Array.isArray(value)) {
+    return value.map(normalizeDropdownOptionValue).filter((item) => item !== "");
+  }
+  if (value === null || value === undefined || value === "" || value === "none") {
+    return [];
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed === "0") return [];
+    if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed.map(normalizeDropdownOptionValue).filter((item) => item !== "");
+        }
+      } catch (e) {
+        // fall through and treat as scalar
+      }
+    }
+  }
+  const normalized = normalizeDropdownOptionValue(value);
+  return normalized === 0 || normalized === "0" || normalized === "" ? [] : [normalized];
+}
+
+function updateMultiDropdownDisplay(parentEle, values) {
+  const normalizedValues = normalizeDropdownMultiValue(values);
+  const selectEle = parentEle.children[0].children[0];
+  const optionsEle = parentEle.children[1].children[0];
+  const selectedLabels = [];
+
+  Array.from(optionsEle.children).forEach((option) => {
+    const optionValue = normalizeDropdownOptionValue(option.dataset.value);
+    const isSelected = normalizedValues.some((value) => value == optionValue);
+    option.classList.toggle("selected", isSelected);
+    if (isSelected) {
+      selectedLabels.push(option.textContent.trim());
+    }
+  });
+
+  selectEle.dataset.value = JSON.stringify(normalizedValues);
+  selectEle.innerHTML = selectedLabels.length ? selectedLabels.join(", ") : "None";
+  try { updateDependentFields(); } catch (e) { /* ignore */ }
+}
+
 //pass an optionEle to set the select-area
 function updateDropDownDisplay(optionEle) {
   const parentEle = optionEle.parentElement.parentElement.parentElement;
+  if (isMultiSelectDropdown(parentEle)) {
+    const currentValues = normalizeDropdownMultiValue(getDropdownValue(parentEle));
+    const optionValue = normalizeDropdownOptionValue(optionEle.dataset.value);
+    const nextValues = currentValues.some((value) => value == optionValue)
+      ? currentValues.filter((value) => value != optionValue)
+      : [...currentValues, optionValue];
+    updateMultiDropdownDisplay(parentEle, nextValues);
+    return;
+  }
   //set the data-value attribute of the select
   const selectEle = parentEle.children[0].children[0];
   selectEle.dataset.value = optionEle.dataset.value;
@@ -954,75 +1022,86 @@ function updateDropDownDisplay(optionEle) {
 }
 //document click event
 function dropdownClicked(event) {
-  //get the element that was clicked
-  const ele = event.target;
-  if (!ele) {
+  const target = event.target;
+  if (!target) {
     dropdownOpen = false;
     return;
   }
-  //toggle dropdown
-  if (ele.className.includes("select-area")) {
-    //get the associated custom-select parent element
-    const parent = ele.parentElement;
+
+  const selectArea = target.closest?.(".select-area");
+  if (selectArea) {
+    const parent = selectArea.parentElement;
     const optionsEle = parent.children[1].children[0];
     closeAllDropdowns(optionsEle); //close all other dropdowns
-    //toggle the dropdown menu
     if (dropdownOpen !== optionsEle) {
-      //open it
       dropdownOpen = optionsEle;
       optionsEle.style.display = "block";
       const currValue = parent.children[0].children[0].dataset.value;
-      //highlight the corresponding value option
-      //ie if the value of the dropdown is "none", highlight the "none option"
-      Array.from(optionsEle.children).forEach((x) => {
-        x.dataset.value == currValue
-          ? x.classList.add("selected")
-          : x.classList.remove("selected");
-      });
+      if (isMultiSelectDropdown(parent)) {
+        const selectedValues = normalizeDropdownMultiValue(currValue);
+        Array.from(optionsEle.children).forEach((x) => {
+          const optionValue = normalizeDropdownOptionValue(x.dataset.value);
+          x.classList.toggle(
+            "selected",
+            selectedValues.some((value) => value == optionValue)
+          );
+        });
+      } else {
+        Array.from(optionsEle.children).forEach((x) => {
+          x.dataset.value == currValue
+            ? x.classList.add("selected")
+            : x.classList.remove("selected");
+        });
+      }
       //check if its going below the screen and render the menu above
       parent.style.transform = "none";
       optionsEle.style.transform = "none";
-      ele.style.transform = "none";
+      selectArea.style.transform = "none";
       const height = optionsEle.getBoundingClientRect().height;
       const y = optionsEle.getBoundingClientRect().top;
-      //check if it goes below the screen
-      //if it is flipped and goes above the screen, prioritise rendering the dropdown down
       if (height + y > window.innerHeight && y > height) {
         parent.style.transform = "rotate(180deg)"; //render the dropdown menu above
-        //flip everything to face the correct direction
         optionsEle.style.transform = "rotate(180deg)";
-        ele.style.transform = "rotate(180deg)";
+        selectArea.style.transform = "rotate(180deg)";
       }
     } else {
-      //close it
       optionsEle.style.display = "none";
       dropdownOpen = false;
     }
-  } else {
-    //close all dropdowns, because an option was selected or the user clicked elsewhere
-    closeAllDropdowns();
-    if (ele.className.includes("option")) {
-      updateDropDownDisplay(ele);
-      const parentEle = ele.parentElement.parentElement.parentElement;
-      if (parentEle.id === "gui_theme") {
-        applyTheme(getDropdownValue(parentEle));
-      }
-      let funcParams = parentEle.dataset.onchange.replace("this", "parentEle");
-      eval(funcParams);
-      dropdownOpen = false;
-    } else {
-      //try again, but with the parent element
-      //this creates a recursive loop to account for children elements (could be expensive)
-      dropdownClicked({ target: ele.parentElement });
-    }
+    return;
   }
+
+  const option = target.closest?.(".option");
+  if (option) {
+    closeAllDropdowns();
+    const parentEle = option.parentElement.parentElement.parentElement;
+    updateDropDownDisplay(option);
+    if (parentEle.id === "gui_theme") {
+      applyTheme(getDropdownValue(parentEle));
+    }
+    let funcParams = parentEle.dataset.onchange.replace("this", "parentEle");
+    eval(funcParams);
+    dropdownOpen = false;
+    return;
+  }
+
+  closeAllDropdowns();
+  dropdownOpen = false;
 }
 
 function getDropdownValue(ele) {
-  return ele.children[0].children[0].dataset.value;
+  const value = ele.children[0].children[0].dataset.value;
+  if (isMultiSelectDropdown(ele)) {
+    return normalizeDropdownMultiValue(value);
+  }
+  return value;
 }
 
 function setDropdownValue(ele, value) {
+  if (isMultiSelectDropdown(ele)) {
+    updateMultiDropdownDisplay(ele, value);
+    return;
+  }
   const optionsEle = ele.children[1].children[0];
   for (let i = 0; i < optionsEle.children.length; i++) {
     const x = optionsEle.children[i];
@@ -1040,16 +1119,25 @@ function closeAllDropdowns(ele) {
   });
 }
 function dropdownHover(event) {
-  const ele = event.target;
-  if (ele.className.includes("option")) {
-    Array.from(document.getElementsByClassName("option")).forEach((x) => {
-      x.classList.remove("selected");
+  const option = event.target.closest?.(".option");
+  if (option) {
+    const optionsEle = option.parentElement;
+    Array.from(optionsEle.children).forEach((x) => {
+      x.classList.remove("hovered");
     });
-    ele.classList.add("selected");
+    option.classList.add("hovered");
+  }
+}
+
+function dropdownHoverLeave(event) {
+  const option = event.target.closest?.(".option");
+  if (option) {
+    option.classList.remove("hovered");
   }
 }
 document.addEventListener("click", dropdownClicked);
 document.addEventListener("mouseover", dropdownHover);
+document.addEventListener("mouseout", dropdownHoverLeave);
 
 // Keybind recording functionality
 let keybindRecording = false;
