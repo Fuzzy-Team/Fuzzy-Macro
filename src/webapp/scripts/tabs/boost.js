@@ -1,5 +1,6 @@
 
 function switchBoostTab(target){
+    setActiveSubtab("activeBoostSubtab", target.id)
     //hide all tabs
 
     //remove the arrow indicator
@@ -37,7 +38,7 @@ function switchBoostHotbarSlot(slot) {
 }
 
 function loadBoost(){
-    switchBoostTab(document.getElementById("boost-hotbar"))
+    switchBoostTab(document.getElementById(getActiveSubtab("activeBoostSubtab", "boost-hotbar")))
     switchBoostHotbarSlot(1)
 }
 

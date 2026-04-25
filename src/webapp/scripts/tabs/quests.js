@@ -1,6 +1,7 @@
 
 
 function switchQuestsTab(target){
+    setActiveSubtab("activeQuestsSubtab", target.id)
     //hide all tabs
 
     //remove the arrow indicator
@@ -22,7 +23,7 @@ function switchQuestsTab(target){
 }
 
 function loadQuests(){
-    switchQuestsTab(document.getElementById("quests-quests"))
+    switchQuestsTab(document.getElementById(getActiveSubtab("activeQuestsSubtab", "quests-quests")))
 }
 
 $("#quests-placeholder")
