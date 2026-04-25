@@ -1,6 +1,7 @@
 
 
 function switchKillTab(target){
+    setActiveSubtab("activeKillSubtab", target.id)
     //hide all tabs
 
     //remove the arrow indicator
@@ -22,7 +23,7 @@ function switchKillTab(target){
 }
 
 function loadKill(){
-    switchKillTab(document.getElementById("kill-settings"))
+    switchKillTab(document.getElementById(getActiveSubtab("activeKillSubtab", "kill-settings")))
 }
 
 $("#kill-placeholder")

@@ -705,6 +705,7 @@ function switchHotbarBuffToolSlot(slot) {
 }
 
 function switchToolsTab(target) {
+  setActiveSubtab("activeToolsSubtab", target.id);
   const selector = document.getElementById("tools-select");
   if (selector) selector.remove();
 
@@ -733,7 +734,9 @@ function loadTools() {
   initializeAutoGiftedBasicBeeTool();
   initializeHotbarBuffTool();
 
-  switchToolsTab(document.getElementById("tools-autoclicker"));
+  switchToolsTab(
+    document.getElementById(getActiveSubtab("activeToolsSubtab", "tools-autoclicker"))
+  );
 }
 
 $("#tools-placeholder")

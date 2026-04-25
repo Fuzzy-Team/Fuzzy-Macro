@@ -15,6 +15,7 @@ function clearBlenderData(ele){
 }
 
 function switchCollectTab(target){
+    setActiveSubtab("activeCollectSubtab", target.id)
     Array.from(document.getElementsByClassName("collect-tab-item")).forEach(x => {
         x.classList.remove("active")
         document.getElementById(`${x.id}-tab`).style.display = "none"
@@ -29,7 +30,7 @@ function switchCollectTab(target){
 async function loadCollect(){
     const settings = await loadAllSettings()
     loadInputs(settings)
-    switchCollectTab(document.getElementById("collect-dispensers"))
+    switchCollectTab(document.getElementById(getActiveSubtab("activeCollectSubtab", "collect-dispensers")))
 }
 
 $("#collect-placeholder")

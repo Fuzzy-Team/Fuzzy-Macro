@@ -269,6 +269,7 @@ async function loadAndSaveField(ele) {
 }
 
 async function switchGatherTab(target) {
+  setActiveSubtab("activeGatherSubtab", target.id);
   fieldNo = target.id.split("-")[1];
   //remove the arrow indicator
   const selector = document.getElementById("gather-select");
@@ -303,8 +304,10 @@ async function switchGatherTab(target) {
 
 $("#gather-placeholder")
   .load("../htmlImports/tabs/gather.html", () =>
-    switchGatherTab(document.getElementById("field-1"))
-  ) //load home tab, switch to field 1 once its done loading
+    switchGatherTab(
+      document.getElementById(getActiveSubtab("activeGatherSubtab", "field-1"))
+    )
+  ) //load home tab, restore active field once its done loading
   .on("click", ".gather-tab-item", (event) =>
     switchGatherTab(event.currentTarget)
   ) //navigate between fields
