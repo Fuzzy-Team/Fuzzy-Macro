@@ -485,6 +485,126 @@ def importFieldSettings(field_name, json_settings):
     except json.JSONDecodeError as e:
         raise ValueError(f"Invalid JSON format: {str(e)}")
 
+def _isPlanterSettingKey(key):
+    """Return True when a profile setting belongs to the planters tab."""
+    if key in {
+        "planters_mode",
+        "manual_planters_collect_every",
+        "manual_planters_collect_full",
+        "manual_planters_check",
+        "auto_planters_collect_every",
+        "auto_planters_collect_full",
+        "auto_planters_collect_auto",
+        "auto_planters_check",
+        "auto_max_planters",
+        "auto_preset",
+    }:
+        return True
+
+    if re.match(r"^cycle\d+_\d+_(planter|field|gather|glitter)$", key):
+        return True
+
+    if re.match(r"^auto_priority_\d+_(nectar|min)$", key):
+        return True
+
+    return (
+        key.startswith("auto_field_")
+        or key.startswith("auto_planter_")
+        or key.startswith("planter_hotbar_")
+    )
+
+def _getAutoPlanterUserPath():
+    return os.path.join(getProjectRoot(), "src", "data", "user", "auto_planters.json")
+
+def _readAutoPlanterGatherFlag():
+    try:
+        with open(_getAutoPlanterUserPath(), "r") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            return bool(data.get("gather", False))
+    except Exception:
+        pass
+    return False
+
+def _writeAutoPlanterGatherFlag(value):
+    path = _getAutoPlanterUserPath()
+    try:
+        with open(path, "r") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            data = {}
+    except Exception:
+        data = {}
+
+    data["gather"] = bool(value)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(data, f, indent=3)
+
+def exportPlanterSettings():
+    """Export planter profile settings as JSON string with metadata."""
+    settings = loadSettings()
+    planter_settings = {
+        key: value
+        for key, value in settings.items()
+        if _isPlanterSettingKey(key)
+    }
+
+    export_data = {
+        "metadata": {
+            "settings_type": "planters",
+            "macro_version": getMacroVersion(),
+            "export_date": datetime.now().isoformat()
+        },
+        "settings": planter_settings,
+        "user_settings": {
+            "auto_planters_gather": _readAutoPlanterGatherFlag()
+        }
+    }
+    return json.dumps(export_data, indent=2)
+
+def importPlanterSettings(json_settings):
+    """Import planter settings from JSON string with backward compatibility."""
+    try:
+        data = json.loads(json_settings)
+
+        if isinstance(data, dict) and "metadata" in data and "settings" in data:
+            settings = data["settings"]
+            user_settings = data.get("user_settings", {})
+            metadata = data.get("metadata", {})
+            macro_version = metadata.get("macro_version", "unknown")
+        else:
+            settings = data
+            user_settings = data if isinstance(data, dict) else {}
+            macro_version = "unknown"
+
+        if not isinstance(settings, dict):
+            raise ValueError("Invalid JSON format: expected object")
+
+        planter_settings = {
+            key: _coerceNestedValues(value)
+            for key, value in settings.items()
+            if _isPlanterSettingKey(key)
+        }
+
+        if not planter_settings and "auto_planters_gather" not in user_settings:
+            raise ValueError("No planter settings found in JSON")
+
+        if planter_settings:
+            saveDictProfileSettings(planter_settings)
+
+        if isinstance(user_settings, dict) and "auto_planters_gather" in user_settings:
+            _writeAutoPlanterGatherFlag(user_settings["auto_planters_gather"])
+
+        return {
+            "success": True,
+            "imported_settings_count": len(planter_settings),
+            "macro_version": macro_version
+        }
+
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON format: {str(e)}")
+
 def getAvailablePatterns():
     """Get list of available pattern names"""
     patterns_dir = getPatternsDir()

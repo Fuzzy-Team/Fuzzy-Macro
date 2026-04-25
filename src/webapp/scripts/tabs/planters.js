@@ -528,4 +528,88 @@ function changePreset(ele){
 }
 
 $("#planters-placeholder")
-.load("../htmlImports/tabs/planters.html", loadPlanters) 
+.load("../htmlImports/tabs/planters.html", loadPlanters)
+.on("click", "#export-planters-button", async (event) => {
+    event.preventDefault()
+
+    try{
+        const jsonSettings = await eel.exportPlanterSettings()()
+
+        if (jsonSettings){
+            let metadata = {}
+            try{
+                const parsedData = JSON.parse(jsonSettings)
+                metadata = parsedData.metadata || {}
+            }catch(e){}
+
+            await navigator.clipboard.writeText(jsonSettings)
+
+            let successMsg = "Planter settings exported and copied to clipboard!"
+            if (metadata.macro_version){
+                successMsg += `\n\nExport details:\nMacro version: ${metadata.macro_version}`
+            }
+            if (metadata.export_date){
+                successMsg += `\nExported: ${new Date(metadata.export_date).toLocaleString()}`
+            }
+
+            alert(successMsg)
+        } else {
+            alert("Failed to export planter settings.")
+        }
+    }catch(error){
+        console.error("Error exporting planter settings:", error)
+        alert("An error occurred while exporting planter settings.")
+    }
+})
+.on("click", "#import-planters-button", (event) => {
+    event.preventDefault()
+
+    const modal = document.getElementById("import-planters-modal")
+    const textarea = document.getElementById("import-planters-json-textarea")
+    textarea.value = ""
+    modal.style.display = "flex"
+})
+.on("click", "#cancel-import-planters-button", (event) => {
+    event.preventDefault()
+    document.getElementById("import-planters-modal").style.display = "none"
+})
+.on("click", "#confirm-import-planters-button", async (event) => {
+    event.preventDefault()
+
+    const textarea = document.getElementById("import-planters-json-textarea")
+    const jsonSettings = textarea.value.trim()
+
+    if (!jsonSettings){
+        alert("Please paste JSON settings to import.")
+        return
+    }
+
+    try{
+        const result = await eel.importPlanterSettings(jsonSettings)()
+
+        if (result && result.success){
+            await loadPlanters()
+            document.getElementById("import-planters-modal").style.display = "none"
+
+            let successMsg = "Successfully imported planter settings!"
+            if (result.macro_version && result.macro_version !== "unknown"){
+                successMsg += `\n\nMacro version: ${result.macro_version}`
+            }
+            if (typeof result.imported_settings_count !== "undefined"){
+                successMsg += `\nImported settings: ${result.imported_settings_count}`
+            }
+
+            alert(successMsg)
+        } else {
+            alert("Failed to import planter settings. Please check your JSON format.")
+        }
+    }catch(error){
+        console.error("Error importing planter settings:", error)
+        alert("An error occurred while importing planter settings. Please check your JSON format.")
+    }
+})
+.on("click", "#import-planters-modal", function(event) {
+    if (event.target === this){
+        $(this).hide()
+    }
+})

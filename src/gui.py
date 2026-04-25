@@ -903,6 +903,24 @@ def importFieldSettings(field_name, json_settings):
     except Exception as e:
         print(f"Error importing field settings: {e}")
         return False
+
+@eel.expose
+def exportPlanterSettings():
+    """Export planter settings as JSON string"""
+    try:
+        return settingsManager.exportPlanterSettings()
+    except Exception as e:
+        print(f"Error exporting planter settings: {e}")
+        return None
+
+@eel.expose
+def importPlanterSettings(json_settings):
+    """Import planter settings from JSON string"""
+    try:
+        return settingsManager.importPlanterSettings(json_settings)
+    except Exception as e:
+        print(f"Error importing planter settings: {e}")
+        return False
         
 @eel.expose
 def getMacroVersion():
