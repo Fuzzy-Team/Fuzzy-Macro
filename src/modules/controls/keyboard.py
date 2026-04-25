@@ -177,6 +177,17 @@ class keyboard:
         else:
             self.press(key,(tiles/8.3)*28/self.haste.value)
 
+    #def _tile_multi_walk(keys, tiles):
+    #    if tiles <= 0:
+    #        return False
+
+    #    for key in keys:
+    #        self.keyboard.keyDown(key, False)
+    #    self.keyboard.tileWait(tiles)
+    #    for key in reversed(keys):
+    #        self.keyboard.keyUp(key, False)
+    #    return True
+
     #release all movement keys (wasd, space)
     @staticmethod
     def releaseMovement():

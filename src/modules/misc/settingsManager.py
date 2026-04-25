@@ -7,6 +7,26 @@ import tempfile
 from datetime import datetime
 import re
 
+FUZZY_AI_RUNTIME_DEFAULTS = {
+    "fuzzy_ai_confidence_threshold": 0.4,
+    "fuzzy_ai_sprinkler_confidence_threshold": 0.6,
+    "fuzzy_ai_min_token_distance": 0.3,
+    "fuzzy_ai_idle_return_interval": 1.5,
+    "fuzzy_ai_no_token_recalibration_timeout": 12.0,
+    "fuzzy_ai_movements_before_recalibration": 10,
+    "fuzzy_ai_sprinkler_arrival_threshold": 0.8,
+    "fuzzy_ai_max_sprinkler_distance": 10.0,
+    "fuzzy_ai_sprinkler_rescan_attempts": 3,
+    "fuzzy_ai_sprinkler_rescan_delay": 0.3,
+    "fuzzy_ai_target_sprinkler_label": "",
+    "fuzzy_ai_capture_backend": "auto",
+}
+
+DEFAULT_FUZZY_AI_TOKEN_RANKING = {
+    "preferred_tokens": "Token Link,Focus,Melody,Blue Boost,Honey Mark,Honey Mark Token,Pollen Mark,Pollen Mark Token,Haste",
+    "ignored_tokens": "Honey,Blueberry",
+}
+
 #returns a dictionary containing the settings
 profileName = "a"
 # Track profile changes for running macro processes
@@ -45,6 +65,8 @@ def getProjectRoot():
 
 # File to store current profile persistence
 CURRENT_PROFILE_FILE = os.path.join(getProjectRoot(), "src", "data", "user", "current_profile.txt")
+FUZZY_AI_TOKEN_RANKINGS_FILE = os.path.join(getProjectRoot(), "src", "data", "user", "fuzzy_ai_token_rankings.json")
+DEFAULT_FUZZY_AI_TOKEN_RANKINGS_FILE = os.path.join(getProjectRoot(), "src", "data", "default_settings", "fuzzy_ai_token_rankings.json")
 
 # Helper functions for common paths
 def getProfilesDir():
@@ -68,6 +90,97 @@ def getSettingsDir():
 def getPatternsDir():
     """Get the patterns directory path"""
     return os.path.join(getProjectRoot(), "settings", "patterns")
+
+def getFuzzyAIModelPath(model_filename):
+    """Get the fixed fuzzy AI model path under src/data/models."""
+    return os.path.join(getProjectRoot(), "src", "data", "models", model_filename)
+
+def resolveProjectPath(path_value):
+    """Resolve a path relative to the project root."""
+    if path_value is None:
+        return None
+
+    path_text = str(path_value).strip()
+    if not path_text:
+        return None
+
+    if os.path.isabs(path_text):
+        return os.path.normpath(path_text)
+
+    return os.path.normpath(os.path.join(getProjectRoot(), path_text))
+
+def loadDefaultFields():
+    """Load default field settings from the bundled defaults."""
+    defaults_path = os.path.join(getDefaultSettingsPath(), "fields.txt")
+    with open(defaults_path) as f:
+        out = ast.literal_eval(f.read())
+    return out
+
+def _stripAIGatherFieldKeys(settings):
+    if not isinstance(settings, dict):
+        return {}
+    return {key: value for key, value in settings.items() if not str(key).startswith("fuzzy_ai_")}
+
+def normalizeFieldSettings(field_name, settings, default_fields=None):
+    """Merge bundled defaults into a field settings object."""
+    if default_fields is None:
+        default_fields = loadDefaultFields()
+
+    normalized = {}
+
+    default_field_settings = default_fields.get(field_name)
+    if isinstance(default_field_settings, dict):
+        normalized.update(_stripAIGatherFieldKeys(default_field_settings))
+
+    if isinstance(settings, dict):
+        normalized.update(_stripAIGatherFieldKeys(settings))
+
+    return normalized
+
+def _tokenRankingDefaults():
+    return {
+        "preferred_tokens": DEFAULT_FUZZY_AI_TOKEN_RANKING["preferred_tokens"],
+        "ignored_tokens": DEFAULT_FUZZY_AI_TOKEN_RANKING["ignored_tokens"],
+    }
+
+def loadFuzzyAITokenRankings():
+    """Load per-field AI Gathering token rankings from src/data/user."""
+    for path in (FUZZY_AI_TOKEN_RANKINGS_FILE, DEFAULT_FUZZY_AI_TOKEN_RANKINGS_FILE):
+        try:
+            if os.path.exists(path):
+                with open(path, "r") as f:
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+        except Exception as e:
+            print(f"Warning: Could not load AI token rankings from {path}: {e}")
+    return {}
+
+def saveFuzzyAITokenRankings(data):
+    os.makedirs(os.path.dirname(FUZZY_AI_TOKEN_RANKINGS_FILE), exist_ok=True)
+    with open(FUZZY_AI_TOKEN_RANKINGS_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
+def loadFuzzyAITokenRanking(field_name):
+    rankings = loadFuzzyAITokenRankings()
+    ranking = rankings.get(field_name, {})
+    defaults = _tokenRankingDefaults()
+    if not isinstance(ranking, dict):
+        ranking = {}
+    return {
+        "preferred_tokens": ranking.get("preferred_tokens") or defaults["preferred_tokens"],
+        "ignored_tokens": ranking.get("ignored_tokens") or defaults["ignored_tokens"],
+    }
+
+def saveFuzzyAITokenRanking(field_name, ranking):
+    rankings = loadFuzzyAITokenRankings()
+    current = loadFuzzyAITokenRanking(field_name)
+    if isinstance(ranking, dict):
+        current["preferred_tokens"] = str(ranking.get("preferred_tokens", current["preferred_tokens"]))
+        current["ignored_tokens"] = str(ranking.get("ignored_tokens", current["ignored_tokens"]))
+    rankings[field_name] = current
+    saveFuzzyAITokenRankings(rankings)
+    return current
 
 def getMacroVersion():
     """Get the macro version from version.txt file"""
@@ -410,11 +523,25 @@ def _loadFieldsFile(fields_path, repair=True):
 
 def loadFields():
     fields_path = os.path.join(getProfilePath(), "fields.txt")
-    return _loadFieldsFile(fields_path)
+    out = _loadFieldsFile(fields_path)
+
+    default_fields = loadDefaultFields()
+    fieldsUpdated = False
+    for field, settings in out.items():
+        normalized = normalizeFieldSettings(field, settings, default_fields)
+        if normalized != settings:
+            out[field] = normalized
+            fieldsUpdated = True
+
+    if fieldsUpdated:
+        with open(fields_path, "w") as f:
+            f.write(str(out))
+
+    return out
 
 def saveField(field, settings):
     fieldsData = loadFields()
-    fieldsData[field] = settings
+    fieldsData[field] = normalizeFieldSettings(field, settings)
     fields_path = os.path.join(getProfilePath(), "fields.txt")
     with open(fields_path, "w") as f:
         f.write(str(fieldsData))
@@ -458,8 +585,18 @@ def importFieldSettings(field_name, json_settings):
         if not isinstance(settings, dict):
             raise ValueError("Invalid JSON format: expected object")
 
+        imported_token_ranking = None
+        if "fuzzy_ai_preferred_tokens" in settings or "fuzzy_ai_ignored_tokens" in settings:
+            imported_token_ranking = {
+                "preferred_tokens": settings.get("fuzzy_ai_preferred_tokens"),
+                "ignored_tokens": settings.get("fuzzy_ai_ignored_tokens"),
+            }
+
+        settings = normalizeFieldSettings(field_name, settings)
+
         # Check for missing patterns and replace with defaults
         missing_patterns = []
+        warnings = []
         available_patterns = getAvailablePatterns()
 
         if "shape" in settings:
@@ -470,13 +607,24 @@ def importFieldSettings(field_name, json_settings):
                 settings["shape"] = default_pattern
                 missing_patterns.append(f"'{requested_pattern}' → '{default_pattern}'")
 
+        if settings.get("shape") == "fuzzy_ai_gather":
+            blue_model = getFuzzyAIModelPath("blue.onnx")
+            sprinkler_model = getFuzzyAIModelPath("sprinkler.onnx")
+            if not os.path.exists(blue_model):
+                warnings.append("Missing blue model: src/data/models/blue.onnx")
+            if not os.path.exists(sprinkler_model):
+                warnings.append("Missing sprinkler model: src/data/models/sprinkler.onnx")
+
         # Save the imported settings
         saveField(field_name, settings)
+        if imported_token_ranking is not None:
+            saveFuzzyAITokenRanking(field_name, imported_token_ranking)
 
         # Return success with information about any pattern replacements and metadata
         result = {
             "success": True,
             "missing_patterns": missing_patterns,
+            "warnings": warnings,
             "imported_from_field": exported_field,
             "macro_version": macro_version
         }
@@ -609,7 +757,12 @@ def getAvailablePatterns():
     """Get list of available pattern names"""
     patterns_dir = getPatternsDir()
     if os.path.exists(patterns_dir):
-        return [f.replace(".py", "") for f in os.listdir(patterns_dir) if f.endswith(".py")]
+        out = []
+        for filename in os.listdir(patterns_dir):
+            root, ext = os.path.splitext(filename)
+            if ext.lower() in (".py", ".ahk"):
+                out.append(root)
+        return sorted(out)
     return []
 
 def syncFieldSettings(setting, value):
