@@ -214,6 +214,7 @@ function getTicketCalcElements() {
   return {
     nextPrice: document.getElementById("ticket-calc-next-price"),
     nextPriceUnit: document.getElementById("ticket-calc-next-price-unit"),
+    customAmount: document.getElementById("ticket-calc-custom-amount"),
     warning: document.getElementById("ticket-calc-warning"),
     presetBreakdown: document.getElementById("ticket-calc-presets-breakdown"),
   };
@@ -267,10 +268,15 @@ function calculateTicketPurchase(nextPrice, ticketCount) {
 
 function updateTicketPriceCalculator() {
   const el = getTicketCalcElements();
-  if (!el.nextPrice || !el.nextPriceUnit || !el.presetBreakdown) return;
+  if (!el.nextPrice || !el.nextPriceUnit || !el.customAmount || !el.presetBreakdown) return;
 
   const rawNextPrice = Number(el.nextPrice.value);
   const nextPrice = normalizeTicketPrice(el.nextPrice.value, el.nextPriceUnit.value);
+  let customAmount = Math.floor(Number(el.customAmount.value) || 1);
+
+  if (customAmount < 1) customAmount = 1;
+  if (customAmount > TICKET_CALC_MAX_TICKETS) customAmount = TICKET_CALC_MAX_TICKETS;
+  el.customAmount.value = customAmount;
 
   if (el.warning) {
     const rawWholePrice = rawNextPrice * (Number(el.nextPriceUnit.value) || 1);
@@ -279,11 +285,16 @@ function updateTicketPriceCalculator() {
     el.warning.textContent = "Ticket prices below 100K are raised to 100K, and prices are rounded to the nearest 1,000 honey.";
   }
 
-  el.presetBreakdown.innerHTML = TICKET_CALC_PRESETS.map((amount) => {
+  const rows = [...TICKET_CALC_PRESETS, customAmount].filter(
+    (amount, index, amounts) => amounts.indexOf(amount) === index
+  );
+
+  el.presetBreakdown.innerHTML = rows.map((amount) => {
     const preset = calculateTicketPurchase(nextPrice, amount);
+    const label = amount === customAmount && !TICKET_CALC_PRESETS.includes(amount) ? `${formatWholeNumber(amount)} Tickets (Custom)` : `${formatWholeNumber(amount)} Tickets`;
     return `
       <tr>
-        <td>${formatWholeNumber(amount)} Tickets</td>
+        <td>${label}</td>
         <td>${formatCompactHoney(preset.totalCost)}</td>
       </tr>
     `;
@@ -292,12 +303,13 @@ function updateTicketPriceCalculator() {
 
 function initializeTicketPriceCalculator() {
   const el = getTicketCalcElements();
-  if (!el.nextPrice || !el.nextPriceUnit) return;
+  if (!el.nextPrice || !el.nextPriceUnit || !el.customAmount) return;
 
   if (!el.nextPrice.value) el.nextPrice.value = "100";
   if (!el.nextPriceUnit.value) el.nextPriceUnit.value = "1000000";
+  if (!el.customAmount.value) el.customAmount.value = "1";
 
-  [el.nextPrice, el.nextPriceUnit].forEach((input) => {
+  [el.nextPrice, el.nextPriceUnit, el.customAmount].forEach((input) => {
     input.addEventListener("change", updateTicketPriceCalculator);
     input.addEventListener("input", updateTicketPriceCalculator);
   });

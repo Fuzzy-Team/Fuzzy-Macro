@@ -734,7 +734,7 @@ select:focus {
 }
 
 .ticket-calc-grid {
-  grid-template-columns: minmax(220px, 320px);
+  grid-template-columns: minmax(220px, 320px) minmax(180px, 220px);
 }
 
 .ticket-calc-price-row {
