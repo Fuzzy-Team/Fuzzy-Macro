@@ -351,6 +351,28 @@
             value="1"
           />
         </div>
+
+        <div class="bond-calc-input-group">
+          <label for="ticket-calc-budget">Budget</label>
+          <div class="ticket-calc-price-row">
+            <input
+              id="ticket-calc-budget"
+              class="textbox"
+              type="number"
+              min="0"
+              step="0.01"
+              value="0"
+            />
+            <select id="ticket-calc-budget-unit" class="textbox bond-calc-select ticket-calc-unit">
+              <option value="1000">K</option>
+              <option value="1000000" selected>M</option>
+              <option value="1000000000">B</option>
+              <option value="1000000000000">T</option>
+              <option value="1000000000000000">Qd</option>
+              <option value="1000000000000000000">Qn</option>
+            </select>
+          </div>
+        </div>
       </div>
 
       <div id="ticket-calc-warning" class="bond-calc-warning" style="display:none;"></div>
