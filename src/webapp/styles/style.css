@@ -213,6 +213,7 @@ select:focus {
 /* Sub-nav bar (tabs inside main content) */
 .sub-nav-bar {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   margin-bottom: 1rem;
   align-items: center;
@@ -730,6 +731,29 @@ select:focus {
 
 .bond-calc-table td {
   color: var(--text-dim);
+}
+
+.ticket-calc-grid {
+  grid-template-columns: minmax(220px, 320px);
+}
+
+.ticket-calc-price-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.ticket-calc-price-row .textbox {
+  min-width: 0;
+}
+
+.ticket-calc-unit {
+  flex: 0 0 5.5rem;
+}
+
+@media (max-width: 720px) {
+  .ticket-calc-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .textbox {

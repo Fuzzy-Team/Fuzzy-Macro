@@ -8,6 +8,9 @@ const AUTOCLICKER_MIN_INTERVAL = 10;
 const AUTOCLICKER_DEFAULT_INTERVAL = 100;
 const AUTOCLICKER_DEFAULT_START_DELAY = 3;
 const AUTO_GIFTED_BASIC_BEE_DEFAULT_DELAY = 3;
+const TICKET_CALC_DEFAULT_NEXT_PRICE = 100000;
+const TICKET_CALC_MAX_TICKETS = 100000;
+const TICKET_CALC_PRESETS = [10, 100, 500];
 
 const TREAT_COST_HONEY = 10000;
 const BOND_REQUIREMENTS = [
@@ -205,6 +208,101 @@ function initializeBondTreatCalculator() {
   });
 
   updateBondTreatCalculator();
+}
+
+function getTicketCalcElements() {
+  return {
+    nextPrice: document.getElementById("ticket-calc-next-price"),
+    nextPriceUnit: document.getElementById("ticket-calc-next-price-unit"),
+    warning: document.getElementById("ticket-calc-warning"),
+    presetBreakdown: document.getElementById("ticket-calc-presets-breakdown"),
+  };
+}
+
+function normalizeTicketPrice(value, unit) {
+  const multiplier = Number(unit) || 1;
+  let price = Math.round(((Number(value) || 0) * multiplier) / 1000) * 1000;
+  if (price < TICKET_CALC_DEFAULT_NEXT_PRICE) price = TICKET_CALC_DEFAULT_NEXT_PRICE;
+  return price;
+}
+
+function getTicketsBoughtFromNextPrice(nextPrice) {
+  if (nextPrice === TICKET_CALC_DEFAULT_NEXT_PRICE) return 0;
+  if (nextPrice < 102000) return 1;
+
+  const scaledPrice = nextPrice / 1000 - 100;
+  const inverseExponent = nextPrice <= 1824000 ? 5 / 6 : 10 / 17;
+  return Math.floor(Math.pow(scaledPrice, inverseExponent)) + 1;
+}
+
+function getTicketPriceAfterBought(ticketsBought) {
+  if (ticketsBought <= 0) return TICKET_CALC_DEFAULT_NEXT_PRICE;
+  if (ticketsBought === 1) return 101000;
+
+  const exponent = ticketsBought < 499 ? 6 / 5 : 17 / 10;
+  return Math.ceil(Math.pow(ticketsBought, exponent) + 99) * 1000;
+}
+
+function calculateTicketPurchase(nextPrice, ticketCount) {
+  const ticketsToBuy = Math.max(0, Math.min(TICKET_CALC_MAX_TICKETS, Math.floor(Number(ticketCount) || 0)));
+  const ticketsAlreadyBought = getTicketsBoughtFromNextPrice(nextPrice);
+  let totalCost = 0;
+  let finalTicketPrice = 0;
+
+  for (let index = 0; index < ticketsToBuy; index += 1) {
+    const ticketPrice = index === 0 ? nextPrice : getTicketPriceAfterBought(ticketsAlreadyBought + index);
+    totalCost += ticketPrice;
+    finalTicketPrice = ticketPrice;
+  }
+
+  return {
+    ticketsAlreadyBought,
+    ticketsToBuy,
+    totalCost,
+    averagePrice: ticketsToBuy > 0 ? totalCost / ticketsToBuy : 0,
+    finalTicketPrice,
+    nextPriceAfterPurchase: getTicketPriceAfterBought(ticketsAlreadyBought + ticketsToBuy),
+  };
+}
+
+function updateTicketPriceCalculator() {
+  const el = getTicketCalcElements();
+  if (!el.nextPrice || !el.nextPriceUnit || !el.presetBreakdown) return;
+
+  const rawNextPrice = Number(el.nextPrice.value);
+  const nextPrice = normalizeTicketPrice(el.nextPrice.value, el.nextPriceUnit.value);
+
+  if (el.warning) {
+    const rawWholePrice = rawNextPrice * (Number(el.nextPriceUnit.value) || 1);
+    const isRounded = Number.isFinite(rawWholePrice) && rawWholePrice > 0 && rawWholePrice !== nextPrice;
+    el.warning.style.display = isRounded ? "block" : "none";
+    el.warning.textContent = "Ticket prices below 100K are raised to 100K, and prices are rounded to the nearest 1,000 honey.";
+  }
+
+  el.presetBreakdown.innerHTML = TICKET_CALC_PRESETS.map((amount) => {
+    const preset = calculateTicketPurchase(nextPrice, amount);
+    return `
+      <tr>
+        <td>${formatWholeNumber(amount)} Tickets</td>
+        <td>${formatCompactHoney(preset.totalCost)}</td>
+      </tr>
+    `;
+  }).join("");
+}
+
+function initializeTicketPriceCalculator() {
+  const el = getTicketCalcElements();
+  if (!el.nextPrice || !el.nextPriceUnit) return;
+
+  if (!el.nextPrice.value) el.nextPrice.value = "100";
+  if (!el.nextPriceUnit.value) el.nextPriceUnit.value = "1000000";
+
+  [el.nextPrice, el.nextPriceUnit].forEach((input) => {
+    input.addEventListener("change", updateTicketPriceCalculator);
+    input.addEventListener("input", updateTicketPriceCalculator);
+  });
+
+  updateTicketPriceCalculator();
 }
 
 function getAutoClickerInterval() {
@@ -619,6 +717,7 @@ function loadTools() {
   refreshToolStopHotkey();
   initializeAutoClickerTool();
   initializeBondTreatCalculator();
+  initializeTicketPriceCalculator();
   initializeAutoGiftedBasicBeeTool();
   initializeHotbarBuffTool();
 
