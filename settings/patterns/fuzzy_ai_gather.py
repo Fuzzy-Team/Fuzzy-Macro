@@ -463,10 +463,10 @@ def _movement_segments(tx, ty):
     fb_key, lr_key = _movement_keys(tx, ty)
 
     segments = []
-    if diagonal_distance >= 0.05:
+    if diagonal_distance >= 0.01:
         segments.append(("diagonal", [fb_key, lr_key], diagonal_distance))
 
-    if axial_distance >= 0.05:
+    if axial_distance >= 0.01:
         if abs(ty) >= abs(tx):
             segments.append(("axial", [fb_key], axial_distance))
         else:
@@ -499,7 +499,7 @@ def _tile_multi_walk(keys, tiles):
 
 def _execute_movement(tx, ty):
     magnitude = math.hypot(tx, ty)
-    if magnitude <= 0.01:
+    if magnitude <= 0.001:
         return False
 
     moved = False
