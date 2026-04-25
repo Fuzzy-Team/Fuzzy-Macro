@@ -638,6 +638,7 @@ async function triggerBetaUpdate() {
   if (!confirm(`Update macro from commit ${hash}? This will backup and apply files.`)) return;
 
   try {
+    if (window.updateProgress) window.updateProgress(0, `Starting update to ${hash}`);
     // call backend updater
     const res = await eel.updateFromHash(hash)();
     if (res) {

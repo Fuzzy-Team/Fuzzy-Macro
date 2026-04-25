@@ -3,10 +3,31 @@ window.updateButtonReset = function () {
   const updateBtn = document.getElementById("update-btn");
   if (updateBtn) {
     updateBtn.classList.remove("active");
-    updateBtn.innerText = "Update";
+    updateBtn.disabled = false;
+    updateBtn.innerText = "Check for Updates";
   }
 };
 if (window.eel) eel.expose(window.updateButtonReset, 'updateButtonReset');
+
+window.updateProgress = function (percent, message) {
+  const progress = document.getElementById("update-progress");
+  const bar = document.getElementById("update-progress-bar");
+  const label = document.getElementById("update-progress-label");
+  const percentLabel = document.getElementById("update-progress-percent");
+  const updateBtn = document.getElementById("update-btn");
+
+  const value = Math.max(0, Math.min(100, Number(percent) || 0));
+  if (progress) progress.classList.remove("d-none");
+  if (bar) bar.style.width = `${value}%`;
+  if (label) label.textContent = message || "Updating";
+  if (percentLabel) percentLabel.textContent = `${Math.round(value)}%`;
+  if (updateBtn) {
+    updateBtn.classList.add("active");
+    updateBtn.disabled = true;
+    updateBtn.innerText = "Updating";
+  }
+};
+if (window.eel) eel.expose(window.updateProgress, "updateProgress");
 
 // Auto-update check functionality
 async function checkForUpdatesOnStartup() {
@@ -118,6 +139,8 @@ async function startUpdate() {
   const updateBtn = document.getElementById("update-btn");
   if (updateBtn && !updateBtn.classList.contains("active")) {
     purpleButtonToggle(updateBtn, ["Update", "Updating"]);
+    updateBtn.disabled = true;
+    window.updateProgress(0, "Starting update");
     if (window.eel && typeof eel.update === "function") {
       await eel.update();
     }
@@ -131,6 +154,8 @@ document.addEventListener("DOMContentLoaded", function () {
     updateBtn.addEventListener("click", async function (event) {
       if (!event.currentTarget.classList.contains("active")) {
         purpleButtonToggle(event.currentTarget, ["Update", "Updating"]);
+        event.currentTarget.disabled = true;
+        window.updateProgress(0, "Starting update");
         if (window.eel && typeof eel.update === "function") {
           await eel.update();
         }
@@ -160,16 +185,10 @@ function purpleButtonToggle(element, labels) {
 }
 
 //get the value of input elements like checkboxes, dropdown and textboxes
-function getInputValue(id) {
-  const ele = document.getElementById(id);
-  if (!ele) {
-    console.error("Element not found:", id);
-    return "";
-  }
-  //checkbox
+function getInputValueFromElement(ele) {
+  if (!ele) return "";
   if (ele.tagName == "INPUT" && ele.type == "checkbox") {
     return ele.checked;
-    //textbox
   } else if (ele.tagName == "INPUT" && ele.type == "text") {
     const value = ele.value;
     if (
@@ -179,16 +198,24 @@ function getInputValue(id) {
       return 0;
     if (!value) return "";
     return value;
-    //custom dropdown
   } else if (ele.tagName == "DIV" && ele.className.includes("custom-select")) {
     return getDropdownValue(ele).toLowerCase();
-    //slider
+  } else if (ele.tagName == "SELECT") {
+    return ele.value;
   } else if (ele.tagName == "INPUT" && ele.type == "range") {
     return ele.value;
-    //keybind
   } else if (ele.tagName == "DIV" && ele.className.includes("keybind-input")) {
     return ele.dataset.keybind || "";
   }
+}
+
+function getInputValue(id) {
+  const ele = document.getElementById(id);
+  if (!ele) {
+    console.error("Element not found:", id);
+    return "";
+  }
+  return getInputValueFromElement(ele);
 }
 
 async function loadSettings() {
@@ -316,16 +343,31 @@ async function saveSetting(ele, type) {
       try { await eel.saveProfileSetting(bindTargetId, false)(); } catch (e) { /* ignore */ }
     }
   }
-  const id = ele.id;
-  const value = getInputValue(id);
+  const id = ele.dataset && ele.dataset.settingId ? ele.dataset.settingId : ele.id;
+  const value = ele.dataset && ele.dataset.settingId ? getInputValueFromElement(ele) : getInputValue(id);
   // Enforce limits for specific settings before saving
   let valueToSave = value;
-  if (type == "general" && id === "max_cannon_attempts") {
-    // Ensure numeric and clamp between 1 and 25
+  if (type == "general" && (id === "max_cannon_attempts" || id === "cannon_hive_resync_attempts")) {
+    // Ensure numeric and clamp cannon retry settings.
     let n = parseInt(value, 10);
-    if (Number.isNaN(n)) n = 1;
-    if (n < 1) n = 1;
+    const min = id === "cannon_hive_resync_attempts" ? 0 : 1;
+    if (Number.isNaN(n)) n = min;
+    if (n < min) n = min;
     if (n > 25) n = 25;
+    const maxCannonInput = document.getElementById("max_cannon_attempts");
+    const hiveResyncInput = document.getElementById("cannon_hive_resync_attempts");
+    if (id === "cannon_hive_resync_attempts") {
+      const maxAttempts = parseInt(maxCannonInput?.value, 10);
+      if (!Number.isNaN(maxAttempts) && n >= maxAttempts) n = Math.max(0, maxAttempts - 1);
+    } else if (hiveResyncInput) {
+      let hiveResyncAttempts = parseInt(hiveResyncInput.value, 10);
+      if (Number.isNaN(hiveResyncAttempts)) hiveResyncAttempts = 0;
+      if (hiveResyncAttempts >= n) {
+        hiveResyncAttempts = Math.max(0, n - 1);
+        hiveResyncInput.value = hiveResyncAttempts;
+        try { await eel.saveGeneralSetting("cannon_hive_resync_attempts", hiveResyncAttempts)(); } catch (e) { /* ignore */ }
+      }
+    }
     valueToSave = n;
     // Update the displayed input to reflect clamped value
     const inputEl = document.getElementById(id);
@@ -636,12 +678,15 @@ function loadInputs(obj, save = "") {
     if (!ele) continue;
     if (ele.type == "checkbox") {
       ele.checked = v;
+    } else if (ele.tagName == "SELECT") {
+      ele.value = v;
     } else if (ele.className.includes("custom-select")) {
       setDropdownValue(ele, v);
     } else if (ele.className.includes("keybind-input")) {
       // Handle keybind elements
-      ele.dataset.keybind = v;
-      const displayText = v ? v.replace(/\+/g, " + ") : "Click to record";
+      const keybind = normalizeKeybindString(v);
+      ele.dataset.keybind = keybind;
+      const displayText = keybind ? keybindDisplayText(keybind) : "Click to record";
       ele.querySelector(".keybind-display").textContent = displayText;
     } else if (ele.className.includes("drag-list")) {
       // Handle drag list elements
@@ -755,47 +800,109 @@ window.oncontextmenu = function(event) {
     return false;
 };
 */
+const keybindModifierOrder = ["Ctrl", "Alt", "Shift", "Cmd"];
+
+function normalizeKeybindKey(key) {
+  if (!key) return "";
+  const aliases = {
+    " ": "Space",
+    Spacebar: "Space",
+    Control: "Ctrl",
+    Ctrl: "Ctrl",
+    Alt: "Alt",
+    Option: "Alt",
+    Shift: "Shift",
+    Meta: "Cmd",
+    Command: "Cmd",
+    Cmd: "Cmd",
+    Esc: "Escape",
+    Escape: "Escape",
+    Del: "Delete",
+    Delete: "Delete",
+    ArrowLeft: "ArrowLeft",
+    ArrowRight: "ArrowRight",
+    ArrowUp: "ArrowUp",
+    ArrowDown: "ArrowDown",
+    PageUp: "PageUp",
+    PageDown: "PageDown",
+    CapsLock: "CapsLock",
+    Fn: "Fn",
+  };
+  if (aliases[key]) return aliases[key];
+  if (/^F\d{1,2}$/i.test(key)) return key.toUpperCase();
+  if (key.length === 1) return key.toUpperCase();
+  return key;
+}
+
+function keybindKeyFromEvent(event) {
+  if (!event) return "";
+  const code = event.code || "";
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+  if (/^Digit\d$/.test(code)) return code.slice(5);
+  if (/^Numpad\d$/.test(code)) return code;
+  if (/^F\d{1,2}$/.test(code)) return code;
+  return normalizeKeybindKey(event.key);
+}
+
+function sortKeybindKeys(keys) {
+  const uniqueKeys = Array.from(new Set(keys.filter((key) => key && key !== "Fn")));
+  const modifiers = keybindModifierOrder.filter((key) => uniqueKeys.includes(key));
+  const normalKeys = uniqueKeys
+    .filter((key) => !keybindModifierOrder.includes(key))
+    .sort();
+  return modifiers.concat(normalKeys);
+}
+
+function normalizeKeybindString(keybind) {
+  return sortKeybindKeys(
+    String(keybind || "")
+      .split("+")
+      .map((key) => normalizeKeybindKey(key.trim()))
+  ).join("+");
+}
+
+function keybindDisplayText(keybind) {
+  return normalizeKeybindString(keybind).replace(/\+/g, " + ");
+}
+
+function keybindFromEvent(event) {
+  const keys = [];
+  if (event.ctrlKey) keys.push("Ctrl");
+  if (event.altKey) keys.push("Alt");
+  if (event.shiftKey) keys.push("Shift");
+  if (event.metaKey) keys.push("Cmd");
+
+  const mainKey = keybindKeyFromEvent(event);
+  if (!keybindModifierOrder.includes(mainKey)) keys.push(mainKey);
+  return sortKeybindKeys(keys).join("+");
+}
+
 // Function to check if current key combination matches a configured keybind
 function isConfiguredKeybind(event) {
   // Get current keybinds from settings
-  const startKeybind =
-    document.getElementById("start_keybind")?.dataset.keybind;
-  const pauseKeybind =
-    document.getElementById("pause_keybind")?.dataset.keybind;
-  const stopKeybind = document.getElementById("stop_keybind")?.dataset.keybind;
+  const startKeybind = normalizeKeybindString(
+    document.getElementById("start_keybind")?.dataset.keybind
+  );
+  const pauseKeybind = normalizeKeybindString(
+    document.getElementById("pause_keybind")?.dataset.keybind
+  );
+  const stopKeybind = normalizeKeybindString(
+    document.getElementById("stop_keybind")?.dataset.keybind
+  );
+  const hotbarBuffStartKeybind = normalizeKeybindString(
+    document.getElementById("hotbar_buff_start_keybind")?.dataset.keybind
+  );
 
-  if (!startKeybind && !pauseKeybind && !stopKeybind) return false;
+  if (!startKeybind && !pauseKeybind && !stopKeybind && !hotbarBuffStartKeybind) return false;
 
-  // Build current key combination
-  let currentCombo = [];
-  if (event.ctrlKey) currentCombo.push("Ctrl");
-  if (event.altKey) currentCombo.push("Alt");
-  if (event.shiftKey) currentCombo.push("Shift");
-  if (event.metaKey) currentCombo.push("Cmd");
-
-  // Add the main key
-  let mainKey = event.key;
-  if (mainKey === " ") mainKey = "Space";
-  else if (mainKey === "Control") mainKey = "Ctrl";
-  else if (mainKey === "Alt") mainKey = "Alt";
-  else if (mainKey === "Shift") mainKey = "Shift";
-  else if (mainKey === "Meta") mainKey = "Cmd";
-  else if (mainKey.startsWith("F") && mainKey.length <= 3) {
-    // Function keys (F1, F2, etc.)
-    mainKey = mainKey;
-  } else if (mainKey.length === 1) {
-    // Regular character keys
-    mainKey = mainKey.toUpperCase();
-  }
-
-  currentCombo.push(mainKey);
-  const currentComboString = currentCombo.join("+");
+  const currentComboString = keybindFromEvent(event);
 
   // Check if it matches either configured keybind
   return (
     currentComboString === startKeybind ||
     currentComboString === pauseKeybind ||
-    currentComboString === stopKeybind
+    currentComboString === stopKeybind ||
+    currentComboString === hotbarBuffStartKeybind
   );
 }
 
@@ -1001,6 +1108,7 @@ async function updateKeybindDisplay() {
     const startKey = settings.start_keybind || "F1";
     const pauseKey = settings.pause_keybind || "F2";
     const stopKey = settings.stop_keybind || "F3";
+    const hotbarBuffStartKey = settings.hotbar_buff_start_keybind || "F4";
 
     const startButton = document.getElementById("start-btn");
     if (startButton) {
@@ -1011,13 +1119,14 @@ async function updateKeybindDisplay() {
     const startKeybindElement = document.getElementById("start_keybind");
     const pauseKeybindElement = document.getElementById("pause_keybind");
     const stopKeybindElement = document.getElementById("stop_keybind");
+    const hotbarBuffStartKeybindElement = document.getElementById("hotbar_buff_start_keybind");
 
     if (
       startKeybindElement &&
       startKeybindElement.querySelector(".keybind-display")
     ) {
       startKeybindElement.querySelector(".keybind-display").textContent =
-        startKey.replace(/\+/g, " + ");
+        keybindDisplayText(startKey);
     }
 
     if (
@@ -1025,7 +1134,7 @@ async function updateKeybindDisplay() {
       pauseKeybindElement.querySelector(".keybind-display")
     ) {
       pauseKeybindElement.querySelector(".keybind-display").textContent =
-        pauseKey.replace(/\+/g, " + ");
+        keybindDisplayText(pauseKey);
     }
 
     if (
@@ -1033,7 +1142,15 @@ async function updateKeybindDisplay() {
       stopKeybindElement.querySelector(".keybind-display")
     ) {
       stopKeybindElement.querySelector(".keybind-display").textContent =
-        stopKey.replace(/\+/g, " + ");
+        keybindDisplayText(stopKey);
+    }
+
+    if (
+      hotbarBuffStartKeybindElement &&
+      hotbarBuffStartKeybindElement.querySelector(".keybind-display")
+    ) {
+      hotbarBuffStartKeybindElement.querySelector(".keybind-display").textContent =
+        keybindDisplayText(hotbarBuffStartKey);
     }
   } catch (error) {
     // Silently handle errors
@@ -1065,27 +1182,8 @@ function handleKeybindKeyDown(event) {
   event.preventDefault();
   event.stopPropagation();
 
-  // Get the key name
-  let keyName = event.key;
-
-  // Handle special keys
-  if (event.key === " ") {
-    keyName = "Space";
-  } else if (event.key === "Control") {
-    keyName = "Ctrl";
-  } else if (event.key === "Alt") {
-    keyName = "Alt";
-  } else if (event.key === "Shift") {
-    keyName = "Shift";
-  } else if (event.key === "Meta") {
-    keyName = "Cmd";
-  } else if (event.key.startsWith("F") && event.key.length <= 3) {
-    // Function keys (F1, F2, etc.)
-    keyName = event.key;
-  } else if (event.key.length === 1) {
-    // Regular character keys
-    keyName = event.key.toUpperCase();
-  }
+  const keyName = keybindKeyFromEvent(event);
+  if (!keyName || keyName === "Fn") return;
 
   // Add to sequence if not already present
   if (!keybindSequence.includes(keyName)) {
@@ -1093,7 +1191,7 @@ function handleKeybindKeyDown(event) {
   }
 
   // Update display
-  const displayText = keybindSequence.join(" + ");
+  const displayText = sortKeybindKeys(keybindSequence).join(" + ");
   currentKeybindElement.querySelector(".keybind-display").textContent =
     displayText;
 }
@@ -1102,11 +1200,11 @@ function finalizeKeybind() {
   if (!keybindRecording || !currentKeybindElement) return;
 
   // Save the keybind combination
-  const keybindString = keybindSequence.join("+");
+  const keybindString = sortKeybindKeys(keybindSequence).join("+");
   currentKeybindElement.dataset.keybind = keybindString;
 
   // Update the display to show the saved keybind
-  const displayText = keybindString.replace(/\+/g, " + ");
+  const displayText = keybindDisplayText(keybindString);
   currentKeybindElement.querySelector(".keybind-display").textContent =
     displayText;
 

@@ -65,6 +65,15 @@
             <h2>Planter Cycles</h2>
             <p style = "font-weight:500; font-size:1rem;">The macro can place and collect up to 3 planters at once each cycle. Setting a field or planter as 'none' will make the macro ignore that slot</p>
         </div>
+
+        <div class="poppins-medium standard-container" style="flex-direction: column; padding-top: 1rem; justify-content: unset;">
+            <h2>Selected Planters</h2>
+            <p style="font-weight:500; font-size:1rem;">Map selected planters to hotbar slots. Slot 0 uses inventory search.</p>
+            <div class="seperator"></div>
+            <div id="manual-selected-planter-hotbar-slots" class="planter-hotbar-grid">
+
+            </div>
+        </div>
     </div>
     
     <div id = "planters-auto" class="planter-tab tab-main" style="display: none;">
@@ -194,6 +203,15 @@
 
             </div>
         </div>
+
+        <div class="poppins-medium standard-container" style="flex-direction: column; padding-top: 1rem; justify-content: unset;">
+            <h2>Selected Planters</h2>
+            <p style="font-weight:500; font-size:1rem;">Map enabled planters to hotbar slots. Slot 0 uses inventory search.</p>
+            <div class="seperator"></div>
+            <div id="auto-selected-planter-hotbar-slots" class="planter-hotbar-grid">
+
+            </div>
+        </div>
         
         <div class="poppins-medium standard-container" style="flex-direction: column; padding-top: 1rem; justify-content: unset;">
             <h2>Wax from Planters</h2>
@@ -210,5 +228,25 @@
         </div>
     
     </div>
+
+    <div style="display: flex; justify-content: center; gap: 10px; margin: 20px 0;">
+        <button id="export-planters-button" class="import-export-button">
+            Export Settings
+        </button>
+        <button id="import-planters-button" class="import-export-button">
+            Import Settings
+        </button>
+    </div>
 </div>
 
+<div id="import-planters-modal" class="modal-overlay">
+    <div class="modal-dialog poppins-regular">
+        <h3>Import Planter Settings</h3>
+        <p>Paste your JSON settings below:</p>
+        <textarea id="import-planters-json-textarea" class="modal-textarea" placeholder="Paste JSON here..."></textarea>
+        <div class="modal-actions">
+            <button id="cancel-import-planters-button" class="btn-cancel">Cancel</button>
+            <button id="confirm-import-planters-button" class="btn-confirm">Import</button>
+        </div>
+    </div>
+</div>

@@ -11,6 +11,7 @@ import webbrowser
 import time
 import threading
 from modules.submacros.autoGiftedBasicBee import AutoGiftedBasicBeeRunner
+import modules.controls.keyboard as keyboardModule
 
 eel.init('webapp')
 run = None
@@ -271,6 +272,193 @@ class AutoClickerRunner:
 _auto_clicker_runner = AutoClickerRunner()
 
 
+class HotbarBuffRunner:
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._stop_event = threading.Event()
+        self._thread = None
+        self._status = self._fresh_status()
+
+    def _fresh_status(self):
+        return {
+            "running": False,
+            "state": "idle",
+            "message": "Ready. Start with F4 by default and stop with the macro stop hotkey.",
+            "last_slot": None,
+        }
+
+    def get_status(self):
+        with self._lock:
+            return dict(self._status)
+
+    def is_active(self):
+        with self._lock:
+            return bool(
+                (self._thread and self._thread.is_alive())
+                or self._status.get("running")
+                or self._status.get("state") == "stopping"
+            )
+
+    def _update_status(self, **kwargs):
+        with self._lock:
+            self._status.update(kwargs)
+
+    def start(self, run_state=3):
+        thread_to_join = None
+        with self._lock:
+            if self._thread and not self._thread.is_alive():
+                self._thread = None
+            elif self._thread and self._stop_event.is_set():
+                thread_to_join = self._thread
+            elif self._thread and self._thread.is_alive():
+                return {"ok": False, "message": "The tool is already running."}
+            if run_state != 3:
+                return {"ok": False, "message": "Stop the macro before starting this tool."}
+
+        if thread_to_join:
+            thread_to_join.join(timeout=0.3)
+
+        with self._lock:
+            if self._thread and self._thread.is_alive():
+                return {"ok": False, "message": "The tool is still stopping. Try again in a moment."}
+            if run_state != 3:
+                return {"ok": False, "message": "Stop the macro before starting this tool."}
+            self._stop_event.clear()
+            self._status = self._fresh_status()
+            self._status.update(
+                {
+                    "running": True,
+                    "state": "running",
+                    "message": "Hotbar buff tool running. Stop it with the macro's configured stop hotkey.",
+                }
+            )
+            self._thread = threading.Thread(target=self._run, daemon=True)
+            self._thread.start()
+
+        return {"ok": True, "message": "Hotbar buff tool started."}
+
+    def stop(self):
+        with self._lock:
+            thread = self._thread
+            is_running = bool(
+                (thread and thread.is_alive())
+                or self._status.get("running")
+                or self._status.get("state") == "stopping"
+            )
+            if not is_running:
+                self._stop_event.set()
+                self._status = self._fresh_status()
+                return {"ok": True, "message": "Hotbar buff tool is already stopped."}
+
+            self._stop_event.set()
+            self._status.update(
+                {
+                    "running": False,
+                    "state": "stopping",
+                    "message": "Stopping hotbar buff tool.",
+                }
+            )
+
+        if thread and thread.is_alive():
+            thread.join(timeout=0.3)
+        return {"ok": True, "message": "Hotbar buff tool stop requested."}
+
+    def _timings_path(self):
+        return os.path.join(settingsManager.getProjectRoot(), "src", "data", "user", "hotbar_buff_tool_timings.txt")
+
+    def _load_timings(self):
+        timings_path = self._timings_path()
+        try:
+            with open(timings_path, "r") as f:
+                timings = ast.literal_eval(f.read())
+        except Exception:
+            timings = {}
+        for slot in range(1, 8):
+            timings.setdefault(slot, 0)
+        return timings
+
+    def _save_timings(self, timings):
+        with open(self._timings_path(), "w") as f:
+            f.write(str(timings))
+
+    def _slot_interval_seconds(self, settings, slot):
+        try:
+            interval = float(settings.get(f"hotbar_buff_tool_slot{slot}_use_every_value", 30))
+        except Exception:
+            interval = 30
+        if str(settings.get(f"hotbar_buff_tool_slot{slot}_use_every_format", "secs")).lower() == "mins":
+            interval *= 60
+        return max(0, interval)
+
+    def _run(self):
+        try:
+            while not self._stop_event.is_set():
+                settings = settingsManager.loadAllSettings()
+                timings = self._load_timings()
+                used_slot = None
+                enabled_count = 0
+
+                for slot in range(1, 8):
+                    if self._stop_event.is_set():
+                        break
+                    if not settings.get(f"hotbar_buff_tool_slot{slot}_enabled", False):
+                        continue
+                    enabled_count += 1
+
+                    interval_seconds = self._slot_interval_seconds(settings, slot)
+                    if time.time() - float(timings.get(slot, 0) or 0) < interval_seconds:
+                        continue
+
+                    for _ in range(2):
+                        if self._stop_event.is_set():
+                            break
+                        keyboardModule.keyboard.pagPress(str(slot))
+                        if self._stop_event.wait(0.4):
+                            break
+
+                    timings[slot] = time.time()
+                    self._save_timings(timings)
+                    used_slot = slot
+                    self._update_status(
+                        running=True,
+                        state="running",
+                        message=f"Pressed hotbar slot {slot}. Stop it with the macro's configured stop hotkey.",
+                        last_slot=slot,
+                    )
+
+                if enabled_count == 0:
+                    self._update_status(
+                        running=True,
+                        state="running",
+                        message="Hotbar buff tool running. Enable at least one slot in the tool settings.",
+                    )
+                elif used_slot is None:
+                    self._update_status(
+                        running=True,
+                        state="running",
+                        message="Hotbar buff tool running. Waiting for the next configured slot timer.",
+                    )
+                if self._stop_event.wait(1):
+                    break
+        except Exception as exc:
+            self._update_status(
+                running=False,
+                state="finished",
+                message=str(exc),
+            )
+            _clear_tool_presence("tool_hotbar_buff")
+            _send_tool_webhook("Tool Error", f"Hotbar Buff: {str(exc)}", "red")
+        finally:
+            with self._lock:
+                self._thread = None
+                if self._status.get("state") != "finished" or self._status.get("running"):
+                    self._status = self._fresh_status()
+            _clear_tool_presence("tool_hotbar_buff")
+
+
+_hotbar_buff_runner = HotbarBuffRunner()
+
+
 def configureToolRuntime(logger=None, status=None, presence=None):
     global _tool_logger, _tool_status, _tool_presence
     _tool_logger = logger
@@ -282,7 +470,8 @@ def openLink(link):
     
 @eel.expose
 def start():
-    if run.value == 2: return #already running
+    if run.value != 3:
+        return {"ok": False, "message": "The macro is not fully stopped yet."}
     if isAnyToolRunning():
         return {"ok": False, "message": "Stop the running tool before starting the macro."}
     run.value = 1
@@ -741,6 +930,23 @@ def loadFuzzyAITokenRanking(field_name):
 @eel.expose
 def saveFuzzyAITokenRanking(field_name, ranking):
     return settingsManager.saveFuzzyAITokenRanking(field_name, ranking)
+  
+def exportPlanterSettings():
+    """Export planter settings as JSON string"""
+    try:
+        return settingsManager.exportPlanterSettings()
+    except Exception as e:
+        print(f"Error exporting planter settings: {e}")
+        return None
+
+@eel.expose
+def importPlanterSettings(json_settings):
+    """Import planter settings from JSON string"""
+    try:
+        return settingsManager.importPlanterSettings(json_settings)
+    except Exception as e:
+        print(f"Error importing planter settings: {e}")
+        return False
         
 @eel.expose
 def getMacroVersion():
@@ -790,14 +996,36 @@ def getAutoGiftedBasicBeeStatus():
     return _auto_gifted_basic_bee_runner.get_status()
 
 @eel.expose
+def startHotbarBuffTool():
+    result = _hotbar_buff_runner.start(getRunState())
+    if result.get("ok"):
+        _set_tool_presence("tool_hotbar_buff")
+        _send_tool_webhook("Tool Started", "Hotbar Buff started.", "purple")
+    return result
+
+@eel.expose
+def stopHotbarBuffTool():
+    was_active = _hotbar_buff_runner.is_active()
+    result = _hotbar_buff_runner.stop()
+    if was_active:
+        _clear_tool_presence("tool_hotbar_buff")
+        _send_tool_webhook("Tool Stopped", "Hotbar Buff stopped.", "orange")
+    return result
+
+@eel.expose
+def getHotbarBuffStatus():
+    return _hotbar_buff_runner.get_status()
+
+@eel.expose
 def isAnyToolRunning():
-    return _auto_clicker_runner.is_active() or _auto_gifted_basic_bee_runner.is_active()
+    return _auto_clicker_runner.is_active() or _auto_gifted_basic_bee_runner.is_active() or _hotbar_buff_runner.is_active()
 
 @eel.expose
 def stopAllTools():
     results = {
         "auto_clicker": stopAutoClickerTool(),
         "auto_gifted_basic_bee": stopAutoGiftedBasicBeeTool(),
+        "hotbar_buff": stopHotbarBuffTool(),
     }
     return {"ok": True, "results": results}
 
@@ -814,6 +1042,7 @@ def syncToolSession(session_id):
             "status": {
                 "auto_clicker": getAutoClickerStatus(),
                 "auto_gifted_basic_bee": getAutoGiftedBasicBeeStatus(),
+                "hotbar_buff": getHotbarBuffStatus(),
             },
         }
 
@@ -832,18 +1061,25 @@ def syncToolSession(session_id):
         "status": {
             "auto_clicker": getAutoClickerStatus(),
             "auto_gifted_basic_bee": getAutoGiftedBasicBeeStatus(),
+            "hotbar_buff": getHotbarBuffStatus(),
         },
     }
 
 @eel.expose
 def update():
+    def send_update_progress(percent, message):
+        try:
+            eel.updateProgress(percent, message)()
+        except Exception:
+            pass
+
     try:
         # Get the update channel preference
         generalsettings_path = os.path.join(settingsManager.getProfilePath(), "generalsettings.txt")
         settings = settingsManager.readSettingsFile(generalsettings_path)
         update_channel = settings.get("update_channel", "stable")
         
-        updated = updateModule.update(update_channel=update_channel)
+        updated = updateModule.update(update_channel=update_channel, progress_callback=send_update_progress)
     except Exception:
         updated = False
     if updated:
@@ -859,8 +1095,14 @@ def update():
 
 @eel.expose
 def updateFromHash(commit_hash):
+    def send_update_progress(percent, message):
+        try:
+            eel.updateProgress(percent, message)()
+        except Exception:
+            pass
+
     try:
-        updated = updateModule.update_from_commit(commit_hash)
+        updated = updateModule.update_from_commit(commit_hash, progress_callback=send_update_progress)
     except Exception:
         updated = False
     if updated:

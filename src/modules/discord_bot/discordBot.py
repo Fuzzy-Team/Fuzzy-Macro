@@ -93,6 +93,22 @@ def _format_planter_name(name: str) -> str:
     return canonical.replace("_", " ").title() if canonical else ""
 
 
+def _format_planter_time(seconds_remaining: float) -> str:
+    if seconds_remaining <= 0:
+        return "Ready!"
+
+    seconds_remaining = int(seconds_remaining)
+    hours = seconds_remaining // 3600
+    minutes = (seconds_remaining % 3600) // 60
+    seconds = seconds_remaining % 60
+
+    if hours:
+        return f"{hours}h {minutes}m"
+    if minutes:
+        return f"{minutes}m {seconds}s"
+    return f"{seconds}s"
+
+
 def _load_manual_planter_data() -> Dict:
     manual_data = {"planters": [], "fields": [], "harvestTimes": []}
     manual_path = "./data/user/manualplanters.txt"
@@ -162,6 +178,40 @@ def _get_active_planter_choices(settings: Dict) -> List[Tuple[str, int]]:
                 choices.append((canonical, index))
 
     return choices
+
+
+def _get_active_planter_timers(settings: Dict) -> Tuple[int, List[Dict]]:
+    mode = int(settings.get("planters_mode", 0) or 0)
+    timers = []
+    current_time = time.time()
+
+    if mode == 1:
+        manual_data = _load_manual_planter_data()
+        planters = manual_data.get("planters", [])
+        fields = manual_data.get("fields", [])
+        harvest_times = manual_data.get("harvestTimes", [])
+
+        for index, planter in enumerate(planters):
+            if not planter:
+                continue
+            harvest_time = harvest_times[index] if index < len(harvest_times) else 0
+            timers.append({
+                "planter": planter,
+                "field": fields[index] if index < len(fields) else "",
+                "remaining": harvest_time - current_time,
+            })
+    elif mode == 2:
+        auto_data = _load_auto_planter_data()
+        for planter_slot in auto_data.get("planters", []):
+            if not isinstance(planter_slot, dict) or not planter_slot.get("planter"):
+                continue
+            timers.append({
+                "planter": planter_slot.get("planter", ""),
+                "field": planter_slot.get("field", ""),
+                "remaining": planter_slot.get("harvest_time", 0) - current_time,
+            })
+
+    return mode, timers
 
 
 def _reset_planter_timer_by_name(settings: Dict, planter_name: str) -> Tuple[bool, str]:
@@ -666,13 +716,6 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         ("ant_pass_dispenser", "Ant Pass Dispenser"),
         ("treat_dispenser", "Treat Dispenser"),
         ("glue_dispenser", "Glue Dispenser"),
-        ("stockings", "Stockings"),
-        ("wreath", "Wreath"),
-        ("feast", "Feast"),
-        ("samovar", "Samovar"),
-        ("snow_machine", "Snow Machine"),
-        ("lid_art", "Lid Art"),
-        ("candles", "Candles"),
         ("memory_match", "Memory Match"),
         ("mega_memory_match", "Mega Memory Match"),
         ("extreme_memory_match", "Extreme Memory Match"),
@@ -683,6 +726,16 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         ("blue_booster", "Blue Booster"),
         ("red_booster", "Red Booster"),
         ("mountain_booster", "Mountain Booster"),
+    ]
+
+    BEESMAS_SETTINGS = [
+        ("stockings", "Stockings"),
+        ("wreath", "Wreath"),
+        ("feast", "Feast"),
+        ("samovar", "Samovar"),
+        ("snow_machine", "Snow Machine"),
+        ("lid_art", "Lid Art"),
+        ("candles", "Candles"),
     ]
 
     MOB_SETTINGS = [
@@ -710,6 +763,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         "macro_mode": "Macro Mode",
         "quests": "Quests",
         "collectibles": "Collectibles",
+        "beesmas": "Beesmas",
         "mobs": "Mobs",
         "utility": "Utility",
         "hive_slot": "Hive Slot",
@@ -885,6 +939,16 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                     disabled.append(label)
             _add_enabled_disabled(enabled, disabled)
 
+        elif category_key == "beesmas":
+            enabled = []
+            disabled = []
+            for key, label in BEESMAS_SETTINGS:
+                if settings.get(key, False):
+                    enabled.append(label)
+                else:
+                    disabled.append(label)
+            _add_enabled_disabled(enabled, disabled)
+
         elif category_key == "mobs":
             enabled = []
             disabled = []
@@ -946,6 +1010,13 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         embed.add_field(
             name="Collectibles",
             value=f"Enabled: {collectibles_enabled}/{len(COLLECTIBLE_SETTINGS)}",
+            inline=False,
+        )
+
+        beesmas_enabled = sum(1 for key, _ in BEESMAS_SETTINGS if settings.get(key, False))
+        embed.add_field(
+            name="Beesmas",
+            value=f"Enabled: {beesmas_enabled}/{len(BEESMAS_SETTINGS)}",
             inline=False,
         )
 
@@ -2142,6 +2213,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 self.add_item(ToggleSettingsSelect(settings, QUEST_SETTINGS, "Select enabled quests"))
             elif category_key == "collectibles":
                 self.add_item(ToggleSettingsSelect(settings, COLLECTIBLE_SETTINGS, "Select enabled collectibles"))
+            elif category_key == "beesmas":
+                self.add_item(ToggleSettingsSelect(settings, BEESMAS_SETTINGS, "Select enabled Beesmas tasks"))
             elif category_key == "mobs":
                 self.add_item(ToggleSettingsSelect(settings, MOB_SETTINGS, "Select enabled mobs"))
             elif category_key == "utility":
@@ -2167,8 +2240,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
     @bot.tree.command(name = "start", description = "Start")
     async def start(interaction: discord.Interaction):
-        if run.value == 2: 
-            await interaction.response.send_message("Macro is already running")
+        if run.value != 3:
+            await interaction.response.send_message("Macro is not fully stopped yet")
             return 
         try:
             # Press F1 to start the macro (simulating keyboard input)
@@ -3203,6 +3276,37 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         except Exception as e:
             await interaction.response.send_message(f"❌ Error resetting planter timer: {str(e)}")
 
+    @bot.tree.command(name="plantertimers", description="View active planter timers")
+    async def planter_timers(interaction: discord.Interaction):
+        """View active planter timers without generating an hourly report"""
+        try:
+            settings = get_cached_settings()
+            mode, timers = _get_active_planter_timers(settings)
+
+            if mode == 0:
+                await interaction.response.send_message("❌ Planters are currently disabled.")
+                return
+
+            mode_name = "Manual" if mode == 1 else "Auto" if mode == 2 else "Unknown"
+            embed = discord.Embed(title="🌱 Planter Timers", description=f"Mode: **{mode_name}**", color=0x00ff00)
+
+            if not timers:
+                embed.add_field(name="No Active Timers", value="No active planter timers were found.", inline=False)
+            else:
+                for index, timer_data in enumerate(timers, start=1):
+                    planter = _format_planter_name(timer_data.get("planter", ""))
+                    field = str(timer_data.get("field", "")).replace("_", " ").title() or "Unknown Field"
+                    remaining = _format_planter_time(timer_data.get("remaining", 0))
+                    embed.add_field(
+                        name=f"{index}. {planter}",
+                        value=f"Field: **{field}**\nTime: **{remaining}**",
+                        inline=False,
+                    )
+
+            await interaction.response.send_message(embed=embed)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error retrieving planter timers: {str(e)}")
+
     # === MOB RUN COMMANDS ===
 
     @bot.tree.command(name="mobs", description="View mob run configuration")
@@ -3395,7 +3499,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         embed.add_field(name="🎁 **Collectibles**", value="`/collectibles` - View collectibles\n`/collectible <item> <true/false>` - Enable or disable collectible", inline=False)
 
-        embed.add_field(name="🌱 **Planters**", value="`/planterreset <planter>` - Reset the timer for one active enabled planter", inline=False)
+        embed.add_field(name="🌱 **Planters**", value="`/plantertimers` - View active planter timers\n`/planterreset <planter>` - Reset the timer for one active enabled planter", inline=False)
 
         embed.add_field(name="🐛 **Mob Runs**", value="`/mobs` - View mob configuration\n`/mob <mob> <true/false>` - Enable or disable mob run", inline=False)
 
