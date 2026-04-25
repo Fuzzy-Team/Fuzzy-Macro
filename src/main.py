@@ -1501,15 +1501,18 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     fieldDegradation = data.get("field_degradation", {})
 
                     priorityMap = {}
+                    priorityOrder = []
                     for i in range(5):
                         nectar = macro.setdat[f"auto_priority_{i}_nectar"]
                         if nectar == "none":
                             continue
-                        priorityMap[nectar] = {
+                        priorityInfo = {
                             "min": float(macro.setdat[f"auto_priority_{i}_min"]),
                             "index": i,
                             "weight": max(0.5, 1.35 - (i * 0.12))
                         }
+                        priorityMap[nectar] = priorityInfo
+                        priorityOrder.append((nectar, priorityInfo))
 
                     def emptyAutoPlanterSlot():
                         return {
@@ -1884,6 +1887,22 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                     break
                         return candidates
 
+                    def getFocusedPriorityNectar(candidates, projectedNectarPercentages):
+                        availableNectars = {candidate["nectar"] for candidate in candidates}
+                        for nectar, priorityInfo in priorityOrder:
+                            currentPercent = getCurrentNectarPercent(nectar)
+                            if currentPercent >= priorityInfo["min"]:
+                                continue
+
+                            projectedPercent = projectedNectarPercentages.get(nectar, 0.0)
+                            if projectedPercent >= priorityInfo["min"]:
+                                return "waiting_for_harvest"
+                            if nectar in availableNectars:
+                                return nectar
+                            if projectedPercent > currentPercent:
+                                return "waiting_for_harvest"
+                        return None
+
                     def evaluateCandidate(candidate, projectedNectarPercentages, availableFieldCounts):
                         nectar = candidate["nectar"]
                         priorityInfo = getPriorityInfo(nectar)
@@ -1926,6 +1945,15 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         candidates = buildPlacementCandidates(occupiedFields, occupiedPlanters)
                         if not candidates:
                             return 0.0, []
+
+                        focusedNectar = getFocusedPriorityNectar(candidates, projectedNectarPercentages)
+                        if focusedNectar == "waiting_for_harvest":
+                            return 0.0, []
+                        if focusedNectar:
+                            candidates = [
+                                candidate for candidate in candidates
+                                if candidate["nectar"] == focusedNectar
+                            ]
 
                         availableFieldCounts = {}
                         for candidate in candidates:
@@ -2402,7 +2430,7 @@ def watch_for_hotkeys(run):
     pressed_keys = set()
     
     # Add debouncing to prevent duplicate triggers
-    last_trigger_time = {"start": 0.0, "stop": 0.0, "pause": 0.0}
+    last_trigger_time = {"start": 0.0, "stop": 0.0, "pause": 0.0, "hotbar_buff_start": 0.0}
     debounce_duration = 0.3  # 300ms debounce
     
     # Add threading lock for synchronization
@@ -2424,9 +2452,42 @@ def watch_for_hotkeys(run):
     settings_cache_duration = 1.0  # Reload settings every 1 second max
     
     # Cache Eel recording state to avoid repeated calls
-    recording_cache = {"start": False, "pause": False, "stop": False}
+    recording_cache = {"start": False, "pause": False, "stop": False, "hotbar_buff_start": False}
     last_recording_check = 0
     recording_cache_duration = 0.5  # Check recording state every 0.5 seconds max
+
+    modifier_keys = ["Ctrl", "Alt", "Shift", "Cmd"]
+    ignored_keys = {"Fn"}
+    key_aliases = {
+        "ctrl_l": "Ctrl", "ctrl_r": "Ctrl", "control": "Ctrl", "ctrl": "Ctrl",
+        "alt_l": "Alt", "alt_r": "Alt", "option": "Alt", "alt": "Alt",
+        "shift_l": "Shift", "shift_r": "Shift", "shift": "Shift",
+        "cmd_l": "Cmd", "cmd_r": "Cmd", "cmd": "Cmd", "meta": "Cmd", "command": "Cmd",
+        "space": "Space", "spacebar": "Space",
+        "enter": "Enter", "return": "Enter",
+        "tab": "Tab",
+        "backspace": "Backspace",
+        "delete": "Delete", "del": "Delete",
+        "esc": "Escape", "escape": "Escape",
+        "caps_lock": "CapsLock", "capslock": "CapsLock",
+        "left": "ArrowLeft", "arrowleft": "ArrowLeft",
+        "right": "ArrowRight", "arrowright": "ArrowRight",
+        "up": "ArrowUp", "arrowup": "ArrowUp",
+        "down": "ArrowDown", "arrowdown": "ArrowDown",
+        "home": "Home",
+        "end": "End",
+        "page_up": "PageUp", "pageup": "PageUp",
+        "page_down": "PageDown", "pagedown": "PageDown",
+        "insert": "Insert",
+        "fn": "Fn",
+        "¡": "1", "™": "2", "£": "3", "¢": "4", "∞": "5",
+        "§": "6", "¶": "7", "•": "8", "ª": "9", "º": "0",
+        "å": "A", "∫": "B", "ç": "C", "∂": "D", "ƒ": "F",
+        "©": "G", "˙": "H", "∆": "J", "˚": "K", "¬": "L",
+        "µ": "M", "ø": "O", "π": "P", "œ": "Q", "®": "R",
+        "ß": "S", "†": "T", "√": "V", "∑": "W", "≈": "X",
+        "¥": "Y", "Ω": "Z", "ω": "Z",
+    }
     
     def get_cached_settings():
         nonlocal settings_cache, last_settings_load
@@ -2445,64 +2506,67 @@ def watch_for_hotkeys(run):
                 recording_cache["start"] = eel.getElementProperty("start_keybind", "dataset.recording")() == "true"
                 recording_cache["pause"] = eel.getElementProperty("pause_keybind", "dataset.recording")() == "true"
                 recording_cache["stop"] = eel.getElementProperty("stop_keybind", "dataset.recording")() == "true"
+                recording_cache["hotbar_buff_start"] = eel.getElementProperty("hotbar_buff_start_keybind", "dataset.recording")() == "true"
                 last_recording_check = current_time
             except:
-                recording_cache = {"start": False, "pause": False, "stop": False}
-            return recording_cache["start"] or recording_cache["pause"] or recording_cache["stop"]
+                recording_cache = {"start": False, "pause": False, "stop": False, "hotbar_buff_start": False}
+            return recording_cache["start"] or recording_cache["pause"] or recording_cache["stop"] or recording_cache["hotbar_buff_start"]
     
+    def normalize_key_name(key_name):
+        key_name = str(key_name or "").strip()
+        if not key_name:
+            return ""
+        if key_name.startswith("Key."):
+            key_name = key_name[4:]
+        if key_name.startswith("'") and key_name.endswith("'") and len(key_name) >= 2:
+            key_name = key_name[1:-1]
+
+        alias = key_aliases.get(key_name.lower())
+        if alias:
+            return alias
+        if key_name.lower().startswith("f") and key_name[1:].isdigit():
+            return key_name.upper()
+        if len(key_name) == 1:
+            return key_name.upper()
+        return key_name
+
+    def parse_keybind(keybind):
+        keys = []
+        for raw_key in str(keybind or "").split("+"):
+            key_name = normalize_key_name(raw_key)
+            if key_name and key_name not in ignored_keys and key_name not in keys:
+                keys.append(key_name)
+        return tuple(order_keys(keys))
+
+    def order_keys(keys):
+        ordered = [key for key in modifier_keys if key in keys]
+        ordered.extend(sorted(key for key in keys if key not in modifier_keys))
+        return ordered
+
+    def keys_match_keybind(keybind):
+        expected_keys = parse_keybind(keybind)
+        if not expected_keys:
+            return False
+        active_keys = {key for key in pressed_keys if key not in ignored_keys}
+        return active_keys == set(expected_keys)
+
+    def keybind_is_held(keybind):
+        expected_keys = parse_keybind(keybind)
+        if not expected_keys:
+            return False
+        return all(key in pressed_keys for key in expected_keys)
+
     def convert_key_to_string(key):
-        """Optimized key conversion with minimal string operations and error handling"""
+        """Convert pynput key objects to the same canonical names saved by the UI."""
         try:
-            key_str = str(key)
-            if key_str.startswith("Key."):
-                key_str = key_str[4:]  # Remove "Key." prefix
-            
-            # Use dictionary lookup for better performance
-            key_mapping = {
-                "ctrl_l": "Ctrl", "ctrl_r": "Ctrl",
-                "alt_l": "Alt", "alt_r": "Alt", 
-                "shift_l": "Shift", "shift_r": "Shift",
-                "cmd_l": "Cmd", "cmd_r": "Cmd", "cmd": "Cmd",
-                "space": "Space",
-                "enter": "Enter", "return": "Enter",
-                "tab": "Tab", "backspace": "Backspace",
-                "delete": "Delete", "esc": "Escape"
-            }
-            
-            if key_str in key_mapping:
-                return key_mapping[key_str]
-            elif key_str.startswith("f") and len(key_str) <= 3:
-                return key_str.upper()  # F1, F2, etc.
-            elif key_str.startswith("'") and key_str.endswith("'"):
-                return key_str[1:-1].upper()  # Remove quotes and uppercase
-            elif len(key_str) == 1:
-                return key_str.upper()  # A, B, C, etc.
-            else:
-                return key_str
+            key_char = getattr(key, "char", None)
+            if key_char:
+                return normalize_key_name(key_char)
+            return normalize_key_name(str(key))
         except Exception as e:
             # Log error but don't crash the listener
             print(f"Error converting key {key}: {e}")
-            return str(key)
-    
-    def build_key_combination():
-        """Build current key combination string in consistent order"""
-        modifier_keys = ['Ctrl', 'Alt', 'Shift', 'Cmd']
-        sorted_keys = []
-        
-        # Add modifiers first in consistent order
-        for mod in modifier_keys:
-            if mod in pressed_keys:
-                sorted_keys.append(mod)
-        
-        # Add non-modifier keys (sorted alphabetically)
-        non_modifier_keys = []
-        for key in pressed_keys:
-            if key not in modifier_keys:
-                non_modifier_keys.append(key)
-        non_modifier_keys.sort()
-        sorted_keys.extend(non_modifier_keys)
-        
-        return "+".join(sorted_keys)
+            return normalize_key_name(str(key))
     
     def is_stop_keybind_held():
         """Check if the stop keybind is currently held down"""
@@ -2515,14 +2579,7 @@ def watch_for_hotkeys(run):
             if not stop_keybind:
                 return False
             
-            # Parse the stop keybind to get individual keys
-            stop_keys = stop_keybind.split("+")
-            
-            # Check if all keys in the stop keybind are currently pressed
-            for key in stop_keys:
-                if key not in pressed_keys:
-                    return False
-            return True
+            return keybind_is_held(stop_keybind)
         except Exception as e:
             print(f"Error checking stop keybind: {e}")
             return False
@@ -2545,13 +2602,11 @@ def watch_for_hotkeys(run):
                 start_keybind = settings.get("start_keybind", "F1")
                 stop_keybind = settings.get("stop_keybind", "F3")
                 pause_keybind = settings.get("pause_keybind", "F2")
+                hotbar_buff_start_keybind = settings.get("hotbar_buff_start_keybind", "F4")
                 
                 # Convert key to string for comparison
                 key_str = convert_key_to_string(key)
                 pressed_keys.add(key_str)
-                
-                # Build current key combination
-                current_combo = build_key_combination()
                 
                 # Don't start/stop macro if we're recording a keybind
                 if is_recording_keybind():
@@ -2569,11 +2624,11 @@ def watch_for_hotkeys(run):
                     # Force stop immediately when stop keybind is held
                     if run.value != 0:  # Only if not already stopped
                         run.value = 0
-                        # Update GUI immediately (optimistically show stopped state)
+                        # Update GUI immediately so the app shows cleanup in progress.
                         try:
                             import gui
-                            gui.setRunState(3)  # Update GUI state optimistically to stopped
-                            gui.toggleStartStop()  # Update UI immediately
+                            gui.setRunState(0)
+                            gui.toggleStartStop()
                         except:
                             pass  # If gui is not ready, continue
                 else:
@@ -2582,8 +2637,8 @@ def watch_for_hotkeys(run):
                 # Add debouncing to prevent duplicate triggers
                 current_time = time.time()
                 
-                if current_combo == start_keybind:
-                    if run.value == 2: #already running
+                if keys_match_keybind(start_keybind):
+                    if run.value != 3: #only start from fully stopped state
                         return
                     try:
                         import gui
@@ -2608,7 +2663,7 @@ def watch_for_hotkeys(run):
                         gui.toggleStartStop()  # Update UI immediately
                     except:
                         pass  # If gui is not ready, continue
-                elif current_combo == stop_keybind and not stop_key_held:
+                elif keys_match_keybind(stop_keybind) and not stop_key_held:
                     # Check debounce with error handling
                     try:
                         if current_time - last_trigger_time["stop"] < debounce_duration:
@@ -2625,14 +2680,30 @@ def watch_for_hotkeys(run):
                     if run.value == 3: #already stopped
                         return
                     run.value = 0
-                    # Update GUI immediately (optimistically show stopped state)
+                    # Update GUI immediately so the app shows cleanup in progress.
                     try:
                         import gui
-                        gui.setRunState(3)  # Update GUI state optimistically to stopped
-                        gui.toggleStartStop()  # Update UI immediately
+                        gui.setRunState(0)
+                        gui.toggleStartStop()
                     except:
                         pass  # If gui is not ready, continue
-                elif current_combo == pause_keybind:
+                elif keys_match_keybind(hotbar_buff_start_keybind):
+                    if run.value != 3:
+                        return
+                    try:
+                        if current_time - last_trigger_time["hotbar_buff_start"] < debounce_duration:
+                            return
+                    except (TypeError, ValueError):
+                        last_trigger_time["hotbar_buff_start"] = 0.0
+                    last_trigger_time["hotbar_buff_start"] = current_time
+                    try:
+                        import gui
+                        result = gui.startHotbarBuffTool()
+                        if not result.get("ok") and not gui.isAnyToolRunning():
+                            messageBox.msgBox(title="Hotbar Buff", text=result.get("message", "Could not start Hotbar Buff."))
+                    except Exception:
+                        pass
+                elif keys_match_keybind(pause_keybind):
                     # Check debounce with error handling
                     try:
                         if current_time - last_trigger_time["pause"] < debounce_duration:
@@ -2752,12 +2823,12 @@ if __name__ == "__main__":
     #3: already stopped (do nothing)
     #4: disconnected (rejoin)
     manager = multiprocessing.Manager()
-    run = multiprocessing.Value('i', 3)
+    run = manager.Value('i', 3)
     gui.setRunState(3)  # Initialize the global run state
     recentLogs = manager.list()  # Shared list to store recent log entries for discord bot
     gui.setRecentLogs(recentLogs)
-    updateGUI = multiprocessing.Value('i', 0)
-    skipTask = multiprocessing.Value('i', INTERRUPT_NONE)  # interrupt action for the running task
+    updateGUI = manager.Value('i', 0)
+    skipTask = manager.Value('i', INTERRUPT_NONE)  # interrupt action for the running task
     status = manager.Value(ctypes.c_wchar_p, "none")
     presence = manager.Value(ctypes.c_wchar_p, "")
     logQueue = manager.Queue()
@@ -2839,9 +2910,12 @@ if __name__ == "__main__":
         stopThreads = True
         #print(sockets)
         if macroProc and macroProc.is_alive():
-            macroProc.kill()
-            macroProc.join()
-            macroProc = None
+            macroProc.terminate()
+            macroProc.join(timeout=2)
+            if macroProc.is_alive():
+                macroProc.kill()
+                macroProc.join(timeout=2)
+        macroProc = None
         stream.stop()
         #if discordBotProc.is_alive(): discordBotProc.kill()
         keyboardModule.releaseMovement()
@@ -3103,6 +3177,12 @@ if __name__ == "__main__":
             autoStopHours = 0.0
 
             # Stop macro/tools and release all inputs first.
+            gui.setRunState(0)
+            try:
+                gui.toggleStartStop()
+            except:
+                pass
+
             if had_macro_proc:
                 logger.webhook("Macro Stopped", "Fuzzy Macro", "red")
             try:
@@ -3110,14 +3190,14 @@ if __name__ == "__main__":
             except Exception:
                 pass
 
+            stopApp()
+
             run.value = 3
             gui.setRunState(3)
             try:
                 gui.toggleStartStop()
             except:
                 pass
-
-            stopApp()
 
             if not had_macro_proc:
                 continue

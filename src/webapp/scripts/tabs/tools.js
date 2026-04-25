@@ -1,6 +1,7 @@
 let autoClickerTimer = null;
 let autoClickerStatusTimer = null;
 let autoGiftedBasicBeeStatusTimer = null;
+let hotbarBuffStatusTimer = null;
 let toolSessionSynced = false;
 const TOOL_SESSION_ID = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const AUTOCLICKER_MIN_INTERVAL = 10;
@@ -85,7 +86,12 @@ function getBondCalcElements() {
 }
 
 function calculateTreatsForBond(bond, bonusPercent) {
-  const bondPerTreat = 10 * (1 + bonusPercent / 100);
+  // Treat 100% as the base (no bonus). Any input is interpreted as total
+  // Bond from Treats %. We compute the effective bonus relative to 100%
+  // (e.g., input 120 -> effective 20). Ensure the effective bonus
+  // never goes below 0.
+  const effectiveBonus = Math.max(0, (Number(bonusPercent) || 0) - 100);
+  const bondPerTreat = 10 * (1 + effectiveBonus / 100);
   return Math.ceil(bond / bondPerTreat);
 }
 
@@ -241,6 +247,16 @@ async function refreshToolStopHotkey() {
     if (autoGiftedBasicBeeStopHotkey) {
       autoGiftedBasicBeeStopHotkey.textContent = stopKey;
     }
+
+    const hotbarBuffStartHotkey = document.getElementById("hotbar-buff-start-hotkey");
+    if (hotbarBuffStartHotkey) {
+      hotbarBuffStartHotkey.textContent = settings.hotbar_buff_start_keybind || "F4";
+    }
+
+    const hotbarBuffStopHotkey = document.getElementById("hotbar-buff-stop-hotkey");
+    if (hotbarBuffStopHotkey) {
+      hotbarBuffStopHotkey.textContent = stopKey;
+    }
   } catch (error) {
     console.error("Failed to load tool stop hotkey:", error);
   }
@@ -303,6 +319,10 @@ async function syncToolSessionState() {
 
     if (result?.status?.auto_gifted_basic_bee) {
       renderAutoGiftedBasicBeeStatus(result.status.auto_gifted_basic_bee);
+    }
+
+    if (result?.status?.hotbar_buff) {
+      renderHotbarBuffStatus(result.status.hotbar_buff);
     }
   } catch (error) {
     console.error("Failed to sync tool session:", error);
@@ -483,6 +503,97 @@ function initializeAutoGiftedBasicBeeTool() {
   refreshAutoGiftedBasicBeeStatus();
 }
 
+function renderHotbarBuffStatus(status) {
+  if (!status) return;
+
+  const state = document.getElementById("hotbar-buff-state");
+  const lastSlot = document.getElementById("hotbar-buff-last-slot");
+  const message = document.getElementById("hotbar-buff-message");
+  const startButton = document.getElementById("hotbar-buff-start");
+  const stopButton = document.getElementById("hotbar-buff-stop");
+
+  if (state) state.textContent = status.state || "idle";
+  if (lastSlot) lastSlot.textContent = status.last_slot ? `Slot ${status.last_slot}` : "None";
+  if (message) message.textContent = status.message || "Ready";
+
+  if (startButton) {
+    startButton.classList.toggle("active", !!status.running);
+    startButton.textContent = "Start";
+    startButton.style.display = status.running ? "none" : "";
+  }
+
+  if (stopButton) {
+    stopButton.classList.toggle("active", !!status.running);
+    stopButton.style.display = status.running ? "" : "none";
+  }
+}
+
+async function refreshHotbarBuffStatus() {
+  if (!window.eel || typeof eel.getHotbarBuffStatus !== "function") return;
+
+  try {
+    const status = await eel.getHotbarBuffStatus()();
+    renderHotbarBuffStatus(status);
+  } catch (error) {
+    console.error("Failed to refresh hotbar buff status:", error);
+  }
+}
+
+async function startHotbarBuffTool() {
+  if (!window.eel || typeof eel.startHotbarBuffTool !== "function") return;
+
+  try {
+    const result = await eel.startHotbarBuffTool()();
+    const message = document.getElementById("hotbar-buff-message");
+    if (message && result && result.message) {
+      message.textContent = result.message;
+    }
+    await refreshHotbarBuffStatus();
+  } catch (error) {
+    console.error("Failed to start hotbar buff tool:", error);
+  }
+}
+
+async function stopHotbarBuffTool() {
+  if (!window.eel || typeof eel.stopHotbarBuffTool !== "function") return;
+
+  try {
+    const result = await eel.stopHotbarBuffTool()();
+    const message = document.getElementById("hotbar-buff-message");
+    if (message && result && result.message) {
+      message.textContent = result.message;
+    }
+    await refreshHotbarBuffStatus();
+  } catch (error) {
+    console.error("Failed to stop hotbar buff tool:", error);
+  }
+}
+
+function initializeHotbarBuffTool() {
+  if (!hotbarBuffStatusTimer) {
+    hotbarBuffStatusTimer = setInterval(refreshHotbarBuffStatus, 1000);
+  }
+
+  refreshHotbarBuffStatus();
+  switchHotbarBuffToolSlot(1);
+}
+
+function switchHotbarBuffToolSlot(slot) {
+  Array.from(document.getElementsByClassName("hotbar-buff-tool-slot")).forEach((button) => {
+    button.classList.remove("active");
+  });
+  Array.from(document.getElementsByClassName("hotbar-buff-tool-panel")).forEach((panel) => {
+    panel.classList.remove("active");
+  });
+
+  const button = document.getElementById(`hotbar-buff-tool-slot-${slot}`);
+  const panel = document.getElementById(`hotbar-buff-tool-slot-${slot}-panel`);
+  if (!button || !panel) return;
+
+  button.classList.add("active");
+  panel.classList.add("active");
+}
+
 function switchToolsTab(target) {
   const selector = document.getElementById("tools-select");
   if (selector) selector.remove();
@@ -509,6 +620,7 @@ function loadTools() {
   initializeAutoClickerTool();
   initializeBondTreatCalculator();
   initializeAutoGiftedBasicBeeTool();
+  initializeHotbarBuffTool();
 
   switchToolsTab(document.getElementById("tools-autoclicker"));
 }

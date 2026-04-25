@@ -40,6 +40,15 @@
       <div class="credits">
         <span id="version">Loading version...</span><br>
         <button id="update-btn" class="purple-button">Check for Updates</button>
+        <div id="update-progress" class="update-progress d-none" aria-live="polite">
+          <div class="update-progress-row">
+            <span id="update-progress-label">Preparing update</span>
+            <span id="update-progress-percent">0%</span>
+          </div>
+          <div class="update-progress-track">
+            <div id="update-progress-bar" class="update-progress-bar"></div>
+          </div>
+        </div>
       </div>
     </div>
 

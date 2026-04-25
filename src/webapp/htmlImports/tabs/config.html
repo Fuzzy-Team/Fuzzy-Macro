@@ -433,6 +433,17 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
+        {
+          id: "cannon_hive_resync_attempts",
+          title: "Cannon Misses Before Hive Slot Recheck",
+          desc: "After this many missed cannon attempts, reset to the hive, recheck the hive slot number, and try the cannon again before rejoining. Set to 0 to disable.",
+          type: {
+            name: "textbox",
+            inputType: "int",
+            inputLimit: 2,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
       ]);
 
       buildStandardContainer(parentOther, "Auto Stop", "", [
@@ -444,6 +455,18 @@
             name: "textbox",
             inputType: "float",
             inputLimit: 5,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+      ]);
+
+      buildStandardContainer(parentOther, "Inactive Honey Reset", "", [
+        {
+          id: "inactive_honey_reset",
+          title: "Inactive Honey Reset (Beta)",
+          desc: "Reset and retry when the macro detects no active honey gain for an extended period while gathering or converting.",
+          type: {
+            name: "checkbox",
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
@@ -554,6 +577,15 @@
           id: "stop_keybind",
           title: "Stop Macro Keybind",
           desc: "Click to record a new keybind for stopping the macro",
+          type: {
+            name: "keybind",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "hotbar_buff_start_keybind",
+          title: "Start Hotbar Buff Keybind",
+          desc: "Click to record a new keybind for starting the Hotbar Buff tool",
           type: {
             name: "keybind",
             triggerFunction: saveGeneralTriggerFunction,

@@ -1048,6 +1048,25 @@ class macro:
 
     def getBackpack(self):
         return bpc(self.robloxWindow.mx+(self.robloxWindow.mw//2+59+3), self.robloxWindow.my+self.robloxWindow.yOffset+6)
+
+    def isActiveHoney(self):
+        try:
+            x = int(self.robloxWindow.mx + self.robloxWindow.mw//2 - 90)
+            y = int(self.robloxWindow.my + self.robloxWindow.yOffset)
+            screen = mssScreenshotNP(x, y, 70, 34)
+            target_bgr = np.array([128, 226, 255], dtype=np.int16)
+            diff = np.abs(screen[:, :, :3].astype(np.int16) - target_bgr)
+            if np.any(np.all(diff <= 20, axis=2)):
+                return True
+
+            if int(self.setdat.get("bees", 50)) < 25:
+                x = int(self.robloxWindow.mx + self.robloxWindow.mw//2 + 210)
+                screen = mssScreenshotNP(x, y, 70, 34)
+                white_diff = np.abs(screen[:, :, :3].astype(np.int16) - 255)
+                return bool(np.any(np.all(white_diff <= 20, axis=2)))
+        except Exception:
+            return False
+        return False
     
     def faceDirection(self, field, dir):
         keys = fieldFaceNorthKeys[field]
@@ -1126,6 +1145,11 @@ class macro:
     def isBesideEImage(self, name):
         template = self.adjustImage("./images/menu",name)
         return locateTransparentImageOnScreen(template, self.robloxWindow.mx+(self.robloxWindow.mw//2-200), self.robloxWindow.my+self.robloxWindow.yOffset+34, 400, 140, 0.75)
+
+    def isMakeHoneyPrompt(self, log=False):
+        text = self.getTextBesideE()
+        if log: print(f"output text: {text}")
+        return ("make" in text and "honey" in text) or self.isBesideEImage("makehoney")
 
     def getTiming(self,name = None):
         for _ in range(3):
@@ -1557,6 +1581,7 @@ class macro:
                 (conv_setting == "every_gather" and forced_convert_balloon is True)
         
         convertedBackpack = False
+        inactiveHoneyChecks = 0
 
         if self.enableNightDetection:
             self.keyboard.press(",")
@@ -1584,6 +1609,17 @@ class macro:
             if "make" in text and not "stop" in text:
                 self.keyboard.press("e")
                 time.sleep(2)
+
+            if self.setdat.get("inactive_honey_reset", False) and time.time() - st > 60:
+                inactiveHoneyChecks = 0 if self.isActiveHoney() else inactiveHoneyChecks + 1
+                if inactiveHoneyChecks > 30:
+                    self.logger.webhook("Converting: interrupted", "Inactive Honey Reset (Beta)", "orange", "screen")
+                    self.clear_task_status()
+                    if self.enableNightDetection:
+                        self.keyboard.press(".")
+                    self.converting = False
+                    self.reset(convert=False)
+                    return False
 
             mouse.click()
 
@@ -1855,7 +1891,56 @@ class macro:
         else:
             self.logger.webhook("", "Unable to detect that player respawned at hive", "dark brown", "screen")
 
-    def cannon(self, fast = False):
+    def resyncHiveSlotFromHive(self):
+        self.logger.webhook("", "Rechecking hive slot before rejoining", "dark brown", "screen")
+        if not self.reset(convert=False):
+            return False
+
+        def alignWithCannonSideFromHive():
+            self.setRobloxWindowInfo()
+            self.keyboard.walk("w", 0.8)
+            self.keyboard.walk("d", 1.2 * 6)
+
+        def isHivePromptVisible():
+            return self.isMakeHoneyPrompt(log=True) or self.isBesideE(["claim", "hive", "send", "trad", "trade", "has"], log=True)
+
+        def stopAndCheckHiveSlot():
+            time.sleep(0.4)
+            for _ in range(3):
+                if self.isMakeHoneyPrompt(log=True):
+                    return True
+                time.sleep(0.25)
+            return False
+
+        alignWithCannonSideFromHive()
+        for _ in range(4):
+            time.sleep(0.4)
+            if isHivePromptVisible():
+                break
+            self.keyboard.walk("w", 0.1)
+        else:
+            self.logger.webhook("", "Could not find hive prompts while rechecking hive slot", "dark brown", "screen")
+            return False
+
+        hiveNumber = 0
+        for slot in range(1, 7):
+            if slot > 1:
+                self.keyboard.walk("a", self.hiveDistance)
+            if stopAndCheckHiveSlot():
+                hiveNumber = slot
+                break
+
+        if hiveNumber == 0:
+            self.logger.webhook("", "Could not find Make Honey while rechecking hive slot", "dark brown", "screen")
+            return False
+
+        self.setdat["hive_number"] = hiveNumber
+        settingsManager.saveGeneralSetting("hive_number", hiveNumber)
+        self.cannonFromHive = True
+        self.logger.webhook("", f"Updated hive slot to {hiveNumber}; retrying cannon", "bright green", "screen")
+        return True
+
+    def cannon(self, fast = False, allowHiveResync = True):
         def detect_rejoin_mode_color():
             try:
                 if not appManager.isAppFocused("Roblox"):
@@ -1884,6 +1969,13 @@ class macro:
         except (TypeError, ValueError):
             max_attempts = 3
         max_attempts = max(1, max_attempts)
+        try:
+            hive_resync_attempts = int(self.setdat.get("cannon_hive_resync_attempts", 0))
+        except (TypeError, ValueError):
+            hive_resync_attempts = 0
+        hive_resync_attempts = max(0, hive_resync_attempts)
+        if hive_resync_attempts >= max_attempts:
+            hive_resync_attempts = max(0, max_attempts - 1)
         first_attempt_color = None
         for i in range(max_attempts):
             #Move to canon:
@@ -1932,6 +2024,13 @@ class macro:
                 "screen",
             )
             detected_color = detect_rejoin_mode_color()
+            if allowHiveResync and hive_resync_attempts and i + 1 >= hive_resync_attempts:
+                if self.resyncHiveSlotFromHive():
+                    self.cannon(fast=fast, allowHiveResync=False)
+                    return
+                self.logger.webhook("", "Hive slot recheck failed; rejoining", "dark brown", "screen")
+                self.rejoin()
+                return
 
             # Reset between failed attempts until the configured limit is exhausted.
             if i < max_attempts - 1:
@@ -2149,6 +2248,7 @@ class macro:
             rejoinSuccess = False
             availableSlots = [] #store hive slots that are claimable
             newHiveNumber = 0
+            hiveAlreadyClaimed = False
         
             # self.keyboard.keyDown("d", False)
             # self.keyboard.tileWait(4)
@@ -2172,6 +2272,9 @@ class macro:
             def isHiveAvailable():
                 return self.isBesideE(["claim", "hive"], ["send", "trade"], log=True)
 
+            def isOtherHive():
+                return self.isBesideE(["send", "trad", "trade"], ["claim"], log=True)
+
             def isExcludedSlot(slot):
                 return excludedHiveSlot != 0 and slot == excludedHiveSlot
 
@@ -2184,18 +2287,42 @@ class macro:
             # Check selected hive first
             if isExcludedSlot(hiveNumber):
                 self.logger.webhook("", f'Hive {hiveNumber} is excluded, scanning other hives', 'dark brown', "screen")
+            elif self.isMakeHoneyPrompt(log=True):
+                newHiveNumber = hiveNumber
+                rejoinSuccess = True
+                hiveAlreadyClaimed = True
             elif isHiveAvailable():
                 newHiveNumber = hiveNumber
                 rejoinSuccess = True
             else:
                 # Selected hive unavailable — fallback to scanning all hive slots.
-                self.logger.webhook("", f'Hive {hiveNumber} is already claimed, scanning all hives','dark brown', "screen")
+                if isOtherHive():
+                    self.logger.webhook("", f'Hive {hiveNumber} belongs to another player, scanning hives for your slot','dark brown', "screen")
+                else:
+                    self.logger.webhook("", f'Hive {hiveNumber} is already claimed, scanning all hives','dark brown', "screen")
                 # Backtrack to slot 1 before scanning
                 if hiveNumber > 1:
                     self.keyboard.walk("d", self.hiveDistance * (hiveNumber - 1))
                     time.sleep(0.4)
-                # Scan slots 1..6 sequentially
+                # Scan for an already claimed hive first so we update the saved slot instead of claiming a new hive.
                 for j in range(1, 7):
+                    if j > 1:
+                        self.keyboard.walk("a", self.hiveDistance)
+                    time.sleep(0.4)
+                    if self.isMakeHoneyPrompt(log=True):
+                        newHiveNumber = j
+                        rejoinSuccess = True
+                        hiveAlreadyClaimed = True
+                        break
+
+                if not rejoinSuccess:
+                    self.keyboard.walk("d", self.hiveDistance * 5)
+                    time.sleep(0.4)
+
+                # If no existing hive was found, scan slots 1..6 sequentially for a claimable hive.
+                for j in range(1, 7):
+                    if rejoinSuccess:
+                        break
                     if j > 1:
                         self.keyboard.walk("a", self.hiveDistance)
                     time.sleep(0.4)
@@ -2249,9 +2376,20 @@ class macro:
             #             self.setdat["hive_number"] = hiveClaim
             #             break
             #claim hive and convert
-            if rejoinSuccess and isHiveAvailable():
-                self.keyboard.press("e")
-                time.sleep(1)
+            if rejoinSuccess:
+                claimedHive = False
+                if hiveAlreadyClaimed:
+                    claimedHive = True
+                elif isHiveAvailable():
+                    self.keyboard.press("e")
+                    for _ in range(6):
+                        time.sleep(0.5)
+                        if self.isMakeHoneyPrompt(log=True):
+                            claimedHive = True
+                            break
+                if not claimedHive:
+                    self.logger.webhook("",f'Claimed hive {newHiveNumber} prompt not detected; retrying rejoin','dark brown', "screen")
+                    continue
                 self.logger.webhook("",f'Claimed hive {newHiveNumber}', "bright green", "screen", ping_category="ping_critical_errors")
                 self.setdat["hive_number"] = newHiveNumber
                 settingsManager.saveGeneralSetting("hive_number", newHiveNumber)
@@ -2259,7 +2397,7 @@ class macro:
                     self.keyboard.press("o")
                 self.moveMouseToDefault()
                 time.sleep(1)
-                self.convert()
+                self.convert(bypass=True)
                 #no need to reset
                 self.canDetectNight = True
                 self.clear_task_status()
@@ -2449,12 +2587,14 @@ class macro:
         honeyWreathReturnEnabled = shouldUseHoneyWreathReturn()
         honeyWreathPending = False
         honeyWreathWaitLogged = False
+        inactiveHoneyResetEnabled = bool(self.setdat.get("inactive_honey_reset", False))
+        inactiveHoneyTimerActive = True
+        inactiveHoneyEvent = threading.Event()
 
         # Add goo status to webhook message
         gooStatus = " - Goo Enabled" if fieldSetting.get("goo", False) else ""
         self.logger.webhook(f"Gathering: {field.title()}", f"Limit: {gatherTimeLimit} - {fieldSetting['shape']} - Backpack: {fieldSetting['backpack']}%{gooStatus}", "light green")
 
-        import threading
         # Goo timer thread: always 3s interval if goo quest, else field setting
         def gooTimerThread():
             nonlocal lastGooTime, gooTimerActive
@@ -2482,10 +2622,29 @@ class macro:
                     lastGumdropTime = currentTime
                 time.sleep(0.5)
 
+        def inactiveHoneyTimerThread():
+            nonlocal inactiveHoneyTimerActive
+            inactiveChecks = 0
+            while inactiveHoneyTimerActive:
+                try:
+                    if self.getBackpack() < fieldSetting["backpack"]:
+                        inactiveChecks = 0 if self.isActiveHoney() else inactiveChecks + 1
+                        if inactiveChecks > 30:
+                            inactiveHoneyEvent.set()
+                            return
+                    else:
+                        inactiveChecks = 0
+                except Exception:
+                    inactiveChecks = 0
+                time.sleep(1)
+
         gooThread = threading.Thread(target=gooTimerThread, daemon=True)
         gooThread.start()
         gumdropThread = threading.Thread(target=gumdropTimerThread, daemon=True)
         gumdropThread.start()
+        if inactiveHoneyResetEnabled:
+            inactiveHoneyThread = threading.Thread(target=inactiveHoneyTimerThread, daemon=True)
+            inactiveHoneyThread.start()
         mouse.moveBy(10,5)
         self.keyboard.releaseMovement()
 
@@ -2493,9 +2652,10 @@ class macro:
             return time.time() - st
         
         def stopGather():
-            nonlocal gooTimerActive, gumdropTimerActive
+            nonlocal gooTimerActive, gumdropTimerActive, inactiveHoneyTimerActive
             gooTimerActive = False  # Stop the goo timer thread
             gumdropTimerActive = False  # Stop the gumdrop timer thread
+            inactiveHoneyTimerActive = False
             if fieldSetting["shift_lock"]: 
                 self.keyboard.press('shift')
             self.moveMouseToDefault()
@@ -2595,7 +2755,12 @@ class macro:
             gatherTime = self.convertSecsToMinsAndSecs(getGatherTime())
 
             #check for AFB
-            if self.setdat["Auto_Field_Boost"] and not self.AFBLIMIT and self.AFB(gatherInterrupt=True, turnOffShiftLock = fieldSetting["shift_lock"]):
+            if inactiveHoneyEvent.is_set():
+                stopGather()
+                self.logger.webhook("Gathering: interrupted", "Inactive Honey Reset (Beta)", "orange", "screen")
+                self.reset()
+                return
+            elif self.setdat["Auto_Field_Boost"] and not self.AFBLIMIT and self.AFB(gatherInterrupt=True, turnOffShiftLock = fieldSetting["shift_lock"]):
                 return
             #check for gather interrupts
             elif self.night and self.setdat["stinger_hunt"]:
@@ -3518,6 +3683,10 @@ class macro:
                 ix, iy = [j//self.robloxWindow.multi for j in res[1]]
                 mouse.moveTo(x + ix + 5, y + iy + 5)
                 mouse.click()
+                return
+            if keepOldData is not None:
+                mouse.moveTo(keepOldData[0] + 170, keepOldData[1])
+                mouse.click()
         amulet = self.setdat["stump_snail_amulet"]
         if amulet == "keep":
             keepOld()
@@ -3746,11 +3915,22 @@ class macro:
                 self.logger.webhook("", f"Could not find {name}planter in inventory (attempt {attempt+1}) - invalidating cache and retrying", "red")
                 self.planterCoords = None
                 time.sleep(1)
+
+    def getPlanterHotbarSlot(self, planter):
+        settingName = planter.lower().replace(" ", "_")
+        try:
+            slot = int(self.setdat.get(f"planter_hotbar_{settingName}_slot", 0) or 0)
+        except Exception:
+            return 0
+        if slot < 1 or slot > 5:
+            return 0
+        return slot
             
     #place the planter and return true if successfully placed
     def placePlanter(self, planter, field, glitter):
         st = time.time()
         name = planter.lower().replace(" ","").replace("-","")
+        hotbarSlot = self.getPlanterHotbarSlot(planter)
 
         def updateHourlyTime():
             self.hourlyReport.addHourlyStat("misc_time", time.time()-st)
@@ -3767,17 +3947,26 @@ class macro:
         max_attempts = 2
         cooldown_seconds = 3  # Wait 3 seconds before retrying if planter is missing
         for attempt in range(max_attempts):
-            # Invalidate cached planter coordinates before each attempt
-            self.planterCoords = None
-            findPlanterInventoryThread = threading.Thread(target=self.findPlanterInInventory, args=(name,))
-            findPlanterInventoryThread.daemon = True
-            findPlanterInventoryThread.start()
+            findPlanterInventoryThread = None
+            if hotbarSlot:
+                self.planterCoords = None
+            else:
+                # Invalidate cached planter coordinates before each attempt
+                self.planterCoords = None
+                findPlanterInventoryThread = threading.Thread(target=self.findPlanterInInventory, args=(name,))
+                findPlanterInventoryThread.daemon = True
+                findPlanterInventoryThread.start()
 
             self.goToPlanter(planter, field, "place")
-            #wait for thread to finish
-            findPlanterInventoryThread.join()
+            if hotbarSlot:
+                self.logger.webhook("", f"Using hotbar slot {hotbarSlot} for {planter.title()} planter", "dark brown")
+                self.keyboard.press(str(hotbarSlot))
+            else:
+                #wait for thread to finish
+                findPlanterInventoryThread.join()
+
             #Couldn't find planter
-            if self.planterCoords is None:
+            if not hotbarSlot and self.planterCoords is None:
                 # If not found: retry only if we haven't exhausted attempts.
                 if attempt < max_attempts - 1:
                     self.logger.webhook("", f"[Planter Placement] Could not find {planter.title()} in inventory (attempt {attempt+1}/{max_attempts}). Waiting {cooldown_seconds}s before retry.", "red", "screen", ping_category="ping_critical_errors")
@@ -3797,7 +3986,8 @@ class macro:
                     updateHourlyTime()
                     return False
             #place planter
-            self.useItemInInventory(x=self.planterCoords[0], y=self.planterCoords[1])
+            if not hotbarSlot:
+                self.useItemInInventory(x=self.planterCoords[0], y=self.planterCoords[1])
             
             #check if planter is placed
             time.sleep(0.5)
@@ -3813,6 +4003,29 @@ class macro:
                     placedPlanter = False
                     break
                 time.sleep(0.3)
+            if hotbarSlot and placedPlanter and not recoverAlreadyPlacedPlanterState():
+                self.logger.webhook("", f"[Planter Placement] Hotbar slot {hotbarSlot} did not confirm {planter.title()} placement. Trying inventory fallback.", "orange", "screen")
+                self.planterCoords = None
+                self.findPlanterInInventory(name)
+                if self.planterCoords is None:
+                    placedPlanter = False
+                else:
+                    self.goToPlanter(planter, field, "place")
+                    self.useItemInInventory(x=self.planterCoords[0], y=self.planterCoords[1])
+                    time.sleep(0.5)
+                    placementError = None
+                    for _ in range(7):
+                        if self.blueTextImageSearch("notinfield"):
+                            placementError = "notinfield"
+                            placedPlanter = False
+                            break
+                        if self.blueTextImageSearch("maxplanters"):
+                            placementError = "maxplanters"
+                            placedPlanter = False
+                            break
+                        time.sleep(0.3)
+                    if placedPlanter:
+                        placedPlanter = recoverAlreadyPlacedPlanterState()
             if placedPlanter: 
                 self.logger.webhook("",f"Placed Planter: {planter.title()}", "dark brown", "screen")          
                 #use glitter
@@ -4574,6 +4787,142 @@ class macro:
 
             return fields, colors
 
+        def findQuestSectionEnd(scanScreen, minOffset=0):
+            """
+            Return the y offset where the current quest card ends.
+            The quest menu uses a full-width blue-gray divider before the next
+            quest, followed by the pale title bar. Treat either as a hard stop
+            so objective OCR cannot bleed into the next quest.
+            """
+            if scanScreen is None or scanScreen.size == 0:
+                return None
+
+            height = scanScreen.shape[0]
+            minOffset = max(0, min(int(minOffset), height))
+            minBandHeight = max(6, int(8*self.robloxWindow.multi))
+            titleTargetColor = np.array([247, 240, 229], dtype=np.int16)
+            titleTolerance = 5
+            rows = scanScreen[minOffset:, :, :3].astype(np.int16)
+            if rows.size == 0:
+                return None
+
+            titleMask = np.all(np.abs(rows - titleTargetColor) <= titleTolerance, axis=2)
+            titleFractions = np.mean(titleMask, axis=1)
+
+            rowMeans = np.mean(rows, axis=1)
+            rowStds = np.mean(np.std(rows, axis=1), axis=1)
+            rowChannelSpread = np.max(rowMeans, axis=1) - np.min(rowMeans, axis=1)
+            rowBrightness = np.mean(rowMeans, axis=1)
+            rowMax = np.max(rowMeans, axis=1)
+            rowMin = np.min(rowMeans, axis=1)
+
+            # Blue-gray separator bars are broad, fairly flat rows. Objective
+            # backgrounds are also broad rows, so exclude strongly red/green
+            # regions before accepting a gray divider.
+            blue, green, red = rowMeans[:, 0], rowMeans[:, 1], rowMeans[:, 2]
+            stronglyGreen = (green > red + 35) & (green > blue + 35)
+            stronglyRed = (red > green + 35) & (red > blue + 35)
+            grayBarRows = (
+                (rowStds < 28) &
+                (rowChannelSpread < 75) &
+                (rowBrightness > 75) &
+                (rowBrightness < 230) &
+                (rowMax - rowMin > 8) &
+                ~stronglyGreen &
+                ~stronglyRed
+            )
+            titleRows = titleFractions > 0.45
+
+            def findRuns(mask):
+                runs = []
+                runStart = None
+                for idx, value in enumerate(mask):
+                    if value and runStart is None:
+                        runStart = idx
+                    elif not value and runStart is not None:
+                        if idx - runStart >= minBandHeight:
+                            runs.append((runStart, idx))
+                        runStart = None
+                if runStart is not None and len(mask) - runStart >= minBandHeight:
+                    runs.append((runStart, len(mask)))
+                return runs
+
+            titleRuns = findRuns(titleRows)
+            directTitleBoundary = titleRuns[0][0] if titleRuns else None
+
+            grayBoundary = None
+            titleLookahead = max(minBandHeight, int(80*self.robloxWindow.multi))
+            for grayStart, grayEnd in findRuns(grayBarRows):
+                lookaheadEnd = min(len(titleRows), grayEnd + titleLookahead)
+                titleRunsAfterGray = findRuns(titleRows[grayEnd:lookaheadEnd])
+                if not titleRunsAfterGray:
+                    continue
+
+                titleStart = grayEnd + titleRunsAfterGray[0][0]
+                betweenRows = rows[grayEnd:titleStart, :, :]
+                if betweenRows.size:
+                    blue, green, red = betweenRows[:, :, 0], betweenRows[:, :, 1], betweenRows[:, :, 2]
+                    objectiveMask = (
+                        ((green > 120) & (green > red + 20) & (green > blue + 20)) |
+                        ((red > 120) & (red > green + 20) & (red > blue + 20))
+                    )
+                    objectiveRowsBetween = np.mean(objectiveMask, axis=1) > 0.30
+                    if np.any(objectiveRowsBetween):
+                        continue
+
+                if titleRunsAfterGray:
+                    grayBoundary = grayStart
+                    break
+
+            candidates = [x for x in (grayBoundary, directTitleBoundary) if x is not None]
+            return minOffset + min(candidates) if candidates else None
+
+        def detectObjectivePanels(scanScreen):
+            """Find objective rows by their red/green background panels."""
+            if scanScreen is None or scanScreen.size == 0:
+                return []
+
+            rows = scanScreen[:, :, :3].astype(np.int16)
+            blue, green, red = rows[:, :, 0], rows[:, :, 1], rows[:, :, 2]
+            greenMask = (green > 120) & (green > red + 20) & (green > blue + 20)
+            redMask = (red > 120) & (red > green + 20) & (red > blue + 20)
+            greenFractions = np.mean(greenMask, axis=1)
+            redFractions = np.mean(redMask, axis=1)
+
+            panelRows = (greenFractions > 0.30) | (redFractions > 0.30)
+            minPanelHeight = max(18, int(28*self.robloxWindow.multi))
+            maxGap = 1
+
+            runs = []
+            runStart = None
+            gap = 0
+            for row, isPanel in enumerate(panelRows):
+                if isPanel:
+                    if runStart is None:
+                        runStart = row
+                    gap = 0
+                elif runStart is not None:
+                    gap += 1
+                    if gap > maxGap:
+                        runEnd = row - gap + 1
+                        if runEnd - runStart >= minPanelHeight:
+                            runs.append((runStart, runEnd))
+                        runStart = None
+                        gap = 0
+            if runStart is not None and len(panelRows) - runStart >= minPanelHeight:
+                runs.append((runStart, len(panelRows)))
+
+            panels = []
+            for y1, y2 in runs:
+                redScore = float(np.mean(redFractions[y1:y2]))
+                status = "incomplete" if redScore > 0.05 else "complete"
+                panels.append({
+                    "y": y1,
+                    "bbox": (0, y1, scanScreen.shape[1], y2 - y1),
+                    "status": status,
+                })
+            return panels
+
         def extractQuestObjectiveChunks(screen, questTitleYPos):
             screenBgr = cv2.cvtColor(np.array(screen), cv2.COLOR_RGBA2BGR)
             screenCropped = screenBgr[questTitleYPos:, :]
@@ -4638,23 +4987,13 @@ class macro:
             titleHeight = endIndex if endIndex else int(40*self.robloxWindow.multi)
             titleScreen = screenBgr[questTitleYPos:questTitleYPos+titleHeight, :]
 
-            cropMask = cv2.inRange(screenCropped, lower, upper)
-            cropRows = np.any(cropMask > 0, axis=1)
-            nextTitleStart = None
-            minNextTitleOffset = 20*self.robloxWindow.multi
-            for i, hasColor in enumerate(cropRows):
-                if i <= minNextTitleOffset:
-                    continue
-                if hasColor:
-                    nextTitleStart = i
-                    break
-
             parseScreen = screenCropped
             displayScreen = screenCropped
-            if nextTitleStart:
-                parseScreen = screenCropped[:nextTitleStart, :]
+            sectionEnd = findQuestSectionEnd(screenCropped, 20*self.robloxWindow.multi)
+            if sectionEnd:
+                parseScreen = screenCropped[:sectionEnd, :]
                 extraBottomPixels = int(200*self.robloxWindow.multi)
-                displayEnd = min(nextTitleStart + extraBottomPixels, screenCropped.shape[0])
+                displayEnd = min(sectionEnd + extraBottomPixels, screenCropped.shape[0])
                 displayScreen = screenCropped[:displayEnd, :]
 
             screenGray = cv2.cvtColor(parseScreen, cv2.COLOR_BGR2GRAY)
@@ -4709,17 +5048,20 @@ class macro:
             cropHeight = min(300, screen.height)
             crop = screen.crop((0, 0, screen.width, cropHeight))
             bestMatch = None
-            questTitleNoise = ["talk to", "complete", "collect", "field", "pollen", "tokens", "defeat", "catch"]
+            questTitleNoise = ["talk", "complete", "compete", "competer", "collect", "field", "pollen", "tokens", "defeat", "catch"]
             for bbox, (text, _conf) in ocr.ocrRead(crop):
                 line = self.convertCyrillic(text.lower().strip())
                 if not line:
                     continue
                 if any(phrase in line for phrase in questTitleBlacklistedPhrases.get(questGiver, [])):
                     continue
-                if any(noise in line for noise in questTitleNoise) and ":" not in line:
+                hasColon = ":" in line
+                if any(noise in line for noise in questTitleNoise) and not hasColon:
                     continue
                 if questGiver in line:
-                    score = 1.0 if ":" in line else 0.7
+                    if not hasColon and not line.startswith(questGiver):
+                        continue
+                    score = 1.0 if hasColon else 0.7
                 else:
                     score = SequenceMatcher(None, questGiver, line).ratio()
                 if score < 0.65:
@@ -4963,6 +5305,9 @@ class macro:
         #crop
         if endIndex:
             screen = screen[endIndex:, :]
+        sectionEnd = findQuestSectionEnd(screen, 60*self.robloxWindow.multi)
+        if sectionEnd:
+            screen = screen[:sectionEnd, :]
         screen = screen[:min(screen.shape[0], maxObjectiveScanHeight), :]
 
         #convert to grayscale
@@ -4987,59 +5332,165 @@ class macro:
             indexedContours.append((y, contour))
         indexedContours.sort(key=lambda item: item[0])
 
-        completedObjectives = []
-        incompleteObjectives = []
-        i = 0
+        objectiveTextChunks = []
         for _, contour in indexedContours:
             x, y, w, h = cv2.boundingRect(contour)
-            #check if contour meets size requirements
             area = w*h
             if area < minArea or area > maxArea or h > maxHeight:
-                cv2.rectangle(screen, (x, y), (x+w, y+h), (0, 255, 255), 1) #draw a yellow bounding box
                 continue
-            textImg =  Image.fromarray(screen[y:y+h, x:x+w])
+            textImg = Image.fromarray(screen[y:y+h, x:x+w])
             textChunk = []
             for line in ocr.ocrRead(textImg):
                 textChunk.append(self.convertCyrillic(line[1][0].strip().lower()))
             textChunk = ''.join(textChunk)
-            print(textChunk)
+            if textChunk:
+                objectiveTextChunks.append(textChunk)
 
-            #detect amount of items to feed
-            objectiveData = objectives[i].split("_")
-            if objectiveData[0] == "feed":
-                amount = 0
-                #start by trying to get the text from the progression, ie 0/x
-                if "/" in textChunk: 
-                    split = textChunk.split("/")[1].replace(",","").replace(".", "")
-                    amount = int(split) if split.isdigit() else 0
-                #find it via words, ie feed x bluberries
-                if not amount:
-                    words = textChunk.split(" ")
-                    for word in words:
-                        if word.isdigit():
-                            amount = int(word)
-                            break
-                if amount:
-                    objectiveData[1] = str(min(int(amount), 50))
-                    objectives[i] = "_".join(objectiveData)
+        completedObjectives = []
+        incompleteObjectives = []
+        objectivePanels = detectObjectivePanels(screen)
 
-            if "complete" in textChunk:
-                completedObjectives.append(objectives[i])
-                color = (0, 255, 0)  #green
-            else:
-                incompleteObjectives.append(objectives[i])
-                color = (0, 0, 255)  #red
-            
-            #draw bounding boxes and add the quest text
-            drawY = y+endIndex
-            print(drawY)
-            cv2.rectangle(screenOriginal, (x, drawY), (x+w, drawY+h), color, 2)
-            cv2.putText(screenOriginal, objectives[i], (x, drawY-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+        def getPanelStatusFromRegion(y1, y2):
+            y1 = max(0, min(int(y1), screen.shape[0]))
+            y2 = max(y1, min(int(y2), screen.shape[0]))
+            if y2 <= y1:
+                return None
 
-            i += 1
+            region = screen[y1:y2, :]
+            rows = region[:, :, :3].astype(np.int16)
+            if rows.size == 0:
+                return None
+            blue, green, red = rows[:, :, 0], rows[:, :, 1], rows[:, :, 2]
+            redMask = (red > 120) & (red > green + 20) & (red > blue + 20)
+            greenMask = (green > 120) & (green > red + 20) & (green > blue + 20)
+            redScore = float(np.mean(redMask))
+            greenScore = float(np.mean(greenMask))
+            if redScore > 0.05:
+                return "incomplete"
+            if greenScore > 0.25:
+                return "complete"
+            return None
 
-            if i == len(objectives):
-                break
+        if objectivePanels:
+            for i, panel in enumerate(objectivePanels[:len(objectives)]):
+                x, y, w, h = panel["bbox"]
+                textImg = Image.fromarray(screen[y:y+h, x:x+w])
+                textChunk = []
+                for line in ocr.ocrRead(textImg):
+                    textChunk.append(self.convertCyrillic(line[1][0].strip().lower()))
+                textChunk = ''.join(textChunk)
+                print(textChunk)
+
+                objectiveData = objectives[i].split("_")
+                if objectiveData[0] == "feed":
+                    amount = 0
+                    if "/" in textChunk:
+                        split = textChunk.split("/")[1].replace(",", "").replace(".", "")
+                        amount = int(split) if split.isdigit() else 0
+                    if not amount:
+                        words = textChunk.split(" ")
+                        for word in words:
+                            if word.isdigit():
+                                amount = int(word)
+                                break
+                    if amount:
+                        objectiveData[1] = str(min(int(amount), 50))
+                        objectives[i] = "_".join(objectiveData)
+
+                if "complete" in textChunk:
+                    panel["status"] = "complete"
+
+                if panel["status"] == "complete":
+                    completedObjectives.append(objectives[i])
+                    color = (0, 255, 0)
+                else:
+                    incompleteObjectives.append(objectives[i])
+                    color = (0, 0, 255)
+
+                drawY = y+endIndex
+                cv2.rectangle(screenOriginal, (x, drawY), (x+w, drawY+h), color, 2)
+                cv2.putText(screenOriginal, objectives[i], (x, max(0, drawY-10)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+
+            # If the bottom row is clipped or visually missed, still preserve the
+            # known quest objective instead of dropping it from the task list.
+            for missingIndex, missingObjective in enumerate(objectives[len(objectivePanels):], start=len(objectivePanels)):
+                if missingObjective not in completedObjectives and missingObjective not in incompleteObjectives:
+                    if missingIndex < len(objectiveTextChunks) and "complete" in objectiveTextChunks[missingIndex]:
+                        completedObjectives.append(missingObjective)
+                    else:
+                        status = None
+                        if objectivePanels:
+                            panelHeights = [panel["bbox"][3] for panel in objectivePanels]
+                            estimatedHeight = int(np.median(panelHeights))
+                            if len(objectivePanels) >= 2:
+                                panelStarts = [panel["bbox"][1] for panel in objectivePanels]
+                                estimatedSpacing = int(np.median(np.diff(panelStarts)))
+                                estimatedY = objectivePanels[-1]["bbox"][1] + estimatedSpacing * (missingIndex - len(objectivePanels) + 1)
+                            else:
+                                estimatedGap = max(8, int(14*self.robloxWindow.multi))
+                                estimatedY = objectivePanels[-1]["bbox"][1] + objectivePanels[-1]["bbox"][3] + estimatedGap
+                            status = getPanelStatusFromRegion(estimatedY, estimatedY + estimatedHeight)
+
+                        if status == "complete":
+                            completedObjectives.append(missingObjective)
+                        else:
+                            incompleteObjectives.append(missingObjective)
+        else:
+            i = 0
+            for _, contour in indexedContours:
+                x, y, w, h = cv2.boundingRect(contour)
+                #check if contour meets size requirements
+                area = w*h
+                if area < minArea or area > maxArea or h > maxHeight:
+                    cv2.rectangle(screen, (x, y), (x+w, y+h), (0, 255, 255), 1) #draw a yellow bounding box
+                    continue
+                textImg =  Image.fromarray(screen[y:y+h, x:x+w])
+                textChunk = []
+                for line in ocr.ocrRead(textImg):
+                    textChunk.append(self.convertCyrillic(line[1][0].strip().lower()))
+                textChunk = ''.join(textChunk)
+                print(textChunk)
+
+                #detect amount of items to feed
+                objectiveData = objectives[i].split("_")
+                if objectiveData[0] == "feed":
+                    amount = 0
+                    #start by trying to get the text from the progression, ie 0/x
+                    if "/" in textChunk: 
+                        split = textChunk.split("/")[1].replace(",","").replace(".", "")
+                        amount = int(split) if split.isdigit() else 0
+                    #find it via words, ie feed x bluberries
+                    if not amount:
+                        words = textChunk.split(" ")
+                        for word in words:
+                            if word.isdigit():
+                                amount = int(word)
+                                break
+                    if amount:
+                        objectiveData[1] = str(min(int(amount), 50))
+                        objectives[i] = "_".join(objectiveData)
+
+                if "complete" in textChunk:
+                    completedObjectives.append(objectives[i])
+                    color = (0, 255, 0)  #green
+                else:
+                    incompleteObjectives.append(objectives[i])
+                    color = (0, 0, 255)  #red
+                
+                #draw bounding boxes and add the quest text
+                drawY = y+endIndex
+                print(drawY)
+                cv2.rectangle(screenOriginal, (x, drawY), (x+w, drawY+h), color, 2)
+                cv2.putText(screenOriginal, objectives[i], (x, drawY-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+
+                i += 1
+
+                if i == len(objectives):
+                    break
+
+        for objective in objectives:
+            if objective not in completedObjectives and objective not in incompleteObjectives:
+                incompleteObjectives.append(objective)
         
         questImgPath = "latest-quest.png"
         cv2.imwrite(questImgPath, screenOriginal)
