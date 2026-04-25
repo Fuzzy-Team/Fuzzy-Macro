@@ -2,7 +2,8 @@
   <div id="tools-nav" class="sub-nav-bar">
     <div id="tools-autoclicker" class="tools-tab-item">Auto Clicker</div>
     <div id="tools-hotbar-buff" class="tools-tab-item">Hotbar Buff</div>
-    <div id="tools-bond-calculator" class="tools-tab-item">Bond/Treat Calculator</div>
+    <div id="tools-bond-calculator" class="tools-tab-item">Bond Calculator</div>
+    <div id="tools-ticket-calculator" class="tools-tab-item">Ticket Price Calculator</div>
     <div id="tools-auto-gifted-basic-bee" class="tools-tab-item">Auto Gifted Basic Bee</div>
   </div>
 
@@ -303,6 +304,53 @@
             </tr>
           </thead>
           <tbody id="bond-calc-breakdown"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="tools-ticket-calculator-tab" class="standard-container sub-tab-panel">
+    <div class="poppins-medium standard-container" style="display: block; justify-items: unset; padding-top: 1rem;">
+      <h2>Ticket Price Calculator</h2>
+      <p style="font-weight:500; font-size:1rem;">Calculate the honey cost of buying tickets from the Bee Swarm Simulator ticket shop.</p>
+      <p style="font-size:0.95rem; opacity:0.8; margin-top:0.5rem;">Enter the current price of your next ticket to see the cost for common ticket bundles.</p>
+      <div class="seperator"></div>
+
+      <div class="bond-calc-grid ticket-calc-grid">
+        <div class="bond-calc-input-group">
+          <label for="ticket-calc-next-price">Price of Next Ticket</label>
+          <div class="ticket-calc-price-row">
+            <input
+              id="ticket-calc-next-price"
+              class="textbox"
+              type="number"
+              min="0"
+              step="0.01"
+              value="100"
+            />
+            <select id="ticket-calc-next-price-unit" class="textbox bond-calc-select ticket-calc-unit">
+              <option value="1000">K</option>
+              <option value="1000000" selected>M</option>
+              <option value="1000000000">B</option>
+              <option value="1000000000000">T</option>
+              <option value="1000000000000000">Qd</option>
+              <option value="1000000000000000000">Qn</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div id="ticket-calc-warning" class="bond-calc-warning" style="display:none;"></div>
+
+      <div class="bond-calc-table-wrap">
+        <table class="bond-calc-table ticket-calc-table">
+          <thead>
+            <tr>
+              <th>Tickets</th>
+              <th>Cost</th>
+            </tr>
+          </thead>
+          <tbody id="ticket-calc-presets-breakdown"></tbody>
         </table>
       </div>
     </div>
