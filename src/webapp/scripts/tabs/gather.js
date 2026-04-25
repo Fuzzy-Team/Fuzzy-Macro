@@ -219,7 +219,6 @@ function updateGatherPatternUI() {
   const pattern = getSelectedGatherPattern();
   const fuzzySection = document.getElementById("fuzzy-ai-gather-section");
   const description = document.getElementById("gather-pattern-metadata");
-  const metadata = gatherPatternMetadata[pattern] || {};
   const isFuzzyAI = pattern === "fuzzy_ai_gather";
 
   if (fuzzySection) {
