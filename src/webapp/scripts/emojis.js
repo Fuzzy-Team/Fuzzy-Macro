@@ -45,7 +45,8 @@ const fieldEmojis = {
     rose: "🌹",
     mountain_top: "⛰️",
     pepper: "🌶️",
-    coconut: "🥥"
+    coconut: "🥥",
+    hive_hub: "🏠"
 }
 
 const collectEmojis = {

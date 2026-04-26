@@ -223,6 +223,9 @@ blenderItems = ["red extract", "blue extract", "enzymes", "oil", "glue", "tropic
     "super smoothie",
     "turpentine"]
 
+MAIN_GAME_PLACE_ID = "1537690962"
+HIVE_HUB_PLACE_ID = "15579077077"
+
 #a list of keys to press to face north after running the cannon_to_field path
 fieldFaceNorthKeys = {
     "sunflower": ["."]*2,
@@ -241,7 +244,8 @@ fieldFaceNorthKeys = {
     "rose": ["."]*2,
     "mountain top": ["."]*4,
     "pepper": ["."]*2,
-    "coconut": ["."]*4
+    "coconut": ["."]*4,
+    "hive hub": None
 }
 
 fieldFaceNorthKeys = {
@@ -261,7 +265,8 @@ fieldFaceNorthKeys = {
     "rose": ["."]*2,
     "mountain top": ["."]*4,
     "pepper": ["."]*2,
-    "coconut": ["."]*4
+    "coconut": ["."]*4,
+    "hive hub": None
 }
 
 #the field dimensions taken from natro
@@ -283,7 +288,8 @@ startLocationDimensions = {
     "rose": [2500, 1500],
     "mountain top": [2250, 1500],
     "pepper": [1500, 2250],
-    "coconut": [1500, 2250]
+    "coconut": [1500, 2250],
+    "hive hub": [0, 0]
 }
 
 #for the ocr
@@ -1096,6 +1102,31 @@ class macro:
         # Normalize field name to handle both space and underscore formats
         normalized_field = str(field).replace('_', ' ').strip()
         self.location = normalized_field
+        if normalized_field == "hive hub":
+            self.rejoin(
+                rejoinMsg="Travelling: Hive Hub",
+                placeId=HIVE_HUB_PLACE_ID,
+                claimHive=False,
+                usePrivateServer=False,
+            )
+            #HIVE HUB PATH
+            self.keyboard.press("shift")
+            self.keyboard.keyDown("w")
+            time.sleep(6)
+            self.keyboard.keyUp("w")
+            self.keyboard.keyDown("d")
+            time.sleep(0.5)
+            self.keyboard.keyUp("d")
+            self.keyboard.keyDown("w")
+            time.sleep(1.25)
+            self.keyboard.keyUp("w")
+            self.keyboard.press(",")
+            self.keyboard.press(",")
+            self.keyboard.keyDown("s")
+            time.sleep(0.7)
+            self.keyboard.keyUp("s")
+            self.keyboard.press("shift")
+            return
         self.runPath(f"cannon_to_field/{normalized_field}")
         if faceDir == "default": return
         self.faceDirection(normalized_field, faceDir)
@@ -2064,17 +2095,18 @@ class macro:
             self.logger.webhook("Notice", f"Failed to reach cannon too many times", "red", ping_category="ping_critical_errors")
             self.rejoin()
     
-    def rejoin(self, rejoinMsg = "Rejoining"):
+    def rejoin(self, rejoinMsg = "Rejoining", placeId = MAIN_GAME_PLACE_ID, claimHive = True, usePrivateServer = True):
         self.canDetectNight = False
+        placeId = str(placeId or MAIN_GAME_PLACE_ID)
         psLink = self.setdat.get("private_server_link", "")
         self.logger.webhook("",rejoinMsg, "dark brown")
         self.set_task_status("rejoining", activity="rejoining")
         mouse.mouseUp()
         keyboard.releaseMovement()
         for i in range(3):
-            joinPS = bool(psLink and psLink.strip()) #join private server?
+            joinPS = bool(usePrivateServer and psLink and psLink.strip()) #join private server?
             rejoinMethod = self.setdat.get("rejoin_method", "deeplink")
-            browserLink = "https://www.roblox.com/games/4189852503?privateServerLinkCode=87708969133388638466933925137129"
+            browserLink = f"https://www.roblox.com/games/{placeId}"
             if i == 2 and joinPS: 
                 self.logger.webhook("", "Failed rejoining too many times, falling back to a public server", "red", "screen", ping_category="ping_disconnects")
                 joinPS = False
@@ -2090,7 +2122,7 @@ class macro:
                     appManager.closeApp("Roblox")
                 appManager.openApp("Roblox")
                 time.sleep(2)
-                deeplink = "roblox://placeID=1537690962"
+                deeplink = f"roblox://placeID={placeId}"
                 if joinPS:
                     # Parse the provided private server link robustly using url parsing
                     from urllib.parse import urlparse, parse_qs
@@ -2232,6 +2264,12 @@ class macro:
                 appManager.openApp("Roblox")
             
             self.startDetect()
+            if not claimHive:
+                time.sleep(7) #wait for the joined friend popup to disappear
+                mouse.click()
+                self.canDetectNight = True
+                self.clear_task_status()
+                return True
             #find hive
             time.sleep(7) #wait for the joined friend popup to disappear
             mouse.click()
@@ -2409,9 +2447,10 @@ class macro:
                 #no need to reset
                 self.canDetectNight = True
                 self.clear_task_status()
-                return
+                return True
             self.logger.webhook("",f'Rejoin unsuccessful, attempt {i+2}','dark brown', "screen")
         self.clear_task_status()
+        return False
     
     def blueTextImageSearch(self, text, threshold=0.7):
         target = self.adjustImage("./images/blue", text)
@@ -2447,6 +2486,7 @@ class macro:
         # Normalize field name to handle both space and underscore formats
         # Convert underscores to spaces for fieldSettings lookup
         normalized_field = field.replace('_', ' ')
+        isHiveHubField = normalized_field == "hive hub"
         fieldSetting = {**self.fieldSettings[normalized_field], **settingsOverride}
         def shouldUseHoneyWreathReturn():
             if not self.setdat.get("wreath", False):
@@ -2478,9 +2518,12 @@ class macro:
                 self.set_task_status(f"travelling_{field}", activity="travelling", field=field)
             except Exception:
                 pass
-            self.cannon()
+            if not isHiveHubField:
+                self.cannon()
             self.logger.webhook("",f"Travelling: {field.title()}, Attempt {i+1}", "dark brown")
             self.goToField(field)
+            if isHiveHubField:
+                break
             #go to start location (match natro's)
             startLocation = fieldSetting["start_location"]
             moveSpeedFactor = 18/self.setdat["movespeed"]
@@ -2546,7 +2589,7 @@ class macro:
         width = fieldSetting["width"]
         maxGatherTime = fieldSetting["mins"]*60
         gatherTimeLimit = self.convertSecsToMinsAndSecs(maxGatherTime)
-        returnType = fieldSetting["return"]
+        returnType = "rejoin" if isHiveHubField else fieldSetting["return"]
         pattern = fieldSetting['shape']
         fuzzyAIRuntimeDefaults = settingsManager.FUZZY_AI_RUNTIME_DEFAULTS
         fuzzyAITokenRanking = settingsManager.loadFuzzyAITokenRanking(field)
@@ -2595,7 +2638,7 @@ class macro:
         honeyWreathReturnEnabled = shouldUseHoneyWreathReturn()
         honeyWreathPending = False
         honeyWreathWaitLogged = False
-        inactiveHoneyResetEnabled = bool(self.setdat.get("inactive_honey_reset", False))
+        inactiveHoneyResetEnabled = bool(self.setdat.get("inactive_honey_reset", False)) and not isHiveHubField
         inactiveHoneyTimerActive = True
         inactiveHoneyEvent = threading.Event()
 
@@ -2814,6 +2857,8 @@ class macro:
                     self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Time Limit - Return: {returnType.title()}", "light green", "screen")
                     keepGathering = False
             #check backpack
+            elif isHiveHubField:
+                continue
             else:
                 backpack = self.getBackpack()
                 if backpack >= fieldSetting["backpack"]:
@@ -2924,7 +2969,7 @@ class macro:
             self.reset()
         elif returnType == "rejoin":
             #goo timer continues via background thread during rejoin
-            self.rejoin()
+            self.rejoin(placeId=MAIN_GAME_PLACE_ID, claimHive=True)
         elif returnType == "whirligig":
             #goo timer continues via background thread during whirligig usage
             self.useItemInInventory("whirligig")
