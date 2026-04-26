@@ -3381,16 +3381,10 @@ class macro:
                 #get the blue texts 4 times to avoid missing the field
                 for _ in range(4):
                     bluetexts += ocr.imToString("blue").lower()
-                #find which field is in blue texts
-                #note: fields is set in the collect path of the boosters
-                boostedField = ""
-                for f in fields:
-                    sub_name = f.split(" ")
-                    for sn in sub_name:
-                        if sn in bluetexts:
-                            boostedField = f
-                            break
-                    if boostedField: break
+                # Reuse AFB parsing logic to robustly detect boosted field names.
+                allCandidateFields = list(startLocationDimensions.keys())
+                detectedBoostedFields = self._extractAFBBoostedFields(bluetexts, allCandidateFields)
+                boostedField = detectedBoostedFields[-1] if detectedBoostedFields else ""
                 returnVal = boostedField
                 self.logger.webhook("", f"Collected: {displayName}, Boosted Field: {boostedField.title()}", "bright green", "screen")
                 self.saveTiming("last_booster")
