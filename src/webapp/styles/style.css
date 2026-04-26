@@ -119,6 +119,13 @@
   --primary-rgb: 63, 193, 195;
 }
 
+/* Commander Theme Overrides (main color: #32be4e) */
+.theme-commander {
+  --primary: #32be4e;
+  --primary-hover: #58cf6f;
+  --primary-rgb: 50, 190, 78;
+}
+
 body {
   margin: 0;
   padding: 0;
