@@ -119,10 +119,10 @@
   --primary-rgb: 63, 193, 195;
 }
 
-/* Commander Theme Overrides (main color: #32be4e) */
+/* Commander Theme Overrides (main color: #5ad172) */
 .theme-commander {
-  --primary: #32be4e;
-  --primary-hover: #58cf6f;
+  --primary: #5ad172;
+  --primary-hover: #3d9c50;
   --primary-rgb: 50, 190, 78;
 }
 
