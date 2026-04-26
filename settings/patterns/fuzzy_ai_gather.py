@@ -608,6 +608,9 @@ def _fallback_pattern():
 
 
 def _initialise_runtime():
+    self.keyboard.press("pageup")
+    self.keyboard.press("pageup")
+
     global ort
     if ort is None:
         # Try to install onnxruntime into the active Python environment and import it.
