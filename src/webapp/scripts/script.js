@@ -589,6 +589,7 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
       gather_pineapple: "Gather: Pineapple",
       gather_pumpkin: "Gather: Pumpkin",
       gather_coconut: "Gather: Coconut",
+      gather_hive_hub: "Gather: Hive Hub",
       gather_pepper: "Gather: Pepper",
       gather_mountain_top: "Gather: Mountain Top",
       gather_stump: "Gather: Stump",

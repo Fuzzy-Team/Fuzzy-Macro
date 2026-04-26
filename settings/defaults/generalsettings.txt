@@ -1,5 +1,5 @@
 hive_number=1
-hive_exclude_slot=0
+hive_exclude_slot=[]
 sprinkler_slot=1
 movespeed=29
 sprinkler_type=saturator
