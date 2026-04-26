@@ -1112,7 +1112,7 @@ class macro:
             #HIVE HUB PATH
             self.keyboard.press("shift")
             self.keyboard.keyDown("w")
-            time.sleep(7)
+            time.sleep(6)
             self.keyboard.keyUp("w")
             self.keyboard.keyDown("d")
             time.sleep(0.5)
