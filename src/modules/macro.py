@@ -2503,10 +2503,11 @@ class macro:
         s = n % 60
         return f"{int(m)}m {int(s):02d}s"
 
-    def gatherPetal(self, field):
+    def gatherPetal(self, field, settingsOverride=None):
         normalized_field = str(field).replace('_', ' ').strip()
         if not normalized_field:
             return
+        settingsOverride = settingsOverride or {}
         fieldSetting = self.fieldSettings[normalized_field]
         self._petalCalibration["ready"] = False
         self._petalSprinklerHome["ready"] = False
@@ -2556,7 +2557,13 @@ class macro:
         time.sleep(0.1)
         self._petalReturnToSprinkler()
 
-        max_scan_time = int(self.setdat.get("quest_gather_mins", 0) * 60) if self.setdat.get("quest_gather_mins", 0) else 45
+        try:
+            petalGatherMins = float(settingsOverride.get("mins", 8))
+        except Exception:
+            petalGatherMins = 8
+        if petalGatherMins <= 0:
+            petalGatherMins = 8
+        max_scan_time = int(petalGatherMins * 60)
         start = time.time()
         misses = 0
 
@@ -2578,13 +2585,10 @@ class macro:
                     continue
 
                 misses = 0
-                if not self._petalCalibration["ready"]:
-                    self._petalTryCalibrate(bloom)
-
                 moved = self._petalChaseAndSweep()
                 if moved:
                     if not self._petalReturnToSprinkler():
-                        self._petalCalibration["ready"] = False
+                        self._petalSprinklerHome["ready"] = False
                 if not moved:
                     time.sleep(0.15)
             except Exception:
@@ -2601,17 +2605,12 @@ class macro:
         return self.bloomDetector.detect_candidates(self._petalCaptureBGR())
 
     def _petalAcquireBloomTarget(self):
-        candidates = self._petalCaptureCandidates()
-        if not candidates:
+        if not self._petalSprinklerHome.get("ready") and not self._petalReturnToSprinkler(max_steps=2):
             return None
-        center_x = self.robloxWindow.mw / 2.0
-        center_y = self.robloxWindow.mh / 2.0
-        return max(
-            candidates,
-            key=lambda candidate: (
-                candidate.score,
-                -((candidate.x - center_x) ** 2 + (candidate.y - center_y) ** 2),
-            ),
+        return self.bloomDetector.find_best_aligned_target(
+            self._petalCaptureBGR(),
+            self.sprinklerDetector,
+            max_distance_tiles=self.sprinklerDetector.MAX_DISTANCE_TILES,
         )
 
     def _petalWalkTiles(self, key, tiles):
@@ -2762,53 +2761,33 @@ class macro:
         return min(candidates, key=lambda candidate: (candidate.x - target_x) ** 2 + (candidate.y - target_y) ** 2)
 
     def _petalComputeStep(self, target):
-        if not self._petalCalibration["ready"]:
-            return None
+        if not self._petalSprinklerHome.get("ready"):
+            if not self._petalReturnToSprinkler(max_steps=2):
+                return None
+
+        candidate = target.candidate
 
         center_x = self.robloxWindow.mw / 2.0
         center_y = self.robloxWindow.mh / 2.0
-        dx = target.x - center_x
-        dy = target.y - center_y
-
-        vf_x = self._petalCalibration["vf_x"]
-        vf_y = self._petalCalibration["vf_y"]
-        vr_x = self._petalCalibration["vr_x"]
-        vr_y = self._petalCalibration["vr_y"]
-        det = (vf_x * vr_y) - (vf_y * vr_x)
-        if abs(det) < 1e-6:
-            self._petalCalibration["ready"] = False
-            return None
-
-        forward_tiles = (((-dx) * vr_y) - ((-dy) * vr_x)) / det
-        strafe_tiles = ((vf_x * (-dy)) - (vf_y * (-dx))) / det
+        dx = candidate.x - center_x
+        dy = candidate.y - center_y
+        strafe_tiles = target.tx
+        forward_tiles = target.ty
         return {
             "forward_tiles": forward_tiles,
             "strafe_tiles": strafe_tiles,
+            "distance_tiles": target.distance,
             "distance_px": math.hypot(dx, dy),
         }
 
     def _petalApplyStep(self, forward_tiles, strafe_tiles):
         forward_tiles = max(min(forward_tiles, 4.5), -4.5)
         strafe_tiles = max(min(strafe_tiles, 4.5), -4.5)
-        forward_pos_key = self._petalCalibration["forward_pos_key"]
-        forward_neg_key = self._petalCalibration["forward_neg_key"]
-        strafe_pos_key = self._petalCalibration["strafe_pos_key"]
-        strafe_neg_key = self._petalCalibration["strafe_neg_key"]
-
-        if forward_tiles > 0:
-            self._petalWalkTiles(forward_pos_key, forward_tiles)
-        elif forward_tiles < 0:
-            self._petalWalkTiles(forward_neg_key, -forward_tiles)
-
-        if strafe_tiles > 0:
-            self._petalWalkTiles(strafe_pos_key, strafe_tiles)
-        elif strafe_tiles < 0:
-            self._petalWalkTiles(strafe_neg_key, -strafe_tiles)
-
+        self._petalWalkVector(strafe_tiles, forward_tiles)
         time.sleep(0.1)
 
-    def _petalChaseAndSweep(self, max_steps=5, settle_px=70.0):
-        if not self._petalCalibration["ready"]:
+    def _petalChaseAndSweep(self, max_steps=5, settle_tiles=0.65):
+        if not self._petalSprinklerHome.get("ready") and not self._petalReturnToSprinkler(max_steps=2):
             return False
 
         last_target = None
@@ -2820,7 +2799,7 @@ class macro:
             step = self._petalComputeStep(target)
             if step is None:
                 return False
-            if step["distance_px"] <= settle_px or (
+            if step["distance_tiles"] <= settle_tiles or (
                 abs(step["forward_tiles"]) < 0.2 and abs(step["strafe_tiles"]) < 0.2
             ):
                 self._petalSweepArea()

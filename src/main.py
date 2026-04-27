@@ -777,6 +777,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             questGatherFieldOverrides = {}
             questGumdropFieldOverrides = {}
             questPetalGatherFields = []
+            questPetalGatherFieldOverrides = {}
             redFieldNeeded = False
             blueFieldNeeded = False
             fieldNeeded = False
@@ -858,7 +859,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                     questGumdropGatherFields.append(field)
                                     if field not in questGumdropFieldOverrides:
                                         questGumdropFieldOverrides[field] = dict(questGatherOverrides)
-                                questPetalGatherFields.extend(petalGatherFields)
+                                for field in petalGatherFields:
+                                    questPetalGatherFields.append(field)
+                                    if field not in questPetalGatherFieldOverrides:
+                                        questPetalGatherFieldOverrides[field] = dict(questGatherOverrides)
                                 redFieldNeeded = redFieldNeeded or needsRed
                                 blueFieldNeeded = blueFieldNeeded or needsBlue
                                 itemsToFeedBees.extend(feedBees)
@@ -919,7 +923,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             # Handle petal quest gather fields
             questPetalGatherFields = [x for x in questPetalGatherFields if not (x in allGatheredFields)]
             for field in questPetalGatherFields:
-                runTask(macro.gatherPetal, args=(field,), resetAfter=False)
+                runTask(macro.gatherPetal, args=(field, questPetalGatherFieldOverrides.get(field, {})), resetAfter=False)
                 allGatheredFields.append(field)
 
             # Handle required blue/red fields for quests
@@ -1036,6 +1040,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         questGatherFieldOverrides = {}
         questGumdropFieldOverrides = {}
         questPetalGatherFields = []
+        questPetalGatherFieldOverrides = {}
         redFieldNeeded = False
         blueFieldNeeded = False
         fieldNeeded = False
@@ -1085,7 +1090,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     questGumdropGatherFields.append(field)
                     if field not in questGumdropFieldOverrides:
                         questGumdropFieldOverrides[field] = dict(questGatherOverrides)
-                questPetalGatherFields.extend(petalGatherFields)
+                for field in petalGatherFields:
+                    questPetalGatherFields.append(field)
+                    if field not in questPetalGatherFieldOverrides:
+                        questPetalGatherFieldOverrides[field] = dict(questGatherOverrides)
                 redFieldNeeded = redFieldNeeded or needsRed
                 blueFieldNeeded = blueFieldNeeded or needsBlue
                 redGumdropFieldNeeded = redGumdropFieldNeeded or needsRedGumdrop
@@ -1220,7 +1228,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
 
                     # Gather petal fields (if any)
                     for field in petalGatherFields:
-                        runTask(macro.gatherPetal, args=(field,), resetAfter=False)
+                        runTask(macro.gatherPetal, args=(field, questGatherOverrides), resetAfter=False)
                     
                     # Feed bees if needed
                     for item, quantity in feedBees:
@@ -1364,7 +1372,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             if taskId.startswith("gatherpetal_"):
                 fieldName = taskId.replace("gatherpetal_", "").replace("_", " ")
                 if fieldName in questPetalGatherFields:
-                    runTask(macro.gatherPetal, args=(fieldName,), resetAfter=False)
+                    runTask(macro.gatherPetal, args=(fieldName, questPetalGatherFieldOverrides.get(fieldName, {})), resetAfter=False)
                     executedTasks.add(taskId)
                     return True
                 return False
@@ -1373,7 +1381,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             if taskId.startswith("gatherpetal_"):
                 fieldName = taskId.replace("gatherpetal_", "").replace("_", " ")
                 if fieldName in questPetalGatherFields:
-                    runTask(macro.gatherPetal, args=(fieldName,), resetAfter=False)
+                    runTask(macro.gatherPetal, args=(fieldName, questPetalGatherFieldOverrides.get(fieldName, {})), resetAfter=False)
                     executedTasks.add(taskId)
                     return True
                 return False
@@ -2351,7 +2359,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         # Handle petal quest gather fields
         questPetalGatherFields = [x for x in questPetalGatherFields if not (x in allGatheredFields)]
         for field in questPetalGatherFields:
-            runTask(macro.gatherPetal, args=(field,), resetAfter=False)
+            runTask(macro.gatherPetal, args=(field, questPetalGatherFieldOverrides.get(field, {})), resetAfter=False)
             allGatheredFields.append(field)
 
         # Handle required blue/red fields for quests
