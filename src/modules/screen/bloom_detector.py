@@ -17,29 +17,24 @@ class BloomCandidate:
     score: float
 
 
+@dataclass
+class BloomTarget:
+    tx: float
+    ty: float
+    distance: float
+    candidate: BloomCandidate
+
+
 class BloomDetector:
-    CENTER_HUE_RANGES = [(16, 32)]
-    CENTER_SAT_RANGE = (50, 125)
-    CENTER_VAL_RANGE = (85, 255)
+    HEALTHBAR_TARGET_Y_OFFSET = 80
+    NAMEPLATE_TARGET_Y_MULTIPLIER = 2.0
 
-    MIN_BLOB_AREA = 20
-    MAX_BLOB_AREA = 800
-    MIN_CIRCULARITY = 0.75
-    MIN_CENTER_FILL_RATIO = 0.68
-
-    RING_INNER_RADIUS_PERCENT = 105
-    RING_OUTER_RADIUS_PERCENT = 225
-    MIN_PETAL_RATIO = 0.18
-
-    _PETAL_COLOR_HUES = {
-        "red": [(0, 10), (170, 179)],
-        "pink": [(145, 179)],
-        "blue": [(95, 130)],
-        "cyan": [(80, 100)],
-        "green": [(36, 90)],
-        "white": [],
-        "yellow": [(16, 40)],
-    }
+    def _in_play_area(self, x, y, width, height):
+        if y < 170 or y > height - 125:
+            return False
+        if x > width - 360 and y > height - 240:
+            return False
+        return True
 
     def _range_mask(self, hsv, hue_ranges, sat_range, val_range):
         h = hsv[:, :, 0]
@@ -60,121 +55,269 @@ class BloomDetector:
         val_mask = ((v >= val_range[0]) & (v <= val_range[1])).astype(np.uint8)
         return (hue_mask & sat_mask & val_mask).astype(np.uint8) * 255
 
-    def _generic_petal_mask(self, hsv):
-        masks = [
-            self._range_mask(hsv, [(0, 10), (170, 179)], (80, 255), (90, 255)),
-            self._range_mask(hsv, [(145, 179)], (40, 255), (120, 255)),
-            self._range_mask(hsv, [(95, 130)], (50, 255), (90, 255)),
-            self._range_mask(hsv, [(80, 100)], (40, 255), (120, 255)),
-            self._range_mask(hsv, [(36, 90)], (35, 255), (60, 255)),
-            self._range_mask(hsv, [], (0, 55), (175, 255)),
-        ]
-        out = np.zeros(hsv.shape[:2], dtype=np.uint8)
-        for mask in masks:
-            out |= mask
-        return out
-
-    def _preferred_petal_mask(self, hsv, preferred_color):
-        color = str(preferred_color or "").strip().lower()
-        if color == "white":
-            return self._range_mask(hsv, [], (0, 60), (180, 255))
-        hue_ranges = self._PETAL_COLOR_HUES.get(color)
-        if hue_ranges is None:
-            return self._generic_petal_mask(hsv)
-        return self._range_mask(hsv, hue_ranges, (35, 255), (90, 255))
-
-    def _center_mask(self, bgr):
+    def _detect_healthbar_candidates(self, bgr):
         hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
-        mask = self._range_mask(
-            hsv,
-            self.CENTER_HUE_RANGES,
-            self.CENTER_SAT_RANGE,
-            self.CENTER_VAL_RANGE,
-        )
-        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8), iterations=1)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8), iterations=1)
-        mask = cv2.dilate(mask, np.ones((3, 3), np.uint8), iterations=1)
-        return hsv, mask
+        height, width = bgr.shape[:2]
 
-    def detect_candidates(self, bgr, preferred_color=None):
-        if bgr is None or getattr(bgr, "size", 0) == 0:
-            return []
+        green_mask = self._range_mask(hsv, [(20, 90)], (70, 255), (80, 255))
+        green_mask = cv2.morphologyEx(green_mask, cv2.MORPH_CLOSE, np.ones((7, 3), np.uint8), iterations=1)
+        pink_mask = self._range_mask(hsv, [(135, 176)], (70, 255), (120, 255))
+        white_mask = self._range_mask(hsv, [], (0, 75), (170, 255))
+        dark_mask = self._range_mask(hsv, [], (0, 220), (0, 80))
+        dark_search_mask = cv2.morphologyEx(dark_mask, cv2.MORPH_CLOSE, np.ones((13, 5), np.uint8), iterations=2)
+        dark_search_mask = cv2.morphologyEx(dark_search_mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8), iterations=1)
 
-        hsv, center_mask = self._center_mask(bgr)
-        petal_mask = self._preferred_petal_mask(hsv, preferred_color)
-        generic_mask = self._generic_petal_mask(hsv)
-
-        contours, _ = cv2.findContours(center_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours, _ = cv2.findContours(green_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         candidates = []
-        height, width = center_mask.shape[:2]
+        seen = []
 
         for contour in contours:
+            x, y, w, h = cv2.boundingRect(contour)
             area = cv2.contourArea(contour)
-            if area < self.MIN_BLOB_AREA or area > self.MAX_BLOB_AREA:
+            if w < 10 or w > 120 or h < 3 or h > 24:
+                continue
+            if area < 24 or area > 1800:
+                continue
+            if w / float(max(h, 1)) < 1.8:
                 continue
 
-            perimeter = cv2.arcLength(contour, True)
-            if perimeter <= 0:
-                continue
-            circularity = (4.0 * math.pi * area) / (perimeter * perimeter)
-            if circularity < self.MIN_CIRCULARITY:
-                continue
+            label_x0 = max(0, x - 42)
+            label_y0 = max(0, y - 12)
+            label_x1 = min(width, x + max(w + 85, 95))
+            label_y1 = min(height, y + h + 16)
+            roi_area = max((label_x1 - label_x0) * (label_y1 - label_y0), 1)
 
-            moments = cv2.moments(contour)
-            if not moments["m00"]:
-                continue
-            cx = int(moments["m10"] / moments["m00"])
-            cy = int(moments["m01"] / moments["m00"])
+            pink_count = int(np.count_nonzero(pink_mask[label_y0:label_y1, label_x0:label_x1]))
+            white_count = int(np.count_nonzero(white_mask[label_y0:label_y1, label_x0:label_x1]))
+            dark_count = int(np.count_nonzero(dark_mask[label_y0:label_y1, label_x0:label_x1]))
+            green_count = int(np.count_nonzero(green_mask[label_y0:label_y1, label_x0:label_x1]))
 
-            (_, _), radius = cv2.minEnclosingCircle(contour)
-            radius = max(float(radius), 1.0)
-            circle_area = math.pi * radius * radius
-            center_fill_ratio = float(area) / float(circle_area) if circle_area > 0 else 0.0
-            if center_fill_ratio < self.MIN_CENTER_FILL_RATIO:
+            if pink_count < 2 or white_count < 8:
+                continue
+            if dark_count / float(roi_area) < 0.08:
                 continue
 
-            outer_radius = max(radius * self.RING_OUTER_RADIUS_PERCENT / 100.0, radius + 1.0)
-            outer_radius_i = int(math.ceil(outer_radius))
-            x0 = max(0, cx - outer_radius_i)
-            y0 = max(0, cy - outer_radius_i)
-            x1 = min(width, cx + outer_radius_i + 1)
-            y1 = min(height, cy + outer_radius_i + 1)
-
-            yy, xx = np.ogrid[y0:y1, x0:x1]
-            dist2 = (xx - cx) ** 2 + (yy - cy) ** 2
-            inner2 = (radius * self.RING_INNER_RADIUS_PERCENT / 100.0) ** 2
-            outer2 = outer_radius ** 2
-            annulus = (dist2 >= inner2) & (dist2 <= outer2)
-            annulus_pixels = int(np.count_nonzero(annulus))
-            if not annulus_pixels:
+            cx = int(round(label_x0 + ((label_x1 - label_x0) / 2.0)))
+            cy = int(round(min(height - 1, y + h + self.HEALTHBAR_TARGET_Y_OFFSET)))
+            if not self._in_play_area(cx, cy, width, height):
                 continue
+            if any((cx - px) ** 2 + (cy - py) ** 2 < 2500 for px, py in seen):
+                continue
+            seen.append((cx, cy))
 
-            petal_region = petal_mask[y0:y1, x0:x1] > 0
-            petal_ratio = float(np.count_nonzero(petal_region & annulus)) / float(annulus_pixels)
-
-            # Use a slightly more permissive fallback for candidates with strong circular yellow centers.
-            if petal_ratio < self.MIN_PETAL_RATIO:
-                generic_region = generic_mask[y0:y1, x0:x1] > 0
-                generic_ratio = float(np.count_nonzero(generic_region & annulus)) / float(annulus_pixels)
-                petal_ratio = max(petal_ratio, generic_ratio)
-                if petal_ratio < (self.MIN_PETAL_RATIO * 0.6) and not (
-                    circularity >= 0.86 and center_fill_ratio >= 0.82
-                ):
-                    continue
-
-            score = (circularity * 1.2) + center_fill_ratio + (petal_ratio * 2.0)
+            score = (
+                min(green_count / 80.0, 2.0)
+                + min(pink_count / 20.0, 1.5)
+                + min(white_count / 80.0, 1.5)
+                + min((dark_count / float(roi_area)) * 5.0, 1.0)
+            )
             candidates.append(
                 BloomCandidate(
                     x=cx,
                     y=cy,
                     area=float(area),
-                    radius=radius,
-                    circularity=float(circularity),
-                    center_fill_ratio=float(center_fill_ratio),
-                    petal_ratio=float(petal_ratio),
+                    radius=55.0,
+                    circularity=1.0,
+                    center_fill_ratio=min(green_count / 80.0, 1.0),
+                    petal_ratio=min(pink_count / 20.0, 1.0),
+                    score=float(score),
+                )
+            )
+
+        dark_contours, _ = cv2.findContours(dark_search_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for contour in dark_contours:
+            x, y, w, h = cv2.boundingRect(contour)
+            area = cv2.contourArea(contour)
+            if w < 26 or w > 140 or h < 6 or h > 24:
+                continue
+            if area < 90 or area > 2500:
+                continue
+            if w / float(max(h, 1)) < 2.2:
+                continue
+
+            label_x0 = max(0, x - 42)
+            label_y0 = max(0, y - 14)
+            label_x1 = min(width, x + max(w + 90, 105))
+            label_y1 = min(height, y + h + 18)
+            roi_area = max((label_x1 - label_x0) * (label_y1 - label_y0), 1)
+
+            pink_count = int(np.count_nonzero(pink_mask[label_y0:label_y1, label_x0:label_x1]))
+            white_count = int(np.count_nonzero(white_mask[label_y0:label_y1, label_x0:label_x1]))
+            green_count = int(np.count_nonzero(green_mask[label_y0:label_y1, label_x0:label_x1]))
+            dark_count = int(np.count_nonzero(dark_mask[label_y0:label_y1, label_x0:label_x1]))
+
+            if green_count < 10 or white_count < 8:
+                continue
+            if pink_count < 1 and green_count < 30:
+                continue
+
+            cx = int(round(label_x0 + ((label_x1 - label_x0) / 2.0)))
+            cy = int(round(min(height - 1, y + h + self.HEALTHBAR_TARGET_Y_OFFSET)))
+            if not self._in_play_area(cx, cy, width, height):
+                continue
+            if any((cx - px) ** 2 + (cy - py) ** 2 < 2500 for px, py in seen):
+                continue
+            seen.append((cx, cy))
+
+            score = (
+                min(green_count / 55.0, 2.0)
+                + min(white_count / 70.0, 1.5)
+                + min(pink_count / 12.0, 1.2)
+                + min((dark_count / float(roi_area)) * 5.0, 1.0)
+            )
+            candidates.append(
+                BloomCandidate(
+                    x=cx,
+                    y=cy,
+                    area=float(area),
+                    radius=55.0,
+                    circularity=1.0,
+                    center_fill_ratio=min(green_count / 55.0, 1.0),
+                    petal_ratio=min(pink_count / 12.0, 1.0),
                     score=float(score),
                 )
             )
 
         candidates.sort(key=lambda c: c.score, reverse=True)
         return candidates
+
+    def _detect_nameplate_candidates(self, bgr):
+        hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+        height, width = bgr.shape[:2]
+
+        dark_mask = self._range_mask(hsv, [], (0, 210), (0, 95))
+        dark_mask = cv2.morphologyEx(dark_mask, cv2.MORPH_CLOSE, np.ones((13, 5), np.uint8), iterations=2)
+        dark_mask = cv2.morphologyEx(dark_mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8), iterations=1)
+
+        green_mask = self._range_mask(hsv, [(38, 86)], (80, 255), (120, 255))
+        white_mask = self._range_mask(hsv, [], (0, 70), (175, 255))
+        pink_mask = self._range_mask(hsv, [(135, 175)], (70, 255), (120, 255))
+        cyan_mask = self._range_mask(hsv, [(88, 110)], (70, 255), (110, 255))
+
+        contours, _ = cv2.findContours(dark_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        candidates = []
+        seen = []
+
+        for contour in contours:
+            x, y, w, h = cv2.boundingRect(contour)
+            area = cv2.contourArea(contour)
+            if w < 42 or w > 280 or h < 14 or h > 95:
+                continue
+            if area < 350 or area > 18000:
+                continue
+
+            aspect = w / float(h)
+            if aspect < 1.3 or aspect > 8.5:
+                continue
+
+            pad = max(4, int(round(h * 0.35)))
+            x0 = max(0, x - pad)
+            y0 = max(0, y - pad)
+            x1 = min(width, x + w + pad)
+            y1 = min(height, y + h + pad)
+            roi_area = max((x1 - x0) * (y1 - y0), 1)
+
+            green_count = int(np.count_nonzero(green_mask[y0:y1, x0:x1]))
+            white_count = int(np.count_nonzero(white_mask[y0:y1, x0:x1]))
+            pink_count = int(np.count_nonzero(pink_mask[y0:y1, x0:x1]))
+            cyan_count = int(np.count_nonzero(cyan_mask[y0:y1, x0:x1]))
+            bright_count = green_count + white_count + pink_count + cyan_count
+
+            if green_count < 8 or white_count < 8 or bright_count < 24:
+                continue
+
+            cx = int(round(x + (w / 2.0)))
+            cy = int(round(min(height - 1, y + (h * self.NAMEPLATE_TARGET_Y_MULTIPLIER))))
+            radius = float(max(w, h) / 2.0)
+            body_area = float(area)
+            circularity = 1.0
+            fill_ratio = min(green_count / 80.0, 1.0)
+
+            if not self._in_play_area(cx, cy, width, height):
+                continue
+
+            if any((cx - px) ** 2 + (cy - py) ** 2 < 900 for px, py in seen):
+                continue
+            seen.append((cx, cy))
+
+            health_signal = min(green_count / 80.0, 1.8)
+            text_signal = min(white_count / 120.0, 1.4)
+            bloom_icon_signal = min((pink_count + cyan_count) / 40.0, 1.0)
+            density = bright_count / float(roi_area)
+            score = health_signal + text_signal + bloom_icon_signal + min(density * 8.0, 1.0)
+
+            candidates.append(
+                BloomCandidate(
+                    x=cx,
+                    y=cy,
+                    area=body_area,
+                    radius=radius,
+                    circularity=circularity,
+                    center_fill_ratio=fill_ratio,
+                    petal_ratio=min((pink_count + cyan_count) / 40.0, 1.0),
+                    score=float(score),
+                )
+            )
+
+        candidates.sort(key=lambda c: c.score, reverse=True)
+        return candidates
+
+    def detect_candidates(self, bgr, preferred_color=None):
+        if bgr is None or getattr(bgr, "size", 0) == 0:
+            return []
+
+        candidates = self._detect_healthbar_candidates(bgr)
+        candidates.extend(self._detect_nameplate_candidates(bgr))
+        candidates.sort(key=lambda c: c.score, reverse=True)
+
+        deduped = []
+        for candidate in candidates:
+            if any(
+                (candidate.x - existing.x) ** 2 + (candidate.y - existing.y) ** 2
+                < max(candidate.radius, existing.radius, 35.0) ** 2
+                for existing in deduped
+            ):
+                continue
+            deduped.append(candidate)
+        return deduped
+
+    def aligned_targets(self, bgr, sprinkler_detector, preferred_color=None, max_distance_tiles=None):
+        if bgr is None or getattr(bgr, "size", 0) == 0:
+            return []
+
+        height, width = bgr.shape[:2]
+        targets = []
+        for candidate in self.detect_candidates(bgr, preferred_color=preferred_color):
+            distance = sprinkler_detector.relative_distance(candidate.x, candidate.y, width, height)
+            if distance is None:
+                continue
+            tx, ty = distance
+            magnitude = float(math.hypot(tx, ty))
+            if max_distance_tiles is not None and magnitude > max_distance_tiles:
+                continue
+            targets.append(
+                BloomTarget(
+                    tx=float(tx),
+                    ty=float(ty),
+                    distance=magnitude,
+                    candidate=candidate,
+                )
+            )
+
+        targets.sort(
+            key=lambda target: (
+                target.candidate.score,
+                -target.distance,
+            ),
+            reverse=True,
+        )
+        return targets
+
+    def find_best_aligned_target(self, bgr, sprinkler_detector, preferred_color=None, max_distance_tiles=None):
+        targets = self.aligned_targets(
+            bgr,
+            sprinkler_detector,
+            preferred_color=preferred_color,
+            max_distance_tiles=max_distance_tiles,
+        )
+        return targets[0] if targets else None
