@@ -12,7 +12,7 @@ Requirements:
 - mss or Pillow
 - blue.onnx and sprinkler.onnx
 
-Calibration uses normalized fallback points ported from this repo.
+- Version 1.0
 """
 
 import math
