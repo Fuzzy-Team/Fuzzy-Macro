@@ -12,7 +12,7 @@ Requirements:
 - mss or Pillow
 - blue.onnx and sprinkler.onnx
 
-- Version 1.0
+- Version 1.1
 """
 
 import math
@@ -367,11 +367,11 @@ def _token_metrics():
         "soft_leash": max_leash * 0.625,
         "max_consider": max_leash + 1.0 + (0.15 * width),
         "cluster_radius": 1.6 + (0.1 * width),
-        "proximity_exp": 1.8,
+        "proximity_exp": 1.25,
         "toward_home_bonus": 1.4,
-        "away_from_home_penalty": 0.6,
-        "cluster_bonus_per_token": 0.15,
-        "leash_edge_penalty": 0.3,
+        "away_from_home_penalty": 0.8,
+        "cluster_bonus_per_token": 0.25,
+        "leash_edge_penalty": 0.5,
     }
 
 
