@@ -26,6 +26,7 @@ DEFAULT_FUZZY_AI_TOKEN_RANKING = {
     "preferred_tokens": "Token Link,Focus,Melody,Blue Boost,Honey Mark,Honey Mark Token,Pollen Mark,Pollen Mark Token,Haste",
     "ignored_tokens": "Honey,Blueberry",
 }
+FIELD_PATTERN_PRESETS_KEY = "pattern_presets"
 
 #returns a dictionary containing the settings
 profileName = "a"
@@ -136,6 +137,59 @@ def normalizeFieldSettings(field_name, settings, default_fields=None):
         normalized.update(_stripAIGatherFieldKeys(settings))
 
     return normalized
+
+def _getFieldPatternPresets(settings):
+    if not isinstance(settings, dict):
+        return {}
+    presets = settings.get(FIELD_PATTERN_PRESETS_KEY, {})
+    if isinstance(presets, dict):
+        return {
+            str(pattern): dict(preset)
+            for pattern, preset in presets.items()
+            if isinstance(preset, dict)
+        }
+    return {}
+
+def _fieldSettingsWithoutPatternPresets(settings):
+    if not isinstance(settings, dict):
+        return {}
+    return {
+        key: value
+        for key, value in settings.items()
+        if key != FIELD_PATTERN_PRESETS_KEY
+    }
+
+def _saveFieldPatternPreset(presets, pattern, settings):
+    if not pattern:
+        return
+    preset = _fieldSettingsWithoutPatternPresets(settings)
+    preset["shape"] = pattern
+    presets[pattern] = preset
+
+def _applyFieldPatternPresets(existing_settings, incoming_settings):
+    incoming_shape = incoming_settings.get("shape")
+    existing_shape = (
+        existing_settings.get("shape") if isinstance(existing_settings, dict) else None
+    )
+
+    presets = _getFieldPatternPresets(existing_settings)
+    presets.update(_getFieldPatternPresets(incoming_settings))
+
+    if existing_shape and existing_shape != incoming_shape:
+        _saveFieldPatternPreset(presets, existing_shape, existing_settings)
+
+    if existing_shape != incoming_shape and incoming_shape in presets:
+        merged_settings = {
+            **incoming_settings,
+            **presets[incoming_shape],
+            "shape": incoming_shape,
+        }
+    else:
+        merged_settings = dict(incoming_settings)
+
+    _saveFieldPatternPreset(presets, incoming_shape, merged_settings)
+    merged_settings[FIELD_PATTERN_PRESETS_KEY] = presets
+    return merged_settings
 
 def _tokenRankingDefaults():
     return {
@@ -541,7 +595,9 @@ def loadFields():
 
 def saveField(field, settings):
     fieldsData = loadFields()
-    fieldsData[field] = normalizeFieldSettings(field, settings)
+    existingSettings = fieldsData.get(field, {})
+    normalizedSettings = normalizeFieldSettings(field, settings)
+    fieldsData[field] = _applyFieldPatternPresets(existingSettings, normalizedSettings)
     fields_path = os.path.join(getProfilePath(), "fields.txt")
     with open(fields_path, "w") as f:
         f.write(str(fieldsData))

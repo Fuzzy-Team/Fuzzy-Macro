@@ -17,6 +17,7 @@
     <script>
       const parentElement = document.getElementById("gather");
       const triggerFunction = "saveField()";
+      const patternTriggerFunction = "saveFieldPatternChange()";
       const fieldData = toEmojiArray(fieldEmojis);
       buildStandardContainer(parentElement, "Gather Field", "", [
         {
@@ -66,7 +67,7 @@
           type: {
             name: "dropdown",
             data: [],
-            triggerFunction: triggerFunction,
+            triggerFunction: patternTriggerFunction,
           },
         },
         {
