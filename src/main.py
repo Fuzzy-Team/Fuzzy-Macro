@@ -1501,18 +1501,15 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     fieldDegradation = data.get("field_degradation", {})
 
                     priorityMap = {}
-                    priorityOrder = []
                     for i in range(5):
                         nectar = macro.setdat[f"auto_priority_{i}_nectar"]
                         if nectar == "none":
                             continue
-                        priorityInfo = {
+                        priorityMap[nectar] = {
                             "min": float(macro.setdat[f"auto_priority_{i}_min"]),
                             "index": i,
                             "weight": max(0.5, 1.35 - (i * 0.12))
                         }
-                        priorityMap[nectar] = priorityInfo
-                        priorityOrder.append((nectar, priorityInfo))
 
                     def emptyAutoPlanterSlot():
                         return {
@@ -1887,22 +1884,6 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                     break
                         return candidates
 
-                    def getFocusedPriorityNectar(candidates, projectedNectarPercentages):
-                        availableNectars = {candidate["nectar"] for candidate in candidates}
-                        for nectar, priorityInfo in priorityOrder:
-                            currentPercent = getCurrentNectarPercent(nectar)
-                            if currentPercent >= priorityInfo["min"]:
-                                continue
-
-                            projectedPercent = projectedNectarPercentages.get(nectar, 0.0)
-                            if projectedPercent >= priorityInfo["min"]:
-                                return "waiting_for_harvest"
-                            if nectar in availableNectars:
-                                return nectar
-                            if projectedPercent > currentPercent:
-                                return "waiting_for_harvest"
-                        return None
-
                     def evaluateCandidate(candidate, projectedNectarPercentages, availableFieldCounts):
                         nectar = candidate["nectar"]
                         priorityInfo = getPriorityInfo(nectar)
@@ -1945,15 +1926,6 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         candidates = buildPlacementCandidates(occupiedFields, occupiedPlanters)
                         if not candidates:
                             return 0.0, []
-
-                        focusedNectar = getFocusedPriorityNectar(candidates, projectedNectarPercentages)
-                        if focusedNectar == "waiting_for_harvest":
-                            return 0.0, []
-                        if focusedNectar:
-                            candidates = [
-                                candidate for candidate in candidates
-                                if candidate["nectar"] == focusedNectar
-                            ]
 
                         availableFieldCounts = {}
                         for candidate in candidates:
