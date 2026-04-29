@@ -3392,7 +3392,9 @@ class macro:
                 if "your" in reached or "activated" in reached:
                     self.logger.webhook("", "Sticker Stack on cooldown", "dark brown", "screen")
                     return
-                self.claimStickerStack()
+                if not self.claimStickerStack():
+                    updateHourlyTime()
+                    return
             else:
                 time.sleep(0.1)
                 self.logger.webhook("", f"Collected: {displayName}", "bright green", "screen")
@@ -4522,7 +4524,7 @@ class macro:
                 self.setdat["sticker_stack"] = False
                 settingsManager.saveProfileSetting("sticker_stack", False)
                 self.keyboard.press("e")
-                return
+                return False
         if "ticket" in self.setdat["sticker_stack_item"] and not stickerUsed:
                 mouse.moveTo(self.robloxWindow.mx+(self.robloxWindow.mw//2+105), self.robloxWindow.my+(4*self.robloxWindow.mh//10-78))
                 time.sleep(0.1)
@@ -4544,13 +4546,15 @@ class macro:
             if not self.setdat["hive_skin"] and not self.setdat["cub_skin"]: #do not use cub and hive stickers
                 self.logger.webhook("", "A hive/cub sticker has been wrongly selected, aborting", "red", "screen", ping_category="ping_critical_errors")
                 self.keyboard.press("e")
-                return
+                return False
         
         if "ticket" in self.setdat["sticker_stack_item"] and not yesPopup: #if no popup appears, ran out of tickets
             self.logger.webhook("", "No Tickets left, Sticker Stack has been disabled", "red", "screen", ping_category="ping_critical_errors")
             self.setdat["sticker_stack"] = False
+            settingsManager.saveProfileSetting("sticker_stack", False)
+            self.updateGUI.value = 1
             self.keyboard.press("e")
-            return
+            return False
         if finalTime is not None:
             if stickerUsed: finalTime += 10
             self.logger.webhook("", f"Activated Sticker Stack, Buff Duration: {timedelta(seconds=finalTime)}", "bright green")
@@ -4567,6 +4571,7 @@ class macro:
         with open("./data/user/sticker_stack.txt", "w") as f:
             f.write(str(finalTime))
         f.close()
+        return True
     
     def backgroundOnce(self):
         with open("./data/user/hotbar_timings.txt", "r") as f:
