@@ -24,6 +24,40 @@ const gatherFieldProperties = [
   "goo_interval",
 ];
 let gatherPatternMetadata = {};
+let activeGatherFieldData = {};
+let activeGatherPattern = "";
+
+function getGatherPatternPresets(fieldData) {
+  if (
+    !fieldData ||
+    typeof fieldData.pattern_presets !== "object" ||
+    Array.isArray(fieldData.pattern_presets)
+  ) {
+    return {};
+  }
+  return fieldData.pattern_presets;
+}
+
+function getGatherFieldDataFromInputs() {
+  const fieldData = generateSettingObject(gatherFieldProperties);
+  fieldData.pattern_presets = getGatherPatternPresets(activeGatherFieldData);
+  return fieldData;
+}
+
+function rememberGatherPatternPreset(fieldData, pattern) {
+  if (!pattern) return fieldData;
+  const presets = getGatherPatternPresets(fieldData);
+  presets[pattern] = { ...fieldData, shape: pattern };
+  delete presets[pattern].pattern_presets;
+  fieldData.pattern_presets = presets;
+  return fieldData;
+}
+
+function setActiveGatherFieldData(fieldData) {
+  activeGatherFieldData =
+    fieldData && typeof fieldData === "object" ? fieldData : {};
+  activeGatherPattern = activeGatherFieldData.shape || "";
+}
 const fuzzyAITokenNames = [
   "Baby Love",
   "Beamstorm",
@@ -245,7 +279,37 @@ function saveField() {
     }
   }
 
-  const fieldData = generateSettingObject(gatherFieldProperties);
+  let fieldData = getGatherFieldDataFromInputs();
+  fieldData = rememberGatherPatternPreset(fieldData, fieldData.shape);
+  setActiveGatherFieldData(fieldData);
+  eel.saveField(getInputValue("field"), fieldData);
+  updateGatherPatternUI();
+}
+
+function saveFieldPatternChange() {
+  let fieldData = getGatherFieldDataFromInputs();
+  const previousPattern =
+    activeGatherPattern || activeGatherFieldData.shape || fieldData.shape;
+  const selectedPattern = fieldData.shape;
+
+  fieldData = rememberGatherPatternPreset(fieldData, previousPattern);
+
+  const presets = getGatherPatternPresets(fieldData);
+  const selectedPreset = presets[selectedPattern];
+  if (selectedPreset && typeof selectedPreset === "object") {
+    fieldData = {
+      ...fieldData,
+      ...selectedPreset,
+      shape: selectedPattern,
+      pattern_presets: presets,
+    };
+  } else {
+    fieldData.shape = selectedPattern;
+  }
+
+  fieldData = rememberGatherPatternPreset(fieldData, selectedPattern);
+  setActiveGatherFieldData(fieldData);
+  loadInputs(fieldData);
   eel.saveField(getInputValue("field"), fieldData);
   updateGatherPatternUI();
 }
@@ -260,6 +324,7 @@ async function updateFieldEnable(ele) {
 //load the field selected in the dropdown
 async function loadAndSaveField(ele) {
   const data = (await eel.loadFields()())[getDropdownValue(ele)];
+  setActiveGatherFieldData(data);
   loadInputs(data);
   updateGatherPatternUI();
   //save
@@ -382,6 +447,7 @@ $("#gather-placeholder")
       if (success) {
         // Reload the field data and update the UI
         const data = (await eel.loadFields()())[currentFieldName];
+        setActiveGatherFieldData(data);
         loadInputs(data);
         updateGatherPatternUI();
         alert(
@@ -487,6 +553,7 @@ $("#gather-placeholder")
       if (result && result.success) {
         // Reload the field data and update the UI
         const data = (await eel.loadFields()())[currentFieldName];
+        setActiveGatherFieldData(data);
         loadInputs(data);
         updateGatherPatternUI();
         // Hide the modal
