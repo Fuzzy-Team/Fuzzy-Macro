@@ -12,7 +12,7 @@ Requirements:
 - mss or Pillow
 - blue.onnx and sprinkler.onnx
 
-- Version 1.1
+- Version 1.2
 """
 
 import math
@@ -54,6 +54,7 @@ CONFIDENCE_THRESHOLD = 0.4
 SPRINKLER_CONFIDENCE_THRESHOLD = 0.6
 MIN_TOKEN_DISTANCE = 0.3
 IDLE_RETURN_INTERVAL = 1.5
+NO_TARGET_SWEEP_INTERVAL = 0.35
 NO_TOKEN_RECALIBRATION_TIMEOUT = 12.0
 MOVEMENTS_BEFORE_RECALIBRATION = 10
 SPRINKLER_ARRIVAL_THRESHOLD = 0.8
@@ -182,6 +183,10 @@ SPRINKLER_CONFIDENCE_THRESHOLD = _coerce_float(
 )
 MIN_TOKEN_DISTANCE = _coerce_float(globals().get("pattern_min_token_distance"), MIN_TOKEN_DISTANCE)
 IDLE_RETURN_INTERVAL = _coerce_float(globals().get("pattern_idle_return_interval"), IDLE_RETURN_INTERVAL)
+NO_TARGET_SWEEP_INTERVAL = _coerce_float(
+    globals().get("pattern_no_target_sweep_interval"),
+    NO_TARGET_SWEEP_INTERVAL,
+)
 NO_TOKEN_RECALIBRATION_TIMEOUT = _coerce_float(
     globals().get("pattern_no_token_recalibration_timeout"),
     NO_TOKEN_RECALIBRATION_TIMEOUT,
@@ -609,7 +614,6 @@ def _fallback_pattern():
 
 def _initialise_runtime():
     self.keyboard.press("pageup")
-    self.keyboard.press("pageup")
 
     global ort
     if ort is None:
@@ -672,6 +676,7 @@ def _initialise_runtime():
         "movement_count": 0,
         "last_token_time": time.time(),
         "last_idle_return_time": time.time(),
+        "last_no_target_sweep_time": time.time(),
         "initialised_at": time.time(),
     }
 
@@ -704,11 +709,18 @@ else:
 
         if target:
             _execute_movement(target["tx"], target["ty"])
-        elif time.time() - runtime["last_idle_return_time"] >= IDLE_RETURN_INTERVAL:
-            if _recalibrate(runtime):
-                runtime["last_token_time"] = time.time()
-            else:
-                runtime["last_idle_return_time"] = time.time()
+        else:
+            now = time.time()
+            should_sweep = now - runtime.get("last_no_target_sweep_time", 0.0) >= NO_TARGET_SWEEP_INTERVAL
+            if now - runtime["last_idle_return_time"] >= IDLE_RETURN_INTERVAL:
+                runtime["last_idle_return_time"] = now
+                if _recalibrate(runtime):
+                    runtime["last_token_time"] = time.time()
+                elif should_sweep:
+                    runtime["last_no_target_sweep_time"] = now
+                    _fallback_pattern()
+            elif should_sweep:
+                runtime["last_no_target_sweep_time"] = now
                 _fallback_pattern()
     except Exception as exc:
         runtime["ready"] = False
