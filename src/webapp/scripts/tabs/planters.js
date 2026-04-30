@@ -38,7 +38,7 @@ function planterDropDownHTML(id){
     return buildInput(id,{
         name: "dropdown",
         data: planterArray,
-        triggerFunction: "saveSetting(this, 'profile')",
+        triggerFunction: "savePlanterSettingAndRefresh(this)",
         length: 11.5
     })
 }
@@ -49,6 +49,121 @@ function nectarDropDownHTML(id){
         triggerFunction: "saveSetting(this, 'profile')",
         length: 11.5
     })
+}
+
+function planterHotbarSlotHTML(settingId, domId){
+    let options = `<option value="0">0 - Inventory</option>`
+    for (let slot = 1; slot <= 7; slot++){
+        options += `<option value="${slot}">${slot}</option>`
+    }
+    return `
+        <select id="${domId}" data-setting-id="${settingId}" class="poppins-regular planter-hotbar-slot-select" onchange="savePlanterHotbarSlot(this)">
+            ${options}
+        </select>
+    `
+}
+
+function planterIconHTML(planter){
+    const icon = planterIcons[planter]
+    const name = toTitleCase(planter.replaceAll("_"," "))
+    return icon ? `<img src="./assets/icons/${icon}.png" alt="${name}">` : ""
+}
+
+function canonicalPlanterKey(planter){
+    return String(planter || "").replaceAll(" ", "_")
+}
+
+function planterHotbarTileHTML(planter, prefix){
+    const settingId = `planter_hotbar_${planter}_slot`
+    const domId = `${prefix}_${settingId}`
+    const name = toTitleCase(planter.replaceAll("_"," "))
+    return `
+        <div class="planter-hotbar-tile">
+            <div class="planter-hotbar-planter">
+                ${planterIconHTML(planter)}
+                <span>${name}</span>
+            </div>
+            ${planterHotbarSlotHTML(settingId, domId)}
+        </div>
+    `
+}
+
+function loadSelectedPlanterHotbarSlots(containerId, enabledPlanters){
+    const container = document.getElementById(containerId)
+    if (!container) return
+    container.innerHTML = ""
+    if (!enabledPlanters.length){
+        container.innerHTML = `<p class="planter-hotbar-empty">No planters selected.</p>`
+        return
+    }
+    enabledPlanters.forEach(planter => {
+        container.innerHTML += planterHotbarTileHTML(planter, containerId)
+    })
+}
+
+function getManualSelectedPlanters(settings){
+    const enabled = []
+    for (let cycle = 1; cycle <= 5; cycle++){
+        for (let slot = 1; slot <= 3; slot++){
+            const planter = settings[`cycle${cycle}_${slot}_planter`]
+            const planterKey = canonicalPlanterKey(planter)
+            if (planterKey && planterKey !== "none" && !enabled.includes(planterKey)){
+                enabled.push(planterKey)
+            }
+        }
+    }
+    return enabled
+}
+
+function getAutoEnabledPlanters(settings){
+    return planters.filter(planter => {
+        if (planter === "none") return false
+        return !!settings[`auto_planter_${planter}`]
+    })
+}
+
+function loadPlanterHotbarSections(settings){
+    loadSelectedPlanterHotbarSlots("manual-selected-planter-hotbar-slots", getManualSelectedPlanters(settings))
+    loadSelectedPlanterHotbarSlots("auto-selected-planter-hotbar-slots", getAutoEnabledPlanters(settings))
+}
+
+async function savePlanterSettingAndRefresh(ele){
+    await saveSetting(ele, 'profile')
+    const settings = await loadAllSettings()
+    loadPlanterHotbarSections(settings)
+    loadInputsWithDuplicateSelects(settings)
+}
+
+async function saveAutoPlanterEnabledAndRefresh(ele, planter){
+    await saveSetting(ele, 'profile')
+    updatePlanterRestrictionSummaries()
+    togglePlanterEnabledStyle(planter)
+    const settings = await loadAllSettings()
+    loadPlanterHotbarSections(settings)
+    loadInputsWithDuplicateSelects(settings)
+}
+
+async function savePlanterHotbarSlot(ele){
+    const id = ele.dataset.settingId
+    await saveSetting(ele, 'profile')
+    const matchingSelects = document.querySelectorAll(`select[data-setting-id="${id}"]`)
+    matchingSelects.forEach(select => {
+        if (select !== ele) select.value = ele.value
+    })
+}
+
+function refreshPlanterHotbarSlotSelects(settings){
+    Object.entries(settings).forEach(([key, value]) => {
+        if (!key.startsWith("planter_hotbar_") || !key.endsWith("_slot")) return
+        document.querySelectorAll(`select[data-setting-id="${key}"]`).forEach(select => {
+            select.value = value
+        })
+    })
+}
+
+function loadInputsWithDuplicateSelects(settings){
+    loadInputs(settings)
+    refreshPlanterHotbarSlotSelects(settings)
 }
 
 
@@ -162,7 +277,7 @@ async function loadPlanters(){
             <summary title="Click to expand and view allowed fields" style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;">
                 <div style="display:flex; align-items:center; gap:0.6rem;">
                     <label class="checkbox-container" style="margin:0;">
-                        <input type="checkbox" id="${enableId}" onchange="saveSetting(this, 'profile'); updatePlanterRestrictionSummaries(); togglePlanterEnabledStyle('${planters[i]}')">
+                        <input type="checkbox" id="${enableId}" onchange="saveAutoPlanterEnabledAndRefresh(this, '${planters[i]}')">
                         <span class="checkmark"></span>
                     </label>
                     <div>${planterArray[i]}</div>
@@ -199,7 +314,8 @@ async function loadPlanters(){
 
     //load inputs
     const settings = await loadAllSettings()
-    loadInputs(settings)
+    loadPlanterHotbarSections(settings)
+    loadInputsWithDuplicateSelects(settings)
     // Ensure per-planter field keys default to allowed
     try{
         // For each per-planter-field checkbox, if the setting is not present in the profile,
@@ -412,4 +528,88 @@ function changePreset(ele){
 }
 
 $("#planters-placeholder")
-.load("../htmlImports/tabs/planters.html", loadPlanters) 
+.load("../htmlImports/tabs/planters.html", loadPlanters)
+.on("click", "#export-planters-button", async (event) => {
+    event.preventDefault()
+
+    try{
+        const jsonSettings = await eel.exportPlanterSettings()()
+
+        if (jsonSettings){
+            let metadata = {}
+            try{
+                const parsedData = JSON.parse(jsonSettings)
+                metadata = parsedData.metadata || {}
+            }catch(e){}
+
+            await navigator.clipboard.writeText(jsonSettings)
+
+            let successMsg = "Planter settings exported and copied to clipboard!"
+            if (metadata.macro_version){
+                successMsg += `\n\nExport details:\nMacro version: ${metadata.macro_version}`
+            }
+            if (metadata.export_date){
+                successMsg += `\nExported: ${new Date(metadata.export_date).toLocaleString()}`
+            }
+
+            alert(successMsg)
+        } else {
+            alert("Failed to export planter settings.")
+        }
+    }catch(error){
+        console.error("Error exporting planter settings:", error)
+        alert("An error occurred while exporting planter settings.")
+    }
+})
+.on("click", "#import-planters-button", (event) => {
+    event.preventDefault()
+
+    const modal = document.getElementById("import-planters-modal")
+    const textarea = document.getElementById("import-planters-json-textarea")
+    textarea.value = ""
+    modal.style.display = "flex"
+})
+.on("click", "#cancel-import-planters-button", (event) => {
+    event.preventDefault()
+    document.getElementById("import-planters-modal").style.display = "none"
+})
+.on("click", "#confirm-import-planters-button", async (event) => {
+    event.preventDefault()
+
+    const textarea = document.getElementById("import-planters-json-textarea")
+    const jsonSettings = textarea.value.trim()
+
+    if (!jsonSettings){
+        alert("Please paste JSON settings to import.")
+        return
+    }
+
+    try{
+        const result = await eel.importPlanterSettings(jsonSettings)()
+
+        if (result && result.success){
+            await loadPlanters()
+            document.getElementById("import-planters-modal").style.display = "none"
+
+            let successMsg = "Successfully imported planter settings!"
+            if (result.macro_version && result.macro_version !== "unknown"){
+                successMsg += `\n\nMacro version: ${result.macro_version}`
+            }
+            if (typeof result.imported_settings_count !== "undefined"){
+                successMsg += `\nImported settings: ${result.imported_settings_count}`
+            }
+
+            alert(successMsg)
+        } else {
+            alert("Failed to import planter settings. Please check your JSON format.")
+        }
+    }catch(error){
+        console.error("Error importing planter settings:", error)
+        alert("An error occurred while importing planter settings. Please check your JSON format.")
+    }
+})
+.on("click", "#import-planters-modal", function(event) {
+    if (event.target === this){
+        $(this).hide()
+    }
+})

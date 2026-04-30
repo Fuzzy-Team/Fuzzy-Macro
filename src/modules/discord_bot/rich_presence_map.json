@@ -175,6 +175,22 @@
       "large_text": "Fuzzy Macro",
       "small_image": null,
       "small_text": "Collecting"
+    },
+    "tool_auto_clicker": {
+      "state": "Using Auto Clicker",
+      "details": "Running a macro tool",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Auto Clicker"
+    },
+    "tool_auto_gifted_basic_bee": {
+      "state": "Using Auto Gifted Basic Bee",
+      "details": "Running a macro tool",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": "Gifted Basic Bee"
     }
   },
   "prefix": {

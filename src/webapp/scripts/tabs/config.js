@@ -5,6 +5,7 @@ Config Tab
 */
 
 async function switchConfigTab(target) {
+  setActiveSubtab("activeConfigSubtab", target.id);
   //remove the active classes and hide all tabs
   Array.from(document.getElementsByClassName("config-tab-item")).forEach(
     (x) => {
@@ -29,8 +30,10 @@ async function loadConfig() {
   const settings = await loadAllSettings();
   loadInputs(settings);
 
-  // Start with bss tab
-  switchConfigTab(document.getElementById("setting-bss"));
+  // Restore active subtab
+  switchConfigTab(
+    document.getElementById(getActiveSubtab("activeConfigSubtab", "setting-bss"))
+  );
 
   // Initialize drag and drop for priority list
   initializeDragAndDrop();
@@ -638,6 +641,7 @@ async function triggerBetaUpdate() {
   if (!confirm(`Update macro from commit ${hash}? This will backup and apply files.`)) return;
 
   try {
+    if (window.updateProgress) window.updateProgress(0, `Starting update to ${hash}`);
     // call backend updater
     const res = await eel.updateFromHash(hash)();
     if (res) {

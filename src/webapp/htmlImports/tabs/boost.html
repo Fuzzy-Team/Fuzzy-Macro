@@ -6,36 +6,86 @@
   <div id="boost-hotbar-tab" class="standard-container sub-tab-panel active">
     <script>
       const hotbarParent = document.getElementById("boost-hotbar-tab");
-      buildStandardContainer(hotbarParent, "Hotbar", "Use your hotbar slots", []);
-      const hotbar = document.getElementById("hotbar").parentElement;
-      for (let i = 1; i <= 7; i++) {
-        const html = `
-              ${i > 1 ? '<div class="seperator" style="margin-bottom: 1rem;"></div>' : ""}
-              <h3 class="poppins-semibold">Slot ${i}</h3>
-              <table style="width: 70%;">
-                <tr>
-                  <td>
-                    <h4 class="poppins-regular" style="margin-top:1rem">Use When:</h4>
-                    <div class="poppins-regular" style="font-size:0.9rem; color: #adb4bc">When to use the slot</div>
-                  </td>
-                  <td valign="top" style="padding-top: 0.8rem">
-                    ${buildInput(`hotbar${i}_use_when`, { name: "dropdown", data: ["Never", "Always", "Gathering", "Converting", "Attacking"], triggerFunction: saveProfileTriggerFunction })}
-                  </td>
-                </tr>
-                        <tr>
-                            <td>
-                                <h4 class="poppins-regular" style="margin-top:1rem">Use every X secs/mins:</h4>
-                                <div class="poppins-regular" style="font-size:0.9rem; color: #adb4bc">How often the slot should be used</div>
-                            </td>
-                            <td valign="top" style="display:flex; gap: 0.5rem">
-                                ${buildInput(`hotbar${i}_use_every_value`, { name: "textbox", inputType: "float", triggerFunction: saveProfileTriggerFunction })}
-                                ${buildInput(`hotbar${i}_use_every_format`, { name: "dropdown", data: ["Secs", "Mins"], triggerFunction: saveProfileTriggerFunction, length: 5 }).replace("0.6rem", "0.75rem")}
-                            </td>
-                        </tr>
-                    </table>
-                    `;
-        hotbar.innerHTML += html;
-      }
+      const boostHotbarSlots = [
+        { slot: 1 },
+        { slot: 2 },
+        { slot: 3 },
+        { slot: 4 },
+        { slot: 5 },
+        { slot: 6 },
+        { slot: 7 },
+      ];
+      const useWhenOptions = ["Never", "Always", "Gathering", "Converting", "Attacking"];
+      const useEveryOptions = ["Secs", "Mins"];
+
+      hotbarParent.innerHTML = `
+        <div class="poppins-medium standard-container boost-hotbar-shell">
+          <h2 id="hotbar">Hotbar</h2>
+          <p style="font-weight:500; font-size:1rem;">Choose a slot from the bar and configure when it should activate.</p>
+          <div class="seperator"></div>
+          <div class="boost-hotbar-strip" id="boost-hotbar-strip"></div>
+          <div class="boost-hotbar-panels" id="boost-hotbar-panels"></div>
+        </div>
+      `;
+
+      const strip = document.getElementById("boost-hotbar-strip");
+      const panels = document.getElementById("boost-hotbar-panels");
+
+      boostHotbarSlots.forEach(({ slot }) => {
+        strip.innerHTML += `
+          <button type="button" id="boost-slot-${slot}" class="boost-hotbar-slot" onclick="switchBoostHotbarSlot(${slot})" title="Slot ${slot}">
+            <span class="boost-hotbar-slot-number">[${slot}]</span>
+            <span class="boost-hotbar-slot-frame">
+              <span class="boost-hotbar-slot-empty"></span>
+            </span>
+          </button>
+        `;
+
+        panels.innerHTML += `
+          <div id="boost-hotbar-slot-${slot}-panel" class="boost-hotbar-panel">
+            <div class="boost-hotbar-panel-header">
+              <div class="boost-hotbar-panel-icon boost-hotbar-panel-icon-empty">
+                <span class="boost-hotbar-slot-empty"></span>
+              </div>
+              <div>
+                <h3 class="poppins-semibold">Slot ${slot}</h3>
+                <p class="poppins-regular">Configure when this hotbar slot should be used.</p>
+              </div>
+            </div>
+            <form class="boost-hotbar-form-row">
+              <div class="boost-hotbar-form-copy">
+                <label>Use When</label>
+                <p>Choose the condition that allows this slot to be used.</p>
+              </div>
+              ${buildInput(`hotbar${slot}_use_when`, {
+                name: "dropdown",
+                data: useWhenOptions,
+                triggerFunction: saveProfileTriggerFunction,
+              })}
+            </form>
+            <form class="boost-hotbar-form-row">
+              <div class="boost-hotbar-form-copy">
+                <label>Use Every</label>
+                <p>Set the cooldown for repeated use of this slot.</p>
+              </div>
+              <div class="boost-hotbar-frequency">
+                ${buildInput(`hotbar${slot}_use_every_value`, {
+                  name: "textbox",
+                  inputType: "float",
+                  triggerFunction: saveProfileTriggerFunction,
+                  length: 8,
+                })}
+                ${buildInput(`hotbar${slot}_use_every_format`, {
+                  name: "dropdown",
+                  data: useEveryOptions,
+                  triggerFunction: saveProfileTriggerFunction,
+                  length: 6,
+                }).replace("0.6rem", "0")}
+              </div>
+            </form>
+          </div>
+        `;
+      });
     </script>
   </div>
   <div id="boost-buffs-tab" class="standard-container sub-tab-panel">

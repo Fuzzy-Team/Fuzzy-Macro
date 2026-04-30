@@ -3,6 +3,8 @@ __pycache__/
 .DS_STORE
 macroLogs.log
 bin
+build/
+dist/
 include
 lib
 share
@@ -24,3 +26,4 @@ settings/profiles
 backup_macro.zip
 backups/
 smoke_hourly_report.py
+.vscode/

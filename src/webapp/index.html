@@ -22,6 +22,8 @@
         document.documentElement.classList.add("theme-red");
       } else if (t === "blue") {
         document.documentElement.classList.add("theme-blue");
+      } else if (t === "commander" || t === "comander") {
+        document.documentElement.classList.add("theme-commander");
       }
     })();
   </script>
@@ -40,6 +42,15 @@
       <div class="credits">
         <span id="version">Loading version...</span><br>
         <button id="update-btn" class="purple-button">Check for Updates</button>
+        <div id="update-progress" class="update-progress d-none" aria-live="polite">
+          <div class="update-progress-row">
+            <span id="update-progress-label">Preparing update</span>
+            <span id="update-progress-percent">0%</span>
+          </div>
+          <div class="update-progress-track">
+            <div id="update-progress-bar" class="update-progress-bar"></div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -53,6 +64,7 @@
       <div id="planters-placeholder" class="content"></div>
       <div id="boost-placeholder" class="content"></div>
       <div id="quests-placeholder" class="content"></div>
+      <div id="tools-placeholder" class="content"></div>
 
     </main>
   </div>
@@ -68,6 +80,7 @@
   <script src="./scripts/tabs/planters.js"></script>
   <script src="./scripts/tabs/boost.js"></script>
   <script src="./scripts/tabs/quests.js"></script>
+  <script src="./scripts/tabs/tools.js"></script>
   <script>
     // Fetch version from version.txt and optionally append commit hash
     (async () => {

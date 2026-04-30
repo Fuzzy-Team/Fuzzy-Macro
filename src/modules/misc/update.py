@@ -44,6 +44,51 @@ def _is_remote_newer(local_v, remote_v):
     return rv[3] > lv[3]
 
 
+def _report_update_progress(progress_callback, percent, message):
+    percent = max(0, min(100, int(percent)))
+    bar_width = 24
+    filled = int(bar_width * percent / 100)
+    bar = "#" * filled + "-" * (bar_width - filled)
+    print(f"\rUpdate progress [{bar}] {percent:3d}% {message}", end="", flush=True)
+    if percent >= 100 or "failed" in message.lower() or "aborted" in message.lower():
+        print()
+    if progress_callback is not None:
+        try:
+            progress_callback(percent, message)
+        except Exception:
+            pass
+
+
+def _download_update_zip(zip_link, progress_callback, start_percent=35, end_percent=65):
+    req = requests.get(zip_link, timeout=60, stream=True)
+    try:
+        req.raise_for_status()
+
+        total = int(req.headers.get("content-length", 0) or 0)
+        downloaded = 0
+        last_percent = start_percent - 1
+        data = BytesIO()
+
+        for chunk in req.iter_content(chunk_size=1024 * 128):
+            if not chunk:
+                continue
+            data.write(chunk)
+            downloaded += len(chunk)
+            if total:
+                percent = start_percent + int((end_percent - start_percent) * downloaded / total)
+                if percent != last_percent:
+                    _report_update_progress(progress_callback, percent, "Downloading update")
+                    last_percent = percent
+
+        if not total:
+            _report_update_progress(progress_callback, end_percent, "Downloaded update")
+
+        data.seek(0)
+        return zipfile.ZipFile(data)
+    finally:
+        req.close()
+
+
 # Recursively copy from src to dst, overwriting files. Skip protected names.
 def _merge_overwrite(src, dst, protected_folders, protected_files):
     for root, dirs, files in os.walk(src):
@@ -196,8 +241,12 @@ def _discover_remote_version(remote_version_url, timeout=15):
         return None
 
 
-def update(t="main", update_channel="stable"):
-    msgBox("Update in progress", "Updating... Do not close terminal")
+def update(t="main", update_channel="stable", progress_callback=None):
+    _report_update_progress(progress_callback, 0, "Starting update")
+    # Don't show the blocking "Updating..." dialog while merely checking
+    # for updates. Show it only after we've determined that a newer
+    # remote version exists (see below) so the user only confirms when
+    # an actual update will be applied.
     # Important: preserve user data and profiles. Protect pattern folder
     # during the generic overwrite so we can merge new/old patterns safely.
     protected_folders = [
@@ -213,6 +262,7 @@ def update(t="main", update_channel="stable"):
     # local copy before performing the rest of the update. This allows bug
     # fixes in the updater itself to take effect immediately for this run.
     try:
+        _report_update_progress(progress_callback, 5, "Refreshing updater")
         update_py_url = "https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/src/modules/misc/update.py"
         h = {
             "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -246,13 +296,6 @@ def update(t="main", update_channel="stable"):
     github_releases_api = "https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/releases?per_page=100"
     backup_path = os.path.join(destination, "backup_macro.zip")
 
-    # create a silent backup (overwrite previous backup)
-    try:
-        _create_backup(destination, backup_path, protected_folders, protected_files)
-        _mark_backup_pending(destination)
-    except Exception:
-        pass
-
     # read local version
     local_version = "0.0.0"
     local_version_path = os.path.join(destination, "src", "webapp", "version.txt")
@@ -275,6 +318,7 @@ def update(t="main", update_channel="stable"):
     
     remote_version = None
     try:
+        _report_update_progress(progress_callback, 25, "Checking latest version")
         r = requests.get(github_releases_api, timeout=10, headers=headers)
         r.raise_for_status()
         releases = r.json()
@@ -296,6 +340,7 @@ def update(t="main", update_channel="stable"):
         pass
     
     if not remote_version:
+        _report_update_progress(progress_callback, 100, "Update failed: could not fetch remote version")
         msgBox("Update failed", "Could not fetch remote version. Update aborted.")
         return False
 
@@ -303,20 +348,37 @@ def update(t="main", update_channel="stable"):
     zip_link = f"https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/refs/tags/{remote_version}.zip"
 
     if not _is_remote_newer(local_version, remote_version):
+        _report_update_progress(progress_callback, 100, "No update available")
         msgBox("Up to date", "No update available. Remote version is not newer.")
         return False
 
+    # At this point we know an update is available — prompt the user to
+    # start the update. This is intentionally shown after checking so
+    # the dialog doesn't appear during the version check.
+    msgBox("Update in progress", "Updating... Do not close terminal, press ok to start update.")
+
+    # create a silent backup (overwrite previous backup) only after confirming
+    # that an update will be applied.
+    try:
+        _report_update_progress(progress_callback, 30, "Creating backup")
+        _create_backup(destination, backup_path, [], protected_files)
+        _mark_backup_pending(destination)
+    except Exception:
+        pass
+
     # download zip
     try:
-        req = requests.get(zip_link, timeout=60)
-        req.raise_for_status()
-        zipf = zipfile.ZipFile(BytesIO(req.content))
+        _report_update_progress(progress_callback, 35, f"Downloading v{remote_version}")
+        zipf = _download_update_zip(zip_link, progress_callback, 35, 65)
+        _report_update_progress(progress_callback, 68, "Extracting update")
         zipf.extractall(destination)
     except Exception:
+        _report_update_progress(progress_callback, 100, "Update failed: could not download or extract")
         msgBox("Update failed", "Could not download or extract update zip.")
         return False
 
     # find extracted folder (likely starts with 'Fuzzy-Macro')
+    _report_update_progress(progress_callback, 72, "Locating extracted files")
     extracted = None
     for f in os.listdir(destination):
         if f.startswith("Fuzzy-Macro") and os.path.isdir(os.path.join(destination, f)):
@@ -330,13 +392,16 @@ def update(t="main", update_channel="stable"):
                 extracted = p
                 break
     if not extracted:
+        _report_update_progress(progress_callback, 100, "Update failed: extracted folder missing")
         msgBox("Update failed", "Could not locate extracted update folder.")
         return False
 
     # merge files, overwriting existing, but skip protected folders
     try:
+        _report_update_progress(progress_callback, 78, "Applying update files")
         _merge_overwrite(extracted, destination, protected_folders, protected_files)
     except Exception:
+        _report_update_progress(progress_callback, 100, "Update failed: could not apply files")
         msgBox("Update failed", "Error while applying update files.")
         return False
 
@@ -346,6 +411,7 @@ def update(t="main", update_channel="stable"):
     # copy: copy new files, and if a filename collides, keep the existing
     # file and write the incoming file with a suffix to avoid data loss.
     try:
+        _report_update_progress(progress_callback, 86, "Merging patterns")
         src_patterns = os.path.join(extracted, "settings", "patterns")
         dst_patterns = os.path.join(destination, "settings", "patterns")
         if os.path.exists(src_patterns):
@@ -408,6 +474,7 @@ def update(t="main", update_channel="stable"):
 
     # cleanup the extracted folder
     try:
+        _report_update_progress(progress_callback, 92, "Cleaning up update files")
         shutil.rmtree(extracted)
     except Exception:
         pass
@@ -429,6 +496,7 @@ def update(t="main", update_channel="stable"):
         pass
     # Attempt to run install dependencies script (non-blocking). Fail silently.
     try:
+        _report_update_progress(progress_callback, 96, "Finishing update")
         install_script = os.path.join(destination, "install_dependencies.command")
         if os.path.exists(install_script):
             try:
@@ -451,12 +519,14 @@ def update(t="main", update_channel="stable"):
     except Exception:
         pass
 
+    _report_update_progress(progress_callback, 100, "Update complete")
     msgBox("Update success", "Update complete. You can now relaunch the macro")
     return True
 
 
-def update_from_commit(commit_hash):
+def update_from_commit(commit_hash, progress_callback=None):
     """Update the macro from a specific commit hash (zip at /archive/<hash>.zip)."""
+    _report_update_progress(progress_callback, 0, f"Starting update to {commit_hash}")
     msgBox("Update in progress", f"Updating to commit {commit_hash}... Do not close terminal")
     protected_folders = [
         os.path.join("src", "data", "user"),
@@ -470,22 +540,25 @@ def update_from_commit(commit_hash):
     backup_path = os.path.join(destination, "backup_macro.zip")
 
     try:
-        _create_backup(destination, backup_path, protected_folders, protected_files)
+        _report_update_progress(progress_callback, 15, "Creating backup")
+        _create_backup(destination, backup_path, [], protected_files)
         _mark_backup_pending(destination)
     except Exception:
         pass
 
     # download zip for the commit
     try:
-        req = requests.get(remote_zip, timeout=60)
-        req.raise_for_status()
-        zipf = zipfile.ZipFile(BytesIO(req.content))
+        _report_update_progress(progress_callback, 35, f"Downloading {commit_hash}")
+        zipf = _download_update_zip(remote_zip, progress_callback, 35, 65)
+        _report_update_progress(progress_callback, 68, "Extracting update")
         zipf.extractall(destination)
     except Exception:
+        _report_update_progress(progress_callback, 100, "Update failed: could not download or extract")
         msgBox("Update failed", "Could not download or extract update zip for the specified commit.")
         return False
 
     # find extracted folder
+    _report_update_progress(progress_callback, 72, "Locating extracted files")
     extracted = None
     for f in os.listdir(destination):
         if f.startswith("Fuzzy-Macro") and os.path.isdir(os.path.join(destination, f)):
@@ -498,17 +571,21 @@ def update_from_commit(commit_hash):
                 extracted = p
                 break
     if not extracted:
+        _report_update_progress(progress_callback, 100, "Update failed: extracted folder missing")
         msgBox("Update failed", "Could not locate extracted update folder.")
         return False
 
     try:
+        _report_update_progress(progress_callback, 78, "Applying update files")
         _merge_overwrite(extracted, destination, protected_folders, protected_files)
     except Exception:
+        _report_update_progress(progress_callback, 100, "Update failed: could not apply files")
         msgBox("Update failed", "Error while applying update files.")
         return False
 
     # merge patterns similar to update()
     try:
+        _report_update_progress(progress_callback, 86, "Merging patterns")
         src_patterns = os.path.join(extracted, "settings", "patterns")
         dst_patterns = os.path.join(destination, "settings", "patterns")
         if os.path.exists(src_patterns):
@@ -570,6 +647,7 @@ def update_from_commit(commit_hash):
 
     # cleanup the extracted folder
     try:
+        _report_update_progress(progress_callback, 92, "Cleaning up update files")
         shutil.rmtree(extracted)
     except Exception:
         pass
@@ -592,6 +670,7 @@ def update_from_commit(commit_hash):
         pass
     # Attempt to run install dependencies script (non-blocking). Fail silently.
     try:
+        _report_update_progress(progress_callback, 96, "Finishing update")
         install_script = os.path.join(destination, "install_dependencies.command")
         if os.path.exists(install_script):
             try:
@@ -613,6 +692,7 @@ def update_from_commit(commit_hash):
     except Exception:
         pass
 
+    _report_update_progress(progress_callback, 100, "Update complete")
     msgBox("Update success", "Update complete. You can now relaunch the macro")
     return True
 

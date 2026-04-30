@@ -19,7 +19,7 @@ async function updateStartButtonText() {
   // Check current run state
   try {
     const runState = await eel.getRunState()();
-    // 2 = running, 3 = stopped, 6 = paused
+    // 0 = stopping, 2 = running, 3 = stopped, 6 = paused
 
     const startBtn = document.getElementById("start-btn");
     const stopBtn = document.getElementById("stop-btn");
@@ -30,7 +30,16 @@ async function updateStartButtonText() {
       if (startBtn) startBtn.classList.add("d-none");
       if (stopBtn) {
         stopBtn.classList.remove("d-none");
+        stopBtn.disabled = false;
         stopBtn.textContent = `Stop [${stopKey}]`;
+      }
+    } else if (runState === 0) {
+      // Stopping: keep controls disabled until backend cleanup finishes
+      if (startBtn) startBtn.classList.add("d-none");
+      if (stopBtn) {
+        stopBtn.classList.remove("d-none");
+        stopBtn.disabled = true;
+        stopBtn.textContent = "Stopping...";
       }
     } else if (runState === 6) {
       // Paused: show Unpause button
@@ -75,7 +84,7 @@ async function toggleStartStop() {
   // Check current run state
   try {
     const runState = await eel.getRunState()();
-    // 2 = running, 3 = stopped, 6 = paused
+    // 0 = stopping, 2 = running, 3 = stopped, 6 = paused
 
     const startBtn = document.getElementById("start-btn");
     const stopBtn = document.getElementById("stop-btn");
@@ -86,7 +95,16 @@ async function toggleStartStop() {
       if (startBtn) startBtn.classList.add("d-none");
       if (stopBtn) {
         stopBtn.classList.remove("d-none");
+        stopBtn.disabled = false;
         stopBtn.textContent = `Stop [${stopKey}]`;
+      }
+    } else if (runState === 0) {
+      // Stopping: keep controls disabled until backend cleanup finishes
+      if (startBtn) startBtn.classList.add("d-none");
+      if (stopBtn) {
+        stopBtn.classList.remove("d-none");
+        stopBtn.disabled = true;
+        stopBtn.textContent = "Stopping...";
       }
     } else if (runState === 6) {
       // Paused: show Unpause button
@@ -392,7 +410,8 @@ async function loadTasks() {
     if (taskId === "blender") {
       if (!setdat.blender_enable) return { enabled: false };
       const selectedBlenderItems = {};
-      for (let i = 1; i < 4; i++) {
+      const blenderItemSlots = 5;
+      for (let i = 1; i <= blenderItemSlots; i++) {
         const item = setdat[`blender_item_${i}`]?.replaceAll(" ", "_");
         if (item == "none" || !item) continue;
         selectedBlenderItems[toTitleCase(item.replaceAll("_", " "))] =
@@ -517,9 +536,10 @@ async function loadTasks() {
     //blender
     if (setdat["blender_enable"]) {
       const selectedBlenderItems = {};
-      for (let i = 1; i < 4; i++) {
-        const item = setdat[`blender_item_${i}`].replaceAll(" ", "_");
-        if (item == "none") continue;
+      const blenderItemSlots = 5;
+      for (let i = 1; i <= blenderItemSlots; i++) {
+        const item = setdat[`blender_item_${i}`]?.replaceAll(" ", "_");
+        if (item == "none" || !item) continue;
         selectedBlenderItems[toTitleCase(item.replaceAll("_", " "))] =
           blenderIcons[item];
       }
@@ -646,7 +666,7 @@ function closeWindow() {
 async function checkAndUpdateButtonState() {
   try {
     const runState = await eel.getRunState()();
-    // 2 = running, 3 = stopped, 6 = paused
+    // 0 = stopping, 2 = running, 3 = stopped, 6 = paused
 
     const settings = await loadAllSettings();
     const startKey = settings.start_keybind || "F1";
@@ -662,7 +682,16 @@ async function checkAndUpdateButtonState() {
       if (startBtn) startBtn.classList.add("d-none");
       if (stopBtn) {
         stopBtn.classList.remove("d-none");
+        stopBtn.disabled = false;
         stopBtn.textContent = `Stop [${stopKey}]`;
+      }
+    } else if (runState === 0) {
+      // Stopping: keep controls disabled until backend cleanup finishes
+      if (startBtn) startBtn.classList.add("d-none");
+      if (stopBtn) {
+        stopBtn.classList.remove("d-none");
+        stopBtn.disabled = true;
+        stopBtn.textContent = "Stopping...";
       }
     } else if (runState === 6) {
       // Paused: show Unpause button
@@ -754,39 +783,40 @@ $("#home-placeholder")
 
     if (runState === 6) {
       // Paused -> resume
-      eel.resume();
+      await eel.resume()();
       // Update button state optimistically (show stop button immediately)
       if (startBtn) startBtn.classList.add("d-none");
       if (stopBtn) {
         stopBtn.classList.remove("d-none");
+        stopBtn.disabled = false;
         stopBtn.textContent = `Stop [${stopKey}]`;
       }
     } else {
       // Stopped -> start
-      eel.start();
+      const result = await eel.start()();
+      if (result && result.ok === false) {
+        return;
+      }
       // Update button state optimistically (show stop button immediately)
       if (startBtn) startBtn.classList.add("d-none");
       if (stopBtn) {
         stopBtn.classList.remove("d-none");
+        stopBtn.disabled = false;
         stopBtn.textContent = `Stop [${stopKey}]`;
       }
     }
   })
   .on("click", "#stop-btn", async (event) => {
     //stop button - stops the macro completely
-    eel.stop();
-    // Update button state optimistically (show start button immediately)
-    const settings = await loadAllSettings();
-    const startKey = settings.start_keybind || "F1";
     const startBtn = document.getElementById("start-btn");
     const stopBtn = document.getElementById("stop-btn");
-    if (startBtn) {
-      startBtn.classList.remove("d-none");
-      startBtn.classList.remove("active");
-      startBtn.disabled = false;
-      startBtn.textContent = `Start [${startKey}]`;
+    if (startBtn) startBtn.classList.add("d-none");
+    if (stopBtn) {
+      stopBtn.classList.remove("d-none");
+      stopBtn.disabled = true;
+      stopBtn.textContent = "Stopping...";
     }
-    if (stopBtn) stopBtn.classList.add("d-none");
+    await eel.stop()();
   })
   // .on("click", "#pause-btn", async (event) => {
   //   //pause/resume button - toggle between pause and resume
@@ -803,6 +833,8 @@ $("#home-placeholder")
     //start button
     if (!event.currentTarget.classList.contains("active")) {
       purpleButtonToggle(event.currentTarget, ["Update", "Updating"]);
+      event.currentTarget.disabled = true;
+      if (window.updateProgress) window.updateProgress(0, "Starting update");
       await eel.update();
     }
   })

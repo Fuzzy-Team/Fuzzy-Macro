@@ -1,0 +1,496 @@
+<div class="main-content-container">
+  <div id="tools-nav" class="sub-nav-bar">
+    <div id="tools-autoclicker" class="tools-tab-item">Auto Clicker</div>
+    <div id="tools-hotbar-buff" class="tools-tab-item">Hotbar Buff</div>
+    <div id="tools-bond-calculator" class="tools-tab-item">Bond Calculator</div>
+    <div id="tools-ticket-calculator" class="tools-tab-item">Ticket Price Calculator</div>
+    <div id="tools-auto-gifted-basic-bee" class="tools-tab-item">Auto Gifted Basic Bee</div>
+  </div>
+
+  <div id="tools-autoclicker-tab" class="standard-container sub-tab-panel active">
+    <script>
+      const toolsParent = document.getElementById("tools-autoclicker-tab");
+      buildStandardContainer(toolsParent, "Auto Clicker", "Repeatedly left-clicks at a configurable interval", [
+        {
+          id: "autoclicker_interval_ms",
+          title: "Click Interval (ms)",
+          desc: "Time between clicks in milliseconds. Lower values click faster.",
+          type: {
+            name: "textbox",
+            inputType: "int",
+            inputLimit: 4,
+            triggerFunction: "onAutoClickerIntervalChange(this)",
+          },
+        },
+        {
+          id: "autoclicker_start_delay_seconds",
+          title: "Start Delay (seconds)",
+          desc: "Wait time before the auto clicker begins. Default is 3 seconds.",
+          type: {
+            name: "textbox",
+            inputType: "int",
+            inputLimit: 2,
+            triggerFunction: "onAutoClickerStartDelayChange(this)",
+          },
+        },
+        {
+          id: "autoclicker_start",
+          title: "Start Auto Clicker",
+          desc: "Begins clicking after the configured start delay.",
+          type: {
+            name: "button",
+            text: "Start",
+            triggerFunction: "startAutoClicker()",
+          },
+        },
+        {
+          id: "autoclicker_stop",
+          title: "Stop Auto Clicker",
+          desc: "Stops all automatic clicking.",
+          type: {
+            name: "button",
+            text: "Stop",
+            triggerFunction: "stopAutoClicker()",
+          },
+        },
+      ]);
+
+      toolsParent.insertAdjacentHTML(
+        "beforeend",
+        `
+          <div style="margin-top:1rem; padding:1rem; border-radius:10px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.07);">
+            <div style="font-weight:600; margin-bottom:0.35rem;">Stop Behavior</div>
+            <div style="opacity:0.85;">
+              This tool stops with the macro stop hotkey:
+              <span id="autoclicker_stop_hotkey" style="font-weight:600;">F3</span>.
+              You can change this in Config.
+            </div>
+          </div>
+        `
+      );
+    </script>
+  </div>
+
+  <div id="tools-hotbar-buff-tab" class="standard-container sub-tab-panel">
+    <script>
+      const hotbarBuffParent = document.getElementById("tools-hotbar-buff-tab");
+      const hotbarBuffUseEveryOptions = ["Secs", "Mins"];
+
+      hotbarBuffParent.innerHTML = `
+        <div class="poppins-medium standard-container boost-hotbar-shell">
+          <h2>Hotbar Buff</h2>
+          <p style="font-size:0.95rem; opacity:0.8; margin-top:0.25rem;">
+            Runs this tool's hotbar timers while you play.
+          </p>
+          <p style="font-size:0.95rem; opacity:0.8; margin-top:0.5rem;">
+            Start hotkey:
+            <span id="hotbar-buff-start-hotkey" style="font-weight:600;">F4</span>.
+            Stop hotkey:
+            <span id="hotbar-buff-stop-hotkey" style="font-weight:600;">F3</span>.
+          </p>
+          <div class="seperator"></div>
+
+          <div style="display:flex; gap:0.75rem; flex-wrap:wrap;">
+            <button id="hotbar-buff-start" class="purple-button" onclick="startHotbarBuffTool()">
+              Start
+            </button>
+            <button id="hotbar-buff-stop" class="purple-button" onclick="stopHotbarBuffTool()" style="display:none;">
+              Stop
+            </button>
+          </div>
+
+          <div style="margin-top:1rem; display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:0.75rem;">
+            <div class="bond-calc-summary-item">
+              <span>Status</span>
+              <strong id="hotbar-buff-state">idle</strong>
+            </div>
+            <div class="bond-calc-summary-item">
+              <span>Last Slot</span>
+              <strong id="hotbar-buff-last-slot">None</strong>
+            </div>
+          </div>
+          <p id="hotbar-buff-message" style="font-size:0.95rem; opacity:0.85; margin-top:1rem;">Ready</p>
+
+          <div class="seperator"></div>
+          <div class="boost-hotbar-strip" id="hotbar-buff-tool-strip"></div>
+          <div class="boost-hotbar-panels" id="hotbar-buff-tool-panels"></div>
+        </div>
+      `;
+
+      const hotbarBuffStrip = document.getElementById("hotbar-buff-tool-strip");
+      const hotbarBuffPanels = document.getElementById("hotbar-buff-tool-panels");
+      for (let slot = 1; slot <= 7; slot += 1) {
+        hotbarBuffStrip.innerHTML += `
+          <button type="button" id="hotbar-buff-tool-slot-${slot}" class="boost-hotbar-slot hotbar-buff-tool-slot" onclick="switchHotbarBuffToolSlot(${slot})" title="Slot ${slot}">
+            <span class="boost-hotbar-slot-number">[${slot}]</span>
+            <span class="boost-hotbar-slot-frame">
+              <span class="boost-hotbar-slot-empty"></span>
+            </span>
+          </button>
+        `;
+
+        hotbarBuffPanels.innerHTML += `
+          <div id="hotbar-buff-tool-slot-${slot}-panel" class="boost-hotbar-panel hotbar-buff-tool-panel">
+            <div class="boost-hotbar-panel-header">
+              <div class="boost-hotbar-panel-icon boost-hotbar-panel-icon-empty">
+                <span class="boost-hotbar-slot-empty"></span>
+              </div>
+              <div>
+                <h3 class="poppins-semibold">Slot ${slot}</h3>
+                <p class="poppins-regular">Enable this slot and set how often it should be pressed.</p>
+              </div>
+            </div>
+            <form class="boost-hotbar-form-row">
+              <div class="boost-hotbar-form-copy">
+                <label>Enabled</label>
+                <p>Allow the tool to press this hotbar slot.</p>
+              </div>
+              ${buildInput(`hotbar_buff_tool_slot${slot}_enabled`, {
+                name: "checkbox",
+                triggerFunction: saveProfileTriggerFunction,
+              })}
+            </form>
+            <form class="boost-hotbar-form-row">
+              <div class="boost-hotbar-form-copy">
+                <label>Use Every</label>
+                <p>Set the cooldown for repeated use of this slot.</p>
+              </div>
+              <div class="boost-hotbar-frequency">
+              ${buildInput(`hotbar_buff_tool_slot${slot}_use_every_value`, {
+                name: "textbox",
+                inputType: "float",
+                triggerFunction: saveProfileTriggerFunction,
+                length: 8,
+              })}
+              ${buildInput(`hotbar_buff_tool_slot${slot}_use_every_format`, {
+                name: "dropdown",
+                data: hotbarBuffUseEveryOptions,
+                triggerFunction: saveProfileTriggerFunction,
+                length: 6,
+              }).replace("0.6rem", "0")}
+              </div>
+            </form>
+          </div>
+        `;
+      }
+    </script>
+  </div>
+
+  <div id="tools-bond-calculator-tab" class="standard-container sub-tab-panel">
+    <div class="poppins-medium standard-container" style="display: block; justify-items: unset; padding-top: 1rem;">
+      <h2 id="bond-treat-calculator">Bond/Treat Calculator</h2>
+      <p style="font-weight:500; font-size:1rem;">Calculate treat count and honey cost between bond levels using your Bond from Treats stat.</p>
+      <p style="font-size:0.95rem; opacity:0.8; margin-top:0.5rem;">You can find your Bond from Treats % in your character stats in BSS.</p>
+      <div class="seperator"></div>
+
+      <div class="bond-calc-grid">
+        <div class="bond-calc-input-group">
+          <label for="bond-calc-start-level">Initial Level</label>
+          <select id="bond-calc-start-level" class="textbox bond-calc-select">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="7">7</option>
+            <option value="8">8</option>
+            <option value="9">9</option>
+            <option value="10">10</option>
+            <option value="11">11</option>
+            <option value="12">12</option>
+            <option value="13">13</option>
+            <option value="14">14</option>
+            <option value="15">15</option>
+            <option value="16">16</option>
+            <option value="17">17</option>
+            <option value="18">18</option>
+            <option value="19">19</option>
+            <option value="20">20</option>
+            <option value="21">21</option>
+            <option value="22">22</option>
+            <option value="23">23</option>
+            <option value="24">24</option>
+          </select>
+        </div>
+
+        <div class="bond-calc-input-group">
+          <label for="bond-calc-end-level">Final Level</label>
+          <select id="bond-calc-end-level" class="textbox bond-calc-select">
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="7">7</option>
+            <option value="8">8</option>
+            <option value="9">9</option>
+            <option value="10">10</option>
+            <option value="11">11</option>
+            <option value="12">12</option>
+            <option value="13">13</option>
+            <option value="14">14</option>
+            <option value="15">15</option>
+            <option value="16">16</option>
+            <option value="17">17</option>
+            <option value="18">18</option>
+            <option value="19">19</option>
+            <option value="20">20</option>
+            <option value="21">21</option>
+            <option value="22">22</option>
+            <option value="23">23</option>
+            <option value="24">24</option>
+            <option value="25" selected>25</option>
+          </select>
+        </div>
+
+        <div class="bond-calc-input-group">
+          <label for="bond-calc-bonus">Bond from Treats (%)</label>
+          <input
+            id="bond-calc-bonus"
+            class="textbox"
+            type="number"
+            min="0"
+            max="300"
+            step="0.1"
+            value="20"
+          />
+        </div>
+
+        <div class="bond-calc-input-group">
+          <label for="bond-calc-bee-count"># of Bees</label>
+          <input
+            id="bond-calc-bee-count"
+            class="textbox"
+            type="number"
+            min="1"
+            max="50"
+            step="1"
+            value="50"
+          />
+        </div>
+      </div>
+
+      <div id="bond-calc-warning" class="bond-calc-warning" style="display:none;"></div>
+
+      <div class="bond-calc-summary">
+        <div class="bond-calc-summary-item">
+          <span>Total Bond</span>
+          <strong id="bond-calc-total-bond">0</strong>
+        </div>
+        <div class="bond-calc-summary-item">
+          <span id="bond-calc-total-treats-label">Treats Needed (1 Bee)</span>
+          <strong id="bond-calc-total-treats">0</strong>
+        </div>
+        <div class="bond-calc-summary-item">
+          <span>Cost (1 Bee)</span>
+          <strong id="bond-calc-total-cost-one">0</strong>
+        </div>
+        <div class="bond-calc-summary-item">
+          <span id="bond-calc-total-cost-bees-label">Cost (50 Bees)</span>
+          <strong id="bond-calc-total-cost-bees">0</strong>
+        </div>
+      </div>
+
+      <div class="bond-calc-table-wrap">
+        <table class="bond-calc-table">
+          <thead>
+            <tr>
+              <th>Level</th>
+              <th>Bond Required</th>
+              <th>Treats Needed</th>
+              <th>Cost per Bee</th>
+              <th id="bond-calc-breakdown-cost-bees-label">Cost for 50 Bees</th>
+            </tr>
+          </thead>
+          <tbody id="bond-calc-breakdown"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="tools-ticket-calculator-tab" class="standard-container sub-tab-panel">
+    <div class="poppins-medium standard-container" style="display: block; justify-items: unset; padding-top: 1rem;">
+      <h2>Ticket Price Calculator</h2>
+      <p style="font-weight:500; font-size:1rem;">Calculate the honey cost of buying tickets from the Bee Swarm Simulator ticket shop.</p>
+      <p style="font-size:0.95rem; opacity:0.8; margin-top:0.5rem;">Enter the current price of your next ticket to see the cost for common ticket bundles.</p>
+      <div class="seperator"></div>
+
+      <div class="bond-calc-grid ticket-calc-grid">
+        <div class="bond-calc-input-group">
+          <label for="ticket-calc-next-price">Price of Next Ticket</label>
+          <div class="ticket-calc-price-row">
+            <input
+              id="ticket-calc-next-price"
+              class="textbox"
+              type="number"
+              min="0"
+              step="0.01"
+              value="100"
+            />
+            <select id="ticket-calc-next-price-unit" class="textbox bond-calc-select ticket-calc-unit">
+              <option value="1000">K</option>
+              <option value="1000000" selected>M</option>
+              <option value="1000000000">B</option>
+              <option value="1000000000000">T</option>
+              <option value="1000000000000000">Qd</option>
+              <option value="1000000000000000000">Qn</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="bond-calc-input-group">
+          <label for="ticket-calc-custom-amount">Custom Amount</label>
+          <input
+            id="ticket-calc-custom-amount"
+            class="textbox"
+            type="number"
+            min="1"
+            max="100000"
+            step="1"
+            value="1"
+          />
+        </div>
+
+        <div class="bond-calc-input-group">
+          <label for="ticket-calc-budget">Budget</label>
+          <div class="ticket-calc-price-row">
+            <input
+              id="ticket-calc-budget"
+              class="textbox"
+              type="number"
+              min="0"
+              step="0.01"
+              value="0"
+            />
+            <select id="ticket-calc-budget-unit" class="textbox bond-calc-select ticket-calc-unit">
+              <option value="1000">K</option>
+              <option value="1000000" selected>M</option>
+              <option value="1000000000">B</option>
+              <option value="1000000000000">T</option>
+              <option value="1000000000000000">Qd</option>
+              <option value="1000000000000000000">Qn</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div id="ticket-calc-warning" class="bond-calc-warning" style="display:none;"></div>
+
+      <div class="bond-calc-table-wrap">
+        <table class="bond-calc-table ticket-calc-table">
+          <thead>
+            <tr>
+              <th>Tickets</th>
+              <th>Cost</th>
+            </tr>
+          </thead>
+          <tbody id="ticket-calc-presets-breakdown"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="tools-auto-gifted-basic-bee-tab" class="standard-container sub-tab-panel">
+    <div class="poppins-medium standard-container" style="display: block; justify-items: unset; padding-top: 1rem;">
+      <h2>Auto Gifted Basic Bee Tool (BETA)</h2>
+      <p style="font-size:0.95rem; opacity:0.8; margin-top:0.25rem;">
+        This tool is in early beta and may be buggy. It is recommended to watch the tool run to make sure it doesn't do anything unexpected. If you encounter any issues, please report them on the discord server.
+      </p>
+        <br>
+      <p style="font-size:0.95rem; opacity:0.8; margin-top:0.5rem;">
+        When you press start, the tool focuses Roblox, waits a short countdown (set below, default of 3 seconds), captures your current mouse position as the bee slot,
+        then alternates Basic Egg, Royal Jelly, Basic Egg, and repeats until it finds a Gifted Basic Bee or a paused result.
+      </p>
+      <p style="font-size:0.95rem; opacity:0.8; margin-top:0.5rem;">
+        To stop this tool, use the macro stop hotkey:
+        <span id="auto-gifted-basic-bee-stop-hotkey" style="font-weight:600;">F3</span>.
+        You can change this in Config.
+      </p>
+      <div class="seperator"></div>
+
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; align-items:end;">
+        <div>
+          <label for="auto-gifted-basic-bee-delay">Capture Delay (seconds)</label>
+          <input
+            id="auto-gifted-basic-bee-delay"
+            class="textbox"
+            type="number"
+            min="1"
+            max="10"
+            step="1"
+            value="3"
+            style="margin-top:0.5rem; width:8rem;"
+          />
+        </div>
+        <div style="display:flex; gap:0.75rem; flex-wrap:wrap;">
+          <button id="auto-gifted-basic-bee-start" class="purple-button" onclick="startAutoGiftedBasicBeeTool()">
+            Start
+          </button>
+          <button id="auto-gifted-basic-bee-stop" class="purple-button" onclick="stopAutoGiftedBasicBeeTool()" style="display:none;">
+            Stop
+          </button>
+        </div>
+      </div>
+
+      <div style="margin-top:1rem;">
+        <label style="display:block; margin-bottom:0.5rem;">Pause On Result</label>
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:0.6rem 1rem;">
+          <label style="display:flex; align-items:center; gap:0.5rem;">
+            <input id="auto-gifted-basic-bee-pause-gifted-other" type="checkbox" checked />
+            Gifted Non-Basic
+          </label>
+          <label style="display:flex; align-items:center; gap:0.5rem;">
+            <input id="auto-gifted-basic-bee-pause-legendary" type="checkbox" />
+            Legendary
+          </label>
+          <label style="display:flex; align-items:center; gap:0.5rem;">
+            <input id="auto-gifted-basic-bee-pause-mythic" type="checkbox" checked />
+            Mythic
+          </label>
+        </div>
+      </div>
+
+      <div style="margin-top:1rem; padding:1rem; border-radius:10px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.07);">
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:0.75rem;">
+          <div>
+            <label>Status</label>
+            <div id="auto-gifted-basic-bee-state" style="margin-top:0.3rem; font-weight:600;">Idle</div>
+          </div>
+          <div>
+            <label>Bee Slot</label>
+            <div id="auto-gifted-basic-bee-slot" style="margin-top:0.3rem;">Not captured</div>
+          </div>
+          <div>
+            <label>Basic Eggs</label>
+            <div id="auto-gifted-basic-bee-eggs" style="margin-top:0.3rem;">0</div>
+          </div>
+          <div>
+            <label>Royal Jellies</label>
+            <div id="auto-gifted-basic-bee-rj" style="margin-top:0.3rem;">0</div>
+          </div>
+          <div>
+            <label>Total Rolls</label>
+            <div id="auto-gifted-basic-bee-rolls" style="margin-top:0.3rem;">0</div>
+          </div>
+        </div>
+        <div style="margin-top:1rem;">
+          <label>Message</label>
+          <div id="auto-gifted-basic-bee-message" style="margin-top:0.3rem; opacity:0.9;">Ready</div>
+        </div>
+        <div style="margin-top:1rem;">
+          <label>Last OCR Read</label>
+          <div id="auto-gifted-basic-bee-last-text" style="margin-top:0.3rem; opacity:0.75; word-break:break-word;">None</div>
+        </div>
+      </div>
+
+      <p style="font-size:0.9rem; opacity:0.75; margin-top:1rem;">
+        Requirements: stop the main macro first, keep Auto-Jelly disabled in-game, and make sure Roblox is visible before starting.
+      </p>
+
+      <p style="font-size:0.9rem; opacity:0.75; margin-top:1rem; font-style: bold; color: #ff6f91;">
+        Please note: this is beta, it may mess up, it is not garunteed to work, please watch it run and report any issues you see on the discord. The tool relies on OCR to read the result of each roll, so it may misread sometimes, especially if your game resolution is low or if you have a lot of screen clutter. If it misreads a result, it may do extra rolls or stop when it shouldn't, so it's important to keep an eye on it while it's running.
+      </p>
+    </div>
+  </div>
+</div>

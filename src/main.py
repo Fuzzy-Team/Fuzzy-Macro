@@ -32,6 +32,12 @@ import modules.misc.settingsManager as settingsManager
 import modules.macro as macroModule
 import modules.controls.mouse as mouse
 import json
+from modules.controls.sleep import (
+    InterruptRequested,
+    INTERRUPT_NONE,
+    INTERRUPT_SKIP,
+    INTERRUPT_RESET,
+)
 # delete backup from previous update if pending
 try:
     from modules.misc.update import delete_backup_if_pending
@@ -461,40 +467,53 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
     #makes it easy to do any checks after a task is complete (like stinger hunt, rejoin every, etc)
     def runTask(func = None, args = (), resetAfter = True, convertAfter = True, allowAFB = True):
         nonlocal taskCompleted
-        # Check if skip was requested
-        if skipTask.value == 1:
-            skipTask.value = 0  # Reset skip flag
-            macro.logger.webhook("Task Skipped", f"Skipped: {status.value.replace('_', ' ').title()}", "orange")
+
+        def handle_interrupt(action):
+            skipTask.value = INTERRUPT_NONE
+            macro.keyboard.releaseMovement()
+            mouse.mouseUp()
+            interrupted_status = status.value.replace('_', ' ').title() if status.value else "Current Task"
             macro.clear_task_status()
             taskCompleted = True
-            if resetAfter:
-                macro.reset(convert=False)
+            if action == INTERRUPT_SKIP:
+                macro.logger.webhook("Task Skipped", f"Skipped: {interrupted_status}", "orange")
+            elif action == INTERRUPT_RESET:
+                macro.logger.webhook("Task Reset", f"Resetting and retrying: {interrupted_status}", "orange")
+            macro.reset(convert=True)
+            if action == INTERRUPT_RESET and func:
+                return runTask(func, args=args, resetAfter=resetAfter, convertAfter=convertAfter, allowAFB=allowAFB)
             return None
+
+        pending_action = int(skipTask.value)
+        if pending_action != INTERRUPT_NONE:
+            return handle_interrupt(pending_action)
         
-        #execute the task
-        if func:
-            returnVal = func(*args) 
-            taskCompleted = True
-        else:
-            returnVal = None
-        #task done
-        if resetAfter: 
-            macro.reset(convert=convertAfter)
-        
-        #do priority tasks
-        if macro.night and macro.setdat["stinger_hunt"]:
-            macro.stingerHunt()
-        if macro.setdat["mondo_buff"] and macro.hasMondoRespawned():
-            macro.collectMondoBuff()
-        if macro.setdat["rejoin_every"]:
-            if macro.hasRespawned("rejoin_every", macro.setdat["rejoin_every"]*60*60):
+        try:
+            #execute the task
+            if func:
+                returnVal = func(*args) 
+                taskCompleted = True
+            else:
+                returnVal = None
+            #task done
+            if resetAfter: 
+                macro.reset(convert=convertAfter)
+            
+            #do priority tasks
+            if macro.night and macro.setdat["stinger_hunt"]:
+                macro.stingerHunt()
+            if macro.setdat["mondo_buff"] and macro.hasMondoRespawned():
+                macro.collectMondoBuff()
+            if macro.hasScheduledRejoinArrived():
                 macro.rejoin("Rejoining (Scheduled)")
                 macro.saveTiming("rejoin_every")
-        
-        #auto field boost (can be disabled per-call via allowAFB)
-        if allowAFB and macro.setdat["Auto_Field_Boost"] and not macro.AFBLIMIT:
-            if macro.hasAFBRespawned("AFB_dice_cd", macro.setdat["AFB_rebuff"]*60) or macro.hasAFBRespawned("AFB_glitter_cd", macro.setdat["AFB_rebuff"]*60-30):
-                macro.AFB(gatherInterrupt=False)
+            
+            #auto field boost (can be disabled per-call via allowAFB)
+            if allowAFB and macro.setdat["Auto_Field_Boost"] and not macro.AFBLIMIT:
+                if macro.hasAFBRespawned("AFB_dice_cd", macro.setdat["AFB_rebuff"]*60) or macro.hasAFBRespawned("AFB_glitter_cd", macro.setdat["AFB_rebuff"]*60-30):
+                    macro.AFB(gatherInterrupt=False)
+        except InterruptRequested as interrupt:
+            return handle_interrupt(interrupt.action)
 
         macro.clear_task_status()
         return returnVal
@@ -695,6 +714,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         # Check if stop was requested while paused
         if run.value == 0:
             break  # Exit macro loop if stop requested
+
+        # Quest scans should be cached only within a single outer loop pass.
+        # Clearing here guarantees the board is re-read after the task list recycles.
+        questCache.clear()
         
         macro.setdat = get_cached_settings()
         # Check if profile has changed and reload settings if needed
@@ -1125,6 +1148,58 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     return cycle
             else: 
                 return False
+
+        def emptyManualPlanterData():
+            return {
+                "cycles": [1, 1, 1],
+                "planters": ["", "", ""],
+                "fields": ["", "", ""],
+                "gatherFields": ["", "", ""],
+                "harvestTimes": [0, 0, 0]
+            }
+
+        def normalizeManualPlanterData(rawData):
+            normalized = emptyManualPlanterData()
+            if not isinstance(rawData, dict):
+                return normalized
+
+            for key, defaultValues in normalized.items():
+                values = rawData.get(key, defaultValues)
+                if not isinstance(values, list):
+                    values = defaultValues
+
+                cleaned = list(values[:3])
+                while len(cleaned) < 3:
+                    cleaned.append(defaultValues[len(cleaned)])
+
+                if key == "cycles":
+                    normalized[key] = []
+                    for value in cleaned:
+                        try:
+                            cycle = int(value)
+                        except Exception:
+                            cycle = 1
+                        normalized[key].append(min(5, max(1, cycle)))
+                elif key == "harvestTimes":
+                    normalized[key] = []
+                    for value in cleaned:
+                        try:
+                            harvestTime = float(value or 0)
+                        except Exception:
+                            harvestTime = 0
+                        normalized[key].append(harvestTime)
+                else:
+                    normalized[key] = [str(value or "") for value in cleaned]
+
+            return normalized
+
+        def saveManualPlanterData(planterData):
+            nonlocal planterDataRaw
+            normalized = normalizeManualPlanterData(planterData)
+            planterDataRaw = str(normalized)
+            with open("./data/user/manualplanters.txt", "w") as f:
+                f.write(planterDataRaw)
+            return normalized
         
         # Get priority order from settings, or use empty list if not set
         priorityOrder = get_task_list_order(macro.setdat)
@@ -1314,6 +1389,11 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             # Handle gather tasks
             if taskId.startswith("gather_"):
                 fieldName = taskId.replace("gather_", "").replace("_", " ")
+
+                # When a field is needed for an active quest, let the quest resolver handle it
+                # in quest order instead of the global gather priority queue.
+                if fieldName in questGatherFields or fieldName in questGumdropGatherFields:
+                    return False
                 
                 # Check if this field is enabled in gather tab
                 for i in range(len(macro.setdat["fields_enabled"])):
@@ -1321,14 +1401,6 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         runTask(macro.gather, args=(fieldName,), resetAfter=False)
                         executedTasks.add(taskId)
                         return True
-                
-                # Check if it's a quest gather field
-                if fieldName in questGatherFields or fieldName in questGumdropGatherFields:
-                    isGumdrop = fieldName in questGumdropGatherFields
-                    questGatherOverrides = questGumdropFieldOverrides.get(fieldName, {}) if isGumdrop else questGatherFieldOverrides.get(fieldName, {})
-                    runTask(macro.gather, args=(fieldName, questGatherOverrides, isGumdrop), resetAfter=False)
-                    executedTasks.add(taskId)
-                    return True
                 
                 return False
             
@@ -1356,13 +1428,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         f.close()
                     
                     if not planterDataRaw.strip():
-                        planterData = {
-                            "cycles": [1,1,1],
-                            "planters": ["","",""],
-                            "fields": ["","",""],
-                            "gatherFields": ["","",""],
-                            "harvestTimes": [0,0,0]
-                        }
+                        planterData = emptyManualPlanterData()
                         for i in range(3):
                             if macro.setdat[f"cycle1_{i+1}_planter"] == "none" or macro.setdat[f"cycle1_{i+1}_field"] == "none":
                                 continue
@@ -1372,23 +1438,24 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                 planterData["fields"][i] = planter[1]
                                 planterData["harvestTimes"][i] = planter[2]
                                 planterData["gatherFields"][i] = planter[1] if planter[3] else ""
-                                with open("./data/user/manualplanters.txt", "w") as f:
-                                    f.write(str(planterData))
-                                f.close()
+                                planterData = saveManualPlanterData(planterData)
                         executedTasks.add(taskId)
                         return True
                     else:
-                        planterData = ast.literal_eval(planterDataRaw)
+                        try:
+                            planterData = normalizeManualPlanterData(ast.literal_eval(planterDataRaw))
+                        except Exception:
+                            planterData = emptyManualPlanterData()
+                            planterData = saveManualPlanterData(planterData)
                         for i in range(3):
                             cycle = planterData["cycles"][i]
                             if planterData["planters"][i] and time.time() > planterData["harvestTimes"][i]:
                                 if runTask(macro.collectPlanter, args=(planterData["planters"][i], planterData["fields"][i])):
-                                    planterData["harvestTimes"][i] = ""
+                                    planterData["harvestTimes"][i] = 0
                                     planterData["planters"][i] = ""
                                     planterData["fields"][i] = ""
-                                    with open("./data/user/manualplanters.txt", "w") as f:
-                                        f.write(str(planterData))
-                                    f.close()
+                                    planterData["gatherFields"][i] = ""
+                                    planterData = saveManualPlanterData(planterData)
                                     updateGUI.value = 1
                         
                         for i in range(3):
@@ -1416,9 +1483,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                 planterData["fields"][i] = planter[1]
                                 planterData["harvestTimes"][i] = planter[2]
                                 planterData["gatherFields"][i] = planter[1] if planter[3] else ""
-                                with open("./data/user/manualplanters.txt", "w") as f:
-                                    f.write(str(planterData))
-                                f.close()
+                                planterData = saveManualPlanterData(planterData)
                                 updateGUI.value = 1
                         executedTasks.add(taskId)
                         return True
@@ -2309,7 +2374,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         # Handle planter gather fields (if not already gathered)
         if planterDataRaw:
             try:
-                planterGatherFields = [x for x in ast.literal_eval(planterDataRaw)["gatherFields"] if x]
+                planterGatherFields = [x for x in normalizeManualPlanterData(ast.literal_eval(planterDataRaw))["gatherFields"] if x]
                 for field in planterGatherFields:
                     if field not in allGatheredFields:
                         runTask(macro.gather, args=(field,), resetAfter=False)
@@ -2343,7 +2408,7 @@ def watch_for_hotkeys(run):
     pressed_keys = set()
     
     # Add debouncing to prevent duplicate triggers
-    last_trigger_time = {"start": 0.0, "stop": 0.0, "pause": 0.0}
+    last_trigger_time = {"start": 0.0, "stop": 0.0, "pause": 0.0, "hotbar_buff_start": 0.0}
     debounce_duration = 0.3  # 300ms debounce
     
     # Add threading lock for synchronization
@@ -2365,9 +2430,42 @@ def watch_for_hotkeys(run):
     settings_cache_duration = 1.0  # Reload settings every 1 second max
     
     # Cache Eel recording state to avoid repeated calls
-    recording_cache = {"start": False, "pause": False, "stop": False}
+    recording_cache = {"start": False, "pause": False, "stop": False, "hotbar_buff_start": False}
     last_recording_check = 0
     recording_cache_duration = 0.5  # Check recording state every 0.5 seconds max
+
+    modifier_keys = ["Ctrl", "Alt", "Shift", "Cmd"]
+    ignored_keys = {"Fn"}
+    key_aliases = {
+        "ctrl_l": "Ctrl", "ctrl_r": "Ctrl", "control": "Ctrl", "ctrl": "Ctrl",
+        "alt_l": "Alt", "alt_r": "Alt", "option": "Alt", "alt": "Alt",
+        "shift_l": "Shift", "shift_r": "Shift", "shift": "Shift",
+        "cmd_l": "Cmd", "cmd_r": "Cmd", "cmd": "Cmd", "meta": "Cmd", "command": "Cmd",
+        "space": "Space", "spacebar": "Space",
+        "enter": "Enter", "return": "Enter",
+        "tab": "Tab",
+        "backspace": "Backspace",
+        "delete": "Delete", "del": "Delete",
+        "esc": "Escape", "escape": "Escape",
+        "caps_lock": "CapsLock", "capslock": "CapsLock",
+        "left": "ArrowLeft", "arrowleft": "ArrowLeft",
+        "right": "ArrowRight", "arrowright": "ArrowRight",
+        "up": "ArrowUp", "arrowup": "ArrowUp",
+        "down": "ArrowDown", "arrowdown": "ArrowDown",
+        "home": "Home",
+        "end": "End",
+        "page_up": "PageUp", "pageup": "PageUp",
+        "page_down": "PageDown", "pagedown": "PageDown",
+        "insert": "Insert",
+        "fn": "Fn",
+        "¡": "1", "™": "2", "£": "3", "¢": "4", "∞": "5",
+        "§": "6", "¶": "7", "•": "8", "ª": "9", "º": "0",
+        "å": "A", "∫": "B", "ç": "C", "∂": "D", "ƒ": "F",
+        "©": "G", "˙": "H", "∆": "J", "˚": "K", "¬": "L",
+        "µ": "M", "ø": "O", "π": "P", "œ": "Q", "®": "R",
+        "ß": "S", "†": "T", "√": "V", "∑": "W", "≈": "X",
+        "¥": "Y", "Ω": "Z", "ω": "Z",
+    }
     
     def get_cached_settings():
         nonlocal settings_cache, last_settings_load
@@ -2386,64 +2484,67 @@ def watch_for_hotkeys(run):
                 recording_cache["start"] = eel.getElementProperty("start_keybind", "dataset.recording")() == "true"
                 recording_cache["pause"] = eel.getElementProperty("pause_keybind", "dataset.recording")() == "true"
                 recording_cache["stop"] = eel.getElementProperty("stop_keybind", "dataset.recording")() == "true"
+                recording_cache["hotbar_buff_start"] = eel.getElementProperty("hotbar_buff_start_keybind", "dataset.recording")() == "true"
                 last_recording_check = current_time
             except:
-                recording_cache = {"start": False, "pause": False, "stop": False}
-            return recording_cache["start"] or recording_cache["pause"] or recording_cache["stop"]
+                recording_cache = {"start": False, "pause": False, "stop": False, "hotbar_buff_start": False}
+            return recording_cache["start"] or recording_cache["pause"] or recording_cache["stop"] or recording_cache["hotbar_buff_start"]
     
+    def normalize_key_name(key_name):
+        key_name = str(key_name or "").strip()
+        if not key_name:
+            return ""
+        if key_name.startswith("Key."):
+            key_name = key_name[4:]
+        if key_name.startswith("'") and key_name.endswith("'") and len(key_name) >= 2:
+            key_name = key_name[1:-1]
+
+        alias = key_aliases.get(key_name.lower())
+        if alias:
+            return alias
+        if key_name.lower().startswith("f") and key_name[1:].isdigit():
+            return key_name.upper()
+        if len(key_name) == 1:
+            return key_name.upper()
+        return key_name
+
+    def parse_keybind(keybind):
+        keys = []
+        for raw_key in str(keybind or "").split("+"):
+            key_name = normalize_key_name(raw_key)
+            if key_name and key_name not in ignored_keys and key_name not in keys:
+                keys.append(key_name)
+        return tuple(order_keys(keys))
+
+    def order_keys(keys):
+        ordered = [key for key in modifier_keys if key in keys]
+        ordered.extend(sorted(key for key in keys if key not in modifier_keys))
+        return ordered
+
+    def keys_match_keybind(keybind):
+        expected_keys = parse_keybind(keybind)
+        if not expected_keys:
+            return False
+        active_keys = {key for key in pressed_keys if key not in ignored_keys}
+        return active_keys == set(expected_keys)
+
+    def keybind_is_held(keybind):
+        expected_keys = parse_keybind(keybind)
+        if not expected_keys:
+            return False
+        return all(key in pressed_keys for key in expected_keys)
+
     def convert_key_to_string(key):
-        """Optimized key conversion with minimal string operations and error handling"""
+        """Convert pynput key objects to the same canonical names saved by the UI."""
         try:
-            key_str = str(key)
-            if key_str.startswith("Key."):
-                key_str = key_str[4:]  # Remove "Key." prefix
-            
-            # Use dictionary lookup for better performance
-            key_mapping = {
-                "ctrl_l": "Ctrl", "ctrl_r": "Ctrl",
-                "alt_l": "Alt", "alt_r": "Alt", 
-                "shift_l": "Shift", "shift_r": "Shift",
-                "cmd_l": "Cmd", "cmd_r": "Cmd", "cmd": "Cmd",
-                "space": "Space",
-                "enter": "Enter", "return": "Enter",
-                "tab": "Tab", "backspace": "Backspace",
-                "delete": "Delete", "esc": "Escape"
-            }
-            
-            if key_str in key_mapping:
-                return key_mapping[key_str]
-            elif key_str.startswith("f") and len(key_str) <= 3:
-                return key_str.upper()  # F1, F2, etc.
-            elif key_str.startswith("'") and key_str.endswith("'"):
-                return key_str[1:-1].upper()  # Remove quotes and uppercase
-            elif len(key_str) == 1:
-                return key_str.upper()  # A, B, C, etc.
-            else:
-                return key_str
+            key_char = getattr(key, "char", None)
+            if key_char:
+                return normalize_key_name(key_char)
+            return normalize_key_name(str(key))
         except Exception as e:
             # Log error but don't crash the listener
             print(f"Error converting key {key}: {e}")
-            return str(key)
-    
-    def build_key_combination():
-        """Build current key combination string in consistent order"""
-        modifier_keys = ['Ctrl', 'Alt', 'Shift', 'Cmd']
-        sorted_keys = []
-        
-        # Add modifiers first in consistent order
-        for mod in modifier_keys:
-            if mod in pressed_keys:
-                sorted_keys.append(mod)
-        
-        # Add non-modifier keys (sorted alphabetically)
-        non_modifier_keys = []
-        for key in pressed_keys:
-            if key not in modifier_keys:
-                non_modifier_keys.append(key)
-        non_modifier_keys.sort()
-        sorted_keys.extend(non_modifier_keys)
-        
-        return "+".join(sorted_keys)
+            return normalize_key_name(str(key))
     
     def is_stop_keybind_held():
         """Check if the stop keybind is currently held down"""
@@ -2456,14 +2557,7 @@ def watch_for_hotkeys(run):
             if not stop_keybind:
                 return False
             
-            # Parse the stop keybind to get individual keys
-            stop_keys = stop_keybind.split("+")
-            
-            # Check if all keys in the stop keybind are currently pressed
-            for key in stop_keys:
-                if key not in pressed_keys:
-                    return False
-            return True
+            return keybind_is_held(stop_keybind)
         except Exception as e:
             print(f"Error checking stop keybind: {e}")
             return False
@@ -2486,13 +2580,11 @@ def watch_for_hotkeys(run):
                 start_keybind = settings.get("start_keybind", "F1")
                 stop_keybind = settings.get("stop_keybind", "F3")
                 pause_keybind = settings.get("pause_keybind", "F2")
+                hotbar_buff_start_keybind = settings.get("hotbar_buff_start_keybind", "F4")
                 
                 # Convert key to string for comparison
                 key_str = convert_key_to_string(key)
                 pressed_keys.add(key_str)
-                
-                # Build current key combination
-                current_combo = build_key_combination()
                 
                 # Don't start/stop macro if we're recording a keybind
                 if is_recording_keybind():
@@ -2502,14 +2594,19 @@ def watch_for_hotkeys(run):
                 if is_stop_keybind_held():
                     if not stop_key_held:
                         stop_key_held = True
+                    try:
+                        import gui
+                        gui.stopAllTools()
+                    except Exception:
+                        pass
                     # Force stop immediately when stop keybind is held
                     if run.value != 0:  # Only if not already stopped
                         run.value = 0
-                        # Update GUI immediately (optimistically show stopped state)
+                        # Update GUI immediately so the app shows cleanup in progress.
                         try:
                             import gui
-                            gui.setRunState(3)  # Update GUI state optimistically to stopped
-                            gui.toggleStartStop()  # Update UI immediately
+                            gui.setRunState(0)
+                            gui.toggleStartStop()
                         except:
                             pass  # If gui is not ready, continue
                 else:
@@ -2518,9 +2615,16 @@ def watch_for_hotkeys(run):
                 # Add debouncing to prevent duplicate triggers
                 current_time = time.time()
                 
-                if current_combo == start_keybind:
-                    if run.value == 2: #already running
+                if keys_match_keybind(start_keybind):
+                    if run.value != 3: #only start from fully stopped state
                         return
+                    try:
+                        import gui
+                        if gui.isAnyToolRunning():
+                            messageBox.msgBox(title="Tool Running", text="Stop the running tool before starting the macro.")
+                            return
+                    except Exception:
+                        pass
                     # Check debounce with error handling
                     try:
                         if current_time - last_trigger_time["start"] < debounce_duration:
@@ -2537,9 +2641,7 @@ def watch_for_hotkeys(run):
                         gui.toggleStartStop()  # Update UI immediately
                     except:
                         pass  # If gui is not ready, continue
-                elif current_combo == stop_keybind and not stop_key_held:
-                    if run.value == 3: #already stopped
-                        return
+                elif keys_match_keybind(stop_keybind) and not stop_key_held:
                     # Check debounce with error handling
                     try:
                         if current_time - last_trigger_time["stop"] < debounce_duration:
@@ -2548,15 +2650,38 @@ def watch_for_hotkeys(run):
                         # Reset trigger time if there's a comparison error
                         last_trigger_time["stop"] = 0.0
                     last_trigger_time["stop"] = current_time
-                    run.value = 0
-                    # Update GUI immediately (optimistically show stopped state)
                     try:
                         import gui
-                        gui.setRunState(3)  # Update GUI state optimistically to stopped
-                        gui.toggleStartStop()  # Update UI immediately
+                        gui.stopAllTools()
+                    except Exception:
+                        pass
+                    if run.value == 3: #already stopped
+                        return
+                    run.value = 0
+                    # Update GUI immediately so the app shows cleanup in progress.
+                    try:
+                        import gui
+                        gui.setRunState(0)
+                        gui.toggleStartStop()
                     except:
                         pass  # If gui is not ready, continue
-                elif current_combo == pause_keybind:
+                elif keys_match_keybind(hotbar_buff_start_keybind):
+                    if run.value != 3:
+                        return
+                    try:
+                        if current_time - last_trigger_time["hotbar_buff_start"] < debounce_duration:
+                            return
+                    except (TypeError, ValueError):
+                        last_trigger_time["hotbar_buff_start"] = 0.0
+                    last_trigger_time["hotbar_buff_start"] = current_time
+                    try:
+                        import gui
+                        result = gui.startHotbarBuffTool()
+                        if not result.get("ok") and not gui.isAnyToolRunning():
+                            messageBox.msgBox(title="Hotbar Buff", text=result.get("message", "Could not start Hotbar Buff."))
+                    except Exception:
+                        pass
+                elif keys_match_keybind(pause_keybind):
                     # Check debounce with error handling
                     try:
                         if current_time - last_trigger_time["pause"] < debounce_duration:
@@ -2676,18 +2801,19 @@ if __name__ == "__main__":
     #3: already stopped (do nothing)
     #4: disconnected (rejoin)
     manager = multiprocessing.Manager()
-    run = multiprocessing.Value('i', 3)
+    run = manager.Value('i', 3)
     gui.setRunState(3)  # Initialize the global run state
     recentLogs = manager.list()  # Shared list to store recent log entries for discord bot
     gui.setRecentLogs(recentLogs)
-    updateGUI = multiprocessing.Value('i', 0)
-    skipTask = multiprocessing.Value('i', 0)  # 0 = don't skip, 1 = skip current task
+    updateGUI = manager.Value('i', 0)
+    skipTask = manager.Value('i', INTERRUPT_NONE)  # interrupt action for the running task
     status = manager.Value(ctypes.c_wchar_p, "none")
     presence = manager.Value(ctypes.c_wchar_p, "")
     logQueue = manager.Queue()
     pin_requests = manager.Queue()  # Shared queue for pin requests
     start_keyboard_listener_fn = watch_for_hotkeys(run)
     logger = logModule.log(logQueue, False, None, False, blocking=False)
+    gui.configureToolRuntime(logger=logger, status=status, presence=presence)
 
     disconnectCooldownUntil = 0 #only for running disconnect check on low performance
 
@@ -2762,9 +2888,12 @@ if __name__ == "__main__":
         stopThreads = True
         #print(sockets)
         if macroProc and macroProc.is_alive():
-            macroProc.kill()
-            macroProc.join()
-            macroProc = None
+            macroProc.terminate()
+            macroProc.join(timeout=2)
+            if macroProc.is_alive():
+                macroProc.kill()
+                macroProc.join(timeout=2)
+        macroProc = None
         stream.stop()
         #if discordBotProc.is_alive(): discordBotProc.kill()
         keyboardModule.releaseMovement()
@@ -2833,6 +2962,9 @@ if __name__ == "__main__":
     discordBotProc = None
     prevDiscordBotToken = None
     prevRunState = run.value  # Track previous run state for GUI updates
+    autoStopStartTime = None
+    autoStopDeadline = None
+    autoStopHours = 0.0
     
     # Initialize Rich Presence Manager
     richPresenceManager = None
@@ -2841,6 +2973,13 @@ if __name__ == "__main__":
     gui_settings_cache = {}
     last_gui_settings_load = 0
     gui_settings_cache_duration = 1.0  # Reload settings every 1 second max
+
+    def parseAutoStopHours(settings):
+        try:
+            hours = float(settings.get("auto_stop_after", 0) or 0)
+        except (TypeError, ValueError):
+            return 0.0
+        return max(0.0, hours)
 
     while True:
         eel.sleep(0.5)
@@ -2851,6 +2990,20 @@ if __name__ == "__main__":
             gui_settings_cache = settingsManager.loadAllSettings()
             last_gui_settings_load = current_time
         setdat = gui_settings_cache
+
+        if autoStopStartTime is not None and run.value in (2, 4, 6):
+            latestAutoStopHours = parseAutoStopHours(setdat)
+            if latestAutoStopHours != autoStopHours:
+                autoStopHours = latestAutoStopHours
+                autoStopDeadline = autoStopStartTime + (autoStopHours * 3600) if autoStopHours > 0 else None
+
+        if autoStopDeadline is not None and run.value in (2, 4, 6) and current_time >= autoStopDeadline:
+            logger.webhook(
+                "Macro Auto Stopped",
+                f"Stopped after {autoStopHours:g} hour{'s' if autoStopHours != 1 else ''}.",
+                "orange",
+            )
+            run.value = 0
 
         #discord bot. Look for changes in the bot token
         currentDiscordBotToken = setdat.get("discord_bot_token", "")
@@ -2969,7 +3122,7 @@ if __name__ == "__main__":
                     break
             #check if blender is enabled but there are no items to craft
             validBlender = not setdat["blender_enable"] #valid blender set to false if blender is enabled, else its true since blender is disabled
-            for i in range(1,4):
+            for i in range(1, macroModule.BLENDER_ITEM_SLOTS + 1):
                 if setdat[f"blender_item_{i}"] != "none" and (setdat[f"blender_repeat_{i}"] or setdat[f"blender_repeat_inf_{i}"]):
                     validBlender = True
             if not validBlender:
@@ -2983,6 +3136,9 @@ if __name__ == "__main__":
             macro_version = settingsManager.getMacroVersion()
             logger.webhook("Macro Started", f'Fuzzy Macro v{macro_version}\nDisplay: {screenInfo["display_type"]}, {screenInfo["screen_width"]}x{screenInfo["screen_height"]}', "purple")
             run.value = 2
+            autoStopStartTime = time.time()
+            autoStopHours = parseAutoStopHours(setdat)
+            autoStopDeadline = autoStopStartTime + (autoStopHours * 3600) if autoStopHours > 0 else None
             gui.setRunState(2)  # Update the global run state
             try:
                 gui.toggleStartStop()  # Update UI
@@ -2993,68 +3149,85 @@ if __name__ == "__main__":
             except:
                 pass  # If eel is not ready, continue
         elif run.value == 0:
-            if macroProc:
-                # Stop macro and release all inputs first
+            had_macro_proc = bool(macroProc)
+            autoStopStartTime = None
+            autoStopDeadline = None
+            autoStopHours = 0.0
+
+            # Stop macro/tools and release all inputs first.
+            gui.setRunState(0)
+            try:
+                gui.toggleStartStop()
+            except:
+                pass
+
+            if had_macro_proc:
                 logger.webhook("Macro Stopped", "Fuzzy Macro", "red")
+            try:
+                gui.stopAllTools()
+            except Exception:
+                pass
+
+            stopApp()
+
+            run.value = 3
+            gui.setRunState(3)
+            try:
+                gui.toggleStartStop()
+            except:
+                pass
+
+            if not had_macro_proc:
+                continue
+
+            # Generate and send final report AFTER stopping inputs
+            try:
+                print("Generating final report...")
+                from modules.submacros.finalReport import FinalReport
+                import os
                 
-                run.value = 3
-                gui.setRunState(3)  # Update the global run state
-                try:
-                    gui.toggleStartStop()  # Update UI
-                except:
-                    pass  # If eel is not ready, continue
+                # Create final report object
+                finalReportObj = FinalReport()
+                sessionStats = finalReportObj.generateFinalReport(setdat)
                 
-                # Stop all inputs and processes
-                stopApp()
-                
-                # Generate and send final report AFTER stopping inputs
-                try:
-                    print("Generating final report...")
-                    from modules.submacros.finalReport import FinalReport
-                    import os
+                # Check if report was generated successfully
+                if sessionStats and os.path.exists("finalReport.png"):
+                    # Format session summary for webhook
+                    sessionTime = sessionStats.get("total_session_time", 0)
+                    hours = int(sessionTime / 3600)
+                    minutes = int((sessionTime % 3600) / 60)
+                    timeStr = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
                     
-                    # Create final report object
-                    finalReportObj = FinalReport()
-                    sessionStats = finalReportObj.generateFinalReport(setdat)
+                    totalHoney = sessionStats.get("total_honey", 0)
+                    avgHoneyPerHour = sessionStats.get("avg_honey_per_hour", 0)
                     
-                    # Check if report was generated successfully
-                    if sessionStats and os.path.exists("finalReport.png"):
-                        # Format session summary for webhook
-                        sessionTime = sessionStats.get("total_session_time", 0)
-                        hours = int(sessionTime / 3600)
-                        minutes = int((sessionTime % 3600) / 60)
-                        timeStr = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
-                        
-                        totalHoney = sessionStats.get("total_honey", 0)
-                        avgHoneyPerHour = sessionStats.get("avg_honey_per_hour", 0)
-                        
-                        def millify(n):
-                            """Format large numbers with suffixes"""
-                            if n < 1000:
-                                return str(int(n))
-                            elif n < 1000000:
-                                return f"{n/1000:.1f}K"
-                            elif n < 1000000000:
-                                return f"{n/1000000:.1f}M"
-                            elif n < 1000000000000:
-                                return f"{n/1000000000:.1f}B"
-                            else:
-                                return f"{n/1000000000000:.1f}T"
-                        
-                        # Add "Estimated" label if session was less than 1 hour
-                        avgLabel = "Est. Avg/Hour" if sessionTime < 3600 else "Avg/Hour"
-                        description = f"Runtime: {timeStr}\nTotal Honey: {millify(totalHoney)}\n{avgLabel}: {millify(avgHoneyPerHour)}"
-                        
-                        # Send final report webhook
-                        logger.finalReport("Session Complete", description, "purple")
-                        print("Final report sent successfully")
-                    else:
-                        print("Failed to generate final report - no data available")
-                        
-                except Exception as e:
-                    print(f"Error generating final report: {e}")
-                    import traceback
-                    traceback.print_exc()
+                    def millify(n):
+                        """Format large numbers with suffixes"""
+                        if n < 1000:
+                            return str(int(n))
+                        elif n < 1000000:
+                            return f"{n/1000:.1f}K"
+                        elif n < 1000000000:
+                            return f"{n/1000000:.1f}M"
+                        elif n < 1000000000000:
+                            return f"{n/1000000000:.1f}B"
+                        else:
+                            return f"{n/1000000000000:.1f}T"
+                    
+                    # Add "Estimated" label if session was less than 1 hour
+                    avgLabel = "Est. Avg/Hour" if sessionTime < 3600 else "Avg/Hour"
+                    description = f"Runtime: {timeStr}\nTotal Honey: {millify(totalHoney)}\n{avgLabel}: {millify(avgHoneyPerHour)}"
+                    
+                    # Send final report webhook
+                    logger.finalReport("Session Complete", description, "purple")
+                    print("Final report sent successfully")
+                else:
+                    print("Failed to generate final report - no data available")
+                    
+            except Exception as e:
+                print(f"Error generating final report: {e}")
+                import traceback
+                traceback.print_exc()
         elif run.value == 4: #disconnected
             if macroProc and macroProc.is_alive():
                 macroProc.kill()

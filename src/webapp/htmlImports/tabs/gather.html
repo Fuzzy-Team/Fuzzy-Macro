@@ -17,6 +17,7 @@
     <script>
       const parentElement = document.getElementById("gather");
       const triggerFunction = "saveField()";
+      const patternTriggerFunction = "saveFieldPatternChange()";
       const fieldData = toEmojiArray(fieldEmojis);
       buildStandardContainer(parentElement, "Gather Field", "", [
         {
@@ -66,7 +67,7 @@
           type: {
             name: "dropdown",
             data: [],
-            triggerFunction: triggerFunction,
+            triggerFunction: patternTriggerFunction,
           },
         },
         {
@@ -108,6 +109,11 @@
           },
         },
       ]);
+      const patternMetadata = document.createElement("div");
+      patternMetadata.id = "gather-pattern-metadata";
+      patternMetadata.className = "poppins-regular";
+      patternMetadata.style.cssText = "display:none; margin: 0.5rem 0 1rem 0; color: var(--description-text);";
+      parentElement.appendChild(patternMetadata);
       buildStandardContainer(
         parentElement,
         "Rotate Camera",
@@ -254,6 +260,47 @@
             },
           },
         ]
+      );
+
+      const fuzzyAIContainer = document.createElement("div");
+      fuzzyAIContainer.id = "fuzzy-ai-gather-section";
+      fuzzyAIContainer.style.display = "none";
+      parentElement.appendChild(fuzzyAIContainer);
+      buildStandardContainer(
+        fuzzyAIContainer,
+        "AI Gathering",
+        "",
+        [
+          {
+            id: "configure-fuzzy-ai-tokens-button",
+            title: "Preferred Tokens",
+            desc: "Choose which tokens AI Gathering should chase and sort them by priority.",
+            type: {
+              name: "button",
+              text: "Customize Tokens",
+              length: 10,
+              triggerFunction: "openFuzzyAITokenPopup()",
+            },
+          },
+        ]
+      );
+      fuzzyAIContainer.insertAdjacentHTML(
+        "beforeend",
+        `
+          <input type="hidden" id="fuzzy_ai_preferred_tokens">
+          <input type="hidden" id="fuzzy_ai_ignored_tokens">
+          <div id="fuzzy-ai-token-modal" class="modal-overlay" style="display:none;">
+            <div class="modal-dialog poppins-regular" style="max-width: 42rem; width: 90%; max-height: 85vh; overflow: hidden; display:flex; flex-direction:column;">
+              <h3>Preferred Tokens</h3>
+              <p>Enable tokens AI Gathering should chase. Drag tokens to sort them from highest to lowest priority; disabled tokens are ignored.</p>
+              <div id="fuzzy-ai-token-list" style="overflow:auto; padding-right:0.5rem; margin-top:0.5rem;"></div>
+              <div class="modal-actions" style="margin-top:1rem;">
+                <button id="cancel-fuzzy-ai-tokens-button" class="btn-cancel">Cancel</button>
+                <button id="save-fuzzy-ai-tokens-button" class="btn-confirm">Save Tokens</button>
+              </div>
+            </div>
+          </div>
+        `
       );
 
       // Add control buttons at the bottom

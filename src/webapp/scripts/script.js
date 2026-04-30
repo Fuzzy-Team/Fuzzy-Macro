@@ -3,10 +3,31 @@ window.updateButtonReset = function () {
   const updateBtn = document.getElementById("update-btn");
   if (updateBtn) {
     updateBtn.classList.remove("active");
-    updateBtn.innerText = "Update";
+    updateBtn.disabled = false;
+    updateBtn.innerText = "Check for Updates";
   }
 };
 if (window.eel) eel.expose(window.updateButtonReset, 'updateButtonReset');
+
+window.updateProgress = function (percent, message) {
+  const progress = document.getElementById("update-progress");
+  const bar = document.getElementById("update-progress-bar");
+  const label = document.getElementById("update-progress-label");
+  const percentLabel = document.getElementById("update-progress-percent");
+  const updateBtn = document.getElementById("update-btn");
+
+  const value = Math.max(0, Math.min(100, Number(percent) || 0));
+  if (progress) progress.classList.remove("d-none");
+  if (bar) bar.style.width = `${value}%`;
+  if (label) label.textContent = message || "Updating";
+  if (percentLabel) percentLabel.textContent = `${Math.round(value)}%`;
+  if (updateBtn) {
+    updateBtn.classList.add("active");
+    updateBtn.disabled = true;
+    updateBtn.innerText = "Updating";
+  }
+};
+if (window.eel) eel.expose(window.updateProgress, "updateProgress");
 
 // Auto-update check functionality
 async function checkForUpdatesOnStartup() {
@@ -118,6 +139,8 @@ async function startUpdate() {
   const updateBtn = document.getElementById("update-btn");
   if (updateBtn && !updateBtn.classList.contains("active")) {
     purpleButtonToggle(updateBtn, ["Update", "Updating"]);
+    updateBtn.disabled = true;
+    window.updateProgress(0, "Starting update");
     if (window.eel && typeof eel.update === "function") {
       await eel.update();
     }
@@ -131,6 +154,8 @@ document.addEventListener("DOMContentLoaded", function () {
     updateBtn.addEventListener("click", async function (event) {
       if (!event.currentTarget.classList.contains("active")) {
         purpleButtonToggle(event.currentTarget, ["Update", "Updating"]);
+        event.currentTarget.disabled = true;
+        window.updateProgress(0, "Starting update");
         if (window.eel && typeof eel.update === "function") {
           await eel.update();
         }
@@ -160,16 +185,10 @@ function purpleButtonToggle(element, labels) {
 }
 
 //get the value of input elements like checkboxes, dropdown and textboxes
-function getInputValue(id) {
-  const ele = document.getElementById(id);
-  if (!ele) {
-    console.error("Element not found:", id);
-    return "";
-  }
-  //checkbox
+function getInputValueFromElement(ele) {
+  if (!ele) return "";
   if (ele.tagName == "INPUT" && ele.type == "checkbox") {
     return ele.checked;
-    //textbox
   } else if (ele.tagName == "INPUT" && ele.type == "text") {
     const value = ele.value;
     if (
@@ -179,16 +198,26 @@ function getInputValue(id) {
       return 0;
     if (!value) return "";
     return value;
-    //custom dropdown
   } else if (ele.tagName == "DIV" && ele.className.includes("custom-select")) {
-    return getDropdownValue(ele).toLowerCase();
-    //slider
+    const value = getDropdownValue(ele);
+    if (Array.isArray(value)) return value;
+    return String(value).toLowerCase();
+  } else if (ele.tagName == "SELECT") {
+    return ele.value;
   } else if (ele.tagName == "INPUT" && ele.type == "range") {
     return ele.value;
-    //keybind
   } else if (ele.tagName == "DIV" && ele.className.includes("keybind-input")) {
     return ele.dataset.keybind || "";
   }
+}
+
+function getInputValue(id) {
+  const ele = document.getElementById(id);
+  if (!ele) {
+    console.error("Element not found:", id);
+    return "";
+  }
+  return getInputValueFromElement(ele);
 }
 
 async function loadSettings() {
@@ -280,6 +309,17 @@ window.refreshCurrentTabContent = async function () {
       }
     }
 
+    if (activeMainTab === "tools" && typeof switchToolsTab === "function") {
+      const activeToolsTab = document.querySelector(".tools-tab-item.active");
+      if (activeToolsTab) {
+        switchToolsTab(activeToolsTab);
+      } else {
+        const defaultToolsTab = document.getElementById("tools-autoclicker");
+        if (defaultToolsTab) switchToolsTab(defaultToolsTab);
+      }
+      return true;
+    }
+
     if (typeof loadTasks === "function") {
       await loadTasks();
       return true;
@@ -305,16 +345,31 @@ async function saveSetting(ele, type) {
       try { await eel.saveProfileSetting(bindTargetId, false)(); } catch (e) { /* ignore */ }
     }
   }
-  const id = ele.id;
-  const value = getInputValue(id);
+  const id = ele.dataset && ele.dataset.settingId ? ele.dataset.settingId : ele.id;
+  const value = ele.dataset && ele.dataset.settingId ? getInputValueFromElement(ele) : getInputValue(id);
   // Enforce limits for specific settings before saving
   let valueToSave = value;
-  if (type == "general" && id === "max_cannon_attempts") {
-    // Ensure numeric and clamp between 1 and 25
+  if (type == "general" && (id === "max_cannon_attempts" || id === "cannon_hive_resync_attempts")) {
+    // Ensure numeric and clamp cannon retry settings.
     let n = parseInt(value, 10);
-    if (Number.isNaN(n)) n = 1;
-    if (n < 1) n = 1;
+    const min = id === "cannon_hive_resync_attempts" ? 0 : 1;
+    if (Number.isNaN(n)) n = min;
+    if (n < min) n = min;
     if (n > 25) n = 25;
+    const maxCannonInput = document.getElementById("max_cannon_attempts");
+    const hiveResyncInput = document.getElementById("cannon_hive_resync_attempts");
+    if (id === "cannon_hive_resync_attempts") {
+      const maxAttempts = parseInt(maxCannonInput?.value, 10);
+      if (!Number.isNaN(maxAttempts) && n >= maxAttempts) n = Math.max(0, maxAttempts - 1);
+    } else if (hiveResyncInput) {
+      let hiveResyncAttempts = parseInt(hiveResyncInput.value, 10);
+      if (Number.isNaN(hiveResyncAttempts)) hiveResyncAttempts = 0;
+      if (hiveResyncAttempts >= n) {
+        hiveResyncAttempts = Math.max(0, n - 1);
+        hiveResyncInput.value = hiveResyncAttempts;
+        try { await eel.saveGeneralSetting("cannon_hive_resync_attempts", hiveResyncAttempts)(); } catch (e) { /* ignore */ }
+      }
+    }
     valueToSave = n;
     // Update the displayed input to reflect clamped value
     const inputEl = document.getElementById(id);
@@ -534,6 +589,7 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
       gather_pineapple: "Gather: Pineapple",
       gather_pumpkin: "Gather: Pumpkin",
       gather_coconut: "Gather: Coconut",
+      gather_hive_hub: "Gather: Hive Hub",
       gather_pepper: "Gather: Pepper",
       gather_mountain_top: "Gather: Mountain Top",
       gather_stump: "Gather: Stump",
@@ -625,12 +681,15 @@ function loadInputs(obj, save = "") {
     if (!ele) continue;
     if (ele.type == "checkbox") {
       ele.checked = v;
+    } else if (ele.tagName == "SELECT") {
+      ele.value = v;
     } else if (ele.className.includes("custom-select")) {
       setDropdownValue(ele, v);
     } else if (ele.className.includes("keybind-input")) {
       // Handle keybind elements
-      ele.dataset.keybind = v;
-      const displayText = v ? v.replace(/\+/g, " + ") : "Click to record";
+      const keybind = normalizeKeybindString(v);
+      ele.dataset.keybind = keybind;
+      const displayText = keybind ? keybindDisplayText(keybind) : "Click to record";
       ele.querySelector(".keybind-display").textContent = displayText;
     } else if (ele.className.includes("drag-list")) {
       // Handle drag list elements
@@ -643,7 +702,7 @@ function loadInputs(obj, save = "") {
     eel.saveDictProfileSettings(obj);
   }
   // Update visibility of any dependent fields after loading inputs
-  try { updateReturnDependentFields(); } catch (e) { /* ignore */ }
+  try { updateDependentFields(); } catch (e) { /* ignore */ }
 
   // Ensure the beta commit input is never pre-filled from saved settings
   try {
@@ -657,7 +716,7 @@ function loadInputs(obj, save = "") {
 function applyTheme(theme) {
   if (theme) localStorage.setItem("gui_theme", theme);
   // remove any known theme classes first
-  document.documentElement.classList.remove("theme-purple", "theme-cream", "theme-red", "theme-blue");
+  document.documentElement.classList.remove("theme-purple", "theme-cream", "theme-red", "theme-blue", "theme-commander");
   if (!theme) return;
   const t = theme.toLowerCase();
   if (t === "purple") {
@@ -669,10 +728,17 @@ function applyTheme(theme) {
     document.documentElement.classList.add("theme-red");
   } else if (t === "blue") {
     document.documentElement.classList.add("theme-blue");
+  } else if (t === "commander" || t === "comander") {
+    document.documentElement.classList.add("theme-commander");
   }
 }
 
 // Show/hide inputs that depend on the 'return' dropdown value
+function updateDependentFields() {
+  updateReturnDependentFields();
+  updateScheduledRejoinDependentFields();
+}
+
 function updateReturnDependentFields() {
   const returnEle = document.getElementById("return");
   if (!returnEle) return;
@@ -686,6 +752,20 @@ function updateReturnDependentFields() {
   } else {
     form.style.display = "none";
   }
+}
+
+function updateScheduledRejoinDependentFields() {
+  const scheduleEle = document.getElementById("rejoin_schedule_type");
+  if (!scheduleEle) return;
+
+  const val = getDropdownValue(scheduleEle) || "hours";
+  const everyForm = document.getElementById("rejoin_every")?.closest("form");
+  const atTimeForm = document.getElementById("rejoin_at_time")?.closest("form");
+  const timeZoneForm = document.getElementById("rejoin_timezone")?.closest("form");
+
+  if (everyForm) everyForm.style.display = val === "daily" ? "none" : "flex";
+  if (atTimeForm) atTimeForm.style.display = val === "daily" ? "flex" : "none";
+  if (timeZoneForm) timeZoneForm.style.display = val === "daily" ? "flex" : "none";
 }
 /*
 =============================================
@@ -725,47 +805,109 @@ window.oncontextmenu = function(event) {
     return false;
 };
 */
+const keybindModifierOrder = ["Ctrl", "Alt", "Shift", "Cmd"];
+
+function normalizeKeybindKey(key) {
+  if (!key) return "";
+  const aliases = {
+    " ": "Space",
+    Spacebar: "Space",
+    Control: "Ctrl",
+    Ctrl: "Ctrl",
+    Alt: "Alt",
+    Option: "Alt",
+    Shift: "Shift",
+    Meta: "Cmd",
+    Command: "Cmd",
+    Cmd: "Cmd",
+    Esc: "Escape",
+    Escape: "Escape",
+    Del: "Delete",
+    Delete: "Delete",
+    ArrowLeft: "ArrowLeft",
+    ArrowRight: "ArrowRight",
+    ArrowUp: "ArrowUp",
+    ArrowDown: "ArrowDown",
+    PageUp: "PageUp",
+    PageDown: "PageDown",
+    CapsLock: "CapsLock",
+    Fn: "Fn",
+  };
+  if (aliases[key]) return aliases[key];
+  if (/^F\d{1,2}$/i.test(key)) return key.toUpperCase();
+  if (key.length === 1) return key.toUpperCase();
+  return key;
+}
+
+function keybindKeyFromEvent(event) {
+  if (!event) return "";
+  const code = event.code || "";
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+  if (/^Digit\d$/.test(code)) return code.slice(5);
+  if (/^Numpad\d$/.test(code)) return code;
+  if (/^F\d{1,2}$/.test(code)) return code;
+  return normalizeKeybindKey(event.key);
+}
+
+function sortKeybindKeys(keys) {
+  const uniqueKeys = Array.from(new Set(keys.filter((key) => key && key !== "Fn")));
+  const modifiers = keybindModifierOrder.filter((key) => uniqueKeys.includes(key));
+  const normalKeys = uniqueKeys
+    .filter((key) => !keybindModifierOrder.includes(key))
+    .sort();
+  return modifiers.concat(normalKeys);
+}
+
+function normalizeKeybindString(keybind) {
+  return sortKeybindKeys(
+    String(keybind || "")
+      .split("+")
+      .map((key) => normalizeKeybindKey(key.trim()))
+  ).join("+");
+}
+
+function keybindDisplayText(keybind) {
+  return normalizeKeybindString(keybind).replace(/\+/g, " + ");
+}
+
+function keybindFromEvent(event) {
+  const keys = [];
+  if (event.ctrlKey) keys.push("Ctrl");
+  if (event.altKey) keys.push("Alt");
+  if (event.shiftKey) keys.push("Shift");
+  if (event.metaKey) keys.push("Cmd");
+
+  const mainKey = keybindKeyFromEvent(event);
+  if (!keybindModifierOrder.includes(mainKey)) keys.push(mainKey);
+  return sortKeybindKeys(keys).join("+");
+}
+
 // Function to check if current key combination matches a configured keybind
 function isConfiguredKeybind(event) {
   // Get current keybinds from settings
-  const startKeybind =
-    document.getElementById("start_keybind")?.dataset.keybind;
-  const pauseKeybind =
-    document.getElementById("pause_keybind")?.dataset.keybind;
-  const stopKeybind = document.getElementById("stop_keybind")?.dataset.keybind;
+  const startKeybind = normalizeKeybindString(
+    document.getElementById("start_keybind")?.dataset.keybind
+  );
+  const pauseKeybind = normalizeKeybindString(
+    document.getElementById("pause_keybind")?.dataset.keybind
+  );
+  const stopKeybind = normalizeKeybindString(
+    document.getElementById("stop_keybind")?.dataset.keybind
+  );
+  const hotbarBuffStartKeybind = normalizeKeybindString(
+    document.getElementById("hotbar_buff_start_keybind")?.dataset.keybind
+  );
 
-  if (!startKeybind && !pauseKeybind && !stopKeybind) return false;
+  if (!startKeybind && !pauseKeybind && !stopKeybind && !hotbarBuffStartKeybind) return false;
 
-  // Build current key combination
-  let currentCombo = [];
-  if (event.ctrlKey) currentCombo.push("Ctrl");
-  if (event.altKey) currentCombo.push("Alt");
-  if (event.shiftKey) currentCombo.push("Shift");
-  if (event.metaKey) currentCombo.push("Cmd");
-
-  // Add the main key
-  let mainKey = event.key;
-  if (mainKey === " ") mainKey = "Space";
-  else if (mainKey === "Control") mainKey = "Ctrl";
-  else if (mainKey === "Alt") mainKey = "Alt";
-  else if (mainKey === "Shift") mainKey = "Shift";
-  else if (mainKey === "Meta") mainKey = "Cmd";
-  else if (mainKey.startsWith("F") && mainKey.length <= 3) {
-    // Function keys (F1, F2, etc.)
-    mainKey = mainKey;
-  } else if (mainKey.length === 1) {
-    // Regular character keys
-    mainKey = mainKey.toUpperCase();
-  }
-
-  currentCombo.push(mainKey);
-  const currentComboString = currentCombo.join("+");
+  const currentComboString = keybindFromEvent(event);
 
   // Check if it matches either configured keybind
   return (
     currentComboString === startKeybind ||
     currentComboString === pauseKeybind ||
-    currentComboString === stopKeybind
+    currentComboString === stopKeybind ||
+    currentComboString === hotbarBuffStartKeybind
   );
 }
 
@@ -804,88 +946,165 @@ Custom Select
 =============================================
 */
 dropdownOpen = false;
+function isMultiSelectDropdown(ele) {
+  return ele?.dataset?.multiple === "true";
+}
+
+function normalizeDropdownOptionValue(value) {
+  if (typeof value === "number") return value;
+  const text = String(value ?? "").trim();
+  if (text === "") return "";
+  const numeric = Number(text);
+  return Number.isNaN(numeric) ? text.toLowerCase() : numeric;
+}
+
+function normalizeDropdownMultiValue(value) {
+  if (Array.isArray(value)) {
+    return value.map(normalizeDropdownOptionValue).filter((item) => item !== "");
+  }
+  if (value === null || value === undefined || value === "" || value === "none") {
+    return [];
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed === "0") return [];
+    if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed.map(normalizeDropdownOptionValue).filter((item) => item !== "");
+        }
+      } catch (e) {
+        // fall through and treat as scalar
+      }
+    }
+  }
+  const normalized = normalizeDropdownOptionValue(value);
+  return normalized === 0 || normalized === "0" || normalized === "" ? [] : [normalized];
+}
+
+function updateMultiDropdownDisplay(parentEle, values) {
+  const normalizedValues = normalizeDropdownMultiValue(values);
+  const selectEle = parentEle.children[0].children[0];
+  const optionsEle = parentEle.children[1].children[0];
+  const selectedLabels = [];
+
+  Array.from(optionsEle.children).forEach((option) => {
+    const optionValue = normalizeDropdownOptionValue(option.dataset.value);
+    const isSelected = normalizedValues.some((value) => value == optionValue);
+    option.classList.toggle("selected", isSelected);
+    if (isSelected) {
+      selectedLabels.push(option.textContent.trim());
+    }
+  });
+
+  selectEle.dataset.value = JSON.stringify(normalizedValues);
+  selectEle.innerHTML = selectedLabels.length ? selectedLabels.join(", ") : "None";
+  try { updateDependentFields(); } catch (e) { /* ignore */ }
+}
+
 //pass an optionEle to set the select-area
 function updateDropDownDisplay(optionEle) {
   const parentEle = optionEle.parentElement.parentElement.parentElement;
+  if (isMultiSelectDropdown(parentEle)) {
+    const currentValues = normalizeDropdownMultiValue(getDropdownValue(parentEle));
+    const optionValue = normalizeDropdownOptionValue(optionEle.dataset.value);
+    const nextValues = currentValues.some((value) => value == optionValue)
+      ? currentValues.filter((value) => value != optionValue)
+      : [...currentValues, optionValue];
+    updateMultiDropdownDisplay(parentEle, nextValues);
+    return;
+  }
   //set the data-value attribute of the select
   const selectEle = parentEle.children[0].children[0];
   selectEle.dataset.value = optionEle.dataset.value;
   //set the display to match the option
   selectEle.innerHTML = optionEle.innerHTML;
   // Ensure dependent fields reflect this change
-  try { updateReturnDependentFields(); } catch (e) { /* ignore */ }
+  try { updateDependentFields(); } catch (e) { /* ignore */ }
 }
 //document click event
 function dropdownClicked(event) {
-  //get the element that was clicked
-  const ele = event.target;
-  if (!ele) {
+  const target = event.target;
+  if (!target) {
     dropdownOpen = false;
     return;
   }
-  //toggle dropdown
-  if (ele.className.includes("select-area")) {
-    //get the associated custom-select parent element
-    const parent = ele.parentElement;
+
+  const selectArea = target.closest?.(".select-area");
+  if (selectArea) {
+    const parent = selectArea.parentElement;
     const optionsEle = parent.children[1].children[0];
     closeAllDropdowns(optionsEle); //close all other dropdowns
-    //toggle the dropdown menu
     if (dropdownOpen !== optionsEle) {
-      //open it
       dropdownOpen = optionsEle;
       optionsEle.style.display = "block";
       const currValue = parent.children[0].children[0].dataset.value;
-      //highlight the corresponding value option
-      //ie if the value of the dropdown is "none", highlight the "none option"
-      Array.from(optionsEle.children).forEach((x) => {
-        x.dataset.value == currValue
-          ? x.classList.add("selected")
-          : x.classList.remove("selected");
-      });
+      if (isMultiSelectDropdown(parent)) {
+        const selectedValues = normalizeDropdownMultiValue(currValue);
+        Array.from(optionsEle.children).forEach((x) => {
+          const optionValue = normalizeDropdownOptionValue(x.dataset.value);
+          x.classList.toggle(
+            "selected",
+            selectedValues.some((value) => value == optionValue)
+          );
+        });
+      } else {
+        Array.from(optionsEle.children).forEach((x) => {
+          x.dataset.value == currValue
+            ? x.classList.add("selected")
+            : x.classList.remove("selected");
+        });
+      }
       //check if its going below the screen and render the menu above
       parent.style.transform = "none";
       optionsEle.style.transform = "none";
-      ele.style.transform = "none";
+      selectArea.style.transform = "none";
       const height = optionsEle.getBoundingClientRect().height;
       const y = optionsEle.getBoundingClientRect().top;
-      //check if it goes below the screen
-      //if it is flipped and goes above the screen, prioritise rendering the dropdown down
       if (height + y > window.innerHeight && y > height) {
         parent.style.transform = "rotate(180deg)"; //render the dropdown menu above
-        //flip everything to face the correct direction
         optionsEle.style.transform = "rotate(180deg)";
-        ele.style.transform = "rotate(180deg)";
+        selectArea.style.transform = "rotate(180deg)";
       }
     } else {
-      //close it
       optionsEle.style.display = "none";
       dropdownOpen = false;
     }
-  } else {
-    //close all dropdowns, because an option was selected or the user clicked elsewhere
-    closeAllDropdowns();
-    if (ele.className.includes("option")) {
-      updateDropDownDisplay(ele);
-      const parentEle = ele.parentElement.parentElement.parentElement;
-      if (parentEle.id === "gui_theme") {
-        applyTheme(getDropdownValue(parentEle));
-      }
-      let funcParams = parentEle.dataset.onchange.replace("this", "parentEle");
-      eval(funcParams);
-      dropdownOpen = false;
-    } else {
-      //try again, but with the parent element
-      //this creates a recursive loop to account for children elements (could be expensive)
-      dropdownClicked({ target: ele.parentElement });
-    }
+    return;
   }
+
+  const option = target.closest?.(".option");
+  if (option) {
+    closeAllDropdowns();
+    const parentEle = option.parentElement.parentElement.parentElement;
+    updateDropDownDisplay(option);
+    if (parentEle.id === "gui_theme") {
+      applyTheme(getDropdownValue(parentEle));
+    }
+    let funcParams = parentEle.dataset.onchange.replace("this", "parentEle");
+    eval(funcParams);
+    dropdownOpen = false;
+    return;
+  }
+
+  closeAllDropdowns();
+  dropdownOpen = false;
 }
 
 function getDropdownValue(ele) {
-  return ele.children[0].children[0].dataset.value;
+  const value = ele.children[0].children[0].dataset.value;
+  if (isMultiSelectDropdown(ele)) {
+    return normalizeDropdownMultiValue(value);
+  }
+  return value;
 }
 
 function setDropdownValue(ele, value) {
+  if (isMultiSelectDropdown(ele)) {
+    updateMultiDropdownDisplay(ele, value);
+    return;
+  }
   const optionsEle = ele.children[1].children[0];
   for (let i = 0; i < optionsEle.children.length; i++) {
     const x = optionsEle.children[i];
@@ -903,16 +1122,25 @@ function closeAllDropdowns(ele) {
   });
 }
 function dropdownHover(event) {
-  const ele = event.target;
-  if (ele.className.includes("option")) {
-    Array.from(document.getElementsByClassName("option")).forEach((x) => {
-      x.classList.remove("selected");
+  const option = event.target.closest?.(".option");
+  if (option) {
+    const optionsEle = option.parentElement;
+    Array.from(optionsEle.children).forEach((x) => {
+      x.classList.remove("hovered");
     });
-    ele.classList.add("selected");
+    option.classList.add("hovered");
+  }
+}
+
+function dropdownHoverLeave(event) {
+  const option = event.target.closest?.(".option");
+  if (option) {
+    option.classList.remove("hovered");
   }
 }
 document.addEventListener("click", dropdownClicked);
 document.addEventListener("mouseover", dropdownHover);
+document.addEventListener("mouseout", dropdownHoverLeave);
 
 // Keybind recording functionality
 let keybindRecording = false;
@@ -971,6 +1199,7 @@ async function updateKeybindDisplay() {
     const startKey = settings.start_keybind || "F1";
     const pauseKey = settings.pause_keybind || "F2";
     const stopKey = settings.stop_keybind || "F3";
+    const hotbarBuffStartKey = settings.hotbar_buff_start_keybind || "F4";
 
     const startButton = document.getElementById("start-btn");
     if (startButton) {
@@ -981,13 +1210,14 @@ async function updateKeybindDisplay() {
     const startKeybindElement = document.getElementById("start_keybind");
     const pauseKeybindElement = document.getElementById("pause_keybind");
     const stopKeybindElement = document.getElementById("stop_keybind");
+    const hotbarBuffStartKeybindElement = document.getElementById("hotbar_buff_start_keybind");
 
     if (
       startKeybindElement &&
       startKeybindElement.querySelector(".keybind-display")
     ) {
       startKeybindElement.querySelector(".keybind-display").textContent =
-        startKey.replace(/\+/g, " + ");
+        keybindDisplayText(startKey);
     }
 
     if (
@@ -995,7 +1225,7 @@ async function updateKeybindDisplay() {
       pauseKeybindElement.querySelector(".keybind-display")
     ) {
       pauseKeybindElement.querySelector(".keybind-display").textContent =
-        pauseKey.replace(/\+/g, " + ");
+        keybindDisplayText(pauseKey);
     }
 
     if (
@@ -1003,7 +1233,15 @@ async function updateKeybindDisplay() {
       stopKeybindElement.querySelector(".keybind-display")
     ) {
       stopKeybindElement.querySelector(".keybind-display").textContent =
-        stopKey.replace(/\+/g, " + ");
+        keybindDisplayText(stopKey);
+    }
+
+    if (
+      hotbarBuffStartKeybindElement &&
+      hotbarBuffStartKeybindElement.querySelector(".keybind-display")
+    ) {
+      hotbarBuffStartKeybindElement.querySelector(".keybind-display").textContent =
+        keybindDisplayText(hotbarBuffStartKey);
     }
   } catch (error) {
     // Silently handle errors
@@ -1035,27 +1273,8 @@ function handleKeybindKeyDown(event) {
   event.preventDefault();
   event.stopPropagation();
 
-  // Get the key name
-  let keyName = event.key;
-
-  // Handle special keys
-  if (event.key === " ") {
-    keyName = "Space";
-  } else if (event.key === "Control") {
-    keyName = "Ctrl";
-  } else if (event.key === "Alt") {
-    keyName = "Alt";
-  } else if (event.key === "Shift") {
-    keyName = "Shift";
-  } else if (event.key === "Meta") {
-    keyName = "Cmd";
-  } else if (event.key.startsWith("F") && event.key.length <= 3) {
-    // Function keys (F1, F2, etc.)
-    keyName = event.key;
-  } else if (event.key.length === 1) {
-    // Regular character keys
-    keyName = event.key.toUpperCase();
-  }
+  const keyName = keybindKeyFromEvent(event);
+  if (!keyName || keyName === "Fn") return;
 
   // Add to sequence if not already present
   if (!keybindSequence.includes(keyName)) {
@@ -1063,7 +1282,7 @@ function handleKeybindKeyDown(event) {
   }
 
   // Update display
-  const displayText = keybindSequence.join(" + ");
+  const displayText = sortKeybindKeys(keybindSequence).join(" + ");
   currentKeybindElement.querySelector(".keybind-display").textContent =
     displayText;
 }
@@ -1072,11 +1291,11 @@ function finalizeKeybind() {
   if (!keybindRecording || !currentKeybindElement) return;
 
   // Save the keybind combination
-  const keybindString = keybindSequence.join("+");
+  const keybindString = sortKeybindKeys(keybindSequence).join("+");
   currentKeybindElement.dataset.keybind = keybindString;
 
   // Update the display to show the saved keybind
-  const displayText = keybindString.replace(/\+/g, " + ");
+  const displayText = keybindDisplayText(keybindString);
   currentKeybindElement.querySelector(".keybind-display").textContent =
     displayText;
 
