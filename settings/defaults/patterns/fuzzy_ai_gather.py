@@ -12,7 +12,7 @@ Requirements:
 - mss or Pillow
 - blue.onnx and sprinkler.onnx
 
-- Version 1.2
+- Version 1.3
 """
 
 import math
@@ -613,6 +613,7 @@ def _fallback_pattern():
 
 
 def _initialise_runtime():
+    self.keyboard.press("pageup")
     self.keyboard.press("pageup")
 
     global ort
