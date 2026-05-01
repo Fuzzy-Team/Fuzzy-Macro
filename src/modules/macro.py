@@ -1172,7 +1172,22 @@ class macro:
         for i in includeList:
             if i in text:  return text
         return False
-    
+
+    def _compactPromptText(self, text):
+        return ''.join(ch for ch in str(text or "").lower() if ch.isalnum())
+
+    def isSpecificPlanterPrompt(self, planter, promptText=None):
+        promptText = self.getTextBesideE() if promptText is None else promptText
+        compactPrompt = self._compactPromptText(promptText)
+        compactPlanter = self._compactPromptText(planter)
+        if not compactPrompt or not compactPlanter:
+            return False
+        return (
+            "harvest" in compactPrompt
+            and "planter" in compactPrompt
+            and compactPlanter in compactPrompt
+        )
+
     def isBesideEImage(self, name):
         template = self.adjustImage("./images/menu",name)
         return locateTransparentImageOnScreen(template, self.robloxWindow.mx+(self.robloxWindow.mw//2-200), self.robloxWindow.my+self.robloxWindow.yOffset+34, 400, 140, 0.75)
@@ -3986,10 +4001,12 @@ class macro:
 
         def recoverAlreadyPlacedPlanterState():
             try:
-                if self.isBesideE(["harvest", "planter"]):
+                promptText = self.getTextBesideE()
+                if self.isSpecificPlanterPrompt(planter, promptText):
                     return True
                 self.moveToPlanter()
-                return bool(self.isBesideE(["harvest", "planter"]))
+                promptText = self.getTextBesideE()
+                return self.isSpecificPlanterPrompt(planter, promptText)
             except Exception:
                 return False
 
