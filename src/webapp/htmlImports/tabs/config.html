@@ -96,6 +96,15 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
+        {
+          id: "use_sprinkler_model_for_drift_compensation",
+          title: "Use Sprinkler Model For Field Drift Compensation",
+          desc: "Use AI to detect your sprinkler for field drift compensation instead of the color-based method. If the model cannot run, the macro falls back automatically.",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
       ]);
 
       buildStandardContainer(parentBSS, "Goo", "", [
