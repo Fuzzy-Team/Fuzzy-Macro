@@ -204,6 +204,8 @@ function getInputValueFromElement(ele) {
     return String(value).toLowerCase();
   } else if (ele.tagName == "SELECT") {
     return ele.value;
+  } else if (ele.tagName == "DIV" && ele.className.includes("multi-checklist")) {
+    return Array.from(ele.querySelectorAll("input[type='checkbox']:checked")).map((x) => x.value);
   } else if (ele.tagName == "INPUT" && ele.type == "range") {
     return ele.value;
   } else if (ele.tagName == "DIV" && ele.className.includes("keybind-input")) {
@@ -694,6 +696,11 @@ function loadInputs(obj, save = "") {
     } else if (ele.className.includes("drag-list")) {
       // Handle drag list elements
       loadDragListOrder(ele, v, obj);
+    } else if (ele.className.includes("multi-checklist")) {
+      const selected = Array.isArray(v) ? v : [];
+      Array.from(ele.querySelectorAll("input[type='checkbox']")).forEach((input) => {
+        input.checked = selected.includes(input.value);
+      });
     } else {
       ele.value = v;
     }
@@ -1031,7 +1038,12 @@ function dropdownClicked(event) {
     return;
   }
 
+  if (target.closest?.(".multi-checklist")) {
+    closeAllDropdowns();
+    return;
+  }
   const selectArea = target.closest?.(".select-area");
+  const dropdownOption = target.closest?.(".custom-select .option");
   if (selectArea) {
     const parent = selectArea.parentElement;
     const optionsEle = parent.children[1].children[0];
@@ -1074,11 +1086,10 @@ function dropdownClicked(event) {
     return;
   }
 
-  const option = target.closest?.(".option");
-  if (option) {
+  if (dropdownOption) {
     closeAllDropdowns();
-    const parentEle = option.parentElement.parentElement.parentElement;
-    updateDropDownDisplay(option);
+    const parentEle = dropdownOption.parentElement.parentElement.parentElement;
+    updateDropDownDisplay(dropdownOption);
     if (parentEle.id === "gui_theme") {
       applyTheme(getDropdownValue(parentEle));
     }

@@ -1771,7 +1771,7 @@ class macro:
             mmImg = self.adjustImage("./images/menu", "mmopen") #memory match
             if locateImageOnScreen(mmImg, self.robloxWindow.mx+(self.robloxWindow.mw/4), self.robloxWindow.my+(self.robloxWindow.mh/4), self.robloxWindow.mw/4, self.robloxWindow.mh/3.5, 0.8):
                 self.canDetectNight = False
-                self.memoryMatch.solveMemoryMatch(self.latestMM)
+                self.memoryMatch.solveMemoryMatch(self.latestMM, self.setdat.get("memory_match_rewards", []))
                 self.canDetectNight = True
             print(f"checked memory match popup: {time.time()-st}")
 
@@ -3386,7 +3386,7 @@ class macro:
                 time.sleep(2)
                 self.logger.webhook("", f"Solving: {displayName}", "dark brown", "screen")
                 self.canDetectNight = False
-                self.memoryMatch.solveMemoryMatch(mmType)
+                self.memoryMatch.solveMemoryMatch(mmType, self.setdat.get("memory_match_rewards", []))
                 self.canDetectNight = True
                 time.sleep(2)
                 self.logger.webhook("", f"Completed: {displayName}", "bright green", "blue")
