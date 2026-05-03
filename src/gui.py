@@ -931,6 +931,7 @@ def loadFuzzyAITokenRanking(field_name):
 def saveFuzzyAITokenRanking(field_name, ranking):
     return settingsManager.saveFuzzyAITokenRanking(field_name, ranking)
   
+@eel.expose
 def exportPlanterSettings():
     """Export planter settings as JSON string"""
     try:
