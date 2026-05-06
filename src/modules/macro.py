@@ -12,6 +12,7 @@ from modules.controls.sleep import (
     sleep,
     set_run_state,
     pauseable_sleep,
+    set_resume_callback,
     set_interrupt_action,
     get_interrupt_action,
     InterruptRequested,
@@ -513,6 +514,7 @@ class macro:
         # Set the run state for pause-aware sleep functions
         if run is not None:
             set_run_state(run)
+            set_resume_callback(self._redetect_y_offset_after_resume)
         if skipTask is not None:
             set_interrupt_action(skipTask)
         
@@ -640,6 +642,9 @@ class macro:
         self.robloxWindow.setRobloxWindowBounds(setYOffset=setYOffset)
         if setYOffset:
             self.logger.webhook("", f"Detect Y Offset: {self.robloxWindow.contentYOffset}", "dark brown")
+
+    def _redetect_y_offset_after_resume(self):
+        self.setRobloxWindowInfo(setYOffset=True)
 
     
     def _load_shift_lock_template(self):
@@ -907,6 +912,7 @@ class macro:
             self.raiseIfInterrupted()
         if wasPaused:
             self._inactiveHoneyResetResumeBlockUntil = time.monotonic() + 2
+            self._redetect_y_offset_after_resume()
         # Check if stop was requested (state 0)
         return self.run.value == 0
 
