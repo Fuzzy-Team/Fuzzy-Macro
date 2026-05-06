@@ -2641,6 +2641,9 @@ class macro:
         pattern_max_sprinkler_distance = fuzzyAIRuntimeDefaults["fuzzy_ai_max_sprinkler_distance"]
         pattern_sprinkler_rescan_attempts = fuzzyAIRuntimeDefaults["fuzzy_ai_sprinkler_rescan_attempts"]
         pattern_sprinkler_rescan_delay = fuzzyAIRuntimeDefaults["fuzzy_ai_sprinkler_rescan_delay"]
+        pattern_debug_mode = fuzzyAIRuntimeDefaults["fuzzy_ai_debug_mode"]
+        pattern_record_video = fuzzyAIRuntimeDefaults["fuzzy_ai_record_video"]
+        pattern_record_video_fps = fuzzyAIRuntimeDefaults["fuzzy_ai_record_video_fps"]
         sprinklerLabelMap = {
             "basic": "Basic",
             "silver": "Silver",

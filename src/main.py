@@ -2891,6 +2891,10 @@ if __name__ == "__main__":
         stopThreads = True
         #print(sockets)
         if macroProc and macroProc.is_alive():
+            # Give the macro process a chance to observe run.value == 0 and run
+            # gather cleanup hooks, including AI gather video finalization.
+            macroProc.join(timeout=8)
+        if macroProc and macroProc.is_alive():
             macroProc.terminate()
             macroProc.join(timeout=2)
             if macroProc.is_alive():

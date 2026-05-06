@@ -12,10 +12,13 @@ Requirements:
 - mss or Pillow
 - blue.onnx and sprinkler.onnx
 
-- Version 1.3
+- Version 1.4
 """
 
 import math
+import shutil
+import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -62,6 +65,9 @@ MAX_SPRINKLER_DISTANCE = 10.0
 SPRINKLER_RESCAN_ATTEMPTS = 3
 SPRINKLER_RESCAN_DELAY = 0.3
 TARGET_SPRINKLER_LABEL = None
+DEBUG_MODE = False
+RECORD_VIDEO = False
+RECORD_VIDEO_FPS = 12.0
 
 PREFERRED_TOKENS = {
     "Token Link": 100,
@@ -127,6 +133,19 @@ def _coerce_text(value, default=""):
     if value is None:
         return default
     return str(value).strip()
+
+
+def _coerce_bool(value, default=False):
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return bool(default)
+    text = str(value).strip().lower()
+    if text in ("1", "true", "yes", "y", "on", "enabled", "enable"):
+        return True
+    if text in ("0", "false", "no", "n", "off", "disabled", "disable"):
+        return False
+    return bool(default)
 
 
 def _parse_token_names(value):
@@ -216,6 +235,9 @@ TARGET_SPRINKLER_LABEL = _coerce_text(
     "",
 ) or None
 CAPTURE_BACKEND = _coerce_text(globals().get("pattern_capture_backend"), "auto").lower()
+DEBUG_MODE = _coerce_bool(globals().get("pattern_debug_mode"), DEBUG_MODE)
+RECORD_VIDEO = _coerce_bool(globals().get("pattern_record_video"), RECORD_VIDEO)
+RECORD_VIDEO_FPS = _coerce_float(globals().get("pattern_record_video_fps"), RECORD_VIDEO_FPS)
 PREFERRED_TOKENS = _preferred_token_weights(globals().get("pattern_preferred_tokens"), PREFERRED_TOKENS)
 IGNORED_TOKENS = _ignored_token_names(globals().get("pattern_ignored_tokens"), IGNORED_TOKENS)
 
@@ -295,6 +317,21 @@ def _postprocess(output, confidence_threshold):
     return detections
 
 
+def _debug_log(message, min_interval=0.0, key=None):
+    if not DEBUG_MODE:
+        return
+
+    now = time.time()
+    log_state = globals().setdefault("_FUZZY_AI_DEBUG_LOG_TIMES", {})
+    log_key = key or message
+    last = log_state.get(log_key, 0.0)
+    if min_interval > 0 and now - last < min_interval:
+        return
+
+    log_state[log_key] = now
+    print(f"[fuzzy_ai_gather][debug] {message}", flush=True)
+
+
 def _runtime_state():
     state = getattr(self, "_fuzzy_ai_gather_state", None)
     if isinstance(state, dict):
@@ -341,15 +378,274 @@ def _grab_frame(runtime):
     return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
 
 
+def _bgr_frame(frame):
+    if frame.ndim == 3 and frame.shape[2] == 4:
+        return cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+    return frame.copy()
+
+
+def _recording_dir():
+    path = _project_root() / "src" / "data" / "user" / "fuzzy_ai_recordings"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _ensure_video_writer(runtime, frame):
+    if not RECORD_VIDEO or cv2 is None:
+        return None
+
+    writer = runtime.get("video_writer")
+    if writer is not None:
+        return writer
+
+    bgr = _bgr_frame(frame)
+    height, width_px = bgr.shape[:2]
+    filename = f"fuzzy_ai_gather_{time.strftime('%Y%m%d_%H%M%S')}.mp4"
+    output_path = _recording_dir() / filename
+
+    ffmpeg_path = shutil.which("ffmpeg")
+    if ffmpeg_path:
+        command = [
+            ffmpeg_path,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "bgr24",
+            "-s",
+            f"{width_px}x{height}",
+            "-r",
+            str(max(RECORD_VIDEO_FPS, 1.0)),
+            "-i",
+            "-",
+            "-an",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "frag_keyframe+empty_moov+default_base_moof",
+            str(output_path),
+        ]
+        try:
+            process = subprocess.Popen(command, stdin=subprocess.PIPE)
+            writer = {"kind": "ffmpeg", "process": process, "path": str(output_path)}
+        except Exception as exc:
+            writer = None
+            _debug_log(f"ffmpeg recording failed to start: {exc}", min_interval=5.0, key="record_ffmpeg_failed")
+    else:
+        writer = None
+
+    if writer is None:
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        cv_writer = cv2.VideoWriter(str(output_path), fourcc, max(RECORD_VIDEO_FPS, 1.0), (width_px, height))
+        if not cv_writer.isOpened():
+            runtime["video_writer"] = None
+            _debug_log(f"video recording failed to open: {output_path}", min_interval=5.0, key="record_open_failed")
+            return None
+        writer = {"kind": "opencv", "writer": cv_writer, "path": str(output_path)}
+
+    runtime["video_writer"] = writer
+    runtime["video_path"] = str(output_path)
+    runtime["recording_stop_event"] = threading.Event()
+    runtime["recording_lock"] = threading.Lock()
+    runtime["recording_thread"] = threading.Thread(target=_recording_thread, args=(runtime,), daemon=True)
+    runtime["recording_thread"].start()
+    _debug_log(f"recording AI gather video to {output_path}")
+    return writer
+
+
+def _release_video_writer(runtime=None):
+    if runtime is None:
+        runtime = _runtime_state()
+    writer = runtime.get("video_writer") if isinstance(runtime, dict) else None
+    if writer is not None:
+        stop_event = runtime.get("recording_stop_event")
+        if stop_event is not None:
+            stop_event.set()
+        thread = runtime.get("recording_thread")
+        if thread is not None and thread.is_alive() and thread is not threading.current_thread():
+            try:
+                thread.join(timeout=2)
+            except Exception:
+                pass
+        try:
+            if isinstance(writer, dict) and writer.get("kind") == "ffmpeg":
+                process = writer.get("process")
+                if process and process.stdin:
+                    process.stdin.close()
+                if process:
+                    process.wait(timeout=5)
+            elif isinstance(writer, dict) and writer.get("kind") == "opencv":
+                writer["writer"].release()
+            else:
+                writer.release()
+        except Exception:
+            pass
+        runtime["video_writer"] = None
+        runtime["recording_thread"] = None
+        runtime["recording_stop_event"] = None
+        if runtime.get("video_path"):
+            _debug_log(f"saved AI gather recording: {runtime['video_path']}")
+
+
+def onGatherEnd():
+    _release_video_writer()
+
+
+def _draw_label(frame, text, x, y, color):
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.45
+    thickness = 1
+    (text_w, text_h), baseline = cv2.getTextSize(text, font, font_scale, thickness)
+    y = max(y, text_h + 6)
+    cv2.rectangle(frame, (x, y - text_h - baseline - 4), (x + text_w + 4, y + 2), color, -1)
+    cv2.putText(frame, text, (x + 2, y - baseline - 1), font, font_scale, (0, 0, 0), thickness, cv2.LINE_AA)
+
+
+def _record_debug_frame(runtime, frame, detections, target):
+    writer = _ensure_video_writer(runtime, frame)
+    if writer is None:
+        return
+
+    runtime["latest_recording_overlay"] = {
+        "detections": list(detections),
+        "target": dict(target) if isinstance(target, dict) else None,
+        "current_x": runtime.get("current_x", 0.0),
+        "current_y": runtime.get("current_y", 0.0),
+        "movement_count": runtime.get("movement_count", 0),
+        "detection_fps": runtime.get("detection_fps"),
+        "last_detection_ms": runtime.get("last_detection_ms"),
+        "updated_at": time.time(),
+    }
+
+
+def _annotate_recording_frame(runtime, frame):
+    annotated = _bgr_frame(frame)
+    frame_h, frame_w = annotated.shape[:2]
+    scale_x = frame_w / float(INPUT_WIDTH)
+    scale_y = frame_h / float(INPUT_HEIGHT)
+
+    overlay = runtime.get("latest_recording_overlay", {})
+    detections = overlay.get("detections", [])
+    target = overlay.get("target")
+    target_box = target.get("box") if isinstance(target, dict) else None
+
+    for box, class_id, confidence in detections:
+        token_name = LABELS_BLUE.get(class_id, f"class {class_id}")
+        x1, y1, x2, y2 = box
+        left = max(0, min(frame_w - 1, int(round(x1 * scale_x))))
+        top = max(0, min(frame_h - 1, int(round(y1 * scale_y))))
+        right = max(0, min(frame_w - 1, int(round(x2 * scale_x))))
+        bottom = max(0, min(frame_h - 1, int(round(y2 * scale_y))))
+        is_target = target_box == box
+        if token_name in IGNORED_TOKENS:
+            color = (120, 120, 120)
+        elif is_target:
+            color = (0, 255, 255)
+        else:
+            color = (80, 220, 80)
+        cv2.rectangle(annotated, (left, top), (right, bottom), color, 2 if is_target else 1)
+        _draw_label(annotated, f"{token_name} {confidence:.2f}", left, top - 4, color)
+
+    status_lines = [
+        f"tokens={len(detections)} pos=({overlay.get('current_x', 0.0):.2f},{overlay.get('current_y', 0.0):.2f}) moves={overlay.get('movement_count', 0)}",
+        f"target={target['name']} score={target['score']:.2f} move=({target['tx']:.2f},{target['ty']:.2f})" if target else "target=None",
+    ]
+    for index, line in enumerate(status_lines):
+        _draw_label(annotated, line, 10, 24 + (index * 24), (255, 255, 255))
+
+    detection_fps = overlay.get("detection_fps")
+    detection_ms = overlay.get("last_detection_ms")
+    fps_text = "detect FPS: --" if detection_fps is None else f"detect FPS: {detection_fps:.1f}"
+    if detection_ms is not None:
+        fps_text += f" ({detection_ms:.0f}ms)"
+    (text_w, _text_h), _baseline = cv2.getTextSize(fps_text, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
+    _draw_label(annotated, fps_text, max(10, frame_w - text_w - 18), 24, (255, 255, 255))
+
+    return annotated
+
+
+def _recording_thread(runtime):
+    frame_interval = 1.0 / max(RECORD_VIDEO_FPS, 1.0)
+    next_frame_time = time.time()
+    stop_event = runtime.get("recording_stop_event")
+
+    while stop_event is not None and not stop_event.is_set():
+        now = time.time()
+        if now < next_frame_time:
+            time.sleep(min(next_frame_time - now, 0.05))
+            continue
+
+        try:
+            frame = _grab_frame(runtime)
+            annotated = _annotate_recording_frame(runtime, frame)
+            writer = runtime.get("video_writer")
+            if writer is None:
+                return
+            _write_recording_frame(runtime, writer, annotated, frame_count=1)
+        except Exception as exc:
+            _debug_log(f"recording frame failed: {exc}", min_interval=5.0, key="record_frame_failed")
+
+        next_frame_time += frame_interval
+        if next_frame_time < time.time() - frame_interval:
+            next_frame_time = time.time() + frame_interval
+
+
+def _write_recording_frame(runtime, writer, annotated, frame_count=1):
+    try:
+        lock = runtime.get("recording_lock")
+        if lock is None:
+            lock = threading.Lock()
+            runtime["recording_lock"] = lock
+        with lock:
+            if isinstance(writer, dict) and writer.get("kind") == "ffmpeg":
+                process = writer.get("process")
+                if process and process.stdin and process.poll() is None:
+                    payload = annotated.tobytes()
+                    for _ in range(frame_count):
+                        process.stdin.write(payload)
+            elif isinstance(writer, dict) and writer.get("kind") == "opencv":
+                for _ in range(frame_count):
+                    writer["writer"].write(annotated)
+            else:
+                for _ in range(frame_count):
+                    writer.write(annotated)
+    except Exception as exc:
+        _debug_log(f"recording write failed: {exc}", min_interval=5.0, key="record_write_failed")
+        _release_video_writer(runtime)
+
+
+def _update_detection_fps(runtime, elapsed):
+    if elapsed <= 0:
+        return
+    fps = 1.0 / elapsed
+    previous = runtime.get("detection_fps")
+    runtime["detection_fps"] = fps if previous is None else ((previous * 0.8) + (fps * 0.2))
+    runtime["last_detection_ms"] = elapsed * 1000.0
+
+
 def _load_session(model_path):
     available = ort.get_available_providers()
     preferred = [
+        "CoreMLExecutionProvider",
+        "AzureExecutionProvider",
         "DmlExecutionProvider",
         "CUDAExecutionProvider",
         "CPUExecutionProvider",
     ]
     providers = [provider for provider in preferred if provider in available] or available
-    session = ort.InferenceSession(str(model_path), providers=providers)
+    session_options = ort.SessionOptions()
+    session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+    session_options.enable_mem_pattern = True
+    session_options.enable_cpu_mem_arena = True
+    session_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+    session = ort.InferenceSession(str(model_path), sess_options=session_options, providers=providers)
     input_meta = session.get_inputs()[0]
     return session, input_meta.name, "float16" in input_meta.type.lower()
 
@@ -431,6 +727,7 @@ def _find_best_token(runtime, detections):
         candidates.append(
             {
                 "name": token_name,
+                "box": box,
                 "tx": tx,
                 "ty": ty,
                 "future_x": future_x,
@@ -569,25 +866,43 @@ def _find_sprinkler_with_retry(runtime):
     for attempt in range(SPRINKLER_RESCAN_ATTEMPTS):
         result = _find_sprinkler(runtime)
         if result:
+            _debug_log(
+                f"sprinkler found on attempt {attempt + 1}: label={result[3]} confidence={result[4]:.2f} distance={result[2]:.2f}",
+                min_interval=1.0,
+                key="sprinkler_found",
+            )
             return result
+        _debug_log(
+            f"sprinkler scan attempt {attempt + 1}/{SPRINKLER_RESCAN_ATTEMPTS} found no match",
+            min_interval=1.0,
+            key="sprinkler_missing",
+        )
         if attempt < SPRINKLER_RESCAN_ATTEMPTS - 1:
             time.sleep(SPRINKLER_RESCAN_DELAY)
     return None
 
 
 def _recalibrate(runtime):
+    _debug_log(
+        f"recalibrating from pos=({runtime['current_x']:.2f},{runtime['current_y']:.2f}) moves={runtime['movement_count']}",
+        min_interval=1.0,
+        key="recalibrate_start",
+    )
     result = _find_sprinkler_with_retry(runtime)
     if not result:
+        _debug_log("recalibration failed: no sprinkler found", min_interval=1.0, key="recalibrate_failed")
         return False
 
     tx, ty, distance, _label, _confidence = result
     if distance >= SPRINKLER_ARRIVAL_THRESHOLD:
+        _debug_log(f"returning to sprinkler: move=({tx:.2f},{ty:.2f}) distance={distance:.2f}")
         _execute_movement(tx, ty)
 
     runtime["current_x"] = 0.0
     runtime["current_y"] = 0.0
     runtime["movement_count"] = 0
     runtime["last_idle_return_time"] = time.time()
+    _debug_log("recalibration complete; position reset to sprinkler")
     return True
 
 
@@ -604,6 +919,7 @@ def _should_recalibrate(runtime):
 
 def _fallback_pattern():
     # Tiny figure-eight around the current spot so the pattern still works if AI deps are missing.
+    _debug_log("running fallback sweep pattern", min_interval=1.0, key="fallback")
     travel = 0.12 * max(size, 0.75)
     for _ in range(max(1, min(int(width), 2))):
         self.keyboard.multiWalk([tcfbkey, tclrkey], travel)
@@ -646,6 +962,9 @@ def _initialise_runtime():
     sprinkler_path = sprinkler_candidate if sprinkler_candidate.exists() else None
 
     capture = _build_capture()
+    _debug_log(
+        f"capture backend={capture['backend']} size={capture['width']}x{capture['height']} token_model={token_path} sprinkler_model={sprinkler_path or 'missing'}"
+    )
     points = _default_points(capture["width"], capture["height"])
 
     destination = np.array(
@@ -679,6 +998,11 @@ def _initialise_runtime():
         "last_idle_return_time": time.time(),
         "last_no_target_sweep_time": time.time(),
         "initialised_at": time.time(),
+        "video_writer": None,
+        "video_path": "",
+        "last_recording_frame_time": 0.0,
+        "detection_fps": None,
+        "last_detection_ms": None,
     }
 
 
@@ -689,9 +1013,13 @@ if not runtime.get("ready"):
         runtime.update(_initialise_runtime())
         runtime["ready"] = True
         runtime["error"] = ""
+        _debug_log(
+            f"runtime ready providers={runtime['token_session'].get_providers()} confidence={CONFIDENCE_THRESHOLD} ignored={sorted(IGNORED_TOKENS)} record={RECORD_VIDEO}"
+        )
     except Exception as exc:
         runtime["ready"] = False
         runtime["error"] = str(exc)
+        _debug_log(f"initialisation failed: {exc}")
 
 
 if not runtime.get("ready"):
@@ -702,15 +1030,28 @@ else:
         if _should_recalibrate(runtime):
             _recalibrate(runtime)
 
+        detection_start = time.time()
         frame = _grab_frame(runtime)
         tensor = _preprocess(frame, INPUT_WIDTH, INPUT_HEIGHT, runtime["token_use_float16"])
         output = runtime["token_session"].run(None, {runtime["token_input"]: tensor})
         detections = _postprocess(output, CONFIDENCE_THRESHOLD)
         target = _find_best_token(runtime, detections)
+        _update_detection_fps(runtime, time.time() - detection_start)
+        _record_debug_frame(runtime, frame, detections, target)
 
         if target:
+            _debug_log(
+                f"target={target['name']} confidence={target['confidence']:.2f} score={target['score']:.2f} move=({target['tx']:.2f},{target['ty']:.2f}) detections={len(detections)}",
+                min_interval=0.25,
+                key="target",
+            )
             _execute_movement(target["tx"], target["ty"])
         else:
+            _debug_log(
+                f"no target from detections={len(detections)} pos=({runtime['current_x']:.2f},{runtime['current_y']:.2f})",
+                min_interval=0.5,
+                key="no_target",
+            )
             now = time.time()
             should_sweep = now - runtime.get("last_no_target_sweep_time", 0.0) >= NO_TARGET_SWEEP_INTERVAL
             if now - runtime["last_idle_return_time"] >= IDLE_RETURN_INTERVAL:
@@ -726,5 +1067,6 @@ else:
     except Exception as exc:
         runtime["ready"] = False
         runtime["error"] = str(exc)
+        _release_video_writer(runtime)
         print(f"[fuzzy_ai_gather] runtime error: {exc}")
         _fallback_pattern()
