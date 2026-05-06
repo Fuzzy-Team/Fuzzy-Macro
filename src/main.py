@@ -460,6 +460,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
 
     taskCompleted = True
     questCache = {}
+    questScanScreens = None
     
     macro.start()
     #macro.useItemInInventory("blueclayplanter")
@@ -541,7 +542,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             return False
 
     def handleQuest(questGiver, executeQuest=True):
-        nonlocal questCache, taskCompleted
+        nonlocal questCache, questScanScreens, taskCompleted
         
         
         
@@ -560,8 +561,15 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         if cacheFresh and questCache[questGiver] is not None:
             questObjective = questCache[questGiver]
         else:
-            questObjective = macro.findQuest(questGiver)
+            if not executeQuest:
+                if questScanScreens is None:
+                    questScanScreens = macro.captureQuestScreenshots()
+                questObjective = macro.findQuest(questGiver, questScreens=questScanScreens)
+            else:
+                questObjective = macro.findQuest(questGiver)
             questCache[questGiver] = questObjective
+            if not executeQuest:
+                taskCompleted = False
 
         # Only submit/get quests if executeQuest is True (when quest appears in priority queue)
         if executeQuest:
@@ -712,6 +720,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         # Quest scans should be cached only within a single outer loop pass.
         # Clearing here guarantees the board is re-read after the task list recycles.
         questCache.clear()
+        questScanScreens = None
         
         macro.setdat = get_cached_settings()
         # Check if profile has changed and reload settings if needed
