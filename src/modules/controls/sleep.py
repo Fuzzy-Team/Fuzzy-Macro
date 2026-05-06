@@ -4,6 +4,7 @@ import time
 # Module-level reference to the run state (multiprocessing.Value)
 _run_state = None
 _interrupt_action = None
+_resume_callback = None
 
 INTERRUPT_NONE = 0
 INTERRUPT_SKIP = 1
@@ -25,6 +26,12 @@ def set_interrupt_action(interrupt_action):
     """Set the shared interrupt action for task interruption checks."""
     global _interrupt_action
     _interrupt_action = interrupt_action
+
+
+def set_resume_callback(callback):
+    """Set a callback to run after a paused macro resumes."""
+    global _resume_callback
+    _resume_callback = callback
 
 
 def get_interrupt_action():
@@ -64,8 +71,15 @@ def is_stopped():
 
 def wait_while_paused():
     """Wait while the macro is paused, return True if stop was requested"""
+    was_paused = False
     while is_paused():
+        was_paused = True
         time.sleep(0.1)
+    if was_paused and not is_stopped() and _resume_callback is not None:
+        try:
+            _resume_callback()
+        except Exception:
+            pass
     return is_stopped()
 
 def sleep(duration, get_now=time.perf_counter):
