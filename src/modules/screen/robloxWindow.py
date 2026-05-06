@@ -35,9 +35,10 @@ class RobloxWindowBounds:
             res = bitmap_matcher.find_bitmap_cython(screen, honeyImg, variance=5)
             if res:
                 self.contentYOffset = max((res[1]//self.multi)-15-self.yOffset, 0)
+                if self.contentYOffset != 0:
+                    pag.hotkey("ctrl", "command", "f")
                 self.my+=self.contentYOffset
                 self.mh-=self.contentYOffset
             
         
-
 
