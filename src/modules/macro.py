@@ -4883,6 +4883,47 @@ class macro:
 
             return fields, colors
 
+        def parseBrownBearTitleObjectives(titleText):
+            import re
+
+            text = self.convertCyrillic(titleText.lower())
+            text = re.sub(r"^.*brown\s+bear[:\-\s]*", "", text).strip()
+
+            abbrevToField = {
+                "sun": "sunflower",
+                "dand": "dandelion",
+                "mush": "mushroom",
+                "bluf": "blue flower",
+                "clove": "clover",
+                "bamb": "bamboo",
+                "spide": "spider",
+                "straw": "strawberry",
+                "pinap": "pineapple",
+                "stump": "stump",
+                "cact": "cactus",
+                "pump": "pumpkin",
+                "pine": "pine tree",
+                "rose": "rose",
+                "mount": "mountain top",
+                "coco": "coconut",
+                "pepp": "pepper"
+            }
+            colorTokens = {"white", "blue", "red"}
+
+            objectives = []
+            for token in [t for t in re.split(r"[^a-z]+", text) if t]:
+                if token in colorTokens:
+                    objective = f"pollen_{token}"
+                else:
+                    field = abbrevToField.get(token)
+                    if not field:
+                        continue
+                    objective = f"gather_{field}"
+                if objective not in objectives:
+                    objectives.append(objective)
+
+            return objectives
+
         def findQuestSectionEnd(scanScreen, minOffset=0):
             """
             Return the y offset where the current quest card ends.
@@ -5089,9 +5130,6 @@ class macro:
             sectionEnd = findQuestSectionEnd(screenCropped, 20*self.robloxWindow.multi)
             if sectionEnd:
                 parseScreen = screenCropped[:sectionEnd, :]
-                extraBottomPixels = int(200*self.robloxWindow.multi)
-                displayEnd = min(sectionEnd + extraBottomPixels, screenCropped.shape[0])
-                displayScreen = screenCropped[:displayEnd, :]
 
             screenGray = cv2.cvtColor(parseScreen, cv2.COLOR_BGR2GRAY)
             img = cv2.inRange(screenGray, 0, 50)
@@ -5288,51 +5326,98 @@ class macro:
 
             annotatedScreen = np.copy(objectiveScreen)
 
-            def getBrownObjectiveStatus(textChunk, bbox):
+            def cleanBrownObjectiveText(textChunk):
+                import re
+
+                # Brown Bear objectives are detected from title-like bitmaps in
+                # Natro. For OCR, remove status words before mapping the action.
+                return re.split(r'\bcomplete\b', textChunk, maxsplit=1, flags=re.IGNORECASE)[0].strip()
+
+            def getBrownPanelStatus(panel, textChunk):
                 if objectiveTextShowsIncompleteProgress(textChunk):
                     return "incomplete"
 
-                x, y, w, h = bbox
-                padY = max(8, int(12*self.robloxWindow.multi))
-                y1 = max(0, y - padY)
-                y2 = min(parseScreen.shape[0], y + h + padY)
-                region = parseScreen[y1:y2, :, :3]
+                x, y, w, h = panel["bbox"]
+                region = parseScreen[y:y+h, x:x+w, :3]
                 if region.size:
                     rows = region.astype(np.int16)
                     blue, green, red = rows[:, :, 0], rows[:, :, 1], rows[:, :, 2]
                     redMask = (red > 120) & (red > green + 20) & (red > blue + 20)
                     greenMask = (green > 120) & (green > red + 20) & (green > blue + 20)
-                    redRows = np.mean(redMask, axis=1)
                     redScore = float(np.mean(redMask))
-                    rightEdge = region[:, max(0, region.shape[1] - int(24*self.robloxWindow.multi)):, :]
-                    edgeBlue, edgeGreen, edgeRed = rightEdge[:, :, 0], rightEdge[:, :, 1], rightEdge[:, :, 2]
-                    edgeRedMask = (edgeRed > 120) & (edgeRed > edgeGreen + 20) & (edgeRed > edgeBlue + 20)
-
-                    if redScore > 0.02 or np.any(redRows > 0.12) or float(np.mean(edgeRedMask)) > 0.02:
+                    greenScore = float(np.mean(greenMask))
+                    if redScore > greenScore:
                         return "incomplete"
-                    if float(np.mean(greenMask)) > 0.25:
+                    if greenScore > redScore:
                         return "complete"
 
-                return "complete" if "complete" in textChunk.lower() else "incomplete"
+                if "complete" in textChunk.lower():
+                    return "complete"
+                return panel["status"]
 
-            for chunk in objectiveChunks:
-                textChunk = chunk["text"]
-                x, y, w, h = chunk["bbox"]
-                objectiveStatus = getBrownObjectiveStatus(textChunk, chunk["bbox"])
-                isComplete = objectiveStatus == "complete"
+            brownPanels = detectObjectivePanels(parseScreen)
+            brownItems = []
+
+            titleObjectives = parseBrownBearTitleObjectives(questTitle)
+
+            if brownPanels:
+                for panel in brownPanels[:4]:
+                    x, y, w, h = panel["bbox"]
+                    textImg = Image.fromarray(parseScreen[y:y+h, x:x+w])
+                    textChunk = []
+                    for line in ocr.ocrRead(textImg):
+                        textChunk.append(self.convertCyrillic(line[1][0].strip().lower()))
+                    textChunk = ''.join(textChunk).strip()
+                    brownItems.append({
+                        "text": textChunk,
+                        "bbox": panel["bbox"],
+                        "status": getBrownPanelStatus(panel, textChunk),
+                    })
+            else:
+                # Fallback for unusual themes or OCR captures where colored
+                # panels were not found.
+                for chunk in objectiveChunks:
+                    textChunk = chunk["text"]
+                    x, y, w, h = chunk["bbox"]
+                    padY = max(8, int(12*self.robloxWindow.multi))
+                    y1 = max(0, y - padY)
+                    y2 = min(parseScreen.shape[0], y + h + padY)
+                    region = parseScreen[y1:y2, :, :3]
+                    status = "incomplete"
+                    if objectiveTextShowsIncompleteProgress(textChunk):
+                        status = "incomplete"
+                    elif region.size:
+                        rows = region.astype(np.int16)
+                        blue, green, red = rows[:, :, 0], rows[:, :, 1], rows[:, :, 2]
+                        redMask = (red > 120) & (red > green + 20) & (red > blue + 20)
+                        greenMask = (green > 120) & (green > red + 20) & (green > blue + 20)
+                        redRows = np.mean(redMask, axis=1)
+                        if float(np.mean(redMask)) > 0.02 or np.any(redRows > 0.12):
+                            status = "incomplete"
+                        elif float(np.mean(greenMask)) > 0.25 or "complete" in textChunk.lower():
+                            status = "complete"
+                    brownItems.append({
+                        "text": textChunk,
+                        "bbox": chunk["bbox"],
+                        "status": status,
+                    })
+
+            for item in brownItems:
+                textChunk = item["text"]
+                x, y, w, h = item["bbox"]
+                isComplete = item["status"] == "complete"
+                itemIndex = len(incompleteObjectives) + len(completedObjectives)
 
                 # Skip standalone completion labels so they don't register as objectives.
-                if isComplete and len(textChunk.split()) < 5:
+                if itemIndex >= len(titleObjectives) and isComplete and len(textChunk.split()) < 5:
                     continue
 
-                parseText = textChunk
-                if isComplete:
-                    # Split case-insensitively
-                    import re
-                    parseText = re.split(r'complete', textChunk, maxsplit=1, flags=re.IGNORECASE)[0].strip()
-
-                parsedObjective = self.parseQuestObjective(parseText)
-                mappedObjectives = self.mapObjectiveToMacroAction(parsedObjective, parseText)
+                if itemIndex < len(titleObjectives):
+                    mappedObjectives = [titleObjectives[itemIndex]]
+                else:
+                    parseText = cleanBrownObjectiveText(textChunk)
+                    parsedObjective = self.parseQuestObjective(parseText)
+                    mappedObjectives = self.mapObjectiveToMacroAction(parsedObjective, parseText)
 
                 if not isComplete:
                     for objective in mappedObjectives:
@@ -5348,20 +5433,7 @@ class macro:
                 cv2.rectangle(annotatedScreen, (x, y), (x+w, y+h), color, 2)
                 cv2.putText(annotatedScreen, label, (x, max(0, y-5)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
 
-            allObjectives = incompleteObjectives + completedObjectives
-
-            # Parse title for fields and colors that should be gathered
-            titleFields, titleColors = parseBrownBearTitleFields(questTitle)
-            
-            # Add each field from the title if it's not already detected
-            for field in titleFields:
-                objective = f"gather_{field}"
-                if objective not in incompleteObjectives and objective not in completedObjectives:
-                    incompleteObjectives.append(objective)
-            
-            # Add each color from the title if it's not already detected  
-            for color in titleColors:
-                objective = f"pollen_{color}"
+            for objective in titleObjectives[len(brownItems):]:
                 if objective not in incompleteObjectives and objective not in completedObjectives:
                     incompleteObjectives.append(objective)
 
