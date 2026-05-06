@@ -2623,8 +2623,9 @@ class macro:
         sizeword = fieldSetting["size"]
         size = sizeData[sizeword]
         width = fieldSetting["width"]
+        infiniteGather = bool(fieldSetting.get("infinite_gather", False))
         maxGatherTime = fieldSetting["mins"]*60
-        gatherTimeLimit = self.convertSecsToMinsAndSecs(maxGatherTime)
+        gatherTimeLimit = "Infinite" if infiniteGather else self.convertSecsToMinsAndSecs(maxGatherTime)
         returnType = "rejoin" if isHiveHubField else fieldSetting["return"]
         pattern = fieldSetting['shape']
         fuzzyAIRuntimeDefaults = settingsManager.FUZZY_AI_RUNTIME_DEFAULTS
@@ -2680,7 +2681,8 @@ class macro:
 
         # Add goo status to webhook message
         gooStatus = " - Goo Enabled" if fieldSetting.get("goo", False) else ""
-        self.logger.webhook(f"Gathering: {field.title()}", f"Limit: {gatherTimeLimit} - {fieldSetting['shape']} - Backpack: {fieldSetting['backpack']}%{gooStatus}", "light green")
+        backpackLimitLabel = "Ignored" if infiniteGather else f"{fieldSetting['backpack']}%"
+        self.logger.webhook(f"Gathering: {field.title()}", f"Limit: {gatherTimeLimit} - {fieldSetting['shape']} - Backpack: {backpackLimitLabel}{gooStatus}", "light green")
 
         # Goo timer thread: always 3s interval if goo quest, else field setting
         def gooTimerThread():
@@ -2873,7 +2875,7 @@ class macro:
                 time.sleep(0.4)
                 self.reset()
                 break
-            elif getGatherTime() > maxGatherTime:
+            elif not infiniteGather and getGatherTime() > maxGatherTime:
                 if honeyWreathReturnEnabled and isHoneyWreathReady():
                     backpack = self.getBackpack()
                     if isHoneyWreathBackpackReady(backpack):
@@ -2897,7 +2899,7 @@ class macro:
                     self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Time Limit - Return: {returnType.title()}", "light green", "screen")
                     keepGathering = False
             #check backpack
-            elif isHiveHubField:
+            elif isHiveHubField or infiniteGather:
                 continue
             else:
                 backpack = self.getBackpack()

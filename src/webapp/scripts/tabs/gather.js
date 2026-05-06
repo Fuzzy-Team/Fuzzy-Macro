@@ -16,6 +16,7 @@ const gatherFieldProperties = [
   "turn_times",
   "mins",
   "backpack",
+  "infinite_gather",
   "return",
   "use_whirlwig_fallback",
   "start_location",
@@ -26,6 +27,13 @@ const gatherFieldProperties = [
 let gatherPatternMetadata = {};
 let activeGatherFieldData = {};
 let activeGatherPattern = "";
+
+function normalizeGatherFieldData(fieldData) {
+  return {
+    ...(fieldData && typeof fieldData === "object" ? fieldData : {}),
+    infinite_gather: Boolean(fieldData?.infinite_gather),
+  };
+}
 
 function getGatherPatternPresets(fieldData) {
   if (
@@ -54,8 +62,7 @@ function rememberGatherPatternPreset(fieldData, pattern) {
 }
 
 function setActiveGatherFieldData(fieldData) {
-  activeGatherFieldData =
-    fieldData && typeof fieldData === "object" ? fieldData : {};
+  activeGatherFieldData = normalizeGatherFieldData(fieldData);
   activeGatherPattern = activeGatherFieldData.shape || "";
 }
 const fuzzyAITokenNames = [
@@ -255,6 +262,17 @@ function getSelectedGatherField() {
   return getDropdownValue(fieldDropdown);
 }
 
+function updateInfiniteGatherUI() {
+  const infiniteGather = document.getElementById("infinite_gather")?.checked || false;
+  ["mins", "backpack"].forEach((id) => {
+    const input = document.getElementById(id);
+    if (!input) return;
+    input.disabled = infiniteGather;
+    input.style.opacity = infiniteGather ? "0.45" : "";
+    input.style.cursor = infiniteGather ? "not-allowed" : "";
+  });
+}
+
 function updateGatherPatternUI() {
   const pattern = getSelectedGatherPattern();
   const field = getSelectedGatherField();
@@ -272,6 +290,7 @@ function updateGatherPatternUI() {
       : "";
     description.style.display = isHiveHubGather ? "block" : "none";
   }
+  updateInfiniteGatherUI();
 }
 //save the enabled status for the fields
 async function saveEnabled() {
@@ -333,7 +352,7 @@ async function updateFieldEnable(ele) {
 
 //load the field selected in the dropdown
 async function loadAndSaveField(ele) {
-  const data = (await eel.loadFields()())[getDropdownValue(ele)];
+  const data = normalizeGatherFieldData((await eel.loadFields()())[getDropdownValue(ele)]);
   setActiveGatherFieldData(data);
   loadInputs(data);
   updateGatherPatternUI();
@@ -456,7 +475,7 @@ $("#gather-placeholder")
 
       if (success) {
         // Reload the field data and update the UI
-        const data = (await eel.loadFields()())[currentFieldName];
+        const data = normalizeGatherFieldData((await eel.loadFields()())[currentFieldName]);
         setActiveGatherFieldData(data);
         loadInputs(data);
         updateGatherPatternUI();
