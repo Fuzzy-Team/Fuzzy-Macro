@@ -142,6 +142,15 @@
       );
       buildStandardContainer(parentElement, "Gather Until", "", [
         {
+          id: "infinite_gather",
+          title: "Infinite Gathering",
+          desc: "Ignore the time and backpack limits and keep gathering until interrupted",
+          type: {
+            name: "checkbox",
+            triggerFunction: triggerFunction,
+          },
+        },
+        {
           id: "mins",
           title: "Mins",
           desc: "Maximum number of minutes to gather for",
