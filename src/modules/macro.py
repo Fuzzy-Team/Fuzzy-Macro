@@ -4821,7 +4821,52 @@ class macro:
         mouse.moveTo(self.robloxWindow.mx+(312), self.robloxWindow.my+(200))
         mouse.click()
 
-    def findQuest(self, questGiver):
+    def captureQuestScreenshots(self, maxScreens=150):
+        """
+        Capture the quest list from top to bottom once.
+        Returned RGBA screenshots can be reused by findQuest for multiple
+        quest givers without reopening and rescrolling the quest UI.
+        """
+        def screenshotQuest(screenshotHeight, mode="gray"):
+            mode = mode.lower()
+            if mode == "rgba":
+                screenshotFunction = mssScreenshotPillowRGBA
+            else:
+                screenshotFunction = mssScreenshotNP
+            screen = screenshotFunction(self.robloxWindow.mx, self.robloxWindow.my+150, 300, min(screenshotHeight, self.robloxWindow.mh-(self.robloxWindow.my+150)))
+            if mode == "gray":
+                screen = cv2.cvtColor(screen, cv2.COLOR_BGRA2GRAY)
+            return screen
+
+        self.toggleInventory("close")
+        self.toggleQuest()
+
+        prevHash = None
+        for _ in range(200):
+            mouse.scroll(100)
+            sleep(0.08)
+            currentHash = imagehash.average_hash(Image.fromarray(screenshotQuest(100)))
+            if prevHash is not None and prevHash == currentHash:
+                break
+            prevHash = currentHash
+
+        sleep(0.4)
+        screens = []
+        prevHash = None
+        for _ in range(maxScreens):
+            screens.append(screenshotQuest(800, mode="RGBA"))
+            mouse.scroll(-1, True)
+            time.sleep(0.06)
+            currentHash = imagehash.average_hash(Image.fromarray(screenshotQuest(100)))
+            if prevHash is not None and prevHash == currentHash:
+                break
+            prevHash = currentHash
+
+        self.toggleQuest()
+        self.moveMouseToDefault()
+        return screens
+
+    def findQuest(self, questGiver, questScreens=None):
         #map quest giver to a shorthand form for ocr searching
         questGiverShort = {
             "polar bear": "polar",
@@ -5206,21 +5251,24 @@ class macro:
                     bestMatch = (score, line, yPos)
             return bestMatch
         
+        manageQuestUi = questScreens is None
         #open inventory to ensure quest page is closed
-        self.toggleInventory("close")
-        self.toggleQuest()
-        #scroll to top
-        #stop scrolling when the quest page remains unchanged
-        prevHash = None
-        for _ in range(200):
-            mouse.scroll(100)
-            sleep(0.08)
-            hash = imagehash.average_hash(Image.fromarray(screenshotQuest(100)))
-            if not prevHash is None and prevHash == hash:
-                break
-            prevHash = hash
+        if manageQuestUi:
+            self.toggleInventory("close")
+            self.toggleQuest()
+            #scroll to top
+            #stop scrolling when the quest page remains unchanged
+            prevHash = None
+            for _ in range(200):
+                mouse.scroll(100)
+                sleep(0.08)
+                hash = imagehash.average_hash(Image.fromarray(screenshotQuest(100)))
+                if not prevHash is None and prevHash == hash:
+                    break
+                prevHash = hash
         #scroll down, note the best match
-        sleep(0.4)
+        if manageQuestUi:
+            sleep(0.4)
         questTitle = None
         questTitleYPos = None
 
@@ -5249,8 +5297,9 @@ class macro:
         except Exception:
             pass
         prevHash = None
-        for i in range(150):
-            screen = screenshotQuest(800, mode="RGBA")
+        screenSource = questScreens if questScreens is not None else range(150)
+        for i, screenEntry in enumerate(screenSource):
+            screen = screenEntry if questScreens is not None else screenshotQuest(800, mode="RGBA")
 
             ocrMatch = ocrQuestTitleFromScreen(screen)
             if ocrMatch:
@@ -5295,16 +5344,19 @@ class macro:
                     self.logger.webhook("", f"Quest Title: {questTitle}", "dark brown")
                     break
                 
-            mouse.scroll(-1, True)
-            time.sleep(0.06)
-            hash = imagehash.average_hash(Image.fromarray(screenshotQuest(100)))
-            if not prevHash is None and prevHash == hash:
-                break
+            if manageQuestUi:
+                mouse.scroll(-1, True)
+                time.sleep(0.06)
+                hash = imagehash.average_hash(Image.fromarray(screenshotQuest(100)))
+                if not prevHash is None and prevHash == hash:
+                    break
+                prevHash = hash
 
         if questTitle is None:
             self.logger.webhook("", f"Could not find {questGiver} quest", "dark brown")
-            self.toggleQuest()
-            self.moveMouseToDefault()
+            if manageQuestUi:
+                self.toggleQuest()
+                self.moveMouseToDefault()
             return None
 
         def objectiveTextShowsIncompleteProgress(textChunk):
@@ -5460,8 +5512,9 @@ class macro:
             except Exception:
                 pass
 
-            self.toggleQuest()
-            self.moveMouseToDefault()
+            if manageQuestUi:
+                self.toggleQuest()
+                self.moveMouseToDefault()
             return incompleteObjectives
 
         #quest title found, now find the objectives
@@ -5720,8 +5773,9 @@ class macro:
                                 '\n'.join(completedObjectives) if completedObjectives else "None", 
                                 '\n'.join(incompleteObjectives) if incompleteObjectives else "None"), 
                             "light blue", imagePath=questImgPath)
-        self.toggleQuest()
-        self.moveMouseToDefault()
+        if manageQuestUi:
+            self.toggleQuest()
+            self.moveMouseToDefault()
         return incompleteObjectives
 
     def detectQuestObjectives(self):
