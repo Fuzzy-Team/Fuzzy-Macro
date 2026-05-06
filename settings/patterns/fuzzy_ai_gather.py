@@ -521,6 +521,8 @@ def _record_debug_frame(runtime, frame, detections, target):
         "movement_count": runtime.get("movement_count", 0),
         "detection_fps": runtime.get("detection_fps"),
         "last_detection_ms": runtime.get("last_detection_ms"),
+        "candidate_count": runtime.get("last_candidate_count", 0),
+        "rejected_tokens": list(runtime.get("last_rejected_tokens", [])),
         "updated_at": time.time(),
     }
 
@@ -554,9 +556,22 @@ def _annotate_recording_frame(runtime, frame):
         _draw_label(annotated, f"{token_name} {confidence:.2f}", left, top - 4, color)
 
     status_lines = [
-        f"tokens={len(detections)} pos=({overlay.get('current_x', 0.0):.2f},{overlay.get('current_y', 0.0):.2f}) moves={overlay.get('movement_count', 0)}",
+        f"tokens={len(detections)} candidates={overlay.get('candidate_count', 0)} pos=({overlay.get('current_x', 0.0):.2f},{overlay.get('current_y', 0.0):.2f}) moves={overlay.get('movement_count', 0)}",
         f"target={target['name']} score={target['score']:.2f} move=({target['tx']:.2f},{target['ty']:.2f})" if target else "target=None",
     ]
+    rejected = overlay.get("rejected_tokens", [])
+    if rejected:
+        summary = []
+        for item in rejected[:4]:
+            name = item.get("name", f"class {item.get('class_id', '?')}")
+            reason = item.get("reason", "?")
+            if "distance" in item:
+                summary.append(f"{name}:{reason}:{item['distance']:.1f}")
+            elif "future_dist" in item:
+                summary.append(f"{name}:{reason}:{item['future_dist']:.1f}")
+            else:
+                summary.append(f"{name}:{reason}")
+        status_lines.append("skip " + ", ".join(summary))
     for index, line in enumerate(status_lines):
         _draw_label(annotated, line, 10, 24 + (index * 24), (255, 255, 255))
 
@@ -686,9 +701,14 @@ def _find_best_token(runtime, detections):
     scale_y = runtime["capture"]["height"] / float(INPUT_HEIGHT)
 
     candidates = []
+    rejected = []
     for box, class_id, confidence in detections:
         token_name = LABELS_BLUE.get(class_id)
-        if not token_name or token_name in IGNORED_TOKENS:
+        if not token_name:
+            rejected.append({"class_id": class_id, "reason": "unknown", "confidence": confidence})
+            continue
+        if token_name in IGNORED_TOKENS:
+            rejected.append({"name": token_name, "reason": "ignored", "confidence": confidence})
             continue
 
         x1, y1, x2, y2 = box
@@ -697,13 +717,18 @@ def _find_best_token(runtime, detections):
         tx, ty = _relative_distance(center_x, center_y, runtime["homography"])
         distance = math.hypot(tx, ty)
 
-        if distance < MIN_TOKEN_DISTANCE or distance > metrics["max_consider"]:
+        if distance < MIN_TOKEN_DISTANCE:
+            rejected.append({"name": token_name, "reason": "too_close", "confidence": confidence, "distance": distance, "tx": tx, "ty": ty})
+            continue
+        if distance > metrics["max_consider"]:
+            rejected.append({"name": token_name, "reason": "too_far", "confidence": confidence, "distance": distance, "tx": tx, "ty": ty})
             continue
 
         future_x = current_x + tx
         future_y = current_y + ty
         future_dist = math.hypot(future_x, future_y)
         if future_dist > metrics["max_leash"]:
+            rejected.append({"name": token_name, "reason": "leash", "confidence": confidence, "distance": distance, "future_dist": future_dist, "tx": tx, "ty": ty})
             continue
 
         proximity = 1.0 / (0.3 + distance) ** metrics["proximity_exp"]
@@ -738,6 +763,8 @@ def _find_best_token(runtime, detections):
         )
 
     if not candidates:
+        runtime["last_candidate_count"] = 0
+        runtime["last_rejected_tokens"] = rejected[:8]
         return None
 
     for candidate in candidates:
@@ -749,6 +776,8 @@ def _find_best_token(runtime, detections):
                 nearby += 1
         candidate["score"] *= 1.0 + (nearby * metrics["cluster_bonus_per_token"])
 
+    runtime["last_candidate_count"] = len(candidates)
+    runtime["last_rejected_tokens"] = rejected[:8]
     return max(candidates, key=lambda item: item["score"])
 
 
@@ -1053,8 +1082,16 @@ else:
                 key="no_target",
             )
             now = time.time()
+            rejected_reasons = {item.get("reason") for item in runtime.get("last_rejected_tokens", [])}
+            recalibrated = False
+            if detections and "leash" in rejected_reasons and _recalibrate(runtime):
+                runtime["last_token_time"] = time.time()
+                recalibrated = True
+
             should_sweep = now - runtime.get("last_no_target_sweep_time", 0.0) >= NO_TARGET_SWEEP_INTERVAL
-            if now - runtime["last_idle_return_time"] >= IDLE_RETURN_INTERVAL:
+            if recalibrated:
+                pass
+            elif now - runtime["last_idle_return_time"] >= IDLE_RETURN_INTERVAL:
                 runtime["last_idle_return_time"] = now
                 if _recalibrate(runtime):
                     runtime["last_token_time"] = time.time()
