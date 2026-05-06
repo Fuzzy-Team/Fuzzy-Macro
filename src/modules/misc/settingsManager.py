@@ -20,6 +20,9 @@ FUZZY_AI_RUNTIME_DEFAULTS = {
     "fuzzy_ai_sprinkler_rescan_delay": 0.3,
     "fuzzy_ai_target_sprinkler_label": "",
     "fuzzy_ai_capture_backend": "auto",
+    "fuzzy_ai_debug_mode": None,
+    "fuzzy_ai_record_video": None,
+    "fuzzy_ai_record_video_fps": None,
 }
 
 DEFAULT_FUZZY_AI_TOKEN_RANKING = {
