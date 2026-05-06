@@ -5011,7 +5011,8 @@ class macro:
             panels = []
             for y1, y2 in runs:
                 redScore = float(np.mean(redFractions[y1:y2]))
-                status = "incomplete" if redScore > 0.05 else "complete"
+                redRows = redFractions[y1:y2]
+                status = "incomplete" if redScore > 0.02 or np.any(redRows > 0.12) else "complete"
                 panels.append({
                     "y": y1,
                     "bbox": (0, y1, scanScreen.shape[1], y2 - y1),
@@ -5267,6 +5268,18 @@ class macro:
             self.toggleQuest()
             self.moveMouseToDefault()
             return None
+
+        def objectiveTextShowsIncompleteProgress(textChunk):
+            import re
+
+            normalized = textChunk.replace(",", "").replace(" ", "")
+            for currentRaw, totalRaw in re.findall(r"(\d+)\s*/\s*(\d+)", normalized):
+                try:
+                    if int(currentRaw) < int(totalRaw):
+                        return True
+                except ValueError:
+                    continue
+            return False
         
         if questGiver == "brown bear":
             titleScreen, objectiveScreen, parseScreen, objectiveChunks = extractQuestObjectiveChunks(screen, questTitleYPos)
@@ -5275,10 +5288,38 @@ class macro:
 
             annotatedScreen = np.copy(objectiveScreen)
 
+            def getBrownObjectiveStatus(textChunk, bbox):
+                if objectiveTextShowsIncompleteProgress(textChunk):
+                    return "incomplete"
+
+                x, y, w, h = bbox
+                padY = max(8, int(12*self.robloxWindow.multi))
+                y1 = max(0, y - padY)
+                y2 = min(parseScreen.shape[0], y + h + padY)
+                region = parseScreen[y1:y2, :, :3]
+                if region.size:
+                    rows = region.astype(np.int16)
+                    blue, green, red = rows[:, :, 0], rows[:, :, 1], rows[:, :, 2]
+                    redMask = (red > 120) & (red > green + 20) & (red > blue + 20)
+                    greenMask = (green > 120) & (green > red + 20) & (green > blue + 20)
+                    redRows = np.mean(redMask, axis=1)
+                    redScore = float(np.mean(redMask))
+                    rightEdge = region[:, max(0, region.shape[1] - int(24*self.robloxWindow.multi)):, :]
+                    edgeBlue, edgeGreen, edgeRed = rightEdge[:, :, 0], rightEdge[:, :, 1], rightEdge[:, :, 2]
+                    edgeRedMask = (edgeRed > 120) & (edgeRed > edgeGreen + 20) & (edgeRed > edgeBlue + 20)
+
+                    if redScore > 0.02 or np.any(redRows > 0.12) or float(np.mean(edgeRedMask)) > 0.02:
+                        return "incomplete"
+                    if float(np.mean(greenMask)) > 0.25:
+                        return "complete"
+
+                return "complete" if "complete" in textChunk.lower() else "incomplete"
+
             for chunk in objectiveChunks:
                 textChunk = chunk["text"]
                 x, y, w, h = chunk["bbox"]
-                isComplete = "complete" in textChunk.lower()  # Make case-insensitive
+                objectiveStatus = getBrownObjectiveStatus(textChunk, chunk["bbox"])
+                isComplete = objectiveStatus == "complete"
 
                 # Skip standalone completion labels so they don't register as objectives.
                 if isComplete and len(textChunk.split()) < 5:
@@ -5461,7 +5502,11 @@ class macro:
             greenMask = (green > 120) & (green > red + 20) & (green > blue + 20)
             redScore = float(np.mean(redMask))
             greenScore = float(np.mean(greenMask))
-            if redScore > 0.05:
+            redRows = np.mean(redMask, axis=1)
+            rightEdge = region[:, max(0, region.shape[1] - int(24*self.robloxWindow.multi)):, :3].astype(np.int16)
+            edgeBlue, edgeGreen, edgeRed = rightEdge[:, :, 0], rightEdge[:, :, 1], rightEdge[:, :, 2]
+            edgeRedMask = (edgeRed > 120) & (edgeRed > edgeGreen + 20) & (edgeRed > edgeBlue + 20)
+            if redScore > 0.02 or np.any(redRows > 0.12) or float(np.mean(edgeRedMask)) > 0.02:
                 return "incomplete"
             if greenScore > 0.25:
                 return "complete"
@@ -5495,6 +5540,8 @@ class macro:
 
                 if "complete" in textChunk:
                     panel["status"] = "complete"
+                if objectiveTextShowsIncompleteProgress(textChunk):
+                    panel["status"] = "incomplete"
 
                 if panel["status"] == "complete":
                     completedObjectives.append(objectives[i])
@@ -5569,6 +5616,9 @@ class macro:
                 if "complete" in textChunk:
                     completedObjectives.append(objectives[i])
                     color = (0, 255, 0)  #green
+                elif objectiveTextShowsIncompleteProgress(textChunk):
+                    incompleteObjectives.append(objectives[i])
+                    color = (0, 0, 255)  #red
                 else:
                     incompleteObjectives.append(objectives[i])
                     color = (0, 0, 255)  #red
