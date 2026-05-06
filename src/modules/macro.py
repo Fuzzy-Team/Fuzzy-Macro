@@ -570,6 +570,7 @@ class macro:
         self.converting = False
         self.alreadyConverted = False
         self.cannonFromHive = False
+        self._inactiveHoneyResetResumeBlockUntil = 0.0
 
         #auto field boost
         self.failed = False
@@ -895,14 +896,25 @@ class macro:
             return False
         self.raiseIfInterrupted()
         # Wait while paused (state 6)
+        wasPaused = False
         while self.run.value == 6:
+            wasPaused = True
+            self._inactiveHoneyResetResumeBlockUntil = time.monotonic() + 2
             # Keep inputs released while paused
             self.keyboard.releaseMovement()
             mouse.mouseUp()
             time.sleep(0.1)
             self.raiseIfInterrupted()
+        if wasPaused:
+            self._inactiveHoneyResetResumeBlockUntil = time.monotonic() + 2
         # Check if stop was requested (state 0)
         return self.run.value == 0
+
+    def isInactiveHoneyResetPaused(self):
+        if self.run is not None and self.run.value == 6:
+            self._inactiveHoneyResetResumeBlockUntil = time.monotonic() + 2
+            return True
+        return time.monotonic() < self._inactiveHoneyResetResumeBlockUntil
     
     #thread to detect night
     #night detection is done by converting the screenshot to hsv and checking the average brightness
@@ -1657,15 +1669,18 @@ class macro:
                 time.sleep(2)
 
             if self.setdat.get("inactive_honey_reset", False) and time.time() - st > 60:
-                inactiveHoneyChecks = 0 if self.isActiveHoney() else inactiveHoneyChecks + 1
-                if inactiveHoneyChecks > 30:
-                    self.logger.webhook("Converting: interrupted", "Inactive Honey Reset (Beta)", "orange", "screen")
-                    self.clear_task_status()
-                    if self.enableNightDetection:
-                        self.keyboard.press(".")
-                    self.converting = False
-                    self.reset(convert=False)
-                    return False
+                if self.isInactiveHoneyResetPaused():
+                    inactiveHoneyChecks = 0
+                else:
+                    inactiveHoneyChecks = 0 if self.isActiveHoney() else inactiveHoneyChecks + 1
+                    if inactiveHoneyChecks > 30:
+                        self.logger.webhook("Converting: interrupted", "Inactive Honey Reset (Beta)", "orange", "screen")
+                        self.clear_task_status()
+                        if self.enableNightDetection:
+                            self.keyboard.press(".")
+                        self.converting = False
+                        self.reset(convert=False)
+                        return False
 
             mouse.click()
 
@@ -2693,6 +2708,10 @@ class macro:
             inactiveChecks = 0
             while inactiveHoneyTimerActive:
                 try:
+                    if self.isInactiveHoneyResetPaused():
+                        inactiveChecks = 0
+                        time.sleep(1)
+                        continue
                     if self.getBackpack() < fieldSetting["backpack"]:
                         inactiveChecks = 0 if self.isActiveHoney() else inactiveChecks + 1
                         if inactiveChecks > 30:
