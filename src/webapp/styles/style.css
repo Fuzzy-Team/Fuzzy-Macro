@@ -664,6 +664,17 @@ select:focus {
   font-size: 0.85rem;
 }
 
+.gather-pattern-notice {
+  display: none;
+  margin: 0.5rem 0 1rem 0;
+  border: 1px solid #a94545;
+  background: rgba(169, 69, 69, 0.15);
+  color: #ffb3b3;
+  border-radius: 8px;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.85rem;
+}
+
 .bond-calc-summary {
   margin-top: 1rem;
   display: grid;

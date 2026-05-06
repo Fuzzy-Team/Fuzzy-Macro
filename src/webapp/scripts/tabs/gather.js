@@ -249,18 +249,28 @@ function getSelectedGatherPattern() {
   return getDropdownValue(shapeDropdown);
 }
 
+function getSelectedGatherField() {
+  const fieldDropdown = document.getElementById("field");
+  if (!fieldDropdown) return "";
+  return getDropdownValue(fieldDropdown);
+}
+
 function updateGatherPatternUI() {
   const pattern = getSelectedGatherPattern();
+  const field = getSelectedGatherField();
   const fuzzySection = document.getElementById("fuzzy-ai-gather-section");
   const description = document.getElementById("gather-pattern-metadata");
   const isFuzzyAI = pattern === "fuzzy_ai_gather";
+  const isHiveHubGather = pattern === "hive_hub" || field === "hive hub";
 
   if (fuzzySection) {
     fuzzySection.style.display = isFuzzyAI ? "block" : "none";
   }
   if (description) {
-    description.innerText = "";
-    description.style.display = "none";
+    description.innerText = isHiveHubGather
+      ? "Notice: Do NOT start the macro in Hive Hub, it will travel there automatically."
+      : "";
+    description.style.display = isHiveHubGather ? "block" : "none";
   }
 }
 //save the enabled status for the fields

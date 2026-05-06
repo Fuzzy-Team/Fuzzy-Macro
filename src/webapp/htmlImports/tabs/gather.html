@@ -19,6 +19,10 @@
       const triggerFunction = "saveField()";
       const patternTriggerFunction = "saveFieldPatternChange()";
       const fieldData = toEmojiArray(fieldEmojis);
+      const patternMetadata = document.createElement("div");
+      patternMetadata.id = "gather-pattern-metadata";
+      patternMetadata.className = "poppins-regular gather-pattern-notice";
+      parentElement.appendChild(patternMetadata);
       buildStandardContainer(parentElement, "Gather Field", "", [
         {
           id: "field_enable",
@@ -109,11 +113,6 @@
           },
         },
       ]);
-      const patternMetadata = document.createElement("div");
-      patternMetadata.id = "gather-pattern-metadata";
-      patternMetadata.className = "poppins-regular";
-      patternMetadata.style.cssText = "display:none; margin: 0.5rem 0 1rem 0; color: var(--description-text);";
-      parentElement.appendChild(patternMetadata);
       buildStandardContainer(
         parentElement,
         "Rotate Camera",
