@@ -2582,6 +2582,7 @@ class macro:
             self.reset()
         else: #failed too many times
             return
+        pattern = fieldSetting['shape']
         #rotate camera
         if fieldSetting["turn"] == "left":
             for _ in range(fieldSetting["turn_times"]):
@@ -2589,6 +2590,17 @@ class macro:
         elif fieldSetting["turn"] == "right":
             for _ in range(fieldSetting["turn_times"]):
                 self.keyboard.press(".")
+        if pattern == "fuzzy_ai_gather":
+            for _ in range(11):
+                self.keyboard.keyDown("pageup", False)
+                sleep(0.01)
+                self.keyboard.keyUp("pageup", False)
+                sleep(0.01)
+            for _ in range(3):
+                self.keyboard.keyDown("pagedown", False)
+                sleep(0.01)
+                self.keyboard.keyUp("pagedown", False)
+                sleep(0.01)
         #key variables
         #check invert L/R and invert B/R
         fwdkey = "w"
@@ -2627,7 +2639,6 @@ class macro:
         maxGatherTime = fieldSetting["mins"]*60
         gatherTimeLimit = "Infinite" if infiniteGather else self.convertSecsToMinsAndSecs(maxGatherTime)
         returnType = "rejoin" if isHiveHubField else fieldSetting["return"]
-        pattern = fieldSetting['shape']
         fuzzyAIRuntimeDefaults = settingsManager.FUZZY_AI_RUNTIME_DEFAULTS
         fuzzyAITokenRanking = settingsManager.loadFuzzyAITokenRanking(field)
         pattern_capture_backend = fuzzyAIRuntimeDefaults["fuzzy_ai_capture_backend"]

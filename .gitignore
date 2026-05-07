@@ -27,3 +27,4 @@ backup_macro.zip
 backups/
 smoke_hourly_report.py
 .vscode/
+*.pt
