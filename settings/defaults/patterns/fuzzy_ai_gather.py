@@ -1196,8 +1196,6 @@ def _fallback_pattern():
 
 
 def _initialise_runtime():
-    self.keyboard.press("pageup")
-    self.keyboard.press("pageup")
 
     if ct is None:
         try:
