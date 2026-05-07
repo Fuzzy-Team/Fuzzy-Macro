@@ -9,6 +9,10 @@ import time
 import pyautogui as pag
 from modules.screen.robloxWindow import RobloxWindowBounds
 import os
+try:
+    from PIL import Image
+except Exception:
+    Image = None
 
 try:
     import coremltools as ct
@@ -28,6 +32,7 @@ class fieldDriftCompensation():
         self._sprinkler_session = None
         self._sprinkler_input_name = None
         self._sprinkler_output_name = None
+        self._sprinkler_input_is_image = False
         self._sprinkler_use_float16 = False
         self._sprinkler_model_failed = False
         self._sprinkler_warning_shown = False
@@ -134,10 +139,21 @@ class fieldDriftCompensation():
 
             model = ct.models.MLModel(str(model_path_coreml), compute_units=ct.ComputeUnit.ALL)
             description = model.get_spec().description
+            input_description = description.input[0]
+            input_type = input_description.type.WhichOneof("Type")
             self._sprinkler_session = model
-            self._sprinkler_input_name = description.input[0].name
+            self._sprinkler_input_name = input_description.name
             self._sprinkler_output_name = description.output[0].name
+            self._sprinkler_input_is_image = input_type == "imageType"
             self._sprinkler_use_float16 = False
+            if self._sprinkler_input_is_image:
+                if Image is None:
+                    self._sprinkler_model_failed = True
+                    self._warn_sprinkler_model("Pillow is not installed")
+                    return False
+                image_type = input_description.type.imageType
+                if image_type.width > 0 and image_type.height > 0:
+                    self._sprinkler_input_size = int(min(image_type.width, image_type.height))
             return True
         except Exception as e:
             self._sprinkler_model_failed = True
@@ -151,6 +167,8 @@ class fieldDriftCompensation():
             interpolation=cv2.INTER_LINEAR,
         )
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+        if self._sprinkler_input_is_image:
+            return Image.fromarray(rgb)
         dtype = np.float16 if self._sprinkler_use_float16 else np.float32
         normalized = rgb.astype(dtype) / 255.0
         chw = np.transpose(normalized, (2, 0, 1))
