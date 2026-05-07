@@ -14,6 +14,10 @@ try:
     import onnxruntime as ort
 except Exception:
     ort = None
+try:
+    import coremltools as ct
+except Exception:
+    ct = None
 
 mw, mh = pag.size()
 
@@ -27,6 +31,8 @@ class fieldDriftCompensation():
             self.kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(8,8))
         self._sprinkler_session = None
         self._sprinkler_input_name = None
+        self._sprinkler_output_name = None
+        self._sprinkler_backend = None
         self._sprinkler_use_float16 = False
         self._sprinkler_model_failed = False
         self._sprinkler_warning_shown = False
@@ -116,33 +122,54 @@ class fieldDriftCompensation():
             return True
         if self._sprinkler_model_failed:
             return False
-        if ort is None:
-            self._sprinkler_model_failed = True
-            self._warn_sprinkler_model("onnxruntime is not installed")
-            return False
 
-        model_path = settingsManager.getFuzzyAIModelPath("sprinkler.mlpackage")
-        if not model_path or not os.path.exists(model_path):
+        model_path_coreml = settingsManager.getFuzzyAIModelPath("sprinkler.mlpackage")
+        model_path_onnx = settingsManager.getFuzzyAIModelPath("sprinkler.onnx")
+        has_coreml = bool(model_path_coreml and os.path.exists(model_path_coreml))
+        has_onnx = bool(model_path_onnx and os.path.exists(model_path_onnx))
+
+        if not has_coreml and not has_onnx:
             self._sprinkler_model_failed = True
-            self._warn_sprinkler_model("sprinkler.mlpackage is missing")
+            self._warn_sprinkler_model("sprinkler model is missing (expected sprinkler.mlpackage or sprinkler.onnx)")
             return False
 
         try:
-            available = ort.get_available_providers()
-            preferred = [
-                "DmlExecutionProvider",
-                "CUDAExecutionProvider",
-                "CPUExecutionProvider",
-            ]
-            providers = [provider for provider in preferred if provider in available] or available
-            self._sprinkler_session = ort.InferenceSession(str(model_path), providers=providers)
-            input_meta = self._sprinkler_session.get_inputs()[0]
-            self._sprinkler_input_name = input_meta.name
-            self._sprinkler_use_float16 = "float16" in input_meta.type.lower()
-            return True
+            if has_coreml and ct is not None:
+                model = ct.models.MLModel(str(model_path_coreml), compute_units=ct.ComputeUnit.ALL)
+                description = model.get_spec().description
+                self._sprinkler_session = model
+                self._sprinkler_backend = "coreml"
+                self._sprinkler_input_name = description.input[0].name
+                self._sprinkler_output_name = description.output[0].name
+                self._sprinkler_use_float16 = False
+                return True
+
+            if has_onnx and ort is not None:
+                available = ort.get_available_providers()
+                preferred = [
+                    "DmlExecutionProvider",
+                    "CUDAExecutionProvider",
+                    "CPUExecutionProvider",
+                ]
+                providers = [provider for provider in preferred if provider in available] or available
+                self._sprinkler_session = ort.InferenceSession(str(model_path_onnx), providers=providers)
+                self._sprinkler_backend = "onnx"
+                input_meta = self._sprinkler_session.get_inputs()[0]
+                self._sprinkler_input_name = input_meta.name
+                self._sprinkler_use_float16 = "float16" in input_meta.type.lower()
+                return True
+
+            self._sprinkler_model_failed = True
+            if has_coreml and ct is None:
+                self._warn_sprinkler_model("coremltools is not installed")
+            elif has_onnx and ort is None:
+                self._warn_sprinkler_model("onnxruntime is not installed")
+            else:
+                self._warn_sprinkler_model("no compatible runtime available for sprinkler model")
+            return False
         except Exception as e:
             self._sprinkler_model_failed = True
-            self._warn_sprinkler_model(f"could not load sprinkler.mlpackage ({e})")
+            self._warn_sprinkler_model(f"could not load sprinkler model ({e})")
             return False
 
     def _preprocess_sprinkler_image(self, imgSRC):
@@ -210,7 +237,11 @@ class fieldDriftCompensation():
 
         try:
             tensor = self._preprocess_sprinkler_image(imgSRC)
-            output = self._sprinkler_session.run(None, {self._sprinkler_input_name: tensor})
+            if self._sprinkler_backend == "coreml":
+                prediction = self._sprinkler_session.predict({self._sprinkler_input_name: tensor})
+                output = [prediction[self._sprinkler_output_name]]
+            else:
+                output = self._sprinkler_session.run(None, {self._sprinkler_input_name: tensor})
             detections = self._postprocess_sprinkler_output(output)
         except Exception as e:
             self._sprinkler_model_failed = True
