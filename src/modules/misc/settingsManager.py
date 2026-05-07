@@ -667,12 +667,12 @@ def importFieldSettings(field_name, json_settings):
                 missing_patterns.append(f"'{requested_pattern}' → '{default_pattern}'")
 
         if settings.get("shape") == "fuzzy_ai_gather":
-            blue_model = getFuzzyAIModelPath("tokens.onnx")
-            sprinkler_model = getFuzzyAIModelPath("sprinkler.onnx")
+            blue_model = getFuzzyAIModelPath("best.mlpackage")
+            sprinkler_model = getFuzzyAIModelPath("sprinkler.mlpackage")
             if not os.path.exists(blue_model):
-                warnings.append("Missing blue model: src/data/models/tokens.onnx")
+                warnings.append("Missing blue model: src/data/models/best.mlpackage")
             if not os.path.exists(sprinkler_model):
-                warnings.append("Missing sprinkler model: src/data/models/sprinkler.onnx")
+                warnings.append("Missing sprinkler model: src/data/models/sprinkler.mlpackage")
 
         # Save the imported settings
         saveField(field_name, settings)

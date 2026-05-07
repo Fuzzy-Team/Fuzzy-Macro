@@ -121,10 +121,10 @@ class fieldDriftCompensation():
             self._warn_sprinkler_model("onnxruntime is not installed")
             return False
 
-        model_path = settingsManager.getFuzzyAIModelPath("sprinkler.onnx")
+        model_path = settingsManager.getFuzzyAIModelPath("sprinkler.mlpackage")
         if not model_path or not os.path.exists(model_path):
             self._sprinkler_model_failed = True
-            self._warn_sprinkler_model("sprinkler.onnx is missing")
+            self._warn_sprinkler_model("sprinkler.mlpackage is missing")
             return False
 
         try:
@@ -142,7 +142,7 @@ class fieldDriftCompensation():
             return True
         except Exception as e:
             self._sprinkler_model_failed = True
-            self._warn_sprinkler_model(f"could not load sprinkler.onnx ({e})")
+            self._warn_sprinkler_model(f"could not load sprinkler.mlpackage ({e})")
             return False
 
     def _preprocess_sprinkler_image(self, imgSRC):
