@@ -1,18 +1,18 @@
 """
 Pattern: Fuzzy AI Gather
-Description: Uses tokens.onnx for token targeting and sprinkler.onnx for returns.
+Description: Uses CoreML models for token targeting and sprinkler returns.
 Best for: Blue-focused gathering where you want token chasing instead of a fixed path.
 Width: Expands the leash radius and target clustering range.
 Size: Scales each movement step so the pattern still respects the GUI controls.
 
 Requirements:
-- onnxruntime
+- coremltools
 - opencv-python
 - numpy
 - mss or Pillow
-- tokens.onnx and sprinkler.onnx
+- best.mlpackage and sprinkler.mlpackage
 
-- Version 1.4
+- Version 1.5
 """
 
 import math
@@ -33,9 +33,9 @@ except Exception as _numpy_error:
     np = None
 
 try:
-    import onnxruntime as ort
-except Exception as _onnx_error:
-    ort = None
+    import coremltools as ct
+except Exception as _coreml_error:
+    ct = None
 
 try:
     import mss
@@ -43,17 +43,21 @@ except Exception:
     mss = None
 
 try:
-    from PIL import ImageGrab
+    from PIL import Image, ImageGrab
 except Exception:
+    Image = None
     ImageGrab = None
 
 
-INPUT_WIDTH = 864
-INPUT_HEIGHT = 864
+ROBLOX_VIEWPORT_WIDTH = 1364
+ROBLOX_VIEWPORT_HEIGHT = 732
+AT_CROP = (186, 128, 186, 124)  # left, top, right, bottom
+INPUT_WIDTH = ROBLOX_VIEWPORT_WIDTH - AT_CROP[0] - AT_CROP[2]
+INPUT_HEIGHT = ROBLOX_VIEWPORT_HEIGHT - AT_CROP[1] - AT_CROP[3]
 SPRINKLER_INPUT_WIDTH = 736
 SPRINKLER_INPUT_HEIGHT = 736
 NMS_THRESHOLD = 0.5
-CONFIDENCE_THRESHOLD = 0.4
+CONFIDENCE_THRESHOLD = 0.3
 SPRINKLER_CONFIDENCE_THRESHOLD = 0.6
 MIN_TOKEN_DISTANCE = 0.3
 IDLE_RETURN_INTERVAL = 1.5
@@ -65,22 +69,84 @@ MAX_SPRINKLER_DISTANCE = 10.0
 SPRINKLER_RESCAN_ATTEMPTS = 3
 SPRINKLER_RESCAN_DELAY = 0.3
 TARGET_SPRINKLER_LABEL = None
-DEBUG_MODE = False
-RECORD_VIDEO = False
-RECORD_VIDEO_FPS = 12.0
+DEBUG_MODE = True
+RECORD_VIDEO = True
+RECORD_VIDEO_FPS = 20.0
 
 PREFERRED_TOKENS = {
     "Token Link": 100,
     "Focus": 80,
     "Melody": 70,
     "Blue Boost": 65,
-    "Honey Mark": 60,
+    "Honey Mark Station": 60,
     "Honey Mark Token": 60,
-    "Pollen Mark": 50,
+    "Pollen Mark Station": 50,
     "Pollen Mark Token": 50,
     "Haste": 40,
 }
-IGNORED_TOKENS = {"Honey", "Blueberry"}
+IGNORED_TOKENS = {
+    "Honey Token",
+    "Blueberry",
+    "Bloom",
+    "Duped Baby Love",
+    "Duped Beamstorm",
+    "Duped Beesmas Cheer Token",
+    "Duped Black Bear Morph",
+    "Duped Blue Bomb Sync",
+    "Duped Blue Boost",
+    "Duped Blueberry",
+    "Duped Bomb",
+    "Duped Brown Bear Morph",
+    "Duped Festive Blessing Token",
+    "Duped Festive Gift Token",
+    "Duped Festive Mark Token",
+    "Duped Fetch",
+    "Duped Flame Fuel",
+    "Duped Focus",
+    "Duped Fuzz Bombs Token",
+    "Duped Glitch Token",
+    "Duped Glob",
+    "Duped Gumdrop Barrage",
+    "Duped Haste",
+    "Duped Honey Mark Token",
+    "Duped Honey Token",
+    "Duped Impale",
+    "Duped Inferno Token",
+    "Duped Inflate Balloons",
+    "Duped Inspire Token",
+    "Duped Jelly Bean",
+    "Duped Map Corruption",
+    "Duped Mark Surge Token",
+    "Duped Melody",
+    "Duped Mind Hack",
+    "Duped Mother Bear Morph",
+    "Duped Panda Bear Morph",
+    "Duped Pineapple",
+    "Duped Polar Bear Morph",
+    "Duped Pollen Haze",
+    "Duped Pollen Mark Token",
+    "Duped Pulse",
+    "Duped Puppy Love",
+    "Duped Rage Token",
+    "Duped Rain Cloud",
+    "Duped Red Bomb Sync",
+    "Duped Red Boost",
+    "Duped Science Bear Morph",
+    "Duped Scratch",
+    "Duped Snowflake",
+    "Duped Snowglobe Shake",
+    "Duped Strawberry",
+    "Duped Summon Frog Token",
+    "Duped Sunflower Seed",
+    "Duped Surprise Party",
+    "Duped Tabby Love",
+    "Duped Target Practice Token",
+    "Duped Token Link",
+    "Duped Tornado",
+    "Duped Treat",
+    "Duped Triangulate Token",
+    "Duped White Boost",
+}
 
 NORMALIZED_CAL_RATIOS = [
     (0.395314, 0.427995),
@@ -89,21 +155,50 @@ NORMALIZED_CAL_RATIOS = [
     (0.670597, 0.722439),
 ]
 
-LABELS_BLUE = {
-    0: "Baby Love", 1: "Beamstorm", 2: "Beesmas Cheer", 3: "Black Bear Morph",
-    4: "Blue Bomb", 5: "Blue Bomb Sync", 6: "Blue Boost", 7: "Blue Pulse",
-    8: "Blueberry", 9: "Brown Bear Morph", 10: "Buzz Bomb", 11: "Festive Blessing",
-    12: "Festive Gift", 13: "Festive Mark", 14: "Festive Mark Token", 15: "Fetch",
-    16: "Focus", 17: "Fuzz Bomb Field", 18: "Fuzz Bombs Token", 19: "Glitch Token",
-    20: "Glob", 21: "Gumdrop Barrage", 22: "Haste", 23: "Honey",
-    24: "Honey Mark", 25: "Honey Mark Token", 26: "Impale", 27: "Inflate Balloons",
-    28: "Inspire", 29: "Map Corruption", 30: "Melody", 31: "Mind Hack",
-    32: "Mother Bear Morph", 33: "Panda Bear Morph", 34: "Pineapple", 35: "Polar Bear Morph",
-    36: "Pollen Haze", 37: "Pollen Mark", 38: "Pollen Mark Token", 39: "Puppy Ball",
-    40: "Puppy Love", 41: "Rain Cloud", 42: "Red Bomb", 43: "Red Boost",
-    44: "Science Bear Morph", 45: "Scratch", 46: "Snowflake", 47: "Snowglobe Shake",
-    48: "Strawberry", 49: "Summon Frog", 50: "Sunflower Seed", 51: "Surprise Party",
-    52: "Tabby Love", 53: "Token Link", 54: "Tornado", 55: "White Boost",
+LABELS_TOKENS = {
+    0: "Activated Target", 1: "Baby Love", 2: "Beamstorm", 3: "Beesmas Cheer Token",
+    4: "Black Bear Morph", 5: "Bloom", 6: "Blue Bomb Sync", 7: "Blue Boost",
+    8: "Blueberry", 9: "Bomb", 10: "Brown Bear Morph", 11: "Coconut",
+    12: "ComboCoconut", 13: "Duped Baby Love", 14: "Duped Beamstorm",
+    15: "Duped Beesmas Cheer Token", 16: "Duped Black Bear Morph",
+    17: "Duped Blue Bomb Sync", 18: "Duped Blue Boost", 19: "Duped Blueberry",
+    20: "Duped Bomb", 21: "Duped Brown Bear Morph", 22: "Duped Festive Blessing Token",
+    23: "Duped Festive Gift Token", 24: "Duped Festive Mark Token", 25: "Duped Fetch",
+    26: "Duped Flame Fuel", 27: "Duped Focus", 28: "Duped Fuzz Bombs Token",
+    29: "Duped Glitch Token", 30: "Duped Glob", 31: "Duped Gumdrop Barrage",
+    32: "Duped Haste", 33: "Duped Honey Mark Token", 34: "Duped Honey Token",
+    35: "Duped Impale", 36: "Duped Inferno Token", 37: "Duped Inflate Balloons",
+    38: "Duped Inspire Token", 39: "Duped Jelly Bean", 40: "Duped Map Corruption",
+    41: "Duped Mark Surge Token", 42: "Duped Melody", 43: "Duped Mind Hack",
+    44: "Duped Mother Bear Morph", 45: "Duped Panda Bear Morph", 46: "Duped Pineapple",
+    47: "Duped Polar Bear Morph", 48: "Duped Pollen Haze", 49: "Duped Pollen Mark Token",
+    50: "Duped Pulse", 51: "Duped Puppy Love", 52: "Duped Rage Token",
+    53: "Duped Rain Cloud", 54: "Duped Red Bomb Sync", 55: "Duped Red Boost",
+    56: "Duped Science Bear Morph", 57: "Duped Scratch", 58: "Duped Snowflake",
+    59: "Duped Snowglobe Shake", 60: "Duped Strawberry", 61: "Duped Summon Frog Token",
+    62: "Duped Sunflower Seed", 63: "Duped Surprise Party", 64: "Duped Tabby Love",
+    65: "Duped Target Practice Token", 66: "Duped Token Link", 67: "Duped Tornado",
+    68: "Duped Treat", 69: "Duped Triangulate Token", 70: "Duped White Boost",
+    71: "Falling Star", 72: "Festive Blessing Token", 73: "Festive Gift Token",
+    74: "Festive Mark Station", 75: "Festive Mark Token", 76: "Fetch",
+    77: "Flame Fuel", 78: "Focus", 79: "Fully Collected Target",
+    80: "Fuzz Bombs Token", 81: "Glitch Token", 82: "Glob",
+    83: "Gumdrop Barrage", 84: "Haste", 85: "Honey Mark Station",
+    86: "Honey Mark Token", 87: "Honey Token", 88: "Impale",
+    89: "Inferno Token", 90: "Inflate Balloons", 91: "Inspire Token",
+    92: "Jelly Bean", 93: "Map Corruption", 94: "Mark Surge Token",
+    95: "Melody", 96: "Mind Hack", 97: "Mother Bear Morph",
+    98: "Panda Bear Morph", 99: "Pineapple", 100: "Polar Bear Morph",
+    101: "Pollen Haze", 102: "Pollen Mark Station", 103: "Pollen Mark Token",
+    104: "Precise Mark Station", 105: "Precise Mark Target", 106: "Pulse",
+    107: "Puppy Love", 108: "Rage Token", 109: "Rain Cloud",
+    110: "Red Bomb Sync", 111: "Red Boost", 112: "Science Bear Morph",
+    113: "Scratch", 114: "Smiley", 115: "Snowflake",
+    116: "Snowglobe Shake", 117: "Strawberry", 118: "Summon Frog Token",
+    119: "Sunflower Seed", 120: "Surprise Party", 121: "Tabby Love",
+    122: "Target Practice Token", 123: "TennisBall", 124: "Token Link",
+    125: "Tornado", 126: "Treat", 127: "Triangulate Token",
+    128: "Unactivated Target", 129: "White Boost",
 }
 
 LABELS_SPRINKLER = {
@@ -269,17 +364,63 @@ def _default_points(screen_w, screen_h):
     )
 
 
-def _preprocess(frame, input_width, input_height, use_float16):
-    resized = cv2.resize(frame, (int(input_width), int(input_height)), interpolation=cv2.INTER_LINEAR)
-    if resized.ndim == 3 and resized.shape[2] == 4:
-        rgb = cv2.cvtColor(resized, cv2.COLOR_BGRA2RGB)
+def _preprocess(frame, input_width, input_height, use_float16, crop=None, resize=True):
+    if crop:
+        left, top, width_px, height_px = crop
+        frame = frame[top:top + height_px, left:left + width_px]
+
+    if resize or frame.shape[1] != int(input_width) or frame.shape[0] != int(input_height):
+        if not resize:
+            _debug_log(
+                f"token crop was {frame.shape[1]}x{frame.shape[0]}, resizing to {input_width}x{input_height}",
+                min_interval=5.0,
+                key="token_crop_resize_fallback",
+            )
+        frame = cv2.resize(frame, (int(input_width), int(input_height)), interpolation=cv2.INTER_LINEAR)
+
+    if frame.ndim == 3 and frame.shape[2] == 4:
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGB)
     else:
-        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
     dtype = np.float16 if use_float16 else np.float32
     normalized = rgb.astype(dtype) / 255.0
     chw = np.transpose(normalized, (2, 0, 1))
     return np.expand_dims(chw, axis=0)
+
+
+def _preprocess_token_frame(frame, runtime):
+    if runtime.get("token_frame_is_crop"):
+        cropped = frame
+    else:
+        left, top, width_px, height_px = runtime["token_crop"]
+        cropped = frame[top:top + height_px, left:left + width_px]
+
+    if cropped.shape[1] != INPUT_WIDTH or cropped.shape[0] != INPUT_HEIGHT:
+        cropped = cv2.resize(cropped, (INPUT_WIDTH, INPUT_HEIGHT), interpolation=cv2.INTER_LINEAR)
+
+    if cropped.ndim == 3 and cropped.shape[2] == 4:
+        rgb = cv2.cvtColor(cropped, cv2.COLOR_BGRA2RGB)
+    else:
+        rgb = cv2.cvtColor(cropped, cv2.COLOR_BGR2RGB)
+
+    if Image is None:
+        raise RuntimeError("Pillow is required for CoreML token inference.")
+    return Image.fromarray(rgb)
+
+
+def _preprocess_coreml_image(frame, input_width, input_height):
+    if frame.shape[1] != int(input_width) or frame.shape[0] != int(input_height):
+        frame = cv2.resize(frame, (int(input_width), int(input_height)), interpolation=cv2.INTER_LINEAR)
+
+    if frame.ndim == 3 and frame.shape[2] == 4:
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGB)
+    else:
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+    if Image is None:
+        raise RuntimeError("Pillow is required for CoreML inference.")
+    return Image.fromarray(rgb)
 
 
 def _postprocess(output, confidence_threshold):
@@ -317,6 +458,29 @@ def _postprocess(output, confidence_threshold):
     return detections
 
 
+def _postprocess_tokens(output, confidence_threshold):
+    pred = output[0]
+    if pred.ndim != 3 or pred.shape[0] < 1 or pred.shape[2] < 6:
+        return []
+
+    detections = []
+    for row in pred[0]:
+        x1, y1, x2, y2, confidence, class_id = row[:6]
+        confidence = float(confidence)
+        if confidence < confidence_threshold:
+            continue
+
+        x1 = float(x1)
+        y1 = float(y1)
+        x2 = float(x2)
+        y2 = float(y2)
+        if x2 <= x1 or y2 <= y1:
+            continue
+
+        detections.append(((x1, y1, x2, y2), int(round(float(class_id))), confidence))
+    return detections
+
+
 def _debug_log(message, min_interval=0.0, key=None):
     if not DEBUG_MODE:
         return
@@ -351,20 +515,52 @@ def _runtime_state():
 
 
 def _build_capture():
+    viewport = getattr(self, "robloxWindow", None)
+    if viewport is not None:
+        left = int(getattr(viewport, "mx", 0))
+        top = int(getattr(viewport, "my", 0))
+        width_px = int(getattr(viewport, "mw", 0))
+        height_px = int(getattr(viewport, "mh", 0))
+    else:
+        left = 0
+        top = 0
+        width_px = 0
+        height_px = 0
+
+    if width_px >= ROBLOX_VIEWPORT_WIDTH and height_px >= ROBLOX_VIEWPORT_HEIGHT:
+        left += max((width_px - ROBLOX_VIEWPORT_WIDTH) // 2, 0)
+        top += max(height_px - ROBLOX_VIEWPORT_HEIGHT, 0)
+        width_px = ROBLOX_VIEWPORT_WIDTH
+        height_px = ROBLOX_VIEWPORT_HEIGHT
+
     if CAPTURE_BACKEND in ("auto", "mss") and mss is not None:
         session = mss.mss()
-        monitor = session.monitors[1]
+        if width_px <= 0 or height_px <= 0:
+            monitor = session.monitors[1]
+            left = int(monitor["left"])
+            top = int(monitor["top"])
+            width_px = int(monitor["width"])
+            height_px = int(monitor["height"])
+        monitor = {"left": left, "top": top, "width": width_px, "height": height_px}
         return {
             "backend": "mss",
             "session": session,
             "monitor": monitor,
-            "width": monitor["width"],
-            "height": monitor["height"],
+            "width": width_px,
+            "height": height_px,
         }
 
     if CAPTURE_BACKEND in ("auto", "pil", "pillow") and ImageGrab is not None:
-        width, height = ImageGrab.grab().size
-        return {"backend": "pil", "width": width, "height": height}
+        if width_px <= 0 or height_px <= 0:
+            width_px, height_px = ImageGrab.grab().size
+            left = 0
+            top = 0
+        return {
+            "backend": "pil",
+            "bbox": (left, top, left + width_px, top + height_px),
+            "width": width_px,
+            "height": height_px,
+        }
 
     raise RuntimeError(f"No supported capture backend found for '{CAPTURE_BACKEND}'. Install mss or Pillow.")
 
@@ -374,8 +570,53 @@ def _grab_frame(runtime):
         monitor = runtime["capture"]["monitor"]
         return np.array(runtime["capture"]["session"].grab(monitor))
 
-    image = ImageGrab.grab()
+    image = ImageGrab.grab(bbox=runtime["capture"].get("bbox"))
     return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+
+
+def _grab_token_frame(runtime):
+    capture = runtime["capture"]
+    token_monitor = runtime.get("token_monitor")
+    if capture["backend"] == "mss" and token_monitor:
+        return np.array(capture["session"].grab(token_monitor))
+
+    token_bbox = runtime.get("token_bbox")
+    if token_bbox:
+        image = ImageGrab.grab(bbox=token_bbox)
+        return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+
+    return _grab_frame(runtime)
+
+
+def _token_crop_for_capture(capture):
+    capture_w = int(capture["width"])
+    capture_h = int(capture["height"])
+    if capture_w >= ROBLOX_VIEWPORT_WIDTH and capture_h >= ROBLOX_VIEWPORT_HEIGHT:
+        return {
+            "rect": (
+                AT_CROP[0],
+                AT_CROP[1],
+                INPUT_WIDTH,
+                INPUT_HEIGHT,
+            ),
+            "resize": False,
+        }
+
+    left = int(round(capture_w * (AT_CROP[0] / ROBLOX_VIEWPORT_WIDTH)))
+    top = int(round(capture_h * (AT_CROP[1] / ROBLOX_VIEWPORT_HEIGHT)))
+    right = int(round(capture_w * (AT_CROP[2] / ROBLOX_VIEWPORT_WIDTH)))
+    bottom = int(round(capture_h * (AT_CROP[3] / ROBLOX_VIEWPORT_HEIGHT)))
+    crop_w = max(capture_w - left - right, 1)
+    crop_h = max(capture_h - top - bottom, 1)
+    return {"rect": (left, top, crop_w, crop_h), "resize": True}
+
+
+def _model_point_to_capture(runtime, x, y):
+    left, top, crop_w, crop_h = runtime["token_crop"]
+    return (
+        left + (x * crop_w / float(INPUT_WIDTH)),
+        top + (y * crop_h / float(INPUT_HEIGHT)),
+    )
 
 
 def _bgr_frame(frame):
@@ -509,6 +750,9 @@ def _draw_label(frame, text, x, y, color):
 
 
 def _record_debug_frame(runtime, frame, detections, target):
+    if runtime.get("video_writer") is None:
+        frame = _grab_frame(runtime)
+
     writer = _ensure_video_writer(runtime, frame)
     if writer is None:
         return
@@ -521,6 +765,7 @@ def _record_debug_frame(runtime, frame, detections, target):
         "movement_count": runtime.get("movement_count", 0),
         "detection_fps": runtime.get("detection_fps"),
         "last_detection_ms": runtime.get("last_detection_ms"),
+        "last_timing_ms": dict(runtime.get("last_timing_ms", {})),
         "candidate_count": runtime.get("last_candidate_count", 0),
         "rejected_tokens": list(runtime.get("last_rejected_tokens", [])),
         "updated_at": time.time(),
@@ -530,8 +775,6 @@ def _record_debug_frame(runtime, frame, detections, target):
 def _annotate_recording_frame(runtime, frame):
     annotated = _bgr_frame(frame)
     frame_h, frame_w = annotated.shape[:2]
-    scale_x = frame_w / float(INPUT_WIDTH)
-    scale_y = frame_h / float(INPUT_HEIGHT)
 
     overlay = runtime.get("latest_recording_overlay", {})
     detections = overlay.get("detections", [])
@@ -539,12 +782,14 @@ def _annotate_recording_frame(runtime, frame):
     target_box = target.get("box") if isinstance(target, dict) else None
 
     for box, class_id, confidence in detections:
-        token_name = LABELS_BLUE.get(class_id, f"class {class_id}")
+        token_name = LABELS_TOKENS.get(class_id, f"class {class_id}")
         x1, y1, x2, y2 = box
-        left = max(0, min(frame_w - 1, int(round(x1 * scale_x))))
-        top = max(0, min(frame_h - 1, int(round(y1 * scale_y))))
-        right = max(0, min(frame_w - 1, int(round(x2 * scale_x))))
-        bottom = max(0, min(frame_h - 1, int(round(y2 * scale_y))))
+        left_f, top_f = _model_point_to_capture(runtime, x1, y1)
+        right_f, bottom_f = _model_point_to_capture(runtime, x2, y2)
+        left = max(0, min(frame_w - 1, int(round(left_f))))
+        top = max(0, min(frame_h - 1, int(round(top_f))))
+        right = max(0, min(frame_w - 1, int(round(right_f))))
+        bottom = max(0, min(frame_h - 1, int(round(bottom_f))))
         is_target = target_box == box
         if token_name in IGNORED_TOKENS:
             color = (120, 120, 120)
@@ -582,6 +827,17 @@ def _annotate_recording_frame(runtime, frame):
         fps_text += f" ({detection_ms:.0f}ms)"
     (text_w, _text_h), _baseline = cv2.getTextSize(fps_text, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
     _draw_label(annotated, fps_text, max(10, frame_w - text_w - 18), 24, (255, 255, 255))
+    timing = overlay.get("last_timing_ms") or {}
+    if timing:
+        timing_text = (
+            f"cap {timing.get('screenshot', 0.0):.0f} "
+            f"prep {timing.get('preprocess', 0.0):.0f} "
+            f"infer {timing.get('inference', 0.0):.0f} "
+            f"post {timing.get('postprocess', 0.0):.0f} "
+            f"score {timing.get('scoring', 0.0):.0f}ms"
+        )
+        (timing_w, _timing_h), _timing_baseline = cv2.getTextSize(timing_text, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
+        _draw_label(annotated, timing_text, max(10, frame_w - timing_w - 18), 48, (255, 255, 255))
 
     return annotated
 
@@ -645,24 +901,15 @@ def _update_detection_fps(runtime, elapsed):
     runtime["last_detection_ms"] = elapsed * 1000.0
 
 
-def _load_session(model_path):
-    available = ort.get_available_providers()
-    preferred = [
-        "CoreMLExecutionProvider",
-        "AzureExecutionProvider",
-        "DmlExecutionProvider",
-        "CUDAExecutionProvider",
-        "CPUExecutionProvider",
-    ]
-    providers = [provider for provider in preferred if provider in available] or available
-    session_options = ort.SessionOptions()
-    session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-    session_options.enable_mem_pattern = True
-    session_options.enable_cpu_mem_arena = True
-    session_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
-    session = ort.InferenceSession(str(model_path), sess_options=session_options, providers=providers)
-    input_meta = session.get_inputs()[0]
-    return session, input_meta.name, "float16" in input_meta.type.lower()
+def _load_coreml_model(model_path):
+    if ct is None:
+        raise RuntimeError("coremltools is required for AI token gathering. Install coremltools, then restart the macro.")
+
+    model = ct.models.MLModel(str(model_path), compute_units=ct.ComputeUnit.ALL)
+    description = model.get_spec().description
+    input_name = description.input[0].name
+    output_name = description.output[0].name
+    return model, input_name, output_name
 
 
 def _relative_distance(x, y, homography):
@@ -697,13 +944,10 @@ def _find_best_token(runtime, detections):
     current_y = runtime["current_y"]
     current_dist = math.hypot(current_x, current_y)
 
-    scale_x = runtime["capture"]["width"] / float(INPUT_WIDTH)
-    scale_y = runtime["capture"]["height"] / float(INPUT_HEIGHT)
-
     candidates = []
     rejected = []
     for box, class_id, confidence in detections:
-        token_name = LABELS_BLUE.get(class_id)
+        token_name = LABELS_TOKENS.get(class_id)
         if not token_name:
             rejected.append({"class_id": class_id, "reason": "unknown", "confidence": confidence})
             continue
@@ -712,8 +956,7 @@ def _find_best_token(runtime, detections):
             continue
 
         x1, y1, x2, y2 = box
-        center_x = ((x1 + x2) / 2.0) * scale_x
-        center_y = ((y1 + y2) / 2.0) * scale_y
+        center_x, center_y = _model_point_to_capture(runtime, (x1 + x2) / 2.0, (y1 + y2) / 2.0)
         tx, ty = _relative_distance(center_x, center_y, runtime["homography"])
         distance = math.hypot(tx, ty)
 
@@ -856,14 +1099,9 @@ def _find_sprinkler(runtime):
         return None
 
     frame = _grab_frame(runtime)
-    tensor = _preprocess(
-        frame,
-        SPRINKLER_INPUT_WIDTH,
-        SPRINKLER_INPUT_HEIGHT,
-        runtime["sprinkler_use_float16"],
-    )
-    output = runtime["sprinkler_session"].run(None, {runtime["sprinkler_input"]: tensor})
-    detections = _postprocess(output, SPRINKLER_CONFIDENCE_THRESHOLD)
+    image = _preprocess_coreml_image(frame, SPRINKLER_INPUT_WIDTH, SPRINKLER_INPUT_HEIGHT)
+    output = [runtime["sprinkler_session"].predict({runtime["sprinkler_input"]: image})[runtime["sprinkler_output"]]]
+    detections = _postprocess_tokens(output, SPRINKLER_CONFIDENCE_THRESHOLD)
 
     scale_x = runtime["capture"]["width"] / float(SPRINKLER_INPUT_WIDTH)
     scale_y = runtime["capture"]["height"] / float(SPRINKLER_INPUT_HEIGHT)
@@ -961,20 +1199,17 @@ def _initialise_runtime():
     self.keyboard.press("pageup")
     self.keyboard.press("pageup")
 
-    global ort
-    if ort is None:
-        # Try to install onnxruntime into the active Python environment and import it.
+    if ct is None:
         try:
             import subprocess
             import sys
             import importlib
 
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "onnxruntime"])
-            ort = importlib.import_module("onnxruntime")
-            globals()["ort"] = ort
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "coremltools"])
+            globals()["ct"] = importlib.import_module("coremltools")
         except Exception as exc:
             raise RuntimeError(
-                "onnxruntime is required but automatic install failed: " + str(exc) + ". Please install onnxruntime before using AI Gathering, then restart the macro."
+                "coremltools is required but automatic install failed: " + str(exc) + ". Please install coremltools before using AI Gathering, then restart the macro."
             )
 
     if cv2 is None or np is None:
@@ -982,17 +1217,39 @@ def _initialise_runtime():
             "Must install opencv-python and numpy before using AI Gathering, please run install dependencies before continuing."
         )
 
+    if Image is None:
+        raise RuntimeError("Pillow is required for CoreML AI Gathering, please run install dependencies before continuing.")
 
-    token_path = MODEL_DIR / "tokens.onnx"
+    token_path = MODEL_DIR / "best.mlpackage"
     if not token_path.exists():
-        raise FileNotFoundError(f"tokens.onnx was not found at fixed path: {token_path}")
+        raise FileNotFoundError(f"best.mlpackage was not found at fixed path: {token_path}")
 
-    sprinkler_candidate = MODEL_DIR / "sprinkler.onnx"
+    sprinkler_candidate = MODEL_DIR / "sprinkler.mlpackage"
     sprinkler_path = sprinkler_candidate if sprinkler_candidate.exists() else None
 
     capture = _build_capture()
+    token_crop_info = _token_crop_for_capture(capture)
+    token_left, token_top, token_width, token_height = token_crop_info["rect"]
+    token_monitor = None
+    token_bbox = None
+    if capture["backend"] == "mss":
+        monitor = capture["monitor"]
+        token_monitor = {
+            "left": int(monitor["left"] + token_left),
+            "top": int(monitor["top"] + token_top),
+            "width": int(token_width),
+            "height": int(token_height),
+        }
+    elif capture["backend"] == "pil":
+        left, top, _right, _bottom = capture["bbox"]
+        token_bbox = (
+            int(left + token_left),
+            int(top + token_top),
+            int(left + token_left + token_width),
+            int(top + token_top + token_height),
+        )
     _debug_log(
-        f"capture backend={capture['backend']} size={capture['width']}x{capture['height']} token_model={token_path} sprinkler_model={sprinkler_path or 'missing'}"
+        f"capture backend={capture['backend']} size={capture['width']}x{capture['height']} token_capture={token_monitor or token_bbox or token_crop_info['rect']} token_resize={token_crop_info['resize']} token_model={token_path} sprinkler_model={sprinkler_path or 'missing'}"
     )
     points = _default_points(capture["width"], capture["height"])
 
@@ -1004,21 +1261,27 @@ def _initialise_runtime():
     if homography is None:
         raise RuntimeError("Could not compute AI gather homography.")
 
-    token_session, token_input, token_use_float16 = _load_session(token_path)
+    token_session, token_input, token_output = _load_coreml_model(token_path)
     sprinkler_session = None
     sprinkler_input = None
-    sprinkler_use_float16 = False
+    sprinkler_output = None
     if sprinkler_path is not None:
-        sprinkler_session, sprinkler_input, sprinkler_use_float16 = _load_session(sprinkler_path)
+        sprinkler_session, sprinkler_input, sprinkler_output = _load_coreml_model(sprinkler_path)
 
     return {
         "capture": capture,
+        "token_crop": token_crop_info["rect"],
+        "token_monitor": token_monitor,
+        "token_bbox": token_bbox,
+        "token_frame_is_crop": token_monitor is not None or token_bbox is not None,
+        "token_resize": token_crop_info["resize"],
         "token_session": token_session,
         "token_input": token_input,
-        "token_use_float16": token_use_float16,
+        "token_output": token_output,
+        "token_model_kind": "coreml",
         "sprinkler_session": sprinkler_session,
         "sprinkler_input": sprinkler_input,
-        "sprinkler_use_float16": sprinkler_use_float16,
+        "sprinkler_output": sprinkler_output,
         "homography": homography,
         "current_x": 0.0,
         "current_y": 0.0,
@@ -1032,6 +1295,7 @@ def _initialise_runtime():
         "last_recording_frame_time": 0.0,
         "detection_fps": None,
         "last_detection_ms": None,
+        "last_timing_ms": {},
     }
 
 
@@ -1043,7 +1307,7 @@ if not runtime.get("ready"):
         runtime["ready"] = True
         runtime["error"] = ""
         _debug_log(
-            f"runtime ready providers={runtime['token_session'].get_providers()} confidence={CONFIDENCE_THRESHOLD} ignored={sorted(IGNORED_TOKENS)} record={RECORD_VIDEO}"
+            f"runtime ready token_model=coreml input={runtime['token_input']} output={runtime['token_output']} confidence={CONFIDENCE_THRESHOLD} ignored={sorted(IGNORED_TOKENS)} record={RECORD_VIDEO}"
         )
     except Exception as exc:
         runtime["ready"] = False
@@ -1060,12 +1324,42 @@ else:
             _recalibrate(runtime)
 
         detection_start = time.time()
-        frame = _grab_frame(runtime)
-        tensor = _preprocess(frame, INPUT_WIDTH, INPUT_HEIGHT, runtime["token_use_float16"])
-        output = runtime["token_session"].run(None, {runtime["token_input"]: tensor})
-        detections = _postprocess(output, CONFIDENCE_THRESHOLD)
+        screenshot_start = time.time()
+        frame = _grab_token_frame(runtime)
+        screenshot_elapsed = time.time() - screenshot_start
+        preprocess_start = time.time()
+        image = _preprocess_token_frame(frame, runtime)
+        preprocess_elapsed = time.time() - preprocess_start
+        inference_start = time.time()
+        output = [runtime["token_session"].predict({runtime["token_input"]: image})[runtime["token_output"]]]
+        inference_elapsed = time.time() - inference_start
+        postprocess_start = time.time()
+        detections = _postprocess_tokens(output, CONFIDENCE_THRESHOLD)
+        postprocess_elapsed = time.time() - postprocess_start
+        scoring_start = time.time()
         target = _find_best_token(runtime, detections)
-        _update_detection_fps(runtime, time.time() - detection_start)
+        scoring_elapsed = time.time() - scoring_start
+        total_elapsed = time.time() - detection_start
+        runtime["last_timing_ms"] = {
+            "screenshot": screenshot_elapsed * 1000.0,
+            "preprocess": preprocess_elapsed * 1000.0,
+            "inference": inference_elapsed * 1000.0,
+            "postprocess": postprocess_elapsed * 1000.0,
+            "scoring": scoring_elapsed * 1000.0,
+            "total": total_elapsed * 1000.0,
+        }
+        _debug_log(
+            "timing "
+            f"screenshot={runtime['last_timing_ms']['screenshot']:.1f}ms "
+            f"preprocess={runtime['last_timing_ms']['preprocess']:.1f}ms "
+            f"inference={runtime['last_timing_ms']['inference']:.1f}ms "
+            f"postprocess={runtime['last_timing_ms']['postprocess']:.1f}ms "
+            f"scoring={runtime['last_timing_ms']['scoring']:.1f}ms "
+            f"total={runtime['last_timing_ms']['total']:.1f}ms",
+            min_interval=1.0,
+            key="timing",
+        )
+        _update_detection_fps(runtime, total_elapsed)
         _record_debug_frame(runtime, frame, detections, target)
 
         if target:
