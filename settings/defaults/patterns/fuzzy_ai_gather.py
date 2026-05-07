@@ -1,17 +1,16 @@
 """
 Pattern: Fuzzy AI Gather
-Description: Uses best.mlpackage for token targeting and sprinkler.onnx for returns.
+Description: Uses CoreML models for token targeting and sprinkler returns.
 Best for: Blue-focused gathering where you want token chasing instead of a fixed path.
 Width: Expands the leash radius and target clustering range.
 Size: Scales each movement step so the pattern still respects the GUI controls.
 
 Requirements:
-- onnxruntime
 - coremltools
 - opencv-python
 - numpy
 - mss or Pillow
-- best.mlpackage and sprinkler.onnx
+- best.mlpackage and sprinkler.mlpackage
 
 - Version 1.5
 """
@@ -32,11 +31,6 @@ try:
     import numpy as np
 except Exception as _numpy_error:
     np = None
-
-try:
-    import onnxruntime as ort
-except Exception as _onnx_error:
-    ort = None
 
 try:
     import coremltools as ct
@@ -76,8 +70,8 @@ SPRINKLER_RESCAN_ATTEMPTS = 3
 SPRINKLER_RESCAN_DELAY = 0.3
 TARGET_SPRINKLER_LABEL = None
 DEBUG_MODE = True
-RECORD_VIDEO = False
-RECORD_VIDEO_FPS = 12.0
+RECORD_VIDEO = True
+RECORD_VIDEO_FPS = 20.0
 
 PREFERRED_TOKENS = {
     "Token Link": 100,
@@ -412,6 +406,20 @@ def _preprocess_token_frame(frame, runtime):
 
     if Image is None:
         raise RuntimeError("Pillow is required for CoreML token inference.")
+    return Image.fromarray(rgb)
+
+
+def _preprocess_coreml_image(frame, input_width, input_height):
+    if frame.shape[1] != int(input_width) or frame.shape[0] != int(input_height):
+        frame = cv2.resize(frame, (int(input_width), int(input_height)), interpolation=cv2.INTER_LINEAR)
+
+    if frame.ndim == 3 and frame.shape[2] == 4:
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGB)
+    else:
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+    if Image is None:
+        raise RuntimeError("Pillow is required for CoreML inference.")
     return Image.fromarray(rgb)
 
 
@@ -893,26 +901,6 @@ def _update_detection_fps(runtime, elapsed):
     runtime["last_detection_ms"] = elapsed * 1000.0
 
 
-def _load_session(model_path):
-    available = ort.get_available_providers()
-    preferred = [
-        "CPUExecutionProvider",
-        "CoreMLExecutionProvider",
-        "AzureExecutionProvider",
-        "DmlExecutionProvider",
-        "CUDAExecutionProvider",
-    ]
-    providers = [provider for provider in preferred if provider in available] or available
-    session_options = ort.SessionOptions()
-    session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-    session_options.enable_mem_pattern = True
-    session_options.enable_cpu_mem_arena = True
-    session_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
-    session = ort.InferenceSession(str(model_path), sess_options=session_options, providers=providers)
-    input_meta = session.get_inputs()[0]
-    return session, input_meta.name, "float16" in input_meta.type.lower()
-
-
 def _load_coreml_model(model_path):
     if ct is None:
         raise RuntimeError("coremltools is required for AI token gathering. Install coremltools, then restart the macro.")
@@ -1111,14 +1099,9 @@ def _find_sprinkler(runtime):
         return None
 
     frame = _grab_frame(runtime)
-    tensor = _preprocess(
-        frame,
-        SPRINKLER_INPUT_WIDTH,
-        SPRINKLER_INPUT_HEIGHT,
-        runtime["sprinkler_use_float16"],
-    )
-    output = runtime["sprinkler_session"].run(None, {runtime["sprinkler_input"]: tensor})
-    detections = _postprocess(output, SPRINKLER_CONFIDENCE_THRESHOLD)
+    image = _preprocess_coreml_image(frame, SPRINKLER_INPUT_WIDTH, SPRINKLER_INPUT_HEIGHT)
+    output = [runtime["sprinkler_session"].predict({runtime["sprinkler_input"]: image})[runtime["sprinkler_output"]]]
+    detections = _postprocess_tokens(output, SPRINKLER_CONFIDENCE_THRESHOLD)
 
     scale_x = runtime["capture"]["width"] / float(SPRINKLER_INPUT_WIDTH)
     scale_y = runtime["capture"]["height"] / float(SPRINKLER_INPUT_HEIGHT)
@@ -1216,22 +1199,6 @@ def _initialise_runtime():
     self.keyboard.press("pageup")
     self.keyboard.press("pageup")
 
-    global ort
-    if ort is None:
-        # Try to install onnxruntime into the active Python environment and import it.
-        try:
-            import subprocess
-            import sys
-            import importlib
-
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "onnxruntime"])
-            ort = importlib.import_module("onnxruntime")
-            globals()["ort"] = ort
-        except Exception as exc:
-            raise RuntimeError(
-                "onnxruntime is required but automatic install failed: " + str(exc) + ". Please install onnxruntime before using AI Gathering, then restart the macro."
-            )
-
     if ct is None:
         try:
             import subprocess
@@ -1257,7 +1224,7 @@ def _initialise_runtime():
     if not token_path.exists():
         raise FileNotFoundError(f"best.mlpackage was not found at fixed path: {token_path}")
 
-    sprinkler_candidate = MODEL_DIR / "sprinkler.onnx"
+    sprinkler_candidate = MODEL_DIR / "sprinkler.mlpackage"
     sprinkler_path = sprinkler_candidate if sprinkler_candidate.exists() else None
 
     capture = _build_capture()
@@ -1297,9 +1264,9 @@ def _initialise_runtime():
     token_session, token_input, token_output = _load_coreml_model(token_path)
     sprinkler_session = None
     sprinkler_input = None
-    sprinkler_use_float16 = False
+    sprinkler_output = None
     if sprinkler_path is not None:
-        sprinkler_session, sprinkler_input, sprinkler_use_float16 = _load_session(sprinkler_path)
+        sprinkler_session, sprinkler_input, sprinkler_output = _load_coreml_model(sprinkler_path)
 
     return {
         "capture": capture,
@@ -1314,7 +1281,7 @@ def _initialise_runtime():
         "token_model_kind": "coreml",
         "sprinkler_session": sprinkler_session,
         "sprinkler_input": sprinkler_input,
-        "sprinkler_use_float16": sprinkler_use_float16,
+        "sprinkler_output": sprinkler_output,
         "homography": homography,
         "current_x": 0.0,
         "current_y": 0.0,
