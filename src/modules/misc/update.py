@@ -8,6 +8,8 @@ from io import BytesIO
 from modules.misc.messageBox import msgBox
 
 
+PATTERN_OVERWRITE_EXCEPTIONS = {"fuzzy_ai_gather.py"}
+
 # Helper: parse version strings like 1.2.3 or 1.2.3a
 def _parse_version(v):
     if not v:
@@ -247,14 +249,16 @@ def update(t="main", update_channel="stable", progress_callback=None):
     # for updates. Show it only after we've determined that a newer
     # remote version exists (see below) so the user only confirms when
     # an actual update will be applied.
-    # Important: preserve user data and profiles. Protect pattern folder
-    # during the generic overwrite so we can merge new/old patterns safely.
+    # Important: preserve user data and profiles. Protect the patterns folder
+    # during the generic overwrite, then handle pattern files with explicit
+    # merge rules below so specific built-in patterns can be updated safely.
     protected_folders = [
         os.path.join("src", "data", "user"),
         os.path.join("settings", "profiles"),
         os.path.join("settings", "patterns"),
     ]
     protected_files = [".git"]
+    pattern_overwrite_exceptions = PATTERN_OVERWRITE_EXCEPTIONS
     destination = os.getcwd().replace("/src", "")
 
     # remote version URL and zip link
@@ -422,7 +426,12 @@ def update(t="main", update_channel="stable", progress_callback=None):
                 for f in files:
                     src_file = os.path.join(root, f)
                     dest_file = os.path.join(dest_root, f)
-                    if not os.path.exists(dest_file):
+                    if f in pattern_overwrite_exceptions:
+                        try:
+                            shutil.copy2(src_file, dest_file)
+                        except Exception:
+                            pass
+                    elif not os.path.exists(dest_file):
                         try:
                             shutil.copy2(src_file, dest_file)
                         except Exception:
@@ -534,6 +543,7 @@ def update_from_commit(commit_hash, progress_callback=None):
         os.path.join("settings", "patterns"),
     ]
     protected_files = [".git"]
+    pattern_overwrite_exceptions = PATTERN_OVERWRITE_EXCEPTIONS
     destination = os.getcwd().replace("/src", "")
 
     remote_zip = f"https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/{commit_hash}.zip"
@@ -596,7 +606,12 @@ def update_from_commit(commit_hash, progress_callback=None):
                 for f in files:
                     src_file = os.path.join(root, f)
                     dest_file = os.path.join(dest_root, f)
-                    if not os.path.exists(dest_file):
+                    if f in pattern_overwrite_exceptions:
+                        try:
+                            shutil.copy2(src_file, dest_file)
+                        except Exception:
+                            pass
+                    elif not os.path.exists(dest_file):
                         try:
                             shutil.copy2(src_file, dest_file)
                         except Exception:
