@@ -1,6 +1,6 @@
 """
 Pattern: Fuzzy AI Gather
-Description: Uses blue.onnx for token targeting and sprinkler.onnx for returns.
+Description: Uses tokens.onnx for token targeting and sprinkler.onnx for returns.
 Best for: Blue-focused gathering where you want token chasing instead of a fixed path.
 Width: Expands the leash radius and target clustering range.
 Size: Scales each movement step so the pattern still respects the GUI controls.
@@ -10,7 +10,7 @@ Requirements:
 - opencv-python
 - numpy
 - mss or Pillow
-- blue.onnx and sprinkler.onnx
+- tokens.onnx and sprinkler.onnx
 
 - Version 1.4
 """
@@ -983,9 +983,9 @@ def _initialise_runtime():
         )
 
 
-    token_path = MODEL_DIR / "blue.onnx"
+    token_path = MODEL_DIR / "tokens.onnx"
     if not token_path.exists():
-        raise FileNotFoundError(f"blue.onnx was not found at fixed path: {token_path}")
+        raise FileNotFoundError(f"tokens.onnx was not found at fixed path: {token_path}")
 
     sprinkler_candidate = MODEL_DIR / "sprinkler.onnx"
     sprinkler_path = sprinkler_candidate if sprinkler_candidate.exists() else None
