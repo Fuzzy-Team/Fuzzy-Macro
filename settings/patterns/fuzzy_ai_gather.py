@@ -69,8 +69,8 @@ MAX_SPRINKLER_DISTANCE = 10.0
 SPRINKLER_RESCAN_ATTEMPTS = 3
 SPRINKLER_RESCAN_DELAY = 0.3
 TARGET_SPRINKLER_LABEL = None
-DEBUG_MODE = True
-RECORD_VIDEO = True
+DEBUG_MODE = False
+RECORD_VIDEO = False
 RECORD_VIDEO_FPS = 20.0
 
 PREFERRED_TOKENS = {}
@@ -1293,19 +1293,12 @@ else:
                 runtime["last_token_time"] = time.time()
                 recalibrated = True
 
-            should_sweep = now - runtime.get("last_no_target_sweep_time", 0.0) >= NO_TARGET_SWEEP_INTERVAL
             if recalibrated:
                 pass
             elif now - runtime["last_idle_return_time"] >= IDLE_RETURN_INTERVAL:
                 runtime["last_idle_return_time"] = now
                 if _recalibrate(runtime):
                     runtime["last_token_time"] = time.time()
-                elif should_sweep:
-                    runtime["last_no_target_sweep_time"] = now
-                    _fallback_pattern()
-            elif should_sweep:
-                runtime["last_no_target_sweep_time"] = now
-                _fallback_pattern()
     except Exception as exc:
         runtime["ready"] = False
         runtime["error"] = str(exc)
