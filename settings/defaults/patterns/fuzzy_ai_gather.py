@@ -1293,19 +1293,12 @@ else:
                 runtime["last_token_time"] = time.time()
                 recalibrated = True
 
-            should_sweep = now - runtime.get("last_no_target_sweep_time", 0.0) >= NO_TARGET_SWEEP_INTERVAL
             if recalibrated:
                 pass
             elif now - runtime["last_idle_return_time"] >= IDLE_RETURN_INTERVAL:
                 runtime["last_idle_return_time"] = now
                 if _recalibrate(runtime):
                     runtime["last_token_time"] = time.time()
-                elif should_sweep:
-                    runtime["last_no_target_sweep_time"] = now
-                    _fallback_pattern()
-            elif should_sweep:
-                runtime["last_no_target_sweep_time"] = now
-                _fallback_pattern()
     except Exception as exc:
         runtime["ready"] = False
         runtime["error"] = str(exc)
