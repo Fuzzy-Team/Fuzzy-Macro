@@ -194,6 +194,23 @@ def _applyFieldPatternPresets(existing_settings, incoming_settings):
     merged_settings[FIELD_PATTERN_PRESETS_KEY] = presets
     return merged_settings
 
+def _fieldSettingsWithCurrentPatternPreset(settings):
+    if not isinstance(settings, dict):
+        return {}
+
+    exported_settings = dict(settings)
+    presets = _getFieldPatternPresets(exported_settings)
+    current_shape = exported_settings.get("shape")
+
+    if current_shape in presets:
+        exported_settings[FIELD_PATTERN_PRESETS_KEY] = {
+            current_shape: dict(presets[current_shape])
+        }
+    else:
+        exported_settings.pop(FIELD_PATTERN_PRESETS_KEY, None)
+
+    return exported_settings
+
 def _tokenRankingDefaults():
     return {
         "preferred_tokens": DEFAULT_FUZZY_AI_TOKEN_RANKING["preferred_tokens"],
@@ -610,6 +627,7 @@ def exportFieldSettings(field_name):
     """Export field settings as JSON string with metadata"""
     fields_data = loadFields()
     if field_name in fields_data:
+        field_settings = _fieldSettingsWithCurrentPatternPreset(fields_data[field_name])
         # Create export data with metadata
         export_data = {
             "metadata": {
@@ -617,7 +635,7 @@ def exportFieldSettings(field_name):
                 "macro_version": getMacroVersion(),
                 "export_date": datetime.now().isoformat()
             },
-            "settings": fields_data[field_name]
+            "settings": field_settings
         }
         return json.dumps(export_data, indent=2)
     else:
