@@ -71,7 +71,7 @@ SPRINKLER_RESCAN_DELAY = 0.3
 TARGET_SPRINKLER_LABEL = None
 DEBUG_MODE = False
 RECORD_VIDEO = False
-RECORD_VIDEO_FPS = 20.0
+RECORD_VIDEO_FPS = 12.0
 
 PREFERRED_TOKENS = {}
 IGNORED_TOKENS = {}
@@ -490,7 +490,7 @@ def _build_capture():
 def _grab_frame(runtime):
     if runtime["capture"]["backend"] == "mss":
         monitor = runtime["capture"]["monitor"]
-        return np.array(runtime["capture"]["session"].grab(monitor))
+        return _mss_grab_to_array(runtime["capture"]["session"], monitor)
 
     image = ImageGrab.grab(bbox=runtime["capture"].get("bbox"))
     return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
@@ -500,7 +500,7 @@ def _grab_token_frame(runtime):
     capture = runtime["capture"]
     token_monitor = runtime.get("token_monitor")
     if capture["backend"] == "mss" and token_monitor:
-        return np.array(capture["session"].grab(token_monitor))
+        return _mss_grab_to_array(capture["session"], token_monitor)
 
     token_bbox = runtime.get("token_bbox")
     if token_bbox:
@@ -508,6 +508,11 @@ def _grab_token_frame(runtime):
         return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
 
     return _grab_frame(runtime)
+
+
+def _mss_grab_to_array(session, monitor):
+    shot = session.grab(monitor)
+    return np.frombuffer(shot.raw, dtype=np.uint8).reshape((shot.height, shot.width, 4))
 
 
 def _token_crop_for_capture(capture):
@@ -759,26 +764,39 @@ def _recording_thread(runtime):
     frame_interval = 1.0 / max(RECORD_VIDEO_FPS, 1.0)
     next_frame_time = time.time()
     stop_event = runtime.get("recording_stop_event")
+    recording_session = None
+    if runtime["capture"]["backend"] == "mss" and mss is not None:
+        recording_session = mss.mss()
 
-    while stop_event is not None and not stop_event.is_set():
-        now = time.time()
-        if now < next_frame_time:
-            time.sleep(min(next_frame_time - now, 0.05))
-            continue
+    try:
+        while stop_event is not None and not stop_event.is_set():
+            now = time.time()
+            if now < next_frame_time:
+                time.sleep(min(next_frame_time - now, 0.05))
+                continue
 
-        try:
-            frame = _grab_frame(runtime)
-            annotated = _annotate_recording_frame(runtime, frame)
-            writer = runtime.get("video_writer")
-            if writer is None:
-                return
-            _write_recording_frame(runtime, writer, annotated, frame_count=1)
-        except Exception as exc:
-            _debug_log(f"recording frame failed: {exc}", min_interval=5.0, key="record_frame_failed")
+            try:
+                if recording_session is not None:
+                    frame = _mss_grab_to_array(recording_session, runtime["capture"]["monitor"])
+                else:
+                    frame = _grab_frame(runtime)
+                annotated = _annotate_recording_frame(runtime, frame)
+                writer = runtime.get("video_writer")
+                if writer is None:
+                    return
+                _write_recording_frame(runtime, writer, annotated, frame_count=1)
+            except Exception as exc:
+                _debug_log(f"recording frame failed: {exc}", min_interval=5.0, key="record_frame_failed")
 
-        next_frame_time += frame_interval
-        if next_frame_time < time.time() - frame_interval:
-            next_frame_time = time.time() + frame_interval
+            next_frame_time += frame_interval
+            if next_frame_time < time.time() - frame_interval:
+                next_frame_time = time.time() + frame_interval
+    finally:
+        if recording_session is not None:
+            try:
+                recording_session.close()
+            except Exception:
+                pass
 
 
 def _write_recording_frame(runtime, writer, annotated, frame_count=1):
