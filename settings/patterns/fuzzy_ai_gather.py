@@ -69,8 +69,8 @@ MAX_SPRINKLER_DISTANCE = 10.0
 SPRINKLER_RESCAN_ATTEMPTS = 3
 SPRINKLER_RESCAN_DELAY = 0.3
 TARGET_SPRINKLER_LABEL = None
-DEBUG_MODE = False
-RECORD_VIDEO = False
+DEBUG_MODE = True
+RECORD_VIDEO = True
 RECORD_VIDEO_FPS = 20.0
 
 PREFERRED_TOKENS = {}
@@ -455,12 +455,6 @@ def _build_capture():
         width_px = 0
         height_px = 0
 
-    if width_px >= ROBLOX_VIEWPORT_WIDTH and height_px >= ROBLOX_VIEWPORT_HEIGHT:
-        left += max((width_px - ROBLOX_VIEWPORT_WIDTH) // 2, 0)
-        top += max(height_px - ROBLOX_VIEWPORT_HEIGHT, 0)
-        width_px = ROBLOX_VIEWPORT_WIDTH
-        height_px = ROBLOX_VIEWPORT_HEIGHT
-
     if CAPTURE_BACKEND in ("auto", "mss") and mss is not None:
         session = mss.mss()
         if width_px <= 0 or height_px <= 0:
@@ -519,16 +513,6 @@ def _grab_token_frame(runtime):
 def _token_crop_for_capture(capture):
     capture_w = int(capture["width"])
     capture_h = int(capture["height"])
-    if capture_w >= ROBLOX_VIEWPORT_WIDTH and capture_h >= ROBLOX_VIEWPORT_HEIGHT:
-        return {
-            "rect": (
-                AT_CROP[0],
-                AT_CROP[1],
-                INPUT_WIDTH,
-                INPUT_HEIGHT,
-            ),
-            "resize": False,
-        }
 
     left = int(round(capture_w * (AT_CROP[0] / ROBLOX_VIEWPORT_WIDTH)))
     top = int(round(capture_h * (AT_CROP[1] / ROBLOX_VIEWPORT_HEIGHT)))
@@ -536,7 +520,8 @@ def _token_crop_for_capture(capture):
     bottom = int(round(capture_h * (AT_CROP[3] / ROBLOX_VIEWPORT_HEIGHT)))
     crop_w = max(capture_w - left - right, 1)
     crop_h = max(capture_h - top - bottom, 1)
-    return {"rect": (left, top, crop_w, crop_h), "resize": True}
+    resize = crop_w != INPUT_WIDTH or crop_h != INPUT_HEIGHT
+    return {"rect": (left, top, crop_w, crop_h), "resize": resize}
 
 
 def _model_point_to_capture(runtime, x, y):
