@@ -870,6 +870,17 @@ def _load_onnx_model(model_path):
     return model, None, None
 
 
+def _delete_model_path(model_path):
+    try:
+        path = Path(model_path)
+        if path.is_dir():
+            shutil.rmtree(path)
+        elif path.exists():
+            path.unlink()
+    except Exception as exc:
+        _debug_log(f"could not delete alternate model {model_path}: {exc}", min_interval=10.0, key=f"delete_model_{model_path}")
+
+
 def _run_model(runtime, prefix, image):
     if runtime.get(f"{prefix}_model_kind") == "opencv_onnx":
         session = runtime[f"{prefix}_session"]
@@ -1243,16 +1254,20 @@ def _initialise_runtime():
 
     if token_model_kind == "opencv_onnx":
         token_session, token_input, token_output = _load_onnx_model(token_path)
+        _delete_model_path(MODEL_DIR / "best.mlpackage")
     else:
         token_session, token_input, token_output = _load_coreml_model(token_path)
+        _delete_model_path(MODEL_DIR / "tokens.onnx")
     sprinkler_session = None
     sprinkler_input = None
     sprinkler_output = None
     if sprinkler_path is not None:
         if sprinkler_model_kind == "opencv_onnx":
             sprinkler_session, sprinkler_input, sprinkler_output = _load_onnx_model(sprinkler_path)
+            _delete_model_path(MODEL_DIR / "sprinkler.mlpackage")
         else:
             sprinkler_session, sprinkler_input, sprinkler_output = _load_coreml_model(sprinkler_path)
+            _delete_model_path(MODEL_DIR / "sprinkler.onnx")
 
     return {
         "capture": capture,
