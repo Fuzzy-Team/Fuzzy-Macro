@@ -9,6 +9,7 @@ import time
 import pyautogui as pag
 from modules.screen.robloxWindow import RobloxWindowBounds
 import os
+import shutil
 try:
     from PIL import Image
 except Exception:
@@ -118,6 +119,15 @@ class fieldDriftCompensation():
         print(f"[field drift compensation] {message}. Falling back to the current drift compensation method.")
         self._sprinkler_warning_shown = True
 
+    def _delete_model_path(self, model_path):
+        try:
+            if os.path.isdir(model_path):
+                shutil.rmtree(model_path)
+            elif os.path.exists(model_path):
+                os.remove(model_path)
+        except Exception as e:
+            print(f"[field drift compensation] could not delete alternate model {model_path}: {e}")
+
     def _load_sprinkler_model(self):
         if self._sprinkler_session is not None:
             return True
@@ -152,6 +162,7 @@ class fieldDriftCompensation():
                     image_type = input_description.type.imageType
                     if image_type.width > 0 and image_type.height > 0:
                         self._sprinkler_input_size = int(min(image_type.width, image_type.height))
+                self._delete_model_path(model_path_onnx)
                 return True
             if has_coreml and ct is None and not has_onnx:
                 self._sprinkler_model_failed = True
@@ -165,6 +176,7 @@ class fieldDriftCompensation():
                 self._sprinkler_input_is_image = False
                 self._sprinkler_use_float16 = False
                 self._sprinkler_input_size = 736
+                self._delete_model_path(model_path_coreml)
                 return True
             self._sprinkler_model_failed = True
             self._warn_sprinkler_model("coremltools is not installed")
