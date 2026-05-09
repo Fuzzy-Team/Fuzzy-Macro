@@ -332,6 +332,11 @@ def _preprocess_token_frame(frame, runtime):
     else:
         rgb = cv2.cvtColor(cropped, cv2.COLOR_BGR2RGB)
 
+    if runtime.get("token_model_kind") == "opencv_onnx":
+        normalized = rgb.astype(np.float32) / 255.0
+        chw = np.transpose(normalized, (2, 0, 1))
+        return np.expand_dims(chw, axis=0)
+
     if Image is None:
         raise RuntimeError("Pillow is required for CoreML token inference.")
     return Image.fromarray(rgb)
@@ -349,6 +354,20 @@ def _preprocess_coreml_image(frame, input_width, input_height):
     if Image is None:
         raise RuntimeError("Pillow is required for CoreML inference.")
     return Image.fromarray(rgb)
+
+
+def _preprocess_onnx_image(frame, input_width, input_height):
+    if frame.shape[1] != int(input_width) or frame.shape[0] != int(input_height):
+        frame = cv2.resize(frame, (int(input_width), int(input_height)), interpolation=cv2.INTER_LINEAR)
+
+    if frame.ndim == 3 and frame.shape[2] == 4:
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGB)
+    else:
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+    normalized = rgb.astype(np.float32) / 255.0
+    chw = np.transpose(normalized, (2, 0, 1))
+    return np.expand_dims(chw, axis=0)
 
 
 def _postprocess(output, confidence_threshold):
@@ -843,6 +862,27 @@ def _load_coreml_model(model_path):
     return model, input_name, output_name
 
 
+def _load_onnx_model(model_path):
+    if cv2 is None:
+        raise RuntimeError("OpenCV is required for ONNX AI gathering.")
+
+    model = cv2.dnn.readNetFromONNX(str(model_path))
+    return model, None, None
+
+
+def _run_model(runtime, prefix, image):
+    if runtime.get(f"{prefix}_model_kind") == "opencv_onnx":
+        session = runtime[f"{prefix}_session"]
+        session.setInput(image)
+        return [session.forward()]
+
+    return [
+        runtime[f"{prefix}_session"].predict(
+            {runtime[f"{prefix}_input"]: image}
+        )[runtime[f"{prefix}_output"]]
+    ]
+
+
 def _relative_distance(x, y, homography):
     point = np.array([[[x, y + 15]]], dtype=np.float32)
     transformed = cv2.perspectiveTransform(point, homography)
@@ -1030,8 +1070,11 @@ def _find_sprinkler(runtime):
         return None
 
     frame = _grab_frame(runtime)
-    image = _preprocess_coreml_image(frame, SPRINKLER_INPUT_WIDTH, SPRINKLER_INPUT_HEIGHT)
-    output = [runtime["sprinkler_session"].predict({runtime["sprinkler_input"]: image})[runtime["sprinkler_output"]]]
+    if runtime.get("sprinkler_model_kind") == "opencv_onnx":
+        image = _preprocess_onnx_image(frame, SPRINKLER_INPUT_WIDTH, SPRINKLER_INPUT_HEIGHT)
+    else:
+        image = _preprocess_coreml_image(frame, SPRINKLER_INPUT_WIDTH, SPRINKLER_INPUT_HEIGHT)
+    output = _run_model(runtime, "sprinkler", image)
     detections = _postprocess_tokens(output, SPRINKLER_CONFIDENCE_THRESHOLD)
 
     scale_x = runtime["capture"]["width"] / float(SPRINKLER_INPUT_WIDTH)
@@ -1127,8 +1170,19 @@ def _fallback_pattern():
 
 
 def _initialise_runtime():
+    if cv2 is None or np is None:
+        raise RuntimeError(
+            "Must install opencv-python and numpy before using AI Gathering, please run install dependencies before continuing."
+        )
 
-    if ct is None:
+    token_path = MODEL_DIR / "best.mlpackage"
+    token_model_kind = "coreml"
+    if not token_path.exists():
+        token_path = MODEL_DIR / "tokens.onnx"
+        token_model_kind = "opencv_onnx"
+    if not token_path.exists():
+        raise FileNotFoundError(f"No token AI model was found at fixed path: {MODEL_DIR / 'tokens.onnx'} or {MODEL_DIR / 'best.mlpackage'}")
+    if token_model_kind == "coreml" and ct is None:
         try:
             import subprocess
             import sys
@@ -1140,20 +1194,17 @@ def _initialise_runtime():
             raise RuntimeError(
                 "coremltools is required but automatic install failed: " + str(exc) + ". Please install coremltools before using AI Gathering, then restart the macro."
             )
-
-    if cv2 is None or np is None:
-        raise RuntimeError(
-            "Must install opencv-python and numpy before using AI Gathering, please run install dependencies before continuing."
-        )
-
-    if Image is None:
+    if token_model_kind == "coreml" and Image is None:
         raise RuntimeError("Pillow is required for CoreML AI Gathering, please run install dependencies before continuing.")
 
-    token_path = MODEL_DIR / "best.mlpackage"
-    if not token_path.exists():
-        raise FileNotFoundError(f"best.mlpackage was not found at fixed path: {token_path}")
-
+    sprinkler_model_kind = None
     sprinkler_candidate = MODEL_DIR / "sprinkler.mlpackage"
+    if sprinkler_candidate.exists():
+        sprinkler_model_kind = "coreml"
+    else:
+        sprinkler_candidate = MODEL_DIR / "sprinkler.onnx"
+        if sprinkler_candidate.exists():
+            sprinkler_model_kind = "opencv_onnx"
     sprinkler_path = sprinkler_candidate if sprinkler_candidate.exists() else None
 
     capture = _build_capture()
@@ -1190,12 +1241,18 @@ def _initialise_runtime():
     if homography is None:
         raise RuntimeError("Could not compute AI gather homography.")
 
-    token_session, token_input, token_output = _load_coreml_model(token_path)
+    if token_model_kind == "opencv_onnx":
+        token_session, token_input, token_output = _load_onnx_model(token_path)
+    else:
+        token_session, token_input, token_output = _load_coreml_model(token_path)
     sprinkler_session = None
     sprinkler_input = None
     sprinkler_output = None
     if sprinkler_path is not None:
-        sprinkler_session, sprinkler_input, sprinkler_output = _load_coreml_model(sprinkler_path)
+        if sprinkler_model_kind == "opencv_onnx":
+            sprinkler_session, sprinkler_input, sprinkler_output = _load_onnx_model(sprinkler_path)
+        else:
+            sprinkler_session, sprinkler_input, sprinkler_output = _load_coreml_model(sprinkler_path)
 
     return {
         "capture": capture,
@@ -1207,10 +1264,11 @@ def _initialise_runtime():
         "token_session": token_session,
         "token_input": token_input,
         "token_output": token_output,
-        "token_model_kind": "coreml",
+        "token_model_kind": token_model_kind,
         "sprinkler_session": sprinkler_session,
         "sprinkler_input": sprinkler_input,
         "sprinkler_output": sprinkler_output,
+        "sprinkler_model_kind": sprinkler_model_kind,
         "homography": homography,
         "current_x": 0.0,
         "current_y": 0.0,
@@ -1236,7 +1294,7 @@ if not runtime.get("ready"):
         runtime["ready"] = True
         runtime["error"] = ""
         _debug_log(
-            f"runtime ready token_model=coreml input={runtime['token_input']} output={runtime['token_output']} confidence={CONFIDENCE_THRESHOLD} ignored={sorted(IGNORED_TOKENS)} record={RECORD_VIDEO}"
+            f"runtime ready token_model={runtime['token_model_kind']} input={runtime['token_input']} output={runtime['token_output']} confidence={CONFIDENCE_THRESHOLD} ignored={sorted(IGNORED_TOKENS)} record={RECORD_VIDEO}"
         )
     except Exception as exc:
         runtime["ready"] = False
@@ -1260,7 +1318,7 @@ else:
         image = _preprocess_token_frame(frame, runtime)
         preprocess_elapsed = time.time() - preprocess_start
         inference_start = time.time()
-        output = [runtime["token_session"].predict({runtime["token_input"]: image})[runtime["token_output"]]]
+        output = _run_model(runtime, "token", image)
         inference_elapsed = time.time() - inference_start
         postprocess_start = time.time()
         detections = _postprocess_tokens(output, CONFIDENCE_THRESHOLD)
