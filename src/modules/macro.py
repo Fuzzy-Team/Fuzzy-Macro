@@ -583,7 +583,7 @@ class macro:
         self.afb = False
         self.stop = False
 
-        self.hiveDistance = 1.32 #distance between hives (in seconds)
+        self.hiveSlotTiles = 9.2 #distance between hive slots (in tiles)
 
 
         self.setRobloxWindowInfo(setYOffset=False)
@@ -1041,6 +1041,7 @@ class macro:
         return True
 
     def toggleFullScreen(self):
+        self.logger.webhook("", "Toggling fullscreen mode", "dark brown", "screen")
         self.keyboard.keyDown("command")
         time.sleep(0.05)
         self.keyboard.keyDown("ctrl")
@@ -1050,6 +1051,8 @@ class macro:
         self.keyboard.keyUp("command")
         self.keyboard.keyUp("ctrl")
         self.keyboard.keyUp("f")
+        time.sleep(0.5)
+        self.setRobloxWindowInfo(setYOffset=True)
 
     def adjustImage(self, path, imageName):
         return adjustImage(path, imageName, self.robloxWindow.display_type)
@@ -1948,7 +1951,7 @@ class macro:
                         dir = "d"
                     else:
                         dir = "a"
-                    self.keyboard.walk(dir, self.hiveDistance*abs(self.setdat["hive_number"]-3))
+                    self.walkHiveSlots(dir, abs(self.setdat["hive_number"]-3))
                     self.convert()
                 else:
                     self.keyboard.walk("s", 0.15)
@@ -1957,6 +1960,15 @@ class macro:
         
         else:
             self.logger.webhook("", "Unable to detect that player respawned at hive", "dark brown", "screen")
+
+    def walkHiveSlots(self, direction, slots):
+        for _ in range(max(0, int(slots))):
+            self.keyboard.tileWalk(direction, self.hiveSlotTiles)
+            time.sleep(0.25)
+
+    def stepBackOntoHivePad(self):
+        self.keyboard.tileWalk("s", 1.7)
+        time.sleep(0.1)
 
     def resyncHiveSlotFromHive(self):
         self.logger.webhook("", "Rechecking hive slot before rejoining", "dark brown", "screen")
@@ -1984,7 +1996,7 @@ class macro:
             time.sleep(0.4)
             if isHivePromptVisible():
                 break
-            self.keyboard.walk("w", 0.1)
+            self.stepBackOntoHivePad()
         else:
             self.logger.webhook("", "Could not find hive prompts while rechecking hive slot", "dark brown", "screen")
             return False
@@ -1992,7 +2004,7 @@ class macro:
         hiveNumber = 0
         for slot in range(1, 7):
             if slot > 1:
-                self.keyboard.walk("a", self.hiveDistance)
+                self.walkHiveSlots("a", 1)
             if stopAndCheckHiveSlot():
                 hiveNumber = slot
                 break
@@ -2349,7 +2361,7 @@ class macro:
                 time.sleep(0.4)
                 if self.isBesideE(["claim", "hive", "send", "trad", "has"]):
                     break
-                self.keyboard.walk("w", 0.1)
+                self.stepBackOntoHivePad()
 
             def isHiveAvailable():
                 return self.isBesideE(["claim", "hive"], ["send", "trade"], log=True)
@@ -2360,12 +2372,36 @@ class macro:
             def isExcludedSlot(slot):
                 return slot in excludedHiveSlots
 
+            def settleOnHivePad():
+                if not (
+                    self.isMakeHoneyPrompt(log=True)
+                    or self.isBesideE(["claim", "hive", "send", "trad", "trade", "has"], log=True)
+                ):
+                    self.stepBackOntoHivePad()
+
+            def boundedHiveSlot(slot):
+                return max(1, min(6, int(slot)))
+
+            currentHiveSlot = 1
+
+            def moveToHiveSlot(targetSlot):
+                nonlocal currentHiveSlot
+                targetSlot = boundedHiveSlot(targetSlot)
+                slotDelta = targetSlot - currentHiveSlot
+                if slotDelta > 0:
+                    self.walkHiveSlots("a", slotDelta)
+                elif slotDelta < 0:
+                    self.walkHiveSlots("d", abs(slotDelta))
+                currentHiveSlot = targetSlot
+                time.sleep(0.4)
+                settleOnHivePad()
+
+            hiveNumber = boundedHiveSlot(hiveNumber)
+
             # Go directly to the selected hive first. If that fails, scan all hives as a fallback.
             self.logger.webhook("", f'Claiming hive {hiveNumber}', "dark brown")
             # Move directly to the selected hive (slot 1 is nearest cannon)
-            if hiveNumber > 1:
-                self.keyboard.walk("a", self.hiveDistance * (hiveNumber - 1))
-            time.sleep(0.4)
+            moveToHiveSlot(hiveNumber)
             # Check selected hive first
             if isExcludedSlot(hiveNumber):
                 self.logger.webhook("", f'Hive {hiveNumber} is excluded, scanning other hives', 'dark brown', "screen")
@@ -2383,14 +2419,10 @@ class macro:
                 else:
                     self.logger.webhook("", f'Hive {hiveNumber} is already claimed, scanning all hives','dark brown', "screen")
                 # Backtrack to slot 1 before scanning
-                if hiveNumber > 1:
-                    self.keyboard.walk("d", self.hiveDistance * (hiveNumber - 1))
-                    time.sleep(0.4)
+                moveToHiveSlot(1)
                 # Scan for an already claimed hive first so we update the saved slot instead of claiming a new hive.
                 for j in range(1, 7):
-                    if j > 1:
-                        self.keyboard.walk("a", self.hiveDistance)
-                    time.sleep(0.4)
+                    moveToHiveSlot(j)
                     if self.isMakeHoneyPrompt(log=True):
                         newHiveNumber = j
                         rejoinSuccess = True
@@ -2398,16 +2430,13 @@ class macro:
                         break
 
                 if not rejoinSuccess:
-                    self.keyboard.walk("d", self.hiveDistance * 5)
-                    time.sleep(0.4)
+                    moveToHiveSlot(1)
 
                 # If no existing hive was found, scan slots 1..6 sequentially for a claimable hive.
                 for j in range(1, 7):
                     if rejoinSuccess:
                         break
-                    if j > 1:
-                        self.keyboard.walk("a", self.hiveDistance)
-                    time.sleep(0.4)
+                    moveToHiveSlot(j)
                     if isExcludedSlot(j):
                         continue
                     if isHiveAvailable():
