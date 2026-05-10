@@ -202,3 +202,17 @@ def ensure_supported_models():
     elif skipped:
         print("[models] Models are up to date")
     return {"downloaded": downloaded, "skipped": skipped, "model_dir": MODEL_DIR}
+
+
+def ensure_missing_supported_models():
+    os.makedirs(MODEL_DIR, exist_ok=True)
+    downloaded = []
+    skipped = []
+    for model_name in _supported_model_names():
+        local_path = os.path.join(MODEL_DIR, model_name)
+        if os.path.exists(local_path):
+            skipped.append(model_name)
+            continue
+        _copy_from_repo_zip(model_name, local_path)
+        downloaded.append(model_name)
+    return {"downloaded": downloaded, "skipped": skipped, "model_dir": MODEL_DIR}
