@@ -74,19 +74,19 @@ printf "\033[32;1mYour mac is compatible \033[0m\n\n\n"
 
 python_ver="3.9"
 python_link="/www.python.org/ftp/python/3.9.8/python-3.9.8-macos11.pkg"
-constraints=''
+constraints=$'numpy<2'
 if [ "$chip" = 'i386' ]; then
 	if echo -e "$os_ver \n10.15.0" | sort -V | tail -n1 | grep -Fq "10.15.0"; then
 		python_ver="3.8"
 		python_link="/www.python.org/ftp/python/3.8.0/python-3.8.0-macosx10.9.pkg"
-		constraints=$'pyobjc-core<11.0\npyobjc<11.0'
+		constraints=$'numpy<2\npyobjc-core<11.0\npyobjc<11.0'
 	elif echo -e "$os_ver \n12.0.0" | sort -V | tail -n1 | grep -Fq "12.0.0"; then
 		python_ver="3.8"
 		python_link="/www.python.org/ftp/python/3.8.0/python-3.8.0-macosx10.9.pkg"
-		constraints=$'pyobjc-core<11.0\npyobjc<11.0'
+		constraints=$'numpy<2\npyobjc-core<11.0\npyobjc<11.0'
 	else 
 		python_link="/www.python.org/ftp/python/3.9.5/python-3.9.5-macos11.pkg"
-		constraints=$'pyobjc-core<12.0\npyobjc<12.0'
+		constraints=$'numpy<2\npyobjc-core<12.0\npyobjc<12.0'
 	fi
 fi
 
@@ -232,6 +232,7 @@ install_pip_package "pygetwindow"
 install_pip_package "requests" #used to check if this script was ran, should be installed by discord-webhooks
 install_pip_package "aiohttp==3.10.5"
 install_pip_package "pynput"
+install_pip_package "numpy<2" "--force-reinstall"
 
 "$VENV_PATH/bin/python" << "EOF"
 
