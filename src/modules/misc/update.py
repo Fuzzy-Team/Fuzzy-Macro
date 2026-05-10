@@ -156,11 +156,11 @@ def _create_backup(destination, backup_path, protected_folders, protected_files)
                     pass
 
 
-# Mark that a backup exists and should be deleted on next macro run
+# Mark that a backup exists and should be deleted after one full macro launch.
 def _mark_backup_pending(destination):
     try:
         with open(os.path.join(destination, ".backup_pending"), "w") as fh:
-            fh.write("1")
+            fh.write("defer_once")
     except Exception:
         pass
 
@@ -185,6 +185,18 @@ def delete_backup_if_pending(destination=None):
         backup = os.path.join(base, "backup_macro.zip")
         try:
             if os.path.exists(marker) or os.path.exists(backup):
+                if os.path.exists(marker):
+                    try:
+                        with open(marker, "r") as fh:
+                            marker_state = fh.read().strip()
+                    except Exception:
+                        marker_state = ""
+
+                    if marker_state == "defer_once":
+                        with open(marker, "w") as fh:
+                            fh.write("ready")
+                        break
+
                 prompt = "A backup from a previous update was found.\nDo you want to delete the backup now? (Recommended if the macro is working fine.)"
                 response = msgBoxOkCancel("Delete Backup?", prompt)
                 if response:
