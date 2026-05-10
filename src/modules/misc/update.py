@@ -422,6 +422,13 @@ def update(t="main", update_channel="stable", progress_callback=None):
         msgBox("Update failed", "Error while applying update files.")
         return False
 
+    try:
+        _report_update_progress(progress_callback, 84, "Checking AI models")
+        from modules.misc.modelManager import ensure_supported_models
+        ensure_supported_models()
+    except Exception as e:
+        print(f"[models] Could not check/download AI models: {e}")
+
     # Merge patterns: combine files from extracted/settings/patterns with
     # existing settings/patterns in destination. We protected patterns above
     # so the generic merge didn't overwrite them. Here we perform a union
@@ -606,6 +613,13 @@ def update_from_commit(commit_hash, progress_callback=None):
         _report_update_progress(progress_callback, 100, "Update failed: could not apply files")
         msgBox("Update failed", "Error while applying update files.")
         return False
+
+    try:
+        _report_update_progress(progress_callback, 84, "Checking AI models")
+        from modules.misc.modelManager import ensure_supported_models
+        ensure_supported_models()
+    except Exception as e:
+        print(f"[models] Could not check/download AI models: {e}")
 
     # merge patterns similar to update()
     try:
