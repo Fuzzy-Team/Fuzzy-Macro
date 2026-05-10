@@ -2418,31 +2418,36 @@ class macro:
                     self.logger.webhook("", f'Hive {hiveNumber} belongs to another player, scanning hives for your slot','dark brown', "screen")
                 else:
                     self.logger.webhook("", f'Hive {hiveNumber} is already claimed, scanning all hives','dark brown', "screen")
-                # Backtrack to slot 1 before scanning
-                moveToHiveSlot(1)
-                # Scan for an already claimed hive first so we update the saved slot instead of claiming a new hive.
-                for j in range(1, 7):
+                # Scan once for an already claimed hive, while remembering open slots passed along the way.
+                forwardScanSlots = list(range(hiveNumber + 1, 7))
+                wrapScanSlots = list(range(1, hiveNumber))
+                for j in forwardScanSlots:
                     moveToHiveSlot(j)
                     if self.isMakeHoneyPrompt(log=True):
                         newHiveNumber = j
                         rejoinSuccess = True
                         hiveAlreadyClaimed = True
                         break
+                    if not isExcludedSlot(j) and isHiveAvailable():
+                        availableSlots.append(j)
 
-                if not rejoinSuccess:
-                    moveToHiveSlot(1)
-
-                # If no existing hive was found, scan slots 1..6 sequentially for a claimable hive.
-                for j in range(1, 7):
+                for j in wrapScanSlots:
                     if rejoinSuccess:
                         break
                     moveToHiveSlot(j)
-                    if isExcludedSlot(j):
-                        continue
-                    if isHiveAvailable():
+                    if self.isMakeHoneyPrompt(log=True):
                         newHiveNumber = j
                         rejoinSuccess = True
+                        hiveAlreadyClaimed = True
                         break
+                    if not isExcludedSlot(j) and isHiveAvailable():
+                        availableSlots.append(j)
+
+                # If no existing hive was found, claim the nearest open slot found during the scan.
+                if not rejoinSuccess and availableSlots:
+                    newHiveNumber = min(availableSlots, key=lambda slot: abs(slot - currentHiveSlot))
+                    moveToHiveSlot(newHiveNumber)
+                    rejoinSuccess = True
 
             # #find the hive in hive number
             # self.logger.webhook("",f'Claiming hive {hiveNumber} (guessing hive location)', "dark brown")
