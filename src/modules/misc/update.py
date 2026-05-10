@@ -91,6 +91,32 @@ def _download_update_zip(zip_link, progress_callback, start_percent=35, end_perc
         req.close()
 
 
+def _refresh_updater(destination, progress_callback=None):
+    update_py_url = "https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/src/modules/misc/update.py"
+    headers = {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+    }
+    _report_update_progress(progress_callback, 5, "Refreshing updater")
+    response = requests.get(update_py_url, timeout=20, headers=headers)
+    response.raise_for_status()
+
+    target_update = os.path.join(destination, "src", "modules", "misc", "update.py")
+    os.makedirs(os.path.dirname(target_update), exist_ok=True)
+    tmp_path = target_update + ".tmp"
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as fh:
+            fh.write(response.text)
+        os.replace(tmp_path, target_update)
+    finally:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception:
+            pass
+
+
 # Recursively copy from src to dst, overwriting files. Skip protected names.
 def _merge_overwrite(src, dst, protected_folders, protected_files):
     for root, dirs, files in os.walk(src):
@@ -274,35 +300,8 @@ def update(t="main", update_channel="stable", progress_callback=None):
     pattern_overwrite_exceptions = PATTERN_OVERWRITE_EXCEPTIONS
     destination = os.getcwd().replace("/src", "")
 
-    # remote version URL and zip link
-    # Attempt to fetch the latest `update.py` from upstream and replace the
-    # local copy before performing the rest of the update. This allows bug
-    # fixes in the updater itself to take effect immediately for this run.
     try:
-        _report_update_progress(progress_callback, 5, "Refreshing updater")
-        update_py_url = "https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/src/modules/misc/update.py"
-        h = {
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0",
-        }
-        r_up = requests.get(update_py_url, timeout=20, headers=h)
-        r_up.raise_for_status()
-        upd_code = r_up.text
-        target_update = os.path.join(destination, "src", "modules", "misc", "update.py")
-        target_dir = os.path.dirname(target_update)
-        os.makedirs(target_dir, exist_ok=True)
-        tmp_path = target_update + ".tmp"
-        try:
-            with open(tmp_path, "w", encoding="utf-8") as fh:
-                fh.write(upd_code)
-            os.replace(tmp_path, target_update)
-        except Exception:
-            try:
-                if os.path.exists(tmp_path):
-                    os.remove(tmp_path)
-            except Exception:
-                pass
+        _refresh_updater(destination, progress_callback)
     except Exception:
         # non-fatal: continue with current updater if fetch fails
         pass
@@ -566,6 +565,12 @@ def update_from_commit(commit_hash, progress_callback=None):
     protected_files = [".git"]
     pattern_overwrite_exceptions = PATTERN_OVERWRITE_EXCEPTIONS
     destination = os.getcwd().replace("/src", "")
+
+    try:
+        _refresh_updater(destination, progress_callback)
+    except Exception:
+        # non-fatal: continue with current updater if fetch fails
+        pass
 
     remote_zip = f"https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/{commit_hash}.zip"
     backup_path = os.path.join(destination, "backup_macro.zip")
