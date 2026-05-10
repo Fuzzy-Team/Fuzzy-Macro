@@ -254,6 +254,7 @@ def update(t="main", update_channel="stable", progress_callback=None):
     # merge rules below so specific built-in patterns can be updated safely.
     protected_folders = [
         os.path.join("src", "data", "user"),
+        os.path.join("src", "data", "models"),
         os.path.join("settings", "profiles"),
         os.path.join("settings", "patterns"),
     ]
@@ -539,6 +540,7 @@ def update_from_commit(commit_hash, progress_callback=None):
     msgBox("Update in progress", f"Updating to commit {commit_hash}... Do not close terminal")
     protected_folders = [
         os.path.join("src", "data", "user"),
+        os.path.join("src", "data", "models"),
         os.path.join("settings", "profiles"),
         os.path.join("settings", "patterns"),
     ]
