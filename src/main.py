@@ -32,6 +32,7 @@ import modules.misc.settingsManager as settingsManager
 import modules.macro as macroModule
 import modules.controls.mouse as mouse
 import json
+from modules.misc.modelManager import ensure_missing_supported_models
 from modules.controls.sleep import (
     InterruptRequested,
     INTERRUPT_NONE,
@@ -42,6 +43,11 @@ from modules.controls.sleep import (
 try:
     from modules.misc.update import delete_backup_if_pending
     delete_backup_if_pending()
+except Exception:
+    pass
+
+try:
+    ensure_missing_supported_models()
 except Exception:
     pass
 
