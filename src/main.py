@@ -32,7 +32,6 @@ import modules.misc.settingsManager as settingsManager
 import modules.macro as macroModule
 import modules.controls.mouse as mouse
 import json
-from modules.misc.modelManager import ensure_supported_models
 from modules.controls.sleep import (
     InterruptRequested,
     INTERRUPT_NONE,
@@ -45,11 +44,6 @@ try:
     delete_backup_if_pending()
 except Exception:
     pass
-
-try:
-    ensure_supported_models()
-except Exception as e:
-    print(f"[models] Could not check/download AI models: {e}")
 
 try:
 	from modules.misc.ColorProfile import DisplayColorProfile
