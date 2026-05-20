@@ -30,8 +30,54 @@ if exist "%VENV_PATH%\Scripts\activate.bat" (
     echo Activating virtual environment...
     call "%VENV_PATH%\Scripts\activate.bat"
     echo.
-    python --version
-    python main.py
+    rem Get the virtualenv python version (e.g. 3.9)
+    set "VENV_PY_VER="
+    for /f "usebackq delims=" %%V in (`python -c "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')" 2^>nul`) do set "VENV_PY_VER=%%V"
+    echo Virtualenv python: %VENV_PY_VER%
+
+    rem If venv Python is 3.7/3.8/3.9, use it. Otherwise search for a suitable system Python.
+    set "PY_EXEC="
+    if "%VENV_PY_VER%"=="3.9" set "PY_EXEC=python"
+    if "%VENV_PY_VER%"=="3.8" set "PY_EXEC=python"
+    if "%VENV_PY_VER%"=="3.7" set "PY_EXEC=python"
+
+    if defined PY_EXEC (
+        echo Using virtualenv Python %VENV_PY_VER%
+        python main.py
+    ) else (
+        echo Virtualenv Python is not 3.7/3.8/3.9 — searching system interpreters...
+
+        rem Prefer the py launcher if available
+        where py >nul 2>&1
+        if %errorlevel%==0 (
+            for %%v in (3.9 3.8 3.7) do (
+                py -%%v -c "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')" >nul 2>&1
+                if not errorlevel 1 (
+                    set "PY_EXEC=py -%%v"
+                    goto :found_python
+                )
+            )
+        )
+
+        rem Try explicit executables on PATH
+        for %%e in (python3.9.exe python3.8.exe python3.7.exe python3.exe python.exe) do (
+            for /f "usebackq delims=" %%W in (`"%%~e" -c "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')" 2^>nul`) do (
+                if "%%W"=="3.9" set "PY_EXEC=%%~e" & goto :found_python
+                if "%%W"=="3.8" set "PY_EXEC=%%~e" & goto :found_python
+                if "%%W"=="3.7" set "PY_EXEC=%%~e" & goto :found_python
+            )
+        )
+
+:found_python
+        if defined PY_EXEC (
+            echo Found Python: %PY_EXEC%
+            %PY_EXEC% main.py
+        ) else (
+            echo No Python 3.7, 3.8, or 3.9 found on PATH or via the py launcher.
+            echo Please install one of these versions or ensure it's on PATH, then rerun.
+            pause
+        )
+    )
 ) else (
     echo Virtual environment not found at %VENV_PATH%
     echo Please run install_dependencies.bat first.
