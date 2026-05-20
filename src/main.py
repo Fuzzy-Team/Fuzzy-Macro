@@ -1,5 +1,8 @@
 from modules.misc import messageBox
+import os
 import platform as _platform
+import subprocess
+import sys
 _IS_WINDOWS = _platform.system() == "Windows"
 #check if installing dependencies was ran
 try:
@@ -24,10 +27,7 @@ import ctypes
 from threading import Thread
 import eel
 import time
-import sys
-import os
 import ast
-import subprocess
 import atexit
 from modules.misc.imageManipulation import adjustImage
 from modules.screen.imageSearch import locateImageOnScreen
