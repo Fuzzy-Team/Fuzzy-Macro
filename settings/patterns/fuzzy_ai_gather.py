@@ -12,7 +12,7 @@ Requirements:
 - mss or Pillow
 - best.mlpackage and sprinkler.mlpackage
 
-- Version 1.5
+- Version 2.0
 """
 
 import math
