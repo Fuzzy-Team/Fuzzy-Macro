@@ -1,3 +1,3 @@
-self.keyboard.walk('d', 24.0)
-self.keyboard.walk('s', 11.0)
-self.keyboard.multiWalk(['s', 'd'], 5.0)
+self.keyboard.walk('a', 24.0)
+self.keyboard.walk('w', 11.0)
+self.keyboard.multiWalk(['w', 'a'], 5.0)

@@ -1,1 +1,1 @@
-self.keyboard.walk('d', 39.0)
+self.keyboard.walk('a', 39.0)

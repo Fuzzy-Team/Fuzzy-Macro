@@ -1,6 +1,6 @@
 self.keyboard.press('space')
 self.keyboard.press('space')
-self.keyboard.walk('w', 4.0)
+self.keyboard.walk('s', 4.0)
 time.sleep(0.1)
 time.sleep(0.6)
 time.sleep(0.1)

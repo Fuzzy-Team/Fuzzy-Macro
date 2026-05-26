@@ -1,5 +1,5 @@
 time.sleep(0.1)
-self.keyboard.keyDown('a')
+self.keyboard.keyDown('d')
 self.keyboard.press('space')
 time.sleep(0.4)
-self.keyboard.keyUp('a')
+self.keyboard.keyUp('d')

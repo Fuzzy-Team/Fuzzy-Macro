@@ -1,2 +1,2 @@
-self.keyboard.walk('d', 3.0)
-self.keyboard.walk('w', 2.5)
+self.keyboard.walk('a', 3.0)
+self.keyboard.walk('s', 2.5)
