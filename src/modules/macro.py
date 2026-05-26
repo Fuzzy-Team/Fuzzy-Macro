@@ -42,6 +42,7 @@ import math
 import re
 import ast
 from modules.submacros.hourlyReport import HourlyReport, BuffDetector
+from modules.submacros.liveGatherReport import LiveGatherReport
 from difflib import SequenceMatcher
 import fuzzywuzzy.process
 import fuzzywuzzy
@@ -2799,12 +2800,28 @@ class macro:
 
         def getGatherTime():
             return time.time() - st
+
+        liveGatherReport = None
+        if (
+            self.setdat.get("enable_webhook", False)
+            and self.setdat.get("live_gather_report", self.setdat.get("live_honey_report", False))
+            and not self.setdat.get("only_send_hourly_report", False)
+        ):
+            liveGatherReport = LiveGatherReport(
+                self.setdat.get("webhook_link", ""),
+                self.robloxWindow,
+                self.setdat.get("live_gather_report_interval", self.setdat.get("live_honey_report_interval", 15)),
+                self.setdat.get("webhook_time_format", 24),
+            )
+            liveGatherReport.start(field, gatherTimeLimit, getGatherTime)
         
         def stopGather():
             nonlocal gooTimerActive, gumdropTimerActive, inactiveHoneyTimerActive
             gooTimerActive = False  # Stop the goo timer thread
             gumdropTimerActive = False  # Stop the gumdrop timer thread
             inactiveHoneyTimerActive = False
+            if liveGatherReport:
+                liveGatherReport.stop()
             if fieldSetting["shift_lock"]: 
                 self.keyboard.press('shift')
             self.moveMouseToDefault()
@@ -2910,6 +2927,7 @@ class macro:
                 self.reset()
                 return
             elif self.setdat["Auto_Field_Boost"] and not self.AFBLIMIT and self.AFB(gatherInterrupt=True, turnOffShiftLock = fieldSetting["shift_lock"]):
+                stopGather()
                 return
             #check for gather interrupts
             elif self.night and self.setdat["stinger_hunt"]:
