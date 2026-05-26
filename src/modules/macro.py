@@ -1902,6 +1902,7 @@ class macro:
                 time.sleep(8-3)
 
             print(f"respawn complete: {time.time()-st}")
+            self.keyboard.releaseMovement()
 
             if AFB: 
                 self.logger.webhook("", f"AFB: Cooldown: {self.setdat['AFB_wait']} seconds", "brown")
@@ -1935,12 +1936,14 @@ class macro:
                     self.keyboard.press(".")
                 time.sleep(0.1)
 
+            self.keyboard.releaseMovement()
             for _ in range(8):
                 self.keyboard.press("o")
             if atHive:
                 self.cannonFromHive = True
                 if convert: 
                     self.convert()
+                self.keyboard.releaseMovement()
                 return True
             else:
                 self.keyboard.walk("w", 5)
@@ -1956,6 +1959,7 @@ class macro:
                 else:
                     self.keyboard.walk("s", 0.15)
                     self.cannonFromHive = False
+            self.keyboard.releaseMovement()
             return True
         
         else:
