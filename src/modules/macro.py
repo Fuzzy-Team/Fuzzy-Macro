@@ -3145,19 +3145,42 @@ class macro:
             self.keyboard.walk("w",0.15)
             self.keyboard.walk("d",0.3)
             mouse.mouseDown()
+            challengeStart = time.time()
+
+            def clickKeepOld(keepOld=None):
+                if keepOld is None:
+                    keepOld = self.keepOldCheck()
+                if keepOld is None:
+                    keepOld = (
+                        int(self.robloxWindow.mx + self.robloxWindow.mw/2),
+                        int(self.robloxWindow.my + self.robloxWindow.mh*0.58),
+                    )
+                time.sleep(0.1)
+                mouse.moveTo(*keepOld)
+                time.sleep(0.2)
+                mouse.click()
+
             while True:
                 keepOld = self.keepOldCheck()
                 if keepOld is not None:
                     mouse.mouseUp()
                     self.logger.webhook("","Ant Challenge Complete","bright green", "screen", ping_category="ping_ant_challenge")
-                    time.sleep(0.1)
-                    mouse.moveTo(*keepOld)
-                    time.sleep(0.2)
-                    mouse.click()
-                    break
-            return
+                    clickKeepOld(keepOld)
+                    return True
+                if self.blueTextImageSearch("died", 0.8):
+                    mouse.mouseUp()
+                    self.logger.webhook("","Player died during Ant Challenge; resetting", "dark brown", "screen", ping_category="ping_character_deaths")
+                    self.reset(convert=False)
+                    return False
+                if time.time() - challengeStart > 8*60:
+                    mouse.mouseUp()
+                    self.logger.webhook("","Ant Challenge timed out waiting for score popup; pressing Keep Old and resetting", "red", "screen", ping_category="ping_critical_errors")
+                    clickKeepOld()
+                    self.reset(convert=False)
+                    return False
 
         self.logger.webhook("", "Cant start ant challenge", "red", "screen", ping_category="ping_critical_errors")
+        return False
 
     def getCurrentMinute(self):
         current_time = datetime.now().strftime("%H:%M:%S")
