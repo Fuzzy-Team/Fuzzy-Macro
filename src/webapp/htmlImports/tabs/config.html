@@ -52,6 +52,15 @@
           },
         },
         {
+          id: "claim_first_available_hive",
+          title: "Claim First Available Hive",
+          desc: "When the selected hive is unavailable, claim the first open hive slot reached during the scan instead of checking every slot first.",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
           id: "movespeed",
           title: "Movespeed",
           desc: "Your movespeed without any haste",
