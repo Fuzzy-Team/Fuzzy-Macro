@@ -9,6 +9,7 @@ _resume_callback = None
 INTERRUPT_NONE = 0
 INTERRUPT_SKIP = 1
 INTERRUPT_RESET = 2
+INTERRUPT_AFB_REROLL = 3
 
 
 class InterruptRequested(Exception):

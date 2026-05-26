@@ -38,6 +38,7 @@ from modules.controls.sleep import (
     INTERRUPT_NONE,
     INTERRUPT_SKIP,
     INTERRUPT_RESET,
+    INTERRUPT_AFB_REROLL,
 )
 # delete backup from previous update if pending
 try:
@@ -486,7 +487,21 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 macro.logger.webhook("Task Skipped", f"Skipped: {interrupted_status}", "orange")
             elif action == INTERRUPT_RESET:
                 macro.logger.webhook("Task Reset", f"Resetting and retrying: {interrupted_status}", "orange")
+            elif action == INTERRUPT_AFB_REROLL:
+                macro.logger.webhook("AFB Reroll", f"Reroll requested during: {interrupted_status}", "orange")
             macro.reset(convert=True)
+            if action == INTERRUPT_AFB_REROLL:
+                macro.AFBLIMIT = False
+                macro.AFBglitter = False
+                macro.cAFBglitter = False
+                macro.cAFBDice = True
+                macro.failed = False
+                rebuffCooldown = max(0, float(macro.setdat.get("AFB_rebuff", 0) or 0) * 60)
+                settingsManager.saveSettingFile("AFB_dice_cd", time.time() - rebuffCooldown, "./data/user/AFB.txt")
+                settingsManager.saveSettingFile("AFB_glitter_cd", time.time(), "./data/user/AFB.txt")
+                macro.AFB(gatherInterrupt=False)
+                macro.cAFBDice = False
+                return None
             if action == INTERRUPT_RESET and func:
                 return runTask(func, args=args, resetAfter=resetAfter, convertAfter=convertAfter, allowAFB=allowAFB)
             return None
