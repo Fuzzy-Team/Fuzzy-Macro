@@ -4073,15 +4073,10 @@ class macro:
         normalized_field = str(field).replace("_", " ").strip()
         current_location = str(getattr(self, "location", "") or "").replace("_", " ").strip()
         fieldToFieldPath = f"../paths/field_to_field/{current_location}/{normalized_field}.py"
-        planterFromHivePath = f"../paths/planters_from_hive/{normalized_field}.py"
 
         if current_location and current_location != normalized_field and os.path.isfile(fieldToFieldPath):
             self.logger.webhook("", f"Travelling field-to-field: {current_location.title()} to {normalized_field.title()}", "dark brown")
             exec(open(fieldToFieldPath).read())
-            self.location = normalized_field
-        elif current_location in ("spawn", "hive") and os.path.isfile(planterFromHivePath):
-            self.logger.webhook("", f"Travelling hive-to-planter: {normalized_field.title()}", "dark brown")
-            exec(open(planterFromHivePath).read())
             self.location = normalized_field
         else:
             self.cannon()
