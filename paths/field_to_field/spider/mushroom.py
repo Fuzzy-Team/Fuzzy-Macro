@@ -1,0 +1,6 @@
+self.keyboard.keyDown('d')
+self.keyboard.tileWait(43.5)
+self.keyboard.keyUp('d')
+self.keyboard.keyDown('w')
+self.keyboard.tileWait(1.0)
+self.keyboard.keyUp('w')

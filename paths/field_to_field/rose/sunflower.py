@@ -1,3 +1,5 @@
-self.keyboard.walk('a', 23.0)
-self.keyboard.walk('s', 15.0)
-self.keyboard.walk('d', 2.0)
+self.keyboard.tileWalk('w', 28.0)
+self.keyboard.tileWalk('a', 17.0)
+self.keyboard.tileWalk('d', 23.0)
+self.keyboard.tileWalk('w', 15.0)
+self.keyboard.tileWalk('a', 2.0)

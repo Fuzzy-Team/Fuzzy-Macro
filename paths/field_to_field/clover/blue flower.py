@@ -1,1 +1,1 @@
-self.keyboard.walk('a', 7.0)
+self.keyboard.tileWalk('d', 7.0)
