@@ -29,7 +29,7 @@ class LiveGatherReport:
         self.webhook_id = match.group(1)
         self.webhook_token = match.group(2)
 
-    def start(self, field, gather_time_limit, get_elapsed_seconds):
+    def start(self, field, gather_time_limit, get_elapsed_seconds, is_paused=None):
         if not self.webhook_id or not self.webhook_token:
             return
         if self.thread and self.thread.is_alive():
@@ -37,7 +37,7 @@ class LiveGatherReport:
         self.stop_event.clear()
         self.thread = threading.Thread(
             target=self._run,
-            args=(field, gather_time_limit, get_elapsed_seconds),
+            args=(field, gather_time_limit, get_elapsed_seconds, is_paused),
             daemon=True,
         )
         self.thread.start()
@@ -45,8 +45,12 @@ class LiveGatherReport:
     def stop(self):
         self.stop_event.set()
 
-    def _run(self, field, gather_time_limit, get_elapsed_seconds):
+    def _run(self, field, gather_time_limit, get_elapsed_seconds, is_paused=None):
         while not self.stop_event.is_set():
+            while is_paused and is_paused():
+                if self.stop_event.wait(0.1):
+                    return
+
             try:
                 self._send_or_edit(field, gather_time_limit, get_elapsed_seconds())
             except Exception as e:
