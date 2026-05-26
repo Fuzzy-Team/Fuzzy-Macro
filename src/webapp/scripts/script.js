@@ -738,7 +738,7 @@ function loadInputs(obj, save = "") {
 function applyTheme(theme) {
   if (theme) localStorage.setItem("gui_theme", theme);
   // remove any known theme classes first
-  document.documentElement.classList.remove("theme-purple", "theme-cream", "theme-red", "theme-blue", "theme-commander");
+  document.documentElement.classList.remove("theme-purple", "theme-cream", "theme-red", "theme-blue", "theme-commander", "theme-basic-black", "theme-gummy", "theme-tadpole", "theme-gifted-tadpole");
   if (!theme) return;
   const t = theme.toLowerCase();
   if (t === "purple") {
@@ -752,6 +752,14 @@ function applyTheme(theme) {
     document.documentElement.classList.add("theme-blue");
   } else if (t === "commander" || t === "comander") {
     document.documentElement.classList.add("theme-commander");
+  } else if (t === "basic black") {
+    document.documentElement.classList.add("theme-basic-black");
+  } else if (t === "gummy") {
+    document.documentElement.classList.add("theme-gummy");
+  } else if (t === "tadpole") {
+    document.documentElement.classList.add("theme-tadpole");
+  } else if (t === "gifted tad" || t === "gifted tadpole") {
+    document.documentElement.classList.add("theme-gifted-tadpole");
   }
 }
 
