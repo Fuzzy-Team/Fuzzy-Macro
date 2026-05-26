@@ -5138,6 +5138,35 @@ class macro:
             candidates = [x for x in (grayBoundary, directTitleBoundary) if x is not None]
             return minOffset + min(candidates) if candidates else None
 
+        def regionHasIncompleteRed(region):
+            if region is None or region.size == 0:
+                return False
+
+            rows = region[:, :, :3].astype(np.int16)
+            blue, green, red = rows[:, :, 0], rows[:, :, 1], rows[:, :, 2]
+            redMask = (red > 120) & (red > green + 20) & (red > blue + 20)
+            if redMask.size == 0:
+                return False
+
+            redScore = float(np.mean(redMask))
+            redRows = np.mean(redMask, axis=1)
+            redCols = np.mean(redMask, axis=0)
+
+            edgeWidth = max(8, int(24*self.robloxWindow.multi))
+            leftEdge = redMask[:, :edgeWidth]
+            rightEdge = redMask[:, max(0, redMask.shape[1] - edgeWidth):]
+            edgeScore = max(
+                float(np.mean(leftEdge)) if leftEdge.size else 0.0,
+                float(np.mean(rightEdge)) if rightEdge.size else 0.0,
+            )
+
+            return (
+                redScore > 0.012 or
+                np.any(redRows > 0.06) or
+                np.any(redCols > 0.35) or
+                edgeScore > 0.015
+            )
+
         def detectObjectivePanels(scanScreen):
             """Find objective rows by their red/green background panels."""
             if scanScreen is None or scanScreen.size == 0:
@@ -5175,9 +5204,8 @@ class macro:
 
             panels = []
             for y1, y2 in runs:
-                redScore = float(np.mean(redFractions[y1:y2]))
-                redRows = redFractions[y1:y2]
-                status = "incomplete" if redScore > 0.02 or np.any(redRows > 0.12) else "complete"
+                region = scanScreen[y1:y2, :, :3]
+                status = "incomplete" if regionHasIncompleteRed(region) else "complete"
                 panels.append({
                     "y": y1,
                     "bbox": (0, y1, scanScreen.shape[1], y2 - y1),
@@ -5471,15 +5499,13 @@ class macro:
                 x, y, w, h = panel["bbox"]
                 region = parseScreen[y:y+h, x:x+w, :3]
                 if region.size:
+                    if regionHasIncompleteRed(region):
+                        return "incomplete"
                     rows = region.astype(np.int16)
                     blue, green, red = rows[:, :, 0], rows[:, :, 1], rows[:, :, 2]
-                    redMask = (red > 120) & (red > green + 20) & (red > blue + 20)
                     greenMask = (green > 120) & (green > red + 20) & (green > blue + 20)
-                    redScore = float(np.mean(redMask))
                     greenScore = float(np.mean(greenMask))
-                    if redScore > greenScore:
-                        return "incomplete"
-                    if greenScore > redScore:
+                    if greenScore > 0.25:
                         return "complete"
 
                 if "complete" in textChunk.lower():
@@ -5518,15 +5544,14 @@ class macro:
                     if objectiveTextShowsIncompleteProgress(textChunk):
                         status = "incomplete"
                     elif region.size:
-                        rows = region.astype(np.int16)
-                        blue, green, red = rows[:, :, 0], rows[:, :, 1], rows[:, :, 2]
-                        redMask = (red > 120) & (red > green + 20) & (red > blue + 20)
-                        greenMask = (green > 120) & (green > red + 20) & (green > blue + 20)
-                        redRows = np.mean(redMask, axis=1)
-                        if float(np.mean(redMask)) > 0.02 or np.any(redRows > 0.12):
+                        if regionHasIncompleteRed(region):
                             status = "incomplete"
-                        elif float(np.mean(greenMask)) > 0.25 or "complete" in textChunk.lower():
-                            status = "complete"
+                        else:
+                            rows = region.astype(np.int16)
+                            blue, green, red = rows[:, :, 0], rows[:, :, 1], rows[:, :, 2]
+                            greenMask = (green > 120) & (green > red + 20) & (green > blue + 20)
+                            if float(np.mean(greenMask)) > 0.25 or "complete" in textChunk.lower():
+                                status = "complete"
                     brownItems.append({
                         "text": textChunk,
                         "bbox": chunk["bbox"],
@@ -5701,17 +5726,11 @@ class macro:
             rows = region[:, :, :3].astype(np.int16)
             if rows.size == 0:
                 return None
-            blue, green, red = rows[:, :, 0], rows[:, :, 1], rows[:, :, 2]
-            redMask = (red > 120) & (red > green + 20) & (red > blue + 20)
-            greenMask = (green > 120) & (green > red + 20) & (green > blue + 20)
-            redScore = float(np.mean(redMask))
-            greenScore = float(np.mean(greenMask))
-            redRows = np.mean(redMask, axis=1)
-            rightEdge = region[:, max(0, region.shape[1] - int(24*self.robloxWindow.multi)):, :3].astype(np.int16)
-            edgeBlue, edgeGreen, edgeRed = rightEdge[:, :, 0], rightEdge[:, :, 1], rightEdge[:, :, 2]
-            edgeRedMask = (edgeRed > 120) & (edgeRed > edgeGreen + 20) & (edgeRed > edgeBlue + 20)
-            if redScore > 0.02 or np.any(redRows > 0.12) or float(np.mean(edgeRedMask)) > 0.02:
+            if regionHasIncompleteRed(region):
                 return "incomplete"
+            blue, green, red = rows[:, :, 0], rows[:, :, 1], rows[:, :, 2]
+            greenMask = (green > 120) & (green > red + 20) & (green > blue + 20)
+            greenScore = float(np.mean(greenMask))
             if greenScore > 0.25:
                 return "complete"
             return None
