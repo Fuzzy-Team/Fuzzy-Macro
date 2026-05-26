@@ -719,6 +719,7 @@ def _isPlanterSettingKey(key):
         "manual_planters_collect_every",
         "manual_planters_collect_full",
         "manual_planters_check",
+        "planters_collect_loot",
         "auto_planters_collect_every",
         "auto_planters_collect_full",
         "auto_planters_collect_auto",

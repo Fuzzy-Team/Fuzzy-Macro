@@ -4341,6 +4341,7 @@ class macro:
             check_enabled = False
 
         attempts = 3 if check_enabled else 1
+        collect_loot_enabled = bool(self.setdat.get("planters_collect_loot", True))
 
         # normalize planter name for inventory lookup
         name = planter.lower().replace(" ", "").replace("-", "")
@@ -4367,8 +4368,11 @@ class macro:
             self.keyboard.press("e")
             self.clickYes()
             self.logger.webhook("", f"Looting: {planter.title()} planter", "bright green", "screen", ping_category="ping_conversion_events")
-            self.keyboard.multiWalk(["s","d"], 0.87)
-            self.nmLoot(9, 5, "a")
+            if collect_loot_enabled:
+                self.keyboard.multiWalk(["s","d"], 0.87)
+                self.nmLoot(9, 5, "a")
+            else:
+                self.logger.webhook("", f"Skipping loot collection for {planter.title()} planter", "orange")
             self.setMobTimer(field)
             updateHourlyTime()
 
