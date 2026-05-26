@@ -6762,6 +6762,17 @@ class macro:
         text = re.sub(r"\s+", " ", text).strip()
         return text
 
+    def _removeAFBNonBoostText(self, text):
+        # Coconut Belt kick messages share the blue-text feed with boost messages
+        # and can otherwise be mistaken for a field dice result.
+        text = re.sub(
+            r"\bkicked\b.*?\bto\b.*?\b(?:forest|field)\b",
+            " ",
+            text,
+            flags=re.IGNORECASE,
+        )
+        return text
+
     def _getAFBTargetFields(self):
         raw = str(self.setdat.get("AFB_field", "sunflower")).lower().replace("_", " ")
         chunks = [x.strip() for x in re.split(r"[,/|]", raw) if x.strip()]
@@ -6804,8 +6815,9 @@ class macro:
             "from",
         }
 
-        normalized = self._normalizeAFBText(rawBlueTexts)
-        boostedLines = [line for line in rawBlueTexts.split("\n") if "boosted" in line.lower()]
+        boostCandidateText = self._removeAFBNonBoostText(rawBlueTexts)
+        normalized = self._normalizeAFBText(boostCandidateText)
+        boostedLines = [line for line in boostCandidateText.split("\n") if "boosted" in line.lower()]
         latestBoostText = boostedLines[-1] if boostedLines else rawBlueTexts
         tokens = set(normalized.split()) if not boostedLines else set()
         if boostedLines:
