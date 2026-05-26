@@ -43,6 +43,16 @@
             </form> 
             <form style="display: flex; align-items:flex-start; justify-content: space-between; padding-right: 5%; margin-top:1rem">
                 <div style="width: 70%;">
+                    <label>Collect Planter Loot</label>
+                    <p>Collect tokens dropped after harvesting planters. Disable this to harvest planters without sweeping up loot.</p>
+                </div>
+                <label class="checkbox-container" style="margin-top: 0.6rem;">
+                    <input type="checkbox" id="manual_planters_collect_loot" data-setting-id="planters_collect_loot" onchange="saveSetting(this, 'profile')">
+                    <span class="checkmark"></span>
+                </label>
+            </form>
+            <form style="display: flex; align-items:flex-start; justify-content: space-between; padding-right: 5%; margin-top:1rem">
+                <div style="width: 70%;">
                     <label>Planter check</label>
                     <p>Check inventory after looting planters and make sure that the planter was in fact collected.</p>
                 </div>
@@ -99,6 +109,16 @@
                         <span class="checkmark"></span>
                     </label>
             </form> 
+            <form style="display: flex; align-items:flex-start; justify-content: space-between; padding-right: 5%; margin-top:1rem">
+                <div style="width: 70%;">
+                    <label>Collect Planter Loot</label>
+                    <p>Collect tokens dropped after harvesting planters. Disable this to harvest planters without sweeping up loot.</p>
+                </div>
+                <label class="checkbox-container" style="margin-top: 0.6rem;">
+                    <input type="checkbox" id="auto_planters_collect_loot" data-setting-id="planters_collect_loot" onchange="saveSetting(this, 'profile')">
+                    <span class="checkmark"></span>
+                </label>
+            </form>
             <form style="display: flex; align-items:flex-start; justify-content: space-between; padding-right: 5%; margin-top:1rem">
                 <div style="width: 70%;">
                     <label>Planter check</label>

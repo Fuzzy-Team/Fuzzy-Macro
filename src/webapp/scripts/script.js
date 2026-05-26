@@ -391,6 +391,17 @@ async function saveSetting(ele, type) {
   } else if (type == "general") {
     try { await eel.saveGeneralSetting(id, valueToSave)(); } catch (e) { /* ignore */ }
   }
+
+  if (ele.dataset && ele.dataset.settingId) {
+    document.querySelectorAll(`[data-setting-id="${id}"]`).forEach(boundEle => {
+      if (boundEle === ele) return;
+      if (boundEle.type == "checkbox") {
+        boundEle.checked = ele.checked;
+      } else {
+        boundEle.value = ele.value;
+      }
+    });
+  }
 }
 
 // Update enabled/disabled state for all drag items based on settings
@@ -671,14 +682,7 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
 //load fields based on the obj data
 eel.expose(loadInputs);
 function loadInputs(obj, save = "") {
-  for (const [k, v] of Object.entries(obj)) {
-    // Specific logic for theme switching
-    if (k === "gui_theme") {
-      applyTheme(v);
-    }
-    const ele = document.getElementById(k);
-    //check if element exists
-    if (!ele) continue;
+  function setInputElementValue(ele, v) {
     if (ele.type == "checkbox") {
       ele.checked = v;
     } else if (ele.tagName == "SELECT") {
@@ -696,6 +700,24 @@ function loadInputs(obj, save = "") {
       loadDragListOrder(ele, v, obj);
     } else {
       ele.value = v;
+    }
+  }
+
+  for (const [k, v] of Object.entries(obj)) {
+    // Specific logic for theme switching
+    if (k === "gui_theme") {
+      applyTheme(v);
+    }
+    const ele = document.getElementById(k);
+    if (ele) setInputElementValue(ele, v);
+
+    document.querySelectorAll(`[data-setting-id="${k}"]`).forEach(boundEle => {
+      if (boundEle !== ele) setInputElementValue(boundEle, v);
+    });
+
+    //check if element exists
+    if (!ele && !document.querySelector(`[data-setting-id="${k}"]`)) {
+      continue;
     }
   }
   if (save == "profile") {
