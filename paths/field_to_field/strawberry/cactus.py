@@ -1,0 +1,7 @@
+self.keyboard.keyDown('d')
+self.keyboard.press('space')
+time.sleep(0.4)
+self.keyboard.keyUp('d')
+time.sleep(0.25)
+time.sleep(0.07)
+self.keyboard.walk('w', 12.0)

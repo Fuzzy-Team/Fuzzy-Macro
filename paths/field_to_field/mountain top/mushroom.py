@@ -1,0 +1,6 @@
+self.keyboard.press('space')
+self.keyboard.press('space')
+self.keyboard.walk('a', 5.0)
+self.keyboard.walk(' FwdKey ', 2.5)
+self.keyboard.multiWalk([' FwdKey ', ' LeftKey '], 10.0)
+self.keyboard.walk(' FwdKey ', 3.0)

@@ -1,0 +1,8 @@
+self.keyboard.walk('d', 23.0)
+self.keyboard.walk('w', 16.0)
+self.keyboard.multiWalk(['w', 'a'], 5.0)
+self.keyboard.walk('w', 15.0)
+self.keyboard.multiWalk(['d', 'w'], 4.0)
+self.keyboard.walk('w', 27.0)
+self.keyboard.multiWalk(['w', 'a'], 27.0)
+self.keyboard.walk('w', 19.5)

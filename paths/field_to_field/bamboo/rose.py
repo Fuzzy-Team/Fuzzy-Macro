@@ -1,0 +1,8 @@
+self.keyboard.walk('s', 11.0)
+self.keyboard.keyDown('s')
+self.keyboard.press('space')
+time.sleep(0.4)
+self.keyboard.keyUp('s')
+time.sleep(0.1)
+self.keyboard.multiWalk(['a', 's'], 19.0)
+self.keyboard.walk('s', 3.5)

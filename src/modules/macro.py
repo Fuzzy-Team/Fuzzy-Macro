@@ -4070,14 +4070,24 @@ class macro:
     
     def goToPlanter(self, planter, field, method):
         global finalKey
-        self.cannon()
+        normalized_field = str(field).replace("_", " ").strip()
+        current_location = str(getattr(self, "location", "") or "").replace("_", " ").strip()
+        fieldToFieldPath = f"../paths/field_to_field/{current_location}/{normalized_field}.py"
+        planterFromHivePath = f"../paths/planters_from_hive/{normalized_field}.py"
+
+        if current_location and current_location != normalized_field and os.path.isfile(fieldToFieldPath):
+            self.logger.webhook("", f"Travelling field-to-field: {current_location.title()} to {normalized_field.title()}", "dark brown")
+            exec(open(fieldToFieldPath).read())
+            self.location = normalized_field
+        elif current_location in ("spawn", "hive") and os.path.isfile(planterFromHivePath):
+            self.logger.webhook("", f"Travelling hive-to-planter: {normalized_field.title()}", "dark brown")
+            exec(open(planterFromHivePath).read())
+            self.location = normalized_field
+        else:
+            self.cannon()
+            self.goToField(normalized_field, "north")
         self.logger.webhook("", f"Travelling: {planter.title()} Planter ({field.title()}), {method.title()}", "dark brown")
-        self.goToField(field, "north")
-        #move from center of field to planter spot
         finalKey = None
-        path = f"../paths/planters/{field}.py"
-        if os.path.isfile(path): #not all fields have a planter path
-            exec(open(path).read())
         #go to the planter
         if method == "collect": #return true if the planter can be found
             time.sleep(1)

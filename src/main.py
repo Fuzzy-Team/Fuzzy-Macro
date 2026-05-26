@@ -1995,6 +1995,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
 
                         return bestScore, bestPlacements
 
+                    placedPlanterThisRun = False
                     while True:
                         plantersPlaced = sum(bool(planter["planter"]) for planter in planterData)
                         if plantersPlaced >= maxAllowedPlanters:
@@ -2031,14 +2032,19 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         if runTask(
                             macro.placePlanter,
                             args=(candidate["planter"], candidate["field"], False),
+                            resetAfter=False,
                             convertAfter=False,
                             allowAFB=False
                         ):
+                            placedPlanterThisRun = True
                             savePlacedPlanter(slot, candidate["field"], candidate["planter_obj"], candidate["nectar"], placementPlan)
                             if gatherFlag:
                                 runTask(macro.gather, args=(candidate["field"],), resetAfter=False)
                         else:
                             blockedPlacements.add((candidate["planter"], candidate["field"]))
+
+                    if placedPlanterThisRun:
+                        macro.reset()
                     
                     executedTasks.add(taskId)
                     return True

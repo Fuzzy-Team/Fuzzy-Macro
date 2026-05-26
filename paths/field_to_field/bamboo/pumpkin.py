@@ -1,0 +1,8 @@
+self.keyboard.keyDown('d')
+self.keyboard.press('space')
+time.sleep(0.4)
+self.keyboard.keyUp('d')
+time.sleep(0.25)
+time.sleep(0.07)
+self.keyboard.multiWalk(['w', 'a'], 17.0)
+self.keyboard.walk('a', 7.0)

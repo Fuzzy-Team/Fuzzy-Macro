@@ -1,0 +1,5 @@
+self.keyboard.walk('s', 18.0)
+time.sleep(0.05)
+self.keyboard.walk('a', 52.0)
+self.keyboard.multiWalk(['w', 'a'], 27.0)
+self.keyboard.walk('w', 17.0)

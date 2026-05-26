@@ -1,0 +1,6 @@
+time.sleep(0.11)
+self.keyboard.press('.')
+self.keyboard.press('space')
+self.keyboard.press('.')
+self.keyboard.press('space')
+time.sleep(0.5)
