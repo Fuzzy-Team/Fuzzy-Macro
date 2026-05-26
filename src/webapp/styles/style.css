@@ -126,6 +126,34 @@
   --primary-rgb: 50, 190, 78;
 }
 
+/* Basic Black Theme Overrides */
+.theme-basic-black {
+  --primary: #ffc800;
+  --primary-hover: #ffd640;
+  --primary-rgb: 255, 200, 0;
+}
+
+/* Gummy Theme Overrides */
+.theme-gummy {
+  --primary: #ff00ff;
+  --primary-hover: #0ceb4f;
+  --primary-rgb: 255, 0, 255;
+}
+
+/* Tadpole Theme Overrides */
+.theme-tadpole {
+  --primary: #20bd96;
+  --primary-hover: #3e8075;
+  --primary-rgb: 32, 189, 150;
+}
+
+/* Gifted Tadpole Theme Overrides */
+.theme-gifted-tadpole {
+  --primary: #90f0e0;
+  --primary-hover: #5ebdad;
+  --primary-rgb: 144, 240, 224;
+}
+
 body {
   margin: 0;
   padding: 0;
