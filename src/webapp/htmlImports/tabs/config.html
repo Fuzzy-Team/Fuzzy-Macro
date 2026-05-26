@@ -681,6 +681,26 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
+        {
+          id: "live_gather_report",
+          title: "Live Gather Report",
+          desc: "While gathering, edit one Discord webhook message with a honey/pollen screenshot and gather timer",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "live_gather_report_interval",
+          title: "Live Gather Report Interval",
+          desc: "Seconds between updates. Values below 10 or above 20 are clamped automatically",
+          type: {
+            name: "textbox",
+            inputType: "int",
+            inputLimit: 2,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
       ]);
 
       buildStandardContainer(parentDiscord, "Discord Bot", "", [
