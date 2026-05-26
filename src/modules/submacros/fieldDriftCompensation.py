@@ -42,18 +42,15 @@ class fieldDriftCompensation():
         self._sprinkler_confidence_threshold = 0.6
         self._sprinkler_nms_threshold = 0.5
         self._sprinkler_label_map = {
-            0: "Basic",
-            1: "Diamond",
-            2: "Gold",
-            3: "Silver",
-            4: "Supreme",
+            0: "Sprinkler",
+            1: "Supreme",
         }
         self._sprinkler_type_map = {
-            "basic": "Basic",
-            "silver": "Silver",
-            "gold": "Gold",
-            "golden": "Gold",
-            "diamond": "Diamond",
+            "basic": "Sprinkler",
+            "silver": "Sprinkler",
+            "gold": "Sprinkler",
+            "golden": "Sprinkler",
+            "diamond": "Sprinkler",
             "supreme": "Supreme",
             "saturator": "Supreme",
         }

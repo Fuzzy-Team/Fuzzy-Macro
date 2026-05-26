@@ -2689,12 +2689,16 @@ class macro:
         pattern_debug_mode = fuzzyAIRuntimeDefaults["fuzzy_ai_debug_mode"]
         pattern_record_video = fuzzyAIRuntimeDefaults["fuzzy_ai_record_video"]
         pattern_record_video_fps = fuzzyAIRuntimeDefaults["fuzzy_ai_record_video_fps"]
+        pattern_field_drift_compensation = bool(fieldSetting.get("field_drift_compensation", False))
+        pattern_use_sprinkler_model_for_drift_compensation = bool(
+            self.setdat.get("use_sprinkler_model_for_drift_compensation", False)
+        )
         sprinklerLabelMap = {
-            "basic": "Basic",
-            "silver": "Silver",
-            "golden": "Gold",
-            "gold": "Gold",
-            "diamond": "Diamond",
+            "basic": "Sprinkler",
+            "silver": "Sprinkler",
+            "golden": "Sprinkler",
+            "gold": "Sprinkler",
+            "diamond": "Sprinkler",
             "saturator": "Supreme",
             "supreme": "Supreme",
         }
