@@ -2345,7 +2345,9 @@ class macro:
                 if 1 <= slotNumber <= 6:
                     excludedHiveSlots.add(slotNumber)
             rejoinSuccess = False
-            availableSlots = [] #store hive slots that are claimable
+            claimFirstAvailableHive = self.setdat.get("claim_first_available_hive", True)
+            claimFirstAvailableHive = claimFirstAvailableHive is not False
+            availableSlots = [] #store hive slots that are claimable when not claiming the first available hive
             newHiveNumber = 0
             hiveAlreadyClaimed = False
         
@@ -2423,7 +2425,7 @@ class macro:
                     self.logger.webhook("", f'Hive {hiveNumber} belongs to another player, scanning hives for your slot','dark brown', "screen")
                 else:
                     self.logger.webhook("", f'Hive {hiveNumber} is already claimed, scanning all hives','dark brown', "screen")
-                # Scan once for an already claimed hive, while remembering open slots passed along the way.
+                # Scan once and optionally use the first claimable slot reached.
                 forwardScanSlots = list(range(hiveNumber + 1, 7))
                 wrapScanSlots = list(range(1, hiveNumber))
                 for j in forwardScanSlots:
@@ -2434,6 +2436,10 @@ class macro:
                         hiveAlreadyClaimed = True
                         break
                     if not isExcludedSlot(j) and isHiveAvailable():
+                        if claimFirstAvailableHive:
+                            newHiveNumber = j
+                            rejoinSuccess = True
+                            break
                         availableSlots.append(j)
 
                 for j in wrapScanSlots:
@@ -2446,9 +2452,13 @@ class macro:
                         hiveAlreadyClaimed = True
                         break
                     if not isExcludedSlot(j) and isHiveAvailable():
+                        if claimFirstAvailableHive:
+                            newHiveNumber = j
+                            rejoinSuccess = True
+                            break
                         availableSlots.append(j)
 
-                # If no existing hive was found, claim the nearest open slot found during the scan.
+                # If immediate claiming is disabled, preserve the old nearest-open-slot behavior.
                 if not rejoinSuccess and availableSlots:
                     newHiveNumber = min(availableSlots, key=lambda slot: abs(slot - currentHiveSlot))
                     moveToHiveSlot(newHiveNumber)
