@@ -20,7 +20,7 @@ import cv2
 import numpy as np
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Tuple
-from modules.controls.sleep import INTERRUPT_SKIP, INTERRUPT_RESET
+from modules.controls.sleep import INTERRUPT_SKIP, INTERRUPT_RESET, INTERRUPT_AFB_REROLL
 
 # Import settings manager functions
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'misc'))
@@ -2309,6 +2309,18 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         skipTask.value = INTERRUPT_RESET
         await interaction.response.send_message("Interrupting the current task. The macro will reset, convert, and retry it.")
 
+    @bot.tree.command(name = "reroll", description = "Interrupt the current task and reroll Auto Field Boost")
+    async def reroll(interaction: discord.Interaction):
+        if run.value != 2:
+            await interaction.response.send_message("Macro is not running")
+            return
+        settings = get_cached_settings()
+        if not settings.get("Auto_Field_Boost", settings.get("auto_field_boost", False)):
+            await interaction.response.send_message("Auto Field Boost is not enabled.")
+            return
+        skipTask.value = INTERRUPT_AFB_REROLL
+        await interaction.response.send_message("Rerolling Auto Field Boost. The macro will reset, convert, and roll dice again.")
+
     @bot.tree.command(name = "skip", description = "Skip the current task and move to the next one")
     async def skip(interaction: discord.Interaction):
         if run.value != 2:
@@ -3487,27 +3499,27 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     @bot.tree.command(name="help", description="Show available commands")
     async def help_command(interaction: discord.Interaction):
         """Show available commands"""
-        embed = discord.Embed(title="🤖 BSS Macro Discord Bot", description="Available Commands:", color=0x0099ff)
+        embed = discord.Embed(title="BSS Macro Discord Bot", description="Available Commands:", color=0x0099ff)
 
-        embed.add_field(name="🔧 **Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/stop` - Stop the macro\n`/pause` - Pause the macro\n`/resume` - Resume the macro\n`/status` - Get macro status and current task\n`/rejoin` - Make macro rejoin game\n`/screenshot` - Get screenshot\n`/settings` - Open settings panel\n`/hiveslot <1-6>` - Change hive slot number\n`/shiftlock <on/off/toggle>` - Control shift lock", inline=False)
+        embed.add_field(name="**Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/stop` - Stop the macro\n`/pause` - Pause the macro\n`/resume` - Resume the macro\n`/status` - Get macro status and current task\n`/reroll` - Reroll Auto Field Boost\n`/rejoin` - Make macro rejoin game\n`/screenshot` - Get screenshot\n`/settings` - Open settings panel\n`/hiveslot <1-6>` - Change hive slot number\n`/shiftlock <on/off/toggle>` - Control shift lock", inline=False)
 
-        embed.add_field(name="🌾 **Field Management**", value="`/fields` - View field configuration\n`/field <field> <true/false>` - Enable or disable a field\n`/swapfield <current> <new>` - Swap one field for another (new can be any field)", inline=False)
+        embed.add_field(name="**Field Management**", value="`/fields` - View field configuration\n`/field <field> <true/false>` - Enable or disable a field\n`/swapfield <current> <new>` - Swap one field for another (new can be any field)", inline=False)
 
-        embed.add_field(name="📜 **Quest Management**", value="`/quests` - View quest configuration\n`/quest <quest> <true/false>` - Enable or disable a quest", inline=False)
+        embed.add_field(name="**Quest Management**", value="`/quests` - View quest configuration\n`/quest <quest> <true/false>` - Enable or disable a quest", inline=False)
 
-        embed.add_field(name="🔄 **Macro Mode**", value="`/macromode <normal/quests/field>` - Set macro mode (normal = all tasks, quests = quests only, field = fields only)", inline=False)
+        embed.add_field(name="**Macro Mode**", value="`/macromode <normal/quests/field>` - Set macro mode (normal = all tasks, quests = quests only, field = fields only)", inline=False)
 
-        embed.add_field(name="🎁 **Collectibles**", value="`/collectibles` - View collectibles\n`/collectible <item> <true/false>` - Enable or disable collectible", inline=False)
+        embed.add_field(name="**Collectibles**", value="`/collectibles` - View collectibles\n`/collectible <item> <true/false>` - Enable or disable collectible", inline=False)
 
-        embed.add_field(name="🌱 **Planters**", value="`/plantertimers` - View active planter timers\n`/planterreset <planter>` - Reset the timer for one active enabled planter", inline=False)
+        embed.add_field(name="**Planters**", value="`/plantertimers` - View active planter timers\n`/planterreset <planter>` - Reset the timer for one active enabled planter", inline=False)
 
-        embed.add_field(name="🐛 **Mob Runs**", value="`/mobs` - View mob configuration\n`/mob <mob> <true/false>` - Enable or disable mob run", inline=False)
+        embed.add_field(name="**Mob Runs**", value="`/mobs` - View mob configuration\n`/mob <mob> <true/false>` - Enable or disable mob run", inline=False)
 
-        embed.add_field(name="📁 **Profile Management**", value="`/swapprofile <name>` - Switch to a different profile (macro must be stopped)", inline=False)
+        embed.add_field(name="**Profile Management**", value="`/swapprofile <name>` - Switch to a different profile (macro must be stopped)", inline=False)
 
-        embed.add_field(name="📊 **Status & Monitoring**", value="`/status` - Get macro status and current task\n`/tasklist` - Show enabled task order, current task, and next task\n`/logs` - Show recent macro actions\n`/battery` - Check battery status\n`/streamurl` - Get stream URL\n`/hourlyreport` - Generate and send the hourly report\n`/session` - Generate and send the final session report", inline=False)
+        embed.add_field(name="**Status & Monitoring**", value="`/status` - Get macro status and current task\n`/tasklist` - Show enabled task order, current task, and next task\n`/logs` - Show recent macro actions\n`/battery` - Check battery status\n`/streamurl` - Get stream URL\n`/hourlyreport` - Generate and send the hourly report\n`/session` - Generate and send the final session report", inline=False)
         
-        embed.add_field(name="⚙️ **Advanced**", value="`/amulet <keep/replace>` - Choose amulet action\n`/close <both/roblox/macro>` - Close both, Roblox only, or macro only", inline=False)
+        embed.add_field(name="**Advanced**", value="`/amulet <keep/replace>` - Choose amulet action\n`/close <both/roblox/macro>` - Close both, Roblox only, or macro only", inline=False)
 
         await interaction.response.send_message(embed=embed)
 
