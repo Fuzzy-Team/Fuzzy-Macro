@@ -12,7 +12,7 @@ Requirements:
 - mss or Pillow
 - best.mlpackage and sprinkler.mlpackage
 
-- Version 1.5
+- Version 2.0
 """
 
 import math
@@ -70,8 +70,18 @@ SPRINKLER_RESCAN_ATTEMPTS = 3
 SPRINKLER_RESCAN_DELAY = 0.3
 TARGET_SPRINKLER_LABEL = None
 DEBUG_MODE = False
-RECORD_VIDEO = False
+RECORD_VIDEO = True
 RECORD_VIDEO_FPS = 12.0
+CONTINUOUS_SCAN_INTERVAL = 0.08
+CONTINUOUS_MIN_REPLAN_DISTANCE = 0.08
+TARGET_LOCK_REACHED_DISTANCE = 0.18
+TARGET_LOCK_LOST_TIMEOUT = 0.9
+TARGET_LOCK_SWITCH_SCORE_MULTIPLIER = 2.25
+TARGET_LOCK_SWITCH_DISTANCE = 1.25
+ANCHOR_REFRESH_INTERVAL = 0.75
+ANCHOR_MAX_PASSIVE_DISTANCE = 8.0
+LEASH_HARD_MARGIN = 2.5
+LEASH_NEAR_TOKEN_ALLOWANCE = 2.25
 
 PREFERRED_TOKENS = {}
 IGNORED_TOKENS = {}
@@ -130,11 +140,8 @@ LABELS_TOKENS = {
 }
 
 LABELS_SPRINKLER = {
-    0: "Basic",
-    1: "Diamond",
-    2: "Gold",
-    3: "Silver",
-    4: "Supreme",
+    0: "Sprinkler",
+    1: "Supreme",
 }
 
 
@@ -257,6 +264,11 @@ TARGET_SPRINKLER_LABEL = _coerce_text(
     globals().get("pattern_target_sprinkler_label"),
     "",
 ) or None
+FIELD_DRIFT_COMPENSATION = _coerce_bool(globals().get("pattern_field_drift_compensation"), False)
+USE_SPRINKLER_MODEL_FOR_DRIFT_COMPENSATION = _coerce_bool(
+    globals().get("pattern_use_sprinkler_model_for_drift_compensation"),
+    False,
+)
 CAPTURE_BACKEND = _coerce_text(globals().get("pattern_capture_backend"), "auto").lower()
 DEBUG_MODE = _coerce_bool(globals().get("pattern_debug_mode"), DEBUG_MODE)
 RECORD_VIDEO = _coerce_bool(globals().get("pattern_record_video"), RECORD_VIDEO)
@@ -673,6 +685,7 @@ def _release_video_writer(runtime=None):
 
 
 def onGatherEnd():
+    _stop_scanner_thread()
     _release_video_writer()
 
 
@@ -705,6 +718,14 @@ def _record_debug_frame(runtime, frame, detections, target):
         "last_timing_ms": dict(runtime.get("last_timing_ms", {})),
         "candidate_count": runtime.get("last_candidate_count", 0),
         "rejected_tokens": list(runtime.get("last_rejected_tokens", [])),
+        "sprinkler": dict(runtime.get("last_sprinkler_detection", {})),
+        "anchor": dict(runtime.get("last_anchor", {})),
+        "sprinkler_status": runtime.get("last_sprinkler_status", ""),
+        "target_sprinkler_label": TARGET_SPRINKLER_LABEL or "",
+        "field_drift_compensation": FIELD_DRIFT_COMPENSATION,
+        "use_sprinkler_model_for_drift_compensation": USE_SPRINKLER_MODEL_FOR_DRIFT_COMPENSATION,
+        "preferred_tokens": list(PREFERRED_TOKENS.keys())[:8],
+        "ignored_count": len(IGNORED_TOKENS),
         "updated_at": time.time(),
     }
 
@@ -737,10 +758,35 @@ def _annotate_recording_frame(runtime, frame):
         cv2.rectangle(annotated, (left, top), (right, bottom), color, 2 if is_target else 1)
         _draw_label(annotated, f"{token_name} {confidence:.2f}", left, top - 4, color)
 
+    sprinkler = overlay.get("sprinkler") or {}
+    sprinkler_box = sprinkler.get("box")
+    if sprinkler_box:
+        x1, y1, x2, y2 = sprinkler_box
+        left = max(0, min(frame_w - 1, int(round(x1))))
+        top = max(0, min(frame_h - 1, int(round(y1))))
+        right = max(0, min(frame_w - 1, int(round(x2))))
+        bottom = max(0, min(frame_h - 1, int(round(y2))))
+        cv2.rectangle(annotated, (left, top), (right, bottom), (255, 180, 0), 3)
+        match_text = "match" if sprinkler.get("target_match") else "seen"
+        _draw_label(
+            annotated,
+            f"sprinkler {match_text} {sprinkler.get('label', '?')} {sprinkler.get('confidence', 0.0):.2f} d={sprinkler.get('distance', 0.0):.2f}",
+            left,
+            top - 4,
+            (255, 180, 0),
+        )
+
+    anchor = overlay.get("anchor") or {}
     status_lines = [
         f"tokens={len(detections)} candidates={overlay.get('candidate_count', 0)} pos=({overlay.get('current_x', 0.0):.2f},{overlay.get('current_y', 0.0):.2f}) moves={overlay.get('movement_count', 0)}",
         f"target={target['name']} score={target['score']:.2f} move=({target['tx']:.2f},{target['ty']:.2f})" if target else "target=None",
+        f"sprinkler_status={overlay.get('sprinkler_status', '')} target={overlay.get('target_sprinkler_label', '') or 'any'} drift={overlay.get('field_drift_compensation')} model={overlay.get('use_sprinkler_model_for_drift_compensation')}",
     ]
+    if anchor:
+        age = max(0.0, time.time() - float(anchor.get("time", time.time())))
+        status_lines.append(
+            f"anchor=({anchor.get('x', 0.0):.2f},{anchor.get('y', 0.0):.2f}) sprinkler=({anchor.get('sprinkler_tx', 0.0):.2f},{anchor.get('sprinkler_ty', 0.0):.2f}) age={age:.1f}s"
+        )
     rejected = overlay.get("rejected_tokens", [])
     if rejected:
         summary = []
@@ -851,6 +897,133 @@ def _update_detection_fps(runtime, elapsed):
     runtime["last_detection_ms"] = elapsed * 1000.0
 
 
+def _scan_tokens_once(runtime):
+    detection_start = time.time()
+    screenshot_start = time.time()
+    frame = _grab_token_frame(runtime)
+    screenshot_elapsed = time.time() - screenshot_start
+    preprocess_start = time.time()
+    image = _preprocess_token_frame(frame, runtime)
+    preprocess_elapsed = time.time() - preprocess_start
+    inference_start = time.time()
+    output = _run_model(runtime, "token", image)
+    inference_elapsed = time.time() - inference_start
+    postprocess_start = time.time()
+    detections = _postprocess_tokens(output, CONFIDENCE_THRESHOLD)
+    postprocess_elapsed = time.time() - postprocess_start
+    _refresh_sprinkler_anchor(runtime)
+    scoring_start = time.time()
+    target = _find_best_token(runtime, detections)
+    if (
+        target is None
+        and not runtime.get("movement_active")
+        and any(item.get("reason") in ("leash", "hard_leash") for item in runtime.get("last_rejected_tokens", []))
+        and _refresh_sprinkler_anchor(runtime, force=True)
+    ):
+        target = _find_best_token(runtime, detections)
+    scoring_elapsed = time.time() - scoring_start
+    total_elapsed = time.time() - detection_start
+
+    runtime["last_timing_ms"] = {
+        "screenshot": screenshot_elapsed * 1000.0,
+        "preprocess": preprocess_elapsed * 1000.0,
+        "inference": inference_elapsed * 1000.0,
+        "postprocess": postprocess_elapsed * 1000.0,
+        "scoring": scoring_elapsed * 1000.0,
+        "total": total_elapsed * 1000.0,
+    }
+    _debug_log(
+        "timing "
+        f"screenshot={runtime['last_timing_ms']['screenshot']:.1f}ms "
+        f"preprocess={runtime['last_timing_ms']['preprocess']:.1f}ms "
+        f"inference={runtime['last_timing_ms']['inference']:.1f}ms "
+        f"postprocess={runtime['last_timing_ms']['postprocess']:.1f}ms "
+        f"scoring={runtime['last_timing_ms']['scoring']:.1f}ms "
+        f"total={runtime['last_timing_ms']['total']:.1f}ms",
+        min_interval=1.0,
+        key="timing",
+    )
+    _update_detection_fps(runtime, total_elapsed)
+    _record_debug_frame(runtime, frame, detections, target)
+
+    now = time.time()
+    scan_lock = runtime.get("scan_lock")
+    if scan_lock is None:
+        scan_lock = threading.Lock()
+        runtime["scan_lock"] = scan_lock
+    with scan_lock:
+        runtime["latest_detections"] = detections
+        runtime["latest_target"] = target
+        runtime["latest_scan_time"] = now
+
+    return detections, target
+
+
+def _same_token_candidate(a, b):
+    if not isinstance(a, dict) or not isinstance(b, dict):
+        return False
+    if a.get("name") != b.get("name"):
+        return False
+    ax = a.get("future_x")
+    ay = a.get("future_y")
+    bx = b.get("future_x")
+    by = b.get("future_y")
+    if ax is None or ay is None or bx is None or by is None:
+        return False
+    return math.hypot(float(ax) - float(bx), float(ay) - float(by)) <= TARGET_LOCK_SWITCH_DISTANCE
+
+
+def _scanner_loop(runtime):
+    stop_event = runtime.get("scanner_stop_event")
+    while stop_event is not None and not stop_event.is_set():
+        try:
+            if not runtime.get("ready"):
+                return
+            _scan_tokens_once(runtime)
+        except Exception as exc:
+            runtime["ready"] = False
+            runtime["error"] = str(exc)
+            _release_video_writer(runtime)
+            _debug_log(f"scanner error: {exc}", min_interval=1.0, key="scanner_error")
+            return
+        time.sleep(max(CONTINUOUS_SCAN_INTERVAL, 0.01))
+
+
+def _ensure_scanner_thread(runtime):
+    thread = runtime.get("scanner_thread")
+    if thread is not None and thread.is_alive():
+        return
+
+    stop_event = runtime.get("scanner_stop_event")
+    if stop_event is None or stop_event.is_set():
+        stop_event = threading.Event()
+        runtime["scanner_stop_event"] = stop_event
+
+    thread = threading.Thread(target=_scanner_loop, args=(runtime,), daemon=True)
+    runtime["scanner_thread"] = thread
+    thread.start()
+    _debug_log("continuous token scanner started", min_interval=1.0, key="scanner_started")
+
+
+def _stop_scanner_thread(runtime=None):
+    if runtime is None:
+        runtime = _runtime_state()
+    if not isinstance(runtime, dict):
+        return
+
+    stop_event = runtime.get("scanner_stop_event")
+    if stop_event is not None:
+        stop_event.set()
+
+    thread = runtime.get("scanner_thread")
+    if thread is not None and thread.is_alive() and thread is not threading.current_thread():
+        try:
+            thread.join(timeout=1)
+        except Exception:
+            pass
+    runtime["scanner_thread"] = None
+
+
 def _load_coreml_model(model_path):
     if ct is None:
         raise RuntimeError("coremltools is required for AI token gathering. Install coremltools, then restart the macro.")
@@ -905,10 +1078,15 @@ def _get_importance(token_name):
     return PREFERRED_TOKENS.get(token_name, 1)
 
 
+def _sprinkler_anchor_enabled():
+    return FIELD_DRIFT_COMPENSATION and USE_SPRINKLER_MODEL_FOR_DRIFT_COMPENSATION
+
+
 def _token_metrics():
     max_leash = 4.0 + (0.45 * max(width - 1, 0)) + (0.35 * size)
     return {
         "max_leash": max_leash,
+        "hard_leash": max_leash + LEASH_HARD_MARGIN,
         "soft_leash": max_leash * 0.625,
         "max_consider": max_leash + 1.0 + (0.15 * width),
         "cluster_radius": 1.6 + (0.1 * width),
@@ -916,7 +1094,8 @@ def _token_metrics():
         "toward_home_bonus": 1.4,
         "away_from_home_penalty": 0.8,
         "cluster_bonus_per_token": 0.25,
-        "leash_edge_penalty": 0.5,
+        "leash_edge_penalty": 0.45,
+        "outside_leash_penalty": 0.35,
     }
 
 
@@ -952,8 +1131,8 @@ def _find_best_token(runtime, detections):
         future_x = current_x + tx
         future_y = current_y + ty
         future_dist = math.hypot(future_x, future_y)
-        if future_dist > metrics["max_leash"]:
-            rejected.append({"name": token_name, "reason": "leash", "confidence": confidence, "distance": distance, "future_dist": future_dist, "tx": tx, "ty": ty})
+        if future_dist > metrics["hard_leash"] and distance > LEASH_NEAR_TOKEN_ALLOWANCE:
+            rejected.append({"name": token_name, "reason": "hard_leash", "confidence": confidence, "distance": distance, "future_dist": future_dist, "tx": tx, "ty": ty})
             continue
 
         proximity = 1.0 / (0.3 + distance) ** metrics["proximity_exp"]
@@ -972,6 +1151,8 @@ def _find_best_token(runtime, detections):
 
         if current_dist > metrics["soft_leash"] and future_dist > current_dist:
             direction_score *= metrics["leash_edge_penalty"]
+        if future_dist > metrics["max_leash"]:
+            direction_score *= metrics["outside_leash_penalty"]
 
         score = proximity * direction_score * (math.log(_get_importance(token_name) + 1.0) + 1.0)
         candidates.append(
@@ -1059,25 +1240,123 @@ def _execute_movement(tx, ty):
         return False
 
     moved = False
-    for segment_type, keys, distance in _movement_segments(tx, ty):
-        if segment_type == "diagonal":
-            _tile_multi_walk(keys, distance)
-        else:
-            _tile_walk(keys[0], distance)
-        moved = True
-
-    if moved:
-        runtime = _runtime_state()
-        runtime["current_x"] += tx
-        runtime["current_y"] += ty
-        runtime["movement_count"] += 1
-        runtime["last_token_time"] = time.time()
+    runtime = _runtime_state()
+    runtime["movement_active"] = True
+    try:
+        for segment_type, keys, distance in _movement_segments(tx, ty):
+            if segment_type == "diagonal":
+                _tile_multi_walk(keys, distance)
+            else:
+                _tile_walk(keys[0], distance)
+            moved = True
+        if moved:
+            runtime["current_x"] += tx
+            runtime["current_y"] += ty
+            runtime["movement_count"] += 1
+            runtime["last_token_time"] = time.time()
+    finally:
+        runtime["movement_active"] = False
 
     return moved
 
 
+def _execute_movement_to_target(tx, ty):
+    magnitude = math.hypot(tx, ty)
+    if magnitude <= CONTINUOUS_MIN_REPLAN_DISTANCE:
+        return False
+
+    return _execute_movement(tx, ty)
+
+
+def _latest_target(runtime):
+    scan_lock = runtime.get("scan_lock")
+    if scan_lock is None:
+        return runtime.get("latest_target")
+    with scan_lock:
+        target = runtime.get("latest_target")
+        return dict(target) if isinstance(target, dict) else target
+
+
+def _locked_target(runtime):
+    lock = runtime.get("locked_target")
+    return dict(lock) if isinstance(lock, dict) else None
+
+
+def _clear_locked_target(runtime):
+    scan_lock = runtime.get("scan_lock")
+    if scan_lock is None:
+        runtime["locked_target"] = None
+    else:
+        with scan_lock:
+            runtime["locked_target"] = None
+
+
+def _select_movement_target(runtime):
+    latest = _latest_target(runtime)
+    locked = _locked_target(runtime)
+    now = time.time()
+
+    if locked:
+        remaining_x = float(locked.get("future_x", runtime["current_x"])) - runtime["current_x"]
+        remaining_y = float(locked.get("future_y", runtime["current_y"])) - runtime["current_y"]
+        remaining = math.hypot(remaining_x, remaining_y)
+        if remaining <= TARGET_LOCK_REACHED_DISTANCE:
+            _clear_locked_target(runtime)
+            return latest
+
+        last_seen = float(locked.get("last_seen", locked.get("locked_at", now)))
+        if latest and _same_token_candidate(locked, latest):
+            locked.update(latest)
+            locked["last_seen"] = now
+            runtime["locked_target"] = locked
+            return locked
+
+        if now - last_seen <= TARGET_LOCK_LOST_TIMEOUT:
+            return locked
+
+        if latest and latest.get("score", 0.0) >= locked.get("score", 0.0) * TARGET_LOCK_SWITCH_SCORE_MULTIPLIER:
+            latest["locked_at"] = now
+            latest["last_seen"] = now
+            runtime["locked_target"] = latest
+            return latest
+
+        _clear_locked_target(runtime)
+        return latest
+
+    if latest:
+        latest["locked_at"] = now
+        latest["last_seen"] = now
+        runtime["locked_target"] = latest
+    return latest
+
+
+def _execute_planned_movement(runtime):
+    target = _select_movement_target(runtime)
+    if not target:
+        return False
+
+    target_x = target.get("future_x")
+    target_y = target.get("future_y")
+    if target_x is None or target_y is None:
+        return _execute_movement_to_target(target.get("tx", 0.0), target.get("ty", 0.0))
+
+    remaining_x = float(target_x) - runtime["current_x"]
+    remaining_y = float(target_y) - runtime["current_y"]
+    if math.hypot(remaining_x, remaining_y) <= CONTINUOUS_MIN_REPLAN_DISTANCE:
+        _clear_locked_target(runtime)
+        return False
+
+    _debug_log(
+        f"moving toward planned target={target['name']} remaining=({remaining_x:.2f},{remaining_y:.2f}) score={target['score']:.2f}",
+        min_interval=0.25,
+        key="planned_move",
+    )
+    return _execute_movement_to_target(remaining_x, remaining_y)
+
+
 def _find_sprinkler(runtime):
     if runtime.get("sprinkler_session") is None:
+        runtime["last_sprinkler_status"] = "model_missing"
         return None
 
     frame = _grab_frame(runtime)
@@ -1093,24 +1372,51 @@ def _find_sprinkler(runtime):
 
     best = None
     best_distance = float("inf")
+    best_any = None
+    best_any_distance = float("inf")
+    status = "no_detection"
     for box, class_id, confidence in detections:
         label = LABELS_SPRINKLER.get(class_id)
-        if TARGET_SPRINKLER_LABEL and label != TARGET_SPRINKLER_LABEL:
-            continue
 
         x1, y1, x2, y2 = box
         center_x = ((x1 + x2) / 2.0) * scale_x
         center_y = ((y1 + y2) / 2.0) * scale_y
         tx, ty = _relative_distance(center_x, center_y, runtime["homography"])
         distance = math.hypot(tx, ty)
+        scaled_box = (x1 * scale_x, y1 * scale_y, x2 * scale_x, y2 * scale_y)
 
         if distance > MAX_SPRINKLER_DISTANCE:
             continue
 
+        if distance < best_any_distance:
+            best_any_distance = distance
+            best_any = (tx, ty, distance, label, confidence, scaled_box)
+
+        if TARGET_SPRINKLER_LABEL and label != TARGET_SPRINKLER_LABEL:
+            status = f"label_mismatch:{label or 'unknown'}"
+            continue
+
         if distance < best_distance:
             best_distance = distance
-            best = (tx, ty, distance, label, confidence)
+            best = (tx, ty, distance, label, confidence, scaled_box)
 
+    overlay_detection = best or best_any
+    if overlay_detection:
+        tx, ty, distance, label, confidence, scaled_box = overlay_detection
+        runtime["last_sprinkler_detection"] = {
+            "tx": tx,
+            "ty": ty,
+            "distance": distance,
+            "label": label,
+            "confidence": confidence,
+            "box": scaled_box,
+            "target_match": bool(best),
+            "time": time.time(),
+        }
+        status = "target_match" if best else status
+    else:
+        runtime["last_sprinkler_detection"] = {}
+    runtime["last_sprinkler_status"] = status
     return best
 
 
@@ -1134,6 +1440,66 @@ def _find_sprinkler_with_retry(runtime):
     return None
 
 
+def _clear_targets(runtime):
+    scan_lock = runtime.get("scan_lock")
+    if scan_lock is None:
+        runtime["latest_target"] = None
+        runtime["locked_target"] = None
+    else:
+        with scan_lock:
+            runtime["latest_target"] = None
+            runtime["locked_target"] = None
+
+
+def _refresh_sprinkler_anchor(runtime, force=False):
+    if not _sprinkler_anchor_enabled():
+        runtime["last_sprinkler_status"] = (
+            "disabled:field_drift_compensation"
+            if not FIELD_DRIFT_COMPENSATION
+            else "disabled:use_sprinkler_model_for_drift_compensation"
+        )
+        return False
+    if runtime.get("sprinkler_session") is None:
+        runtime["last_sprinkler_status"] = "model_missing"
+        return False
+    if runtime.get("movement_active") and not force:
+        return False
+
+    now = time.time()
+    if not force and now - runtime.get("last_anchor_time", 0.0) < ANCHOR_REFRESH_INTERVAL:
+        return False
+
+    result = _find_sprinkler(runtime)
+    runtime["last_anchor_time"] = now
+    if not result:
+        return False
+
+    tx, ty, distance, label, confidence = result[:5]
+    if distance > ANCHOR_MAX_PASSIVE_DISTANCE:
+        return False
+
+    old_x = runtime.get("current_x", 0.0)
+    old_y = runtime.get("current_y", 0.0)
+    runtime["current_x"] = -tx
+    runtime["current_y"] = -ty
+    runtime["last_anchor"] = {
+        "x": runtime["current_x"],
+        "y": runtime["current_y"],
+        "sprinkler_tx": tx,
+        "sprinkler_ty": ty,
+        "distance": distance,
+        "label": label,
+        "confidence": confidence,
+        "time": time.time(),
+    }
+    _debug_log(
+        f"anchor refreshed from sprinkler label={label} confidence={confidence:.2f} pos=({old_x:.2f},{old_y:.2f})->({runtime['current_x']:.2f},{runtime['current_y']:.2f})",
+        min_interval=1.0,
+        key="anchor_refresh",
+    )
+    return True
+
+
 def _recalibrate(runtime):
     _debug_log(
         f"recalibrating from pos=({runtime['current_x']:.2f},{runtime['current_y']:.2f}) moves={runtime['movement_count']}",
@@ -1145,7 +1511,7 @@ def _recalibrate(runtime):
         _debug_log("recalibration failed: no sprinkler found", min_interval=1.0, key="recalibrate_failed")
         return False
 
-    tx, ty, distance, _label, _confidence = result
+    tx, ty, distance, _label, _confidence = result[:5]
     if distance >= SPRINKLER_ARRIVAL_THRESHOLD:
         _debug_log(f"returning to sprinkler: move=({tx:.2f},{ty:.2f}) distance={distance:.2f}")
         _execute_movement(tx, ty)
@@ -1154,6 +1520,8 @@ def _recalibrate(runtime):
     runtime["current_y"] = 0.0
     runtime["movement_count"] = 0
     runtime["last_idle_return_time"] = time.time()
+    runtime["last_anchor_time"] = time.time()
+    _clear_targets(runtime)
     _debug_log("recalibration complete; position reset to sprinkler")
     return True
 
@@ -1298,6 +1666,18 @@ def _initialise_runtime():
         "detection_fps": None,
         "last_detection_ms": None,
         "last_timing_ms": {},
+        "latest_detections": [],
+        "latest_target": None,
+        "locked_target": None,
+        "latest_scan_time": 0.0,
+        "last_anchor_time": 0.0,
+        "last_anchor": {},
+        "last_sprinkler_detection": {},
+        "last_sprinkler_status": "",
+        "movement_active": False,
+        "scan_lock": threading.Lock(),
+        "scanner_stop_event": None,
+        "scanner_thread": None,
     }
 
 
@@ -1322,56 +1702,24 @@ if not runtime.get("ready"):
     _fallback_pattern()
 else:
     try:
+        if not runtime.get("latest_scan_time"):
+            _scan_tokens_once(runtime)
+        _ensure_scanner_thread(runtime)
+        _refresh_sprinkler_anchor(runtime)
+
         if _should_recalibrate(runtime):
             _recalibrate(runtime)
 
-        detection_start = time.time()
-        screenshot_start = time.time()
-        frame = _grab_token_frame(runtime)
-        screenshot_elapsed = time.time() - screenshot_start
-        preprocess_start = time.time()
-        image = _preprocess_token_frame(frame, runtime)
-        preprocess_elapsed = time.time() - preprocess_start
-        inference_start = time.time()
-        output = _run_model(runtime, "token", image)
-        inference_elapsed = time.time() - inference_start
-        postprocess_start = time.time()
-        detections = _postprocess_tokens(output, CONFIDENCE_THRESHOLD)
-        postprocess_elapsed = time.time() - postprocess_start
-        scoring_start = time.time()
-        target = _find_best_token(runtime, detections)
-        scoring_elapsed = time.time() - scoring_start
-        total_elapsed = time.time() - detection_start
-        runtime["last_timing_ms"] = {
-            "screenshot": screenshot_elapsed * 1000.0,
-            "preprocess": preprocess_elapsed * 1000.0,
-            "inference": inference_elapsed * 1000.0,
-            "postprocess": postprocess_elapsed * 1000.0,
-            "scoring": scoring_elapsed * 1000.0,
-            "total": total_elapsed * 1000.0,
-        }
-        _debug_log(
-            "timing "
-            f"screenshot={runtime['last_timing_ms']['screenshot']:.1f}ms "
-            f"preprocess={runtime['last_timing_ms']['preprocess']:.1f}ms "
-            f"inference={runtime['last_timing_ms']['inference']:.1f}ms "
-            f"postprocess={runtime['last_timing_ms']['postprocess']:.1f}ms "
-            f"scoring={runtime['last_timing_ms']['scoring']:.1f}ms "
-            f"total={runtime['last_timing_ms']['total']:.1f}ms",
-            min_interval=1.0,
-            key="timing",
-        )
-        _update_detection_fps(runtime, total_elapsed)
-        _record_debug_frame(runtime, frame, detections, target)
-
+        target = _locked_target(runtime) or _latest_target(runtime)
         if target:
             _debug_log(
-                f"target={target['name']} confidence={target['confidence']:.2f} score={target['score']:.2f} move=({target['tx']:.2f},{target['ty']:.2f}) detections={len(detections)}",
+                f"target={target['name']} confidence={target['confidence']:.2f} score={target['score']:.2f} planned=({target['future_x']:.2f},{target['future_y']:.2f})",
                 min_interval=0.25,
                 key="target",
             )
-            _execute_movement(target["tx"], target["ty"])
+            _execute_planned_movement(runtime)
         else:
+            detections = runtime.get("latest_detections", [])
             _debug_log(
                 f"no target from detections={len(detections)} pos=({runtime['current_x']:.2f},{runtime['current_y']:.2f})",
                 min_interval=0.5,
@@ -1380,7 +1728,7 @@ else:
             now = time.time()
             rejected_reasons = {item.get("reason") for item in runtime.get("last_rejected_tokens", [])}
             recalibrated = False
-            if detections and "leash" in rejected_reasons and _recalibrate(runtime):
+            if detections and rejected_reasons.intersection({"leash", "hard_leash"}) and _recalibrate(runtime):
                 runtime["last_token_time"] = time.time()
                 recalibrated = True
 
