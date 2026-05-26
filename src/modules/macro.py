@@ -2808,8 +2808,23 @@ class macro:
         mouse.moveBy(10,5)
         self.keyboard.releaseMovement()
 
+        pauseStarted = None
+        pausedDuration = 0
+
+        def isGatherPaused():
+            return self.run is not None and self.run.value == 6
+
         def getGatherTime():
-            return time.time() - st
+            nonlocal pauseStarted, pausedDuration
+            now = time.time()
+            if isGatherPaused():
+                if pauseStarted is None:
+                    pauseStarted = now
+                return pauseStarted - st - pausedDuration
+            if pauseStarted is not None:
+                pausedDuration += now - pauseStarted
+                pauseStarted = None
+            return now - st - pausedDuration
 
         liveGatherReport = None
         if (
@@ -2823,7 +2838,7 @@ class macro:
                 self.setdat.get("live_gather_report_interval", self.setdat.get("live_honey_report_interval", 15)),
                 self.setdat.get("webhook_time_format", 24),
             )
-            liveGatherReport.start(field, gatherTimeLimit, getGatherTime)
+            liveGatherReport.start(field, gatherTimeLimit, getGatherTime, isGatherPaused)
         
         def stopGather():
             nonlocal gooTimerActive, gumdropTimerActive, inactiveHoneyTimerActive
