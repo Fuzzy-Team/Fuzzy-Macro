@@ -1196,6 +1196,8 @@ class macro:
                 time.sleep(0.15)
 
         def lootWindShrineTokens():
+            self.keyboard.tileWalk("d", 11)
+            self.keyboard.tileWalk("w", 4.5)
             for _ in range(4):
                 self.keyboard.tileWalk("a", 5)
                 self.keyboard.tileWalk("s", 1.5)
@@ -1206,7 +1208,7 @@ class macro:
                 self.keyboard.tileWalk("w", 1)
                 self.keyboard.tileWalk("d", 15)
                 self.keyboard.tileWalk("w", 1)
-            self.keyboard.tileWalk("a", 15)
+            self.keyboard.tileWalk("a", 17)
             for _ in range(4):
                 self.keyboard.tileWalk("w", 1.5)
                 self.keyboard.tileWalk("d", 5)
