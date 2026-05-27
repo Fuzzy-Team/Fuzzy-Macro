@@ -25,6 +25,7 @@ from modules.screen.robloxWindow import RobloxWindowBounds
 import sys
 import platform
 import os
+import re
 import numpy as np
 import threading
 from modules.submacros.backpack import bpc
@@ -72,26 +73,30 @@ pynputKeyboard = Controller()
 #[besideE text, movement key, max cooldowns]
 collectData = { 
     "wealth_clock": [["use"], "w", 1*60*60], #1hr
+    "honey_dispenser": [["use", "honey"], None, 1*60*60], #1hr
     "blueberry_dispenser": [["use", "dispenser"], "a", 4*60*60], #4hr
     "strawberry_dispenser": [["use", "dispenser"], None, 4*60*60], #4hr
     "coconut_dispenser": [["use", "dispenser"], "s", 4*60*60], #4hr
     "royal_jelly_dispenser": [["claim", "royal"], "a",22*60*60], #22hr
     "treat_dispenser": [["use", "treat"], "w", 1*60*60], #1hr
     "ant_pass_dispenser": [["use", "free"], "w", 2*60*60], #2hr
+    "robo_pass_dispenser": [["use", "free", "robo", "pass", "passes"], None, 22*60*60], #22hr
     "glue_dispenser": [["use", "glue"], None, 22*60*60], #22hr
     "stockings": [["check", "inside", "stocking"], "a", 1*60*60], #1hr
     "wreath": [["admire", "honey"], "a", 30*60], #30mins
     "feast": [["dig", "beesmas"], "s", 1.5*60*60], #1.5hr
+    "gingerbread": [["gingerbread", "inside", "check"], None, 2*60*60], #2hr
     "samovar": [["heat", "samovar", "strange"], "w", 6*60*60], #6hr
     "snow_machine": [["activ", "machine"], None, 2*60*60], #2hr
     "lid_art": [["gander", "onett", "art"], "s", 8*60*60], #8hr
     "candles": [["admire", "candle", "honey"], "w", 4*60*60], #4hr
+    "gummy_beacon": [["gummy", "beacon", "siege", "satellite", "satelite", "vibes", "progress"], None, 8*60*60], #8hr
     "memory_match": [["spend", "play"], "a", 2*60*60], #2hr
     "mega_memory_match": [["spend", "play"], "w", 4*60*60], #4hr
-    #"night_memory_match": [["spend", "play"], "w", 8*60*60], #8hr
     "extreme_memory_match": [["spend", "play"], "w", 8*60*60], #8hr
     "winter_memory_match": [["spend", "play"], "a", 4*60*60], #4hr
     "honeystorm": [["sum", "honey", "mmon", "storm"], "s", 4*60*60], #4hr
+    "wind_shrine": [["inspect", "wind", "shrine"], None, 1*60*60], #1hr
 }
 
 #these collects are added seperately as they need to be handled seperately instead of being iterated through by the main loop
@@ -103,6 +108,62 @@ fieldBoosterData = {
 
 mergedCollectData = {**collectData, **fieldBoosterData}
 mergedCollectData["sticker_stack"] = [["add", "sticker"], None, 0]
+
+windShrineDonationItems = [
+    "ticket", "tickets",
+    "gumdrops",
+    "coconut", "coconuts",
+    "stinger", "stingers",
+    "micro-converter", "micro-converters", "micro converter", "micro converters",
+    "honeysuckle", "honeysuckles",
+    "whirligig", "whirligigs",
+    "field dice",
+    "smooth dice",
+    "loaded dice",
+    "jelly beans",
+    "red extract", "red extracts",
+    "blue extract", "blue extracts",
+    "glitter",
+    "glue", "glues",
+    "oil", "oils",
+    "enzymes",
+    "tropical drink", "tropical drinks",
+    "purple potion", "purple potions",
+    "marshmallow bee", "marshmallow bees",
+    "magic bean", "magic beans",
+    "festive bean", "festive beans",
+    "cloud vial", "cloud vials",
+    "night bell", "night bells",
+    "box-o-frogs", "boxes-o-frogs", "box o frogs", "boxes o frogs",
+    "ant pass", "ant passes",
+    "treat", "treats",
+    "atomic treat", "atomic treats",
+    "star treat", "star treats",
+    "sunflower seed", "sunflower seeds",
+    "strawberry", "strawberries",
+    "pineapple", "pineapples",
+    "blueberry", "blueberries",
+    "bitterberry", "bitterberries",
+    "neonberry", "neonberries",
+    "moon charm", "moon charms",
+    "soft wax", "soft waxes",
+    "hard wax", "hard waxes",
+    "caustic wax", "caustic waxes",
+    "swirled wax", "swirled waxes",
+    "turpentine", "turpentines",
+    "basic egg", "basic eggs", "honey bee egg",
+    "silver egg", "silver eggs",
+    "gold egg", "gold eggs",
+    "diamond egg", "diamond eggs",
+    "mythic egg", "mythic eggs",
+    "star egg", "star eggs",
+    "gifted silver egg", "gifted silver eggs",
+    "gifted gold egg", "gifted gold eggs",
+    "gifted diamond egg", "gifted diamond eggs",
+    "gifted mythic egg", "gifted mythic eggs",
+    "royal jelly", "royal jellies",
+    "star jelly", "star jellies",
+]
 
 #werewolf is a unique one. There is only one, but it can be triggered from pine, pumpkin or cactus
 regularMobQuantitiesInFields = {
@@ -501,7 +562,18 @@ questCompleterCollectNames = {
     "winter memory match": "winter_memory_match",
     "honeystorm": "honeystorm",
     "honey_storm": "honeystorm",
-    "honey storm": "honeystorm"
+    "honey storm": "honeystorm",
+    "honey_dispenser": "honey_dispenser",
+    "honey dispenser": "honey_dispenser",
+    "robo_pass_dispenser": "robo_pass_dispenser",
+    "robo pass dispenser": "robo_pass_dispenser",
+    "robo pass": "robo_pass_dispenser",
+    "gummy_beacon": "gummy_beacon",
+    "gummy beacon": "gummy_beacon",
+    "gingerbread": "gingerbread",
+    "gingerbread house": "gingerbread",
+    "wind_shrine": "wind_shrine",
+    "wind shrine": "wind_shrine"
 } 
 
 class macro:
@@ -540,7 +612,8 @@ class macro:
             "ping_sticker_events": self.setdat.get("ping_sticker_events", False),
             "ping_mob_events": self.setdat.get("ping_mob_events", False),
             "ping_conversion_events": self.setdat.get("ping_conversion_events", False),
-            "ping_hourly_reports": self.setdat.get("ping_hourly_reports", False)
+            "ping_hourly_reports": self.setdat.get("ping_hourly_reports", False),
+            "ping_guiding_star": self.setdat.get("ping_guiding_star", False)
         }
         
         self.logger = logModule.log(logQueue, self.setdat.get("enable_webhook", False), self.setdat.get("webhook_link", ""), self.setdat.get("send_screenshot", True), blocking=self.setdat.get("low_performance", False), hourlyReportOnly=self.setdat.get("only_send_hourly_report", False), robloxWindow=self.robloxWindow, enableDiscordPing=self.setdat.get("enable_discord_ping", False), discordUserID=self.setdat.get("discord_user_id", ""), pingSettings=pingSettings, webhookTimeFormat=self.setdat.get("webhook_time_format", 24))
@@ -568,6 +641,8 @@ class macro:
 
         #memory match
         self.latestMM = "normal"
+        self.lastGuidingStarScan = 0
+        self.guidingStarLastAnnounced = {}
 
         self.isGathering = False
         self.converting = False
@@ -609,7 +684,8 @@ class macro:
                 "ping_sticker_events": self.setdat.get("ping_sticker_events", False),
                 "ping_mob_events": self.setdat.get("ping_mob_events", False),
                 "ping_conversion_events": self.setdat.get("ping_conversion_events", False),
-                "ping_hourly_reports": self.setdat.get("ping_hourly_reports", False)
+                "ping_hourly_reports": self.setdat.get("ping_hourly_reports", False),
+                "ping_guiding_star": self.setdat.get("ping_guiding_star", False)
             }
             self.logger.enableWebhook = self.setdat.get("enable_webhook", False)
             self.logger.webhookURL = self.setdat.get("webhook_link", "")
@@ -1032,6 +1108,185 @@ class macro:
             self.night = False
             self.nightDetectStreaks = 0
 
+    def detectGuidingStarAnnouncement(self):
+        if not self.setdat.get("guiding_star_announcements", False):
+            return
+        if self.status.value == "rejoining":
+            return
+        now = time.time()
+        if now - self.lastGuidingStarScan < 10:
+            return
+        self.lastGuidingStarScan = now
+
+        try:
+            text = ocr.imToString("blue").lower()
+        except Exception:
+            return
+
+        if "guiding" not in text or "star" not in text:
+            return
+
+        allFields = list(startLocationDimensions.keys())
+        detectedFields = self._extractAFBBoostedFields(text, allFields)
+        if not detectedFields:
+            normalized = self._normalizeAFBText(text)
+            detectedFields = [field for field in allFields if self._normalizeAFBText(field) in normalized]
+        if not detectedFields:
+            return
+
+        field = detectedFields[-1]
+        if now - self.guidingStarLastAnnounced.get(field, 0) < 10 * 60:
+            return
+        self.guidingStarLastAnnounced[field] = now
+        self.logger.webhook("Guiding Star", f"Detected in {field.title()}", "light blue", "screen", ping_category="ping_guiding_star")
+
+    def collectWindShrine(self, reached):
+        displayName = "Wind Shrine"
+        cooldownSeconds = self.collectCooldowns["wind_shrine"]
+        elapsed = time.time() - self.getTiming("wind_shrine")
+        if elapsed < cooldownSeconds:
+            remaining = int(cooldownSeconds - elapsed)
+            self.logger.webhook("", f"{displayName} is on cooldown ({timedelta(seconds=remaining)} remaining)", "dark brown", "screen")
+            return None
+
+        def normalizeShrineItemName(value):
+            text = self.convertCyrillic(str(value or "").replace("_", " ").lower())
+            return ''.join(ch for ch in text if ch.isalnum())
+
+        def getShrineItemAliases(value):
+            normalizedValue = normalizeShrineItemName(value)
+            aliases = {normalizedValue}
+            for knownItem in windShrineDonationItems:
+                if normalizeShrineItemName(knownItem) == normalizedValue:
+                    aliases.add(normalizeShrineItemName(knownItem))
+                    continue
+                if normalizedValue and normalizedValue in normalizeShrineItemName(knownItem):
+                    aliases.add(normalizeShrineItemName(knownItem))
+            if normalizedValue.endswith("y"):
+                aliases.add(normalizedValue[:-1] + "ies")
+            elif normalizedValue.endswith("s"):
+                aliases.add(normalizedValue[:-1])
+            else:
+                aliases.add(normalizedValue + "s")
+            return [alias for alias in aliases if alias]
+
+        def readSelectedShrineItem(nameX, nameY, nameW, nameH):
+            itemTextImg = mssScreenshot(nameX, nameY, nameW, nameH)
+            textParts = []
+            for _bbox, (text, _conf) in ocr.ocrRead(itemTextImg):
+                try:
+                    textParts.append(text)
+                except Exception:
+                    continue
+            return normalizeShrineItemName(" ".join(textParts))
+
+        def clickWindShrineDialogsUntilGone():
+            dialogImg = self.adjustImage("./images/menu", "dialog")
+            searchX = self.robloxWindow.mx + self.robloxWindow.mw // 2 - 50
+            searchY = self.robloxWindow.my + 2 * self.robloxWindow.mh // 3
+            searchW = 100
+            searchH = self.robloxWindow.mh // 3
+            for _ in range(500):
+                result = locateTransparentImageOnScreen(dialogImg, searchX, searchY, searchW, searchH, 0.65)
+                if not result:
+                    break
+                _score, loc = result
+                mouse.moveTo(self.robloxWindow.mx + self.robloxWindow.mw // 2, searchY + loc[1] - 15)
+                mouse.click()
+                time.sleep(0.15)
+
+        def lootWindShrineTokens():
+            self.keyboard.multiTileWalk(["d", "w"], 7)
+            self.keyboard.tileWalk("w", 10)
+            self.keyboard.multiTileWalk(["w", "d"], 10)
+            self.keyboard.tileWalk("s", 7)
+            self.keyboard.tileWalk("d", 2)
+            self.keyboard.tileWalk("s", 3.75)
+            self.keyboard.tileWalk("a", 3)
+            for _ in range(4):
+                self.keyboard.tileWalk("a", 5)
+                self.keyboard.tileWalk("s", 1.5)
+                self.keyboard.tileWalk("d", 5)
+                self.keyboard.tileWalk("s", 1.5)
+            for _ in range(2):
+                self.keyboard.tileWalk("a", 15)
+                self.keyboard.tileWalk("w", 1)
+                self.keyboard.tileWalk("d", 15)
+                self.keyboard.tileWalk("w", 1)
+            self.keyboard.tileWalk("a", 15)
+            for _ in range(4):
+                self.keyboard.tileWalk("w", 1.5)
+                self.keyboard.tileWalk("d", 5)
+                self.keyboard.tileWalk("w", 1.5)
+                self.keyboard.tileWalk("a", 5)
+
+
+        item = str(self.setdat.get("wind_shrine_item", "field dice")).replace("_", " ").lower()
+        itemAliases = getShrineItemAliases(item)
+        quantity = max(1, int(self.setdat.get("wind_shrine_quantity", 1) or 1))
+        time.sleep(2)
+
+        # Open the shrine item selector from the initial dialog.
+        mouse.moveTo(self.robloxWindow.mx + self.robloxWindow.mw // 2, self.robloxWindow.my + math.floor(0.74 * self.robloxWindow.mh) - 5)
+        mouse.click()
+        time.sleep(0.5)
+
+        try:
+            itemImg = self.adjustImage("./images/inventory/old", item)
+        except Exception:
+            itemImg = None
+
+        foundItem = False
+        selectorCenterX = self.robloxWindow.mx + math.floor(0.515 * self.robloxWindow.mw)
+        selectorCenterY = self.robloxWindow.my + math.floor(0.535 * self.robloxWindow.mh)
+        searchX = selectorCenterX - 250
+        searchY = selectorCenterY - 100
+        searchW = 500
+        searchH = 300
+        nameX = selectorCenterX - 230
+        nameY = selectorCenterY - 75
+        nameW = 200
+        nameH = 70
+        nextX = selectorCenterX + 157
+        nextY = selectorCenterY - 45
+        for _ in range(80):
+            selectedItemText = readSelectedShrineItem(nameX, nameY, nameW, nameH)
+            if any(alias in selectedItemText or selectedItemText in alias for alias in itemAliases):
+                foundItem = True
+                break
+            if itemImg is not None:
+                maxVal, _ = locateImageOnScreen(itemImg, searchX, searchY, searchW, searchH, 0.62)
+                if maxVal > 0.62:
+                    foundItem = True
+                    break
+            mouse.moveTo(nextX, nextY)
+            mouse.click()
+            time.sleep(0.15)
+
+        if not foundItem:
+            self.logger.webhook("", f"Wind Shrine offering failed: could not find {item.title()} in shrine selector", "red", "screen")
+            self.keyboard.press("e")
+            return None
+
+        addX = self.robloxWindow.mx + math.floor(0.515 * self.robloxWindow.mw) + 157
+        addY = self.robloxWindow.my + math.floor(0.535 * self.robloxWindow.mh) + 40
+        mouse.moveTo(addX, addY)
+        for _ in range(max(0, quantity - 1)):
+            mouse.click()
+            time.sleep(0.04)
+
+        donateX = self.robloxWindow.mx + math.floor(0.515 * self.robloxWindow.mw) - 72
+        donateY = self.robloxWindow.my + math.floor(0.535 * self.robloxWindow.mh) + 116
+        mouse.moveTo(donateX, donateY)
+        mouse.click()
+        time.sleep(2)
+        clickWindShrineDialogsUntilGone()
+        self.logger.webhook("", f"Offered {item.title()} x{quantity} to Wind Shrine", "bright green", "screen")
+        time.sleep(0.5)
+        lootWindShrineTokens()
+        self.logger.webhook("", "Collected loot from Wind Shrine", "bright green", "screen")
+        return cooldownSeconds
+
     def isFullScreen(self):
         windows = gw.getAllTitles()
         for win in windows:
@@ -1227,13 +1482,8 @@ class macro:
         if name is not None:
             if not name in data:
                 print(f"could not find timing for {name}, setting a new one")
-                # For bear quest cooldown keys, initialize to 0 instead of current time
-                if name in ("brown_bear_quest_cd", "black_bear_quest_cd"):
-                    settingsManager.saveSettingFile(name, 0, "./data/user/timings.txt")
-                    return 0
-                else:
-                    self.saveTiming(name)
-                    return time.time()
+                settingsManager.saveSettingFile(name, 0, "./data/user/timings.txt")
+                return 0
             return data[name]
         return data
     
@@ -3457,7 +3707,10 @@ class macro:
         #go to collect and check that player has reached
         for i in range(3):
             self.logger.webhook("",f"Travelling: {displayName}","dark brown")
-            self.cannon()
+            if objective in ["honey_dispenser", "gingerbread"]:
+                self.reset(convert=False)
+            else:
+                self.cannon()
             # Special-case: run a bespoke sequence for Honey Storm instead of the
             # default path/walk system.
             if objective == "honeystorm":
@@ -3511,6 +3764,32 @@ class macro:
         if not reached: 
             updateHourlyTime()
             return #player failed to reach objective
+        if objective == "robo_pass_dispenser":
+            reachedText = str(reached).lower()
+            if (
+                ("already" in reachedText and "robo" in reachedText and "pass" in reachedText)
+                or ("10" in reachedText and "more" in reachedText and "robo" in reachedText)
+            ):
+                self.logger.webhook("", "Maybe you have maxed out robo passes?", "dark brown", "screen")
+                updateHourlyTime()
+                return
+        if objective == "gummy_beacon":
+            reachedText = str(reached).lower()
+            if "siege" in reachedText and "progress" in reachedText:
+                self.logger.webhook("", "Gummy Beacon is already active", "dark brown", "screen")
+                updateHourlyTime()
+                return
+            if ("satellite" in reachedText or "satelite" in reachedText) and "vibes" in reachedText:
+                self.logger.webhook("", "Gummy Beacon is not unlocked", "dark brown", "screen")
+                updateHourlyTime()
+                return
+            if "(" and ":" in reachedText:
+                cd = self.cdTextToSecs(reachedText, True, self.collectCooldowns[objective])
+                if cd:
+                    cooldownFormat = timedelta(seconds=cd)
+                    self.logger.webhook("", f"{displayName} is on cooldown ({cooldownFormat} remaining)", "dark brown", "screen")
+                    updateHourlyTime()
+                    return
         #player has reached, get cooldown info
         #check if on cooldown
         cooldownSeconds = objectiveData[2]
@@ -3559,6 +3838,12 @@ class macro:
                 if not self.claimStickerStack():
                     updateHourlyTime()
                     return
+            elif objective == "wind_shrine":
+                detectedCooldown = self.collectWindShrine(reached)
+                if detectedCooldown is None:
+                    updateHourlyTime()
+                    return
+                cooldownSeconds = detectedCooldown
             else:
                 time.sleep(0.1)
                 self.logger.webhook("", f"Collected: {displayName}", "bright green", "screen")
@@ -4751,6 +5036,7 @@ class macro:
         #night detection
         if self.enableNightDetection:
             self.detectNight()
+        self.detectGuidingStarAnnouncement()
 
         #hotbar
         for i in range(1,8):

@@ -1,0 +1,32 @@
+self.keyboard.slowPress("e")
+sleep(0.1)
+self.keyboard.keyDown("a")
+self.keyboard.keyDown("s")
+sleep(1.4)
+self.keyboard.press("space")
+self.keyboard.press("space")
+sleep(1.1)
+self.keyboard.keyUp("a")
+sleep(0.65)
+self.keyboard.keyUp("s")
+self.keyboard.press("space")
+for _ in range(4):
+    self.keyboard.press(".")
+sleep(1.5)
+
+self.keyboard.multiTileWalk(["d", "w"], 4)
+
+
+self.keyboard.tileWalk("a", 23)
+self.keyboard.tileWalk("w", 9)
+self.keyboard.tileWalk("a", 3)
+self.keyboard.tileWalk("w", 9)
+self.keyboard.tileWalk("s", 2)
+self.keyboard.tileWalk("a", 13)
+for _ in range(2):
+    self.keyboard.press(",")
+self.keyboard.press("space")
+self.keyboard.tileWalk("w", 2)
+self.keyboard.tileWalk("a", 2.5)
+self.keyboard.tileWalk("w", 24)
+sleep(0.5)

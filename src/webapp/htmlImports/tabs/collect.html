@@ -28,6 +28,15 @@
           },
         },
         {
+          id: "honey_dispenser",
+          title: "Honey Dispenser",
+          desc: "Collect the honey dispenser near your hive",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
           id: "blueberry_dispenser",
           title: "Blueberry Dispenser",
           desc: "Collect the blueberry dispenser in the blue HQ",
@@ -67,6 +76,15 @@
           id: "ant_pass_dispenser",
           title: "(Free) Ant Pass Dispenser",
           desc: "Collect the free ant pass dispenser",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "robo_pass_dispenser",
+          title: "(Free) Robo Pass Dispenser",
+          desc: "Collect the free Robo Pass dispenser",
           type: {
             name: "checkbox",
             triggerFunction: saveProfileTriggerFunction,
@@ -238,6 +256,52 @@
           },
         },
       ]);
+
+      const windShrineItemsArray = toImgArray(blenderIcons);
+      buildStandardContainer(parentCollectActivities, "Wind Shrine", "", [
+        {
+          id: "wind_shrine",
+          title: "Enable Task",
+          desc: "Donate an item to the Wind Shrine",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "wind_shrine_item",
+          title: "Offering",
+          desc: "Item to offer to the Wind Shrine",
+          type: {
+            name: "dropdown",
+            data: windShrineItemsArray,
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "wind_shrine_quantity",
+          title: "Quantity",
+          desc: "Quantity to offer",
+          type: {
+            name: "textbox",
+            inputType: "int",
+            inputLimit: 4,
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+      ]);
+
+      buildStandardContainer(parentCollectActivities, "Guiding Star", "", [
+        {
+          id: "guiding_star_announcements",
+          title: "Announcements",
+          desc: "Announce detected Guiding Star fields in webhook/logs",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+      ]);
     </script>
   </div>
 
@@ -258,6 +322,15 @@
           id: "feast",
           title: "Feast",
           desc: "Collect the stockings near polar bear",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "gingerbread",
+          title: "Gingerbread House",
+          desc: "Collect the gingerbread house",
           type: {
             name: "checkbox",
             triggerFunction: saveProfileTriggerFunction,
@@ -303,6 +376,15 @@
           id: "wreath",
           title: "Honey Wreath",
           desc: "Collect the honey wreath near black bear",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "gummy_beacon",
+          title: "Gummy Beacon",
+          desc: "Collect the Gummy Beacon",
           type: {
             name: "checkbox",
             triggerFunction: saveProfileTriggerFunction,
