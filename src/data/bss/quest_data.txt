@@ -91,14 +91,14 @@ kill_2_werewolf
 gather_cactus
 
 -mashed blooms
-gather_pumpkin
-gather_dandelion
-gather_bamboo
+gatherpetal_pumpkin
+gatherpetal_dandelion
+gatherpetal_bamboo
 kill_1_spider
 
 -petal tabbouleh
-gather_clover
-gather_strawberry
+gatherpetal_clover
+gatherpetal_strawberry
 kill_4_rhinobeetle
 
 ==bucko bee==
@@ -141,9 +141,9 @@ gathergoo_bamboo
 gather_pine tree
 
 -petals
-gather_pine tree
-gather_clover
-gather_pineapple
+gatherpetal_pine tree
+gatherpetal_clover
+gatherpetal_pineapple
 
 -picnic
 gather_blue flower
@@ -210,9 +210,9 @@ gather_rose
 gather_mushroom
 
 -petals
-gather_mushroom
-gather_clover
-gather_spider
+gatherpetal_mushroom
+gatherpetal_clover
+gatherpetal_spider
 
 -picnic
 gather_mushroom
