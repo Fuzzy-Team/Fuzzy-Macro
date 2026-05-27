@@ -684,7 +684,7 @@ def importFieldSettings(field_name, json_settings):
                 settings["shape"] = default_pattern
                 missing_patterns.append(f"'{requested_pattern}' → '{default_pattern}'")
 
-        if settings.get("shape") == "fuzzy_ai_gather":
+        if settings.get("shape") in ("fuzzy_ai_gather", "blooms_ai"):
             blue_model = getFuzzyAIModelPath("tokens.onnx")
             blue_model_coreml = getFuzzyAIModelPath("best.mlpackage")
             sprinkler_model = getFuzzyAIModelPath("sprinkler.onnx")
