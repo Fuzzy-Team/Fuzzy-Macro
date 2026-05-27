@@ -279,21 +279,26 @@
             <div class="drag-item" data-id="gather_pepper" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Gather: Pepper</span></div>
             <div class="drag-item" data-id="gather_mountain_top" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Gather: Mountain Top</span></div>
             <div class="drag-item" data-id="gather_stump" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Gather: Stump</span></div>
+            <div class="drag-item" data-id="collect_wind_shrine" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Wind Shrine</span></div>
             <div class="drag-item" data-id="collect_wealth_clock" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Wealth Clock</span></div>
+            <div class="drag-item" data-id="collect_honey_dispenser" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Honey Dispenser</span></div>
             <div class="drag-item" data-id="collect_blueberry_dispenser" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Blueberry Dispenser</span></div>
             <div class="drag-item" data-id="collect_strawberry_dispenser" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Strawberry Dispenser</span></div>
             <div class="drag-item" data-id="collect_coconut_dispenser" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Coconut Dispenser</span></div>
             <div class="drag-item" data-id="collect_royal_jelly_dispenser" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Royal Jelly Dispenser</span></div>
             <div class="drag-item" data-id="collect_treat_dispenser" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Treat Dispenser</span></div>
             <div class="drag-item" data-id="collect_ant_pass_dispenser" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Ant Pass Dispenser</span></div>
+            <div class="drag-item" data-id="collect_robo_pass_dispenser" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Robo Pass Dispenser</span></div>
             <div class="drag-item" data-id="collect_glue_dispenser" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Glue Dispenser</span></div>
             <div class="drag-item" data-id="collect_stockings" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Stockings</span></div>
             <div class="drag-item" data-id="collect_wreath" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Wreath</span></div>
             <div class="drag-item" data-id="collect_feast" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Feast</span></div>
+            <div class="drag-item" data-id="collect_gingerbread" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Gingerbread House</span></div>
             <div class="drag-item" data-id="collect_samovar" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Samovar</span></div>
             <div class="drag-item" data-id="collect_snow_machine" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Snow Machine</span></div>
             <div class="drag-item" data-id="collect_lid_art" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Lid Art</span></div>
             <div class="drag-item" data-id="collect_candles" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Candles</span></div>
+            <div class="drag-item" data-id="collect_gummy_beacon" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Gummy Beacon</span></div>
             <div class="drag-item" data-id="collect_memory_match" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Memory Match</span></div>
             <div class="drag-item" data-id="collect_mega_memory_match" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Mega Memory Match</span></div>
             <div class="drag-item" data-id="collect_extreme_memory_match" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Extreme Memory Match</span></div>
@@ -864,6 +869,15 @@
             id: "ping_hourly_reports",
             title: "Hourly Reports",
             desc: "Ping when hourly reports are generated and sent",
+            type: {
+              name: "checkbox",
+              triggerFunction: saveGeneralTriggerFunction,
+            },
+          },
+          {
+            id: "ping_guiding_star",
+            title: "Guiding Star",
+            desc: "Ping when a Guiding Star field is detected",
             type: {
               name: "checkbox",
               triggerFunction: saveGeneralTriggerFunction,

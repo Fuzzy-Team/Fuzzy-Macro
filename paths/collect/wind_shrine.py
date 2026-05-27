@@ -1,0 +1,7 @@
+self.goToField("pepper")
+self.keyboard.multiTileWalk(["d", "w"], 30)
+self.keyboard.tileWalk("s", 12)
+self.keyboard.slowPress("space")
+self.keyboard.tileWalk("d", 12)
+self.keyboard.tileWalk("s", 4)
+sleep(0.6)
