@@ -1191,18 +1191,11 @@ class macro:
                 if not result:
                     break
                 _score, loc = result
-                mouse.moveTo(self.robloxWindow.mx + self.robloxWindow.mw // 2, searchY + loc[1] - 15)
+                mouse.moveTo(self.robloxWindow.mx + self.robloxWindow.mw // 2, searchY + loc[1] + 35)
                 mouse.click()
                 time.sleep(0.15)
 
         def lootWindShrineTokens():
-            self.keyboard.multiTileWalk(["d", "w"], 7)
-            self.keyboard.tileWalk("w", 10)
-            self.keyboard.multiTileWalk(["w", "d"], 10)
-            self.keyboard.tileWalk("s", 7)
-            self.keyboard.tileWalk("d", 2)
-            self.keyboard.tileWalk("s", 3.75)
-            self.keyboard.tileWalk("a", 3)
             for _ in range(4):
                 self.keyboard.tileWalk("a", 5)
                 self.keyboard.tileWalk("s", 1.5)
