@@ -78,7 +78,7 @@ TARGET_LOCK_REACHED_DISTANCE = 0.18
 TARGET_LOCK_LOST_TIMEOUT = 0.9
 TARGET_LOCK_SWITCH_SCORE_MULTIPLIER = 2.25
 TARGET_LOCK_SWITCH_DISTANCE = 1.25
-ANCHOR_REFRESH_INTERVAL = 0.75
+ANCHOR_REFRESH_INTERVAL = 0.35
 ANCHOR_MAX_PASSIVE_DISTANCE = 8.0
 LEASH_HARD_MARGIN = 2.5
 LEASH_NEAR_TOKEN_ALLOWANCE = 2.25
@@ -86,6 +86,12 @@ BLOOM_LABEL = "Bloom"
 BLOOM_PETAL_SWEEP_TIMEOUT = 0.7
 BLOOM_PETAL_SWEEP_COOLDOWN = 1.5
 BLOOM_PETAL_SWEEP_RADIUS_TILES = 5.0
+BLOOM_MAX_DISTANCE = 10.0
+BLOOM_SETTLE_DISTANCE = 0.55
+BLOOM_MIN_CONFIDENCE = 0.25
+BLOOM_SPRINKLER_ANCHOR_INTERVAL = 0.35
+BLOOM_FORCE_ANCHOR_DISTANCE = 4.0
+BLOOM_MAX_MOVE_STEP = 2.4
 
 PREFERRED_TOKENS = {}
 IGNORED_TOKENS = {}
@@ -905,7 +911,7 @@ def _scan_tokens_once(runtime):
     postprocess_start = time.time()
     detections = _postprocess_tokens(output, CONFIDENCE_THRESHOLD)
     postprocess_elapsed = time.time() - postprocess_start
-    _refresh_sprinkler_anchor(runtime)
+    _refresh_bloom_sprinkler_anchor(runtime)
     scoring_start = time.time()
     target = _find_best_token(runtime, detections)
     if (
@@ -1078,11 +1084,12 @@ def _sprinkler_anchor_enabled():
 
 def _token_metrics():
     max_leash = 4.0 + (0.45 * max(width - 1, 0)) + (0.35 * size)
+    max_bloom_distance = max(BLOOM_MAX_DISTANCE, max_leash + 1.0)
     return {
-        "max_leash": max_leash,
-        "hard_leash": max_leash + LEASH_HARD_MARGIN,
+        "max_leash": max_bloom_distance,
+        "hard_leash": max_bloom_distance + LEASH_HARD_MARGIN,
         "soft_leash": max_leash * 0.625,
-        "max_consider": max_leash + 1.0 + (0.15 * width),
+        "max_consider": max_bloom_distance,
         "cluster_radius": 1.6 + (0.1 * width),
         "proximity_exp": 1.25,
         "toward_home_bonus": 1.4,
@@ -1109,6 +1116,9 @@ def _find_best_token(runtime, detections):
         if token_name != BLOOM_LABEL:
             rejected.append({"name": token_name, "reason": "not_bloom", "confidence": confidence})
             continue
+        if confidence < BLOOM_MIN_CONFIDENCE:
+            rejected.append({"name": token_name, "reason": "low_confidence", "confidence": confidence})
+            continue
 
         x1, y1, x2, y2 = box
         center_x, center_y = _model_point_to_capture(runtime, (x1 + x2) / 2.0, (y1 + y2) / 2.0)
@@ -1125,30 +1135,9 @@ def _find_best_token(runtime, detections):
         future_x = current_x + tx
         future_y = current_y + ty
         future_dist = math.hypot(future_x, future_y)
-        if future_dist > metrics["hard_leash"] and distance > LEASH_NEAR_TOKEN_ALLOWANCE:
-            rejected.append({"name": token_name, "reason": "hard_leash", "confidence": confidence, "distance": distance, "future_dist": future_dist, "tx": tx, "ty": ty})
-            continue
-
         proximity = 1.0 / (0.3 + distance) ** metrics["proximity_exp"]
-        dist_change = future_dist - current_dist
-
-        if dist_change < -0.5:
-            direction_score = metrics["toward_home_bonus"]
-        elif dist_change < 0:
-            direction_score = 1.0 + ((metrics["toward_home_bonus"] - 1.0) * 0.5)
-        elif dist_change < 0.5:
-            direction_score = 1.0
-        elif dist_change < 1.5:
-            direction_score = metrics["away_from_home_penalty"]
-        else:
-            direction_score = metrics["away_from_home_penalty"] * 0.7
-
-        if current_dist > metrics["soft_leash"] and future_dist > current_dist:
-            direction_score *= metrics["leash_edge_penalty"]
-        if future_dist > metrics["max_leash"]:
-            direction_score *= metrics["outside_leash_penalty"]
-
-        score = proximity * direction_score
+        home_bonus = 1.0 / (0.25 + future_dist) ** 0.2
+        score = proximity * home_bonus * (0.8 + confidence)
         candidates.append(
             {
                 "name": token_name,
@@ -1285,9 +1274,10 @@ def _select_movement_target(runtime):
         remaining_x = float(locked.get("future_x", runtime["current_x"])) - runtime["current_x"]
         remaining_y = float(locked.get("future_y", runtime["current_y"])) - runtime["current_y"]
         remaining = math.hypot(remaining_x, remaining_y)
-        if remaining <= TARGET_LOCK_REACHED_DISTANCE:
+        if remaining <= BLOOM_SETTLE_DISTANCE:
+            runtime["pending_petal_sweep"] = True
             _clear_locked_target(runtime)
-            return latest
+            return None
 
         last_seen = float(locked.get("last_seen", locked.get("locked_at", now)))
         if latest and _same_token_candidate(locked, latest):
@@ -1299,14 +1289,15 @@ def _select_movement_target(runtime):
         if now - last_seen <= TARGET_LOCK_LOST_TIMEOUT:
             return locked
 
+        runtime["pending_petal_sweep"] = True
         if latest and latest.get("score", 0.0) >= locked.get("score", 0.0) * TARGET_LOCK_SWITCH_SCORE_MULTIPLIER:
             latest["locked_at"] = now
             latest["last_seen"] = now
             runtime["locked_target"] = latest
-            return latest
+            return None
 
         _clear_locked_target(runtime)
-        return latest
+        return None
 
     if latest:
         latest["locked_at"] = now
@@ -1327,9 +1318,15 @@ def _execute_planned_movement(runtime):
 
     remaining_x = float(target_x) - runtime["current_x"]
     remaining_y = float(target_y) - runtime["current_y"]
-    if math.hypot(remaining_x, remaining_y) <= CONTINUOUS_MIN_REPLAN_DISTANCE:
+    remaining_distance = math.hypot(remaining_x, remaining_y)
+    if remaining_distance <= BLOOM_SETTLE_DISTANCE:
+        runtime["pending_petal_sweep"] = True
         _clear_locked_target(runtime)
         return False
+    if remaining_distance > BLOOM_MAX_MOVE_STEP:
+        scale = BLOOM_MAX_MOVE_STEP / remaining_distance
+        remaining_x *= scale
+        remaining_y *= scale
 
     _debug_log(
         f"moving toward planned target={target['name']} remaining=({remaining_x:.2f},{remaining_y:.2f}) score={target['score']:.2f}",
@@ -1358,6 +1355,9 @@ def _execute_petal_sweep(runtime):
 
 
 def _should_sweep_for_petals(runtime):
+    if runtime.pop("pending_petal_sweep", False):
+        return True
+
     last_bloom_time = runtime.get("last_bloom_seen_time", 0.0)
     if not last_bloom_time:
         return False
@@ -1513,6 +1513,17 @@ def _refresh_sprinkler_anchor(runtime, force=False):
         key="anchor_refresh",
     )
     return True
+
+
+def _refresh_bloom_sprinkler_anchor(runtime):
+    now = time.time()
+    if not force_anchor_needed(runtime) and now - runtime.get("last_anchor_time", 0.0) < BLOOM_SPRINKLER_ANCHOR_INTERVAL:
+        return False
+    return _refresh_sprinkler_anchor(runtime, force=force_anchor_needed(runtime))
+
+
+def force_anchor_needed(runtime):
+    return math.hypot(runtime.get("current_x", 0.0), runtime.get("current_y", 0.0)) >= BLOOM_FORCE_ANCHOR_DISTANCE
 
 
 def _recalibrate(runtime):
@@ -1696,6 +1707,7 @@ def _initialise_runtime():
         "last_bloom_seen_time": 0.0,
         "last_petal_sweep_time": 0.0,
         "petal_sweep_for_bloom_time": 0.0,
+        "pending_petal_sweep": False,
     }
 
 
@@ -1723,7 +1735,7 @@ else:
         if not runtime.get("latest_scan_time"):
             _scan_tokens_once(runtime)
         _ensure_scanner_thread(runtime)
-        _refresh_sprinkler_anchor(runtime)
+        _refresh_bloom_sprinkler_anchor(runtime)
 
         if _should_recalibrate(runtime):
             _recalibrate(runtime)
