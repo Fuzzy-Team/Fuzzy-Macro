@@ -2884,7 +2884,15 @@ class macro:
         elif fieldSetting["turn"] == "right":
             for _ in range(fieldSetting["turn_times"]):
                 self.keyboard.press(".")
-        if pattern == "fuzzy_ai_gather":
+        aiPatternLabels = {
+            "fuzzy_ai_gather": "Fuzzy AI Gather",
+            "blooms_ai": "BloomsAI",
+        }
+        aiPatternStateKeys = {
+            "fuzzy_ai_gather": ("_FUZZY_AI_GATHER_STATE", "_fuzzy_ai_gather_state"),
+            "blooms_ai": ("_BLOOMS_AI_STATE", "_blooms_ai_state"),
+        }
+        if pattern in aiPatternLabels:
             for _ in range(11):
                 self.keyboard.keyDown("pageup", False)
                 sleep(0.01)
@@ -3121,22 +3129,27 @@ class macro:
 
             #ensure that the pattern works
             try:
-                if pattern == "fuzzy_ai_gather" and not fuzzyAIInitStartedLogged:
+                aiPatternLabel = aiPatternLabels.get(pattern, "AI Gather")
+                if pattern in aiPatternLabels and not fuzzyAIInitStartedLogged:
                     self.logger.webhook(
-                        "Fuzzy AI Gather",
+                        aiPatternLabel,
                         "Initialization started.",
                         "light blue",
                     )
                     fuzzyAIInitStartedLogged = True
                 exec(open(f"../settings/patterns/{pattern}.py").read(), gatherNameSpace)
-                if pattern == "fuzzy_ai_gather":
-                    fuzzy_state = gatherNameSpace.get("_FUZZY_AI_GATHER_STATE")
+                if pattern in aiPatternLabels:
+                    stateGlobalKey, stateAttributeKey = aiPatternStateKeys.get(
+                        pattern,
+                        ("_FUZZY_AI_GATHER_STATE", "_fuzzy_ai_gather_state"),
+                    )
+                    fuzzy_state = gatherNameSpace.get(stateGlobalKey)
                     if not isinstance(fuzzy_state, dict):
-                        fuzzy_state = getattr(self, "_fuzzy_ai_gather_state", {})
+                        fuzzy_state = getattr(self, stateAttributeKey, {})
                     if isinstance(fuzzy_state, dict) and fuzzy_state.get("ready"):
                         if not fuzzyAIInitLogged:
                             self.logger.webhook(
-                                "Fuzzy AI Gather",
+                                aiPatternLabel,
                                 "Initialization succeeded.",
                                 "bright green",
                             )
@@ -3149,28 +3162,29 @@ class macro:
                             runtime_error = str(fuzzy_state.get("error", "") or "")
                         if runtime_error and runtime_error != fuzzyAILastError:
                             self.logger.webhook(
-                                "Fuzzy AI Gather",
+                                aiPatternLabel,
                                 f"Runtime failed: {runtime_error}",
                                 "red",
                             )
                             fuzzyAILastError = runtime_error
                         if runtime_error and not fuzzyAIFallbackLogged:
                             self.logger.webhook(
-                                "Fuzzy AI Gather",
+                                aiPatternLabel,
                                 "Fallback behavior engaged.",
                                 "orange",
                             )
                             fuzzyAIFallbackLogged = True
             except Exception as e:
                 print(traceback.format_exc())
-                if pattern == "fuzzy_ai_gather":
+                if pattern in aiPatternLabels:
+                    aiPatternLabel = aiPatternLabels.get(pattern, "AI Gather")
                     self.logger.webhook(
-                        "Fuzzy AI Gather",
+                        aiPatternLabel,
                         f"Runtime failed: {e}",
                         "red",
                     )
                     self.logger.webhook(
-                        "Fuzzy AI Gather",
+                        aiPatternLabel,
                         "Fallback behavior engaged.",
                         "orange",
                     )
