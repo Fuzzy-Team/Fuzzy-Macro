@@ -512,7 +512,13 @@ def getPatterns():
             "requires_models": True,
             "label": "AI Gathering",
             "description": "",
-        }
+        },
+        "blooms_ai": {
+            "ai_backed": True,
+            "requires_models": True,
+            "label": "BloomsAI",
+            "description": "Chases blooms and circles for petals.",
+        },
     }
     patterns = []
     try:
