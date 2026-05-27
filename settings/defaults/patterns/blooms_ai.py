@@ -711,8 +711,14 @@ def _record_debug_frame(runtime, frame, detections, target):
     if writer is None:
         return
 
+    bloom_detections = [
+        detection
+        for detection in detections
+        if LABELS_TOKENS.get(detection[1]) == BLOOM_LABEL
+    ]
     runtime["latest_recording_overlay"] = {
-        "detections": list(detections),
+        "detections": bloom_detections,
+        "raw_detection_count": len(detections),
         "target": dict(target) if isinstance(target, dict) else None,
         "current_x": runtime.get("current_x", 0.0),
         "current_y": runtime.get("current_y", 0.0),
@@ -721,15 +727,12 @@ def _record_debug_frame(runtime, frame, detections, target):
         "last_detection_ms": runtime.get("last_detection_ms"),
         "last_timing_ms": dict(runtime.get("last_timing_ms", {})),
         "candidate_count": runtime.get("last_candidate_count", 0),
-        "rejected_tokens": list(runtime.get("last_rejected_tokens", [])),
         "sprinkler": dict(runtime.get("last_sprinkler_detection", {})),
         "anchor": dict(runtime.get("last_anchor", {})),
         "sprinkler_status": runtime.get("last_sprinkler_status", ""),
         "target_sprinkler_label": TARGET_SPRINKLER_LABEL or "",
         "field_drift_compensation": FIELD_DRIFT_COMPENSATION,
         "use_sprinkler_model_for_drift_compensation": USE_SPRINKLER_MODEL_FOR_DRIFT_COMPENSATION,
-        "preferred_tokens": list(PREFERRED_TOKENS.keys())[:8],
-        "ignored_count": len(IGNORED_TOKENS),
         "updated_at": time.time(),
     }
 
@@ -782,7 +785,7 @@ def _annotate_recording_frame(runtime, frame):
 
     anchor = overlay.get("anchor") or {}
     status_lines = [
-        f"tokens={len(detections)} candidates={overlay.get('candidate_count', 0)} pos=({overlay.get('current_x', 0.0):.2f},{overlay.get('current_y', 0.0):.2f}) moves={overlay.get('movement_count', 0)}",
+        f"blooms={len(detections)} candidates={overlay.get('candidate_count', 0)} pos=({overlay.get('current_x', 0.0):.2f},{overlay.get('current_y', 0.0):.2f}) moves={overlay.get('movement_count', 0)}",
         f"target={target['name']} score={target['score']:.2f} move=({target['tx']:.2f},{target['ty']:.2f})" if target else "target=None",
         f"sprinkler_status={overlay.get('sprinkler_status', '')} target={overlay.get('target_sprinkler_label', '') or 'any'} drift={overlay.get('field_drift_compensation')} model={overlay.get('use_sprinkler_model_for_drift_compensation')}",
     ]
@@ -791,19 +794,6 @@ def _annotate_recording_frame(runtime, frame):
         status_lines.append(
             f"anchor=({anchor.get('x', 0.0):.2f},{anchor.get('y', 0.0):.2f}) sprinkler=({anchor.get('sprinkler_tx', 0.0):.2f},{anchor.get('sprinkler_ty', 0.0):.2f}) age={age:.1f}s"
         )
-    rejected = overlay.get("rejected_tokens", [])
-    if rejected:
-        summary = []
-        for item in rejected[:4]:
-            name = item.get("name", f"class {item.get('class_id', '?')}")
-            reason = item.get("reason", "?")
-            if "distance" in item:
-                summary.append(f"{name}:{reason}:{item['distance']:.1f}")
-            elif "future_dist" in item:
-                summary.append(f"{name}:{reason}:{item['future_dist']:.1f}")
-            else:
-                summary.append(f"{name}:{reason}")
-        status_lines.append("skip " + ", ".join(summary))
     for index, line in enumerate(status_lines):
         _draw_label(annotated, line, 10, 24 + (index * 24), (255, 255, 255))
 
