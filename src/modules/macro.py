@@ -6502,6 +6502,7 @@ class macro:
         patterns = [
             # Petal token catch patterns (new for petal quests)
             (r'.*\b(catch)\b.*\b(red bloom petals?)\b.*\b(in|from)\b.*\b([a-z ]+?)\b field', 'gatherpetal', r'(clover|spider|bamboo|blue flower|cactus|clover|coconut|dandelion|mountain top|mushroom|pepper|pine tree|pineapple|pumpkin|rose|spider|strawberry|stump|sunflower)'),
+            (r'.*\b(catch|collect|get|gather|harvest)\b.*\b((red|blue|white|pink|green|cyan|yellow)\s+)?bloom\s+petals?\b.*\b(in|from)\b.*\b([a-z ]+?)\b field', 'gatherpetal', r'(clover|spider|bamboo|blue flower|cactus|coconut|dandelion|mountain top|mushroom|pepper|pine tree|pineapple|pumpkin|rose|strawberry|stump|sunflower)'),
             # Catch patterns (special catching mechanics)
             (r'.*\b(catch|chase)\b.*', 'catch', r'.*'),
             # Craft patterns (check first - specific crafting actions)
