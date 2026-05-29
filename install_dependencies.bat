@@ -24,11 +24,21 @@ rem Fallback to python/python3 on PATH
 if not defined PYTHON_CMD (
     where python >nul 2>&1
     if %errorlevel%==0 (
-        set "PYTHON_CMD=python"
-    ) else (
-        where python3 >nul 2>&1
-        if %errorlevel%==0 (
-            set "PYTHON_CMD=python3"
+        for /f "usebackq delims=" %%W in (`python -c "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')" 2^>nul`) do (
+            if "%%W"=="3.9" set "PYTHON_CMD=python"
+            if "%%W"=="3.8" set "PYTHON_CMD=python"
+            if "%%W"=="3.7" set "PYTHON_CMD=python"
+        )
+    )
+)
+
+if not defined PYTHON_CMD (
+    where python3 >nul 2>&1
+    if %errorlevel%==0 (
+        for /f "usebackq delims=" %%W in (`python3 -c "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')" 2^>nul`) do (
+            if "%%W"=="3.9" set "PYTHON_CMD=python3"
+            if "%%W"=="3.8" set "PYTHON_CMD=python3"
+            if "%%W"=="3.7" set "PYTHON_CMD=python3"
         )
     )
 )
