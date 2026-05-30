@@ -653,6 +653,9 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     # enable the mob setting (e.g. "rhinobeetle", "werewolf", etc.)
                     if mob_name not in setdatEnable:
                         setdatEnable.append(mob_name)
+            elif objData[0] == "token" and len(objData) > 1 and objData[1] == "honey":
+                if "honeytoken" not in setdatEnable:
+                    setdatEnable.append("honeytoken")
             elif objData[0] == "token":
                 if questGiver == "riley bee":
                     requireRedField = True
@@ -661,8 +664,6 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 else:
                     requireField = True
 
-            elif objData[0] == "token" and objData[1] == "honeytoken":
-                setdatEnable.append("honeytoken")
             elif objData[0] == "fieldtoken" and objData[1] == "blueberry":
                 requireBlueField = True
             elif objData[0] == "fieldtoken" and objData[1] == "strawberry":
@@ -688,7 +689,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 if macro.setdat["quest_use_gumdrops"]:
                     requireRedGumdropField = True
                 else:
-                    requireBlueField = True
+                    requireRedField = True
             elif objData[0] == "pollengoo" and objData[1] == "white":
                 if macro.setdat["quest_use_gumdrops"]:
                     requireBlueGumdropField = True
@@ -698,6 +699,42 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 setdatEnable.append(objData[1].replace("-","_"))
 
         return setdatEnable, gatherFieldsList, gumdropGatherFieldsList, petalGatherFieldsList, requireRedField, requireBlueField, feedBees, requireRedGumdropField, requireBlueGumdropField, requireField
+
+    def runQuestSupportTasks(requiredTasks):
+        """
+        Run non-gather quest requirements directly. Quest-only mode bypasses the
+        normal priority queue, so enabling these settings is not enough there.
+        """
+        nonlocal taskCompleted
+        for taskName in dict.fromkeys(requiredTasks):
+            if taskName == "ant_pass_dispenser":
+                if taskName in macroModule.collectData and macro.hasRespawned(taskName, macro.collectCooldowns[taskName]):
+                    runTask(macro.collect, args=(taskName,))
+                    taskCompleted = True
+                continue
+
+            if taskName == "ant_challenge":
+                runTask(macro.antChallenge, resetAfter=False)
+                taskCompleted = True
+                continue
+
+            if taskName in macroModule.collectData or taskName in macroModule.fieldBoosterData:
+                if taskName in macro.collectCooldowns and macro.hasRespawned(taskName, macro.collectCooldowns[taskName]):
+                    runTask(macro.collect, args=(taskName,))
+                    taskCompleted = True
+                continue
+
+            if taskName == "honeytoken":
+                continue
+
+            if taskName in regularMobData:
+                killedInAnyField = False
+                for field in regularMobData[taskName]:
+                    if macro.hasMobRespawned(taskName, field):
+                        runTask(macro.killMob, args=(taskName, field,), convertAfter=False)
+                        killedInAnyField = True
+                if killedInAnyField:
+                    taskCompleted = True
 
     def bloomsAIQuestOverride(baseOverride=None):
         override = dict(baseOverride or {})
@@ -886,6 +923,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                 questGatherOverrides = getQuestGatherOverrides(questName)
                                 for k in setdatEnable:
                                     macro.setdat[k] = True
+                                runQuestSupportTasks(setdatEnable)
                                 for field in gatherFields:
                                     questGatherFields.append(field)
                                     if field not in questGatherFieldOverrides:
