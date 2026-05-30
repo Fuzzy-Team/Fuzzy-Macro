@@ -3311,7 +3311,10 @@ class macro:
             except Exception:
                 pass
             self.logger.webhook("",f"Walking back to hive: {field.title()}", "dark brown")
-            self.runPath(f"field_to_hive/{field}")
+            if field == "pine tree" and self.setdat.get("pine_tree_fast_return", False):
+                self.runPath("field_to_hive/pine tree fast")
+            else:
+                self.runPath(f"field_to_hive/{field}")
             #find hive and convert
             #self.keyboard.walk("a", (self.setdat["hive_number"]-1)*0.8)
             self.keyboard.keyDown("a")

@@ -152,6 +152,18 @@
         },
       ]);
 
+      buildStandardContainer(parentBSS, "Pine Tree", "", [
+        {
+          id: "pine_tree_fast_return",
+          title: "Fast Return Path",
+          desc: "Use an alternate glider path when returning from Pine Tree field to the hive. Faster than the default walk path",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+      ]);
+
       buildStandardContainer(parentBSS, "Preferences", "", [
         {
           id: "convert_wait",
