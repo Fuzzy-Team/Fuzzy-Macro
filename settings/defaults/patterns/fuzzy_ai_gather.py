@@ -12,7 +12,7 @@ Requirements:
 - mss or Pillow
 - best.mlpackage and sprinkler.mlpackage
 
-- Version 2.0
+- Version 2.1
 """
 
 import math
@@ -84,6 +84,7 @@ LEASH_HARD_MARGIN = 2.5
 LEASH_NEAR_TOKEN_ALLOWANCE = 2.25
 
 PREFERRED_TOKENS = {}
+PREFERRED_TOKEN_RANKS = {}
 IGNORED_TOKENS = {}
 
 NORMALIZED_CAL_RATIOS = [
@@ -274,6 +275,7 @@ DEBUG_MODE = _coerce_bool(globals().get("pattern_debug_mode"), DEBUG_MODE)
 RECORD_VIDEO = _coerce_bool(globals().get("pattern_record_video"), RECORD_VIDEO)
 RECORD_VIDEO_FPS = _coerce_float(globals().get("pattern_record_video_fps"), RECORD_VIDEO_FPS)
 PREFERRED_TOKENS = _preferred_token_weights(globals().get("pattern_preferred_tokens"), PREFERRED_TOKENS)
+PREFERRED_TOKEN_RANKS = {name: index for index, name in enumerate(PREFERRED_TOKENS.keys())}
 IGNORED_TOKENS = _ignored_token_names(globals().get("pattern_ignored_tokens"), IGNORED_TOKENS)
 
 
@@ -1078,6 +1080,16 @@ def _get_importance(token_name):
     return PREFERRED_TOKENS.get(token_name, 1)
 
 
+def _get_priority_rank(token_name):
+    return PREFERRED_TOKEN_RANKS.get(token_name, len(PREFERRED_TOKEN_RANKS) + 100)
+
+
+def _candidate_priority_rank(candidate):
+    if not isinstance(candidate, dict):
+        return len(PREFERRED_TOKEN_RANKS) + 100
+    return int(candidate.get("priority_rank", _get_priority_rank(candidate.get("name", ""))))
+
+
 def _sprinkler_anchor_enabled():
     return FIELD_DRIFT_COMPENSATION and USE_SPRINKLER_MODEL_FOR_DRIFT_COMPENSATION
 
@@ -1164,6 +1176,7 @@ def _find_best_token(runtime, detections):
                 "future_x": future_x,
                 "future_y": future_y,
                 "score": score,
+                "priority_rank": _get_priority_rank(token_name),
                 "confidence": confidence,
             }
         )
@@ -1184,7 +1197,7 @@ def _find_best_token(runtime, detections):
 
     runtime["last_candidate_count"] = len(candidates)
     runtime["last_rejected_tokens"] = rejected[:8]
-    return max(candidates, key=lambda item: item["score"])
+    return max(candidates, key=lambda item: (-item["priority_rank"], item["score"]))
 
 
 def _movement_keys(tx, ty):
@@ -1310,6 +1323,12 @@ def _select_movement_target(runtime):
             locked["last_seen"] = now
             runtime["locked_target"] = locked
             return locked
+
+        if latest and _candidate_priority_rank(latest) < _candidate_priority_rank(locked):
+            latest["locked_at"] = now
+            latest["last_seen"] = now
+            runtime["locked_target"] = latest
+            return latest
 
         if now - last_seen <= TARGET_LOCK_LOST_TIMEOUT:
             return locked
