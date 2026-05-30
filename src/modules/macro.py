@@ -4768,9 +4768,7 @@ class macro:
             self.hourlyReport.addHourlyStat("misc_time", time.time()-st)
 
         def saveBlenderData():
-            with open(settingsManager.getProfileUserDataPath("blender.txt"), "w") as f:
-                f.write(str(blenderData))
-            f.close()
+            settingsManager.writeProfileUserData("blender.txt", blenderData)
             updateHourlyTime()
         
         def getNextItem():
@@ -5026,24 +5024,18 @@ class macro:
             if stickerUsed: finalTime += 10
             self.logger.webhook("", f"Activated Sticker Stack, Buff Duration: {timedelta(seconds=finalTime)}", "bright green")
         else:
-            with open(settingsManager.getProfileUserDataPath("sticker_stack.txt"), "r") as f: #get the cooldown from the prev detection
-                stickerStackCD = int(f.read())
-            f.close()
+            stickerStackCD = int(settingsManager.readProfileUserData("sticker_stack.txt", {}).get("sticker_stack", 0))
             if stickerStackCD > 15*60: #make sure the time is valid
                 finalTime = stickerStackCD + 10
             else:
                 finalTime = 60*60 #default to 1hr
             self.logger.webhook("", f"Activated Sticker Stack, Buff Duration: {timedelta(seconds=finalTime)} (Defaulted to 1hr)", "bright green")
         self.keyboard.press("e")
-        with open(settingsManager.getProfileUserDataPath("sticker_stack.txt"), "w") as f:
-            f.write(str(finalTime))
-        f.close()
+        settingsManager.writeProfileUserData("sticker_stack.txt", {"sticker_stack": finalTime})
         return True
     
     def backgroundOnce(self):
-        with open(settingsManager.getProfileUserDataPath("hotbar_timings.txt"), "r") as f:
-            hotbarSlotTimings = ast.literal_eval(f.read())
-        f.close()
+        hotbarSlotTimings = settingsManager.readProfileUserData("hotbar_timings.txt", {})
 
         #night detection
         if self.enableNightDetection:
@@ -5073,17 +5065,15 @@ class macro:
             cdSecs = self.setdat[f"hotbar{i}_use_every_value"]
             if self.setdat[f"hotbar{i}_use_every_format"] == "mins": 
                 cdSecs *= 60
-            if time.time() - hotbarSlotTimings[i] < cdSecs: continue
+            if time.time() - hotbarSlotTimings.get(str(i), hotbarSlotTimings.get(i, 0)) < cdSecs: continue
             print(f"pressed hotbar {i}")
             #press the key
             for _ in range(2):
                 keyboard.pagPress(str(i))
                 time.sleep(0.4)
             #update the time pressed
-            hotbarSlotTimings[i] = time.time()
-            with open(settingsManager.getProfileUserDataPath("hotbar_timings.txt"), "w") as f:
-                f.write(str(hotbarSlotTimings))
-            f.close()
+            hotbarSlotTimings[str(i)] = time.time()
+            settingsManager.writeProfileUserData("hotbar_timings.txt", hotbarSlotTimings)
     
     def background(self):
         while True:
@@ -5118,9 +5108,7 @@ class macro:
                 self.logger.hourlyReport("Hourly Report", "", "purple")
 
                 #add to history
-                with open(settingsManager.getProfileUserDataPath("hourly_report_history.txt"), "r") as f:
-                    history = ast.literal_eval(f.read())
-                f.close()
+                history = settingsManager.readProfileUserData("hourly_report_history.txt", [])
 
                 historyObj = {
                     "endHour": datetime.now().hour,
@@ -5132,9 +5120,7 @@ class macro:
                     history.pop(-1)
                 history.insert(0,historyObj)
 
-                with open(settingsManager.getProfileUserDataPath("hourly_report_history.txt"), "w") as f:
-                    f.write(str(history))
-                f.close()
+                settingsManager.writeProfileUserData("hourly_report_history.txt", history)
 
                 self.lastHourlyReport = time.time()
                 #reset stats

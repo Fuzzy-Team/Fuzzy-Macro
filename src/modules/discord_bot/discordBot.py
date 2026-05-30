@@ -111,13 +111,8 @@ def _format_planter_time(seconds_remaining: float) -> str:
 
 def _load_manual_planter_data() -> Dict:
     manual_data = {"planters": [], "fields": [], "harvestTimes": []}
-    manual_path = settingsManager.getProfileUserDataPath("manualplanters.txt")
     try:
-        with open(manual_path, "r") as manual_file:
-            raw = manual_file.read().strip()
-        if not raw:
-            return manual_data
-        parsed = ast.literal_eval(raw)
+        parsed = settingsManager.readProfileUserData("manualplanters.txt", {})
         if isinstance(parsed, dict):
             manual_data.update(parsed)
     except Exception:
@@ -239,8 +234,7 @@ def _reset_planter_timer_by_name(settings: Dict, planter_name: str) -> Tuple[boo
         if target_index < len(manual_data.get("harvestTimes", [])):
             manual_data["harvestTimes"][target_index] = 0
         try:
-            with open(settingsManager.getProfileUserDataPath("manualplanters.txt"), "w") as manual_file:
-                manual_file.write(str(manual_data))
+            settingsManager.writeProfileUserData("manualplanters.txt", manual_data)
         except Exception as error:
             return False, f"❌ Failed to reset planter timer: {error}"
     elif mode == 2:
@@ -3420,16 +3414,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 await interaction.response.send_message("❌ Hotbar slot must be between 1 and 7")
                 return
 
-            # Determine path to src and hotbar timings file (same as macro)
-            src_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-            timings_path = os.path.join(src_dir, 'data', 'user', 'hotbar_timings.txt')
-
-            # Read existing timings or initialize
-            try:
-                with open(timings_path, 'r') as f:
-                    hotbarSlotTimings = ast.literal_eval(f.read())
-            except Exception:
-                hotbarSlotTimings = [0] * 8
+            hotbarSlotTimings = settingsManager.readProfileUserData("hotbar_timings.txt", {str(i): 0 for i in range(1, 8)})
 
             # Press the hotbar key twice (same behaviour as macro.backgroundOnce)
             for _ in range(2):
@@ -3438,13 +3423,12 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
             # Update the timing for this slot and save
             try:
-                hotbarSlotTimings[slot] = time.time()
+                hotbarSlotTimings[str(slot)] = time.time()
             except Exception:
                 # If it's a dict-like structure, set the key
-                hotbarSlotTimings[slot] = time.time()
+                hotbarSlotTimings[str(slot)] = time.time()
 
-            with open(timings_path, 'w') as f:
-                f.write(str(hotbarSlotTimings))
+            settingsManager.writeProfileUserData("hotbar_timings.txt", hotbarSlotTimings)
 
             await interaction.response.send_message(f"✅ Activated hotbar slot {slot}")
 

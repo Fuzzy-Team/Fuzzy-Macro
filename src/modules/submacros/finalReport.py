@@ -6,7 +6,7 @@ import ast
 import pickle
 import statistics
 from modules.submacros.hourlyReport import HourlyReport, HourlyReportDrawer
-from modules.misc.settingsManager import getCurrentProfile, getMacroVersion, getProfileUserDataPath
+from modules.misc.settingsManager import getCurrentProfile, getMacroVersion, getProfileUserDataPath, readProfileUserData
 
 
 class FinalReportDrawer(HourlyReportDrawer):
@@ -645,10 +645,7 @@ class FinalReport:
         try:
             if setdat.get("planters_mode") == 1:
                 try:
-                    with open(getProfileUserDataPath("manualplanters.txt"), "r") as f:
-                        planterData = f.read()
-                    if planterData:
-                        planterData = ast.literal_eval(planterData)
+                    planterData = readProfileUserData("manualplanters.txt", {})
                 except (FileNotFoundError, SyntaxError, ValueError):
                     planterData = ""
             elif setdat.get("planters_mode") == 2:

@@ -18,7 +18,7 @@ from datetime import datetime
 from modules.screen.robloxWindow import RobloxWindowBounds
 import pickle
 import json
-from modules.misc.settingsManager import getCurrentProfile, loadFields, getMacroVersion, getProfileUserDataPath
+from modules.misc.settingsManager import getCurrentProfile, loadFields, getMacroVersion, getProfileUserDataPath, readProfileUserData
 
 ww, wh = pag.size()
 
@@ -505,12 +505,7 @@ class HourlyReport():
         planterData = ""
         #get planter data
         if setdat["planters_mode"] == 1:
-            with open(getProfileUserDataPath("manualplanters.txt"), "r") as f:
-                planterData = f.read()
-            f.close()
-
-            if planterData:
-                planterData = ast.literal_eval(planterData)
+            planterData = readProfileUserData("manualplanters.txt", {})
         elif setdat["planters_mode"] == 2:
             with open(getProfileUserDataPath("auto_planters.json"), "r") as f:
                 planterData = json.load(f)["planters"]
@@ -525,9 +520,7 @@ class HourlyReport():
 
 
         #get history
-        with open(getProfileUserDataPath("hourly_report_history.txt"), "r") as f:
-            historyData = ast.literal_eval(f.read())
-        f.close()
+        historyData = readProfileUserData("hourly_report_history.txt", [])
         
         if len(self.hourlyReportStats["honey_per_min"]) < 3:
             self.hourlyReportStats["honey_per_min"] = [0]*3 + self.hourlyReportStats["honey_per_min"]

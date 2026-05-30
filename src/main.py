@@ -1248,9 +1248,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         def saveManualPlanterData(planterData):
             nonlocal planterDataRaw
             normalized = normalizeManualPlanterData(planterData)
-            planterDataRaw = str(normalized)
-            with open(settingsManager.getProfileUserDataPath("manualplanters.txt"), "w") as f:
-                f.write(planterDataRaw)
+            planterDataRaw = normalized
+            settingsManager.writeProfileUserData("manualplanters.txt", normalized)
             return normalized
         
         # Get priority order from settings, or use empty list if not set
@@ -1335,9 +1334,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 # Special case: sticker_stack
                 if collectName == "sticker_stack":
                     if macro.setdat["sticker_stack"]:
-                        with open(settingsManager.getProfileUserDataPath("sticker_stack.txt"), "r") as f:
-                            stickerStackCD = int(f.read())
-                        f.close()
+                        stickerStackCD = int(settingsManager.readProfileUserData("sticker_stack.txt", {}).get("sticker_stack", 0))
                         if macro.hasRespawned("sticker_stack", stickerStackCD):
                             runTask(macro.collect, args=("sticker_stack",))
                             executedTasks.add(taskId)
@@ -1451,9 +1448,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             # Handle special tasks
             if taskId == "blender":
                 if macro.setdat["blender_enable"]:
-                    with open(settingsManager.getProfileUserDataPath("blender.txt"), "r") as f:
-                        blenderData = ast.literal_eval(f.read())
-                    f.close()
+                    blenderData = settingsManager.readProfileUserData("blender.txt", {"item": 1, "collectTime": 0})
                     if blenderData["collectTime"] > -1 and time.time() > blenderData["collectTime"]:
                         runTask(macro.blender, args=(blenderData,))
                         executedTasks.add(taskId)
@@ -1467,11 +1462,9 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 # Manual planters
                 if macro.setdat["planters_mode"] == 1:
                     if planterDataRaw is None:
-                        with open(settingsManager.getProfileUserDataPath("manualplanters.txt"), "r") as f:
-                            planterDataRaw = f.read()
-                        f.close()
+                        planterDataRaw = settingsManager.readProfileUserData("manualplanters.txt", {})
                     
-                    if not planterDataRaw.strip():
+                    if not planterDataRaw:
                         planterData = emptyManualPlanterData()
                         for i in range(3):
                             if macro.setdat[f"cycle1_{i+1}_planter"] == "none" or macro.setdat[f"cycle1_{i+1}_field"] == "none":
@@ -1487,7 +1480,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         return True
                     else:
                         try:
-                            planterData = normalizeManualPlanterData(ast.literal_eval(planterDataRaw))
+                            planterData = normalizeManualPlanterData(planterDataRaw)
                         except Exception:
                             planterData = emptyManualPlanterData()
                             planterData = saveManualPlanterData(planterData)
@@ -2262,8 +2255,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 # Handle craft tasks
                 elif taskId == "craft":
                     # Execute blender crafting directly
-                    with open(settingsManager.getProfileUserDataPath("blender.txt"), "r") as f:
-                        blenderData = ast.literal_eval(f.read())
+                    blenderData = settingsManager.readProfileUserData("blender.txt", {"item": 1, "collectTime": 0})
                     if blenderData["collectTime"] > -1 and time.time() > blenderData["collectTime"]:
                         macro.logger.webhook("Quest Task", "Executing craft (blender)", "light blue")
                         runTask(macro.blender, args=(blenderData,))
@@ -2348,9 +2340,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             
             #blender
             if macro.setdat["blender_enable"]:
-                with open(settingsManager.getProfileUserDataPath("blender.txt"), "r") as f:
-                    blenderData = ast.literal_eval(f.read())
-                f.close()
+                blenderData = settingsManager.readProfileUserData("blender.txt", {"item": 1, "collectTime": 0})
                 if blenderData["collectTime"] > -1 and time.time() > blenderData["collectTime"]:
                     runTask(macro.blender, args=(blenderData,))
 
@@ -2423,7 +2413,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         # Handle planter gather fields (if not already gathered)
         if planterDataRaw:
             try:
-                planterGatherFields = [x for x in normalizeManualPlanterData(ast.literal_eval(planterDataRaw))["gatherFields"] if x]
+                planterGatherFields = [x for x in normalizeManualPlanterData(planterDataRaw)["gatherFields"] if x]
                 for field in planterGatherFields:
                     if field not in allGatheredFields:
                         runTask(macro.gather, args=(field,), resetAfter=False)

@@ -372,6 +372,24 @@ def readProfileUserJson(filename, default=None, profile_name=None):
 def writeProfileUserJson(filename, data, profile_name=None):
     write_json_atomic(getProfileUserDataPath(filename, profile_name), data)
 
+def _jsonUserDataName(filename):
+    mapping = {
+        "screen.txt": "screen.json",
+        "manualplanters.txt": "manualplanters.json",
+        "blender.txt": "blender.json",
+        "sticker_stack.txt": "sticker_stack.json",
+        "hotbar_timings.txt": "hotbar_timings.json",
+        "hotbar_buff_tool_timings.txt": "hotbar_buff_tool_timings.json",
+        "hourly_report_history.txt": "hourly_report_history.json",
+    }
+    return mapping.get(filename, filename)
+
+def readProfileUserData(filename, default=None, profile_name=None):
+    return readProfileUserJson(_jsonUserDataName(filename), default, profile_name)
+
+def writeProfileUserData(filename, data, profile_name=None):
+    writeProfileUserJson(_jsonUserDataName(filename), data, profile_name)
+
 def readProfileUserLiteral(filename, default=None, profile_name=None):
     path = getProfileUserDataPath(filename, profile_name)
     try:
@@ -632,11 +650,39 @@ def _migrateProfileUserFiles(profile_name, log):
         except Exception as e:
             log.setdefault("errors", []).append(f"Could not migrate inventory_screenshots: {e}")
 
+    _migrateProfileUserTextJson(profile_name, log)
+
+def _migrateProfileUserTextJson(profile_name, log):
+    migrations = {
+        "screen.txt": ("screen.json", _readLegacySettingsFile, None),
+        "manualplanters.txt": ("manualplanters.json", load_legacy_python_literal_file, {}),
+        "blender.txt": ("blender.json", load_legacy_python_literal_file, {"item": 1, "collectTime": 0}),
+        "sticker_stack.txt": ("sticker_stack.json", _readLegacySettingsFile, {"sticker_stack": 0}),
+        "hotbar_timings.txt": ("hotbar_timings.json", load_legacy_python_literal_file, {slot: 0 for slot in range(1, 8)}),
+        "hotbar_buff_tool_timings.txt": ("hotbar_buff_tool_timings.json", load_legacy_python_literal_file, {slot: 0 for slot in range(1, 8)}),
+        "hourly_report_history.txt": ("hourly_report_history.json", load_legacy_python_literal_file, []),
+    }
+    for old_name, (new_name, parser, default_value) in migrations.items():
+        old_path = getProfileUserDataPath(old_name, profile_name)
+        new_path = getProfileUserDataPath(new_name, profile_name)
+        if os.path.exists(new_path):
+            continue
+        data = default_value
+        if os.path.exists(old_path):
+            try:
+                data = parser(old_path)
+            except Exception as e:
+                log.setdefault("errors", []).append(f"Could not convert {old_name} to JSON: {e}")
+        if data is None:
+            data = {}
+        write_json_atomic(new_path, data)
+    for old_name in migrations:
+        backup_legacy_file(getProfileUserDataPath(old_name, profile_name))
+
 def _trashLegacyUserDataFiles():
     legacy_dir = os.path.join(getProjectRoot(), "src", "data", "user")
     legacy_basenames = (
         "current_profile.txt",
-        "manualplanters.txt",
         "auto_planters.json",
         "blender.txt",
         "fuzzy_ai_token_rankings.json",
@@ -662,25 +708,6 @@ def _trashLegacyUserDataFiles():
 def _ensureProfileUserDataFiles(profile_name):
     os.makedirs(getProfileUserDataDir(profile_name), exist_ok=True)
     defaults = {
-        "manualplanters.txt": "",
-        "blender.txt": str({"item": 1, "collectTime": 0}),
-        "sticker_stack.txt": "sticker_stack=0\n",
-        "hourly_report_history.txt": "[]",
-        "screen.txt": (
-            "display_type=built-in\n"
-            "screen_width=2880\n"
-            "screen_height=1800\n"
-            "reference_width=2880\n"
-            "reference_height=1800\n"
-            "x_scale=1\n"
-            "y_scale=1\n"
-            "y_multiplier=1\n"
-            "x_multiplier=1\n"
-            "y_length_multiplier=1\n"
-            "x_length_multiplier=1\n"
-        ),
-        "hotbar_timings.txt": str({slot: 0 for slot in range(1, 8)}),
-        "hotbar_buff_tool_timings.txt": str({slot: 0 for slot in range(1, 8)}),
     }
     for filename, content in defaults.items():
         path = getProfileUserDataPath(filename, profile_name)
@@ -688,6 +715,31 @@ def _ensureProfileUserDataFiles(profile_name):
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content)
+
+    json_defaults = {
+        "blender.json": {"item": 1, "collectTime": 0},
+        "manualplanters.json": {},
+        "sticker_stack.json": {"sticker_stack": 0},
+        "hourly_report_history.json": [],
+        "screen.json": {
+            "display_type": "built-in",
+            "screen_width": 2880,
+            "screen_height": 1800,
+            "reference_width": 2880,
+            "reference_height": 1800,
+            "x_scale": 1,
+            "y_scale": 1,
+            "y_multiplier": 1,
+            "x_multiplier": 1,
+            "y_length_multiplier": 1,
+            "x_length_multiplier": 1,
+        },
+        "hotbar_timings.json": {str(slot): 0 for slot in range(1, 8)},
+        "hotbar_buff_tool_timings.json": {str(slot): 0 for slot in range(1, 8)},
+    }
+    for filename, data in json_defaults.items():
+        if not os.path.exists(getProfileUserDataPath(filename, profile_name)):
+            writeProfileUserJson(filename, data, profile_name)
 
     if not os.path.exists(getProfileUserDataPath("auto_planters.json", profile_name)):
         writeProfileUserJson("auto_planters.json", _defaultAutoPlanterUserData(), profile_name)
@@ -759,6 +811,7 @@ def migrateUserDataToJson():
             if profile_log:
                 write_json_atomic(getMigrationLogPath(profile), profile_log)
 
+            _migrateProfileUserTextJson(profile, profile_log)
             _ensureProfileJsonFiles(profile)
 
         runtime_log = {"schema_version": 1, "migrated_at": datetime.now().isoformat(), "dropped_runtime_keys": {}}

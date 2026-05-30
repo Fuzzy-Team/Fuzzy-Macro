@@ -10,7 +10,7 @@ BASE_SCREEN_WIDTH = 2880
 BASE_SCREEN_HEIGHT = 1800
 
 def _screenPath():
-    return settingsManager.getProfileUserDataPath("screen.txt")
+    return settingsManager.getProfileUserDataPath("screen.json")
 
 
 def defaultScreenData():
@@ -153,7 +153,7 @@ def setScreenData():
     screenData["y_length_multiplier"] = screenData["y_multiplier"]
 
     #save the data
-    settingsManager.saveDict(_screenPath(), screenData)
+    settingsManager.writeProfileUserData("screen.txt", screenData)
 
 def getScreenData():
-    return normalizeScreenData(settingsManager.readSettingsFile(_screenPath()))
+    return normalizeScreenData(settingsManager.readProfileUserData("screen.txt", {}))

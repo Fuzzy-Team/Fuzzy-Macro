@@ -364,22 +364,16 @@ class HotbarBuffRunner:
         return {"ok": True, "message": "Hotbar buff tool stop requested."}
 
     def _timings_path(self):
-        return settingsManager.getProfileUserDataPath("hotbar_buff_tool_timings.txt")
+        return settingsManager.getProfileUserDataPath("hotbar_buff_tool_timings.json")
 
     def _load_timings(self):
-        timings_path = self._timings_path()
-        try:
-            with open(timings_path, "r") as f:
-                timings = ast.literal_eval(f.read())
-        except Exception:
-            timings = {}
+        timings = settingsManager.readProfileUserData("hotbar_buff_tool_timings.txt", {})
         for slot in range(1, 8):
-            timings.setdefault(slot, 0)
+            timings.setdefault(str(slot), timings.get(slot, 0))
         return timings
 
     def _save_timings(self, timings):
-        with open(self._timings_path(), "w") as f:
-            f.write(str(timings))
+        settingsManager.writeProfileUserData("hotbar_buff_tool_timings.txt", timings)
 
     def _slot_interval_seconds(self, settings, slot):
         try:
@@ -406,7 +400,7 @@ class HotbarBuffRunner:
                     enabled_count += 1
 
                     interval_seconds = self._slot_interval_seconds(settings, slot)
-                    if time.time() - float(timings.get(slot, 0) or 0) < interval_seconds:
+                    if time.time() - float(timings.get(str(slot), timings.get(slot, 0)) or 0) < interval_seconds:
                         continue
 
                     for _ in range(2):
@@ -416,7 +410,7 @@ class HotbarBuffRunner:
                         if self._stop_event.wait(0.4):
                             break
 
-                    timings[slot] = time.time()
+                    timings[str(slot)] = time.time()
                     self._save_timings(timings)
                     used_slot = slot
                     self._update_status(
@@ -586,17 +580,12 @@ def importPatterns(patterns):
 
 @eel.expose
 def clearManualPlanters():
-    settingsManager.clearProfileUserFile("manualplanters.txt")
+    settingsManager.writeProfileUserData("manualplanters.txt", {})
 
 @eel.expose
 def getManualPlanterData():
-    path = settingsManager.getProfileUserDataPath("manualplanters.txt")
-    with open(path, "r") as f:
-        planterDataRaw = f.read()
-    if planterDataRaw.strip():
-        return ast.literal_eval(planterDataRaw)
-    else: 
-        return ""
+    planter_data = settingsManager.readProfileUserData("manualplanters.txt", {})
+    return planter_data if planter_data else ""
 
 def emptyAutoPlanterSlot():
     return {
@@ -724,13 +713,9 @@ def setAutoPlanterGather(val):
 def resetManualPlanterTimer(index):
     """Reset a specific manual planter timer by index (0-2)"""
     try:
-        with open(settingsManager.getProfileUserDataPath("manualplanters.txt"), "r") as f:
-            planterDataRaw = f.read()
-        
-        if not planterDataRaw.strip():
+        planterData = settingsManager.readProfileUserData("manualplanters.txt", {})
+        if not planterData:
             return False
-        
-        planterData = ast.literal_eval(planterDataRaw)
         
         # Check if index is valid
         if index < 0 or index >= len(planterData.get("planters", [])):
@@ -746,8 +731,7 @@ def resetManualPlanterTimer(index):
         if "harvestTimes" in planterData and len(planterData["harvestTimes"]) > index:
             planterData["harvestTimes"][index] = 0
         
-        with open(settingsManager.getProfileUserDataPath("manualplanters.txt"), "w") as f:
-            f.write(str(planterData))
+        settingsManager.writeProfileUserData("manualplanters.txt", planterData)
         
         return True
     except Exception as e:
@@ -780,7 +764,7 @@ def clearBlender():
         "item": 1,
         "collectTime": 0
     }
-    settingsManager.writeProfileUserLiteral("blender.txt", blenderData)
+    settingsManager.writeProfileUserData("blender.txt", blenderData)
 
 @eel.expose
 def clearAFB():
