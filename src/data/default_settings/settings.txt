@@ -27,6 +27,7 @@ mondo_buff_wait=2
 sticker_printer=False
 sticker_printer_egg=basic
 haste_compensation=True
+pine_tree_fast_return=False
 stump_snail=False
 ladybug=False
 rhinobeetle=False
