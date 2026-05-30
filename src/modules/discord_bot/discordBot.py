@@ -111,7 +111,7 @@ def _format_planter_time(seconds_remaining: float) -> str:
 
 def _load_manual_planter_data() -> Dict:
     manual_data = {"planters": [], "fields": [], "harvestTimes": []}
-    manual_path = "./data/user/manualplanters.txt"
+    manual_path = settingsManager.getProfileUserDataPath("manualplanters.txt")
     try:
         with open(manual_path, "r") as manual_file:
             raw = manual_file.read().strip()
@@ -127,7 +127,7 @@ def _load_manual_planter_data() -> Dict:
 
 def _load_auto_planter_data() -> Dict:
     auto_data = {"planters": []}
-    auto_path = "./data/user/auto_planters.json"
+    auto_path = settingsManager.getProfileUserDataPath("auto_planters.json")
     try:
         with open(auto_path, "r") as auto_file:
             parsed = json.load(auto_file)
@@ -239,7 +239,7 @@ def _reset_planter_timer_by_name(settings: Dict, planter_name: str) -> Tuple[boo
         if target_index < len(manual_data.get("harvestTimes", [])):
             manual_data["harvestTimes"][target_index] = 0
         try:
-            with open("./data/user/manualplanters.txt", "w") as manual_file:
+            with open(settingsManager.getProfileUserDataPath("manualplanters.txt"), "w") as manual_file:
                 manual_file.write(str(manual_data))
         except Exception as error:
             return False, f"❌ Failed to reset planter timer: {error}"
@@ -259,7 +259,7 @@ def _reset_planter_timer_by_name(settings: Dict, planter_name: str) -> Tuple[boo
             "natural_grow_duration": 0,
         }
         try:
-            with open("./data/user/auto_planters.json", "w") as auto_file:
+            with open(settingsManager.getProfileUserDataPath("auto_planters.json"), "w") as auto_file:
                 json.dump(auto_data, auto_file, indent=3)
         except Exception as error:
             return False, f"❌ Failed to reset planter timer: {error}"

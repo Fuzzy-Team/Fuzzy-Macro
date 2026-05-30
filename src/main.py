@@ -1249,7 +1249,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             nonlocal planterDataRaw
             normalized = normalizeManualPlanterData(planterData)
             planterDataRaw = str(normalized)
-            with open("./data/user/manualplanters.txt", "w") as f:
+            with open(settingsManager.getProfileUserDataPath("manualplanters.txt"), "w") as f:
                 f.write(planterDataRaw)
             return normalized
         
@@ -1335,7 +1335,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 # Special case: sticker_stack
                 if collectName == "sticker_stack":
                     if macro.setdat["sticker_stack"]:
-                        with open("./data/user/sticker_stack.txt", "r") as f:
+                        with open(settingsManager.getProfileUserDataPath("sticker_stack.txt"), "r") as f:
                             stickerStackCD = int(f.read())
                         f.close()
                         if macro.hasRespawned("sticker_stack", stickerStackCD):
@@ -1451,7 +1451,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             # Handle special tasks
             if taskId == "blender":
                 if macro.setdat["blender_enable"]:
-                    with open("./data/user/blender.txt", "r") as f:
+                    with open(settingsManager.getProfileUserDataPath("blender.txt"), "r") as f:
                         blenderData = ast.literal_eval(f.read())
                     f.close()
                     if blenderData["collectTime"] > -1 and time.time() > blenderData["collectTime"]:
@@ -1467,7 +1467,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 # Manual planters
                 if macro.setdat["planters_mode"] == 1:
                     if planterDataRaw is None:
-                        with open("./data/user/manualplanters.txt", "r") as f:
+                        with open(settingsManager.getProfileUserDataPath("manualplanters.txt"), "r") as f:
                             planterDataRaw = f.read()
                         f.close()
                     
@@ -1535,7 +1535,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 # Auto planters
                 elif macro.setdat["planters_mode"] == 2:
                     try:
-                        with open("./data/user/auto_planters.json", "r") as f:
+                        with open(settingsManager.getProfileUserDataPath("auto_planters.json"), "r") as f:
                             data = json.load(f)
                     except Exception:
                         data = {}
@@ -1615,7 +1615,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                             "gather": gatherFlag,
                             "field_degradation": fieldDegradation
                         }
-                        with open("./data/user/auto_planters.json", "w") as f:
+                        with open(settingsManager.getProfileUserDataPath("auto_planters.json"), "w") as f:
                             json.dump(data, f, indent=3)
                         f.close()
                         updateGUI.value = 1
@@ -2262,7 +2262,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 # Handle craft tasks
                 elif taskId == "craft":
                     # Execute blender crafting directly
-                    with open("./data/user/blender.txt", "r") as f:
+                    with open(settingsManager.getProfileUserDataPath("blender.txt"), "r") as f:
                         blenderData = ast.literal_eval(f.read())
                     if blenderData["collectTime"] > -1 and time.time() > blenderData["collectTime"]:
                         macro.logger.webhook("Quest Task", "Executing craft (blender)", "light blue")
@@ -2348,7 +2348,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             
             #blender
             if macro.setdat["blender_enable"]:
-                with open("./data/user/blender.txt", "r") as f:
+                with open(settingsManager.getProfileUserDataPath("blender.txt"), "r") as f:
                     blenderData = ast.literal_eval(f.read())
                 f.close()
                 if blenderData["collectTime"] > -1 and time.time() > blenderData["collectTime"]:
@@ -2434,7 +2434,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         try:
             # Only auto-gather when planters mode is auto and auto-harvest is enabled
             if macro.setdat.get("planters_mode") == 2:
-                with open("./data/user/auto_planters.json", "r") as f:
+                with open(settingsManager.getProfileUserDataPath("auto_planters.json"), "r") as f:
                     auto_data = json.load(f)
                 auto_planters = auto_data.get("planters", [])
                 auto_gather = auto_data.get("gather", False)

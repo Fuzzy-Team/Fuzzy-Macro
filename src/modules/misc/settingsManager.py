@@ -40,23 +40,45 @@ _settings_key_file_cache = None
 # File to store current profile persistence (defined after getProjectRoot)
 CURRENT_PROFILE_FILE = None
 
+def _readLegacyCurrentProfile():
+    for path in (CURRENT_PROFILE_FILE, f"{CURRENT_PROFILE_FILE}.bak"):
+        try:
+            if path and os.path.exists(path):
+                with open(path, "r") as f:
+                    saved_profile = f.read().strip()
+                if saved_profile and os.path.exists(getProfilePath(saved_profile)):
+                    return saved_profile, path
+        except Exception:
+            pass
+    return None, None
+
 def loadCurrentProfile():
     """Load the current profile from persistent storage"""
     global profileName
     try:
-        if os.path.exists(CURRENT_PROFILE_FILE):
-            with open(CURRENT_PROFILE_FILE, "r") as f:
-                saved_profile = f.read().strip()
-                if saved_profile and os.path.exists(getProfilePath(saved_profile)):
-                    profileName = saved_profile
+        saved_profile, legacy_path = _readLegacyCurrentProfile()
+        if saved_profile:
+            profileName = saved_profile
+            saveCurrentProfile()
+            if legacy_path == CURRENT_PROFILE_FILE:
+                backup_legacy_file(CURRENT_PROFILE_FILE)
+            return
+
+        app_state = read_json_file(APP_STATE_FILE, {}) if APP_STATE_FILE else {}
+        saved_profile = app_state.get("current_profile") if isinstance(app_state, dict) else None
+        if saved_profile and os.path.exists(getProfilePath(saved_profile)):
+            profileName = saved_profile
+            return
     except Exception as e:
         print(f"Warning: Could not load current profile: {e}")
 
 def saveCurrentProfile():
     """Save the current profile to persistent storage"""
     try:
-        with open(CURRENT_PROFILE_FILE, "w") as f:
-            f.write(profileName)
+        write_json_atomic(APP_STATE_FILE, {
+            "schema_version": 1,
+            "current_profile": profileName,
+        })
     except Exception as e:
         print(f"Warning: Could not save current profile: {e}")
 
@@ -69,6 +91,8 @@ def getProjectRoot():
 
 # File to store current profile persistence
 CURRENT_PROFILE_FILE = os.path.join(getProjectRoot(), "src", "data", "user", "current_profile.txt")
+APP_STATE_FILE = os.path.join(getProjectRoot(), "src", "data", "user", "app_state.json")
+RUNTIME_STATE_FILE = os.path.join(getProjectRoot(), "src", "data", "user", "runtime_state.json")
 FUZZY_AI_TOKEN_RANKINGS_FILE = os.path.join(getProjectRoot(), "src", "data", "user", "fuzzy_ai_token_rankings.json")
 DEFAULT_FUZZY_AI_TOKEN_RANKINGS_FILE = os.path.join(getProjectRoot(), "src", "data", "default_settings", "fuzzy_ai_token_rankings.json")
 
@@ -82,6 +106,24 @@ def getProfilePath(profile_name=None):
     if profile_name is None:
         profile_name = profileName
     return os.path.join(getProfilesDir(), profile_name)
+
+def getProfileJsonPath(profile_name=None):
+    return os.path.join(getProfilePath(profile_name), "profile.json")
+
+def getFieldsJsonPath(profile_name=None):
+    return os.path.join(getProfilePath(profile_name), "fields.json")
+
+def getMigrationLogPath(profile_name=None):
+    return os.path.join(getProfilePath(profile_name), "migration_log.json")
+
+def getRuntimeStateJsonPath(profile_name=None):
+    return os.path.join(getProfilePath(profile_name), "runtime_state.json")
+
+def getProfileUserDataDir(profile_name=None):
+    return os.path.join(getProfilePath(profile_name), "user_data")
+
+def getProfileUserDataPath(filename, profile_name=None):
+    return os.path.join(getProfileUserDataDir(profile_name), filename)
 
 def getDefaultSettingsPath():
     """Get the path to default settings directory"""
@@ -112,6 +154,627 @@ def resolveProjectPath(path_value):
         return os.path.normpath(path_text)
 
     return os.path.normpath(os.path.join(getProjectRoot(), path_text))
+
+def _runtimeStateDefault():
+    return {
+        "schema_version": 1,
+        "timings": {},
+        "auto_gifted_basic_bee": {},
+        "hotbar": {},
+        "hotbar_buff_tool": {},
+        "sticker_stack": {},
+        "blender": {},
+        "hourly_report": {},
+    }
+
+def _defaultAutoPlanterUserData():
+    fields = [
+        "dandelion", "bamboo", "pine tree", "mushroom", "spider", "stump",
+        "rose", "sunflower", "pineapple", "pumpkin", "blue flower",
+        "strawberry", "coconut", "clover", "cactus", "mountain top", "pepper"
+    ]
+    return {
+        "planters": [
+            {
+                "planter": "",
+                "nectar": "",
+                "field": "",
+                "harvest_time": 0,
+                "nectar_est_percent": 0,
+                "placed_time": 0,
+                "grow_duration": 0,
+                "natural_grow_duration": 0,
+            }
+            for _ in range(3)
+        ],
+        "nectar_last_field": {
+            "comforting": "",
+            "refreshing": "",
+            "satisfying": "",
+            "motivating": "",
+            "invigorating": "",
+        },
+        "gather": False,
+        "field_degradation": {
+            field: {"hours": 0.0, "updated_at": 0.0}
+            for field in fields
+        },
+    }
+
+def _defaultProfileDocument():
+    return {
+        "schema_version": 1,
+        "profile_settings": _readLegacySettingsFile(os.path.join(getDefaultSettingsPath(), "settings.txt")),
+        "general_settings": _readLegacySettingsFile(os.path.join(getDefaultSettingsPath(), "generalsettings.txt")),
+    }
+
+def _defaultFieldsDocument():
+    return {
+        "schema_version": 1,
+        "fields": loadDefaultFields(),
+    }
+
+def read_json_file(path, default=None):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data
+    except Exception:
+        return default
+
+def write_json_atomic(path, data):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp_path = f"{path}.tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+    os.replace(tmp_path, path)
+
+def backup_legacy_file(path):
+    if not os.path.exists(path):
+        return
+    backup_dir = os.path.join(getProjectRoot(), "src", "data", "legacy_user_backups")
+    os.makedirs(backup_dir, exist_ok=True)
+
+    rel = _project_relative_path(path).replace("\\", "/")
+    safe_name = rel.replace("/", "__")
+    target = os.path.join(backup_dir, safe_name)
+    if os.path.exists(target):
+        root, ext = os.path.splitext(safe_name)
+        suffix = datetime.now().strftime("%Y%m%d_%H%M%S")
+        target = os.path.join(backup_dir, f"{root}.{suffix}{ext}")
+    os.replace(path, target)
+
+def _project_relative_path(path):
+    abs_path = os.path.abspath(path)
+    try:
+        return os.path.relpath(abs_path, getProjectRoot())
+    except Exception:
+        return abs_path
+
+def coerce_setting_value(value):
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped in ("True", "False"):
+            return stripped == "True"
+        return _parseSettingValue(stripped)
+    if isinstance(value, dict):
+        return {k: coerce_setting_value(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [coerce_setting_value(v) for v in value]
+    return value
+
+def load_legacy_key_value_file(path):
+    return _readLegacySettingsFile(path)
+
+def load_legacy_python_literal_file(path):
+    with open(path, "r", encoding="utf-8") as f:
+        raw = f.read().strip()
+    if not raw:
+        return {}
+    return ast.literal_eval(raw)
+
+def _readLegacySettingsFile(path):
+    with open(path) as f:
+        raw = f.read()
+
+    raw = re.sub(r'(?<!\n)max_convert_time=', r'\nmax_convert_time=', raw)
+    data = [[x.strip() for x in y.split("=", 1)] for y in raw.split("\n") if y and "=" in y]
+    out = {}
+    for k, v in data:
+        out[k] = _parseSettingValue(v)
+    return out
+
+def _getProfileDocument(profile_name=None):
+    profile_path = getProfileJsonPath(profile_name)
+    data = read_json_file(profile_path)
+    if not isinstance(data, dict):
+        return None
+    data.setdefault("schema_version", 1)
+    data.setdefault("profile_settings", {})
+    data.setdefault("general_settings", {})
+    return data
+
+def _loadProfileDocument(profile_name=None):
+    data = _getProfileDocument(profile_name)
+    if data is not None:
+        return data
+
+    name = profile_name if profile_name is not None else profileName
+    return _buildProfileDocumentFromLegacy(name)[0]
+
+def _saveProfileDocument(data, profile_name=None):
+    data = {
+        "schema_version": int(data.get("schema_version", 1) or 1),
+        "profile_settings": dict(data.get("profile_settings", {}) or {}),
+        "general_settings": dict(data.get("general_settings", {}) or {}),
+    }
+    write_json_atomic(getProfileJsonPath(profile_name), data)
+
+def _loadFieldsDocument(profile_name=None):
+    data = read_json_file(getFieldsJsonPath(profile_name))
+    if isinstance(data, dict) and isinstance(data.get("fields"), dict):
+        data.setdefault("schema_version", 1)
+        return data
+
+    name = profile_name if profile_name is not None else profileName
+    default_fields = _readFieldsFile(_getDefaultProfileFieldsPath())
+    legacy_path = os.path.join(getProfilePath(name), "fields.txt")
+    try:
+        fields = load_legacy_python_literal_file(legacy_path)
+    except Exception:
+        fields = {}
+    fields, _ = _repairFieldsData(fields, default_fields)
+    return {"schema_version": 1, "fields": fields}
+
+def _saveFieldsDocument(fields, profile_name=None):
+    write_json_atomic(getFieldsJsonPath(profile_name), {
+        "schema_version": 1,
+        "fields": fields,
+    })
+
+def _runtimeSectionForPath(path):
+    rel = _project_relative_path(path).replace("\\", "/")
+    mapping = {
+        "src/data/user/timings.txt": "timings",
+        "src/data/user/AFB.txt": "auto_gifted_basic_bee",
+        "src/data/user/hotbar_timings.txt": "hotbar",
+        "src/data/user/hotbar_buff_tool_timings.txt": "hotbar_buff_tool",
+        "src/data/user/sticker_stack.txt": "sticker_stack",
+        "src/data/user/blender.txt": "blender",
+        "src/data/user/hourly_report_main.txt": "hourly_report",
+        "src/data/user/hourly_report_bg.txt": "hourly_report",
+    }
+    if rel.startswith("data/user/"):
+        rel = f"src/{rel}"
+    return mapping.get(rel)
+
+def _loadRuntimeState():
+    state = read_json_file(getRuntimeStateJsonPath())
+    if not isinstance(state, dict):
+        state = _runtimeStateDefault()
+    default_state = _runtimeStateDefault()
+    for key, value in default_state.items():
+        if key not in state:
+            state[key] = value
+    for key in default_state:
+        if key != "schema_version" and not isinstance(state.get(key), dict):
+            state[key] = {}
+    state["schema_version"] = 1
+    return state
+
+def _saveRuntimeState(state):
+    write_json_atomic(getRuntimeStateJsonPath(), state)
+
+def readProfileUserJson(filename, default=None, profile_name=None):
+    return read_json_file(getProfileUserDataPath(filename, profile_name), default)
+
+def writeProfileUserJson(filename, data, profile_name=None):
+    write_json_atomic(getProfileUserDataPath(filename, profile_name), data)
+
+def readProfileUserLiteral(filename, default=None, profile_name=None):
+    path = getProfileUserDataPath(filename, profile_name)
+    try:
+        return load_legacy_python_literal_file(path)
+    except Exception:
+        return default
+
+def writeProfileUserLiteral(filename, data, profile_name=None):
+    path = getProfileUserDataPath(filename, profile_name)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(str(data))
+
+def clearProfileUserFile(filename, profile_name=None):
+    path = getProfileUserDataPath(filename, profile_name)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    open(path, "w").close()
+
+def _readRuntimeSection(section):
+    state = _loadRuntimeState()
+    return dict(state.get(section, {}) or {})
+
+def _writeRuntimeSection(section, data):
+    state = _loadRuntimeState()
+    state[section] = dict(data or {})
+    _saveRuntimeState(state)
+
+def _settingOwner(setting, requested_type):
+    return _resolveSettingsFileType(setting, requested_type)
+
+def _isApprovedUnknownSetting(key):
+    key = str(key)
+    return (
+        key.startswith("ping_")
+        or key.startswith("cycle")
+        or key.startswith("auto_planter_")
+        or key.startswith("auto_field_")
+        or key.startswith("planter_hotbar_")
+    )
+
+def _chooseMigrationValue(correct_value, misplaced_value, default_value, log, key):
+    if correct_value is None:
+        return misplaced_value
+    if correct_value == misplaced_value:
+        return correct_value
+    if correct_value == default_value and misplaced_value != default_value:
+        return misplaced_value
+    if misplaced_value == default_value:
+        return correct_value
+    log.setdefault("conflicts", {})[key] = {
+        "kept": correct_value,
+        "discarded": misplaced_value,
+    }
+    return correct_value
+
+def _buildProfileDocumentFromLegacy(profile_name):
+    settings_path = os.path.join(getProfilePath(profile_name), "settings.txt")
+    general_path = os.path.join(getProfilePath(profile_name), "generalsettings.txt")
+    default_profile = _readLegacySettingsFile(os.path.join(getDefaultSettingsPath(), "settings.txt"))
+    default_general = _readLegacySettingsFile(os.path.join(getDefaultSettingsPath(), "generalsettings.txt"))
+    profile_keys = set(default_profile.keys())
+    general_keys = set(default_general.keys())
+    log = {
+        "schema_version": 1,
+        "migrated_at": datetime.now().isoformat(),
+        "moved_settings": [],
+        "missing_defaults": [],
+        "unknown_settings": {},
+        "conflicts": {},
+        "dropped_runtime_keys": {},
+        "errors": [],
+    }
+
+    try:
+        legacy_profile = _readLegacySettingsFile(settings_path)
+    except Exception as e:
+        legacy_profile = {}
+        log["errors"].append(f"Could not read settings.txt: {e}")
+
+    try:
+        legacy_general = _readLegacySettingsFile(general_path)
+    except Exception as e:
+        legacy_general = {}
+        log["errors"].append(f"Could not read generalsettings.txt: {e}")
+
+    profile_settings = {}
+    general_settings = {}
+
+    for key, value in legacy_profile.items():
+        value = coerce_setting_value(value)
+        if key in profile_keys or (key not in general_keys and _isApprovedUnknownSetting(key)):
+            profile_settings[key] = value
+        elif key in general_keys:
+            general_settings[key] = _chooseMigrationValue(
+                general_settings.get(key), value, default_general.get(key), log, key
+            )
+            log["moved_settings"].append({"key": key, "from": "settings.txt", "to": "general_settings"})
+        else:
+            log["unknown_settings"][key] = {"source": "settings.txt", "value": value}
+
+    for key, value in legacy_general.items():
+        value = coerce_setting_value(value)
+        if key in general_keys or (key not in profile_keys and _isApprovedUnknownSetting(key)):
+            general_settings[key] = _chooseMigrationValue(
+                general_settings.get(key), value, default_general.get(key), log, key
+            )
+        elif key in profile_keys:
+            profile_settings[key] = _chooseMigrationValue(
+                profile_settings.get(key), value, default_profile.get(key), log, key
+            )
+            log["moved_settings"].append({"key": key, "from": "generalsettings.txt", "to": "profile_settings"})
+        else:
+            log["unknown_settings"][key] = {"source": "generalsettings.txt", "value": value}
+
+    for key, value in default_profile.items():
+        if key not in profile_settings:
+            profile_settings[key] = value
+            log["missing_defaults"].append({"key": key, "section": "profile_settings"})
+
+    for key, value in default_general.items():
+        if key not in general_settings:
+            general_settings[key] = value
+            log["missing_defaults"].append({"key": key, "section": "general_settings"})
+
+    return {
+        "schema_version": 1,
+        "profile_settings": profile_settings,
+        "general_settings": general_settings,
+    }, log
+
+def _normalizeRuntimeTimingKey(section, key, value, log):
+    key = str(key)
+    known_exact = {
+        "rejoin_every", "convert_balloon", "last_booster", "mondo",
+        "wealth_clock", "honey_dispenser", "blueberry_dispenser",
+        "strawberry_dispenser", "royal_jelly_dispenser", "treat_dispenser",
+        "ant_pass_dispenser", "robo_pass_dispenser", "glue_dispenser",
+        "stockings", "feast", "gingerbread", "samovar", "snow_machine",
+        "lid_art", "candles", "wreath", "gummy_beacon", "sticker_printer",
+        "sticker_stack", "stump_snail", "coconut_crab", "king_beetle",
+        "tunnel_bear", "memory_match", "mega_memory_match",
+        "extreme_memory_match", "winter_memory_match", "night_memory_match",
+        "blue_booster", "red_booster", "mountain_booster", "wind_shrine",
+        "honeystorm", "AFB_dice_cd", "AFB_glitter_cd", "AFB_limit",
+    }
+    known_patterns = (
+        r"^(ladybug|rhinobeetle|mantis|scorpion|spider|werewolf)_.+",
+        r"^(brown_bear|black_bear)_quest_(cd|state)$",
+    )
+    if section in ("hotbar", "hotbar_buff_tool"):
+        return key, _coerceTimingValue(value)
+    if key in known_exact or any(re.match(pattern, key) for pattern in known_patterns):
+        if key.endswith("_quest_state"):
+            return key, 1 if value in (1, True, "1", "True", "true") else 0
+        return key, _coerceTimingValue(value)
+    log.setdefault("dropped_runtime_keys", {}).setdefault(section, {})[key] = value
+    return None, None
+
+def _coerceTimingValue(value):
+    try:
+        return float(value)
+    except Exception:
+        return 0
+
+def _normaliseRuntimeSection(section, data, log):
+    if not isinstance(data, dict):
+        data = {}
+    out = {}
+    for key, value in data.items():
+        normalized_key, normalized_value = _normalizeRuntimeTimingKey(section, key, value, log)
+        if normalized_key is not None:
+            out[str(normalized_key)] = normalized_value
+    if section in ("hotbar", "hotbar_buff_tool"):
+        for slot in range(1, 8):
+            out.setdefault(str(slot), 0)
+    return out
+
+def _loadLegacyRuntimeSection(path, parser):
+    if not os.path.exists(path):
+        return {}
+    try:
+        return parser(path)
+    except Exception:
+        return {}
+
+def _migrateRuntimeState(log, profile_name=None):
+    state = _runtimeStateDefault()
+    runtime_sources = {
+        "timings": (os.path.join(getProjectRoot(), "src", "data", "user", "timings.txt"), _readLegacySettingsFile),
+        "auto_gifted_basic_bee": (os.path.join(getProjectRoot(), "src", "data", "user", "AFB.txt"), _readLegacySettingsFile),
+        "hotbar": (os.path.join(getProjectRoot(), "src", "data", "user", "hotbar_timings.txt"), load_legacy_python_literal_file),
+        "hotbar_buff_tool": (os.path.join(getProjectRoot(), "src", "data", "user", "hotbar_buff_tool_timings.txt"), load_legacy_python_literal_file),
+        "sticker_stack": (os.path.join(getProjectRoot(), "src", "data", "user", "sticker_stack.txt"), _readLegacySettingsFile),
+        "blender": (os.path.join(getProjectRoot(), "src", "data", "user", "blender.txt"), load_legacy_python_literal_file),
+    }
+    for section, (path, parser) in runtime_sources.items():
+        data = _loadLegacyRuntimeSection(path, parser)
+        state[section] = _normaliseRuntimeSection(section, data, log)
+    write_json_atomic(getRuntimeStateJsonPath(profile_name), state)
+    for path, _parser in runtime_sources.values():
+        backup_legacy_file(path)
+
+def _validateAutoPlantersJson(log, profile_name=None):
+    path = getProfileUserDataPath("auto_planters.json", profile_name)
+    legacy_path = os.path.join(getProjectRoot(), "src", "data", "user", "auto_planters.json")
+    if not os.path.exists(path) and os.path.exists(legacy_path):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        shutil.copy2(legacy_path, path)
+    data = read_json_file(path)
+    if not isinstance(data, dict):
+        data = {"gather": False, "planters": []}
+        log.setdefault("errors", []).append("Recreated invalid auto_planters.json")
+    data.setdefault("gather", False)
+    if not isinstance(data.get("planters"), list):
+        data["planters"] = []
+    write_json_atomic(path, data)
+
+def _validateFuzzyAITokenRankingsJson(log, profile_name=None):
+    profile_path = getProfileUserDataPath("fuzzy_ai_token_rankings.json", profile_name)
+    if not os.path.exists(profile_path) and os.path.exists(FUZZY_AI_TOKEN_RANKINGS_FILE):
+        os.makedirs(os.path.dirname(profile_path), exist_ok=True)
+        shutil.copy2(FUZZY_AI_TOKEN_RANKINGS_FILE, profile_path)
+    data = read_json_file(profile_path, {})
+    if not isinstance(data, dict):
+        data = {}
+        log.setdefault("errors", []).append("Recreated invalid fuzzy_ai_token_rankings.json")
+    write_json_atomic(profile_path, data)
+
+def _migrateProfileUserFiles(profile_name, log):
+    legacy_dir = os.path.join(getProjectRoot(), "src", "data", "user")
+    user_dir = getProfileUserDataDir(profile_name)
+    os.makedirs(user_dir, exist_ok=True)
+    for filename in (
+        "manualplanters.txt",
+        "auto_planters.json",
+        "blender.txt",
+        "sticker_stack.txt",
+        "hotbar_timings.txt",
+        "hotbar_buff_tool_timings.txt",
+        "hourly_report_history.txt",
+        "hourly_report_stats.pkl",
+        "screen.txt",
+        "fuzzy_ai_token_rankings.json",
+    ):
+        src = os.path.join(legacy_dir, filename)
+        dst = os.path.join(user_dir, filename)
+        if os.path.exists(src) and not os.path.exists(dst):
+            try:
+                shutil.copy2(src, dst)
+            except Exception as e:
+                log.setdefault("errors", []).append(f"Could not migrate {filename}: {e}")
+
+    screenshots_src = os.path.join(legacy_dir, "inventory_screenshots")
+    screenshots_dst = os.path.join(user_dir, "inventory_screenshots")
+    if os.path.exists(screenshots_src) and not os.path.exists(screenshots_dst):
+        try:
+            shutil.copytree(screenshots_src, screenshots_dst)
+        except Exception as e:
+            log.setdefault("errors", []).append(f"Could not migrate inventory_screenshots: {e}")
+
+def _trashLegacyUserDataFiles():
+    legacy_dir = os.path.join(getProjectRoot(), "src", "data", "user")
+    legacy_basenames = (
+        "current_profile.txt",
+        "manualplanters.txt",
+        "auto_planters.json",
+        "blender.txt",
+        "fuzzy_ai_token_rankings.json",
+        "hotbar_timings.txt",
+        "hotbar_buff_tool_timings.txt",
+        "sticker_stack.txt",
+        "hourly_report_history.txt",
+        "hourly_report_stats.pkl",
+        "hourly_report_main.txt",
+        "hourly_report_bg.txt",
+        "screen.txt",
+        "timings.txt",
+        "AFB.txt",
+        "inventory_screenshots",
+    )
+    for entry in os.listdir(legacy_dir) if os.path.exists(legacy_dir) else []:
+        if entry == "app_state.json":
+            continue
+        should_backup = any(entry == name or entry.startswith(f"{name}.bak") for name in legacy_basenames)
+        if should_backup:
+            backup_legacy_file(os.path.join(legacy_dir, entry))
+
+def _ensureProfileUserDataFiles(profile_name):
+    os.makedirs(getProfileUserDataDir(profile_name), exist_ok=True)
+    defaults = {
+        "manualplanters.txt": "",
+        "blender.txt": str({"item": 1, "collectTime": 0}),
+        "sticker_stack.txt": "sticker_stack=0\n",
+        "hourly_report_history.txt": "[]",
+        "screen.txt": (
+            "display_type=built-in\n"
+            "screen_width=2880\n"
+            "screen_height=1800\n"
+            "reference_width=2880\n"
+            "reference_height=1800\n"
+            "x_scale=1\n"
+            "y_scale=1\n"
+            "y_multiplier=1\n"
+            "x_multiplier=1\n"
+            "y_length_multiplier=1\n"
+            "x_length_multiplier=1\n"
+        ),
+        "hotbar_timings.txt": str({slot: 0 for slot in range(1, 8)}),
+        "hotbar_buff_tool_timings.txt": str({slot: 0 for slot in range(1, 8)}),
+    }
+    for filename, content in defaults.items():
+        path = getProfileUserDataPath(filename, profile_name)
+        if not os.path.exists(path):
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(content)
+
+    if not os.path.exists(getProfileUserDataPath("auto_planters.json", profile_name)):
+        writeProfileUserJson("auto_planters.json", _defaultAutoPlanterUserData(), profile_name)
+
+    if not os.path.exists(getProfileUserDataPath("fuzzy_ai_token_rankings.json", profile_name)):
+        default_rankings = read_json_file(DEFAULT_FUZZY_AI_TOKEN_RANKINGS_FILE, {})
+        writeProfileUserJson("fuzzy_ai_token_rankings.json", default_rankings if isinstance(default_rankings, dict) else {}, profile_name)
+
+def _ensureProfileJsonFiles(profile_name):
+    os.makedirs(getProfilePath(profile_name), exist_ok=True)
+    if not os.path.exists(getProfileJsonPath(profile_name)):
+        _saveProfileDocument(_defaultProfileDocument(), profile_name)
+    if not os.path.exists(getFieldsJsonPath(profile_name)):
+        fields_doc = _defaultFieldsDocument()
+        _saveFieldsDocument(fields_doc["fields"], profile_name)
+    if not os.path.exists(getRuntimeStateJsonPath(profile_name)):
+        write_json_atomic(getRuntimeStateJsonPath(profile_name), _runtimeStateDefault())
+    _ensureProfileUserDataFiles(profile_name)
+
+def _listProfilesRaw():
+    profiles_dir = getProfilesDir()
+    if os.path.exists(profiles_dir):
+        profiles = [
+            d for d in os.listdir(profiles_dir)
+            if os.path.isdir(os.path.join(profiles_dir, d)) and not d.startswith('.')
+        ]
+        return sorted(profiles)
+    return []
+
+def ensureSettingsFilesExist():
+    """Create the generated settings/user-data tree when an install has none."""
+    os.makedirs(getProfilesDir(), exist_ok=True)
+    profiles = _listProfilesRaw()
+    if not profiles:
+        _ensureProfileJsonFiles("a")
+        profiles = ["a"]
+    if not os.path.exists(APP_STATE_FILE):
+        selected = profileName if profileName in profiles else profiles[0]
+        legacy_profile, _legacy_path = _readLegacyCurrentProfile()
+        if legacy_profile in profiles:
+            selected = legacy_profile
+        write_json_atomic(APP_STATE_FILE, {"schema_version": 1, "current_profile": selected})
+
+def migrateUserDataToJson():
+    """Migrate legacy profile and runtime user data to JSON. Safe to call repeatedly."""
+    try:
+        os.makedirs(os.path.join(getProjectRoot(), "src", "data", "user"), exist_ok=True)
+        ensureSettingsFilesExist()
+        legacy_profile, legacy_path = _readLegacyCurrentProfile()
+        if legacy_profile:
+            if legacy_profile and os.path.exists(getProfilePath(legacy_profile)):
+                write_json_atomic(APP_STATE_FILE, {"schema_version": 1, "current_profile": legacy_profile})
+            if legacy_path == CURRENT_PROFILE_FILE:
+                backup_legacy_file(CURRENT_PROFILE_FILE)
+
+        for profile in listProfiles():
+            profile_log = {}
+            if not os.path.exists(getProfileJsonPath(profile)):
+                profile_doc, profile_log = _buildProfileDocumentFromLegacy(profile)
+                _saveProfileDocument(profile_doc, profile)
+                backup_legacy_file(os.path.join(getProfilePath(profile), "settings.txt"))
+                backup_legacy_file(os.path.join(getProfilePath(profile), "generalsettings.txt"))
+
+            if not os.path.exists(getFieldsJsonPath(profile)):
+                fields_doc = _loadFieldsDocument(profile)
+                _saveFieldsDocument(fields_doc["fields"], profile)
+                backup_legacy_file(os.path.join(getProfilePath(profile), "fields.txt"))
+
+            if profile_log:
+                write_json_atomic(getMigrationLogPath(profile), profile_log)
+
+            _ensureProfileJsonFiles(profile)
+
+        runtime_log = {"schema_version": 1, "migrated_at": datetime.now().isoformat(), "dropped_runtime_keys": {}}
+        active_profile = profileName
+        app_state = read_json_file(APP_STATE_FILE, {})
+        if isinstance(app_state, dict) and app_state.get("current_profile"):
+            active_profile = app_state["current_profile"]
+        if not os.path.exists(getRuntimeStateJsonPath(active_profile)):
+            _migrateRuntimeState(runtime_log, active_profile)
+
+        _migrateProfileUserFiles(active_profile, runtime_log)
+        _validateAutoPlantersJson(runtime_log, active_profile)
+        _validateFuzzyAITokenRankingsJson(runtime_log, active_profile)
+        _trashLegacyUserDataFiles()
+    except Exception as e:
+        print(f"Warning: JSON settings migration failed: {e}")
 
 def loadDefaultFields():
     """Load default field settings from the bundled defaults."""
@@ -219,7 +882,8 @@ def _tokenRankingDefaults():
 
 def loadFuzzyAITokenRankings():
     """Load per-field AI Gathering token rankings from src/data/user."""
-    for path in (FUZZY_AI_TOKEN_RANKINGS_FILE, DEFAULT_FUZZY_AI_TOKEN_RANKINGS_FILE):
+    profile_rankings = getProfileUserDataPath("fuzzy_ai_token_rankings.json")
+    for path in (profile_rankings, FUZZY_AI_TOKEN_RANKINGS_FILE, DEFAULT_FUZZY_AI_TOKEN_RANKINGS_FILE):
         try:
             if os.path.exists(path):
                 with open(path, "r") as f:
@@ -231,9 +895,7 @@ def loadFuzzyAITokenRankings():
     return {}
 
 def saveFuzzyAITokenRankings(data):
-    os.makedirs(os.path.dirname(FUZZY_AI_TOKEN_RANKINGS_FILE), exist_ok=True)
-    with open(FUZZY_AI_TOKEN_RANKINGS_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+    write_json_atomic(getProfileUserDataPath("fuzzy_ai_token_rankings.json"), data)
 
 def loadFuzzyAITokenRanking(field_name):
     rankings = loadFuzzyAITokenRankings()
@@ -271,12 +933,7 @@ def getMacroVersion():
 
 def listProfiles():
     """List all available profiles"""
-    profiles_dir = getProfilesDir()
-    if os.path.exists(profiles_dir):
-        profiles = [d for d in os.listdir(profiles_dir) 
-                   if os.path.isdir(os.path.join(profiles_dir, d)) and not d.startswith('.')]
-        return sorted(profiles)
-    return []
+    return _listProfilesRaw()
 
 def getCurrentProfile():
     """Get the current profile name"""
@@ -297,21 +954,18 @@ def switchProfile(name):
     if not os.path.exists(profile_path) or not os.path.isdir(profile_path):
         return False, f"Profile '{name}' not found"
 
-    # Check if required profile files exist
-    settings_file = os.path.join(profile_path, "settings.txt")
-    fields_file = os.path.join(profile_path, "fields.txt")
-    generalsettings_file = os.path.join(profile_path, "generalsettings.txt")
+    # Check if required profile files exist. Legacy profiles are migrated on demand.
+    if not os.path.exists(getProfileJsonPath(name)) or not os.path.exists(getFieldsJsonPath(name)):
+        migrateUserDataToJson()
 
-    if not os.path.exists(settings_file):
-        return False, f"Profile '{name}' is missing settings.txt file"
+    if not os.path.exists(getProfileJsonPath(name)):
+        return False, f"Profile '{name}' is missing profile.json file"
 
-    if not os.path.exists(fields_file):
-        return False, f"Profile '{name}' is missing fields.txt file"
-
-    if not os.path.exists(generalsettings_file):
-        return False, f"Profile '{name}' is missing generalsettings.txt file"
+    if not os.path.exists(getFieldsJsonPath(name)):
+        return False, f"Profile '{name}' is missing fields.json file"
 
     profileName = name
+    _ensureProfileJsonFiles(name)
     # Save the profile selection persistently
     saveCurrentProfile()
     # Increment the change counter to notify running processes
@@ -342,20 +996,7 @@ def createProfile(name):
     try:
         os.makedirs(new_profile_path)
 
-        # Copy default profile settings (fields.txt and settings.txt)
-        default_profile_path = os.path.join(getProjectRoot(), "settings", "defaults", "profiles", "a")
-        if os.path.exists(default_profile_path):
-            for file_name in ["fields.txt", "settings.txt"]:
-                src_file = os.path.join(default_profile_path, file_name)
-                dst_file = os.path.join(new_profile_path, file_name)
-                if os.path.exists(src_file):
-                    shutil.copy2(src_file, dst_file)
-
-        # Copy default generalsettings.txt
-        default_generalsettings = os.path.join(getProjectRoot(), "settings", "defaults", "generalsettings.txt")
-        if os.path.exists(default_generalsettings):
-            dst_generalsettings = os.path.join(new_profile_path, "generalsettings.txt")
-            shutil.copy2(default_generalsettings, dst_generalsettings)
+        _ensureProfileJsonFiles(name)
 
         return True, f"Created profile: {name}"
     except Exception as e:
@@ -441,22 +1082,22 @@ def duplicateProfile(source_name, new_name):
         return False, f"Failed to duplicate profile: {str(e)}"
 
 def readSettingsFile(path):
-    #get each line
-    #read the file, format it to:
-    #[[key, value], [key, value]]
-    with open(path) as f:
-        raw = f.read()
+    section = _runtimeSectionForPath(path)
+    if section:
+        return _readRuntimeSection(section)
 
-    # If `max_convert_time=` was accidentally concatenated onto the previous line,
-    # insert a newline before it so it becomes its own setting line.
-    raw = re.sub(r'(?<!\n)max_convert_time=', r'\nmax_convert_time=', raw)
+    abs_path = os.path.abspath(path)
+    try:
+        profile_path = os.path.abspath(os.path.join(getProfilePath(), "settings.txt"))
+        general_path = os.path.abspath(os.path.join(getProfilePath(), "generalsettings.txt"))
+        if abs_path == profile_path:
+            return dict(_loadProfileDocument().get("profile_settings", {}))
+        if abs_path == general_path:
+            return dict(_loadProfileDocument().get("general_settings", {}))
+    except Exception:
+        pass
 
-    data = [[x.strip() for x in y.split("=", 1)] for y in raw.split("\n") if y]
-    #convert to a dict
-    out = {}
-    for k,v in data:
-        out[k] = _parseSettingValue(v)
-    return out
+    return _readLegacySettingsFile(path)
 
 def _parseSettingValue(value):
     """Parse a settings-file value while preserving unquoted strings."""
@@ -529,6 +1170,26 @@ def _resolveSettingsFileType(setting, requested_type):
     return requested_type
 
 def saveDict(path, data):
+    section = _runtimeSectionForPath(path)
+    if section:
+        _writeRuntimeSection(section, data)
+        return
+
+    abs_path = os.path.abspath(path)
+    try:
+        profile_path = os.path.abspath(os.path.join(getProfilePath(), "settings.txt"))
+        general_path = os.path.abspath(os.path.join(getProfilePath(), "generalsettings.txt"))
+        if abs_path in (profile_path, general_path):
+            doc = _loadProfileDocument()
+            if abs_path == profile_path:
+                doc["profile_settings"] = dict(data)
+            else:
+                doc["general_settings"] = dict(data)
+            _saveProfileDocument(doc)
+            return
+    except Exception:
+        pass
+
     out = "\n".join([f"{k}={v}" for k,v in data.items()])
     # Ensure file ends with a newline to avoid accidental concatenation
     if not out.endswith("\n"):
@@ -555,7 +1216,7 @@ def removeSettingFile(setting, path):
         saveDict(path, data)
 
 def _getDefaultProfileFieldsPath():
-    return os.path.join(getProjectRoot(), "settings", "defaults", "profiles", "a", "fields.txt")
+    return os.path.join(getDefaultSettingsPath(), "fields.txt")
 
 def _readFieldsFile(fields_path):
     with open(fields_path) as f:
@@ -580,6 +1241,13 @@ def _repairFieldsData(fields_data, default_fields):
     return repaired, updated
 
 def _loadFieldsFile(fields_path, repair=True):
+    if os.path.basename(fields_path) == "fields.txt":
+        profile_dir = os.path.dirname(os.path.abspath(fields_path))
+        json_path = os.path.join(profile_dir, "fields.json")
+        data = read_json_file(json_path)
+        if isinstance(data, dict) and isinstance(data.get("fields"), dict):
+            return _coerceNestedValues(data["fields"])
+
     fields_data = _readFieldsFile(fields_path)
     if not repair:
         return _coerceNestedValues(fields_data)
@@ -597,7 +1265,7 @@ def _loadFieldsFile(fields_path, repair=True):
 
 def loadFields():
     fields_path = os.path.join(getProfilePath(), "fields.txt")
-    out = _loadFieldsFile(fields_path)
+    out = _loadFieldsDocument().get("fields", {})
 
     default_fields = loadDefaultFields()
     fieldsUpdated = False
@@ -608,8 +1276,7 @@ def loadFields():
             fieldsUpdated = True
 
     if fieldsUpdated:
-        with open(fields_path, "w") as f:
-            f.write(str(out))
+        _saveFieldsDocument(out)
 
     return out
 
@@ -618,10 +1285,7 @@ def saveField(field, settings):
     existingSettings = fieldsData.get(field, {})
     normalizedSettings = normalizeFieldSettings(field, settings)
     fieldsData[field] = _applyFieldPatternPresets(existingSettings, normalizedSettings)
-    fields_path = os.path.join(getProfilePath(), "fields.txt")
-    with open(fields_path, "w") as f:
-        f.write(str(fieldsData))
-    f.close()
+    _saveFieldsDocument(fieldsData)
 
 def exportFieldSettings(field_name):
     """Export field settings as JSON string with metadata"""
@@ -742,7 +1406,7 @@ def _isPlanterSettingKey(key):
     )
 
 def _getAutoPlanterUserPath():
-    return os.path.join(getProjectRoot(), "src", "data", "user", "auto_planters.json")
+    return getProfileUserDataPath("auto_planters.json")
 
 def _readAutoPlanterGatherFlag():
     try:
@@ -1175,17 +1839,16 @@ def exportProfile(profile_name):
 
     # Read profile data
     try:
-        settings_file = os.path.join(profile_path, "settings.txt")
-        fields_file = os.path.join(profile_path, "fields.txt")
-        generalsettings_file = os.path.join(profile_path, "generalsettings.txt")
+        if not os.path.exists(getProfileJsonPath(profile_name)) or not os.path.exists(getFieldsJsonPath(profile_name)):
+            migrateUserDataToJson()
 
-        if not os.path.exists(settings_file) or not os.path.exists(fields_file) or not os.path.exists(generalsettings_file):
+        if not os.path.exists(getProfileJsonPath(profile_name)) or not os.path.exists(getFieldsJsonPath(profile_name)):
             return False, f"Profile '{profile_name}' is missing required files"
 
-        _moveMisplacedSettings(settings_file, generalsettings_file)
-        settings_data = readSettingsFile(settings_file)
-        fields_data = loadFields() if profile_name == getCurrentProfile() else _loadFieldsFile(fields_file)
-        generalsettings_data = readSettingsFile(generalsettings_file)
+        profile_doc = _loadProfileDocument(profile_name)
+        settings_data = dict(profile_doc.get("profile_settings", {}))
+        fields_data = loadFields() if profile_name == getCurrentProfile() else _loadFieldsDocument(profile_name).get("fields", {})
+        generalsettings_data = dict(profile_doc.get("general_settings", {}))
 
         # Ensure sensitive fields are removed from export
         sensitive_keys = ("discord_bot_token", "webhook_link", "private_server_link")
@@ -1271,25 +1934,21 @@ def _importProfileData(import_data, new_profile_name=None):
         # Create profile directory
         os.makedirs(new_profile_path)
 
-        # Write settings file
-        settings_file = os.path.join(new_profile_path, "settings.txt")
-        saveDict(settings_file, import_data["settings"])
-
-        # Write fields file
-        fields_file = os.path.join(new_profile_path, "fields.txt")
-        with open(fields_file, 'w') as f:
-            f.write(str(import_data["fields"]))
-
-        # Write generalsettings file
-        generalsettings_file = os.path.join(new_profile_path, "generalsettings.txt")
-        saveDict(generalsettings_file, import_data["generalsettings"])
+        _saveProfileDocument({
+            "schema_version": 1,
+            "profile_settings": import_data["settings"],
+            "general_settings": import_data["generalsettings"],
+        }, new_profile_name)
+        _saveFieldsDocument(import_data["fields"], new_profile_name)
+        write_json_atomic(getRuntimeStateJsonPath(new_profile_name), _runtimeStateDefault())
 
         return True, f"Profile imported successfully as '{new_profile_name}'"
 
     except Exception as e:
         return False, f"Failed to import profile: {str(e)}"
 
-# Load the current profile when the module is imported
+# Migrate legacy settings before the module is used by the GUI or macro process.
+migrateUserDataToJson()
 loadCurrentProfile()
 
 #clear a file

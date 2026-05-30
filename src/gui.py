@@ -364,7 +364,7 @@ class HotbarBuffRunner:
         return {"ok": True, "message": "Hotbar buff tool stop requested."}
 
     def _timings_path(self):
-        return os.path.join(settingsManager.getProjectRoot(), "src", "data", "user", "hotbar_buff_tool_timings.txt")
+        return settingsManager.getProfileUserDataPath("hotbar_buff_tool_timings.txt")
 
     def _load_timings(self):
         timings_path = self._timings_path()
@@ -586,11 +586,12 @@ def importPatterns(patterns):
 
 @eel.expose
 def clearManualPlanters():
-    settingsManager.clearFile("./data/user/manualplanters.txt")
+    settingsManager.clearProfileUserFile("manualplanters.txt")
 
 @eel.expose
 def getManualPlanterData():
-    with open("./data/user/manualplanters.txt", "r") as f:
+    path = settingsManager.getProfileUserDataPath("manualplanters.txt")
+    with open(path, "r") as f:
         planterDataRaw = f.read()
     if planterDataRaw.strip():
         return ast.literal_eval(planterDataRaw)
@@ -690,16 +691,14 @@ def normalizeAutoPlanterData(data):
 @eel.expose
 def getAutoPlanterData():
     try:
-        with open("./data/user/auto_planters.json", "r") as f:
-            return normalizeAutoPlanterData(json.load(f))
+        return normalizeAutoPlanterData(settingsManager.readProfileUserJson("auto_planters.json", {}))
     except Exception:
         return defaultAutoPlanterData()
 
 @eel.expose
 def clearAutoPlanters():
     data = defaultAutoPlanterData()
-    with open("./data/user/auto_planters.json", "w") as f:
-        json.dump(data, f, indent=3)
+    settingsManager.writeProfileUserJson("auto_planters.json", data)
 
 
 @eel.expose
@@ -707,8 +706,7 @@ def setAutoPlanterGather(val):
     """Set the global 'gather' flag in data/user/auto_planters.json"""
     try:
         try:
-            with open("./data/user/auto_planters.json", "r") as f:
-                current = normalizeAutoPlanterData(json.load(f))
+            current = normalizeAutoPlanterData(settingsManager.readProfileUserJson("auto_planters.json", {}))
         except Exception:
             current = None
 
@@ -717,8 +715,7 @@ def setAutoPlanterGather(val):
 
         current["gather"] = bool(val)
 
-        with open("./data/user/auto_planters.json", "w") as f:
-            json.dump(current, f, indent=3)
+        settingsManager.writeProfileUserJson("auto_planters.json", current)
         return True
     except Exception:
         return False
@@ -727,7 +724,7 @@ def setAutoPlanterGather(val):
 def resetManualPlanterTimer(index):
     """Reset a specific manual planter timer by index (0-2)"""
     try:
-        with open("./data/user/manualplanters.txt", "r") as f:
+        with open(settingsManager.getProfileUserDataPath("manualplanters.txt"), "r") as f:
             planterDataRaw = f.read()
         
         if not planterDataRaw.strip():
@@ -749,7 +746,7 @@ def resetManualPlanterTimer(index):
         if "harvestTimes" in planterData and len(planterData["harvestTimes"]) > index:
             planterData["harvestTimes"][index] = 0
         
-        with open("./data/user/manualplanters.txt", "w") as f:
+        with open(settingsManager.getProfileUserDataPath("manualplanters.txt"), "w") as f:
             f.write(str(planterData))
         
         return True
@@ -761,8 +758,7 @@ def resetManualPlanterTimer(index):
 def resetAutoPlanterTimer(index):
     """Reset a specific auto planter timer by index (0-2)"""
     try:
-        with open("./data/user/auto_planters.json", "r") as f:
-            data = normalizeAutoPlanterData(json.load(f))
+        data = normalizeAutoPlanterData(settingsManager.readProfileUserJson("auto_planters.json", {}))
         
         # Check if index is valid
         if index < 0 or index >= len(data.get("planters", [])):
@@ -771,8 +767,7 @@ def resetAutoPlanterTimer(index):
         # Clear the specific planter
         data["planters"][index] = emptyAutoPlanterSlot()
         
-        with open("./data/user/auto_planters.json", "w") as f:
-            json.dump(data, f, indent=3)
+        settingsManager.writeProfileUserJson("auto_planters.json", data)
         
         return True
     except Exception as e:
@@ -785,9 +780,7 @@ def clearBlender():
         "item": 1,
         "collectTime": 0
     }
-    with open("data/user/blender.txt", "w") as f:
-        f.write(str(blenderData))
-    f.close()
+    settingsManager.writeProfileUserLiteral("blender.txt", blenderData)
 
 @eel.expose
 def clearAFB():
@@ -800,8 +793,7 @@ def clearAFB():
     # convert to format like in timings.txt
     data_str = "\n".join([f"{key}={value}" for key, value in AFBData.items()])
 
-    with open("data/user/AFB.txt", "w") as f:
-        f.write(data_str)
+    settingsManager.saveDict("./data/user/AFB.txt", AFBData)
 
 @eel.expose
 def resetFieldToDefault(field_name):

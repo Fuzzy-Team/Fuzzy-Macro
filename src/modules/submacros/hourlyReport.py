@@ -18,7 +18,7 @@ from datetime import datetime
 from modules.screen.robloxWindow import RobloxWindowBounds
 import pickle
 import json
-from modules.misc.settingsManager import getCurrentProfile, loadFields, getMacroVersion
+from modules.misc.settingsManager import getCurrentProfile, loadFields, getMacroVersion, getProfileUserDataPath
 
 ww, wh = pag.size()
 
@@ -505,14 +505,14 @@ class HourlyReport():
         planterData = ""
         #get planter data
         if setdat["planters_mode"] == 1:
-            with open("./data/user/manualplanters.txt", "r") as f:
+            with open(getProfileUserDataPath("manualplanters.txt"), "r") as f:
                 planterData = f.read()
             f.close()
 
             if planterData:
                 planterData = ast.literal_eval(planterData)
         elif setdat["planters_mode"] == 2:
-            with open("./data/user/auto_planters.json", "r") as f:
+            with open(getProfileUserDataPath("auto_planters.json"), "r") as f:
                 planterData = json.load(f)["planters"]
             f.close()
             planterData = {
@@ -525,7 +525,7 @@ class HourlyReport():
 
 
         #get history
-        with open("data/user/hourly_report_history.txt", "r") as f:
+        with open(getProfileUserDataPath("hourly_report_history.txt"), "r") as f:
             historyData = ast.literal_eval(f.read())
         f.close()
         
@@ -634,7 +634,7 @@ class HourlyReport():
         self.saveHourlyReportData()
     
     def saveHourlyReportData(self):
-        with open("data/user/hourly_report_stats.pkl", "wb") as f:
+        with open(getProfileUserDataPath("hourly_report_stats.pkl"), "wb") as f:
             pickle.dump({
                 "hourlyReportStats": self.hourlyReportStats,
                 "sessionReportStats": self.sessionReportStats,
@@ -647,7 +647,7 @@ class HourlyReport():
             }, f)
     
     def loadHourlyReportData(self):
-        with open("data/user/hourly_report_stats.pkl", "rb") as f:
+        with open(getProfileUserDataPath("hourly_report_stats.pkl"), "rb") as f:
             data = pickle.load(f)
             self.hourlyReportStats = data["hourlyReportStats"]
             self.sessionReportStats = data.get("sessionReportStats", self._defaultSessionReportStats())

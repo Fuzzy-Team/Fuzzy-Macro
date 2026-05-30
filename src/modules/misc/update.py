@@ -9,6 +9,20 @@ from modules.misc.messageBox import msgBox
 
 
 PATTERN_OVERWRITE_EXCEPTIONS = {"fuzzy_ai_gather.py"}
+PROTECTED_UPDATE_FOLDERS = [
+    os.path.join("src", "data", "user"),
+    os.path.join("src", "data", "models"),
+    os.path.join("settings", "profiles"),
+    os.path.join("settings", "patterns"),
+]
+SETTINGS_BACKUP_FOLDERS = [
+    os.path.join("settings", "profiles"),
+    os.path.join("settings", "patterns"),
+    os.path.join("src", "data", "user"),
+]
+SETTINGS_BACKUP_FILES = [
+    os.path.join("src", "data", "user", "app_state.json"),
+]
 
 # Helper: parse version strings like 1.2.3 or 1.2.3a
 def _parse_version(v):
@@ -182,6 +196,66 @@ def _create_backup(destination, backup_path, protected_folders, protected_files)
                     pass
 
 
+def _create_settings_backup(destination):
+    """Create a focused backup of generated/user-owned settings before update."""
+    backup_dir = os.path.join(destination, "settings", "backups")
+    os.makedirs(backup_dir, exist_ok=True)
+    timestamp = __import__("datetime").datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_path = os.path.join(backup_dir, f"settings_backup_{timestamp}.zip")
+    try:
+        with zipfile.ZipFile(backup_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            added = set()
+            for rel_folder in SETTINGS_BACKUP_FOLDERS:
+                abs_folder = os.path.join(destination, rel_folder)
+                if not os.path.exists(abs_folder):
+                    continue
+                for root, _dirs, files in os.walk(abs_folder):
+                    for filename in files:
+                        abs_file = os.path.join(root, filename)
+                        arcname = os.path.relpath(abs_file, destination)
+                        if arcname.startswith(os.path.join("settings", "backups") + os.sep):
+                            continue
+                        if arcname in added:
+                            continue
+                        try:
+                            zf.write(abs_file, arcname)
+                            added.add(arcname)
+                        except Exception:
+                            pass
+
+            for rel_file in SETTINGS_BACKUP_FILES:
+                abs_file = os.path.join(destination, rel_file)
+                if os.path.exists(abs_file):
+                    if rel_file in added:
+                        continue
+                    try:
+                        zf.write(abs_file, rel_file)
+                        added.add(rel_file)
+                    except Exception:
+                        pass
+        return backup_path
+    except Exception:
+        try:
+            if os.path.exists(backup_path):
+                os.remove(backup_path)
+        except Exception:
+            pass
+        return None
+
+
+def _ensure_generated_settings_after_update(destination):
+    try:
+        import sys
+        src_path = os.path.join(destination, "src")
+        if src_path not in sys.path:
+            sys.path.insert(0, src_path)
+        from modules.misc import settingsManager
+        settingsManager.ensureSettingsFilesExist()
+        settingsManager.migrateUserDataToJson()
+    except Exception as e:
+        print(f"[update] Could not ensure generated settings after update: {e}")
+
+
 # Mark that a backup exists and should be deleted after one full macro launch.
 def _mark_backup_pending(destination):
     try:
@@ -290,12 +364,7 @@ def update(t="main", update_channel="stable", progress_callback=None):
     # Important: preserve user data and profiles. Protect the patterns folder
     # during the generic overwrite, then handle pattern files with explicit
     # merge rules below so specific built-in patterns can be updated safely.
-    protected_folders = [
-        os.path.join("src", "data", "user"),
-        os.path.join("src", "data", "models"),
-        os.path.join("settings", "profiles"),
-        os.path.join("settings", "patterns"),
-    ]
+    protected_folders = PROTECTED_UPDATE_FOLDERS
     protected_files = [".git"]
     pattern_overwrite_exceptions = PATTERN_OVERWRITE_EXCEPTIONS
     destination = os.getcwd().replace("/src", "")
@@ -377,6 +446,7 @@ def update(t="main", update_channel="stable", progress_callback=None):
     # that an update will be applied.
     try:
         _report_update_progress(progress_callback, 30, "Creating backup")
+        _create_settings_backup(destination)
         _create_backup(destination, backup_path, [], protected_files)
         _mark_backup_pending(destination)
     except Exception:
@@ -525,6 +595,7 @@ def update(t="main", update_channel="stable", progress_callback=None):
     # Attempt to run install dependencies script (non-blocking). Fail silently.
     try:
         _report_update_progress(progress_callback, 96, "Finishing update")
+        _ensure_generated_settings_after_update(destination)
         install_script = os.path.join(destination, "install_dependencies.command")
         if os.path.exists(install_script):
             try:
@@ -556,12 +627,7 @@ def update_from_commit(commit_hash, progress_callback=None):
     """Update the macro from a specific commit hash (zip at /archive/<hash>.zip)."""
     _report_update_progress(progress_callback, 0, f"Starting update to {commit_hash}")
     msgBox("Update in progress", f"Updating to commit {commit_hash}... Do not close terminal")
-    protected_folders = [
-        os.path.join("src", "data", "user"),
-        os.path.join("src", "data", "models"),
-        os.path.join("settings", "profiles"),
-        os.path.join("settings", "patterns"),
-    ]
+    protected_folders = PROTECTED_UPDATE_FOLDERS
     protected_files = [".git"]
     pattern_overwrite_exceptions = PATTERN_OVERWRITE_EXCEPTIONS
     destination = os.getcwd().replace("/src", "")
@@ -577,6 +643,7 @@ def update_from_commit(commit_hash, progress_callback=None):
 
     try:
         _report_update_progress(progress_callback, 15, "Creating backup")
+        _create_settings_backup(destination)
         _create_backup(destination, backup_path, [], protected_files)
         _mark_backup_pending(destination)
     except Exception:
@@ -719,6 +786,7 @@ def update_from_commit(commit_hash, progress_callback=None):
     # Attempt to run install dependencies script (non-blocking). Fail silently.
     try:
         _report_update_progress(progress_callback, 96, "Finishing update")
+        _ensure_generated_settings_after_update(destination)
         install_script = os.path.join(destination, "install_dependencies.command")
         if os.path.exists(install_script):
             try:

@@ -1683,7 +1683,7 @@ class macro:
                 mouse.click()
                 time.sleep(0.05)
 
-        outDir = os.path.join("./data/user/inventory_screenshots", datetime.now().strftime("%Y%m%d_%H%M%S"))
+        outDir = os.path.join(settingsManager.getProfileUserDataPath("inventory_screenshots"), datetime.now().strftime("%Y%m%d_%H%M%S"))
         os.makedirs(outDir, exist_ok=True)
 
         savedPaths = []
@@ -4768,7 +4768,7 @@ class macro:
             self.hourlyReport.addHourlyStat("misc_time", time.time()-st)
 
         def saveBlenderData():
-            with open("./data/user/blender.txt", "w") as f:
+            with open(settingsManager.getProfileUserDataPath("blender.txt"), "w") as f:
                 f.write(str(blenderData))
             f.close()
             updateHourlyTime()
@@ -5026,7 +5026,7 @@ class macro:
             if stickerUsed: finalTime += 10
             self.logger.webhook("", f"Activated Sticker Stack, Buff Duration: {timedelta(seconds=finalTime)}", "bright green")
         else:
-            with open("./data/user/sticker_stack.txt", "r") as f: #get the cooldown from the prev detection
+            with open(settingsManager.getProfileUserDataPath("sticker_stack.txt"), "r") as f: #get the cooldown from the prev detection
                 stickerStackCD = int(f.read())
             f.close()
             if stickerStackCD > 15*60: #make sure the time is valid
@@ -5035,13 +5035,13 @@ class macro:
                 finalTime = 60*60 #default to 1hr
             self.logger.webhook("", f"Activated Sticker Stack, Buff Duration: {timedelta(seconds=finalTime)} (Defaulted to 1hr)", "bright green")
         self.keyboard.press("e")
-        with open("./data/user/sticker_stack.txt", "w") as f:
+        with open(settingsManager.getProfileUserDataPath("sticker_stack.txt"), "w") as f:
             f.write(str(finalTime))
         f.close()
         return True
     
     def backgroundOnce(self):
-        with open("./data/user/hotbar_timings.txt", "r") as f:
+        with open(settingsManager.getProfileUserDataPath("hotbar_timings.txt"), "r") as f:
             hotbarSlotTimings = ast.literal_eval(f.read())
         f.close()
 
@@ -5081,7 +5081,7 @@ class macro:
                 time.sleep(0.4)
             #update the time pressed
             hotbarSlotTimings[i] = time.time()
-            with open("./data/user/hotbar_timings.txt", "w") as f:
+            with open(settingsManager.getProfileUserDataPath("hotbar_timings.txt"), "w") as f:
                 f.write(str(hotbarSlotTimings))
             f.close()
     
@@ -5118,7 +5118,7 @@ class macro:
                 self.logger.hourlyReport("Hourly Report", "", "purple")
 
                 #add to history
-                with open("data/user/hourly_report_history.txt", "r") as f:
+                with open(settingsManager.getProfileUserDataPath("hourly_report_history.txt"), "r") as f:
                     history = ast.literal_eval(f.read())
                 f.close()
 
@@ -5132,7 +5132,7 @@ class macro:
                     history.pop(-1)
                 history.insert(0,historyObj)
 
-                with open("data/user/hourly_report_history.txt", "w") as f:
+                with open(settingsManager.getProfileUserDataPath("hourly_report_history.txt"), "w") as f:
                     f.write(str(history))
                 f.close()
 

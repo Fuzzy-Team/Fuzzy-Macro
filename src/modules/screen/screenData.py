@@ -9,7 +9,33 @@ from ..misc import settingsManager
 BASE_SCREEN_WIDTH = 2880
 BASE_SCREEN_HEIGHT = 1800
 
-screenPath = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../data/user/screen.txt'))
+def _screenPath():
+    return settingsManager.getProfileUserDataPath("screen.txt")
+
+
+def defaultScreenData():
+    return {
+        "display_type": "built-in",
+        "screen_width": BASE_SCREEN_WIDTH,
+        "screen_height": BASE_SCREEN_HEIGHT,
+        "reference_width": BASE_SCREEN_WIDTH,
+        "reference_height": BASE_SCREEN_HEIGHT,
+        "x_scale": 1,
+        "y_scale": 1,
+        "y_multiplier": 1,
+        "x_multiplier": 1,
+        "y_length_multiplier": 1,
+        "x_length_multiplier": 1,
+    }
+
+
+def normalizeScreenData(screen_data):
+    normalized = defaultScreenData()
+    if isinstance(screen_data, dict):
+        for key in normalized:
+            if key in screen_data and screen_data[key] not in (None, ""):
+                normalized[key] = screen_data[key]
+    return normalized
 
 
 def _get_reference_scale(screen_data=None):
@@ -127,7 +153,7 @@ def setScreenData():
     screenData["y_length_multiplier"] = screenData["y_multiplier"]
 
     #save the data
-    settingsManager.saveDict(screenPath, screenData)
+    settingsManager.saveDict(_screenPath(), screenData)
 
 def getScreenData():
-    return settingsManager.readSettingsFile(screenPath)
+    return normalizeScreenData(settingsManager.readSettingsFile(_screenPath()))
