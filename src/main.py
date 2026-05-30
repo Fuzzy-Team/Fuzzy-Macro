@@ -2483,6 +2483,13 @@ def watch_for_hotkeys(run):
     last_recording_check = 0
     recording_cache_duration = 0.5  # Check recording state every 0.5 seconds max
 
+    def release_inputs():
+        try:
+            keyboardModule.releaseMovement()
+            mouse.mouseUp()
+        except Exception:
+            pass
+
     modifier_keys = ["Ctrl", "Alt", "Shift", "Cmd"]
     ignored_keys = {"Fn"}
     key_aliases = {
@@ -2650,6 +2657,7 @@ def watch_for_hotkeys(run):
                         pass
                     # Force stop immediately when stop keybind is held
                     if run.value != 0:  # Only if not already stopped
+                        release_inputs()
                         run.value = 0
                         # Update GUI immediately so the app shows cleanup in progress.
                         try:
@@ -2706,6 +2714,7 @@ def watch_for_hotkeys(run):
                         pass
                     if run.value == 3: #already stopped
                         return
+                    release_inputs()
                     run.value = 0
                     # Update GUI immediately so the app shows cleanup in progress.
                     try:
@@ -2743,14 +2752,7 @@ def watch_for_hotkeys(run):
                     # Toggle between pause and resume
                     if run.value == 2:  # Running -> Pause immediately
                         # Release inputs instantly (like force stop behavior)
-                        try:
-                            keyboardModule.releaseMovement()
-                        except Exception:
-                            pass
-                        try:
-                            mouse.mouseUp()
-                        except Exception:
-                            pass
+                        release_inputs()
 
                         run.value = 6
 
@@ -2935,11 +2937,17 @@ if __name__ == "__main__":
         global stopThreads
         global macroProc
         stopThreads = True
+        keyboardModule.releaseMovement()
+        mouse.mouseUp()
         #print(sockets)
         if macroProc and macroProc.is_alive():
             # Give the macro process a chance to observe run.value == 0 and run
             # gather cleanup hooks, including AI gather video finalization.
-            macroProc.join(timeout=1)
+            stop_wait_deadline = time.time() + 1
+            while macroProc.is_alive() and time.time() < stop_wait_deadline:
+                keyboardModule.releaseMovement()
+                mouse.mouseUp()
+                macroProc.join(timeout=0.05)
         if macroProc and macroProc.is_alive():
             macroProc.terminate()
             macroProc.join(timeout=2)
