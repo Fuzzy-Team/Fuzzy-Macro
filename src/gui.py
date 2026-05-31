@@ -606,7 +606,8 @@ def emptyAutoPlanterSlot():
         "nectar_est_percent": 0,
         "placed_time": 0,
         "grow_duration": 0,
-        "natural_grow_duration": 0
+        "natural_grow_duration": 0,
+        "special_drop_id": ""
     }
 
 def emptyAutoPlanterFieldDegradation():
@@ -651,7 +652,8 @@ def defaultAutoPlanterData():
             "invigorating": ""
         },
         "gather": False,
-        "field_degradation": emptyAutoPlanterFieldDegradation()
+        "field_degradation": emptyAutoPlanterFieldDegradation(),
+        "special_drops": {}
     }
 
 def normalizeAutoPlanterData(data):
@@ -673,6 +675,9 @@ def normalizeAutoPlanterData(data):
             if field in normalized["field_degradation"] and isinstance(value, dict):
                 normalized["field_degradation"][field]["hours"] = value.get("hours", value.get("value", 0.0) or 0.0)
                 normalized["field_degradation"][field]["updated_at"] = value.get("updated_at", 0.0) or 0.0
+
+    if isinstance(data.get("special_drops"), dict):
+        normalized["special_drops"] = data["special_drops"]
 
     if isinstance(data.get("planters"), list):
         normalized["planters"] = []
@@ -764,12 +769,14 @@ def resetAutoPlanterTimer(index):
         with open("./data/user/auto_planters.json", "r") as f:
             data = normalizeAutoPlanterData(json.load(f))
         
-        # Check if index is valid
-        if index < 0 or index >= len(data.get("planters", [])):
-            return False
-        
-        # Clear the specific planter
-        data["planters"][index] = emptyAutoPlanterSlot()
+        if index == "all":
+            data["planters"] = [emptyAutoPlanterSlot(), emptyAutoPlanterSlot(), emptyAutoPlanterSlot()]
+            data["special_drops"] = {}
+        else:
+            index = int(index)
+            if index < 0 or index >= len(data.get("planters", [])):
+                return False
+            data["planters"][index] = emptyAutoPlanterSlot()
         
         with open("./data/user/auto_planters.json", "w") as f:
             json.dump(data, f, indent=3)

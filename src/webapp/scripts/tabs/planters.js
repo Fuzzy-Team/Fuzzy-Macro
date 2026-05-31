@@ -25,6 +25,32 @@ const fields = Object.keys(fieldNectarIcons)
 const fieldNectarArray = toImgArray(fieldNectarIcons, true)
 const nectars = Object.keys(nectarIcons)
 const nectarArray = toImgArray(nectarIcons)
+const specialPlanterDrops = [
+    {value: "plastic_coconut_swirled_wax", label: "Plastic in Coconut - 1 Swirled Wax (30d)"},
+    {value: "plastic_rose_caustic_wax", label: "Plastic in Rose - 1 Caustic Wax (30d)"},
+    {value: "candy_cactus_swirled_wax", label: "Candy in Cactus - 1 Swirled Wax (36d)"},
+    {value: "candy_mountain_top_caustic_wax", label: "Candy in Mountain Top - 1 Caustic Wax (36d)"},
+    {value: "candy_stump_glue", label: "Candy in Stump x3 - 10 Glue (7d)"},
+    {value: "red_clay_clover_spider_cactus_stingers", label: "Red Clay in Clover, Spider, Cactus - 10 Stingers (14d)"},
+    {value: "red_clay_sunflower_swirled_wax", label: "Red Clay in Sunflower - 1 Swirled Wax (30d)"},
+    {value: "red_clay_clover_caustic_wax", label: "Red Clay in Clover - 1 Caustic Wax (30d)"},
+    {value: "blue_clay_spider_swirled_wax", label: "Blue Clay in Spider - 1 Swirled Wax (30d)"},
+    {value: "blue_clay_clover_caustic_wax", label: "Blue Clay in Clover - 1 Caustic Wax (30d)"},
+    {value: "tacky_bamboo_caustic_wax", label: "Tacky in Bamboo - 1 Caustic Wax (30d)"},
+    {value: "tacky_pumpkin_swirled_wax", label: "Tacky in Pumpkin - 1 Swirled Wax (30d)"},
+    {value: "tacky_mountain_top_loaded_dice", label: "Tacky in Mountain Top - 1 Loaded Dice (30d)"},
+    {value: "pesticide_stump_mountain_top_coconut_neonberries", label: "Pesticide in Stump, Mountain Top, Coconut - 25 Neonberries (7d)"},
+    {value: "pesticide_strawberry_swirled_wax", label: "Pesticide in Strawberry - 1 Swirled Wax (36d)"},
+    {value: "heat_treated_blue_flower_swirled_wax", label: "Heat-Treated in Blue Flower - 1 Swirled Wax (36d)"},
+    {value: "heat_treated_coconut_caustic_wax", label: "Heat-Treated in Coconut - 1 Caustic Wax (36d)"},
+    {value: "heat_treated_mushroom_strawberry_rose_pepper_red_extracts", label: "Heat-Treated in Mushroom, Strawberry, Rose, Pepper - 100 Red Extracts (30d)"},
+    {value: "hydroponic_blue_flower_bamboo_pine_tree_stump_blue_extracts", label: "Hydroponic in Blue Flower, Bamboo, Pine Tree, Stump - 100 Blue Extracts (30d)"},
+    {value: "hydroponic_mushroom_swirled_wax", label: "Hydroponic in Mushroom - 1 Swirled Wax (36d)"},
+    {value: "hydroponic_coconut_caustic_wax", label: "Hydroponic in Coconut - 1 Caustic Wax (36d)"},
+    {value: "petal_strawberry_swirled_wax", label: "Petal in Strawberry - 1 Swirled Wax (30d)"},
+    {value: "petal_dandelion_caustic_wax", label: "Petal in Dandelion - 1 Caustic Wax (30d)"},
+    {value: "planter_of_plenty_bamboo_super_smoothies", label: "Planter of Plenty in Bamboo - 10 Super Smoothies (30d)"}
+]
 
 function fieldDropDownHTML(id){
     return buildInput(id,{
@@ -48,6 +74,15 @@ function nectarDropDownHTML(id){
         data: nectarArray,
         triggerFunction: "saveSetting(this, 'profile')",
         length: 11.5
+    })
+}
+function specialPlanterDropDownHTML(id, multiple = false){
+    return buildInput(id,{
+        name: "dropdown",
+        data: specialPlanterDrops,
+        triggerFunction: "saveSetting(this, 'profile')",
+        length: 30,
+        multiple
     })
 }
 
@@ -248,6 +283,11 @@ async function loadPlanters(){
         nectarPriorityElement.innerHTML += html
     }
 
+    const specialDropHolder = document.getElementById("auto_planters_special_drop_holder")
+    if (specialDropHolder){
+        specialDropHolder.innerHTML = specialPlanterDropDownHTML("auto_planters_special_drop_queue", true)
+    }
+
     // Note: Allowed-planters is merged into per-planter panels (enable toggle embedded in each panel)
     
     const planterFieldRestrictionsElement = document.getElementById("auto-planter-field-restrictions")
@@ -314,6 +354,9 @@ async function loadPlanters(){
 
     //load inputs
     const settings = await loadAllSettings()
+    if ((!settings.auto_planters_special_drop_queue || !settings.auto_planters_special_drop_queue.length) && settings.auto_planters_special_drop){
+        settings.auto_planters_special_drop_queue = [settings.auto_planters_special_drop]
+    }
     loadPlanterHotbarSections(settings)
     loadInputsWithDuplicateSelects(settings)
     // Ensure per-planter field keys default to allowed

@@ -725,6 +725,9 @@ def _isPlanterSettingKey(key):
         "auto_planters_collect_auto",
         "auto_planters_check",
         "auto_max_planters",
+        "auto_planters_special_drops",
+        "auto_planters_special_drop",
+        "auto_planters_special_drop_queue",
         "auto_preset",
     }:
         return True
