@@ -12,7 +12,7 @@ Requirements:
 - mss or Pillow
 - best.mlpackage and sprinkler.mlpackage
 
-- Version 1.0
+- Version 1.1
 """
 
 import math
@@ -83,9 +83,11 @@ ANCHOR_MAX_PASSIVE_DISTANCE = 8.0
 LEASH_HARD_MARGIN = 2.5
 LEASH_NEAR_TOKEN_ALLOWANCE = 2.25
 BLOOM_LABEL = "Bloom"
+TOKEN_LINK_LABEL = "Token Link"
 BLOOM_PETAL_SWEEP_TIMEOUT = 0.7
-BLOOM_PETAL_SWEEP_COOLDOWN = 1.5
-BLOOM_PETAL_SWEEP_RADIUS_TILES = 5.0
+BLOOM_PETAL_SWEEP_COOLDOWN = 0.45
+BLOOM_PETAL_SWEEP_RADIUS_TILES = 6.0
+BLOOM_PETAL_SWEEP_ACTIVE_WINDOW = 3.5
 BLOOM_MAX_DISTANCE = 10.0
 BLOOM_SETTLE_DISTANCE = 0.55
 BLOOM_MIN_CONFIDENCE = 0.25
@@ -1105,6 +1107,7 @@ def _find_best_token(runtime, detections):
     current_x = runtime["current_x"]
     current_y = runtime["current_y"]
     current_dist = math.hypot(current_x, current_y)
+    bloom_seen = any(LABELS_TOKENS.get(class_id) == BLOOM_LABEL for _, class_id, _ in detections)
 
     candidates = []
     rejected = []
@@ -1113,10 +1116,10 @@ def _find_best_token(runtime, detections):
         if not token_name:
             rejected.append({"class_id": class_id, "reason": "unknown", "confidence": confidence})
             continue
-        if token_name != BLOOM_LABEL:
+        if token_name != BLOOM_LABEL and (bloom_seen or token_name != TOKEN_LINK_LABEL):
             rejected.append({"name": token_name, "reason": "not_bloom", "confidence": confidence})
             continue
-        if confidence < BLOOM_MIN_CONFIDENCE:
+        if token_name == BLOOM_LABEL and confidence < BLOOM_MIN_CONFIDENCE:
             rejected.append({"name": token_name, "reason": "low_confidence", "confidence": confidence})
             continue
 
@@ -1242,6 +1245,45 @@ def _execute_movement_to_target(tx, ty):
     return _execute_movement(tx, ty)
 
 
+def _execute_active_sweep(runtime):
+    now = time.time()
+    if now - runtime.get("last_no_target_sweep_time", 0.0) < NO_TARGET_SWEEP_INTERVAL:
+        return False
+
+    runtime["last_no_target_sweep_time"] = now
+    metrics = _token_metrics()
+    step = max(0.2, min(0.5, 0.2 + (0.05 * size)))
+    sweep_index = int(runtime.get("active_sweep_index", 0))
+    runtime["active_sweep_index"] = sweep_index + 1
+
+    current_x = runtime["current_x"]
+    current_y = runtime["current_y"]
+    current_dist = math.hypot(current_x, current_y)
+    if current_dist > metrics["soft_leash"]:
+        scale = min(step / max(current_dist, 0.001), 1.0)
+        tx = -current_x * scale
+        ty = -current_y * scale
+    else:
+        sweep = (
+            (step, 0.0),
+            (0.0, step),
+            (-step, 0.0),
+            (0.0, -step),
+            (step * 0.75, step * 0.75),
+            (-step * 0.75, step * 0.75),
+            (-step * 0.75, -step * 0.75),
+            (step * 0.75, -step * 0.75),
+        )
+        tx, ty = sweep[sweep_index % len(sweep)]
+
+    _debug_log(
+        f"active bloom sweep move=({tx:.2f},{ty:.2f}) pos=({current_x:.2f},{current_y:.2f})",
+        min_interval=0.5,
+        key="active_sweep",
+    )
+    return _execute_movement(tx, ty)
+
+
 def _latest_target(runtime):
     scan_lock = runtime.get("scan_lock")
     if scan_lock is None:
@@ -1275,7 +1317,12 @@ def _select_movement_target(runtime):
         remaining_y = float(locked.get("future_y", runtime["current_y"])) - runtime["current_y"]
         remaining = math.hypot(remaining_x, remaining_y)
         if remaining <= BLOOM_SETTLE_DISTANCE:
-            runtime["pending_petal_sweep"] = True
+            if locked.get("name") == BLOOM_LABEL:
+                runtime["pending_petal_sweep"] = True
+                runtime["petal_sweep_until"] = max(
+                    runtime.get("petal_sweep_until", 0.0),
+                    now + BLOOM_PETAL_SWEEP_ACTIVE_WINDOW,
+                )
             _clear_locked_target(runtime)
             return None
 
@@ -1289,7 +1336,12 @@ def _select_movement_target(runtime):
         if now - last_seen <= TARGET_LOCK_LOST_TIMEOUT:
             return locked
 
-        runtime["pending_petal_sweep"] = True
+        if locked.get("name") == BLOOM_LABEL:
+            runtime["pending_petal_sweep"] = True
+            runtime["petal_sweep_until"] = max(
+                runtime.get("petal_sweep_until", 0.0),
+                now + BLOOM_PETAL_SWEEP_ACTIVE_WINDOW,
+            )
         if latest and latest.get("score", 0.0) >= locked.get("score", 0.0) * TARGET_LOCK_SWITCH_SCORE_MULTIPLIER:
             latest["locked_at"] = now
             latest["last_seen"] = now
@@ -1320,7 +1372,12 @@ def _execute_planned_movement(runtime):
     remaining_y = float(target_y) - runtime["current_y"]
     remaining_distance = math.hypot(remaining_x, remaining_y)
     if remaining_distance <= BLOOM_SETTLE_DISTANCE:
-        runtime["pending_petal_sweep"] = True
+        if target.get("name") == BLOOM_LABEL:
+            runtime["pending_petal_sweep"] = True
+            runtime["petal_sweep_until"] = max(
+                runtime.get("petal_sweep_until", 0.0),
+                time.time() + BLOOM_PETAL_SWEEP_ACTIVE_WINDOW,
+            )
         _clear_locked_target(runtime)
         return False
     if remaining_distance > BLOOM_MAX_MOVE_STEP:
@@ -1342,20 +1399,46 @@ def _execute_petal_sweep(runtime):
         return False
 
     runtime["last_petal_sweep_time"] = now
-    radius_tiles = BLOOM_PETAL_SWEEP_RADIUS_TILES * max(size, 0.75)
-    square_step = radius_tiles / 8.3
-    _debug_log("sweeping last bloom position for petals", min_interval=0.25, key="petal_sweep")
-    self.keyboard.multiWalk([tcfbkey, afclrkey], square_step)
-    self.keyboard.multiWalk([afcfbkey, afclrkey], square_step)
-    self.keyboard.multiWalk([afcfbkey, tclrkey], square_step)
-    self.keyboard.multiWalk([tcfbkey, tclrkey], square_step)
-    _tile_walk(tcfbkey, radius_tiles * 0.6)
-    _tile_walk(afcfbkey, radius_tiles * 0.6)
+    sweep_index = int(runtime.get("petal_sweep_index", 0))
+    runtime["petal_sweep_index"] = sweep_index + 1
+
+    max_radius = BLOOM_PETAL_SWEEP_RADIUS_TILES * max(size, 0.75)
+    radius = min(max_radius, 1.0 + (0.45 * (sweep_index % 8)))
+    diagonal_radius = radius * 0.72
+    spokes = (
+        (radius, 0.0),
+        (-radius, 0.0),
+        (0.0, radius),
+        (0.0, -radius),
+        (diagonal_radius, diagonal_radius),
+        (-diagonal_radius, diagonal_radius),
+        (-diagonal_radius, -diagonal_radius),
+        (diagonal_radius, -diagonal_radius),
+    )
+    tx, ty = spokes[sweep_index % len(spokes)]
+
+    start_x = runtime["current_x"]
+    start_y = runtime["current_y"]
+    start_movement_count = runtime["movement_count"]
+    _debug_log(
+        f"catching bloom petals spoke=({tx:.2f},{ty:.2f}) phase={sweep_index}",
+        min_interval=0.25,
+        key="petal_sweep",
+    )
+    moved_out = _execute_movement(tx, ty)
+    if moved_out:
+        _execute_movement(-tx, -ty)
+        runtime["current_x"] = start_x
+        runtime["current_y"] = start_y
+        runtime["movement_count"] = start_movement_count
     return True
 
 
 def _should_sweep_for_petals(runtime):
     if runtime.pop("pending_petal_sweep", False):
+        return True
+
+    if time.time() <= runtime.get("petal_sweep_until", 0.0):
         return True
 
     last_bloom_time = runtime.get("last_bloom_seen_time", 0.0)
@@ -1366,6 +1449,10 @@ def _should_sweep_for_petals(runtime):
     if runtime.get("petal_sweep_for_bloom_time") == last_bloom_time:
         return False
     runtime["petal_sweep_for_bloom_time"] = last_bloom_time
+    runtime["petal_sweep_until"] = max(
+        runtime.get("petal_sweep_until", 0.0),
+        time.time() + BLOOM_PETAL_SWEEP_ACTIVE_WINDOW,
+    )
     return True
 
 
@@ -1685,6 +1772,7 @@ def _initialise_runtime():
         "last_token_time": time.time(),
         "last_idle_return_time": time.time(),
         "last_no_target_sweep_time": time.time(),
+        "active_sweep_index": 0,
         "initialised_at": time.time(),
         "video_writer": None,
         "video_path": "",
@@ -1707,6 +1795,8 @@ def _initialise_runtime():
         "last_bloom_seen_time": 0.0,
         "last_petal_sweep_time": 0.0,
         "petal_sweep_for_bloom_time": 0.0,
+        "petal_sweep_until": 0.0,
+        "petal_sweep_index": 0,
         "pending_petal_sweep": False,
     }
 
@@ -1742,13 +1832,18 @@ else:
 
         target = _locked_target(runtime) or _latest_target(runtime)
         if target:
-            runtime["last_bloom_seen_time"] = time.time()
+            if target.get("name") == BLOOM_LABEL:
+                runtime["last_bloom_seen_time"] = time.time()
             _debug_log(
                 f"target={target['name']} confidence={target['confidence']:.2f} score={target['score']:.2f} planned=({target['future_x']:.2f},{target['future_y']:.2f})",
                 min_interval=0.25,
                 key="target",
             )
-            _execute_planned_movement(runtime)
+            if not _execute_planned_movement(runtime):
+                if _should_sweep_for_petals(runtime):
+                    _execute_petal_sweep(runtime)
+                else:
+                    _execute_active_sweep(runtime)
         else:
             detections = runtime.get("latest_detections", [])
             _debug_log(
@@ -1767,6 +1862,8 @@ else:
                 pass
             elif _should_sweep_for_petals(runtime):
                 _execute_petal_sweep(runtime)
+            elif _execute_active_sweep(runtime):
+                pass
             elif now - runtime["last_idle_return_time"] >= IDLE_RETURN_INTERVAL:
                 runtime["last_idle_return_time"] = now
                 if _recalibrate(runtime):
