@@ -88,6 +88,7 @@ BLOOM_PETAL_SWEEP_TIMEOUT = 0.7
 BLOOM_PETAL_SWEEP_COOLDOWN = 0.45
 BLOOM_PETAL_SWEEP_RADIUS_TILES = 6.0
 BLOOM_PETAL_SWEEP_ACTIVE_WINDOW = 3.5
+BLOOM_PETAL_SWEEP_CHAIN_LENGTH = 3
 BLOOM_MAX_DISTANCE = 10.0
 BLOOM_SETTLE_DISTANCE = 0.55
 BLOOM_MIN_CONFIDENCE = 0.25
@@ -1026,6 +1027,12 @@ def _stop_scanner_thread(runtime=None):
     runtime["scanner_thread"] = None
 
 
+def _set_start_camera_angle():
+    for _ in range(4):
+        self.keyboard.press("pageup")
+        time.sleep(0.04)
+
+
 def _load_coreml_model(model_path):
     if ct is None:
         raise RuntimeError("coremltools is required for BloomsAI gathering. Install coremltools, then restart the macro.")
@@ -1417,25 +1424,41 @@ def _execute_petal_sweep(runtime):
     )
     tx, ty = spokes[sweep_index % len(spokes)]
 
-    start_x = runtime["current_x"]
-    start_y = runtime["current_y"]
+    if not runtime.get("petal_sweep_anchor"):
+        runtime["petal_sweep_anchor"] = {
+            "x": runtime["current_x"],
+            "y": runtime["current_y"],
+        }
+
+    anchor = runtime.get("petal_sweep_anchor", {})
+    anchor_x = float(anchor.get("x", runtime["current_x"]))
+    anchor_y = float(anchor.get("y", runtime["current_y"]))
     start_movement_count = runtime["movement_count"]
+    chain_length = max(1, int(BLOOM_PETAL_SWEEP_CHAIN_LENGTH))
+    return_to_anchor = (sweep_index + 1) % chain_length == 0
+
     _debug_log(
-        f"catching bloom petals spoke=({tx:.2f},{ty:.2f}) phase={sweep_index}",
+        f"catching bloom petals spoke=({tx:.2f},{ty:.2f}) phase={sweep_index} return={return_to_anchor}",
         min_interval=0.25,
         key="petal_sweep",
     )
     moved_out = _execute_movement(tx, ty)
-    if moved_out:
-        _execute_movement(-tx, -ty)
-        runtime["current_x"] = start_x
-        runtime["current_y"] = start_y
+    if moved_out and return_to_anchor:
+        return_x = anchor_x - runtime["current_x"]
+        return_y = anchor_y - runtime["current_y"]
+        _execute_movement(return_x, return_y)
+        runtime["current_x"] = anchor_x
+        runtime["current_y"] = anchor_y
         runtime["movement_count"] = start_movement_count
     return True
 
 
 def _should_sweep_for_petals(runtime):
     if runtime.pop("pending_petal_sweep", False):
+        runtime["petal_sweep_anchor"] = {
+            "x": runtime["current_x"],
+            "y": runtime["current_y"],
+        }
         return True
 
     if time.time() <= runtime.get("petal_sweep_until", 0.0):
@@ -1453,6 +1476,10 @@ def _should_sweep_for_petals(runtime):
         runtime.get("petal_sweep_until", 0.0),
         time.time() + BLOOM_PETAL_SWEEP_ACTIVE_WINDOW,
     )
+    runtime["petal_sweep_anchor"] = {
+        "x": runtime["current_x"],
+        "y": runtime["current_y"],
+    }
     return True
 
 
@@ -1667,6 +1694,8 @@ def _initialise_runtime():
             "Must install opencv-python and numpy before using BloomsAI, please run install dependencies before continuing."
         )
 
+    _set_start_camera_angle()
+
     token_path = MODEL_DIR / "best.mlpackage"
     token_model_kind = "coreml"
     if not token_path.exists():
@@ -1797,6 +1826,7 @@ def _initialise_runtime():
         "petal_sweep_for_bloom_time": 0.0,
         "petal_sweep_until": 0.0,
         "petal_sweep_index": 0,
+        "petal_sweep_anchor": {},
         "pending_petal_sweep": False,
     }
 
