@@ -936,6 +936,19 @@ def loadFuzzyAITokenRanking(field_name):
 @eel.expose
 def saveFuzzyAITokenRanking(field_name, ranking):
     return settingsManager.saveFuzzyAITokenRanking(field_name, ranking)
+
+@eel.expose
+def getQuestData():
+    return settingsManager.loadQuestData()
+
+@eel.expose
+def loadQuestConfigs():
+    return settingsManager.loadQuestConfigs()
+
+@eel.expose
+def saveQuestConfig(giver, quest_name, config):
+    settingsManager.saveQuestConfig(giver, quest_name, config)
+    return True
   
 @eel.expose
 def exportPlanterSettings():

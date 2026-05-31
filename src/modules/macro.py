@@ -2976,6 +2976,9 @@ class macro:
         )
         pattern_preferred_tokens = fuzzyAITokenRanking.get("preferred_tokens", "")
         pattern_ignored_tokens = fuzzyAITokenRanking.get("ignored_tokens", "")
+        quest_token_prefix = settingsOverride.get("quest_preferred_tokens", "")
+        if quest_token_prefix:
+            pattern_preferred_tokens = quest_token_prefix + ("," + pattern_preferred_tokens if pattern_preferred_tokens else "")
         st = time.time()
         keepGathering = True
         self.died = False

@@ -256,6 +256,65 @@ def saveFuzzyAITokenRanking(field_name, ranking):
     saveFuzzyAITokenRankings(rankings)
     return current
 
+def getQuestConfigsPath():
+    return os.path.join(getProfilePath(), "quest_configs.json")
+
+def loadQuestConfigs():
+    path = getQuestConfigsPath()
+    try:
+        if os.path.exists(path):
+            with open(path, "r") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                return data
+    except Exception as e:
+        print(f"Warning: Could not load quest configs: {e}")
+    return {}
+
+def saveQuestConfig(giver, quest_name, config):
+    all_configs = loadQuestConfigs()
+    if giver not in all_configs:
+        all_configs[giver] = {}
+    all_configs[giver][quest_name] = config
+    try:
+        path = getQuestConfigsPath()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            json.dump(all_configs, f, indent=2)
+    except Exception as e:
+        print(f"Warning: Could not save quest config: {e}")
+
+def getQuestDataPath():
+    return os.path.join(getProjectRoot(), "src", "data", "bss", "quest_data.txt")
+
+def loadQuestData():
+    quest_data = {}
+    quest_bear = ""
+    quest_title = ""
+    quest_info = []
+    try:
+        with open(getQuestDataPath(), "r") as f:
+            lines = [x for x in f.read().split("\n") if x.strip()]
+        for line in lines:
+            if line.startswith("==") and line.endswith("=="):
+                if quest_title:
+                    quest_data[quest_bear][quest_title] = quest_info
+                quest_bear = line.strip("=").strip()
+                quest_data[quest_bear] = {}
+                quest_title, quest_info = "", []
+            elif line.startswith("-"):
+                if quest_title:
+                    quest_data[quest_bear][quest_title] = quest_info
+                quest_title = line.lstrip("-").strip()
+                quest_info = []
+            else:
+                quest_info.append(line.strip())
+        if quest_title:
+            quest_data[quest_bear][quest_title] = quest_info
+    except Exception as e:
+        print(f"Warning: Could not load quest data: {e}")
+    return quest_data
+
 def getMacroVersion():
     """Get the macro version from version.txt file"""
     try:

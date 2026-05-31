@@ -76,6 +76,30 @@
         },
       ]);
 
+      buildStandardContainer(questsSettingsParent, "Go Until Done", "Keep gathering until each quest objective is complete instead of gathering for a fixed time.", [
+        {
+          id: "quest_go_until_done",
+          title: "Go Until Done",
+          desc: "After each gather session the macro re-checks the quest and keeps going back to the field until that objective is complete.",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "quest_check_interval",
+          title: "Check Interval (s)",
+          desc: "Reserved for future mid-gather checking. Currently the quest is re-checked after every gather session.",
+          type: {
+            name: "textbox",
+            inputType: "float",
+            inputLimit: 5,
+            triggerFunction: saveProfileTriggerFunction,
+            length: 8,
+          },
+        },
+      ]);
+
       buildStandardContainer(questsSettingsParent, "Petal Gather", "Petal quest objectives use BloomsAI.", []);
     </script>
   </div>
