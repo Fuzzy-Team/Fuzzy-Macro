@@ -117,6 +117,7 @@ winter_memory_match=False
 wind_shrine=False
 wind_shrine_item=field dice
 wind_shrine_quantity=1
+memory_match_rewards=[]
 blender_enable=False
 blender_item_1=blue extract
 blender_quantity_1=1
