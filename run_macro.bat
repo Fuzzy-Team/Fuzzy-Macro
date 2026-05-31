@@ -14,8 +14,17 @@ taskkill /F /IM python.exe >nul 2>&1
 taskkill /F /IM python3.exe >nul 2>&1
 taskkill /F /IM python3.9.exe >nul 2>&1
 
-set VENV_NAME=fuzzy-macro-env
-set VENV_PATH=%USERPROFILE%\%VENV_NAME%
+set "VENV_NAME=fuzzy-macro-env"
+set "PROJECT_ROOT=%~dp0"
+set "PROJECT_VENV_PATH=%PROJECT_ROOT%%VENV_NAME%"
+set "LEGACY_VENV_PATH=%USERPROFILE%\%VENV_NAME%"
+set "VENV_PATH=%PROJECT_VENV_PATH%"
+
+if exist "%PROJECT_VENV_PATH%\Scripts\activate.bat" (
+    set "VENV_PATH=%PROJECT_VENV_PATH%"
+) else if exist "%LEGACY_VENV_PATH%\Scripts\activate.bat" (
+    set "VENV_PATH=%LEGACY_VENV_PATH%"
+)
 
 :: Set SSL certificate file for aiohttp/discord compatibility
 if exist "%VENV_PATH%\Lib\site-packages\certifi\cacert.pem" (
