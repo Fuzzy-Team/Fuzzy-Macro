@@ -619,7 +619,7 @@ class macro:
         self.logger = logModule.log(logQueue, self.setdat.get("enable_webhook", False), self.setdat.get("webhook_link", ""), self.setdat.get("send_screenshot", True), blocking=self.setdat.get("low_performance", False), hourlyReportOnly=self.setdat.get("only_send_hourly_report", False), robloxWindow=self.robloxWindow, enableDiscordPing=self.setdat.get("enable_discord_ping", False), discordUserID=self.setdat.get("discord_user_id", ""), pingSettings=pingSettings, webhookTimeFormat=self.setdat.get("webhook_time_format", 24))
         self.buffDetector = BuffDetector(self.robloxWindow)
         self.hourlyReport = HourlyReport(self.buffDetector, self.setdat.get("hourly_report_time_format", 24))
-        self.memoryMatch = MemoryMatch(self.robloxWindow)
+        self.memoryMatch = MemoryMatch(self.robloxWindow, debug=True)
 
         #setup an internal cooldown tracker. The cooldowns can be modified
         self.collectCooldowns = dict([(k, v[2]) for k,v in mergedCollectData.items()])
@@ -2041,7 +2041,7 @@ class macro:
             mmImg = self.adjustImage("./images/menu", "mmopen") #memory match
             if locateImageOnScreen(mmImg, self.robloxWindow.mx+(self.robloxWindow.mw/4), self.robloxWindow.my+(self.robloxWindow.mh/4), self.robloxWindow.mw/4, self.robloxWindow.mh/3.5, 0.8):
                 self.canDetectNight = False
-                self.memoryMatch.solveMemoryMatch(self.latestMM)
+                self.memoryMatch.solveMemoryMatch(self.latestMM, self.setdat.get("memory_match_rewards", []))
                 self.canDetectNight = True
             print(f"checked memory match popup: {time.time()-st}")
 
@@ -3826,7 +3826,7 @@ class macro:
                 time.sleep(2)
                 self.logger.webhook("", f"Solving: {displayName}", "dark brown", "screen")
                 self.canDetectNight = False
-                self.memoryMatch.solveMemoryMatch(mmType)
+                self.memoryMatch.solveMemoryMatch(mmType, self.setdat.get("memory_match_rewards", []))
                 self.canDetectNight = True
                 time.sleep(2)
                 self.logger.webhook("", f"Completed: {displayName}", "bright green", "blue")
