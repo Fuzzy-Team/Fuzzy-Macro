@@ -12,7 +12,7 @@ Requirements:
 - mss or Pillow
 - best.mlpackage and sprinkler.mlpackage
 
-- Version 1.1
+- Version 1.2
 """
 
 import math
@@ -88,8 +88,10 @@ BLOOM_PETAL_SWEEP_TIMEOUT = 0.7
 BLOOM_PETAL_SWEEP_COOLDOWN = 0.45
 BLOOM_PETAL_SWEEP_RADIUS_TILES = 6.0
 BLOOM_PETAL_SWEEP_ACTIVE_WINDOW = 3.5
-BLOOM_PETAL_SWEEP_CHAIN_LENGTH = 3
-BLOOM_MAX_DISTANCE = 10.0
+BLOOM_PETAL_SWEEP_CHAIN_LENGTH = 2
+BLOOM_PETAL_HINT_MAX_MOVE = 2.0
+BLOOM_PETAL_HINT_MIN_SCREEN_DISTANCE = 0.12
+BLOOM_MAX_DISTANCE = 13.0
 BLOOM_SETTLE_DISTANCE = 0.55
 BLOOM_MIN_CONFIDENCE = 0.25
 BLOOM_SPRINKLER_ANCHOR_INTERVAL = 0.35
@@ -1095,8 +1097,8 @@ def _token_metrics():
     max_leash = 4.0 + (0.45 * max(width - 1, 0)) + (0.35 * size)
     max_bloom_distance = max(BLOOM_MAX_DISTANCE, max_leash + 1.0)
     return {
-        "max_leash": max_bloom_distance,
-        "hard_leash": max_bloom_distance + LEASH_HARD_MARGIN,
+        "max_leash": max_leash,
+        "hard_leash": max_leash + LEASH_HARD_MARGIN,
         "soft_leash": max_leash * 0.625,
         "max_consider": max_bloom_distance,
         "cluster_radius": 1.6 + (0.1 * width),
@@ -1145,8 +1147,15 @@ def _find_best_token(runtime, detections):
         future_x = current_x + tx
         future_y = current_y + ty
         future_dist = math.hypot(future_x, future_y)
+        if future_dist > metrics["hard_leash"] and distance > LEASH_NEAR_TOKEN_ALLOWANCE:
+            rejected.append({"name": token_name, "reason": "hard_leash", "confidence": confidence, "distance": distance, "future_dist": future_dist, "tx": tx, "ty": ty})
+            continue
         proximity = 1.0 / (0.3 + distance) ** metrics["proximity_exp"]
         home_bonus = 1.0 / (0.25 + future_dist) ** 0.2
+        if current_dist > metrics["soft_leash"] and future_dist > current_dist:
+            home_bonus *= metrics["leash_edge_penalty"]
+        if future_dist > metrics["max_leash"]:
+            home_bonus *= metrics["outside_leash_penalty"]
         score = proximity * home_bonus * (0.8 + confidence)
         candidates.append(
             {
@@ -1400,6 +1409,106 @@ def _execute_planned_movement(runtime):
     return _execute_movement_to_target(remaining_x, remaining_y)
 
 
+def _find_petal_visual_hint(runtime):
+    if cv2 is None or np is None:
+        return None
+
+    try:
+        frame = _grab_token_frame(runtime)
+        if runtime.get("token_frame_is_crop"):
+            cropped = frame
+            crop_left, crop_top = runtime["token_crop"][0], runtime["token_crop"][1]
+        else:
+            crop_left, crop_top, crop_w, crop_h = runtime["token_crop"]
+            cropped = frame[crop_top:crop_top + crop_h, crop_left:crop_left + crop_w]
+
+        if cropped.size == 0:
+            return None
+        if cropped.ndim == 3 and cropped.shape[2] == 4:
+            bgr = cv2.cvtColor(cropped, cv2.COLOR_BGRA2BGR)
+        else:
+            bgr = cropped
+
+        height, width_px = bgr.shape[:2]
+        if width_px < 10 or height < 10:
+            return None
+
+        hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+        saturation = hsv[:, :, 1]
+        value = hsv[:, :, 2]
+        mask = cv2.inRange(hsv, (0, 85, 115), (179, 255, 255))
+
+        # Suppress huge balloons/auras and focus on smaller flying petal blobs.
+        kernel = np.ones((3, 3), dtype=np.uint8)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return None
+
+        center_x = width_px / 2.0
+        center_y = height / 2.0
+        min_screen_dist = min(width_px, height) * BLOOM_PETAL_HINT_MIN_SCREEN_DISTANCE
+        min_area = max(8.0, (width_px * height) * 0.000015)
+        max_area = max(180.0, (width_px * height) * 0.004)
+        candidates = []
+        for contour in contours:
+            area = cv2.contourArea(contour)
+            if area < min_area or area > max_area:
+                continue
+            x, y, w, h = cv2.boundingRect(contour)
+            if w > width_px * 0.14 or h > height * 0.18:
+                continue
+            moments = cv2.moments(contour)
+            if moments["m00"] == 0:
+                continue
+            cx = moments["m10"] / moments["m00"]
+            cy = moments["m01"] / moments["m00"]
+            region_sat = float(saturation[y:y + h, x:x + w].mean())
+            region_val = float(value[y:y + h, x:x + w].mean())
+            screen_dist = math.hypot(cx - center_x, cy - center_y)
+            if screen_dist < min_screen_dist:
+                continue
+            aspect = max(w / max(h, 1), h / max(w, 1))
+            if aspect > 6.0:
+                continue
+            outer_bias = 1.0 + min(screen_dist / max(width_px, height), 1.0) * 2.0
+            score = area * (region_sat / 255.0) * (region_val / 255.0) * outer_bias
+            candidates.append((score, area, cx, cy, screen_dist))
+
+        if not candidates:
+            return None
+
+        candidates.sort(reverse=True)
+        best_score, _area, best_x, best_y, best_dist = candidates[0]
+        cluster_weight = max(best_score, 1.0)
+        cluster_x = best_x * cluster_weight
+        cluster_y = best_y * cluster_weight
+        for score, _area, cx, cy, _screen_dist in candidates[1:8]:
+            if math.hypot(cx - best_x, cy - best_y) > min(width_px, height) * 0.22:
+                continue
+            weight = max(score, 1.0)
+            cluster_weight += weight
+            cluster_x += cx * weight
+            cluster_y += cy * weight
+
+        capture_x = crop_left + (cluster_x / cluster_weight)
+        capture_y = crop_top + (cluster_y / cluster_weight)
+        tx, ty = _relative_distance(capture_x, capture_y, runtime["homography"])
+        distance = math.hypot(tx, ty)
+        if distance <= CONTINUOUS_MIN_REPLAN_DISTANCE:
+            return None
+        max_move = BLOOM_PETAL_HINT_MAX_MOVE * max(size, 0.75)
+        if distance > max_move:
+            scale = max_move / distance
+            tx *= scale
+            ty *= scale
+            distance = max_move
+        return {"tx": tx, "ty": ty, "distance": distance, "count": len(candidates), "screen_dist": best_dist}
+    except Exception as exc:
+        _debug_log(f"petal visual hint failed: {exc}", min_interval=2.0, key="petal_hint_failed")
+        return None
+
+
 def _execute_petal_sweep(runtime):
     now = time.time()
     if now - runtime.get("last_petal_sweep_time", 0.0) < BLOOM_PETAL_SWEEP_COOLDOWN:
@@ -1408,6 +1517,22 @@ def _execute_petal_sweep(runtime):
     runtime["last_petal_sweep_time"] = now
     sweep_index = int(runtime.get("petal_sweep_index", 0))
     runtime["petal_sweep_index"] = sweep_index + 1
+    metrics = _token_metrics()
+
+    current_x = runtime["current_x"]
+    current_y = runtime["current_y"]
+    current_dist = math.hypot(current_x, current_y)
+    if current_dist > metrics["soft_leash"]:
+        step = min(1.5 * max(size, 0.75), current_dist)
+        scale = step / max(current_dist, 0.001)
+        tx = -current_x * scale
+        ty = -current_y * scale
+        _debug_log(
+            f"petal sweep leash return=({tx:.2f},{ty:.2f}) pos=({current_x:.2f},{current_y:.2f})",
+            min_interval=0.25,
+            key="petal_sweep_return",
+        )
+        return _execute_movement(tx, ty)
 
     max_radius = BLOOM_PETAL_SWEEP_RADIUS_TILES * max(size, 0.75)
     radius = min(max_radius, 1.0 + (0.45 * (sweep_index % 8)))
@@ -1422,7 +1547,21 @@ def _execute_petal_sweep(runtime):
         (-diagonal_radius, -diagonal_radius),
         (diagonal_radius, -diagonal_radius),
     )
-    tx, ty = spokes[sweep_index % len(spokes)]
+    visual_hint = _find_petal_visual_hint(runtime)
+    if visual_hint:
+        tx = visual_hint["tx"]
+        ty = visual_hint["ty"]
+        hint_label = f"hint count={visual_hint['count']}"
+    else:
+        tx, ty = spokes[sweep_index % len(spokes)]
+        hint_label = "spoke"
+
+    future_dist = math.hypot(runtime["current_x"] + tx, runtime["current_y"] + ty)
+    if future_dist > metrics["hard_leash"]:
+        scale = min(1.5 * max(size, 0.75) / max(current_dist, 0.001), 1.0)
+        tx = -current_x * scale
+        ty = -current_y * scale
+        hint_label = "leash return"
 
     if not runtime.get("petal_sweep_anchor"):
         runtime["petal_sweep_anchor"] = {
@@ -1438,7 +1577,7 @@ def _execute_petal_sweep(runtime):
     return_to_anchor = (sweep_index + 1) % chain_length == 0
 
     _debug_log(
-        f"catching bloom petals spoke=({tx:.2f},{ty:.2f}) phase={sweep_index} return={return_to_anchor}",
+        f"catching bloom petals {hint_label}=({tx:.2f},{ty:.2f}) phase={sweep_index} return={return_to_anchor}",
         min_interval=0.25,
         key="petal_sweep",
     )
