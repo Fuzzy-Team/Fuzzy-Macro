@@ -1589,6 +1589,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     nectarLastFields = data.get("nectar_last_field", {})
                     gatherFlag = data.get("gather", False)
                     fieldDegradation = data.get("field_degradation", {})
+                    specialDropState = data.get("special_drops", {})
 
                     priorityMap = {}
                     for i in range(5):
@@ -1610,7 +1611,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                             "nectar_est_percent": 0,
                             "placed_time": 0,
                             "grow_duration": 0,
-                            "natural_grow_duration": 0
+                            "natural_grow_duration": 0,
+                            "special_drop_id": ""
                         }
 
                     def emptyFieldDegradationState():
@@ -1653,7 +1655,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                             "planters": planterData,
                             "nectar_last_field": nectarLastFields,
                             "gather": gatherFlag,
-                            "field_degradation": fieldDegradation
+                            "field_degradation": fieldDegradation,
+                            "special_drops": specialDropState
                         }
                         with open("./data/user/auto_planters.json", "w") as f:
                             json.dump(data, f, indent=3)
@@ -1836,7 +1839,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                             "nectar_est_percent": placementPlan["nectar_est_percent"],
                             "placed_time": placementPlan["placed_time"],
                             "grow_duration": placementPlan["grow_duration"],
-                            "natural_grow_duration": placementPlan["natural_grow_duration"]
+                            "natural_grow_duration": placementPlan["natural_grow_duration"],
+                            "special_drop_id": placementPlan.get("special_drop_id", "")
                         }
                         planterReady = time.strftime("%H:%M:%S", time.gmtime(placementPlan["grow_duration"]))
                         macro.logger.webhook("", f"Planter will be ready in: {planterReady}", "light blue")
@@ -1844,10 +1848,156 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         saveAutoPlanterData()
                         sendNectarPercentageWebhook()
 
+                    def getSpecialDropById(dropId):
+                        for drop in macroModule.specialPlanterDrops:
+                            if drop["id"] == dropId:
+                                return drop
+                        return None
+
+                    def normalizeSpecialDropState():
+                        nonlocal specialDropState
+                        if not isinstance(specialDropState, dict):
+                            specialDropState = {}
+                        for drop in macroModule.specialPlanterDrops:
+                            state = specialDropState.get(drop["id"], {})
+                            if not isinstance(state, dict):
+                                state = {}
+                            try:
+                                progress = int(state.get("progress", 0) or 0)
+                            except Exception:
+                                progress = 0
+                            try:
+                                cooldownUntil = float(state.get("cooldown_until", 0) or 0)
+                            except Exception:
+                                cooldownUntil = 0
+                            specialDropState[drop["id"]] = {
+                                "progress": min(max(progress, 0), len(drop["fields"]) - 1),
+                                "cooldown_until": cooldownUntil
+                            }
+
+                    def getSelectedSpecialDrops():
+                        if not macro.setdat.get("auto_planters_special_drops", False):
+                            return []
+
+                        queue = macro.setdat.get("auto_planters_special_drop_queue", [])
+                        if isinstance(queue, str):
+                            try:
+                                parsedQueue = ast.literal_eval(queue)
+                                queue = parsedQueue if isinstance(parsedQueue, list) else [queue]
+                            except Exception:
+                                queue = [queue]
+                        elif not isinstance(queue, list):
+                            queue = []
+
+                        legacyDrop = macro.setdat.get("auto_planters_special_drop", "")
+                        if not queue and legacyDrop:
+                            queue = [legacyDrop]
+
+                        selected = []
+                        seen = set()
+                        for dropId in queue:
+                            drop = getSpecialDropById(str(dropId))
+                            if drop and drop["id"] not in seen:
+                                selected.append(drop)
+                                seen.add(drop["id"])
+                        return selected
+
+                    def canPlaceSpecialDrop(drop, occupiedFields, occupiedPlanters, projectedNectarPercentages):
+                        if not drop:
+                            return None
+                        state = specialDropState.get(drop["id"], {"progress": 0, "cooldown_until": 0})
+                        if state.get("cooldown_until", 0) > time.time():
+                            return None
+                        planterName = drop["planter"]
+                        progress = min(int(state.get("progress", 0) or 0), len(drop["fields"]) - 1)
+                        fieldName = drop["fields"][progress]
+                        settingPlanter = planterName.replace(" ", "_")
+                        if planterName in occupiedPlanters or fieldName in occupiedFields:
+                            return None
+                        if not macro.setdat.get(f"auto_planter_{settingPlanter}", False):
+                            return None
+                        planterObj = getPlanterRanking(fieldName, planterName)
+                        if not planterObj:
+                            return None
+                        nectar = fieldToNectar.get(fieldName, "")
+                        naturalGrowTimeSeconds = getEffectiveNaturalGrowTimeSeconds(fieldName, planterObj)
+                        nectarProjected = projectedNectarPercentages.get(nectar, getTotalNectarPercent(nectar))
+                        priorityInfo = getPriorityInfo(nectar)
+                        deficitToMin = max(0.0, priorityInfo["min"] - nectarProjected)
+                        if deficitToMin > 0:
+                            nectarScore = 24.0 + deficitToMin
+                        elif nectarProjected < 100:
+                            nectarScore = 10.0 + ((100 - nectarProjected) / 5.0)
+                        else:
+                            nectarScore = max(-18.0, -((nectarProjected - 100) / 2.5))
+                        degradationHours = getFieldDegradationHours(fieldName)
+                        progressScore = progress * 35.0
+                        routeLengthScore = max(0, len(drop["fields"]) - 1) * 4.0
+                        rewardScore = min(16.0, float(drop["cooldown_days"]))
+                        degradationPenalty = degradationHours * 1.4
+                        score = rewardScore + routeLengthScore + progressScore + nectarScore - degradationPenalty
+                        return {
+                            "field": fieldName,
+                            "nectar": nectar,
+                            "planter": planterName,
+                            "planter_obj": planterObj,
+                            "drop": drop,
+                            "progress": progress,
+                            "score": score,
+                            "plan": {
+                                "grow_duration": naturalGrowTimeSeconds,
+                                "harvest_time": time.time() + naturalGrowTimeSeconds,
+                                "placed_time": time.time(),
+                                "nectar_est_percent": estimateNectarGain(planterObj, naturalGrowTimeSeconds),
+                                "natural_grow_duration": naturalGrowTimeSeconds,
+                                "special_drop_id": drop["id"]
+                            }
+                        }
+
+                    def findBestSpecialDropPlacement(drops, occupiedFields, occupiedPlanters, projectedNectarPercentages):
+                        placements = []
+                        for drop in drops:
+                            placement = canPlaceSpecialDrop(drop, occupiedFields, occupiedPlanters, projectedNectarPercentages)
+                            if placement and (placement["planter"], placement["field"]) not in blockedPlacements:
+                                placements.append(placement)
+                        if not placements:
+                            return None
+                        placements.sort(key=lambda placement: placement["score"], reverse=True)
+                        return placements[0]
+
+                    def completeSpecialDropStep(planter):
+                        dropId = planter.get("special_drop_id", "")
+                        drop = getSpecialDropById(dropId)
+                        if not drop:
+                            return
+                        state = specialDropState.setdefault(dropId, {"progress": 0, "cooldown_until": 0})
+                        expectedIndex = min(int(state.get("progress", 0) or 0), len(drop["fields"]) - 1)
+                        if planter.get("field") != drop["fields"][expectedIndex]:
+                            state["progress"] = 0
+                            return
+                        if expectedIndex >= len(drop["fields"]) - 1:
+                            state["progress"] = 0
+                            state["cooldown_until"] = time.time() + (float(drop["cooldown_days"]) * 24 * 60 * 60)
+                            macro.logger.webhook(
+                                "",
+                                f"Completed special planter drop route for {drop['reward']}. Cooldown started.",
+                                "light blue"
+                            )
+                        else:
+                            state["progress"] = expectedIndex + 1
+                            nextField = drop["fields"][state["progress"]].title()
+                            macro.logger.webhook(
+                                "",
+                                f"Special planter drop progress saved for {drop['reward']}. Next field: {nextField}",
+                                "light blue"
+                            )
+
                     def getFieldDegradationHours(fieldName):
                         entry = getDecayedDegradationEntry(fieldName)
                         fieldDegradation[fieldName] = entry
                         return entry["hours"]
+
+                    normalizeSpecialDropState()
 
                     def getNaturalPlanterProgress(planter):
                         if not planter["planter"]:
@@ -1902,7 +2052,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                 continue
 
                             for slot, planter in enumerate(planterData):
-                                if planter["planter"] and planter.get("nectar") == nectarName:
+                                if planter["planter"] and not planter.get("special_drop_id") and planter.get("nectar") == nectarName:
                                     matchingPlanters.append((slot, planter, getNaturalPlanterProgress(planter)))
 
                             matchingPlanters.sort(key=lambda item: (-item[2], item[1]["harvest_time"]))
@@ -1928,6 +2078,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         if not planter["planter"]:
                             continue
                         if runTask(macro.collectPlanter, args=(planter["planter"], planter["field"])):
+                            completeSpecialDropStep(planter)
                             recordFieldDegradation(planter)
                             planterData[slot] = emptyAutoPlanterSlot()
                             currentNectarCache.clear()
@@ -1941,6 +2092,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     maxAllowedPlanters = min(maxAllowedPlanters, macro.setdat["auto_max_planters"])
 
                     blockedPlacements = set()
+
+                    selectedSpecialDrops = getSelectedSpecialDrops()
 
                     def getAvailableFields(occupiedFields):
                         return [
@@ -2055,6 +2208,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
 
                         return bestScore, bestPlacements
 
+                    specialPlacementMadeThisRun = False
                     while True:
                         plantersPlaced = sum(bool(planter["planter"]) for planter in planterData)
                         if plantersPlaced >= maxAllowedPlanters:
@@ -2064,12 +2218,48 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         if not openSlots:
                             break
 
+                        occupiedFields = {planter["field"] for planter in planterData if planter["field"]}
+                        occupiedPlanters = {planter["planter"] for planter in planterData if planter["planter"]}
+
                         projectedNectarPercentages = {
                             nectarName: getTotalNectarPercent(nectarName)
                             for nectarName in macroModule.nectarNames
                         }
-                        occupiedFields = {planter["field"] for planter in planterData if planter["field"]}
-                        occupiedPlanters = {planter["planter"] for planter in planterData if planter["planter"]}
+
+                        specialPlacement = None
+                        if not specialPlacementMadeThisRun:
+                            specialPlacement = findBestSpecialDropPlacement(
+                                selectedSpecialDrops,
+                                occupiedFields,
+                                occupiedPlanters,
+                                projectedNectarPercentages
+                            )
+                        if specialPlacement:
+                            slot = openSlots[0]
+                            macro.logger.webhook(
+                                "",
+                                f"Auto-planter chose special drop route {specialPlacement['planter'].title()} in {specialPlacement['field'].title()} for {specialPlacement['drop']['reward']} (score {round(specialPlacement['score'], 1)})",
+                                "dark brown"
+                            )
+                            if runTask(
+                                macro.placePlanter,
+                                args=(specialPlacement["planter"], specialPlacement["field"], False),
+                                convertAfter=False,
+                                allowAFB=False
+                            ):
+                                savePlacedPlanter(
+                                    slot,
+                                    specialPlacement["field"],
+                                    specialPlacement["planter_obj"],
+                                    specialPlacement["nectar"],
+                                    specialPlacement["plan"]
+                                )
+                                if gatherFlag:
+                                    runTask(macro.gather, args=(specialPlacement["field"],), resetAfter=False)
+                                specialPlacementMadeThisRun = True
+                                continue
+                            blockedPlacements.add((specialPlacement["planter"], specialPlacement["field"]))
+
                         _, plannedPlacements = findBestPlacements(
                             min(len(openSlots), maxAllowedPlanters - plantersPlaced),
                             occupiedFields,

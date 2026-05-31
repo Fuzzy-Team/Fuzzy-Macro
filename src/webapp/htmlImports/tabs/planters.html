@@ -185,6 +185,23 @@
                     <span class="checkmark"></span>
                 </label>
             </form>
+            <form style="display: flex; align-items:flex-start; justify-content: space-between; padding-right: 5%; margin-top:1rem">
+                <div style="width: 70%;">
+                    <label>Special Drop Route</label>
+                    <p>Prioritize a cooldown-based special planter drop route. The macro tracks progress and cooldowns automatically.</p>
+                </div>
+                <label class="checkbox-container" style="margin-top: 0.6rem;">
+                    <input type="checkbox" id="auto_planters_special_drops" onchange="saveSetting(this, 'profile')">
+                    <span class="checkmark"></span>
+                </label>
+            </form>
+            <form style="display: flex; align-items:flex-start; justify-content: space-between; padding-right: 5%; margin-top:1rem">
+                <div style="width: 45%;">
+                    <label>Special Drop Queue</label>
+                    <p>Select one or more routes. Enable the required planters below; route fields can be disabled for normal auto planters.</p>
+                </div>
+                <div id="auto_planters_special_drop_holder"></div>
+            </form>
         </div>
 
         <div class="poppins-medium standard-container" style="flex-direction: column; padding-top: 1rem; justify-content: unset;">
