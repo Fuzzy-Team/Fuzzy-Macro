@@ -29,3 +29,4 @@ backups/
 smoke_hourly_report.py
 .vscode/
 *.pt
+src/data/legacy_user_backups
