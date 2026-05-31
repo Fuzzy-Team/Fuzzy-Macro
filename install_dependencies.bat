@@ -1,8 +1,17 @@
 @echo off
 setlocal enabledelayedexpansion
 
-set VENV_NAME=fuzzy-macro-env
-set VENV_PATH=%USERPROFILE%\%VENV_NAME%
+set "VENV_NAME=fuzzy-macro-env"
+set "PROJECT_ROOT=%~dp0"
+set "PROJECT_VENV_PATH=%PROJECT_ROOT%%VENV_NAME%"
+set "LEGACY_VENV_PATH=%USERPROFILE%\%VENV_NAME%"
+set "VENV_PATH=%PROJECT_VENV_PATH%"
+
+if exist "%PROJECT_VENV_PATH%\Scripts\activate.bat" (
+    set "VENV_PATH=%PROJECT_VENV_PATH%"
+) else if exist "%LEGACY_VENV_PATH%\Scripts\activate.bat" (
+    set "VENV_PATH=%LEGACY_VENV_PATH%"
+)
 
 echo [35mChecking Python installation...[0m
 
