@@ -748,7 +748,7 @@ def _ensureProfileUserDataFiles(profile_name):
         default_rankings = read_json_file(DEFAULT_FUZZY_AI_TOKEN_RANKINGS_FILE, {})
         writeProfileUserJson("fuzzy_ai_token_rankings.json", default_rankings if isinstance(default_rankings, dict) else {}, profile_name)
 
-def _ensureProfileJsonFiles(profile_name):
+def _ensureProfileJsonFiles(profile_name, ensure_user_data=True):
     os.makedirs(getProfilePath(profile_name), exist_ok=True)
     if not os.path.exists(getProfileJsonPath(profile_name)):
         _saveProfileDocument(_defaultProfileDocument(), profile_name)
@@ -757,7 +757,8 @@ def _ensureProfileJsonFiles(profile_name):
         _saveFieldsDocument(fields_doc["fields"], profile_name)
     if not os.path.exists(getRuntimeStateJsonPath(profile_name)):
         write_json_atomic(getRuntimeStateJsonPath(profile_name), _runtimeStateDefault())
-    _ensureProfileUserDataFiles(profile_name)
+    if ensure_user_data:
+        _ensureProfileUserDataFiles(profile_name)
 
 def _listProfilesRaw():
     profiles_dir = getProfilesDir()
@@ -795,6 +796,11 @@ def migrateUserDataToJson():
             if legacy_path == CURRENT_PROFILE_FILE:
                 backup_legacy_file(CURRENT_PROFILE_FILE)
 
+        active_profile = profileName
+        app_state = read_json_file(APP_STATE_FILE, {})
+        if isinstance(app_state, dict) and app_state.get("current_profile"):
+            active_profile = app_state["current_profile"]
+
         for profile in listProfiles():
             profile_log = {}
             if not os.path.exists(getProfileJsonPath(profile)):
@@ -811,20 +817,19 @@ def migrateUserDataToJson():
             if profile_log:
                 write_json_atomic(getMigrationLogPath(profile), profile_log)
 
+            if profile == active_profile:
+                _migrateProfileUserFiles(profile, profile_log)
             _migrateProfileUserTextJson(profile, profile_log)
-            _ensureProfileJsonFiles(profile)
+            _ensureProfileJsonFiles(profile, ensure_user_data=False)
 
         runtime_log = {"schema_version": 1, "migrated_at": datetime.now().isoformat(), "dropped_runtime_keys": {}}
-        active_profile = profileName
-        app_state = read_json_file(APP_STATE_FILE, {})
-        if isinstance(app_state, dict) and app_state.get("current_profile"):
-            active_profile = app_state["current_profile"]
         if not os.path.exists(getRuntimeStateJsonPath(active_profile)):
             _migrateRuntimeState(runtime_log, active_profile)
 
-        _migrateProfileUserFiles(active_profile, runtime_log)
         _validateAutoPlantersJson(runtime_log, active_profile)
         _validateFuzzyAITokenRankingsJson(runtime_log, active_profile)
+        for profile in listProfiles():
+            _ensureProfileUserDataFiles(profile)
         _trashLegacyUserDataFiles()
     except Exception as e:
         print(f"Warning: JSON settings migration failed: {e}")
