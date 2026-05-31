@@ -3,9 +3,9 @@ setlocal enabledelayedexpansion
 
 :: Ensure script is running as administrator
 net session >nul 2>&1
-if not %errorlevel%==0 (
+if errorlevel 1 (
     echo Administrator privileges are required. Attempting to elevate...
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -WorkingDirectory '%~dp0' -Verb RunAs"
     exit /b
 )
 
@@ -44,8 +44,9 @@ if exist "%VENV_PATH%\Scripts\activate.bat" (
     if defined PY_EXEC (
         echo Using virtualenv Python %VENV_PY_VER%
         python main.py
+        if errorlevel 1 pause
     ) else (
-        echo Virtualenv Python is not 3.7/3.8/3.9 — searching system interpreters...
+        echo Virtualenv Python is not 3.7/3.8/3.9 - searching system interpreters...
 
         rem Prefer the py launcher if available
         where py >nul 2>&1
@@ -72,6 +73,7 @@ if exist "%VENV_PATH%\Scripts\activate.bat" (
         if defined PY_EXEC (
             echo Found Python: %PY_EXEC%
             %PY_EXEC% main.py
+            if errorlevel 1 pause
         ) else (
             echo No Python 3.7, 3.8, or 3.9 found on PATH or via the py launcher.
             echo Please install one of these versions or ensure it's on PATH, then rerun.
