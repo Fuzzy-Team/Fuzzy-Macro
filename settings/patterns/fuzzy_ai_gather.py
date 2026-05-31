@@ -12,7 +12,7 @@ Requirements:
 - mss or Pillow
 - best.mlpackage and sprinkler.mlpackage
 
-- Version 2.1
+- Version 2.2
 """
 
 import math
@@ -1184,6 +1184,7 @@ def _find_best_token(runtime, detections):
     if not candidates:
         runtime["last_candidate_count"] = 0
         runtime["last_rejected_tokens"] = rejected[:8]
+        runtime["latest_targets"] = []
         return None
 
     for candidate in candidates:
@@ -1197,7 +1198,9 @@ def _find_best_token(runtime, detections):
 
     runtime["last_candidate_count"] = len(candidates)
     runtime["last_rejected_tokens"] = rejected[:8]
-    return max(candidates, key=lambda item: (-item["priority_rank"], item["score"]))
+    ranked_candidates = sorted(candidates, key=lambda item: (-item["priority_rank"], item["score"]), reverse=True)
+    runtime["latest_targets"] = [dict(candidate) for candidate in ranked_candidates[:6]]
+    return ranked_candidates[0]
 
 
 def _movement_keys(tx, ty):
@@ -1281,6 +1284,46 @@ def _execute_movement_to_target(tx, ty):
     return _execute_movement(tx, ty)
 
 
+def _execute_active_sweep(runtime):
+    now = time.time()
+    if now - runtime.get("last_no_target_sweep_time", 0.0) < NO_TARGET_SWEEP_INTERVAL:
+        return False
+
+    runtime["last_no_target_sweep_time"] = now
+    metrics = _token_metrics()
+    step = max(0.18, min(0.45, 0.18 + (0.05 * size)))
+    sweep_index = int(runtime.get("sweep_index", 0))
+    runtime["sweep_index"] = sweep_index + 1
+
+    # If we are near the leash edge, use the idle step to pull back toward the sprinkler.
+    current_x = runtime["current_x"]
+    current_y = runtime["current_y"]
+    current_dist = math.hypot(current_x, current_y)
+    if current_dist > metrics["soft_leash"]:
+        scale = min(step / max(current_dist, 0.001), 1.0)
+        tx = -current_x * scale
+        ty = -current_y * scale
+    else:
+        sweep = (
+            (step, 0.0),
+            (0.0, step),
+            (-step, 0.0),
+            (0.0, -step),
+            (step * 0.7, step * 0.7),
+            (-step * 0.7, step * 0.7),
+            (-step * 0.7, -step * 0.7),
+            (step * 0.7, -step * 0.7),
+        )
+        tx, ty = sweep[sweep_index % len(sweep)]
+
+    _debug_log(
+        f"active sweep move=({tx:.2f},{ty:.2f}) pos=({current_x:.2f},{current_y:.2f})",
+        min_interval=0.5,
+        key="active_sweep",
+    )
+    return _execute_movement(tx, ty)
+
+
 def _latest_target(runtime):
     scan_lock = runtime.get("scan_lock")
     if scan_lock is None:
@@ -1290,22 +1333,68 @@ def _latest_target(runtime):
         return dict(target) if isinstance(target, dict) else target
 
 
+def _latest_target_lineup(runtime):
+    scan_lock = runtime.get("scan_lock")
+    if scan_lock is None:
+        lineup = runtime.get("latest_targets", [])
+    else:
+        with scan_lock:
+            lineup = runtime.get("latest_targets", [])
+    if not isinstance(lineup, list):
+        return []
+    return [dict(target) for target in lineup if isinstance(target, dict)]
+
+
 def _locked_target(runtime):
     lock = runtime.get("locked_target")
     return dict(lock) if isinstance(lock, dict) else None
 
 
-def _clear_locked_target(runtime):
+def _set_locked_target(runtime, target):
+    if isinstance(target, dict):
+        target = dict(target)
     scan_lock = runtime.get("scan_lock")
     if scan_lock is None:
-        runtime["locked_target"] = None
+        runtime["locked_target"] = target
     else:
         with scan_lock:
-            runtime["locked_target"] = None
+            runtime["locked_target"] = target
+
+
+def _clear_locked_target(runtime):
+    _set_locked_target(runtime, None)
+
+
+def _pop_lineup_target(runtime, excluded=None):
+    scan_lock = runtime.get("scan_lock")
+    if scan_lock is None:
+        lineup = runtime.get("latest_targets", [])
+        for index, target in enumerate(list(lineup)):
+            if not isinstance(target, dict):
+                continue
+            if excluded and _same_token_candidate(excluded, target):
+                continue
+            runtime["latest_targets"] = lineup[index + 1:]
+            return dict(target)
+        runtime["latest_targets"] = []
+        return None
+
+    with scan_lock:
+        lineup = runtime.get("latest_targets", [])
+        for index, target in enumerate(list(lineup)):
+            if not isinstance(target, dict):
+                continue
+            if excluded and _same_token_candidate(excluded, target):
+                continue
+            runtime["latest_targets"] = lineup[index + 1:]
+            return dict(target)
+        runtime["latest_targets"] = []
+    return None
 
 
 def _select_movement_target(runtime):
-    latest = _latest_target(runtime)
+    latest_lineup = _latest_target_lineup(runtime)
+    latest = latest_lineup[0] if latest_lineup else _latest_target(runtime)
     locked = _locked_target(runtime)
     now = time.time()
 
@@ -1315,19 +1404,24 @@ def _select_movement_target(runtime):
         remaining = math.hypot(remaining_x, remaining_y)
         if remaining <= TARGET_LOCK_REACHED_DISTANCE:
             _clear_locked_target(runtime)
-            return latest
+            next_target = _pop_lineup_target(runtime, excluded=locked) or latest
+            if next_target:
+                next_target["locked_at"] = now
+                next_target["last_seen"] = now
+                _set_locked_target(runtime, next_target)
+            return next_target
 
         last_seen = float(locked.get("last_seen", locked.get("locked_at", now)))
         if latest and _same_token_candidate(locked, latest):
             locked.update(latest)
             locked["last_seen"] = now
-            runtime["locked_target"] = locked
+            _set_locked_target(runtime, locked)
             return locked
 
         if latest and _candidate_priority_rank(latest) < _candidate_priority_rank(locked):
             latest["locked_at"] = now
             latest["last_seen"] = now
-            runtime["locked_target"] = latest
+            _set_locked_target(runtime, latest)
             return latest
 
         if now - last_seen <= TARGET_LOCK_LOST_TIMEOUT:
@@ -1336,16 +1430,21 @@ def _select_movement_target(runtime):
         if latest and latest.get("score", 0.0) >= locked.get("score", 0.0) * TARGET_LOCK_SWITCH_SCORE_MULTIPLIER:
             latest["locked_at"] = now
             latest["last_seen"] = now
-            runtime["locked_target"] = latest
+            _set_locked_target(runtime, latest)
             return latest
 
         _clear_locked_target(runtime)
-        return latest
+        next_target = _pop_lineup_target(runtime, excluded=locked) or latest
+        if next_target:
+            next_target["locked_at"] = now
+            next_target["last_seen"] = now
+            _set_locked_target(runtime, next_target)
+        return next_target
 
     if latest:
         latest["locked_at"] = now
         latest["last_seen"] = now
-        runtime["locked_target"] = latest
+        _set_locked_target(runtime, latest)
     return latest
 
 
@@ -1363,7 +1462,21 @@ def _execute_planned_movement(runtime):
     remaining_y = float(target_y) - runtime["current_y"]
     if math.hypot(remaining_x, remaining_y) <= CONTINUOUS_MIN_REPLAN_DISTANCE:
         _clear_locked_target(runtime)
-        return False
+        next_target = _pop_lineup_target(runtime, excluded=target)
+        if not next_target:
+            return False
+        next_x = next_target.get("future_x")
+        next_y = next_target.get("future_y")
+        if next_x is None or next_y is None:
+            return _execute_movement_to_target(next_target.get("tx", 0.0), next_target.get("ty", 0.0))
+        remaining_x = float(next_x) - runtime["current_x"]
+        remaining_y = float(next_y) - runtime["current_y"]
+        if math.hypot(remaining_x, remaining_y) <= CONTINUOUS_MIN_REPLAN_DISTANCE:
+            return False
+        next_target["locked_at"] = time.time()
+        next_target["last_seen"] = next_target["locked_at"]
+        _set_locked_target(runtime, next_target)
+        target = next_target
 
     _debug_log(
         f"moving toward planned target={target['name']} remaining=({remaining_x:.2f},{remaining_y:.2f}) score={target['score']:.2f}",
@@ -1463,10 +1576,12 @@ def _clear_targets(runtime):
     scan_lock = runtime.get("scan_lock")
     if scan_lock is None:
         runtime["latest_target"] = None
+        runtime["latest_targets"] = []
         runtime["locked_target"] = None
     else:
         with scan_lock:
             runtime["latest_target"] = None
+            runtime["latest_targets"] = []
             runtime["locked_target"] = None
 
 
@@ -1678,6 +1793,7 @@ def _initialise_runtime():
         "last_token_time": time.time(),
         "last_idle_return_time": time.time(),
         "last_no_target_sweep_time": time.time(),
+        "sweep_index": 0,
         "initialised_at": time.time(),
         "video_writer": None,
         "video_path": "",
@@ -1687,6 +1803,7 @@ def _initialise_runtime():
         "last_timing_ms": {},
         "latest_detections": [],
         "latest_target": None,
+        "latest_targets": [],
         "locked_target": None,
         "latest_scan_time": 0.0,
         "last_anchor_time": 0.0,
@@ -1736,7 +1853,8 @@ else:
                 min_interval=0.25,
                 key="target",
             )
-            _execute_planned_movement(runtime)
+            if not _execute_planned_movement(runtime):
+                _execute_active_sweep(runtime)
         else:
             detections = runtime.get("latest_detections", [])
             _debug_log(
@@ -1752,6 +1870,8 @@ else:
                 recalibrated = True
 
             if recalibrated:
+                pass
+            elif _execute_active_sweep(runtime):
                 pass
             elif now - runtime["last_idle_return_time"] >= IDLE_RETURN_INTERVAL:
                 runtime["last_idle_return_time"] = now
