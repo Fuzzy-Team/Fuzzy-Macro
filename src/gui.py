@@ -949,6 +949,10 @@ def loadQuestConfigs():
 def saveQuestConfig(giver, quest_name, config):
     settingsManager.saveQuestConfig(giver, quest_name, config)
     return True
+
+@eel.expose
+def getQuestConfigOptions():
+    return settingsManager.loadQuestConfigOptions()
   
 @eel.expose
 def exportPlanterSettings():

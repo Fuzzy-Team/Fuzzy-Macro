@@ -284,6 +284,23 @@ def saveQuestConfig(giver, quest_name, config):
     except Exception as e:
         print(f"Warning: Could not save quest config: {e}")
 
+def loadQuestConfigOptions():
+    fields = []
+    patterns = []
+    try:
+        fields = sorted(loadFields().keys())
+    except Exception as e:
+        print(f"Warning: Could not load quest config fields: {e}")
+    try:
+        patterns = sorted([
+            os.path.splitext(x)[0]
+            for x in os.listdir(getPatternsDir())
+            if x.endswith(".py") and not x.startswith("__")
+        ])
+    except Exception as e:
+        print(f"Warning: Could not load quest config patterns: {e}")
+    return {"fields": fields, "patterns": patterns}
+
 def getQuestDataPath():
     return os.path.join(getProjectRoot(), "src", "data", "bss", "quest_data.txt")
 

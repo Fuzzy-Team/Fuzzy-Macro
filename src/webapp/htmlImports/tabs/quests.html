@@ -89,7 +89,7 @@
         {
           id: "quest_check_interval",
           title: "Check Interval (s)",
-          desc: "Reserved for future mid-gather checking. Currently the quest is re-checked after every gather session.",
+          desc: "How long to wait before re-checking quest progress between go-until-done gather sessions.",
           type: {
             name: "textbox",
             inputType: "float",
@@ -166,6 +166,336 @@
           },
         },
       ]);
+
+      (function buildQuestObjectiveConfig(parent) {
+        const questGiverLabels = {
+          "polar bear": "Polar Bear",
+          "brown bear": "Brown Bear",
+          "black bear": "Black Bear",
+          "honey bee": "Honey Bee",
+          "bucko bee": "Bucko Bee",
+          "riley bee": "Riley Bee",
+        };
+        const fieldOverridePrefixes = ["gatherpetal", "pollen", "pollengoo", "token", "fieldtoken"];
+        const gatherPrefixes = ["gather", "gathergoo", "gatherpetal", "pollen", "pollengoo", "token", "fieldtoken"];
+        const objectiveLabels = {
+          gather: "Gather",
+          gathergoo: "Gather Goo",
+          gatherpetal: "Gather Petals",
+          pollen: "Pollen",
+          pollengoo: "Goo Pollen",
+          token: "Token",
+          fieldtoken: "Field Token",
+          kill: "Kill",
+          feed: "Feed",
+          collect: "Collect",
+        };
+        const gatherSettingInputs = [
+          { key: "mins", label: "Mins", type: "number", step: "0.1", placeholder: "Quest default" },
+          { key: "backpack", label: "Backpack %", type: "number", step: "1", placeholder: "Field default" },
+          { key: "width", label: "Width", type: "number", step: "1", placeholder: "Field default" },
+          { key: "turn_times", label: "Turns", type: "number", step: "1", placeholder: "Field default" },
+          { key: "distance", label: "Distance", type: "number", step: "1", placeholder: "Field default" },
+        ];
+        const gatherSettingSelects = [
+          { key: "size", label: "Size", options: ["s", "m", "l"] },
+          { key: "return", label: "Return", options: ["reset", "walk", "rejoin", "whirligig"] },
+          { key: "turn", label: "Turn", options: ["none", "left", "right"] },
+          { key: "start_location", label: "Start", options: ["center", "upper left", "upper right", "lower left", "lower right", "bottom"] },
+        ];
+        const gatherSettingChecks = [
+          { key: "invert_lr", label: "Invert L/R" },
+          { key: "invert_fb", label: "Invert F/B" },
+          { key: "field_drift_compensation", label: "Drift Compensation" },
+        ];
+
+        let questData = {};
+        let questConfigs = {};
+        let fields = [];
+        let patterns = [];
+        let selectedGiver = "polar bear";
+        let selectedQuest = "";
+
+        const configRoot = document.createElement("div");
+        configRoot.className = "poppins-medium standard-container quest-config-panel";
+        configRoot.innerHTML = `
+          <h2>Quest Objective Config</h2>
+          <p style="font-weight:500; font-size:1rem;">Choose a quest and tune the field, pattern, and gather settings used for each objective.</p>
+          <div class="seperator"></div>
+          <div class="quest-config-layout">
+            <div id="quest-config-givers" class="quest-config-givers"></div>
+            <div class="quest-config-content">
+              <div class="quest-config-toolbar">
+                <label>Quest</label>
+                <select id="quest-config-select" class="textbox poppins-regular quest-config-quest-select"></select>
+                <span id="quest-config-status" class="quest-config-status"></span>
+              </div>
+              <div id="quest-config-objectives" class="quest-config-objectives"></div>
+            </div>
+          </div>
+        `;
+        parent.appendChild(configRoot);
+
+        const giversEl = configRoot.querySelector("#quest-config-givers");
+        const questSelect = configRoot.querySelector("#quest-config-select");
+        const objectivesEl = configRoot.querySelector("#quest-config-objectives");
+        const statusEl = configRoot.querySelector("#quest-config-status");
+
+        function titleCaseObjective(text) {
+          return String(text).replaceAll("_", " ").replace(/\b\w/g, c => c.toUpperCase());
+        }
+
+        function objectivePrefix(obj) {
+          return String(obj).split("_")[0] || "";
+        }
+
+        function defaultFieldForObjective(obj) {
+          const parts = String(obj).split("_");
+          const prefix = parts[0];
+          if (["gather", "gathergoo", "gatherpetal"].includes(prefix)) {
+            return parts.slice(1).join("_").replaceAll("_", " ");
+          }
+          return "";
+        }
+
+        function createOption(value, label) {
+          const option = document.createElement("option");
+          option.value = value;
+          option.textContent = label;
+          return option;
+        }
+
+        function createSelect(options, selected, placeholder) {
+          const select = document.createElement("select");
+          select.className = "textbox poppins-regular quest-config-select";
+          select.appendChild(createOption("", placeholder));
+          options.forEach(optionValue => select.appendChild(createOption(optionValue, titleCaseObjective(optionValue))));
+          select.value = selected || "";
+          return select;
+        }
+
+        function currentQuestConfig() {
+          if (!questConfigs[selectedGiver]) questConfigs[selectedGiver] = {};
+          if (!questConfigs[selectedGiver][selectedQuest]) questConfigs[selectedGiver][selectedQuest] = { objectives: {} };
+          if (!questConfigs[selectedGiver][selectedQuest].objectives) questConfigs[selectedGiver][selectedQuest].objectives = {};
+          return questConfigs[selectedGiver][selectedQuest];
+        }
+
+        function currentObjectiveConfig(obj) {
+          const config = currentQuestConfig();
+          if (!config.objectives[obj]) config.objectives[obj] = {};
+          if (!config.objectives[obj].settings) config.objectives[obj].settings = {};
+          return config.objectives[obj];
+        }
+
+        function pruneObjectiveConfig(obj) {
+          const config = currentQuestConfig();
+          const objConfig = config.objectives[obj];
+          if (!objConfig) return;
+          if (objConfig.settings && !Object.keys(objConfig.settings).length) delete objConfig.settings;
+          if (!objConfig.field && !objConfig.shape && !objConfig.settings) delete config.objectives[obj];
+        }
+
+        async function saveCurrentQuestConfig() {
+          if (!selectedQuest) return;
+          statusEl.textContent = "Saving...";
+          await eel.saveQuestConfig(selectedGiver, selectedQuest, currentQuestConfig())();
+          statusEl.textContent = "Saved";
+          setTimeout(() => {
+            if (statusEl.textContent === "Saved") statusEl.textContent = "";
+          }, 1200);
+        }
+
+        function renderGivers() {
+          giversEl.innerHTML = "";
+          Object.keys(questData).forEach(giver => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.textContent = questGiverLabels[giver] || titleCaseObjective(giver);
+            button.className = `quest-config-giver${giver === selectedGiver ? " active" : ""}`;
+            button.onclick = () => {
+              selectedGiver = giver;
+              selectedQuest = Object.keys(questData[giver] || {})[0] || "";
+              renderGivers();
+              renderQuestSelect();
+              renderObjectives();
+            };
+            giversEl.appendChild(button);
+          });
+        }
+
+        function renderQuestSelect() {
+          questSelect.innerHTML = "";
+          const questNames = Object.keys(questData[selectedGiver] || {});
+          questNames.forEach(name => questSelect.appendChild(createOption(name, titleCaseObjective(name))));
+          if (!selectedQuest || !questNames.includes(selectedQuest)) selectedQuest = questNames[0] || "";
+          questSelect.value = selectedQuest;
+          questSelect.onchange = () => {
+            selectedQuest = questSelect.value;
+            renderObjectives();
+          };
+        }
+
+        function addSettingField(container, obj, objConfig, spec) {
+          const wrap = document.createElement("label");
+          wrap.className = "quest-setting-field";
+          const input = document.createElement("input");
+          input.className = "textbox poppins-regular";
+          input.type = spec.type;
+          input.step = spec.step;
+          input.placeholder = spec.placeholder;
+          input.value = objConfig.settings?.[spec.key] ?? "";
+          input.onchange = async () => {
+            const cfg = currentObjectiveConfig(obj);
+            if (input.value === "") delete cfg.settings[spec.key];
+            else cfg.settings[spec.key] = input.value;
+            pruneObjectiveConfig(obj);
+            await saveCurrentQuestConfig();
+          };
+          wrap.append(spec.label, input);
+          container.appendChild(wrap);
+        }
+
+        function addSettingSelect(container, obj, objConfig, spec) {
+          const wrap = document.createElement("label");
+          wrap.className = "quest-setting-field";
+          const select = createSelect(spec.options, objConfig.settings?.[spec.key], "Default");
+          select.onchange = async () => {
+            const cfg = currentObjectiveConfig(obj);
+            if (!select.value) delete cfg.settings[spec.key];
+            else cfg.settings[spec.key] = select.value;
+            pruneObjectiveConfig(obj);
+            await saveCurrentQuestConfig();
+          };
+          wrap.append(spec.label, select);
+          container.appendChild(wrap);
+        }
+
+        function addSettingCheck(container, obj, objConfig, spec) {
+          const wrap = document.createElement("label");
+          wrap.className = "quest-setting-check";
+          const input = document.createElement("input");
+          input.type = "checkbox";
+          input.checked = objConfig.settings?.[spec.key] === true;
+          input.indeterminate = objConfig.settings?.[spec.key] === undefined;
+          input.onchange = async () => {
+            const cfg = currentObjectiveConfig(obj);
+            cfg.settings[spec.key] = input.checked;
+            pruneObjectiveConfig(obj);
+            await saveCurrentQuestConfig();
+          };
+          wrap.append(input, spec.label);
+          container.appendChild(wrap);
+        }
+
+        function renderObjectives() {
+          objectivesEl.innerHTML = "";
+          if (!selectedQuest) {
+            objectivesEl.textContent = "No quests found.";
+            return;
+          }
+
+          const config = currentQuestConfig();
+          const objectives = questData[selectedGiver][selectedQuest] || [];
+          objectives.forEach(obj => {
+            const prefix = objectivePrefix(obj);
+            const objConfig = config.objectives[obj] || {};
+            const defaultField = defaultFieldForObjective(obj);
+            const row = document.createElement("div");
+            row.className = "quest-objective-row";
+
+            const meta = document.createElement("div");
+            meta.className = "quest-objective-meta";
+            meta.innerHTML = `
+              <div class="quest-objective-type">${objectiveLabels[prefix] || titleCaseObjective(prefix)}</div>
+              <div class="quest-objective-name">${titleCaseObjective(obj)}</div>
+              ${defaultField ? `<div class="quest-objective-default">Default: ${titleCaseObjective(defaultField)}</div>` : ""}
+            `;
+            row.appendChild(meta);
+
+            const controls = document.createElement("div");
+            controls.className = "quest-objective-controls";
+
+            const fieldWrap = document.createElement("label");
+            fieldWrap.className = "quest-setting-field";
+            fieldWrap.append("Field");
+            if (fieldOverridePrefixes.includes(prefix)) {
+              const fieldSelect = createSelect(fields, objConfig.field, "No Override");
+              fieldSelect.onchange = async () => {
+                const cfg = currentObjectiveConfig(obj);
+                if (!fieldSelect.value) delete cfg.field;
+                else cfg.field = fieldSelect.value;
+                pruneObjectiveConfig(obj);
+                await saveCurrentQuestConfig();
+              };
+              fieldWrap.appendChild(fieldSelect);
+            } else {
+              const muted = document.createElement("div");
+              muted.className = "quest-config-muted";
+              muted.textContent = "Objective field";
+              fieldWrap.appendChild(muted);
+            }
+            controls.appendChild(fieldWrap);
+
+            const shapeWrap = document.createElement("label");
+            shapeWrap.className = "quest-setting-field";
+            shapeWrap.append("Pattern");
+            if (gatherPrefixes.includes(prefix)) {
+              const shapeSelect = createSelect(patterns, objConfig.shape, "No Override");
+              shapeSelect.onchange = async () => {
+                const cfg = currentObjectiveConfig(obj);
+                if (!shapeSelect.value) delete cfg.shape;
+                else cfg.shape = shapeSelect.value;
+                pruneObjectiveConfig(obj);
+                await saveCurrentQuestConfig();
+              };
+              shapeWrap.appendChild(shapeSelect);
+            } else {
+              const muted = document.createElement("div");
+              muted.className = "quest-config-muted";
+              muted.textContent = "Not a gather objective";
+              shapeWrap.appendChild(muted);
+            }
+            controls.appendChild(shapeWrap);
+            row.appendChild(controls);
+
+            if (gatherPrefixes.includes(prefix)) {
+              const settings = document.createElement("div");
+              settings.className = "quest-objective-settings";
+              gatherSettingInputs.forEach(spec => addSettingField(settings, obj, objConfig, spec));
+              gatherSettingSelects.forEach(spec => addSettingSelect(settings, obj, objConfig, spec));
+              gatherSettingChecks.forEach(spec => addSettingCheck(settings, obj, objConfig, spec));
+              row.appendChild(settings);
+            }
+
+            objectivesEl.appendChild(row);
+          });
+        }
+
+        async function initQuestObjectiveConfig() {
+          try {
+            const [data, configs, options] = await Promise.all([
+              eel.getQuestData()(),
+              eel.loadQuestConfigs()(),
+              eel.getQuestConfigOptions()(),
+            ]);
+            questData = data || {};
+            questConfigs = configs || {};
+            fields = (options && options.fields) || [];
+            patterns = (options && options.patterns) || [];
+            selectedGiver = Object.keys(questData)[0] || selectedGiver;
+            selectedQuest = Object.keys(questData[selectedGiver] || {})[0] || "";
+            renderGivers();
+            renderQuestSelect();
+            renderObjectives();
+          } catch (error) {
+            objectivesEl.textContent = "Could not load quest config data.";
+            console.error(error);
+          }
+        }
+
+        initQuestObjectiveConfig();
+      })(questsContainer);
     </script>
   </div>
 </div>
