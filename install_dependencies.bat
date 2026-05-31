@@ -127,4 +127,6 @@ linesToRemove = [\"print(f'{r.json()=}')\", \"print(f'cdp_send: {method=} {param
 echo.
 echo.
 echo [32mInstallation complete![0m
-pause
+echo [32mStarting Fuzzy Macro...[0m
+cd /d "%~dp0"
+call "%~dp0run_macro.bat"

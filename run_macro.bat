@@ -82,6 +82,7 @@ if exist "%VENV_PATH%\Scripts\activate.bat" (
     )
 ) else (
     echo Virtual environment not found at %VENV_PATH%
-    echo Please run install_dependencies.bat first.
-    pause
+    echo Starting dependency installer...
+    cd /d "%~dp0"
+    call "%~dp0install_dependencies.bat"
 )
