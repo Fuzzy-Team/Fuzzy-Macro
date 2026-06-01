@@ -587,19 +587,6 @@
         },
       ]);
 
-      buildStandardContainer(parentOther, "Time Format", "", [
-        {
-          id: "webhook_time_format",
-          title: "Webhook Time Format",
-          desc: "Choose between 12-hour (AM/PM) or 24-hour format for webhook message timestamps",
-          type: {
-            name: "dropdown",
-            data: [12, 24],
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-      ]);
-
       buildStandardContainer(parentOther, "Hourly / Session Reports", "", [
         {
           id: "hourly_report_time_format",
@@ -769,6 +756,16 @@
             name: "textbox",
             inputType: "string",
             length: 13,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "webhook_time_format",
+          title: "Webhook Time Format",
+          desc: "Choose between 12-hour (AM/PM) or 24-hour format for webhook message timestamps",
+          type: {
+            name: "dropdown",
+            data: [12, 24],
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
