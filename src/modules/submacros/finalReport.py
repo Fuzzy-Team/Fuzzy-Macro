@@ -447,9 +447,20 @@ class FinalReport:
         
         raw_uptime = setdat.get("hourly_report_uptime_buffs", "") if isinstance(setdat, dict) else ""
         raw_hourly = setdat.get("hourly_report_hourly_buffs", "") if isinstance(setdat, dict) else ""
-        from modules.submacros.hourlyReport import DEFAULT_UPTIME_BUFFS, DEFAULT_HOURLY_BUFFS, normalizeUptimeBuffSelection
+        from modules.submacros.hourlyReport import DEFAULT_UPTIME_BUFFS, DEFAULT_HOURLY_BUFFS, normalizeHourlyBuffSelection, normalizeUptimeBuffSelection
         uptime_buffs = normalizeUptimeBuffSelection(raw_uptime, DEFAULT_UPTIME_BUFFS)
-        hourly_buffs = [b.strip() for b in raw_hourly.split(",") if b.strip()] if raw_hourly else DEFAULT_HOURLY_BUFFS
+        hourly_buffs = normalizeHourlyBuffSelection(raw_hourly, DEFAULT_HOURLY_BUFFS)
+        sideBuffDetectorMap = {
+            "tabby_love":   ["top",    True, True],
+            "polar_power":  ["top",    True, True],
+            "wealth_clock": ["top",    True, True],
+            "blessing":     ["middle", True, True],
+            "bloat":        ["top",    True, True],
+            "tide_blessing":["top",    True, True],
+            "mondo":        ["top",    True, True],
+        }
+        sideBuffDetectorMap = {k: v for k, v in sideBuffDetectorMap.items() if k in hourly_buffs}
+        self.hourlyReport.hourBuffs = sideBuffDetectorMap
 
         # Always try to capture fresh buff values from the current screen.
         # The discord /hourlyreport command reads buffs but never saves them to disk,
@@ -469,9 +480,9 @@ class FinalReport:
                     print(f"Could not create BuffDetector for screen read: {de}")
             if detector:
                 try:
-                    liveBuffQuantity = detector.getBuffsWithImage(self.hourlyReport.hourBuffs)
+                    liveBuffQuantity = detector.getBuffsWithImage(sideBuffDetectorMap)
                     self.hourlyReport.latestBuffQuantity = list(liveBuffQuantity)
-                    self.hourlyReport.latestBuffKeys = list(self.hourlyReport.hourBuffs.keys())
+                    self.hourlyReport.latestBuffKeys = list(sideBuffDetectorMap.keys())
                 except Exception as se:
                     print(f"Could not read buffs from screen: {se}")
         except Exception as e:
@@ -482,7 +493,7 @@ class FinalReport:
         savedBuffQuantity = list(getattr(self.hourlyReport, "latestBuffQuantity", []))
         savedBuffKeys = list(getattr(self.hourlyReport, "latestBuffKeys", []))
         if not savedBuffKeys:
-            savedBuffKeys = list(self.hourlyReport.hourBuffs.keys())
+            savedBuffKeys = list(sideBuffDetectorMap.keys())
         buffByKey = {
             key: savedBuffQuantity[i] if i < len(savedBuffQuantity) else 0
             for i, key in enumerate(savedBuffKeys)

@@ -994,6 +994,11 @@ function isMultiSelectDropdown(ele) {
   return ele?.dataset?.multiple === "true";
 }
 
+function getDropdownMaxSelections(ele) {
+  const maxSelections = Number(ele?.dataset?.maxSelections || 0);
+  return Number.isFinite(maxSelections) && maxSelections > 0 ? maxSelections : 0;
+}
+
 function normalizeDropdownOptionValue(value) {
   if (typeof value === "number") return value;
   const text = String(value ?? "").trim();
@@ -1034,7 +1039,11 @@ function normalizeDropdownMultiValue(value) {
 }
 
 function updateMultiDropdownDisplay(parentEle, values) {
-  const normalizedValues = normalizeDropdownMultiValue(values);
+  let normalizedValues = normalizeDropdownMultiValue(values);
+  const maxSelections = getDropdownMaxSelections(parentEle);
+  if (maxSelections && normalizedValues.length > maxSelections) {
+    normalizedValues = normalizedValues.slice(0, maxSelections);
+  }
   const selectEle = parentEle.children[0].children[0];
   const optionsEle = parentEle.children[1].children[0];
   const selectedLabels = [];
@@ -1059,6 +1068,12 @@ function updateDropDownDisplay(optionEle) {
   if (isMultiSelectDropdown(parentEle)) {
     const currentValues = normalizeDropdownMultiValue(getDropdownValue(parentEle));
     const optionValue = normalizeDropdownOptionValue(optionEle.dataset.value);
+    const isSelected = currentValues.some((value) => value == optionValue);
+    const maxSelections = getDropdownMaxSelections(parentEle);
+    if (!isSelected && maxSelections && currentValues.length >= maxSelections) {
+      updateMultiDropdownDisplay(parentEle, currentValues);
+      return;
+    }
     const nextValues = currentValues.some((value) => value == optionValue)
       ? currentValues.filter((value) => value != optionValue)
       : [...currentValues, optionValue];

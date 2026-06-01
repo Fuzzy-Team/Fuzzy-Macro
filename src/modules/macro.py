@@ -5769,6 +5769,12 @@ class macro:
                             )
                         elif j == "tide_blessing":
                             sampleValues[j] = self.buffDetector.getTideBlessingValueFromScreen(screen, res)
+                        elif j == "blessing":
+                            x = res[0]
+                            x1 = max(0, int(x+8*self.multi))
+                            x2 = min(width, int(x+36*self.multi))
+                            buffImg = screen[15*self.multi:50*self.multi , x1:x2]
+                            sampleValues[j] = min(100, int(self.buffDetector.getBuffQuantityFromImgTight(buffImg)))
                         else:
                             x = res[0]+res[2]
                             x1 = max(0, int(x-25*self.multi))
