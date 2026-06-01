@@ -375,6 +375,27 @@ class FinalReport:
             "bug_run_time": bugRunTime,
             "misc_time": miscTime,
         }
+
+    def _settingsInt(self, settings, key, default=0):
+        try:
+            return int(settings.get(key, default)) if isinstance(settings, dict) else default
+        except (TypeError, ValueError):
+            return default
+
+    def _deriveSessionTime(self, sourceStats, normalizedHoneyPerMin):
+        """Use saved session samples for historical reports; elapsed wall time is only a fallback."""
+        sampleCount = max(
+            len(normalizedHoneyPerMin or []),
+            len(sourceStats.get("backpack_per_min", []) or []),
+        )
+        if sampleCount > 1:
+            return (sampleCount - 1) * 60
+
+        startTime = self.hourlyReport.hourlyReportStats.get("start_time", 0)
+        if startTime:
+            return max(0, time.time() - startTime)
+
+        return 0
     
     def generateFinalReport(self, setdat):
         """Generate a comprehensive final report covering the entire macro session"""
@@ -449,7 +470,8 @@ class FinalReport:
         # Get planter data
         planterData = ""
         try:
-            if setdat.get("planters_mode") == 1:
+            plantersMode = self._settingsInt(setdat, "planters_mode", 0)
+            if plantersMode == 1:
                 try:
                     with open("./data/user/manualplanters.txt", "r") as f:
                         planterData = f.read()
@@ -457,7 +479,7 @@ class FinalReport:
                         planterData = ast.literal_eval(planterData)
                 except (FileNotFoundError, SyntaxError, ValueError):
                     planterData = ""
-            elif setdat.get("planters_mode") == 2:
+            elif plantersMode == 2:
                 try:
                     with open("./data/user/auto_planters.json", "r") as f:
                         planterData = json.load(f)["planters"]
@@ -497,11 +519,7 @@ class FinalReport:
         if onlyValidHourlyHoney and startHoney:
             sessionHoney = max(0, onlyValidHourlyHoney[-1] - startHoney)
         
-        if self.hourlyReport.hourlyReportStats.get("start_time"):
-            sessionTime = time.time() - self.hourlyReport.hourlyReportStats["start_time"]
-        elif len(normalizedHoneyPerMin) > 1:
-            # Fallback for legacy/missing start_time data.
-            sessionTime = (len(normalizedHoneyPerMin) - 1) * 60
+        sessionTime = self._deriveSessionTime(sourceStats, normalizedHoneyPerMin)
         
         # Calculate average honey per hour for the entire session
         avgHoneyPerHour = max(0, (sessionHoney / (sessionTime / 3600)) if sessionTime > 0 else 0)
