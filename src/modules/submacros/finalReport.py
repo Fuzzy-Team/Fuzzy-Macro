@@ -194,6 +194,11 @@ class FinalReportDrawer(HourlyReportDrawer):
         y = self._drawBuffGrid(self.leftPadding, y, self.availableSpace, uptimeBuff_list,
                                uptimeBuffsValues, getAverageBuff, columns=2, xLabelFunc=gridBuffLabel)
 
+        chartContentWidth = self.canvasW - self.leftPadding * 2
+        chartGraphX = self.leftPadding + 450
+        chartGraphWidth = chartContentWidth - 570
+        y = max(y, sidebarBottom + 180)
+
         # honey/sec over session
         y += 150
         self.draw.text((self.leftPadding, y), "Honey / Sec Over Time", fill=self.bodyColor, font=self.getFont("semibold", 85))
@@ -201,9 +206,9 @@ class FinalReportDrawer(HourlyReportDrawer):
         ar, ag, ab = self.accentColor
         peakText = f"Peak: {self.millify(peakRate)}/s"
         pbbox = self.draw.textbbox((0, 0), peakText, font=self.getFont("medium", 60))
-        self.draw.text((self.leftPadding + self.availableSpace - (pbbox[2] - pbbox[0]), y + 15), peakText, fill=self.accentColor, font=self.getFont("medium", 60))
+        self.draw.text((self.leftPadding + chartContentWidth - (pbbox[2] - pbbox[0]), y + 15), peakText, fill=self.accentColor, font=self.getFont("medium", 60))
         y += 950
-        self.drawGraph(self.leftPadding+450, y, self.availableSpace-570, 700, mins,
+        self.drawGraph(chartGraphX, y, chartGraphWidth, 700, mins,
                        [{"data": honeyPerSec, "lineColor": self.accentColor,
                          "gradientFill": {0: (ar, ag, ab, 38), 1: (ar, ag, ab, 153)}}],
                        xLabelFunc=sessionTimeLabel, yLabelFunc=lambda i, x: self.millify(x))
@@ -217,7 +222,7 @@ class FinalReportDrawer(HourlyReportDrawer):
             backpackData = backpackData + [0] * (len(mins) - len(backpackData))
         elif len(backpackData) > len(mins):
             backpackData = backpackData[:len(mins)]
-        self.drawGraph(self.leftPadding+450, y, self.availableSpace-570, 700, mins,
+        self.drawGraph(chartGraphX, y, chartGraphWidth, 700, mins,
                        [{"data": backpackData, "lineColor": "gradient",
                          "gradientFill": {0: (65, 255, 128, 90), 0.6: (201, 163, 36, 90), 0.9: (255, 65, 84, 90), 1: (255, 65, 84, 90)}}],
                        maxY=100, xLabelFunc=sessionTimeLabel, yLabelFunc=lambda i, x: f"{int(x)}%")

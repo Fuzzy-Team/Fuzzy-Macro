@@ -1588,29 +1588,50 @@ class HourlyReportDrawer:
         return bottom
 
     def _drawFieldsSection(self, y, enabled_fields, field_patterns, draw=True):
-        """Draw a 'Fields' card (gather/boosted fields + patterns). Returns the new bottom y."""
+        """Draw a compact Fields card. Returns the new bottom y."""
         if not enabled_fields:
             return y
-        padding = 30
-        entry_height = 120
-        header_height = 120
-        total_height = header_height + len(enabled_fields) * entry_height + padding * 2
+        padding = 45
+        header_height = 105
+        column_gap = 35
+        row_gap = 30
+        columns = 2 if len(enabled_fields) > 1 else 1
+        container_x = self.sidebarX - 30
+        container_right = self.canvasSize[0] - self.sidebarPadding + 30
+        inner_x = container_x + padding
+        inner_right = container_right - padding
+        tile_width = (inner_right - inner_x - column_gap * (columns - 1)) // columns
+        tile_height = 180
+        rows = math.ceil(len(enabled_fields) / columns)
+        total_height = padding + header_height + rows * tile_height + max(0, rows - 1) * row_gap + padding
         if draw:
-            container_x = self.sidebarX - 30
-            container_right = self.canvasSize[0] - self.sidebarPadding + 30
             self.draw.rounded_rectangle((container_x, y, container_right, y + total_height), radius=40, fill=self.cardBackground)
-            header_y = y + padding
-            self.draw.text((self.sidebarX, header_y), "Fields", font=self.getFont("semibold", 85), fill=self.bodyColor)
-            cur_y = header_y + header_height
-            field_font = self.getFont("medium", 60)
-            pattern_font = self.getFont("regular", 50)
-            for fname in enabled_fields:
+            self.draw.rounded_rectangle((container_x, y, container_x + 18, y + total_height), radius=9, fill=self.accentColor)
+            header_y = y + padding - 5
+            self.draw.text((inner_x, header_y), "Fields", font=self.getFont("semibold", 85), fill=self.bodyColor)
+            count_text = f"{len(enabled_fields)} active"
+            count_font = self.getFont("medium", 46)
+            bbox = self.draw.textbbox((0, 0), count_text, font=count_font)
+            self.draw.text((inner_right - (bbox[2] - bbox[0]), header_y + 22), count_text, font=count_font, fill=self.subtleColor)
+
+            field_font = self.getFont("semibold", 54)
+            pattern_font = self.getFont("medium", 38)
+            for idx, fname in enumerate(enabled_fields):
                 pattern = field_patterns.get(fname, "unknown")
-                self.draw.text((self.sidebarX + 20, cur_y), fname.title(), font=field_font, fill=self.bodyColor)
-                bbox = self.draw.textbbox((0, 0), pattern, font=pattern_font)
-                textWidth = bbox[2] - bbox[0]
-                self.draw.text((container_right - 20 - textWidth, cur_y), pattern, fill=self.subtleColor, font=pattern_font)
-                cur_y += entry_height
+                col = idx % columns
+                row = idx // columns
+                tile_x = int(inner_x + col * (tile_width + column_gap))
+                tile_y = int(y + padding + header_height + row * (tile_height + row_gap))
+                self.draw.rounded_rectangle((tile_x, tile_y, tile_x + tile_width, tile_y + tile_height), radius=28, fill=self.sideBarBackground)
+                self.draw.rounded_rectangle((tile_x + 24, tile_y + 36, tile_x + 44, tile_y + tile_height - 36), radius=10, fill=self.accentColorDim)
+                self.draw.text((tile_x + 70, tile_y + 34), fname.title(), font=field_font, fill=self.bodyColor)
+                pattern_text = pattern.replace("_", " ").title()
+                bbox = self.draw.textbbox((0, 0), pattern_text, font=pattern_font)
+                pill_w = min(tile_width - 90, (bbox[2] - bbox[0]) + 48)
+                pill_x = tile_x + 70
+                pill_y = tile_y + 110
+                self.draw.rounded_rectangle((pill_x, pill_y, pill_x + pill_w, pill_y + 48), radius=18, fill=self.backgroundColor)
+                self.draw.text((pill_x + 24, pill_y + 5), pattern_text, font=pattern_font, fill=self.subtleColor)
         return y + total_height + 100
 
     def _drawHourlySidebar(self, top, sessionTime, onlyValidHourlyHoney, sessionHoney, hourlyReportStats,
@@ -1759,12 +1780,17 @@ class HourlyReportDrawer:
         y = self._drawBuffGrid(self.leftPadding, y, self.availableSpace, uptimeBuff_list,
                                uptimeBuffsValues, getAverageBuff, columns=2, xLabelFunc=gridTimeLabel)
 
+        chartContentWidth = self.canvasW - self.leftPadding * 2
+        chartGraphX = self.leftPadding + 450
+        chartGraphWidth = chartContentWidth - 570
+        y = max(y, sidebarBottom + 180)
+
         # honey/sec — accent colored
         y += 150
         self.draw.text((self.leftPadding, y), "Honey / Sec", fill=self.bodyColor, font=self.getFont("semibold", 85))
         y += 950
         ar, ag, ab = self.accentColor
-        self.drawGraph(self.leftPadding+450, y, self.availableSpace-570, 700, mins,
+        self.drawGraph(chartGraphX, y, chartGraphWidth, 700, mins,
                        [{"data": honeyPerMin, "lineColor": self.accentColor,
                          "gradientFill": {0: (ar, ag, ab, 38), 1: (ar, ag, ab, 153)}}],
                        xLabelFunc=self.transformXLabelTime, yLabelFunc=lambda i, x: self.millify(x))
@@ -1773,7 +1799,7 @@ class HourlyReportDrawer:
         y += 200
         self.draw.text((self.leftPadding, y), "Backpack", fill=self.bodyColor, font=self.getFont("semibold", 85))
         y += 950
-        self.drawGraph(self.leftPadding+450, y, self.availableSpace-570, 700, mins,
+        self.drawGraph(chartGraphX, y, chartGraphWidth, 700, mins,
                        [{"data": hourlyReportStats["backpack_per_min"], "lineColor": "gradient",
                          "gradientFill": {0: (65, 255, 128, 90), 0.6: (201, 163, 36, 90), 0.9: (255, 65, 84, 90), 1: (255, 65, 84, 90)}}],
                        maxY=100, xLabelFunc=self.transformXLabelTime, yLabelFunc=lambda i, x: f"{int(x)}%")
