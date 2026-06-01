@@ -273,6 +273,34 @@ def expandUptimeBuffDataKeys(buffList):
 DEFAULT_HOURLY_BUFFS = [
     "tabby_love", "polar_power", "wealth_clock", "blessing", "bloat",
 ]
+MAX_HOURLY_BUFF_OPTIONS = 5
+
+def normalizeHourlyBuffSelection(rawBuffs, fallback=None):
+    fallback = fallback if fallback is not None else DEFAULT_HOURLY_BUFFS
+    if rawBuffs is None or rawBuffs == "":
+        rawBuffs = fallback
+    if isinstance(rawBuffs, str):
+        rawBuffs = rawBuffs.strip()
+        if not rawBuffs:
+            rawBuffs = fallback
+        else:
+            try:
+                parsed = ast.literal_eval(rawBuffs)
+                rawBuffs = parsed if isinstance(parsed, (list, tuple)) else rawBuffs
+            except (ValueError, SyntaxError):
+                pass
+            if isinstance(rawBuffs, str):
+                rawBuffs = [b.strip() for b in rawBuffs.split(",") if b.strip()]
+    normalized = []
+    seen = set()
+    for buff in rawBuffs or []:
+        key = str(buff).strip().lower().replace(" ", "_")
+        if key in HOURLY_BUFF_ASSETS and key not in seen:
+            normalized.append(key)
+            seen.add(key)
+        if len(normalized) >= MAX_HOURLY_BUFF_OPTIONS:
+            break
+    return normalized or list(fallback)
 
 # ---------------------------------------------------------------------------
 
@@ -449,6 +477,65 @@ class BuffDetector():
             screen, buffRect, 0x91c2fd, 0.19, baseValue=1.01, decimals=2, variation=8
         )
 
+    def _ensureBgrBuffScreen(self, screen):
+        if screen is None:
+            return screen
+        if len(screen.shape) == 3 and screen.shape[2] == 4:
+            return cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
+        return screen
+
+    def getTideBlessingAhkStyle(self, screen):
+        """Detect Tide Blessing like StatMonitor: find its blue fill and scale it."""
+        bgrScreen = self._ensureBgrBuffScreen(screen)
+        if bgrScreen is None:
+            return "0"
+        res = self.detectBuffColorInImage(
+            bgrScreen,
+            0x91c2fd,
+            (8, 1),
+            y1=6*self.robloxWindow.multi,
+            y2=44*self.robloxWindow.multi,
+            variation=8,
+            searchDirection=7,
+        )
+        if not res:
+            return "0"
+        y = res[1]
+        scale = max(float(self.robloxWindow.multi or 1), 1.0)
+        value = round(1.01 + 0.19 * ((44.3 * scale - y) / (38 * scale)), 2)
+        value = max(1.01, min(1.2, value))
+        return str(value) if value else "0"
+
+    def getMondoAhkStyle(self, screen):
+        """Detect Mondo Chick Blessing from the AHK icon color and right-side stack digit."""
+        bgrScreen = self._ensureBgrBuffScreen(screen)
+        if bgrScreen is None:
+            return "0"
+        height, width = bgrScreen.shape[:2]
+        res = self.detectBuffColorInImage(
+            bgrScreen,
+            0xbea2a3,
+            (5, 1),
+            y1=20*self.robloxWindow.multi,
+            y2=46*self.robloxWindow.multi,
+            variation=10,
+            searchDirection=7,
+        )
+        if not res:
+            return "0"
+        x = res[0]
+        x1 = max(0, int(x+16*self.robloxWindow.multi))
+        x2 = min(width, int(x+36*self.robloxWindow.multi))
+        y1 = int(20*self.robloxWindow.multi)
+        y2 = min(height, int(46*self.robloxWindow.multi))
+        buffImg = bgrScreen[y1:y2, x1:x2]
+        if buffImg.size == 0:
+            return "1"
+        try:
+            return str(min(10, int(self.getBuffQuantityFromImgTight(buffImg, show=False))))
+        except (TypeError, ValueError):
+            return "1"
+
     def getBuffsWithImage(self, buffs, save=False, screen = None, threshold=0.7):
         buffQuantity = []
         buffs = buffs.items()
@@ -460,7 +547,16 @@ class BuffDetector():
             templatePosition, transform, stackable = v
 
             #find the buff
-            buffTemplate = adjustImage("./images/buffs", buff, self.robloxWindow.display_type)
+            try:
+                buffTemplate = adjustImage("./images/buffs", buff, self.robloxWindow.display_type)
+            except FileNotFoundError:
+                if buff == "tide_blessing":
+                    buffQuantity.append(self.getTideBlessingAhkStyle(screen))
+                elif buff == "mondo":
+                    buffQuantity.append(self.getMondoAhkStyle(screen))
+                else:
+                    buffQuantity.append("0")
+                continue
             finalBuffValues = []
 
             for _ in range(3):
@@ -691,7 +787,7 @@ class BuffDetector():
 class HourlyReport():
     def __init__(self, buffDetector: BuffDetector = None, time_format=24, theme="dark", accent="green", configuredUptimeBuffs=None, configuredHourlyBuffs=None):
         self.configuredUptimeBuffs = normalizeUptimeBuffSelection(configuredUptimeBuffs)
-        self.configuredHourlyBuffs = configuredHourlyBuffs if configuredHourlyBuffs is not None else DEFAULT_HOURLY_BUFFS
+        self.configuredHourlyBuffs = normalizeHourlyBuffSelection(configuredHourlyBuffs)
 
         # hourly snapshot buff detection config (template-based)
         # key → [position, transform, stackable]
@@ -731,11 +827,11 @@ class HourlyReport():
             "inspire":      [0xfff4ef14, (5, 1)],
             # new buffs — colors for pixel detection (added to extend detection support)
             "reindeerfetch":[0xffcc2c2c, (5, 1)],
-            "wealth_clock": [0xffffd700, (5, 1)],
-            "tide_blessing":[0xff5bd3ff, (5, 1)],
+            "wealth_clock": [0xffe2ac35, (5, 1)],
+            "tide_blessing":[0xff91c2fd, (5, 1)],
             "mondo":        [0xff80ff00, (5, 1)],
-            "blessing":     [0xffcc44ff, (5, 1)],
-            "bloat":        [0xffd0d0d0, (5, 1)],
+            "blessing":     [0xffc8ca3c, (5, 1)],
+            "bloat":        [0xff4880cc, (4, 1)],
             "honey_mark":   [0xffffd119, (5, 1)],
             "pollen_mark":  [0xffffe994, (5, 1)],
             "jb_share":     [0xfff9ccff, (5, 1)],
@@ -946,6 +1042,19 @@ class HourlyReport():
         return fields
 
     def generateHourlyReport(self, setdat):
+        raw_hourly = setdat.get("hourly_report_hourly_buffs", "") if isinstance(setdat, dict) else ""
+        hourly_buffs = normalizeHourlyBuffSelection(raw_hourly, self.configuredHourlyBuffs)
+        self.configuredHourlyBuffs = hourly_buffs
+        self.hourBuffs = {
+            "tabby_love":   ["top",    True, True],
+            "polar_power":  ["top",    True, True],
+            "wealth_clock": ["top",    True, True],
+            "blessing":     ["middle", True, True],
+            "bloat":        ["top",    True, True],
+            "tide_blessing":["top",    True, True],
+            "mondo":        ["top",    True, True],
+        }
+        self.hourBuffs = {k: v for k, v in self.hourBuffs.items() if k in hourly_buffs}
         buffQuantity = self.buffDetector.getBuffsWithImage(self.hourBuffs)
         nectarQuantity = self.buffDetector.getNectars()
         self.latestBuffQuantity = list(buffQuantity)
@@ -1038,9 +1147,7 @@ class HourlyReport():
 
         # parse configurable buff lists from settings (comma-separated strings)
         raw_uptime = setdat.get("hourly_report_uptime_buffs", "") if isinstance(setdat, dict) else ""
-        raw_hourly = setdat.get("hourly_report_hourly_buffs", "") if isinstance(setdat, dict) else ""
         uptime_buffs = normalizeUptimeBuffSelection(raw_uptime, self.configuredUptimeBuffs)
-        hourly_buffs = [b.strip() for b in raw_hourly.split(",") if b.strip()] if raw_hourly else self.configuredHourlyBuffs
         detectedBuffByKey = {
             key: buffQuantity[i] if i < len(buffQuantity) else 0
             for i, key in enumerate(self.latestBuffKeys or list(self.hourBuffs.keys()))
@@ -1356,13 +1463,16 @@ class HourlyReportDrawer:
     def _drawLegacyBuffsCard(self, region, buffQuantity, hourlyBuffList, nectarQuantity, uptimeBuffsValues):
         self._drawPanel(region, "BUFFS")
         x, y, w, _ = region
-        iconKeys = ["tabby_love", "polar_power", "wealth_clock", "blessing", "bloat"]
+        iconKeys = normalizeHourlyBuffSelection(hourlyBuffList)
+        iconCount = max(1, min(MAX_HOURLY_BUFF_OPTIONS, len(iconKeys)))
+        iconSize = 220
         for i, key in enumerate(iconKeys):
-            iconX = x + 48 + i * ((w - 96 - 220) / 4)
+            iconX = x + 48 + i * ((w - 96 - iconSize) / max(iconCount - 1, 1))
+            iconY = y + 124
             asset = HOURLY_BUFF_ASSETS.get(key, key + "_buff")
             try:
-                img = Image.open(f"{self.assetPath}/{asset}.png").convert("RGBA").resize((220, 220))
-                self.canvas.paste(img, (int(iconX), y + 124), img)
+                img = Image.open(f"{self.assetPath}/{asset}.png").convert("RGBA").resize((iconSize, iconSize))
+                self.canvas.paste(img, (int(iconX), iconY), img)
             except FileNotFoundError:
                 pass
             value = self._currentBuffValue(uptimeBuffsValues, key)
@@ -1372,7 +1482,7 @@ class HourlyReportDrawer:
             txt = f"x{value}" if value else "x0"
             font = self.getFont("bold", 72)
             bbox = self.draw.textbbox((0, 0), txt, font=font, stroke_width=5)
-            self.draw.text((iconX + 210 - (bbox[2] - bbox[0]), y + 254), txt, font=font, fill=self.bodyColor, stroke_width=5, stroke_fill=(0, 0, 0))
+            self.draw.text((iconX + iconSize - 10 - (bbox[2] - bbox[0]), iconY + int(iconSize * 0.6)), txt, font=font, fill=self.bodyColor, stroke_width=5, stroke_fill=(0, 0, 0))
 
         nectarNames = ["comforting", "motivating", "satisfying", "refreshing", "invigorating"]
         nectarOrder = [0, 2, 4, 3, 1]
