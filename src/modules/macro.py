@@ -42,7 +42,7 @@ from modules.submacros.memoryMatch import MemoryMatch
 import math
 import re
 import ast
-from modules.submacros.hourlyReport import HourlyReport, BuffDetector
+from modules.submacros.hourlyReport import BUFF_RENDER_CONFIG, HourlyReport, BuffDetector
 from modules.submacros.liveGatherReport import LiveGatherReport
 from difflib import SequenceMatcher
 import fuzzywuzzy.process
@@ -5742,67 +5742,78 @@ class macro:
                 height, width = screen.shape[:2]
                 uptimeBuffsColors = self.hourlyReport.uptimeBuffsColors
                 uptimeBearBuffs = self.hourlyReport.uptimeBearBuffs
+                monitoredBuffs = set(self.hourlyReport.configuredUptimeBuffDataKeys(self.setdat))
+                selectedUptimeRows = set(self.hourlyReport.configuredUptimeBuffs)
 
                 sampleValues = {}
 
-                for j in ["baby_love"]:
+                if "baby_love" in monitoredBuffs:
+                    j = "baby_love"
                     if self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors[j][0], uptimeBuffsColors[j][1], y1=30*self.multi, searchDirection=7):
                         sampleValues[j] = 1
 
-                bearBuffRes = [int(x) for x in self.buffDetector.getBuffsWithImage(uptimeBearBuffs, screen=screen, threshold=0.78)]
-                if any(bearBuffRes):
-                    sampleValues["bear"] = 1
+                if "bear" in monitoredBuffs:
+                    bearBuffRes = [int(x) for x in self.buffDetector.getBuffsWithImage(uptimeBearBuffs, screen=screen, threshold=0.78)]
+                    if any(bearBuffRes):
+                        sampleValues["bear"] = 1
 
-                for j in ["focus", "bomb_combo", "balloon_aura", "inspire"]:
+                for j in [key for key in selectedUptimeRows if key in uptimeBuffsColors and key not in {"baby_love", "haste", "melody", "boost", "bear"}]:
                     res = self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors[j][0], uptimeBuffsColors[j][1], y1=30*self.multi, y2=50*self.multi, searchDirection=7)
                     if res:
-                        x = res[0]+res[2]
-                        x1 = max(0, int(x-25*self.multi))
-                        x2 = min(width, int(x+5*self.multi))
-                        buffImg = screen[15*self.multi:50*self.multi , x1:x2]
-                        sampleValues[j] = int(self.buffDetector.getBuffQuantityFromImgTight(buffImg))
+                        chartType = BUFF_RENDER_CONFIG.get(j, ("binary",))[0]
+                        if chartType == "binary":
+                            sampleValues[j] = 1
+                        else:
+                            x = res[0]+res[2]
+                            x1 = max(0, int(x-25*self.multi))
+                            x2 = min(width, int(x+5*self.multi))
+                            buffImg = screen[15*self.multi:50*self.multi , x1:x2]
+                            sampleValues[j] = int(self.buffDetector.getBuffQuantityFromImgTight(buffImg))
 
-                x = 0
-                for _ in range(3):
-                    res = self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["haste"][0], uptimeBuffsColors["haste"][1],x, 30*self.multi, searchDirection=6)
-                    if not res:
-                        break
-                    x = res[0]
-                    if self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["melody"][0], uptimeBuffsColors["melody"][1], x+2*self.multi, 30, x+34*self.multi, 40*self.multi, 12):
-                        sampleValues["melody"] = 1
-                    elif not sampleValues.get("haste", 0):
-                        x1 = max(0, int(x+6*self.multi))
-                        x2 = min(width, int(x+44*self.multi))
-                        buffImg = screen[15*self.multi:50*self.multi , x1:x2]
-                        sampleValues["haste"] = int(self.buffDetector.getBuffQuantityFromImgTight(buffImg))
-                    x += 44*self.multi
+                if "haste" in monitoredBuffs or "melody" in monitoredBuffs:
+                    x = 0
+                    for _ in range(3):
+                        res = self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["haste"][0], uptimeBuffsColors["haste"][1],x, 30*self.multi, searchDirection=6)
+                        if not res:
+                            break
+                        x = res[0]
+                        if "melody" in monitoredBuffs and self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["melody"][0], uptimeBuffsColors["melody"][1], x+2*self.multi, 30, x+34*self.multi, 40*self.multi, 12):
+                            sampleValues["melody"] = 1
+                        elif "haste" in monitoredBuffs and not sampleValues.get("haste", 0):
+                            x1 = max(0, int(x+6*self.multi))
+                            x2 = min(width, int(x+44*self.multi))
+                            buffImg = screen[15*self.multi:50*self.multi , x1:x2]
+                            sampleValues["haste"] = int(self.buffDetector.getBuffQuantityFromImgTight(buffImg))
+                        x += 44*self.multi
                 #print(bd.detectBuffColorInImage(screen, 0xff242424, variation=12, minSize=(3*2,2*2), show=True))
 
-                x = screen.shape[1]
-                for _ in range(3):
-                    res = self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["boost"][0], uptimeBuffsColors["boost"][1], y1=30*self.multi, x2=x, searchDirection=7)
-                    if not res:
-                        break
-                    x = res[0]+res[2]
-                    y = res[1] + res[3]
+                if any(buff in monitoredBuffs for buff in ("blue_boost", "red_boost", "white_boost")):
+                    x = screen.shape[1]
+                    for _ in range(3):
+                        res = self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["boost"][0], uptimeBuffsColors["boost"][1], y1=30*self.multi, x2=x, searchDirection=7)
+                        if not res:
+                            break
+                        x = res[0]+res[2]
+                        y = res[1] + res[3]
 
-                    if len(self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["red_boost"][0], uptimeBuffsColors["red_boost"][1], x-30*self.multi, 15*self.multi, x-4*self.multi, 34*self.multi, 20)):
-                        buffType = "red_boost"
-                    elif len(self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["blue_boost"][0], uptimeBuffsColors["blue_boost"][1], x-30*self.multi, 15*self.multi, x-4*self.multi, 34*self.multi, 20)):
-                        buffType = "blue_boost"
-                    else:
-                        buffType = "white_boost"
+                        if len(self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["red_boost"][0], uptimeBuffsColors["red_boost"][1], x-30*self.multi, 15*self.multi, x-4*self.multi, 34*self.multi, 20)):
+                            buffType = "red_boost"
+                        elif len(self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["blue_boost"][0], uptimeBuffsColors["blue_boost"][1], x-30*self.multi, 15*self.multi, x-4*self.multi, 34*self.multi, 20)):
+                            buffType = "blue_boost"
+                        else:
+                            buffType = "white_boost"
 
-                    x1 = max(0, x-25*self.multi)
-                    buffImg = screen[15*self.multi: 50*self.multi, x1: x]
-                    sampleValues[buffType] = int(self.buffDetector.getBuffQuantityFromImgTight(buffImg))
+                        if buffType in monitoredBuffs:
+                            x1 = max(0, x-25*self.multi)
+                            buffImg = screen[15*self.multi: 50*self.multi, x1: x]
+                            sampleValues[buffType] = int(self.buffDetector.getBuffQuantityFromImgTight(buffImg))
 
-                    x -= 40*self.multi
+                        x -= 40*self.multi
                 
                 self.prevSec = currSec
 
                 isGathering = "gather_" in self.status.value
-                self.hourlyReport.recordUptimeSample(i, sampleValues, isGathering=isGathering)
+                self.hourlyReport.recordUptimeSample(i, sampleValues, isGathering=isGathering, monitoredBuffs=monitoredBuffs)
                 self.hourlyReport.saveHourlyReportData()
         except Exception:
             self.logger.webhook("Hourly Report Error", traceback.format_exc(), "red", ping_category="ping_critical_errors")
