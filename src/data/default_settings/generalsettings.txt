@@ -85,6 +85,7 @@ low_performance=False
 only_send_hourly_report=False
 hourly_report_time_format=24
 hourly_report_uptime_buffs=['boost', 'haste', 'focus', 'bomb_combo', 'balloon_aura', 'inspire', 'melody', 'bear', 'baby_love']
+hourly_report_hourly_buffs=['tabby_love', 'polar_power', 'wealth_clock', 'blessing', 'bloat']
 bees=50
 goo_slot=3
 start_keybind=F1
