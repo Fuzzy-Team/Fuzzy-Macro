@@ -448,7 +448,18 @@ class FinalReport:
         uptime_buffs = normalizeUptimeBuffSelection(raw_uptime, DEFAULT_UPTIME_BUFFS)
         hourly_buffs = [b.strip() for b in raw_hourly.split(",") if b.strip()] if raw_hourly else DEFAULT_HOURLY_BUFFS
 
-        # Use the most recent values captured by the hourly report instead of live detection.
+        # Refresh the point-in-time sidebar values when the live detector is available.
+        # Saved values are still used as a fallback for offline/manual report rendering.
+        try:
+            detector = getattr(self.hourlyReport, "buffDetector", None)
+            if detector:
+                liveBuffQuantity = detector.getBuffsWithImage(self.hourlyReport.hourBuffs)
+                self.hourlyReport.latestBuffQuantity = list(liveBuffQuantity)
+                self.hourlyReport.latestBuffKeys = list(self.hourlyReport.hourBuffs.keys())
+                self.hourlyReport.latestNectarQuantity = list(detector.getNectars())
+        except Exception as e:
+            print(f"Error refreshing final report buff snapshot: {e}")
+
         # The saved values are positional, so keep the saved detector keys with them and
         # remap into the current display order before drawing.
         savedBuffQuantity = list(getattr(self.hourlyReport, "latestBuffQuantity", []))
