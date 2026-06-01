@@ -86,10 +86,10 @@ BUFF_RENDER_CONFIG = {
     "focus":         ("stackable", 10,  (30,  191, 5),   "focus_buff"),
     "bomb_combo":    ("stackable", 10,  (160, 160, 160), "bomb_combo_buff"),
     "balloon_aura":  ("stackable", 10,  (50,  80,  200), "balloon_aura_buff"),
-    "inspire":       ("stackable", 10,  (195, 191, 18),  "inspire_buff"),
+    "inspire":       ("stackable", 50,  (195, 191, 18),  "inspire_buff"),
     "reindeerfetch": ("stackable", 10,  (204, 44,  44),  "reindeerfetch_buff"),
     "wealth_clock":  ("stackable", 10,  (255, 215, 0),   "wealth_clock_buff"),
-    "tide_blessing": ("stackable", 10,  (91,  211, 255), "tide_blessing_buff"),
+    "tide_blessing": ("stackable", 1.2, (91,  211, 255), "tide_blessing_buff"),
     "mondo":         ("stackable", 10,  (128, 255, 0),   "mondo_buff"),
     "blessing":      ("stackable", 100, (204, 68,  255), "blessing_buff"),
     "bloat":         ("stackable", 5,   (208, 208, 208), "bloat_buff"),
@@ -119,7 +119,10 @@ HOURLY_BUFF_ASSETS = {
 MAX_UPTIME_BUFF_OPTIONS = 16
 DEFAULT_UPTIME_BUFFS = [
     "boost", "haste", "focus", "bomb_combo", "balloon_aura",
-    "inspire", "melody", "bear", "baby_love",
+    "inspire", "reindeerfetch", "honey_mark", "pollen_mark",
+    "festive_mark", "popstar", "melody", "bear", "baby_love",
+    "jb_share", "guiding", "mondo", "blessing", "bloat",
+    "tide_blessing", "wealth_clock",
 ]
 
 def normalizeUptimeBuffSelection(rawBuffs, fallback=None):
@@ -273,6 +276,65 @@ class BuffDetector():
         ocrText = ''.join([x[1][0] for x in ocrRead(img)])
         hasteVal = ''.join([x for x in ocrText if x.isdigit()])
         return hasteVal if hasteVal else '1'
+
+    def getScaledBuffQuantityFromScreen(self, screen, buffRect, hexColor, maxValue, baseValue=0, decimals=0, variation=6):
+        """Estimate Natro-style scaled buff values from the icon fill height."""
+        if not buffRect:
+            return 0
+
+        x, y, w, h = buffRect
+        r = (hexColor >> 16) & 0xFF
+        g = (hexColor >> 8) & 0xFF
+        b = hexColor & 0xFF
+        bgr = np.array([b, g, r])
+        lower = np.clip(bgr - variation, 0, 255)
+        upper = np.clip(bgr + variation, 0, 255)
+
+        height, width = screen.shape[:2]
+        iconWidth = max(1, int(38 * self.robloxWindow.multi))
+        y1 = max(0, int(6 * self.robloxWindow.multi))
+        y2 = min(height, int(44 * self.robloxWindow.multi))
+
+        candidateXs = [
+            int(x),
+            int(x + w - iconWidth),
+            int(x - iconWidth // 2),
+        ]
+        bestCrop = None
+        bestPixels = -1
+        for candidateX in candidateXs:
+            x1 = max(0, min(width - 1, candidateX))
+            x2 = min(width, x1 + iconWidth)
+            crop = screen[y1:y2, x1:x2]
+            if crop.size == 0:
+                continue
+            mask = cv2.inRange(crop, lower, upper)
+            pixels = int(cv2.countNonZero(mask))
+            if pixels > bestPixels:
+                bestPixels = pixels
+                bestCrop = crop
+
+        crop = bestCrop
+        if crop is None or crop.size == 0:
+            return 0
+
+        mask = cv2.inRange(crop, lower, upper)
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return 0
+
+        _, topY, _, _ = cv2.boundingRect(max(contours, key=cv2.contourArea))
+        fillRatio = max(0.0, min(1.0, (crop.shape[0] - topY) / max(crop.shape[0], 1)))
+        value = baseValue + fillRatio * maxValue
+        if decimals:
+            return round(value, decimals)
+        return int(round(value))
+
+    def getTideBlessingValueFromScreen(self, screen, buffRect):
+        """Estimate Tide Blessing multiplier from the blue fill height."""
+        return self.getScaledBuffQuantityFromScreen(
+            screen, buffRect, 0x91c2fd, 0.19, baseValue=1.01, decimals=2, variation=8
+        )
 
     def getBuffsWithImage(self, buffs, save=False, screen = None, threshold=0.7):
         buffQuantity = []
@@ -626,7 +688,12 @@ class HourlyReport():
     def recordUptimeSample(self, index, sampleValues, isGathering=False, monitoredBuffs=None):
         monitored = set(monitoredBuffs or self._defaultSessionUptimeBuffs().keys())
         for buffName in monitored:
-            value = int(sampleValues.get(buffName, 0) or 0)
+            try:
+                value = float(sampleValues.get(buffName, 0) or 0)
+            except (TypeError, ValueError):
+                value = 0
+            if value.is_integer():
+                value = int(value)
             if buffName not in self.uptimeBuffsValues:
                 self.uptimeBuffsValues[buffName] = [0] * 600
             if 0 <= index < len(self.uptimeBuffsValues[buffName]):
