@@ -421,13 +421,26 @@ class FinalReport:
             # Backward compatibility for old saved data that predates sessionReportStats.
             sourceStats = copy.deepcopy(self.hourlyReport.hourlyReportStats)
         
+        raw_uptime = setdat.get("hourly_report_uptime_buffs", "") if isinstance(setdat, dict) else ""
+        raw_hourly = setdat.get("hourly_report_hourly_buffs", "") if isinstance(setdat, dict) else ""
+        from modules.submacros.hourlyReport import DEFAULT_UPTIME_BUFFS, DEFAULT_HOURLY_BUFFS, normalizeUptimeBuffSelection
+        uptime_buffs = normalizeUptimeBuffSelection(raw_uptime, DEFAULT_UPTIME_BUFFS)
+        hourly_buffs = [b.strip() for b in raw_hourly.split(",") if b.strip()] if raw_hourly else DEFAULT_HOURLY_BUFFS
+
         # Use the most recent values captured by the hourly report instead of live detection.
-        buffQuantity = list(getattr(self.hourlyReport, "latestBuffQuantity", []))
+        # The saved values are positional, so keep the saved detector keys with them and
+        # remap into the current display order before drawing.
+        savedBuffQuantity = list(getattr(self.hourlyReport, "latestBuffQuantity", []))
+        savedBuffKeys = list(getattr(self.hourlyReport, "latestBuffKeys", []))
+        if not savedBuffKeys:
+            savedBuffKeys = list(self.hourlyReport.hourBuffs.keys())
+        buffByKey = {
+            key: savedBuffQuantity[i] if i < len(savedBuffQuantity) else 0
+            for i, key in enumerate(savedBuffKeys)
+        }
+        buffQuantity = [buffByKey.get(key, 0) for key in hourly_buffs]
+
         nectarQuantity = list(getattr(self.hourlyReport, "latestNectarQuantity", []))
-        if len(buffQuantity) < len(self.hourlyReport.hourBuffs):
-            buffQuantity += [0] * (len(self.hourlyReport.hourBuffs) - len(buffQuantity))
-        else:
-            buffQuantity = buffQuantity[:len(self.hourlyReport.hourBuffs)]
         if len(nectarQuantity) < 5:
             nectarQuantity += [0] * (5 - len(nectarQuantity))
         else:
@@ -537,12 +550,6 @@ class FinalReport:
         theme  = setdat.get("hourly_report_theme",  "dark")  if isinstance(setdat, dict) else "dark"
         accent = setdat.get("hourly_report_accent",  "green") if isinstance(setdat, dict) else "green"
         send_embed_text = setdat.get("hourly_report_embed_text", True) if isinstance(setdat, dict) else True
-
-        raw_uptime = setdat.get("hourly_report_uptime_buffs", "") if isinstance(setdat, dict) else ""
-        raw_hourly = setdat.get("hourly_report_hourly_buffs", "") if isinstance(setdat, dict) else ""
-        from modules.submacros.hourlyReport import DEFAULT_UPTIME_BUFFS, DEFAULT_HOURLY_BUFFS, normalizeUptimeBuffSelection
-        uptime_buffs = normalizeUptimeBuffSelection(raw_uptime, DEFAULT_UPTIME_BUFFS)
-        hourly_buffs = [b.strip() for b in raw_hourly.split(",") if b.strip()] if raw_hourly else DEFAULT_HOURLY_BUFFS
 
         # determine enabled gather fields and their patterns (shown beneath planters)
         enabled_fields, field_patterns = [], {}
