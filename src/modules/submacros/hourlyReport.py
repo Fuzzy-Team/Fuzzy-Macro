@@ -1453,18 +1453,23 @@ class HourlyReportDrawer:
             versionText = f"v{getMacroVersion()}"
         except Exception:
             versionText = "version"
+        try:
+            profileText = getCurrentProfile()
+        except Exception:
+            profileText = "unknown"
         lines = [
-            (f"Fuzzy Macro - {versionText}", (255, 255, 255), 56),
             (reportTitle, (255, 218, 61), 56),
+            (f"Fuzzy Macro - {versionText}", (255, 255, 255), 56),
             (f"Runtime: {self._durationHMS(sessionTime)}", (79, 223, 38), 56),
+            (f"Profile: {profileText}", self.accentColor, 56),
             ("Made by Logan :)", (4, 180, 228), 56),
         ]
-        yy = y + 72
+        yy = y + 34
         for text, color, size in lines:
             font = self._fitText(text, w - 140, "bold", size, 34)
             bbox = self.draw.textbbox((0, 0), text, font=font)
             self.draw.text((cx - (bbox[2] - bbox[0]) / 2, yy), text, font=font, fill=color)
-            yy += 82
+            yy += 74
 
     def _drawUptimeRows(self, region, uptimeBuffList, uptimeBuffsValues, buffGatherIntervals, reportKind):
         self._drawPanel(region, "BUFF UPTIME")
