@@ -2910,9 +2910,25 @@ if __name__ == "__main__":
     #setup stream class
     stream = cloudflaredStream()
 
+    def releaseInputsSafely():
+        try:
+            keyboardModule.releaseMovement()
+        except pag.FailSafeException:
+            print("PyAutoGUI fail-safe triggered while releasing movement during shutdown.")
+        except Exception as e:
+            print(f"Failed to release movement during shutdown: {e}")
+        try:
+            mouse.mouseUp()
+        except pag.FailSafeException:
+            print("PyAutoGUI fail-safe triggered while releasing mouse during shutdown.")
+        except Exception as e:
+            print(f"Failed to release mouse during shutdown: {e}")
+
     def onExit():
-        stopApp()
-        # Reset timed bear quest states on exit so macro resumes checking next run
+        try:
+            stopApp()
+        except Exception as e:
+            print(f"Error during shutdown cleanup: {e}")
         try:
             settingsManager.saveSettingFile("brown_bear_quest_state", 0, "./data/user/timings.txt")
         except Exception:
@@ -2937,16 +2953,14 @@ if __name__ == "__main__":
         global stopThreads
         global macroProc
         stopThreads = True
-        keyboardModule.releaseMovement()
-        mouse.mouseUp()
+        releaseInputsSafely()
         #print(sockets)
         if macroProc and macroProc.is_alive():
             # Give the macro process a chance to observe run.value == 0 and run
             # gather cleanup hooks, including AI gather video finalization.
             stop_wait_deadline = time.time() + 1
             while macroProc.is_alive() and time.time() < stop_wait_deadline:
-                keyboardModule.releaseMovement()
-                mouse.mouseUp()
+                releaseInputsSafely()
                 macroProc.join(timeout=0.05)
         if macroProc and macroProc.is_alive():
             macroProc.terminate()
@@ -2957,8 +2971,7 @@ if __name__ == "__main__":
         macroProc = None
         stream.stop()
         #if discordBotProc.is_alive(): discordBotProc.kill()
-        keyboardModule.releaseMovement()
-        mouse.mouseUp()
+        releaseInputsSafely()
     
     atexit.register(onExit)
         
