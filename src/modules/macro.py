@@ -5763,6 +5763,12 @@ class macro:
                         chartType = BUFF_RENDER_CONFIG.get(j, ("binary",))[0]
                         if chartType == "binary":
                             sampleValues[j] = 1
+                        elif j == "bloat":
+                            sampleValues[j] = self.buffDetector.getScaledBuffQuantityFromScreen(
+                                screen, res, uptimeBuffsColors[j][0], 5, baseValue=1, decimals=2
+                            )
+                        elif j == "tide_blessing":
+                            sampleValues[j] = self.buffDetector.getTideBlessingValueFromScreen(screen, res)
                         else:
                             x = res[0]+res[2]
                             x1 = max(0, int(x-25*self.multi))
