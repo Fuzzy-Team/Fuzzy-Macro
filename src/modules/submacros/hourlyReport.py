@@ -1,5 +1,6 @@
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter
+import base64
 import cv2
 import math
 import time
@@ -21,6 +22,19 @@ import json
 from modules.misc.settingsManager import getCurrentProfile, loadFields, getMacroVersion
 
 ww, wh = pag.size()
+
+NATRO_BUFF_CHARACTER_TEMPLATES = {
+    0: "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAKCAAAAAC2kKDSAAAAAnRSTlMAAHaTzTgAAAA9SURBVHgBATIAzf8BAADzAAAA8wAAAAAAAAAA8wAAAAIAAAAAAgAAAAACAAAAAAAAAAAAAADzAAABAADzAIAxBMg7bpCUAAAAAElFTkSuQmCC",
+    1: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAAMCAAAAABt1zOIAAAAAnRSTlMAAHaTzTgAAAACYktHRAD/h4/MvwAAABZJREFUeAFjYPjM+JmBgeEzEwMDLgQAWo0C7U3u8hAAAAAASUVORK5CYII=",
+    2: "iVBORw0KGgoAAAANSUhEUgAAAAQAAAALCAAAAAB9zHN3AAAAAnRSTlMAAHaTzTgAAABCSURBVHgBATcAyP8BAPMAAADzAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPMAAADzAAAA8wAAAPMAAAAB8wAAAAIAAAAAtc8GqohTl5oAAAAASUVORK5CYII=",
+    3: "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAKCAAAAAC2kKDSAAAAAnRSTlMAAHaTzTgAAAA9SURBVHgBATIAzf8BAPMAAAAAAAAAAAAAAAAAAAAAAAAAAADzAAAAAAAAAAAAAAAAAAAAAPMAAAABAPMAAFILA8/B68+8AAAAAElFTkSuQmCC",
+    4: "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAGCAAAAADBUmCpAAAAAnRSTlMAAHaTzTgAAAApSURBVHgBAR4A4f8AAAAA8wAAAAAAAAAA8wAAAPMAAALzAAAAAfMAAABBtgTDARckPAAAAABJRU5ErkJggg==",
+    5: "iVBORw0KGgoAAAANSUhEUgAAAAQAAAALCAAAAAB9zHN3AAAAAnRSTlMAAHaTzTgAAABCSURBVHgBATcAyP8B8wAAAAIAAAAAAPMAAAACAAAAAAHzAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHzAAAAgmID1KbRt+YAAAAASUVORK5CYII=",
+    6: "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAJCAAAAAAwBNJ8AAAAAnRSTlMAAHaTzTgAAAA4SURBVHgBAS0A0v8AAAAA8wAAAPMAAADzAAACAAAAAAEA8wAAAPPzAAAA8wAAAAAA8wAAAQAA8wC5oAiQ09KYngAAAABJRU5ErkJggg==",
+    7: "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAMCAAAAABgyUPPAAAAAnRSTlMAAHaTzTgAAABHSURBVHgBATwAw/8B8wAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA8wIAAAAAAgAAAABDdgHu70cIeQAAAABJRU5ErkJggg==",
+    8: "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAKCAAAAAC2kKDSAAAAAnRSTlMAAHaTzTgAAAA9SURBVHgBATIAzf8BAADzAAAA8wAAAgAAAAABAPMAAAEAAPMAAADzAAAAAAAAAADzAAAAAADzAAABAADzALv5B59oKTe0AAAAAElFTkSuQmCC",
+    9: "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAKCAAAAAC2kKDSAAAAAnRSTlMAAHaTzTgAAAA9SURBVHgBATIAzf8BAADzAAAA8wAAAPMAAAAAAPMAAAEAAPMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA87TcBbXcfy3eAAAAAElFTkSuQmCC",
+}
 
 # ---------------------------------------------------------------------------
 # Theme / color configuration
@@ -418,6 +432,59 @@ class BuffDetector():
         hasteVal = ''.join([x for x in ocrText if x.isdigit()])
         return hasteVal if hasteVal else '1'
 
+    def _loadBuffCountTemplates(self):
+        if hasattr(self, "_buffCountTemplates"):
+            return self._buffCountTemplates
+
+        templates = []
+        scale = max(1, int(round(self.robloxWindow.multi or 1)))
+        for value in range(10, 1, -1):
+            digit = 1 if value == 10 else value
+            arr = np.frombuffer(base64.b64decode(NATRO_BUFF_CHARACTER_TEMPLATES[digit]), np.uint8)
+            mask = cv2.imdecode(arr, cv2.IMREAD_GRAYSCALE)
+            if mask is None:
+                continue
+            _, mask = cv2.threshold(mask, 1, 255, cv2.THRESH_BINARY)
+            if scale != 1:
+                h, w = mask.shape[:2]
+                mask = cv2.resize(mask, (w * scale, h * scale), interpolation=cv2.INTER_NEAREST)
+            templates.append((value, mask))
+
+        self._buffCountTemplates = templates
+        return templates
+
+    def getBuffQuantityNatroStyle(self, bgrImg, default="1", ocrFallback=True):
+        """Read x2-x10 stack text with count templates first, OCR only as fallback."""
+        if bgrImg is None or bgrImg.size == 0:
+            return default
+
+        bgrImg = self._ensureBgrBuffScreen(bgrImg)
+        whiteMask = cv2.inRange(bgrImg, np.array([235, 235, 235]), np.array([255, 255, 255]))
+        if cv2.countNonZero(whiteMask):
+            bestValue = None
+            bestScore = 0
+            for value, template in self._loadBuffCountTemplates():
+                th, tw = template.shape[:2]
+                if th > whiteMask.shape[0] or tw > whiteMask.shape[1]:
+                    continue
+                try:
+                    res = cv2.matchTemplate(whiteMask, template, cv2.TM_CCOEFF_NORMED)
+                except cv2.error:
+                    continue
+                _, score, _, _ = cv2.minMaxLoc(res)
+                if score > bestScore:
+                    bestValue = value
+                    bestScore = score
+            if bestValue is not None and bestScore >= 0.55:
+                return str(bestValue)
+
+        if not ocrFallback:
+            return default
+        try:
+            return self.getBuffQuantityFromImgTight(bgrImg)
+        except Exception:
+            return default
+
     def getScaledBuffQuantityFromScreen(self, screen, buffRect, hexColor, maxValue, baseValue=0, decimals=0, variation=6):
         """Estimate Natro-style scaled buff values from the icon fill height."""
         if not buffRect:
@@ -531,10 +598,29 @@ class BuffDetector():
         buffImg = bgrScreen[y1:y2, x1:x2]
         if buffImg.size == 0:
             return "1"
-        try:
-            return str(min(10, int(self.getBuffQuantityFromImgTight(buffImg, show=False))))
-        except (TypeError, ValueError):
+        return self.getBuffQuantityNatroStyle(buffImg)
+
+    def getStackQuantityNearBuff(self, screen, buff, iconX, iconW=None):
+        bgrScreen = self._ensureBgrBuffScreen(screen)
+        if bgrScreen is None:
             return "1"
+        height, width = bgrScreen.shape[:2]
+        scale = self.robloxWindow.multi
+        if buff == "blessing":
+            x1 = max(0, int(iconX + 8*scale))
+            x2 = min(width, int(iconX + 36*scale))
+        elif buff == "mondo":
+            x1 = max(0, int(iconX + 16*scale))
+            x2 = min(width, int(iconX + 36*scale))
+        elif buff == "haste":
+            x1 = max(0, int(iconX + 6*scale))
+            x2 = min(width, int(iconX + 44*scale))
+        else:
+            x1 = max(0, int(iconX - 20*scale))
+            x2 = min(width, int(iconX + 2*scale))
+        y1 = max(0, int(15*scale))
+        y2 = min(height, int(50*scale))
+        return self.getBuffQuantityNatroStyle(bgrScreen[y1:y2, x1:x2])
 
     def getBuffsWithImage(self, buffs, save=False, screen = None, threshold=0.7):
         buffQuantity = []
@@ -601,8 +687,9 @@ class BuffDetector():
                 if save:
                     cv2.imwrite(f"{buff}-{time.time()}.png", fullBuffImgBGR)
 
-                #filter out everything but the text
-                buffVal = self.getBuffQuantityFromImg(fullBuffImgBGR, transform, buff=buff)
+                buffVal = self.getStackQuantityNearBuff(screen, buff, cropX, w)
+                if buffVal == "1":
+                    buffVal = self.getBuffQuantityFromImg(fullBuffImgBGR, transform, buff=buff)
                 if buffVal == "1":
                     time.sleep(1)
                 finalBuffValues.append(buffVal)
