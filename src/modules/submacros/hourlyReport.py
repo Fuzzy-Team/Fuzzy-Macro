@@ -1547,7 +1547,7 @@ class HourlyReportDrawer:
             r, g, b = color_info
             data = uptimeBuffsValues.get(buff_key, [0] * 600)
             datasets = [{"data": data, "lineColor": color_info, "gradientFill": {0: (r, g, b, 255), 1: (r, g, b, 255)}}]
-            avgs = []
+            avgs = [(getAverageBuff(data), color_info)]
             my = 1
 
         xData = list(range(max((len(d["data"]) for d in datasets), default=1)))
