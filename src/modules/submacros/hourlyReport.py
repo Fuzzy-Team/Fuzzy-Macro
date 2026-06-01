@@ -586,6 +586,7 @@ class HourlyReport():
         self.sessionUptimeBuffsValues = {}
         self.sessionBuffGatherIntervals = []
         self.latestBuffQuantity = []
+        self.latestBuffKeys = []
         self.latestNectarQuantity = []
         self.lastEmbedFields = None
 
@@ -726,8 +727,12 @@ class HourlyReport():
             fields.append({"name": "Buffs", "value": "  •  ".join(buff_parts), "inline": False})
 
         # Nectars (non-zero)
-        nectar_names = ["comforting", "invigorating", "motivating", "refreshing", "satisfying"]
-        nectar_parts = [f"{n.title()}: {int(nectarQuantity[i])}%" for i, n in enumerate(nectar_names) if i < len(nectarQuantity) and int(nectarQuantity[i] or 0) > 0]
+        nectar_names = ["comforting", "motivating", "satisfying", "refreshing", "invigorating"]
+        nectar_order = [0, 2, 4, 3, 1]
+        nectar_parts = []
+        for name, data_index in zip(nectar_names, nectar_order):
+            if data_index < len(nectarQuantity) and int(nectarQuantity[data_index] or 0) > 0:
+                nectar_parts.append(f"{name.title()}: {int(nectarQuantity[data_index])}%")
         if nectar_parts:
             fields.append({"name": "Nectars", "value": "  •  ".join(nectar_parts), "inline": False})
 
@@ -752,6 +757,7 @@ class HourlyReport():
         buffQuantity = self.buffDetector.getBuffsWithImage(self.hourBuffs)
         nectarQuantity = self.buffDetector.getNectars()
         self.latestBuffQuantity = list(buffQuantity)
+        self.latestBuffKeys = list(self.hourBuffs.keys())
         self.latestNectarQuantity = list(nectarQuantity)
         #mssScreenshot(save=True)
 
@@ -842,6 +848,11 @@ class HourlyReport():
         raw_hourly = setdat.get("hourly_report_hourly_buffs", "") if isinstance(setdat, dict) else ""
         uptime_buffs = normalizeUptimeBuffSelection(raw_uptime, self.configuredUptimeBuffs)
         hourly_buffs = [b.strip() for b in raw_hourly.split(",") if b.strip()] if raw_hourly else self.configuredHourlyBuffs
+        detectedBuffByKey = {
+            key: buffQuantity[i] if i < len(buffQuantity) else 0
+            for i, key in enumerate(self.latestBuffKeys or list(self.hourBuffs.keys()))
+        }
+        displayBuffQuantity = [detectedBuffByKey.get(key, 0) for key in hourly_buffs]
 
         # re-apply theme/accent if they changed
         if theme != self._theme or accent != self._accent:
@@ -851,7 +862,7 @@ class HourlyReport():
 
         canvas = self.hourlyReportDrawer.drawHourlyReport(hourlyReportStats, sessionTime, honeyPerMin,
                                                           sessionHoney, honeyThisHour, onlyValidHourlyHoney,
-                                                          buffQuantity, nectarQuantity, planterData,
+                                                          displayBuffQuantity, nectarQuantity, planterData,
                                                           self.uptimeBuffsValues, self.buffGatherIntervals,
                                                           enabled_fields, field_patterns,
                                                           configuredUptimeBuffs=uptime_buffs,
@@ -864,7 +875,7 @@ class HourlyReport():
         if send_embed_text:
             self.lastEmbedFields = self.generateEmbedFields(
                 hourlyReportStats, sessionTime, sessionHoney, honeyThisHour,
-                onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData)
+                    onlyValidHourlyHoney, displayBuffQuantity, nectarQuantity, planterData)
         else:
             self.lastEmbedFields = None
 
@@ -893,6 +904,7 @@ class HourlyReport():
         self.sessionUptimeBuffsValues = self._defaultSessionUptimeBuffs()
         self.sessionBuffGatherIntervals = []
         self.latestBuffQuantity = []
+        self.latestBuffKeys = []
         self.latestNectarQuantity = []
         self.resetHourlyStats()
     
@@ -925,6 +937,7 @@ class HourlyReport():
                 "sessionUptimeBuffsValues": self.sessionUptimeBuffsValues,
                 "sessionBuffGatherIntervals": self.sessionBuffGatherIntervals,
                 "latestBuffQuantity": self.latestBuffQuantity,
+                "latestBuffKeys": self.latestBuffKeys,
                 "latestNectarQuantity": self.latestNectarQuantity,
             }, f)
     
@@ -938,6 +951,7 @@ class HourlyReport():
             self.sessionUptimeBuffsValues = data.get("sessionUptimeBuffsValues", self._defaultSessionUptimeBuffs())
             self.sessionBuffGatherIntervals = data.get("sessionBuffGatherIntervals", [])
             self.latestBuffQuantity = data.get("latestBuffQuantity", [])
+            self.latestBuffKeys = data.get("latestBuffKeys", [])
             self.latestNectarQuantity = data.get("latestNectarQuantity", [])
 
 
@@ -1143,9 +1157,11 @@ class HourlyReportDrawer:
             self.draw.text((iconX + 210 - (bbox[2] - bbox[0]), y + 254), txt, font=font, fill=self.bodyColor, stroke_width=5, stroke_fill=(0, 0, 0))
 
         nectarNames = ["comforting", "motivating", "satisfying", "refreshing", "invigorating"]
+        nectarOrder = [0, 2, 4, 3, 1]
         nectarColors = [(126, 158, 179), (147, 125, 179), (179, 152, 167), (120, 179, 117), (179, 89, 81)]
         for i, name in enumerate(nectarNames):
-            value = int(nectarQuantity[i] if i < len(nectarQuantity) and nectarQuantity[i] else 0)
+            dataIndex = nectarOrder[i]
+            value = int(nectarQuantity[dataIndex] if dataIndex < len(nectarQuantity) and nectarQuantity[dataIndex] else 0)
             cx = int(x + 150 + i * ((w - 100 - 200) / 4))
             cy = y + 510
             color = nectarColors[i]
@@ -1870,15 +1886,17 @@ class HourlyReportDrawer:
 
     def drawNectars(self, y, nectarData):
         nectarColors = [(165, 207, 234), (235, 120, 108), (194, 166, 236), (162, 239, 163), (239, 205, 224)]
-        nectarNames = ["comforting", "invigorating", "motivating", "refreshing", "satisfying"]
-        count = max(len(nectarData), 1)
+        nectarNames = ["comforting", "motivating", "satisfying", "refreshing", "invigorating"]
+        nectarOrder = [0, 2, 4, 3, 1]
+        visibleNectars = [(i, dataIndex) for i, dataIndex in enumerate(nectarOrder) if dataIndex < len(nectarData)]
+        count = max(len(visibleNectars), 1)
         availWidth = self.canvasSize[0] - self.sidebarPadding - self.sidebarX
         slot = availWidth // count
         progressChartSize = min(300, slot - 20)
         imageHeight = int(progressChartSize * 0.4)
-        for i in range(len(nectarData)):
-            x = self.sidebarX + i * slot + (slot - progressChartSize) // 2
-            self.drawProgressChart(x, y, progressChartSize, nectarData[i], nectarColors[i], 0.75)
+        for slotIndex, (i, dataIndex) in enumerate(visibleNectars):
+            x = self.sidebarX + slotIndex * slot + (slot - progressChartSize) // 2
+            self.drawProgressChart(x, y, progressChartSize, nectarData[dataIndex], nectarColors[i], 0.75)
 
             img = Image.open(f"{self.assetPath}/{nectarNames[i]}.png").convert("RGBA")
             width, height = img.size
