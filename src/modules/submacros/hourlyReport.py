@@ -1197,10 +1197,12 @@ class HourlyReportDrawer:
         if honeyGraphData:
             graph = (x + 200, y + h - 560, w - 280, 480)
             self._drawGraphGrid(graph, xTicks=6, yTicks=4, timelineTicks=False)
-            maxY = max(max(honeyGraphData), 1)
-            labels = [self.millify(maxY - maxY * i / 4) for i in range(5)]
+            minY = min(honeyGraphData)
+            maxY = max(max(honeyGraphData), minY + 1)
+            span = maxY - minY
+            labels = [self.millify(maxY - span * i / 4) for i in range(5)]
             self._drawYAxisLabels(graph, labels, 28)
-            self._drawAreaSeries(graph, honeyGraphData, self.gatherColor, maxY=maxY, alpha=120)
+            self._drawAreaSeries(graph, honeyGraphData, self.gatherColor, maxY=maxY, minY=minY, alpha=120)
             if honeyGraphLabels:
                 small = self.getFont("bold", 30)
                 for i, label in enumerate(honeyGraphLabels):
