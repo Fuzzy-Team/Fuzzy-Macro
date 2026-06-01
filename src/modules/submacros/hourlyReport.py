@@ -86,7 +86,7 @@ BUFF_RENDER_CONFIG = {
     "focus":         ("stackable", 10,  (30,  191, 5),   "focus_buff"),
     "bomb_combo":    ("stackable", 10,  (160, 160, 160), "bomb_combo_buff"),
     "balloon_aura":  ("stackable", 10,  (50,  80,  200), "balloon_aura_buff"),
-    "inspire":       ("stackable", 50,  (195, 191, 18),  "inspire_buff"),
+    "inspire":       ("stackable", 10,  (195, 191, 18),  "inspire_buff"),
     "reindeerfetch": ("stackable", 10,  (204, 44,  44),  "reindeerfetch_buff"),
     "wealth_clock":  ("stackable", 10,  (255, 215, 0),   "wealth_clock_buff"),
     "tide_blessing": ("stackable", 1.2, (91,  211, 255), "tide_blessing_buff"),
@@ -560,12 +560,8 @@ class BuffDetector():
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
         if not contours:
-            #in this case, the nectar quantity might be so low it cant be detected or the player doesnt have the nectar at all
-            #so, we get the confidence value of the match
-            #if the value is high, its probably low nectar quantity
-            #if its low, the player prob doesnt have the nectar
-            max_val, _  = res
-            return 2 if max_val > 0.8 else 0
+            # Avoid treating a matched icon with no colored fill as low nectar.
+            return 0
         # return the bounding with the largest area
         _, _, _, buffH = cv2.boundingRect(max(contours, key=cv2.contourArea))
         quantity = max(min(100, (buffH/h*100)), 1)
@@ -762,19 +758,27 @@ class HourlyReport():
 
         fields = []
 
-        honeyTitle = "Session" if reportType == "session" else "Hourly"
-        honeyLines = [
-            f"🍯 Honey Earned: {fmt(honeyThisHour)}",
-            f"🍯 Hourly Average: {fmt(avgHoney)}",
-        ]
-        fields.append({"name": honeyTitle, "value": "\n".join(honeyLines), "inline": False})
+        if reportType == "session":
+            session_lines = [
+                f"🍯 Current: {fmt(currentHoney)}",
+                f"🍯 Honey Earned: {fmt(honeyThisHour)}",
+                f"🍯 Hourly Average: {fmt(avgHoney)}",
+                f"🕓 Duration: {fmtTime(sessionTime)}",
+            ]
+            fields.append({"name": "Session", "value": "\n".join(session_lines), "inline": False})
+        else:
+            honeyLines = [
+                f"🍯 Honey Earned: {fmt(honeyThisHour)}",
+                f"🍯 Hourly Average: {fmt(avgHoney)}",
+            ]
+            fields.append({"name": "Hourly", "value": "\n".join(honeyLines), "inline": False})
 
-        session_lines = [
-            f"🍯 Current: {fmt(currentHoney)}",
-            f"🍯 Session: {fmt(sessionHoney)}",
-            f"🕓 Duration: {fmtTime(sessionTime)}",
-        ]
-        fields.append({"name": "Session", "value": "\n".join(session_lines), "inline": False})
+            session_lines = [
+                f"🍯 Current: {fmt(currentHoney)}",
+                f"🍯 Session: {fmt(sessionHoney)}",
+                f"🕓 Duration: {fmtTime(sessionTime)}",
+            ]
+            fields.append({"name": "Session", "value": "\n".join(session_lines), "inline": False})
 
         # Activity breakdown
         gath = hourlyReportStats.get("gathering_time", 0)
