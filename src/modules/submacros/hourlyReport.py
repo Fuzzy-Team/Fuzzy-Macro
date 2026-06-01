@@ -118,11 +118,42 @@ HOURLY_BUFF_ASSETS = {
 # Ordered main/important buffs first, situational ones last (shown top-to-bottom in the grid)
 MAX_UPTIME_BUFF_OPTIONS = 16
 DEFAULT_UPTIME_BUFFS = [
-    "boost", "haste", "focus", "bomb_combo", "balloon_aura", "inspire",
-    "reindeerfetch", "honey_mark", "pollen_mark", "festive_mark",
-    "popstar", "melody", "bear", "baby_love", "jb_share", "guiding",
-    "mondo", "blessing", "bloat", "tide_blessing", "wealth_clock",
+    "boost", "haste", "focus", "bomb_combo", "balloon_aura",
+    "inspire", "melody", "bear", "baby_love",
 ]
+
+def normalizeUptimeBuffSelection(rawBuffs, fallback=None):
+    fallback = fallback if fallback is not None else DEFAULT_UPTIME_BUFFS
+    if rawBuffs is None or rawBuffs == "":
+        rawBuffs = fallback
+    if isinstance(rawBuffs, str):
+        rawBuffs = rawBuffs.strip()
+        if not rawBuffs:
+            rawBuffs = fallback
+        else:
+            rawBuffs = [b.strip() for b in rawBuffs.split(",") if b.strip()]
+    normalized = []
+    seen = set()
+    for buff in rawBuffs or []:
+        key = str(buff).strip().lower().replace(" ", "_")
+        if key in BUFF_RENDER_CONFIG and key not in seen:
+            normalized.append(key)
+            seen.add(key)
+    return normalized or list(fallback)
+
+def expandUptimeBuffDataKeys(buffList):
+    dataKeys = []
+    seen = set()
+    for key in normalizeUptimeBuffSelection(buffList):
+        cfg = BUFF_RENDER_CONFIG.get(key)
+        keys = [key]
+        if cfg and cfg[0] == "multi":
+            keys = [dataKey for dataKey, _ in cfg[2]]
+        for dataKey in keys:
+            if dataKey not in seen:
+                dataKeys.append(dataKey)
+                seen.add(dataKey)
+    return dataKeys
 DEFAULT_HOURLY_BUFFS = [
     "tabby_love", "polar_power", "wealth_clock", "blessing", "bloat", "tide_blessing", "mondo",
 ]
@@ -488,7 +519,7 @@ class BuffDetector():
 
 class HourlyReport():
     def __init__(self, buffDetector: BuffDetector = None, time_format=24, theme="dark", accent="green", configuredUptimeBuffs=None, configuredHourlyBuffs=None):
-        self.configuredUptimeBuffs = configuredUptimeBuffs if configuredUptimeBuffs is not None else DEFAULT_UPTIME_BUFFS
+        self.configuredUptimeBuffs = normalizeUptimeBuffSelection(configuredUptimeBuffs)
         self.configuredHourlyBuffs = configuredHourlyBuffs if configuredHourlyBuffs is not None else DEFAULT_HOURLY_BUFFS
 
         # hourly snapshot buff detection config (template-based)
@@ -583,8 +614,17 @@ class HourlyReport():
             sessionUptimeBuffs[k] = []
         return sessionUptimeBuffs
 
-    def recordUptimeSample(self, index, sampleValues, isGathering=False):
-        for buffName in self._defaultSessionUptimeBuffs():
+    def configuredUptimeBuffDataKeys(self, settings=None):
+        rawBuffs = None
+        if isinstance(settings, dict):
+            rawBuffs = settings.get("hourly_report_uptime_buffs")
+        selectedBuffs = normalizeUptimeBuffSelection(rawBuffs, self.configuredUptimeBuffs)
+        self.configuredUptimeBuffs = selectedBuffs
+        return expandUptimeBuffDataKeys(selectedBuffs)
+
+    def recordUptimeSample(self, index, sampleValues, isGathering=False, monitoredBuffs=None):
+        monitored = set(monitoredBuffs or self._defaultSessionUptimeBuffs().keys())
+        for buffName in monitored:
             value = int(sampleValues.get(buffName, 0) or 0)
             if buffName not in self.uptimeBuffsValues:
                 self.uptimeBuffsValues[buffName] = [0] * 600
@@ -800,10 +840,7 @@ class HourlyReport():
         # parse configurable buff lists from settings (comma-separated strings)
         raw_uptime = setdat.get("hourly_report_uptime_buffs", "") if isinstance(setdat, dict) else ""
         raw_hourly = setdat.get("hourly_report_hourly_buffs", "") if isinstance(setdat, dict) else ""
-        if isinstance(raw_uptime, list):
-            uptime_buffs = raw_uptime
-        else:
-            uptime_buffs = [b.strip() for b in raw_uptime.split(",") if b.strip()] if raw_uptime else self.configuredUptimeBuffs
+        uptime_buffs = normalizeUptimeBuffSelection(raw_uptime, self.configuredUptimeBuffs)
         hourly_buffs = [b.strip() for b in raw_hourly.split(",") if b.strip()] if raw_hourly else self.configuredHourlyBuffs
 
         # re-apply theme/accent if they changed
