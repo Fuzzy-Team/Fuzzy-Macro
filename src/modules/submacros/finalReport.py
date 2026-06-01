@@ -451,10 +451,12 @@ class FinalReport:
         uptime_buffs = normalizeUptimeBuffSelection(raw_uptime, DEFAULT_UPTIME_BUFFS)
         hourly_buffs = [b.strip() for b in raw_hourly.split(",") if b.strip()] if raw_hourly else DEFAULT_HOURLY_BUFFS
 
-        # Always try to capture fresh buff/nectar values from the current screen.
+        # Always try to capture fresh buff values from the current screen.
         # The discord /hourlyreport command reads buffs but never saves them to disk,
         # so saved snapshot values may be stale or empty. Fall back to saved values
         # only if the screen read fails (e.g. historical/offline report generation).
+        # Nectar is intentionally left on the latest saved hourly-report snapshot:
+        # one missed icon match at report time should not turn the sidebar to 0%.
         try:
             detector = getattr(self.hourlyReport, "buffDetector", None)
             if not detector:
@@ -470,9 +472,8 @@ class FinalReport:
                     liveBuffQuantity = detector.getBuffsWithImage(self.hourlyReport.hourBuffs)
                     self.hourlyReport.latestBuffQuantity = list(liveBuffQuantity)
                     self.hourlyReport.latestBuffKeys = list(self.hourlyReport.hourBuffs.keys())
-                    self.hourlyReport.latestNectarQuantity = list(detector.getNectars())
                 except Exception as se:
-                    print(f"Could not read buffs/nectars from screen: {se}")
+                    print(f"Could not read buffs from screen: {se}")
         except Exception as e:
             print(f"Error refreshing final report buff snapshot: {e}")
 
