@@ -5,7 +5,7 @@ import json
 import ast
 import pickle
 import statistics
-from modules.submacros.hourlyReport import HourlyReport, HourlyReportDrawer
+from modules.submacros.hourlyReport import HourlyReport, HourlyReportDrawer, BuffDetector
 from modules.misc.settingsManager import getCurrentProfile, getMacroVersion
 
 
@@ -382,22 +382,25 @@ class FinalReport:
         except (TypeError, ValueError):
             return default
 
-    def _deriveSessionTime(self, sourceStats, normalizedHoneyPerMin):
-        """Use saved session samples for historical reports; elapsed wall time is only a fallback."""
+    def _deriveSessionTime(self, sourceStats, normalizedHoneyPerMin, originalHoneySampleCount=None, stop_time=None):
+        """Use stop_time - start_time when available (live stop); fall back to sample count for historical reports."""
+        startTime = self.hourlyReport.hourlyReportStats.get("start_time", 0)
+        if startTime and stop_time:
+            return max(0, stop_time - startTime)
+
         sampleCount = max(
-            len(normalizedHoneyPerMin or []),
+            originalHoneySampleCount if originalHoneySampleCount is not None else len(normalizedHoneyPerMin or []),
             len(sourceStats.get("backpack_per_min", []) or []),
         )
         if sampleCount > 1:
             return (sampleCount - 1) * 60
 
-        startTime = self.hourlyReport.hourlyReportStats.get("start_time", 0)
         if startTime:
             return max(0, time.time() - startTime)
 
         return 0
-    
-    def generateFinalReport(self, setdat):
+
+    def generateFinalReport(self, setdat, stop_time=None):
         """Generate a comprehensive final report covering the entire macro session"""
         # Load the saved data
         try:
@@ -448,15 +451,28 @@ class FinalReport:
         uptime_buffs = normalizeUptimeBuffSelection(raw_uptime, DEFAULT_UPTIME_BUFFS)
         hourly_buffs = [b.strip() for b in raw_hourly.split(",") if b.strip()] if raw_hourly else DEFAULT_HOURLY_BUFFS
 
-        # Refresh the point-in-time sidebar values when the live detector is available.
-        # Saved values are still used as a fallback for offline/manual report rendering.
+        # Always try to capture fresh buff/nectar values from the current screen.
+        # The discord /hourlyreport command reads buffs but never saves them to disk,
+        # so saved snapshot values may be stale or empty. Fall back to saved values
+        # only if the screen read fails (e.g. historical/offline report generation).
         try:
             detector = getattr(self.hourlyReport, "buffDetector", None)
+            if not detector:
+                try:
+                    from modules.screen.robloxWindow import RobloxWindowBounds
+                    robloxWindow = RobloxWindowBounds()
+                    robloxWindow.setRobloxWindowBounds()
+                    detector = BuffDetector(robloxWindow)
+                except Exception as de:
+                    print(f"Could not create BuffDetector for screen read: {de}")
             if detector:
-                liveBuffQuantity = detector.getBuffsWithImage(self.hourlyReport.hourBuffs)
-                self.hourlyReport.latestBuffQuantity = list(liveBuffQuantity)
-                self.hourlyReport.latestBuffKeys = list(self.hourlyReport.hourBuffs.keys())
-                self.hourlyReport.latestNectarQuantity = list(detector.getNectars())
+                try:
+                    liveBuffQuantity = detector.getBuffsWithImage(self.hourlyReport.hourBuffs)
+                    self.hourlyReport.latestBuffQuantity = list(liveBuffQuantity)
+                    self.hourlyReport.latestBuffKeys = list(self.hourlyReport.hourBuffs.keys())
+                    self.hourlyReport.latestNectarQuantity = list(detector.getNectars())
+                except Exception as se:
+                    print(f"Could not read buffs/nectars from screen: {se}")
         except Exception as e:
             print(f"Error refreshing final report buff snapshot: {e}")
 
@@ -511,8 +527,9 @@ class FinalReport:
         rawHoneyPerMin = sourceStats.get("honey_per_min", [])
         if not rawHoneyPerMin:
             rawHoneyPerMin = [0]
-        if len(rawHoneyPerMin) < 3:
-            rawHoneyPerMin = [0] * (3 - len(rawHoneyPerMin)) + rawHoneyPerMin
+        originalHoneySampleCount = len(rawHoneyPerMin)
+        if originalHoneySampleCount < 3:
+            rawHoneyPerMin = [0] * (3 - originalHoneySampleCount) + rawHoneyPerMin
 
         startHoney = self.hourlyReport.hourlyReportStats.get("start_honey", 0)
         normalizedHoneyPerMin = self._normalizeCumulativeHoneySeries(rawHoneyPerMin, baseline=startHoney)
@@ -530,7 +547,7 @@ class FinalReport:
         if onlyValidHourlyHoney and startHoney:
             sessionHoney = max(0, onlyValidHourlyHoney[-1] - startHoney)
         
-        sessionTime = self._deriveSessionTime(sourceStats, normalizedHoneyPerMin)
+        sessionTime = self._deriveSessionTime(sourceStats, normalizedHoneyPerMin, originalHoneySampleCount, stop_time)
         
         # Calculate average honey per hour for the entire session
         avgHoneyPerHour = max(0, (sessionHoney / (sessionTime / 3600)) if sessionTime > 0 else 0)
