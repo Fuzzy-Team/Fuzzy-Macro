@@ -155,7 +155,7 @@ def expandUptimeBuffDataKeys(buffList):
                 seen.add(dataKey)
     return dataKeys
 DEFAULT_HOURLY_BUFFS = [
-    "tabby_love", "polar_power", "wealth_clock", "blessing", "bloat", "tide_blessing", "mondo",
+    "tabby_love", "polar_power", "wealth_clock", "blessing", "bloat",
 ]
 
 # ---------------------------------------------------------------------------
@@ -1138,7 +1138,7 @@ class HourlyReportDrawer:
     def _drawLegacyBuffsCard(self, region, buffQuantity, hourlyBuffList, nectarQuantity, uptimeBuffsValues):
         self._drawPanel(region, "BUFFS")
         x, y, w, _ = region
-        iconKeys = ["wealth_clock", "blessing", "bloat", "tide_blessing", "mondo"]
+        iconKeys = ["tabby_love", "polar_power", "wealth_clock", "blessing", "bloat"]
         for i, key in enumerate(iconKeys):
             iconX = x + 48 + i * ((w - 96 - 220) / 4)
             asset = HOURLY_BUFF_ASSETS.get(key, key + "_buff")
