@@ -5,20 +5,20 @@ from requests.exceptions import SSLError, ConnectionError
 last_message_id = None
 last_channel_id = None
 
-def webhook(url, title, desc, time, color, imagePath = None, ping_user_id = None, time_format=24):
+def webhook(url, title, desc, time, color, imagePath = None, ping_user_id = None, time_format=24, fields = None):
     global last_message_id, last_channel_id
-    
+
     # Check if URL is provided
     if not url or not url.strip():
         print(f"Warning: Webhook URL is empty. Skipping webhook message: {title} {desc}")
         return None
-    
+
     webhook = DiscordWebhook(url = url,rate_limit_retry=True)
-    
+
     # Add ping if user ID is provided
     if ping_user_id:
         webhook.content = f"<@{ping_user_id}>"
-    
+
     # Format time based on preference
     if time_format == 12:
         try:
@@ -35,6 +35,12 @@ def webhook(url, title, desc, time, color, imagePath = None, ping_user_id = None
         embed = DiscordEmbed(title="[{}] {}".format(formatted_time,title), description=desc, color=color)
     else:
         embed = DiscordEmbed(title="", description="[{}] {}".format(formatted_time,desc), color=color)
+
+    # Add embed fields (for hourly/session report text summaries)
+    if fields:
+        for f in fields:
+            embed.add_embed_field(name=f["name"], value=f["value"], inline=f.get("inline", False))
+
     #if to add image
     if imagePath:
         with open(imagePath, "rb") as f:

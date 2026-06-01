@@ -5699,7 +5699,7 @@ class macro:
             #check if its time to send hourly report
             if currMin == 0 and time.time() - self.lastHourlyReport > 120:
                 hourlyReportData = self.hourlyReport.generateHourlyReport(self.setdat)
-                self.logger.hourlyReport("Hourly Report", "", "purple")
+                self.logger.hourlyReport("Hourly Report", "", "purple", fields=getattr(self.hourlyReport, "lastEmbedFields", None))
 
                 #add to history
                 with open("data/user/hourly_report_history.txt", "r") as f:
