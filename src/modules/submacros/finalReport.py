@@ -540,11 +540,8 @@ class FinalReport:
 
         raw_uptime = setdat.get("hourly_report_uptime_buffs", "") if isinstance(setdat, dict) else ""
         raw_hourly = setdat.get("hourly_report_hourly_buffs", "") if isinstance(setdat, dict) else ""
-        from modules.submacros.hourlyReport import DEFAULT_UPTIME_BUFFS, DEFAULT_HOURLY_BUFFS
-        if isinstance(raw_uptime, list):
-            uptime_buffs = raw_uptime
-        else:
-            uptime_buffs = [b.strip() for b in raw_uptime.split(",") if b.strip()] if raw_uptime else DEFAULT_UPTIME_BUFFS
+        from modules.submacros.hourlyReport import DEFAULT_UPTIME_BUFFS, DEFAULT_HOURLY_BUFFS, normalizeUptimeBuffSelection
+        uptime_buffs = normalizeUptimeBuffSelection(raw_uptime, DEFAULT_UPTIME_BUFFS)
         hourly_buffs = [b.strip() for b in raw_hourly.split(",") if b.strip()] if raw_hourly else DEFAULT_HOURLY_BUFFS
 
         # determine enabled gather fields and their patterns (shown beneath planters)

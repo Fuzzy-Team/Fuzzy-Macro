@@ -1010,12 +1010,6 @@ function normalizeDropdownMultiValue(value) {
   if (typeof value === "string") {
     const trimmed = value.trim();
     if (!trimmed || trimmed === "0") return [];
-    if (trimmed.includes(",")) {
-      return trimmed
-        .split(",")
-        .map(normalizeDropdownOptionValue)
-        .filter((item) => item !== "");
-    }
     if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
       try {
         const parsed = JSON.parse(trimmed);
@@ -1025,6 +1019,12 @@ function normalizeDropdownMultiValue(value) {
       } catch (e) {
         // fall through and treat as scalar
       }
+    }
+    if (trimmed.includes(",")) {
+      return trimmed
+        .split(",")
+        .map(normalizeDropdownOptionValue)
+        .filter((item) => item !== "");
     }
   }
   const normalized = normalizeDropdownOptionValue(value);
@@ -1128,15 +1128,16 @@ function dropdownClicked(event) {
   }
 
   if (dropdownOption) {
-    closeAllDropdowns();
     const parentEle = dropdownOption.parentElement.parentElement.parentElement;
+    const isMulti = isMultiSelectDropdown(parentEle);
+    if (!isMulti) closeAllDropdowns();
     updateDropDownDisplay(dropdownOption);
     if (parentEle.id === "gui_theme") {
       applyTheme(getDropdownValue(parentEle));
     }
     let funcParams = parentEle.dataset.onchange.replace("this", "parentEle");
     eval(funcParams);
-    dropdownOpen = false;
+    if (!isMulti) dropdownOpen = false;
     return;
   }
 
