@@ -76,6 +76,119 @@ ACCENT_COLORS = {
     "pink":   (255, 102, 178),
 }
 
+# ---------------------------------------------------------------------------
+# Macro GUI themes
+# Every macro GUI theme (the gui_theme setting) gets a matching report theme so
+# the hourly/session report looks like the rest of the macro. Mirroring the
+# webapp — where each theme only overrides --primary — the macro themes share a
+# common dark base and differ only by their accent colour.
+# ---------------------------------------------------------------------------
+
+_MACRO_REPORT_BASE = {
+    "bg":             (18, 18, 18),    # webapp --background  #121212
+    "sidebar_bg":     (24, 24, 24),
+    "card_bg":        (30, 30, 30),    # webapp --surface     #1E1E1E
+    "text_primary":   (224, 224, 224), # webapp --text-main   #E0E0E0
+    "text_secondary": (160, 160, 160), # webapp --text-dim    #A0A0A0
+    "grid":           (60, 60, 60),
+    "gather":         (166, 255, 124),
+    "convert":        (254, 202, 64),
+    "bug_run":        (200, 100, 80),
+    "other":          (133, 154, 173),
+    "honey":          (248, 191, 23),
+}
+
+# normalized gui_theme value -> accent colour (the webapp --primary for that theme)
+MACRO_THEME_ACCENTS = {
+    "brown":       (171, 128, 98),   # Fuzzy        #ab8062
+    "cream":       (239, 218, 152),  # Gifted Fuzzy #efda98
+    "red":         (203, 65,  68),   # Precise      #cb4144
+    "blue":        (63,  193, 195),  # Bouyant      #3fc1c3
+    "commander":   (90,  209, 114),  # Commander    #5ad172
+    "purple":      (157, 142, 195),  # Mythic       #9d8ec3
+    "basic_black": (255, 200, 0),    # Basic Bee    #ffc800
+    "gummy":       (255, 0,   255),  # Gummy        #ff00ff
+    "tadpole":     (32,  189, 150),  # Tadpole      #20bd96
+    "gifted_tad":  (144, 240, 224),  # Gifted Tad   #90f0e0
+}
+
+def _mixColor(base, accent, ratio):
+    """Blend a base colour toward the accent (0.0 = base, 1.0 = accent)."""
+    ratio = max(0.0, min(1.0, ratio))
+    return tuple(int(round(b * (1 - ratio) + a * ratio)) for b, a in zip(base, accent))
+
+def _saturate(color, factor):
+    """Push a colour away from grey to amplify its hue (factor > 1 = more vivid).
+
+    Surfaces are tinted toward a saturated version of the accent so that themes
+    with similar hues (e.g. the warm Brown and Cream) stay visually distinct
+    even at the low tint ratios used for the dark backgrounds."""
+    mean = sum(color) / 3.0
+    return tuple(int(round(max(0, min(255, mean + (c - mean) * factor)))) for c in color)
+
+# How vivid the accent is made before it is washed into the dark surfaces. The
+# highlight/line accent itself stays the true theme colour; only the background
+# tints use this boosted version so close hues read as different colours.
+_MACRO_TINT_SATURATION = 1.7
+
+# How strongly each palette component is washed toward the theme accent. Dark
+# surfaces take a noticeable tint so each theme clearly reads as its colour,
+# while text and the semantic activity colours keep most of their own identity
+# to stay legible and meaningful.
+_MACRO_MIX_RATIOS = {
+    "bg":             0.09,
+    "sidebar_bg":     0.12,
+    "card_bg":        0.14,
+    "grid":           0.24,
+    "text_primary":   0.04,
+    "text_secondary": 0.16,
+    "gather":         0.07,
+    "convert":        0.07,
+    "bug_run":        0.10,
+    "other":          0.15,
+    "honey":          0.07,
+}
+
+# Very subtle tint for the canvas base (the area behind/between panels). Kept
+# far lighter than the panels so the report stays dark and the panels still read
+# as the theme colour.
+_MACRO_BASE_BG_MIX = 0.05
+
+def buildMacroReportTheme(accent):
+    """Build a full report palette tinted toward a macro theme's accent colour."""
+    tint = _saturate(accent, _MACRO_TINT_SATURATION)
+    theme = {
+        key: _mixColor(base, tint, _MACRO_MIX_RATIOS.get(key, 0.15))
+        for key, base in _MACRO_REPORT_BASE.items()
+    }
+    theme["accent"] = tuple(accent)
+    return theme
+
+# Register a tinted report theme for every macro GUI theme.
+for _macroTheme, _macroAccent in MACRO_THEME_ACCENTS.items():
+    THEMES[_macroTheme] = buildMacroReportTheme(_macroAccent)
+
+# Aliases so alternate spellings of gui_theme still resolve to a report theme.
+_MACRO_THEME_ALIASES = {
+    "comander":       "commander",
+    "basic_bee":      "basic_black",
+    "gifted_tadpole": "gifted_tad",
+    "gifted_fuzzy":   "cream",
+    "fuzzy":          "brown",
+    "mythic":         "purple",
+    "precise":        "red",
+    "bouyant":        "blue",
+    "buoyant":        "blue",
+}
+
+def resolveReportTheme(guiTheme, fallback="brown"):
+    """Map a macro gui_theme value to its matching report theme key."""
+    key = str(guiTheme or "").strip().lower().replace(" ", "_")
+    key = _MACRO_THEME_ALIASES.get(key, key)
+    if key in THEMES:
+        return key
+    return fallback if fallback in THEMES else "dark"
+
 # Uptime buff rendering config
 # key → (chart_type, max_y, color_or_colors, asset_name)
 # chart_type: "stackable" | "binary" | "multi"
@@ -917,8 +1030,9 @@ class HourlyReport():
             except Exception:
                 continue
 
-        # read customization from settings
-        theme  = setdat.get("hourly_report_theme", "dark")  if isinstance(setdat, dict) else "dark"
+        # read customization from settings — the report theme follows the macro's GUI theme
+        gui_theme = setdat.get("gui_theme", "Brown") if isinstance(setdat, dict) else "Brown"
+        theme  = resolveReportTheme(gui_theme)
         accent = setdat.get("hourly_report_accent", "green") if isinstance(setdat, dict) else "green"
         send_embed_text = setdat.get("hourly_report_embed_text", True) if isinstance(setdat, dict) else True
 
@@ -1047,8 +1161,31 @@ class HourlyReportDrawer:
         self.convertColor = t["convert"]
         self.otherColor = t["other"]
         self.honeyColor = t["honey"]
-        self.accentColor = ACCENT_COLORS.get(accent, ACCENT_COLORS["green"])
+        # Macro themes bake in their own accent (the webapp --primary); fall back
+        # to the configurable accent palette for the legacy dark/midnight/oled themes.
+        self.accentColor = t.get("accent", ACCENT_COLORS.get(accent, ACCENT_COLORS["green"]))
         self.accentColorDim = tuple(max(0, int(c * 0.35)) for c in self.accentColor)
+
+        # Panel / graph chrome. For macro themes this is tinted toward the accent
+        # so the whole report (panels, graph backgrounds, gridlines) reflects the
+        # theme, not just the highlight line. The canvas base (behind/between the
+        # panels) gets only a very faint tint so it reads as a dark backdrop.
+        # Legacy themes keep the neutral look.
+        if "accent" in t:
+            tint = _saturate(self.accentColor, _MACRO_TINT_SATURATION)
+            self.baseBackgroundColor = _mixColor((18, 18, 18), tint, _MACRO_BASE_BG_MIX)
+            self.panelColor     = _mixColor((32, 30, 32), tint, 0.15)
+            self.panelOutline   = _mixColor((40, 38, 40), tint, 0.20)
+            self.graphBgColor   = _mixColor((20, 20, 20), tint, 0.10)
+            self.graphGridColor = _mixColor((47, 47, 55), tint, 0.22)
+            self.graphTickColor = _mixColor((64, 60, 78), tint, 0.22)
+        else:
+            self.baseBackgroundColor = (18, 18, 18)
+            self.panelColor     = (32, 30, 32)
+            self.panelOutline   = (40, 38, 40)
+            self.graphBgColor   = (20, 20, 20)
+            self.graphGridColor = (47, 47, 55)
+            self.graphTickColor = (64, 60, 78)
 
         # canvas width is fixed; height is dynamic (cropped to content at the end)
         self.canvasW = 5800
@@ -1090,7 +1227,7 @@ class HourlyReportDrawer:
 
     def _drawPanel(self, box, title=None, titleSize=64):
         x, y, w, h = box
-        self.draw.rounded_rectangle((x, y, x + w, y + h), radius=20, fill=(32, 30, 32), outline=(40, 38, 40), width=10)
+        self.draw.rounded_rectangle((x, y, x + w, y + h), radius=20, fill=self.panelColor, outline=self.panelOutline, width=10)
         if title:
             font = self.getFont("bold", titleSize)
             bbox = self.draw.textbbox((0, 0), title, font=font)
@@ -1098,19 +1235,19 @@ class HourlyReportDrawer:
 
     def _drawGraphGrid(self, graph, xTicks=6, yTicks=4, timelineTicks=True):
         x, y, w, h = graph
-        fill = (20, 20, 20, 128)
+        fill = (*self.graphBgColor, 128)
         self.draw.rectangle((x - 60, y, x + w + 60, y + h), fill=fill)
         for i in range(xTicks + 1):
             gx = x + w * i / xTicks
-            self.draw.line((gx, y, gx, y + h), fill=(47, 47, 55), width=3)
+            self.draw.line((gx, y, gx, y + h), fill=self.graphGridColor, width=3)
         for i in range(1, yTicks):
             gy = y + h * i / yTicks
-            self.draw.line((x - 60, gy, x + w + 60, gy), fill=(47, 47, 55), width=3)
+            self.draw.line((x - 60, gy, x + w + 60, gy), fill=self.graphGridColor, width=3)
         if timelineTicks:
             for i in range(61):
                 gx = x + w * i / 60
                 tick = 45 if i % 10 == 0 else 25
-                self.draw.line((gx, y + h + 20, gx, y + h + 20 + tick), fill=(64, 60, 78), width=3)
+                self.draw.line((gx, y + h + 20, gx, y + h + 20 + tick), fill=self.graphTickColor, width=3)
 
     def _timeLabels(self, count=7):
         labels = []
@@ -1370,7 +1507,7 @@ class HourlyReportDrawer:
         self.canvasW = 6000
         self.canvasMaxH = 5800
         self.canvasSize = (6000, 5800)
-        self.canvas = Image.new("RGBA", self.canvasSize, (18, 18, 18, 255))
+        self.canvas = Image.new("RGBA", self.canvasSize, (*self.baseBackgroundColor, 255))
         self.draw = ImageDraw.Draw(self.canvas)
 
         regions = {

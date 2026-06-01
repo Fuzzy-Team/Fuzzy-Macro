@@ -5,7 +5,7 @@ import json
 import ast
 import pickle
 import statistics
-from modules.submacros.hourlyReport import HourlyReport, HourlyReportDrawer, BuffDetector
+from modules.submacros.hourlyReport import HourlyReport, HourlyReportDrawer, BuffDetector, resolveReportTheme
 from modules.misc.settingsManager import getCurrentProfile, getMacroVersion
 
 
@@ -592,8 +592,9 @@ class FinalReport:
                 600
             )
 
-        # apply theme/accent from settings
-        theme  = setdat.get("hourly_report_theme",  "dark")  if isinstance(setdat, dict) else "dark"
+        # apply theme/accent from settings — the report theme follows the macro's GUI theme
+        gui_theme = setdat.get("gui_theme", "Brown") if isinstance(setdat, dict) else "Brown"
+        theme  = resolveReportTheme(gui_theme)
         accent = setdat.get("hourly_report_accent",  "green") if isinstance(setdat, dict) else "green"
         send_embed_text = setdat.get("hourly_report_embed_text", True) if isinstance(setdat, dict) else True
 
