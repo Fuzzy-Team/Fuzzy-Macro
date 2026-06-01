@@ -5258,13 +5258,13 @@ class macro:
                             x1 = max(0, int(x+8*self.multi))
                             x2 = min(width, int(x+36*self.multi))
                             buffImg = screen[15*self.multi:50*self.multi , x1:x2]
-                            sampleValues[j] = min(100, int(self.buffDetector.getBuffQuantityFromImgTight(buffImg)))
+                            sampleValues[j] = min(100, int(self.buffDetector.getBuffQuantityNatroStyle(buffImg)))
                         else:
                             x = res[0]+res[2]
                             x1 = max(0, int(x-25*self.multi))
                             x2 = min(width, int(x+5*self.multi))
                             buffImg = screen[15*self.multi:50*self.multi , x1:x2]
-                            sampleValues[j] = int(self.buffDetector.getBuffQuantityFromImgTight(buffImg))
+                            sampleValues[j] = int(self.buffDetector.getBuffQuantityNatroStyle(buffImg))
 
                 if "haste" in monitoredBuffs or "melody" in monitoredBuffs:
                     x = 0
@@ -5279,7 +5279,7 @@ class macro:
                             x1 = max(0, int(x+6*self.multi))
                             x2 = min(width, int(x+44*self.multi))
                             buffImg = screen[15*self.multi:50*self.multi , x1:x2]
-                            sampleValues["haste"] = int(self.buffDetector.getBuffQuantityFromImgTight(buffImg))
+                            sampleValues["haste"] = int(self.buffDetector.getBuffQuantityNatroStyle(buffImg))
                         x += 44*self.multi
                 #print(bd.detectBuffColorInImage(screen, 0xff242424, variation=12, minSize=(3*2,2*2), show=True))
 
@@ -5300,9 +5300,11 @@ class macro:
                             buffType = "white_boost"
 
                         if buffType in monitoredBuffs:
-                            x1 = max(0, x-25*self.multi)
-                            buffImg = screen[15*self.multi: 50*self.multi, x1: x]
-                            sampleValues[buffType] = int(self.buffDetector.getBuffQuantityFromImgTight(buffImg))
+                            x1 = max(0, int(x-25*self.multi))
+                            y1 = int(15*self.multi)
+                            y2 = int(50*self.multi)
+                            buffImg = screen[y1:y2, x1: int(x)]
+                            sampleValues[buffType] = int(self.buffDetector.getBuffQuantityNatroStyle(buffImg))
 
                         x -= 40*self.multi
                 
