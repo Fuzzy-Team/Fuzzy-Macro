@@ -3434,7 +3434,7 @@ if __name__ == "__main__":
                 
                 # Create final report object
                 finalReportObj = FinalReport()
-                sessionStats = finalReportObj.generateFinalReport(setdat)
+                sessionStats = finalReportObj.generateFinalReport(setdat, stop_time=time.time())
                 
                 # Check if report was generated successfully
                 if sessionStats and os.path.exists("finalReport.png"):
@@ -3442,7 +3442,13 @@ if __name__ == "__main__":
                     sessionTime = sessionStats.get("total_session_time", 0)
                     hours = int(sessionTime / 3600)
                     minutes = int((sessionTime % 3600) / 60)
-                    timeStr = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+                    seconds = int(sessionTime % 60)
+                    if hours > 0:
+                        timeStr = f"{hours}h {minutes}m {seconds}s"
+                    elif minutes > 0:
+                        timeStr = f"{minutes}m {seconds}s"
+                    else:
+                        timeStr = f"{seconds}s"
                     
                     totalHoney = sessionStats.get("total_honey", 0)
                     avgHoneyPerHour = sessionStats.get("avg_honey_per_hour", 0)
