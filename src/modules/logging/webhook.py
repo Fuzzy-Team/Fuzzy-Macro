@@ -1,9 +1,14 @@
 from discord_webhook import DiscordEmbed, DiscordWebhook
 from requests.exceptions import SSLError, ConnectionError
+from modules.misc.settingsManager import getMacroVersion
 
 # Global variable to store message ID for pinning
 last_message_id = None
 last_channel_id = None
+
+
+def response_footer():
+    return f"Fuzzy Macro - Version {getMacroVersion()} - Made by Logan :)"
 
 def webhook(url, title, desc, time, color, imagePath = None, ping_user_id = None, time_format=24, fields = None):
     global last_message_id, last_channel_id
@@ -35,6 +40,7 @@ def webhook(url, title, desc, time, color, imagePath = None, ping_user_id = None
         embed = DiscordEmbed(title="[{}] {}".format(formatted_time,title), description=desc, color=color)
     else:
         embed = DiscordEmbed(title="", description="[{}] {}".format(formatted_time,desc), color=color)
+    embed.set_footer(text=response_footer())
 
     # Add embed fields (for hourly/session report text summaries)
     if fields:
