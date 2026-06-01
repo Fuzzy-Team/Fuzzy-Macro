@@ -545,6 +545,8 @@ def _build_logger_embed(data):
         embed = discord.Embed(title=f"[{formatted_time}] {title}", description=desc, color=color)
     else:
         embed = discord.Embed(title="", description=f"[{formatted_time}] {desc}", color=color)
+    for field in data.get("fields") or []:
+        embed.add_field(name=field["name"], value=field["value"], inline=field.get("inline", False))
     if data.get("imagePath"):
         embed.set_image(url="attachment://screenshot.png")
     return embed
@@ -3632,7 +3634,16 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
             # Generate the image (saves to hourlyReport.png)
             hr.generateHourlyReport(setdat)
-            await interaction.followup.send(file = discord.File("hourlyReport.png"))
+            embed_fields = getattr(hr, "lastEmbedFields", None)
+            if embed_fields:
+                from discord import Embed, File
+                embed = Embed(title="Hourly Report", color=0x9966FF)
+                for f in embed_fields:
+                    embed.add_field(name=f["name"], value=f["value"], inline=f.get("inline", False))
+                embed.set_image(url="attachment://hourlyReport.png")
+                await interaction.followup.send(embed=embed, file=discord.File("hourlyReport.png"))
+            else:
+                await interaction.followup.send(file=discord.File("hourlyReport.png"))
 
         except Exception as e:
             await interaction.followup.send(f"❌ Error generating hourly report: {str(e)}")
@@ -3649,7 +3660,16 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             sessionStats = finalReportObj.generateFinalReport(setdat)
 
             if sessionStats and os.path.exists("finalReport.png"):
-                await interaction.followup.send(file=discord.File("finalReport.png"))
+                embed_fields = getattr(finalReportObj, "lastEmbedFields", None)
+                if embed_fields:
+                    from discord import Embed
+                    embed = Embed(title="Session Report", color=0x9966FF)
+                    for f in embed_fields:
+                        embed.add_field(name=f["name"], value=f["value"], inline=f.get("inline", False))
+                    embed.set_image(url="attachment://finalReport.png")
+                    await interaction.followup.send(embed=embed, file=discord.File("finalReport.png"))
+                else:
+                    await interaction.followup.send(file=discord.File("finalReport.png"))
             else:
                 await interaction.followup.send("❌ Failed to generate final session report - no data available.")
 
