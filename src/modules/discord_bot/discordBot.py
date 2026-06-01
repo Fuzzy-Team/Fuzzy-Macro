@@ -46,7 +46,7 @@ _shift_lock_template_cache = None
 
 
 def response_footer():
-    return f"Fuzzy Macro - Version {settingsManager.getMacroVersion()} - Made by Logan :)"
+    return f"Fuzzy Macro - Version {settingsManager.getMacroVersion()}"
 
 
 def _content_with_footer(content):
@@ -55,7 +55,7 @@ def _content_with_footer(content):
         return footer
 
     content = str(content)
-    if "Fuzzy Macro - Version" in content and "Made by Logan :)" in content:
+    if "Fuzzy Macro - Version" in content:
         return content
     return f"{content}\n\n{footer}"
 
@@ -67,7 +67,7 @@ def _apply_embed_footer(embed):
     footer = response_footer()
     existing_footer = getattr(getattr(embed, "footer", None), "text", None)
     if existing_footer:
-        if "Fuzzy Macro - Version" not in existing_footer or "Made by Logan :)" not in existing_footer:
+        if "Fuzzy Macro - Version" not in existing_footer:
             embed.set_footer(text=f"{existing_footer} | {footer}")
     else:
         embed.set_footer(text=footer)

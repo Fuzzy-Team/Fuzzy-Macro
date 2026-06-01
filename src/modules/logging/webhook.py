@@ -8,7 +8,7 @@ last_channel_id = None
 
 
 def response_footer():
-    return f"Fuzzy Macro - Version {getMacroVersion()} - Made by Logan :)"
+    return f"Fuzzy Macro - Version {getMacroVersion()}"
 
 def webhook(url, title, desc, time, color, imagePath = None, ping_user_id = None, time_format=24, fields = None):
     global last_message_id, last_channel_id
