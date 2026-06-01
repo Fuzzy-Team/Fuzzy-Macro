@@ -3447,7 +3447,7 @@ if __name__ == "__main__":
                     description = f"Runtime: {timeStr}\nTotal Honey: {millify(totalHoney)}\n{avgLabel}: {millify(avgHoneyPerHour)}"
                     
                     # Send final report webhook
-                    logger.finalReport("Session Complete", description, "purple")
+                    logger.finalReport("Session Complete", description, "purple", fields=getattr(finalReportObj, "lastEmbedFields", None))
                     print("Final report sent successfully")
                 else:
                     print("Failed to generate final report - no data available")
