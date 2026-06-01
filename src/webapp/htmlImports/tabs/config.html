@@ -608,6 +608,17 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
+        {
+          id: "hourly_report_uptime_buffs",
+          title: "Buff Uptime Options",
+          desc: "Comma-separated buff keys to track for hourly/session reports. The first 16 valid keys are visible.",
+          type: {
+            name: "textbox",
+            inputType: "string",
+            length: 180,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
       ]);
 
       buildStandardContainer(parentOther, "Keybinds", "", [

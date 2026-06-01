@@ -122,6 +122,14 @@ class FinalReportDrawer(HourlyReportDrawer):
         else:
             mins = list(range(dataPoints))
 
+        return self._drawStatMonitorReport(
+            "Session Report", hourlyReportStats, sessionTime, honeyPerSec, sessionHoney,
+            sessionStats.get("total_honey", sessionHoney), onlyValidHourlyHoney,
+            buffQuantity, nectarQuantity, planterData, uptimeBuffsValues,
+            buffGatherIntervals, configuredUptimeBuffs=uptimeBuff_list,
+            configuredHourlyBuffs=hourlyBuff_list, sessionStats=sessionStats,
+        )
+
         buffSampleCount = max(
             max((len(values) for values in uptimeBuffsValues.values()), default=0),
             len(buffGatherIntervals), 1)
