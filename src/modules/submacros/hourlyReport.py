@@ -86,7 +86,7 @@ BUFF_RENDER_CONFIG = {
     "focus":         ("stackable", 10,  (30,  191, 5),   "focus_buff"),
     "bomb_combo":    ("stackable", 10,  (160, 160, 160), "bomb_combo_buff"),
     "balloon_aura":  ("stackable", 10,  (50,  80,  200), "balloon_aura_buff"),
-    "inspire":       ("stackable", 50,  (195, 191, 18),  "inspire_buff"),
+    "inspire":       ("stackable", 10,  (195, 191, 18),  "inspire_buff"),
     "reindeerfetch": ("stackable", 10,  (204, 44,  44),  "reindeerfetch_buff"),
     "wealth_clock":  ("stackable", 10,  (255, 215, 0),   "wealth_clock_buff"),
     "tide_blessing": ("stackable", 10,  (91,  211, 255), "tide_blessing_buff"),
@@ -668,14 +668,26 @@ class HourlyReport():
         
         return filtered_values
 
-    def generateEmbedFields(self, hourlyReportStats, sessionTime, sessionHoney, honeyThisHour, onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData):
-        """Build Discord embed text fields (Revolution Macro style) for hybrid embed+image output."""
+    def generateEmbedFields(self, hourlyReportStats, sessionTime, sessionHoney, honeyThisHour, onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData, reportType="hourly"):
+        """Build old-style Discord embed text fields for hybrid embed+image output."""
         def fmt(n):
-            return self.hourlyReportDrawer.millify(n)
+            return self.hourlyReportDrawer.millify(n).replace(" ", "")
         def fmtTime(s):
-            return self.hourlyReportDrawer.displayTime(s, ['h', 'm', 's'])
+            return self.hourlyReportDrawer.displayTime(s, ['h', 'm', 's']).replace(" ", "")
         def pct(part, total):
             return f"{round(part / total * 100, 1)}%" if total else "0%"
+        def planterEmoji(planterName):
+            return "🪴" if planterName else "🌱"
+        def fieldEmoji(fieldName):
+            return "🌼" if fieldName else ""
+        def nectarEmoji(nectarName):
+            return {
+                "comforting": "🌙",
+                "motivating": "🍄",
+                "satisfying": "💜",
+                "refreshing": "💧",
+                "invigorating": "🔥",
+            }.get(nectarName, "✨")
 
         avgHoney = max(0, sessionHoney / (sessionTime / 3600)) if sessionTime > 0 else 0
         currentHoney = onlyValidHourlyHoney[-1] if onlyValidHourlyHoney else 0
@@ -683,14 +695,19 @@ class HourlyReport():
 
         fields = []
 
-        # Honey row (two inline fields)
-        fields.append({"name": "🍯 Honey This Hour", "value": f"{fmt(honeyThisHour)}\nAvg/hr: {fmt(avgHoney)}", "inline": True})
-        session_lines = [
-            f"Current: {fmt(currentHoney)}",
-            f"Total: {fmt(sessionHoney)}",
-            f"Duration: {fmtTime(sessionTime)}",
+        honeyTitle = "Session" if reportType == "session" else "Hourly"
+        honeyLines = [
+            f"🍯 Honey Earned: {fmt(honeyThisHour)}",
+            f"🍯 Hourly Average: {fmt(avgHoney)}",
         ]
-        fields.append({"name": "⏱️ Session", "value": "\n".join(session_lines), "inline": True})
+        fields.append({"name": honeyTitle, "value": "\n".join(honeyLines), "inline": False})
+
+        session_lines = [
+            f"🍯 Current: {fmt(currentHoney)}",
+            f"🍯 Session: {fmt(sessionHoney)}",
+            f"🕓 Duration: {fmtTime(sessionTime)}",
+        ]
+        fields.append({"name": "Session", "value": "\n".join(session_lines), "inline": False})
 
         # Activity breakdown
         gath = hourlyReportStats.get("gathering_time", 0)
@@ -698,12 +715,12 @@ class HourlyReport():
         bug  = hourlyReportStats.get("bug_run_time", 0)
         misc = hourlyReportStats.get("misc_time", 0)
         activity_lines = [
-            f"🟢 Gathering: {fmtTime(gath)} ({pct(gath, totalTime)})",
-            f"🟡 Converting: {fmtTime(conv)} ({pct(conv, totalTime)})",
+            f"🟢 Gathering: {fmtTime(gath)}",
+            f"🟠 Converting: {fmtTime(conv)}",
         ]
         if bug > 0:
-            activity_lines.append(f"🔴 Bug Run: {fmtTime(bug)} ({pct(bug, totalTime)})")
-        activity_lines.append(f"⬜ Other: {fmtTime(misc)} ({pct(misc, totalTime)})")
+            activity_lines.append(f"🔴 Bug Run: {fmtTime(bug)}")
+        activity_lines.append(f"🔵 Travelling: {fmtTime(misc)}")
         fields.append({"name": "Activity", "value": "\n".join(activity_lines), "inline": False})
 
         # Bugs / quests / vicious bees (compact inline)
@@ -717,24 +734,15 @@ class HourlyReport():
         if stats_parts:
             fields.append({"name": "Stats", "value": "  •  ".join(stats_parts), "inline": False})
 
-        # Hourly snapshot buffs (non-zero only)
-        buff_parts = []
-        for i, buffKey in enumerate(self.configuredHourlyBuffs):
-            val = buffQuantity[i] if i < len(buffQuantity) else None
-            if val and str(val) != "0":
-                buff_parts.append(f"{buffKey.replace('_', ' ').title()}: x{val}")
-        if buff_parts:
-            fields.append({"name": "Buffs", "value": "  •  ".join(buff_parts), "inline": False})
-
         # Nectars (non-zero)
         nectar_names = ["comforting", "motivating", "satisfying", "refreshing", "invigorating"]
         nectar_order = [0, 2, 4, 3, 1]
         nectar_parts = []
         for name, data_index in zip(nectar_names, nectar_order):
             if data_index < len(nectarQuantity) and int(nectarQuantity[data_index] or 0) > 0:
-                nectar_parts.append(f"{name.title()}: {int(nectarQuantity[data_index])}%")
+                nectar_parts.append(f"{nectarEmoji(name)} {name.title()}: {int(nectarQuantity[data_index])}%")
         if nectar_parts:
-            fields.append({"name": "Nectars", "value": "  •  ".join(nectar_parts), "inline": False})
+            fields.append({"name": "Nectar", "value": "\n".join(nectar_parts), "inline": False})
 
         # Planters
         if planterData:
@@ -747,7 +755,7 @@ class HourlyReport():
                 harvest = planterData.get("harvestTimes", [])[i] if i < len(planterData.get("harvestTimes", [])) else 0
                 remaining = harvest - time.time()
                 timeStr = self.hourlyReportDrawer.displayTime(max(0, remaining), ['h', 'm']) if remaining > 0 else "Ready!"
-                planter_parts.append(f"{pname.title()} @ {field.title()}: {timeStr}")
+                planter_parts.append(f"{planterEmoji(pname)} {pname.title()}: {timeStr} {fieldEmoji(field)}")
             if planter_parts:
                 fields.append({"name": "Planters", "value": "\n".join(planter_parts), "inline": False})
 
@@ -875,7 +883,7 @@ class HourlyReport():
         if send_embed_text:
             self.lastEmbedFields = self.generateEmbedFields(
                 hourlyReportStats, sessionTime, sessionHoney, honeyThisHour,
-                    onlyValidHourlyHoney, displayBuffQuantity, nectarQuantity, planterData)
+                    onlyValidHourlyHoney, displayBuffQuantity, nectarQuantity, planterData, reportType="hourly")
         else:
             self.lastEmbedFields = None
 
