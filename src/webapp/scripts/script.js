@@ -1012,6 +1012,12 @@ function normalizeDropdownMultiValue(value) {
   if (typeof value === "string") {
     const trimmed = value.trim();
     if (!trimmed || trimmed === "0") return [];
+    if (trimmed.includes(",")) {
+      return trimmed
+        .split(",")
+        .map(normalizeDropdownOptionValue)
+        .filter((item) => item !== "");
+    }
     if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
       try {
         const parsed = JSON.parse(trimmed);
