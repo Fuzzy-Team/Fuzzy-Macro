@@ -800,7 +800,10 @@ class HourlyReport():
         # parse configurable buff lists from settings (comma-separated strings)
         raw_uptime = setdat.get("hourly_report_uptime_buffs", "") if isinstance(setdat, dict) else ""
         raw_hourly = setdat.get("hourly_report_hourly_buffs", "") if isinstance(setdat, dict) else ""
-        uptime_buffs = [b.strip() for b in raw_uptime.split(",") if b.strip()] if raw_uptime else self.configuredUptimeBuffs
+        if isinstance(raw_uptime, list):
+            uptime_buffs = raw_uptime
+        else:
+            uptime_buffs = [b.strip() for b in raw_uptime.split(",") if b.strip()] if raw_uptime else self.configuredUptimeBuffs
         hourly_buffs = [b.strip() for b in raw_hourly.split(",") if b.strip()] if raw_hourly else self.configuredHourlyBuffs
 
         # re-apply theme/accent if they changed
@@ -1040,9 +1043,12 @@ class HourlyReportDrawer:
         x, y, w, h = region
         total = max(1, sum(max(0, r["seconds"]) for r in rows))
         angle = -90
-        pieTop = y + (402 if title == "SESSION" else 318)
         legendTop = y + (432 if title == "SESSION" else 348)
-        pie = (x + 220, pieTop, x + 500, pieTop + 280)
+        pieSize = 280
+        pieCenterY = legendTop + 110
+        pieTop = pieCenterY - pieSize / 2
+        pieLeft = x + 95
+        pie = (pieLeft, pieTop, pieLeft + pieSize, pieTop + pieSize)
         for row in rows:
             extent = row["seconds"] / total * 360
             self.draw.pieslice(pie, angle, angle + extent, fill=row["color"])
@@ -1236,8 +1242,8 @@ class HourlyReportDrawer:
         regions = {
             "honey/sec": (120, 120, 4080, 1080),
             "stats": (4320, 120, 1560, 5560),
-            "backpack": (120, 1440, 4080, 820),
-            "buffs": (120, 2380, 4080, 3300),
+            "backpack": (120, 1320, 4080, 1140),
+            "buffs": (120, 2580, 4080, 3100),
         }
         statRegions = {
             "lasthour": (4420, 220, 1360, 1206),
@@ -1262,7 +1268,7 @@ class HourlyReportDrawer:
         self._drawTimeLabels(honeyGraph, regions["honey/sec"][1] + regions["honey/sec"][3] - 85)
 
         self._drawPanel(regions["backpack"], "BACKPACK")
-        backpackGraph = (440, 1570, 3600, 540)
+        backpackGraph = (440, 1450, 3600, 860)
         self._drawGraphGrid(backpackGraph, xTicks=6, yTicks=2)
         self._drawYAxisLabels(backpackGraph, ["100%", "50%", "0%"], 40)
         self._drawAreaSeries(backpackGraph, hourlyReportStats.get("backpack_per_min", [0]), (65, 255, 128), maxY=100, alpha=130)

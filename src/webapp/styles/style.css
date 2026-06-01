@@ -836,6 +836,13 @@ select:focus {
   color: var(--text-main);
 }
 
+.custom-select .value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .custom-select .select-menu {
   position: absolute;
   top: 100%;
