@@ -1314,7 +1314,7 @@ class HourlyReportDrawer:
             (f"Fuzzy Macro - {versionText}", (255, 255, 255), 56),
             (reportTitle, (255, 218, 61), 56),
             (f"Runtime: {self._durationHMS(sessionTime)}", (79, 223, 38), 56),
-            ("Made by Logan", (4, 180, 228), 56),
+            ("Made by Logan :)", (4, 180, 228), 56),
         ]
         yy = y + 72
         for text, color, size in lines:
