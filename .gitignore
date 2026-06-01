@@ -32,3 +32,4 @@ smoke_hourly_report.py
 src/data/legacy_user_backups
 docs/
 tools/
+generate_theme_reports.py
