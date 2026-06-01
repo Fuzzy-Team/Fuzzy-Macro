@@ -614,7 +614,7 @@ class FinalReport:
                 self.lastEmbedFields = self.hourlyReport.generateEmbedFields(
                     hourlyReportStats, sessionTime, sessionHoney,
                     sessionHoney,  # honeyThisHour = total for session report
-                    onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData)
+                    onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData, reportType="session")
             else:
                 self.lastEmbedFields = None
 
