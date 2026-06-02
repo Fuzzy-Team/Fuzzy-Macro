@@ -397,12 +397,13 @@ class HasteCompensationRevamped():
         self.robloxWindow = robloxWindow
         self.baseMoveSpeed = baseMoveSpeed
 
-        self.countBitmaps = []
+        self.countBitmaps = self._loadCountBitmaps()
         self.bearMorphs = []
         self.hasteBitmap = Image.new('RGBA', (10, 1), '#f0f0f0ff')
         self.melodyBitmap = Image.new('RGBA', (3, 2), '#2b2b2bff')
 
         if self.robloxWindow.isRetina:
+            
             for i in range(2,11):
                 self.countBitmaps.append(Image.open(f"images/buffs/counts/{i}.png").convert('RGBA'))
 
@@ -413,7 +414,6 @@ class HasteCompensationRevamped():
         else:
             #base64 images taken directly from natro macro
             #https://github.com/NatroTeam/NatroMacro/blob/main/lib/Walk.ahk
-            self.countBitmaps = self._loadNatroCountBitmaps()
 
             self.bearMorphs.append(bitmap_matcher.create_bitmap_from_base64("iVBORw0KGgoAAAANSUhEUgAAAAwAAAABBAMAAAAYxVIKAAAAD1BMVEUwLi1STEihfVWzpZbQvKTt7OCuAAAAEklEQVR4AQEHAPj/ACJDEAE0IgLvAM1oKEJeAAAAAElFTkSuQmCC"))
             self.bearMorphs.append(bitmap_matcher.create_bitmap_from_base64("iVBORw0KGgoAAAANSUhEUgAAAA4AAAABBAMAAAAcMII3AAAAFVBMVEUwLi1TTD9lbHNmbXN5enW5oXHQuYJDhTsuAAAAE0lEQVR4AQEIAPf/ACNGUQAVZDIFbwFmjB55HwAAAABJRU5ErkJggg=="))
@@ -427,12 +427,15 @@ class HasteCompensationRevamped():
         self.prevHaste = 0
         self.endTime = 0
 
-    def _loadNatroCountBitmaps(self):
+    def _loadCountBitmaps(self):
+        scale = max(1, int(round(getattr(self.robloxWindow, "multi", 1) or 1)))
         bitmaps = []
         for value in range(2, 11):
             templateDigit = 1 if value == 10 else value
             raw = base64.b64decode(NATRO_BUFF_CHARACTER_TEMPLATES[templateDigit])
             img = Image.open(BytesIO(raw)).convert("RGBA")
+            if scale != 1:
+                img = img.resize((img.width * scale, img.height * scale), Image.Resampling.NEAREST)
             bitmaps.append(img)
         return bitmaps
 
