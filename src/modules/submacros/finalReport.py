@@ -454,7 +454,7 @@ class FinalReport:
             "tabby_love":   ["top",    True, True],
             "polar_power":  ["top",    True, True],
             "wealth_clock": ["top",    True, True],
-            "blessing":     ["middle", True, True],
+            "blessing":     ["top",    True, True],
             "bloat":        ["top",    True, True],
             "tide_blessing":["top",    True, True],
             "mondo":        ["top",    True, True],
