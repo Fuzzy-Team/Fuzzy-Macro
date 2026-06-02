@@ -5741,6 +5741,7 @@ class macro:
                 screen = cv2.cvtColor(self.buffDetector.screenshotBuffArea(), cv2.COLOR_BGRA2BGR)
                 height, width = screen.shape[:2]
                 uptimeBuffsColors = self.hourlyReport.uptimeBuffsColors
+                uptimeBuffsColorVariations = getattr(self.hourlyReport, "uptimeBuffsColorVariations", {})
                 uptimeBearBuffs = self.hourlyReport.uptimeBearBuffs
                 monitoredBuffs = set(self.hourlyReport.configuredUptimeBuffDataKeys(self.setdat))
                 selectedUptimeRows = set(self.hourlyReport.configuredUptimeBuffs)
@@ -5755,7 +5756,7 @@ class macro:
 
                 if "baby_love" in monitoredBuffs:
                     j = "baby_love"
-                    if self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors[j][0], uptimeBuffsColors[j][1], y1=30*self.multi, searchDirection=7):
+                    if self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors[j][0], uptimeBuffsColors[j][1], y1=30*self.multi, variation=uptimeBuffsColorVariations.get(j, 0), searchDirection=7):
                         sampleValues[j] = 1
 
                 if "bear" in monitoredBuffs:
@@ -5764,7 +5765,7 @@ class macro:
                         sampleValues["bear"] = 1
 
                 for j in [key for key in selectedUptimeRows if key in uptimeBuffsColors and key not in {"baby_love", "haste", "melody", "boost", "bear"}]:
-                    res = self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors[j][0], uptimeBuffsColors[j][1], y1=30*self.multi, y2=50*self.multi, searchDirection=7)
+                    res = self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors[j][0], uptimeBuffsColors[j][1], y1=30*self.multi, y2=50*self.multi, variation=uptimeBuffsColorVariations.get(j, 0), searchDirection=7)
                     if res:
                         chartType = BUFF_RENDER_CONFIG.get(j, ("binary",))[0]
                         if chartType == "binary":
@@ -5781,11 +5782,11 @@ class macro:
                 if "haste" in monitoredBuffs or "melody" in monitoredBuffs:
                     x = 0
                     for _ in range(3):
-                        res = self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["haste"][0], uptimeBuffsColors["haste"][1],x, 30*self.multi, searchDirection=6)
+                        res = self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["haste"][0], uptimeBuffsColors["haste"][1],x, 30*self.multi, variation=uptimeBuffsColorVariations.get("haste", 0), searchDirection=6)
                         if not res:
                             break
                         x = res[0]
-                        if "melody" in monitoredBuffs and self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["melody"][0], uptimeBuffsColors["melody"][1], x+2*self.multi, 30, x+34*self.multi, 40*self.multi, 12):
+                        if "melody" in monitoredBuffs and self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["melody"][0], uptimeBuffsColors["melody"][1], x+2*self.multi, 30, x+34*self.multi, 40*self.multi, max(12, uptimeBuffsColorVariations.get("melody", 0))):
                             sampleValues["melody"] = 1
                         elif "haste" in monitoredBuffs and not sampleValues.get("haste", 0):
                             x1 = max(0, int(x+6*self.multi))
@@ -5800,15 +5801,15 @@ class macro:
                 if any(buff in monitoredBuffs for buff in ("blue_boost", "red_boost", "white_boost")):
                     x = screen.shape[1]
                     for _ in range(3):
-                        res = self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["boost"][0], uptimeBuffsColors["boost"][1], y1=30*self.multi, x2=x, searchDirection=7)
+                        res = self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["boost"][0], uptimeBuffsColors["boost"][1], y1=30*self.multi, x2=x, variation=uptimeBuffsColorVariations.get("boost", 0), searchDirection=7)
                         if not res:
                             break
                         x = res[0]+res[2]
                         y = res[1] + res[3]
 
-                        if len(self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["red_boost"][0], uptimeBuffsColors["red_boost"][1], x-30*self.multi, 15*self.multi, x-4*self.multi, 34*self.multi, 20)):
+                        if len(self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["red_boost"][0], uptimeBuffsColors["red_boost"][1], x-30*self.multi, 15*self.multi, x-4*self.multi, 34*self.multi, max(20, uptimeBuffsColorVariations.get("red_boost", 0)))):
                             buffType = "red_boost"
-                        elif len(self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["blue_boost"][0], uptimeBuffsColors["blue_boost"][1], x-30*self.multi, 15*self.multi, x-4*self.multi, 34*self.multi, 20)):
+                        elif len(self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["blue_boost"][0], uptimeBuffsColors["blue_boost"][1], x-30*self.multi, 15*self.multi, x-4*self.multi, 34*self.multi, max(20, uptimeBuffsColorVariations.get("blue_boost", 0)))):
                             buffType = "blue_boost"
                         else:
                             buffType = "white_boost"
