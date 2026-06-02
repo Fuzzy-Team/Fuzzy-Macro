@@ -219,7 +219,7 @@ BUFF_RENDER_CONFIG = {
     "tide_blessing": ("stackable", 1.2, (91,  211, 255), "tide_blessing_buff"),
     "mondo":         ("stackable", 10,  (128, 255, 0),   "mondo_buff"),
     "blessing":      ("stackable", 100, (204, 68,  255), "blessing_buff"),
-    "bloat":         ("stackable", 5,   (208, 208, 208), "bloat_buff"),
+    "bloat":         ("stackable", 6,   (208, 208, 208), "bloat_buff"),
     "honey_mark":    ("stackable", 3,   (255, 209, 25),  "honey_mark_buff"),
     "pollen_mark":   ("stackable", 3,   (255, 233, 148), "pollen_mark_buff"),
     "melody":        ("binary",    1,   (200, 200, 200), "melody_buff"),
@@ -240,6 +240,14 @@ HOURLY_BUFF_ASSETS = {
     "bloat":         "bloat_buff",
     "tide_blessing": "tide_blessing_buff",
     "mondo":         "mondo_buff",
+}
+
+HOURLY_BUFF_OCR_MAX_VALUES = {
+    "tabby_love": 1000,
+    "wealth_clock": 5,
+    "blessing": 100,
+    "bloat": 6,
+    "tide_blessing": 1.2,
 }
 
 # Ordered main/important buffs first, situational ones last (shown top-to-bottom in the grid)
@@ -432,117 +440,67 @@ class BuffDetector():
         hasteVal = ''.join([x for x in ocrText if x.isdigit()])
         return hasteVal if hasteVal else '1'
 
-    def _loadBuffCountTemplates(self):
-        if hasattr(self, "_buffCountTemplates"):
-            return self._buffCountTemplates
-
-        templates = []
-        scale = max(1, int(round(self.robloxWindow.multi or 1)))
-        for value in range(10, 1, -1):
-            digit = 1 if value == 10 else value
-            arr = np.frombuffer(base64.b64decode(NATRO_BUFF_CHARACTER_TEMPLATES[digit]), np.uint8)
-            mask = cv2.imdecode(arr, cv2.IMREAD_GRAYSCALE)
-            if mask is None:
-                continue
-            _, mask = cv2.threshold(mask, 1, 255, cv2.THRESH_BINARY)
-            if scale != 1:
-                h, w = mask.shape[:2]
-                mask = cv2.resize(mask, (w * scale, h * scale), interpolation=cv2.INTER_NEAREST)
-            templates.append((value, mask))
-
-        self._buffCountTemplates = templates
-        return templates
-
-    def getBuffQuantityNatroStyle(self, bgrImg, default="1", ocrFallback=True):
-        """Read x2-x10 stack text with count templates first, OCR only as fallback."""
-        if bgrImg is None or bgrImg.size == 0:
-            return default
-
-        bgrImg = self._ensureBgrBuffScreen(bgrImg)
-        whiteMask = cv2.inRange(bgrImg, np.array([235, 235, 235]), np.array([255, 255, 255]))
-        if cv2.countNonZero(whiteMask):
-            bestValue = None
-            bestScore = 0
-            for value, template in self._loadBuffCountTemplates():
-                th, tw = template.shape[:2]
-                if th > whiteMask.shape[0] or tw > whiteMask.shape[1]:
-                    continue
-                try:
-                    res = cv2.matchTemplate(whiteMask, template, cv2.TM_CCOEFF_NORMED)
-                except cv2.error:
-                    continue
-                _, score, _, _ = cv2.minMaxLoc(res)
-                if score > bestScore:
-                    bestValue = value
-                    bestScore = score
-            if bestValue is not None and bestScore >= 0.55:
-                return str(bestValue)
-
-        if not ocrFallback:
-            return default
+    def getBuffQuantityFromImgTightDecimal(self, bgrImg, crop=True, show=False):
+        img = bgrImg
+        if crop:
+            h, *_ = img.shape
+            img = img[int(h * 0.50):, :]
+        # Mask the white stack text. Keep the threshold loose enough to include the
+        # anti-aliased edges of the tiny decimal point, and do NOT dilate: a kernel
+        # large enough to thicken the digits also swallows the "." so a value like
+        # x2.93 (bloat) would read as "293" and depend on a fragile repair guess.
+        mask = cv2.inRange(img, np.array([200, 200, 200]), np.array([255, 255, 255]))
+        # Black text on a white background OCRs more reliably; upscale generously so
+        # the decimal point survives.
+        img = Image.fromarray(255 - mask).resize((mask.shape[1] * 5, mask.shape[0] * 5), Image.LANCZOS)
+        if show:
+            img.show()
+        ocrText = ''.join([x[1][0] for x in ocrRead(img)]).replace(":", ".").replace(",", ".")
+        buffCount = ''.join([x for x in ocrText if x.isdigit() or x == "."]).strip(".")
+        if not buffCount:
+            return "1"
+        parts = [part for part in buffCount.split(".") if part]
+        if len(parts) > 1:
+            buffCount = f"{parts[0]}.{parts[1]}"
+        elif parts:
+            buffCount = parts[0]
+        else:
+            return "1"
         try:
-            return self.getBuffQuantityFromImgTight(bgrImg)
-        except Exception:
-            return default
+            return buffCount if float(buffCount) > 0 else "1"
+        except ValueError:
+            return "1"
 
-    def getScaledBuffQuantityFromScreen(self, screen, buffRect, hexColor, maxValue, baseValue=0, decimals=0, variation=6):
-        """Estimate Natro-style scaled buff values from the icon fill height."""
-        if not buffRect:
-            return 0
-
-        x, y, w, h = buffRect
-        r = (hexColor >> 16) & 0xFF
-        g = (hexColor >> 8) & 0xFF
-        b = hexColor & 0xFF
-        bgr = np.array([b, g, r])
-        lower = np.clip(bgr - variation, 0, 255)
-        upper = np.clip(bgr + variation, 0, 255)
-
-        height, width = screen.shape[:2]
-        iconWidth = max(1, int(38 * self.robloxWindow.multi))
-        y1 = max(0, int(6 * self.robloxWindow.multi))
-        y2 = min(height, int(44 * self.robloxWindow.multi))
-
-        candidateXs = [
-            int(x),
-            int(x + w - iconWidth),
-            int(x - iconWidth // 2),
+    def getBuffQuantityFromImgOcrRobust(self, bgrImg, transform, buff=None):
+        maxValue = HOURLY_BUFF_OCR_MAX_VALUES.get(buff)
+        candidates = [
+            self.getBuffQuantityFromImg(bgrImg, transform),
+            self.getBuffQuantityFromImg(bgrImg, transform, crop=False),
+            self.getBuffQuantityFromImgTightDecimal(bgrImg),
+            self.getBuffQuantityFromImgTightDecimal(bgrImg, crop=False),
         ]
-        bestCrop = None
-        bestPixels = -1
-        for candidateX in candidateXs:
-            x1 = max(0, min(width - 1, candidateX))
-            x2 = min(width, x1 + iconWidth)
-            crop = screen[y1:y2, x1:x2]
-            if crop.size == 0:
+        best = "1"
+        bestValue = 1.0
+        for candidate in candidates:
+            try:
+                value = float(candidate)
+            except (TypeError, ValueError):
                 continue
-            mask = cv2.inRange(crop, lower, upper)
-            pixels = int(cv2.countNonZero(mask))
-            if pixels > bestPixels:
-                bestPixels = pixels
-                bestCrop = crop
-
-        crop = bestCrop
-        if crop is None or crop.size == 0:
-            return 0
-
-        mask = cv2.inRange(crop, lower, upper)
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if not contours:
-            return 0
-
-        _, topY, _, _ = cv2.boundingRect(max(contours, key=cv2.contourArea))
-        fillRatio = max(0.0, min(1.0, (crop.shape[0] - topY) / max(crop.shape[0], 1)))
-        value = baseValue + fillRatio * maxValue
-        if decimals:
-            return round(value, decimals)
-        return int(round(value))
-
-    def getTideBlessingValueFromScreen(self, screen, buffRect):
-        """Estimate Tide Blessing multiplier from the blue fill height."""
-        return self.getScaledBuffQuantityFromScreen(
-            screen, buffRect, 0x91c2fd, 0.19, baseValue=1.01, decimals=2, variation=8
-        )
+            if maxValue is not None and value > maxValue and "." not in str(candidate):
+                repaired = f"{str(candidate)[0]}.{str(candidate)[1:]}"
+                try:
+                    repairedValue = float(repaired)
+                    if 0 < repairedValue <= maxValue:
+                        candidate = repaired
+                        value = repairedValue
+                except ValueError:
+                    pass
+            if maxValue is not None and value > maxValue:
+                continue
+            if value > bestValue:
+                best = candidate
+                bestValue = value
+        return best
 
     def _ensureBgrBuffScreen(self, screen):
         if screen is None:
@@ -551,76 +509,48 @@ class BuffDetector():
             return cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
         return screen
 
-    def getTideBlessingAhkStyle(self, screen):
-        """Detect Tide Blessing like StatMonitor: find its blue fill and scale it."""
+    def getBuffQuantityFromDetectedRect(self, screen, buffRect, transform=True, xOffset=None, buff=None):
+        """OCR a full buff tile from a detected icon/color rectangle."""
         bgrScreen = self._ensureBgrBuffScreen(screen)
-        if bgrScreen is None:
+        if bgrScreen is None or not buffRect:
             return "0"
-        res = self.detectBuffColorInImage(
-            bgrScreen,
-            0x91c2fd,
-            (8, 1),
-            y1=6*self.robloxWindow.multi,
-            y2=44*self.robloxWindow.multi,
-            variation=8,
-            searchDirection=7,
-        )
-        if not res:
-            return "0"
-        y = res[1]
-        scale = max(float(self.robloxWindow.multi or 1), 1.0)
-        value = round(1.01 + 0.19 * ((44.3 * scale - y) / (38 * scale)), 2)
-        value = max(1.01, min(1.2, value))
-        return str(value) if value else "0"
 
-    def getMondoAhkStyle(self, screen):
-        """Detect Mondo Chick Blessing from the AHK icon color and right-side stack digit."""
-        bgrScreen = self._ensureBgrBuffScreen(screen)
-        if bgrScreen is None:
-            return "0"
-        height, width = bgrScreen.shape[:2]
-        res = self.detectBuffColorInImage(
-            bgrScreen,
-            0xbea2a3,
-            (5, 1),
-            y1=20*self.robloxWindow.multi,
-            y2=46*self.robloxWindow.multi,
-            variation=10,
-            searchDirection=7,
-        )
-        if not res:
-            return "0"
-        x = res[0]
-        x1 = max(0, int(x+16*self.robloxWindow.multi))
-        x2 = min(width, int(x+36*self.robloxWindow.multi))
-        y1 = int(20*self.robloxWindow.multi)
-        y2 = min(height, int(46*self.robloxWindow.multi))
-        buffImg = bgrScreen[y1:y2, x1:x2]
-        if buffImg.size == 0:
-            return "1"
-        return self.getBuffQuantityNatroStyle(buffImg)
-
-    def getStackQuantityNearBuff(self, screen, buff, iconX, iconW=None):
-        bgrScreen = self._ensureBgrBuffScreen(screen)
-        if bgrScreen is None:
-            return "1"
         height, width = bgrScreen.shape[:2]
         scale = self.robloxWindow.multi
-        if buff == "blessing":
-            x1 = max(0, int(iconX + 8*scale))
-            x2 = min(width, int(iconX + 36*scale))
-        elif buff == "mondo":
-            x1 = max(0, int(iconX + 16*scale))
-            x2 = min(width, int(iconX + 36*scale))
-        elif buff == "haste":
-            x1 = max(0, int(iconX + 6*scale))
-            x2 = min(width, int(iconX + 44*scale))
-        else:
-            x1 = max(0, int(iconX - 20*scale))
-            x2 = min(width, int(iconX + 2*scale))
-        y1 = max(0, int(15*scale))
-        y2 = min(height, int(50*scale))
-        return self.getBuffQuantityNatroStyle(bgrScreen[y1:y2, x1:x2])
+        x = int(buffRect[0])
+        if xOffset is None:
+            xOffset = -16 * scale
+        cropX = int(np.clip(x + xOffset, 0, max(0, width - self.buffSize - 5)))
+        cropY = 0
+        tile = bgrScreen[cropY:cropY+self.buffSize+2, cropX:cropX+self.buffSize+5]
+        if tile.size == 0:
+            return "0"
+        return self.getBuffQuantityFromImgOcrRobust(tile, transform, buff=buff)
+
+    def getBuffQuantityFromColorOcr(self, screen, hexColor, minSize, variation=8, xOffset=None, transform=True, buff=None):
+        bgrScreen = self._ensureBgrBuffScreen(screen)
+        if bgrScreen is None:
+            return "0"
+        res = self.detectBuffColorInImage(
+            bgrScreen,
+            hexColor,
+            minSize,
+            y1=6*self.robloxWindow.multi,
+            y2=44*self.robloxWindow.multi,
+            variation=variation,
+            searchDirection=7,
+        )
+        if not res:
+            return "0"
+        return self.getBuffQuantityFromDetectedRect(bgrScreen, res, transform=transform, xOffset=xOffset, buff=buff)
+
+    def getTideBlessingOcr(self, screen):
+        """Detect Tide Blessing by color, then OCR the visible stack text."""
+        return self.getBuffQuantityFromColorOcr(screen, 0x91c2fd, (8, 1), variation=8, buff="tide_blessing")
+
+    def getMondoOcr(self, screen):
+        """Detect Mondo Chick Blessing by color, then OCR the visible stack text."""
+        return self.getBuffQuantityFromColorOcr(screen, 0xbea2a3, (5, 1), variation=10, buff="mondo")
 
     def getBuffsWithImage(self, buffs, save=False, screen = None, threshold=0.7):
         buffQuantity = []
@@ -637,9 +567,9 @@ class BuffDetector():
                 buffTemplate = adjustImage("./images/buffs", buff, self.robloxWindow.display_type)
             except FileNotFoundError:
                 if buff == "tide_blessing":
-                    buffQuantity.append(self.getTideBlessingAhkStyle(screen))
+                    buffQuantity.append(self.getTideBlessingOcr(screen))
                 elif buff == "mondo":
-                    buffQuantity.append(self.getMondoAhkStyle(screen))
+                    buffQuantity.append(self.getMondoOcr(screen))
                 else:
                     buffQuantity.append("0")
                 continue
@@ -687,9 +617,9 @@ class BuffDetector():
                 if save:
                     cv2.imwrite(f"{buff}-{time.time()}.png", fullBuffImgBGR)
 
-                buffVal = self.getStackQuantityNearBuff(screen, buff, cropX, w)
-                if buffVal == "1":
-                    buffVal = self.getBuffQuantityFromImg(fullBuffImgBGR, transform, buff=buff)
+                # Match the hourly report detector from the provided reference file:
+                # crop the full buff tile and OCR the stack text from that tile.
+                buffVal = self.getBuffQuantityFromImgOcrRobust(fullBuffImgBGR, transform, buff=buff)
                 if buffVal == "1":
                     time.sleep(1)
                 finalBuffValues.append(buffVal)
@@ -883,7 +813,7 @@ class HourlyReport():
             "tabby_love":   ["top",    True, True],
             "polar_power":  ["top",    True, True],
             "wealth_clock": ["top",    True, True],
-            "blessing":     ["middle", True, True],
+            "blessing":     ["top",    True, True],
             "bloat":        ["top",    True, True],
             "tide_blessing":["top",    True, True],
             "mondo":        ["top",    True, True],
@@ -1136,7 +1066,7 @@ class HourlyReport():
             "tabby_love":   ["top",    True, True],
             "polar_power":  ["top",    True, True],
             "wealth_clock": ["top",    True, True],
-            "blessing":     ["middle", True, True],
+            "blessing":     ["top",    True, True],
             "bloat":        ["top",    True, True],
             "tide_blessing":["top",    True, True],
             "mondo":        ["top",    True, True],
