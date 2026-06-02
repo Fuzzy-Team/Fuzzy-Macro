@@ -5230,6 +5230,12 @@ class macro:
                 selectedUptimeRows = set(self.hourlyReport.configuredUptimeBuffs)
 
                 sampleValues = {}
+                def parseOcrBuffValue(value, default=1):
+                    try:
+                        parsed = float(value)
+                        return parsed if parsed > 0 else default
+                    except (TypeError, ValueError):
+                        return default
 
                 if "baby_love" in monitoredBuffs:
                     j = "baby_love"
@@ -5247,24 +5253,14 @@ class macro:
                         chartType = BUFF_RENDER_CONFIG.get(j, ("binary",))[0]
                         if chartType == "binary":
                             sampleValues[j] = 1
-                        elif j == "bloat":
-                            sampleValues[j] = self.buffDetector.getScaledBuffQuantityFromScreen(
-                                screen, res, uptimeBuffsColors[j][0], 5, baseValue=1, decimals=2
-                            )
-                        elif j == "tide_blessing":
-                            sampleValues[j] = self.buffDetector.getTideBlessingValueFromScreen(screen, res)
                         elif j == "blessing":
-                            x = res[0]
-                            x1 = max(0, int(x+8*self.multi))
-                            x2 = min(width, int(x+36*self.multi))
-                            buffImg = screen[15*self.multi:50*self.multi , x1:x2]
-                            sampleValues[j] = min(100, int(self.buffDetector.getBuffQuantityNatroStyle(buffImg)))
+                            sampleValues[j] = min(100, parseOcrBuffValue(
+                                self.buffDetector.getBuffQuantityFromDetectedRect(screen, res, buff=j)
+                            ))
                         else:
-                            x = res[0]+res[2]
-                            x1 = max(0, int(x-25*self.multi))
-                            x2 = min(width, int(x+5*self.multi))
-                            buffImg = screen[15*self.multi:50*self.multi , x1:x2]
-                            sampleValues[j] = int(self.buffDetector.getBuffQuantityNatroStyle(buffImg))
+                            sampleValues[j] = parseOcrBuffValue(
+                                self.buffDetector.getBuffQuantityFromDetectedRect(screen, res, buff=j)
+                            )
 
                 if "haste" in monitoredBuffs or "melody" in monitoredBuffs:
                     x = 0
@@ -5279,7 +5275,9 @@ class macro:
                             x1 = max(0, int(x+6*self.multi))
                             x2 = min(width, int(x+44*self.multi))
                             buffImg = screen[15*self.multi:50*self.multi , x1:x2]
-                            sampleValues["haste"] = int(self.buffDetector.getBuffQuantityNatroStyle(buffImg))
+                            sampleValues["haste"] = parseOcrBuffValue(
+                                self.buffDetector.getBuffQuantityFromImgTight(buffImg)
+                            )
                         x += 44*self.multi
                 #print(bd.detectBuffColorInImage(screen, 0xff242424, variation=12, minSize=(3*2,2*2), show=True))
 
@@ -5304,7 +5302,9 @@ class macro:
                             y1 = int(15*self.multi)
                             y2 = int(50*self.multi)
                             buffImg = screen[y1:y2, x1: int(x)]
-                            sampleValues[buffType] = int(self.buffDetector.getBuffQuantityNatroStyle(buffImg))
+                            sampleValues[buffType] = parseOcrBuffValue(
+                                self.buffDetector.getBuffQuantityFromImgTight(buffImg)
+                            )
 
                         x -= 40*self.multi
                 
