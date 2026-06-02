@@ -681,8 +681,8 @@ class BuffDetector():
         g = (hex >> 8) & 0xFF
         b = hex & 0xFF
         bgr = [b,g,r]
-        lower = np.array([x-variation for x in bgr])
-        upper = np.array([x+variation for x in bgr])
+        lower = np.array([max(0, x-variation) for x in bgr])
+        upper = np.array([min(255, x+variation) for x in bgr])
 
         #crop screen
         if x2 is None:
@@ -855,6 +855,33 @@ class HourlyReport():
             "festive_mark": [0xffc84335, (5, 1)],
             "popstar":      [0xff0096ff, (5, 1)],
             "guiding":      [0xffffff80, (5, 1)],
+        }
+        # The in-game buff icons are sampled from a very small strip, and their
+        # edge pixels vary with display scale, bloom, and background overlap.
+        # These tolerances are tuned from the checked-in samples/ screenshots.
+        self.uptimeBuffsColorVariations = {
+            "baby_love": 8,
+            "haste": 8,
+            "melody": 5,
+            "focus": 6,
+            "bomb_combo": 5,
+            "balloon_aura": 8,
+            "boost": 8,
+            "blue_boost": 8,
+            "red_boost": 8,
+            "inspire": 8,
+            "reindeerfetch": 8,
+            "wealth_clock": 10,
+            "tide_blessing": 10,
+            "mondo": 10,
+            "blessing": 10,
+            "bloat": 10,
+            "honey_mark": 8,
+            "pollen_mark": 8,
+            "jb_share": 8,
+            "festive_mark": 8,
+            "popstar": 8,
+            "guiding": 8,
         }
 
         self.buffDetector = buffDetector
