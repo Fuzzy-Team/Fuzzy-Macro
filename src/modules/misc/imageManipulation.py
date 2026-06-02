@@ -5,7 +5,21 @@ from PIL import Image
 import imagehash
 #accept a pillow image and return a cv2 one
 def pillowToCv2(img):
-    return cv2.cvtColor(np.array(img), cv2.COLOR_BGR2RGB)
+    if isinstance(img, np.ndarray):
+        arr = img
+    else:
+        arr = np.asarray(img.convert("RGB"), dtype=np.uint8)
+
+    arr = np.ascontiguousarray(arr)
+
+    if arr.ndim == 2:
+        return arr
+    if arr.ndim == 3 and arr.shape[2] == 3:
+        return cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+    if arr.ndim == 3 and arr.shape[2] == 4:
+        return cv2.cvtColor(arr, cv2.COLOR_RGBA2BGR)
+
+    raise ValueError(f"Unsupported image shape for cv2 conversion: {arr.shape}")
 
 def pillowToHash(img):
     return imagehash.average_hash(img)
