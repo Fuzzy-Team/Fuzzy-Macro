@@ -739,6 +739,15 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
     def bloomsAIQuestOverride(baseOverride=None):
         override = dict(baseOverride or {})
         override["shape"] = "blooms_ai"
+        override["start_location"] = "center"
+        return override
+
+    def questAIFieldCenterOverride(field, baseOverride=None):
+        override = dict(baseOverride or {})
+        normalized_field = field.replace("_", " ")
+        fieldSetting = {**macro.fieldSettings.get(normalized_field, {}), **override}
+        if fieldSetting.get("shape") in ("blooms_ai", "fuzzy_ai_gather"):
+            override["start_location"] = "center"
         return override
 
     #macro.rejoin()
@@ -984,13 +993,13 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
 
             for field in questGumdropGatherFields:
                 if field not in allGatheredFields:
-                    runTask(macro.gather, args=(field, questGumdropFieldOverrides.get(field, {}), True), resetAfter=False)
+                    runTask(macro.gather, args=(field, questAIFieldCenterOverride(field, questGumdropFieldOverrides.get(field, {})), True), resetAfter=False)
                     allGatheredFields.append(field)
 
             # Handle regular quest gather fields
             questGatherFields = [x for x in questGatherFields if not (x in allGatheredFields)]
             for field in questGatherFields:
-                runTask(macro.gather, args=(field, questGatherFieldOverrides.get(field, {})), resetAfter=False)
+                runTask(macro.gather, args=(field, questAIFieldCenterOverride(field, questGatherFieldOverrides.get(field, {}))), resetAfter=False)
                 allGatheredFields.append(field)
 
             questPetalGatherFields = [x for x in questPetalGatherFields if not (x in allGatheredFields)]
@@ -1009,7 +1018,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 else:
                     field = "pine tree"
                     allGatheredFields.append(field)
-                    runTask(macro.gather, args=(field, blueFieldOverride), resetAfter=False)
+                    runTask(macro.gather, args=(field, questAIFieldCenterOverride(field, blueFieldOverride)), resetAfter=False)
 
             if redFieldNeeded:
                 for f in redFields:
@@ -1018,13 +1027,13 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 else:
                     field = "rose"
                     allGatheredFields.append(field)
-                    runTask(macro.gather, args=(field, redFieldOverride), resetAfter=False)
+                    runTask(macro.gather, args=(field, questAIFieldCenterOverride(field, redFieldOverride)), resetAfter=False)
 
             if fieldNeeded and not allGatheredFields:
                 if defaultQuestFieldOverride:
-                    runTask(macro.gather, args=("pine tree", defaultQuestFieldOverride), resetAfter=False)
+                    runTask(macro.gather, args=("pine tree", questAIFieldCenterOverride("pine tree", defaultQuestFieldOverride)), resetAfter=False)
                 else:
-                    runTask(macro.gather, args=("pine tree",), resetAfter=False)
+                    runTask(macro.gather, args=("pine tree", questAIFieldCenterOverride("pine tree")), resetAfter=False)
 
             # Skip to next iteration
             continue
@@ -1292,11 +1301,11 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     
                     # Gather regular fields
                     for field in gatherFields:
-                        runTask(macro.gather, args=(field, questGatherOverrides), resetAfter=False)
+                        runTask(macro.gather, args=(field, questAIFieldCenterOverride(field, questGatherOverrides)), resetAfter=False)
                     
                     # Gather gumdrop fields (if any)
                     for field in gumdropFields:
-                        runTask(macro.gather, args=(field, questGatherOverrides, True), resetAfter=False)
+                        runTask(macro.gather, args=(field, questAIFieldCenterOverride(field, questGatherOverrides), True), resetAfter=False)
 
                     # Gather bloom-petal fields using BloomsAI
                     for field in petalGatherFields:
@@ -2381,13 +2390,13 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
 
         for field in questGumdropGatherFields:
             if field not in allGatheredFields:
-                runTask(macro.gather, args=(field, questGumdropFieldOverrides.get(field, {}), True), resetAfter=False)
+                runTask(macro.gather, args=(field, questAIFieldCenterOverride(field, questGumdropFieldOverrides.get(field, {})), True), resetAfter=False)
                 allGatheredFields.append(field)
 
         # Handle regular quest gather fields
         questGatherFields = [x for x in questGatherFields if not (x in allGatheredFields)]
         for field in questGatherFields:
-            runTask(macro.gather, args=(field, questGatherFieldOverrides.get(field, {})), resetAfter=False)
+            runTask(macro.gather, args=(field, questAIFieldCenterOverride(field, questGatherFieldOverrides.get(field, {}))), resetAfter=False)
             allGatheredFields.append(field)
 
         questPetalGatherFields = [x for x in questPetalGatherFields if not (x in allGatheredFields)]
@@ -2403,7 +2412,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             else:
                 field = "pine tree"
                 allGatheredFields.append(field)
-                runTask(macro.gather, args=(field, blueFieldOverride), resetAfter=False)
+                runTask(macro.gather, args=(field, questAIFieldCenterOverride(field, blueFieldOverride)), resetAfter=False)
         
         if redFieldNeeded:
             for f in redFields:
@@ -2412,13 +2421,13 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             else:
                 field = "rose"
                 allGatheredFields.append(field)
-                runTask(macro.gather, args=(field, redFieldOverride), resetAfter=False)
+                runTask(macro.gather, args=(field, questAIFieldCenterOverride(field, redFieldOverride)), resetAfter=False)
         
         if fieldNeeded and not allGatheredFields:
             if defaultQuestFieldOverride:
-                runTask(macro.gather, args=("pine tree", defaultQuestFieldOverride), resetAfter=False)
+                runTask(macro.gather, args=("pine tree", questAIFieldCenterOverride("pine tree", defaultQuestFieldOverride)), resetAfter=False)
             else:
-                runTask(macro.gather, args=("pine tree",), resetAfter=False)
+                runTask(macro.gather, args=("pine tree", questAIFieldCenterOverride("pine tree")), resetAfter=False)
         
         # Handle planter gather fields (if not already gathered)
         if planterDataRaw:
