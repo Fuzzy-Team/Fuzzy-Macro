@@ -1133,9 +1133,6 @@ def _find_best_token(runtime, detections):
         tx, ty = _relative_distance(center_x, center_y, runtime["homography"])
         distance = math.hypot(tx, ty)
 
-        if distance < MIN_TOKEN_DISTANCE:
-            rejected.append({"name": token_name, "reason": "too_close", "confidence": confidence, "distance": distance, "tx": tx, "ty": ty})
-            continue
         if distance > metrics["max_consider"]:
             rejected.append({"name": token_name, "reason": "too_far", "confidence": confidence, "distance": distance, "tx": tx, "ty": ty})
             continue
