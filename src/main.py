@@ -740,6 +740,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         override = dict(baseOverride or {})
         override["shape"] = "blooms_ai"
         override["start_location"] = "center"
+        override["shift_lock"] = False
         return override
 
     def questAIFieldCenterOverride(field, baseOverride=None):
@@ -748,6 +749,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         fieldSetting = {**macro.fieldSettings.get(normalized_field, {}), **override}
         if fieldSetting.get("shape") in ("blooms_ai", "fuzzy_ai_gather"):
             override["start_location"] = "center"
+            override["shift_lock"] = False
         return override
 
     #macro.rejoin()
