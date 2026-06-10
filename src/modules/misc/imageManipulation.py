@@ -6,11 +6,11 @@ import imagehash
 #accept a pillow image and return a cv2 one
 def pillowToCv2(img):
     if isinstance(img, np.ndarray):
-        arr = img
+        arr = np.array(img, dtype=np.uint8)
     else:
-        arr = np.asarray(img.convert("RGB"), dtype=np.uint8)
+        arr = np.array(img.convert("RGB"), dtype=np.uint8)
 
-    arr = np.ascontiguousarray(arr)
+    arr = np.ascontiguousarray(arr, dtype=np.uint8)
 
     if arr.ndim == 2:
         return arr
