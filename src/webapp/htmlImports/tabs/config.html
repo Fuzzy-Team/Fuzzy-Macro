@@ -114,6 +114,16 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
+        {
+          id: "ai_gather_model",
+          title: "AI Gather Model",
+          desc: "Choose the token detection model used by AI Gathering. Light and Mini automatically fall back to Standard if they cannot load.",
+          type: {
+            name: "dropdown",
+            data: ["Standard", "Light", "Mini"],
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
       ]);
 
       buildStandardContainer(parentBSS, "Goo", "", [
