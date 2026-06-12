@@ -3241,6 +3241,7 @@ class macro:
         pattern_use_sprinkler_model_for_drift_compensation = bool(
             self.setdat.get("use_sprinkler_model_for_drift_compensation", False)
         )
+        pattern_ai_gather_model = str(self.setdat.get("ai_gather_model", "Standard"))
         sprinklerLabelMap = {
             "basic": "Sprinkler",
             "silver": "Sprinkler",

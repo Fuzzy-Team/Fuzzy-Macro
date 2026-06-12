@@ -5,6 +5,7 @@ sprinkler_slot=1
 movespeed=29
 sprinkler_type=saturator
 use_sprinkler_model_for_drift_compensation=True
+ai_gather_model=Standard
 convert_wait=5
 private_server_link=
 rejoin_wait=30
