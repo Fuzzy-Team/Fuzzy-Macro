@@ -933,12 +933,12 @@ def importFieldSettings(field_name, json_settings):
         return False
 
 @eel.expose
-def loadFuzzyAITokenRanking(field_name):
-    return settingsManager.loadFuzzyAITokenRanking(field_name)
+def loadFuzzyAITokenRanking(field_name, model="standard"):
+    return settingsManager.loadFuzzyAITokenRanking(field_name, model)
 
 @eel.expose
-def saveFuzzyAITokenRanking(field_name, ranking):
-    return settingsManager.saveFuzzyAITokenRanking(field_name, ranking)
+def saveFuzzyAITokenRanking(field_name, ranking, model="standard"):
+    return settingsManager.saveFuzzyAITokenRanking(field_name, ranking, model)
   
 @eel.expose
 def exportPlanterSettings():
