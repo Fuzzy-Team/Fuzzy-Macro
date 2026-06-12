@@ -237,58 +237,6 @@ const fuzzyAICommonIgnoredTokens = fuzzyAITokenNames.filter((token) =>
   token.startsWith("Duped ")
 ).concat(["Bloom", "Honey Token", "Blueberry"]);
 
-const fuzzyAITokenPresets = {
-  blue: [
-    "Token Link",
-    "Focus",
-    "Melody",
-    "Blue Boost",
-    "Blue Bomb Sync",
-    "Pulse",
-    "Pollen Haze",
-    "Pollen Mark Station",
-    "Pollen Mark Token",
-    "Honey Mark Station",
-    "Honey Mark Token",
-    "Haste",
-    "Inflate Balloons",
-    "Fuzz Bombs Token",
-  ],
-  red: [
-    "Token Link",
-    "Focus",
-    "Melody",
-    "Red Boost",
-    "Red Bomb Sync",
-    "Flame Fuel",
-    "Inferno Token",
-    "Rage Token",
-    "Precise Mark Target",
-    "Precise Mark Station",
-    "Target Practice Token",
-    "Pollen Mark Station",
-    "Pollen Mark Token",
-    "Haste",
-  ],
-  white: [
-    "Token Link",
-    "Focus",
-    "Melody",
-    "White Boost",
-    "Gumdrop Barrage",
-    "Jelly Bean",
-    "Mark Surge Token",
-    "Festive Mark Station",
-    "Festive Mark Token",
-    "Honey Mark Station",
-    "Honey Mark Token",
-    "Pollen Mark Station",
-    "Pollen Mark Token",
-    "Haste",
-    "Triangulate Token",
-  ],
-};
-
 function parseFuzzyAITokenList(value) {
   if (!value) return [];
   return value
@@ -374,23 +322,6 @@ function renderFuzzyAITokenListFromRows() {
   });
 }
 
-function applyFuzzyAITokenPreset(presetName) {
-  const tokenNames = getFuzzyAITokenNames();
-  const preferred = (fuzzyAITokenPresets[presetName] || []).filter((token) => tokenNames.includes(token));
-  const enabled = new Set(preferred);
-  const ignored = tokenNames.filter((token) => !enabled.has(token));
-
-  fuzzyAICommonIgnoredTokens.filter((token) => tokenNames.includes(token)).forEach((token) => {
-    if (!ignored.includes(token)) ignored.push(token);
-  });
-
-  const preferredInput = document.getElementById("fuzzy_ai_preferred_tokens");
-  const ignoredInput = document.getElementById("fuzzy_ai_ignored_tokens");
-  if (preferredInput) preferredInput.value = preferred.join(",");
-  if (ignoredInput) ignoredInput.value = ignored.join(",");
-  renderFuzzyAITokenList();
-}
-
 async function saveFuzzyAITokenPopup() {
   const rows = Array.from(document.querySelectorAll(".fuzzy-ai-token-row"));
   const preferred = [];
@@ -410,7 +341,7 @@ async function saveFuzzyAITokenPopup() {
   await eel.saveFuzzyAITokenRanking(fieldName, {
     preferred_tokens: preferred.join(","),
     ignored_tokens: ignored.join(","),
-  })();
+  }, fuzzyAISelectedModel)();
 }
 
 async function openFuzzyAITokenPopup() {
@@ -418,7 +349,7 @@ async function openFuzzyAITokenPopup() {
   const fieldDropdown = document.getElementById("field");
   const fieldName = fieldDropdown ? getDropdownValue(fieldDropdown) : "";
   if (fieldName) {
-    const ranking = await eel.loadFuzzyAITokenRanking(fieldName)();
+    const ranking = await eel.loadFuzzyAITokenRanking(fieldName, fuzzyAISelectedModel)();
     const preferredInput = document.getElementById("fuzzy_ai_preferred_tokens");
     const ignoredInput = document.getElementById("fuzzy_ai_ignored_tokens");
     if (preferredInput) preferredInput.value = ranking.preferred_tokens || "";
@@ -813,10 +744,6 @@ $("#gather-placeholder")
     event.preventDefault();
     await saveFuzzyAITokenPopup();
     closeFuzzyAITokenPopup();
-  })
-  .on("click", ".fuzzy-ai-token-preset", (event) => {
-    event.preventDefault();
-    applyFuzzyAITokenPreset(event.currentTarget.dataset.preset);
   })
   .on("click", "#fuzzy-ai-token-modal", function(event) {
     if (event.target === this) {

@@ -235,10 +235,23 @@ def saveFuzzyAITokenRankings(data):
     with open(FUZZY_AI_TOKEN_RANKINGS_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
-def loadFuzzyAITokenRanking(field_name):
+def _normalizeFuzzyAIModel(model):
+    value = str(model or "standard").strip().lower()
+    return value if value in ("standard", "light", "mini") else "standard"
+
+def loadFuzzyAITokenRanking(field_name, model="standard"):
     rankings = loadFuzzyAITokenRankings()
-    ranking = rankings.get(field_name, {})
+    field_rankings = rankings.get(field_name, {})
+    model = _normalizeFuzzyAIModel(model)
     defaults = _tokenRankingDefaults()
+    if not isinstance(field_rankings, dict):
+        field_rankings = {}
+
+    # Existing files stored one flat ranking per field. Preserve it as Standard.
+    if "preferred_tokens" in field_rankings or "ignored_tokens" in field_rankings:
+        ranking = field_rankings if model == "standard" else {}
+    else:
+        ranking = field_rankings.get(model, {})
     if not isinstance(ranking, dict):
         ranking = {}
     return {
@@ -246,13 +259,21 @@ def loadFuzzyAITokenRanking(field_name):
         "ignored_tokens": ranking.get("ignored_tokens") or defaults["ignored_tokens"],
     }
 
-def saveFuzzyAITokenRanking(field_name, ranking):
+def saveFuzzyAITokenRanking(field_name, ranking, model="standard"):
     rankings = loadFuzzyAITokenRankings()
-    current = loadFuzzyAITokenRanking(field_name)
+    model = _normalizeFuzzyAIModel(model)
+    field_rankings = rankings.get(field_name, {})
+    if not isinstance(field_rankings, dict):
+        field_rankings = {}
+    if "preferred_tokens" in field_rankings or "ignored_tokens" in field_rankings:
+        field_rankings = {"standard": field_rankings}
+
+    current = loadFuzzyAITokenRanking(field_name, model)
     if isinstance(ranking, dict):
         current["preferred_tokens"] = str(ranking.get("preferred_tokens", current["preferred_tokens"]))
         current["ignored_tokens"] = str(ranking.get("ignored_tokens", current["ignored_tokens"]))
-    rankings[field_name] = current
+    field_rankings[model] = current
+    rankings[field_name] = field_rankings
     saveFuzzyAITokenRankings(rankings)
     return current
 
