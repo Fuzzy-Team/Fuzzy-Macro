@@ -34,14 +34,22 @@ function getActiveSubtab(storageKey, fallbackTabId) {
 }
 //load and add event handlers
 $("#tabs-placeholder")
-    .load("../htmlImports/persistent/tabs.html", function () {
+    .load("../htmlImports/persistent/tabs.html", function (response, status, xhr) {
+        if (status === "error") {
+            console.error("Failed to load sidebar tabs:", xhr.status, xhr.statusText)
+            this.innerHTML = `<div class="sidebar-load-error">Failed to load tabs (${xhr.status})</div>`
+            return
+        }
         // Restore active tab
         const activeTabId = localStorage.getItem("activeTab")
         if (activeTabId) {
             const tab = document.getElementById(activeTabId)
             if (tab) {
                 tab.click()
+                return
             }
         }
+        const homeTab = document.getElementById("home-tab")
+        if (homeTab) homeTab.click()
     })
     .on("click", ".sidebar-item", switchTab)

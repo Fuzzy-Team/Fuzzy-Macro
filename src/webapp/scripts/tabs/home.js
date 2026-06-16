@@ -730,9 +730,22 @@ async function checkAndUpdateButtonState() {
 let buttonStateInterval;
 
 $("#home-placeholder")
-  .load("../htmlImports/tabs/home.html", async () => {
-    await loadTasks();
-    await updateStartButtonText();
+  .load("../htmlImports/tabs/home.html", async function (response, status, xhr) {
+    if (status === "error") {
+      console.error("Failed to load home tab:", xhr.status, xhr.statusText);
+      this.innerHTML = `<div class="standard-container"><h2>Failed to load Home</h2><p>Could not load the Home tab HTML (${xhr.status}). Restart Fuzzy Macro and check the app log.</p></div>`;
+      return;
+    }
+
+    try {
+      await loadTasks();
+      await updateStartButtonText();
+    } catch (error) {
+      console.error("Error initializing home tab:", error);
+      const taskList = document.getElementById("task-list");
+      if (taskList) taskList.innerHTML = `<div class="profile-status error">Failed to initialize Home: ${String(error)}</div>`;
+      return;
+    }
 
     // Load recent logs from backend
     try {
@@ -748,11 +761,15 @@ $("#home-placeholder")
     }
 
     // Initialize macro mode dropdown
-    const settings = await loadAllSettings();
-    const macroModeDropdown = document.getElementById("macro_mode");
-    if (macroModeDropdown && !isUserChangingMode) {
-      const currentValue = settings.macro_mode || "normal";
-      macroModeDropdown.value = currentValue;
+    try {
+      const settings = await loadAllSettings();
+      const macroModeDropdown = document.getElementById("macro_mode");
+      if (macroModeDropdown && !isUserChangingMode) {
+        const currentValue = settings.macro_mode || "normal";
+        macroModeDropdown.value = currentValue;
+      }
+    } catch (error) {
+      console.error("Error loading macro mode:", error);
     }
 
     // Start checking button state every 500ms

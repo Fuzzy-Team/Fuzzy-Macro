@@ -6,6 +6,28 @@ import sys
 import traceback
 
 
+def _configure_runtime_caches():
+    if not getattr(sys, "frozen", False):
+        return
+
+    cache_root = os.path.join(os.path.expanduser("~/Library/Caches"), "Fuzzy Macro")
+    cache_paths = {
+        "MPLCONFIGDIR": os.path.join(cache_root, "matplotlib"),
+        "XDG_CACHE_HOME": cache_root,
+        "NUMBA_CACHE_DIR": os.path.join(cache_root, "numba"),
+    }
+    for env_name, path in cache_paths.items():
+        if env_name not in os.environ:
+            os.environ[env_name] = path
+        try:
+            os.makedirs(os.environ[env_name], exist_ok=True)
+        except Exception as e:
+            print(f"Could not create {env_name} cache directory at {os.environ[env_name]}: {e}")
+
+
+_configure_runtime_caches()
+
+
 def _hide_packaged_child_process_from_dock():
     if not getattr(sys, "frozen", False) or sys.platform != "darwin" or __name__ == "__main__":
         return
@@ -3808,4 +3830,5 @@ if __name__ == "__main__":
 
     supervision_thread = Thread(target=macro_supervision_loop, daemon=True)
     supervision_thread.start()
+    print("Opening embedded webview window")
     gui.open_embedded_window(gui_url)

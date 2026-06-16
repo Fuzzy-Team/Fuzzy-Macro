@@ -1280,6 +1280,7 @@ def clearRecentLogs():
 
 def launch():
 
+    import queue
     import socket
     import urllib.request
 
@@ -1320,8 +1321,19 @@ def launch():
         pass
 
     try:
-        eel.start('index.html', block=False, mode=False, port=port, host="127.0.0.1")
+        server_errors = queue.Queue()
+
+        def run_eel_server():
+            try:
+                eel.start('index.html', block=True, mode=False, port=port, host="127.0.0.1")
+            except BaseException as e:
+                server_errors.put(e)
+
+        server_thread = threading.Thread(target=run_eel_server, name="FuzzyMacroEelServer", daemon=True)
+        server_thread.start()
         wait_for_eel_server(port_url)
+        if not server_errors.empty():
+            raise server_errors.get()
         return f"{port_url}/index.html"
     except Exception as e:
         print(f"Embedded app window failed: {e}")
