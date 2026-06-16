@@ -41,9 +41,17 @@
 
     <!-- Right Column: Logs -->
     <div class="flex-col flex-1 gap-md">
-      <div class="poppins-regular standard-container flex-grow-1 overflow-y-auto flex-col gap-xs">
-        <div class="flex-row space-between align-items-center mb-05 border-bottom">
-          <h2 style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">Logs</h2>
+      <div class="poppins-regular standard-container flex-grow-1 flex-col gap-xs home-logs-container">
+        <div class="home-logs-header flex-row space-between align-items-center mb-05 border-bottom">
+          <div class="home-logs-title-row">
+            <h2 style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">Logs</h2>
+            <div class="home-log-tabs" role="tablist" aria-label="Log type">
+              <button class="home-log-tab active" type="button" role="tab" aria-selected="true"
+                data-log-tab="macro">Macro Logs</button>
+              <button class="home-log-tab" type="button" role="tab" aria-selected="false"
+                data-log-tab="dev">Dev Logs</button>
+            </div>
+          </div>
           <div class="flex-row gap-xs">
             <button class="purple-button" id="export-logs-btn"
               style="margin-top: 0; padding: 0.3rem 0.6rem; font-size: 0.8rem;">Export</button>
@@ -51,8 +59,13 @@
               style="margin-top: 0; padding: 0.3rem 0.6rem; font-size: 0.8rem;">Clear</button>
           </div>
         </div>
-        <div id="logs" class="flex-col gap-xs overflow-y-auto flex-grow-1">
-          <!-- Logs will be appended here -->
+        <div id="macro-logs-panel" class="log-panel flex-col gap-xs overflow-y-auto flex-grow-1">
+          <div id="logs" class="flex-col gap-xs overflow-y-auto flex-grow-1">
+            <!-- Macro logs will be appended here -->
+          </div>
+        </div>
+        <div id="dev-logs-panel" class="log-panel d-none flex-col flex-grow-1">
+          <pre id="dev-logs" class="overflow-y-auto flex-grow-1"></pre>
         </div>
       </div>
     </div>

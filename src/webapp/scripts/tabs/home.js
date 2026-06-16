@@ -141,8 +141,56 @@ function log(time = "", msg = "", color = "") {
     <div class = "log-msg"><span style="background-color: #${color}; align-self: start"></span>${timeText} ${msg}</div>
     `;
   const logs = document.getElementById("logs");
+  if (!logs) return;
   logs.innerHTML += html;
   logs.scrollTop = logs.scrollHeight;
+}
+
+let activeLogTab = "macro";
+let devLogInterval = null;
+
+function currentLogTab() {
+  const activeTab = document.querySelector(".home-log-tab.active");
+  return activeTab ? activeTab.dataset.logTab : activeLogTab;
+}
+
+function switchLogTab(tabName) {
+  activeLogTab = tabName === "dev" ? "dev" : "macro";
+
+  document.querySelectorAll(".home-log-tab").forEach((tab) => {
+    const isActive = tab.dataset.logTab === activeLogTab;
+    tab.classList.toggle("active", isActive);
+    tab.setAttribute("aria-selected", isActive ? "true" : "false");
+  });
+
+  const macroPanel = document.getElementById("macro-logs-panel");
+  const devPanel = document.getElementById("dev-logs-panel");
+  if (macroPanel) macroPanel.classList.toggle("d-none", activeLogTab !== "macro");
+  if (devPanel) devPanel.classList.toggle("d-none", activeLogTab !== "dev");
+
+  if (activeLogTab === "dev") {
+    refreshDevLogs();
+  }
+}
+
+async function refreshDevLogs() {
+  const devLogs = document.getElementById("dev-logs");
+  if (!devLogs || typeof eel === "undefined" || !eel.getDevLogs) return;
+
+  try {
+    const lines = await eel.getDevLogs(700)();
+    const text = lines && lines.length ? lines.join("\n") : "No dev logs yet.";
+    const shouldStickToBottom =
+      devLogs.scrollTop + devLogs.clientHeight >= devLogs.scrollHeight - 24;
+    if (devLogs.textContent !== text) {
+      devLogs.textContent = text;
+      if (shouldStickToBottom || activeLogTab === "dev") {
+        devLogs.scrollTop = devLogs.scrollHeight;
+      }
+    }
+  } catch (error) {
+    console.error("Error loading dev logs:", error);
+  }
 }
 
 //returns a html string for the task
@@ -760,6 +808,8 @@ $("#home-placeholder")
       console.error("Error loading recent logs:", error);
     }
 
+    await refreshDevLogs();
+
     // Initialize macro mode dropdown
     try {
       const settings = await loadAllSettings();
@@ -774,6 +824,7 @@ $("#home-placeholder")
 
     // Start checking button state every 500ms
     buttonStateInterval = setInterval(checkAndUpdateButtonState, 500);
+    devLogInterval = setInterval(refreshDevLogs, 1000);
   }) //load home tab
   .on("unload", () => {
     // Stop polling when tab is unloaded
@@ -781,6 +832,13 @@ $("#home-placeholder")
       clearInterval(buttonStateInterval);
       buttonStateInterval = null;
     }
+    if (devLogInterval) {
+      clearInterval(devLogInterval);
+      devLogInterval = null;
+    }
+  })
+  .on("click", ".home-log-tab", (event) => {
+    switchLogTab(event.currentTarget.dataset.logTab);
   })
   .on("click", "#log-btn", (event) => {
     //log button
@@ -919,7 +977,16 @@ $("#home-placeholder")
     }
   })
   .on("click", "#clear-logs-btn", async (event) => {
-    if (confirm("Are you sure you want to clear all logs?")) {
+    const activeTab = currentLogTab();
+    const label = activeTab === "dev" ? "dev logs" : "macro logs";
+    if (confirm(`Are you sure you want to clear all ${label}?`)) {
+      if (activeTab === "dev") {
+        await eel.clearDevLogs()();
+        const devLogs = document.getElementById("dev-logs");
+        if (devLogs) devLogs.textContent = "";
+        return;
+      }
+
       await eel.clearRecentLogs()();
       const logs = document.getElementById("logs");
       if (logs) logs.innerHTML = "";
@@ -927,6 +994,32 @@ $("#home-placeholder")
   })
   .on("click", "#export-logs-btn", async (event) => {
     try {
+      if (currentLogTab() === "dev") {
+        const devLogs = await eel.getDevLogs(2000)();
+        if (!devLogs || devLogs.length === 0) {
+          alert("No dev logs to export.");
+          return;
+        }
+
+        let logText = "Fuzzy Macro Dev Logs\n";
+        logText += "====================\n\n";
+        logText += devLogs.join("\n");
+
+        const blob = new Blob([logText], { type: "text/plain" });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `fuzzy_macro_dev_logs_${new Date()
+          .toISOString()
+          .slice(0, 19)
+          .replace(/:/g, "-")}.log`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        return;
+      }
+
       const recentLogs = await eel.getRecentLogs()();
       if (!recentLogs || recentLogs.length === 0) {
         alert("No logs to export.");

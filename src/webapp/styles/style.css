@@ -1474,10 +1474,74 @@ select:focus {
   overflow-y: auto;
 }
 
+.home-logs-container {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.home-logs-header {
+  gap: 0.75rem;
+}
+
+.home-logs-title-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.home-log-tabs {
+  align-items: center;
+  background: var(--surface-dim);
+  border: 1px solid rgba(var(--primary-rgb), 0.18);
+  border-radius: 6px;
+  display: flex;
+  gap: 0.2rem;
+  padding: 0.2rem;
+}
+
+.home-log-tab {
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: #cfd3d6;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1;
+  padding: 0.35rem 0.55rem;
+}
+
+.home-log-tab.active {
+  background: var(--primary);
+  color: #121212;
+}
+
+.log-panel {
+  min-height: 0;
+}
+
 #logs {
   flex: 1 1 0%;
   min-height: 0;
   /* Prevents overflow issues in flex containers */
+}
+
+#dev-logs {
+  background: #111;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  color: #f1f3f5;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  margin: 0;
+  min-height: 0;
+  padding: 0.75rem;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* Drag Action Buttons */

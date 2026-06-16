@@ -9,6 +9,7 @@ import json
 import webbrowser
 import time
 import threading
+from collections import deque
 from modules.submacros.autoGiftedBasicBee import AutoGiftedBasicBeeRunner
 import modules.controls.keyboard as keyboardModule
 
@@ -33,6 +34,7 @@ _tool_status = None
 _tool_presence = None
 _active_tool_presence_key = None
 _tool_session_id = None
+_dev_log_path = os.path.join(os.path.expanduser("~/Library/Logs"), "Fuzzy Macro", "app.log")
 
 
 def _refresh_tool_logger_settings():
@@ -1278,6 +1280,41 @@ def clearRecentLogs():
         # Fallback to re-initializing if clear fails
         _recent_logs = []
 
+def _coerce_log_line_limit(max_lines):
+    try:
+        max_lines = int(max_lines)
+    except Exception:
+        max_lines = 500
+    return max(50, min(max_lines, 2000))
+
+def _tail_text_file(path, max_lines=500):
+    if not os.path.exists(path):
+        return []
+
+    lines = deque(maxlen=_coerce_log_line_limit(max_lines))
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as file:
+            for line in file:
+                lines.append(line.rstrip("\n"))
+    except Exception as e:
+        return [f"Could not read dev log file: {e}"]
+    return list(lines)
+
+@eel.expose
+def getDevLogs(max_lines=500):
+    return _tail_text_file(_dev_log_path, max_lines)
+
+@eel.expose
+def clearDevLogs():
+    try:
+        os.makedirs(os.path.dirname(_dev_log_path), exist_ok=True)
+        with open(_dev_log_path, "w", encoding="utf-8"):
+            pass
+        return True
+    except Exception as e:
+        print(f"Error clearing dev logs: {e}")
+        return False
+
 def launch():
 
     import queue
@@ -1316,6 +1353,8 @@ def launch():
     # Ensure important functions are exposed to the frontend before eel starts
     try:
         eel.expose(getRecentLogs)
+        eel.expose(getDevLogs)
+        eel.expose(clearDevLogs)
     except Exception:
         # ignore if already exposed or if exposure fails at import time
         pass
