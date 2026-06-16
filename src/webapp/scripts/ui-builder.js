@@ -84,7 +84,14 @@ function toggleMultiCheckOption(option, event) {
   }
   const input = option.querySelector("input[type='checkbox']");
   if (!input) return;
-  input.checked = !input.checked;
+  const list = option.closest(".multi-checklist");
+  const maxSelections = Number(list?.dataset?.maxSelections || 0);
+  const willCheck = !input.checked;
+  if (willCheck && maxSelections > 0) {
+    const selected = Array.from(list.querySelectorAll("input[type='checkbox']:checked"));
+    if (selected.length >= maxSelections) return;
+  }
+  input.checked = willCheck;
   input.dispatchEvent(new Event("change"));
 }
 
@@ -187,7 +194,12 @@ function buildInput(id, type) {
     const triggerFunction = type.triggerFunction
       ? type.triggerFunction.replaceAll("this", `document.getElementById('${id}')`)
       : "";
-    let html = `<div id="${id}" class="multi-checklist" style="margin-top: 0.6rem;">`;
+    const variantClass = type.variant
+      ? ` ${String(type.variant).split(/\s+/).filter(Boolean).map((x) => `multi-checklist-${x}`).join(" ")}`
+      : "";
+    const showTileLabel = String(type.variant || "").split(/\s+/).includes("report-buffs");
+    const maxSelectionsAttr = type.maxSelections ? ` data-max-selections="${type.maxSelections}"` : "";
+    let html = `<div id="${id}" class="multi-checklist${variantClass}"${maxSelectionsAttr} style="margin-top: 0.6rem;">`;
     for (let i = 0; i < type.data.length; i++) {
       const item = type.data[i];
       let value = item;
@@ -207,7 +219,8 @@ function buildInput(id, type) {
         value = value.replace(/[^\p{L}\p{N}\p{P}\p{Z}^$\n]/gu, "");
         value = value.trim().toLowerCase();
       }
-      const imageHtml = image ? `<img src="${image}" alt="${display}" draggable="false">` : `<span>${display}</span>`;
+      const labelHtml = showTileLabel ? `<span class="multi-check-label">${display}</span>` : "";
+      const imageHtml = image ? `<img src="${image}" alt="${display}" draggable="false">${labelHtml}` : `<span>${display}</span>`;
       const typeLabels = {
         normal: "Memory Match",
         mega: "Mega Memory Match",

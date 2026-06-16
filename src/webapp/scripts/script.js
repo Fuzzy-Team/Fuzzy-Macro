@@ -708,7 +708,15 @@ function loadInputs(obj, save = "") {
       // Handle drag list elements
       loadDragListOrder(ele, v, obj);
     } else if (ele.className.includes("multi-checklist")) {
-      const selected = Array.isArray(v) ? v : [];
+      let selected = Array.isArray(v) ? v : [];
+      if (!Array.isArray(v) && typeof v === "string") {
+        try {
+          const parsed = JSON.parse(v.replaceAll("'", '"'));
+          selected = Array.isArray(parsed) ? parsed : [];
+        } catch (error) {
+          selected = v.split(",").map((value) => value.trim()).filter(Boolean);
+        }
+      }
       Array.from(ele.querySelectorAll("input[type='checkbox']")).forEach((input) => {
         input.checked = selected.includes(input.value);
       });
