@@ -1180,20 +1180,58 @@ class macro:
                     continue
             return normalizeShrineItemName(" ".join(textParts))
 
+        def shrineScaleX(value):
+            return math.floor(value * (self.robloxWindow.mw / 1920))
+
+        def shrineScaleY(value):
+            return math.floor(value * (self.robloxWindow.mh / 1080))
+
         def clickWindShrineDialogsUntilGone():
             dialogImg = self.adjustImage("./images/menu", "dialog")
-            searchX = self.robloxWindow.mx + self.robloxWindow.mw // 2 - 50
-            searchY = self.robloxWindow.my + 2 * self.robloxWindow.mh // 3
-            searchW = 100
-            searchH = self.robloxWindow.mh // 3
-            for _ in range(500):
+            searchX = self.robloxWindow.mx + math.floor(0.25 * self.robloxWindow.mw)
+            searchY = self.robloxWindow.my + math.floor(0.55 * self.robloxWindow.mh)
+            searchW = math.floor(0.5 * self.robloxWindow.mw)
+            searchH = math.floor(0.4 * self.robloxWindow.mh)
+            clickX = self.robloxWindow.mx + self.robloxWindow.mw // 2
+            clickY = self.robloxWindow.my + math.floor(0.82 * self.robloxWindow.mh)
+            consecutiveMisses = 0
+
+            for _ in range(80):
+                dialogVisible = False
+                result = locateTransparentImageOnScreen(dialogImg, searchX, searchY, searchW, searchH, 0.65)
+                if result:
+                    dialogVisible = True
+                    _score, loc = result
+                    clickY = searchY + loc[1] + shrineScaleY(35)
+                else:
+                    try:
+                        dialogText = ''.join([x[1][0] for x in ocr.ocrRead(mssScreenshot(searchX, searchY, searchW, searchH))]).lower()
+                        dialogVisible = any(text in dialogText for text in ("wind shrine", "click to continue", "blown", "whirlwind"))
+                    except Exception:
+                        dialogVisible = False
+
+                if not dialogVisible:
+                    consecutiveMisses += 1
+                    if consecutiveMisses >= 3:
+                        break
+                    time.sleep(0.15)
+                    continue
+
+                consecutiveMisses = 0
+                mouse.moveTo(clickX, clickY)
+                mouse.click()
+                time.sleep(0.2)
+
+            # One final generic dialog pass catches any follow-up line that appears
+            # after the Wind Shrine-specific text has advanced.
+            for _ in range(3):
                 result = locateTransparentImageOnScreen(dialogImg, searchX, searchY, searchW, searchH, 0.65)
                 if not result:
                     break
                 _score, loc = result
-                mouse.moveTo(self.robloxWindow.mx + self.robloxWindow.mw // 2, searchY + loc[1] + 35)
+                mouse.moveTo(clickX, searchY + loc[1] + shrineScaleY(35))
                 mouse.click()
-                time.sleep(0.15)
+                time.sleep(0.2)
 
         def lootWindShrineTokens():
             self.keyboard.tileWalk("d", 11)
@@ -1234,24 +1272,24 @@ class macro:
         foundItem = False
         selectorCenterX = self.robloxWindow.mx + math.floor(0.515 * self.robloxWindow.mw)
         selectorCenterY = self.robloxWindow.my + math.floor(0.535 * self.robloxWindow.mh)
-        searchX = selectorCenterX - 250
-        searchY = selectorCenterY - 100
-        searchW = 500
-        searchH = 300
-        nameX = selectorCenterX - 230
-        nameY = selectorCenterY - 75
-        nameW = 200
-        nameH = 70
-        nextX = selectorCenterX + 157
-        nextY = selectorCenterY - 45
+        searchX = selectorCenterX - shrineScaleX(250)
+        searchY = selectorCenterY - shrineScaleY(100)
+        searchW = shrineScaleX(500)
+        searchH = shrineScaleY(300)
+        nameX = selectorCenterX - shrineScaleX(230)
+        nameY = selectorCenterY - shrineScaleY(75)
+        nameW = shrineScaleX(200)
+        nameH = shrineScaleY(70)
+        nextX = selectorCenterX + shrineScaleX(157)
+        nextY = selectorCenterY - shrineScaleY(45)
         for _ in range(80):
             selectedItemText = readSelectedShrineItem(nameX, nameY, nameW, nameH)
             if any(alias in selectedItemText or selectedItemText in alias for alias in itemAliases):
                 foundItem = True
                 break
             if itemImg is not None:
-                maxVal, _ = locateImageOnScreen(itemImg, searchX, searchY, searchW, searchH, 0.62)
-                if maxVal > 0.62:
+                itemMatch = locateImageOnScreen(itemImg, searchX, searchY, searchW, searchH, 0.62)
+                if itemMatch and itemMatch[0] > 0.62:
                     foundItem = True
                     break
             mouse.moveTo(nextX, nextY)
@@ -1263,15 +1301,15 @@ class macro:
             self.keyboard.press("e")
             return None
 
-        addX = self.robloxWindow.mx + math.floor(0.515 * self.robloxWindow.mw) + 157
-        addY = self.robloxWindow.my + math.floor(0.535 * self.robloxWindow.mh) + 40
+        addX = selectorCenterX + shrineScaleX(157)
+        addY = selectorCenterY + shrineScaleY(40)
         mouse.moveTo(addX, addY)
         for _ in range(max(0, quantity - 1)):
             mouse.click()
             time.sleep(0.04)
 
-        donateX = self.robloxWindow.mx + math.floor(0.515 * self.robloxWindow.mw) - 72
-        donateY = self.robloxWindow.my + math.floor(0.535 * self.robloxWindow.mh) + 116
+        donateX = selectorCenterX - shrineScaleX(72)
+        donateY = selectorCenterY + shrineScaleY(116)
         mouse.moveTo(donateX, donateY)
         mouse.click()
         time.sleep(2)
