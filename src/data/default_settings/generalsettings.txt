@@ -53,3 +53,4 @@ pause_keybind=F2
 hotbar_buff_start_keybind=F4
 autoclicker_keybind=F3
 macro_mode=normal
+ignore_petal_quests=False

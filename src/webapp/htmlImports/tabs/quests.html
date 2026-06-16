@@ -76,7 +76,17 @@
         },
       ]);
 
-      buildStandardContainer(questsSettingsParent, "Petal Gather", "Petal quest objectives use BloomsAI.", []);
+      buildStandardContainer(questsSettingsParent, "Petal Gather", "Petal quest objectives use BloomsAI.", [
+        {
+          id: "ignore_petal_quests",
+          title: "Ignore Petal Quests",
+          desc: "Skip known petal quest titles instead of gathering bloom petals",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+      ]);
     </script>
   </div>
 
