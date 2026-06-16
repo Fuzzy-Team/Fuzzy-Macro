@@ -11,8 +11,16 @@ printf "Refreshing dependencies via install_dependencies.command...\n"
 
 PYTHON="$VENV_PATH/bin/python"
 export PYINSTALLER_CONFIG_DIR="${TMPDIR:-/tmp}/fuzzy-macro-pyinstaller"
-export FUZZY_TARGET_ARCH="${FUZZY_TARGET_ARCH:-universal2}"
 export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-10.12}"
+
+if [ -z "${FUZZY_TARGET_ARCH:-}" ]; then
+    case "$(uname -m)" in
+        arm64) FUZZY_TARGET_ARCH="arm64" ;;
+        x86_64) FUZZY_TARGET_ARCH="x86_64" ;;
+        *) FUZZY_TARGET_ARCH="$(uname -m)" ;;
+    esac
+    export FUZZY_TARGET_ARCH
+fi
 
 printf "Installing app build tools...\n"
 if ! "$PYTHON" -c "import PyInstaller, webview" >/dev/null 2>&1; then
@@ -38,7 +46,11 @@ if [ "$FUZZY_TARGET_ARCH" = "universal2" ]; then
     fi
 fi
 
-printf "Building Fuzzy Macro.app for %s...\n" "$FUZZY_TARGET_ARCH"
+if [ "$FUZZY_TARGET_ARCH" = "arm64" ]; then
+    export MACOSX_DEPLOYMENT_TARGET="${FUZZY_ARM64_DEPLOYMENT_TARGET:-13.0}"
+fi
+
+printf "Building Fuzzy Macro.app for %s with macOS deployment target %s...\n" "$FUZZY_TARGET_ARCH" "$MACOSX_DEPLOYMENT_TARGET"
 "$PYTHON" -m PyInstaller --clean --noconfirm fuzzy_macro_app.spec
 
 printf "\nBuild complete: %s/dist/Fuzzy Macro.app\n" "$(pwd)"

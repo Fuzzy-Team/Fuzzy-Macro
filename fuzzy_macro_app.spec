@@ -9,6 +9,12 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 ROOT = Path.cwd()
 TARGET_ARCH = os.environ.get("FUZZY_TARGET_ARCH", "universal2") or None
+INTEL_MIN_MACOS = "10.12.0"
+APPLE_SILICON_MIN_MACOS = "13.0.0"
+if TARGET_ARCH == "arm64":
+    BUNDLE_MIN_MACOS = APPLE_SILICON_MIN_MACOS
+else:
+    BUNDLE_MIN_MACOS = INTEL_MIN_MACOS
 
 
 def optional_submodules(package):
@@ -141,10 +147,10 @@ app = BUNDLE(
     icon="src/webapp/assets/general/icon.png",
     bundle_identifier="com.fuzzyteam.fuzzymacro",
     info_plist={
-        "LSMinimumSystemVersion": "10.12.0",
+        "LSMinimumSystemVersion": BUNDLE_MIN_MACOS,
         "LSMinimumSystemVersionByArchitecture": {
-            "x86_64": "10.12.0",
-            "arm64": "11.0.0",
+            "x86_64": INTEL_MIN_MACOS,
+            "arm64": APPLE_SILICON_MIN_MACOS,
         },
         "NSAppleEventsUsageDescription": "Fuzzy Macro needs to control Roblox while the macro is running.",
         "NSInputMonitoringUsageDescription": "Fuzzy Macro uses keyboard hotkeys to start and stop the macro.",

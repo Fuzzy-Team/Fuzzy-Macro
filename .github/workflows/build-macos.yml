@@ -16,11 +16,6 @@ jobs:
   build:
     name: Build ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
-    env:
-      MACOSX_DEPLOYMENT_TARGET: "10.12"
-      CFLAGS: "-mmacosx-version-min=10.12"
-      CXXFLAGS: "-mmacosx-version-min=10.12"
-      LDFLAGS: "-mmacosx-version-min=10.12"
     strategy:
       fail-fast: false
       matrix:
@@ -31,12 +26,20 @@ jobs:
             python-architecture: x64
             target-arch: x86_64
             suffix: Intel
+            min-macos: "10.12"
           - name: Apple Silicon
             runner: macos-15
             python-version: "3.9.13"
             python-architecture: arm64
             target-arch: arm64
             suffix: Apple-Silicon
+            min-macos: "13.0"
+
+    env:
+      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.min-macos }}
+      CFLAGS: -mmacosx-version-min=${{ matrix.min-macos }}
+      CXXFLAGS: -mmacosx-version-min=${{ matrix.min-macos }}
+      LDFLAGS: -mmacosx-version-min=${{ matrix.min-macos }}
 
     steps:
       - name: Check out repository
@@ -74,12 +77,17 @@ jobs:
           FUZZY_TARGET_ARCH: ${{ matrix.target-arch }}
           FUZZY_VENV_PATH: ${{ runner.temp }}/fuzzy-macro-env
           FUZZY_RELEASE_SUFFIX: ${{ matrix.suffix }}
+          FUZZY_MIN_MACOS: ${{ matrix.min-macos }}
         run: /bin/bash ./build_release.command
 
       - name: Verify package
         run: |
           pkgutil --check-signature "dist/Fuzzy Macro ${{ matrix.suffix }}.pkg" || true
           pkgutil --payload-files "dist/Fuzzy Macro ${{ matrix.suffix }}.pkg" | head -20
+          pkgutil --expand "dist/Fuzzy Macro ${{ matrix.suffix }}.pkg" "${{ runner.temp }}/expanded-pkg"
+          grep '<os-version min="${{ matrix.min-macos }}"/>' "${{ runner.temp }}/expanded-pkg/Distribution"
+          /usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "dist/Fuzzy Macro.app/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersionByArchitecture:${{ matrix.target-arch }}' "dist/Fuzzy Macro.app/Contents/Info.plist"
           file "dist/Fuzzy Macro.app/Contents/MacOS/Fuzzy Macro"
           vtool -show-build "dist/Fuzzy Macro.app/Contents/MacOS/Fuzzy Macro" || true
           codesign --verify --deep --strict --verbose=2 "dist/Fuzzy Macro.app"

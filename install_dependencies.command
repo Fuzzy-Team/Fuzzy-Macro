@@ -4,6 +4,28 @@ VENV_NAME="${FUZZY_VENV_NAME:-fuzzy-macro-env}"
 VENV_PATH="${FUZZY_VENV_PATH:-$HOME/$VENV_NAME}"
 PYTHON_BOOTSTRAP="${FUZZY_BOOTSTRAP_PYTHON:-}"
 
+macos_version_lt() {
+	local current="$1"
+	local minimum="$2"
+	local IFS=.
+	local current_parts=($current)
+	local minimum_parts=($minimum)
+	local i current_part minimum_part
+
+	for i in 0 1 2; do
+		current_part="${current_parts[$i]:-0}"
+		minimum_part="${minimum_parts[$i]:-0}"
+		if [ "$current_part" -lt "$minimum_part" ]; then
+			return 0
+		fi
+		if [ "$current_part" -gt "$minimum_part" ]; then
+			return 1
+		fi
+	done
+
+	return 1
+}
+
 create_virtual_env() {
     if [ ! -d "$VENV_PATH" ]; then
         printf "\033[1;35mCreating virtual environment at $VENV_PATH\033[0m\n"
@@ -16,6 +38,12 @@ create_virtual_env() {
 activate_virtual_env() {
     printf "\033[1;35mActivating virtual environment\033[0m\n"
     source "$VENV_PATH/bin/activate"
+}
+
+venv_has_invalid_distributions() {
+	local pip_output
+	pip_output=$("$VENV_PATH/bin/python" -m pip list 2>&1 >/dev/null || true)
+	printf "%s" "$pip_output" | grep -q "Ignoring invalid distribution"
 }
 
 install_pip_package() {
@@ -58,13 +86,13 @@ os_ver=$(sw_vers -productVersion)
 #check mac compatibility
 
 if [ "$chip" = 'arm64' ]; then
-	if echo -e "$os_ver \n12.99.99" | sort -V | tail -n1 | grep -Fq "12.99.99"; then
-		printf "\033[31;1mYour mac is not compatible. It has to be Ventura or later. Consider updating it. \033[0m\n"
+	if macos_version_lt "$os_ver" "13.0.0"; then
+		printf "\033[31;1mYour Mac is not compatible. Apple Silicon Macs need macOS 13.0 or later. Consider updating it. \033[0m\n"
 		exit 1
 	fi
 else 
-	if echo -e "$os_ver \n10.12.0" | sort -V | tail -n1 | grep -Fq "10.12.0"; then
-		printf "\033[31;1mYour mac is not compatible. It has to be 10.12 or later. Consider updating it. \033[0m\n"
+	if macos_version_lt "$os_ver" "10.12.0"; then
+		printf "\033[31;1mYour Mac is not compatible. Intel Macs need macOS 10.12 or later. Consider updating it. \033[0m\n"
 		exit 1
 	fi
 fi
@@ -77,11 +105,11 @@ python_ver="3.9"
 python_link="/www.python.org/ftp/python/3.9.8/python-3.9.8-macos11.pkg"
 constraints=$'numpy<2'
 if [ "$chip" = 'i386' ]; then
-	if echo -e "$os_ver \n10.15.0" | sort -V | tail -n1 | grep -Fq "10.15.0"; then
+	if macos_version_lt "$os_ver" "10.15.0"; then
 		python_ver="3.8"
 		python_link="/www.python.org/ftp/python/3.8.0/python-3.8.0-macosx10.9.pkg"
 		constraints=$'numpy<2\npyobjc-core<11.0\npyobjc<11.0'
-	elif echo -e "$os_ver \n12.0.0" | sort -V | tail -n1 | grep -Fq "12.0.0"; then
+	elif macos_version_lt "$os_ver" "12.0.0"; then
 		python_ver="3.8"
 		python_link="/www.python.org/ftp/python/3.8.0/python-3.8.0-macosx10.9.pkg"
 		constraints=$'numpy<2\npyobjc-core<11.0\npyobjc<11.0'
@@ -163,8 +191,15 @@ while [ "$attempt" -le 3 ]; do
 	
 	# Validate Python and pip paths inside the venv
 	if [ -x "$VENV_PATH/bin/python" ] && [ -x "$VENV_PATH/bin/pip" ]; then
-		echo -e "\033[1;32mVirtual environment is valid\033[0m"
-		break
+		if venv_has_invalid_distributions; then
+			echo -e "\033[1;31mVirtual environment has invalid package metadata, recreating...\033[0m"
+			rm -rf "$VENV_PATH"
+			((attempt++))
+			sleep 2
+		else
+			echo -e "\033[1;32mVirtual environment is valid\033[0m"
+			break
+		fi
 	else
 		echo -e "\033[1;31mVirtual environment is broken, recreating...\033[0m"
 		rm -rf "$VENV_PATH"
@@ -173,6 +208,11 @@ while [ "$attempt" -le 3 ]; do
 		
 	fi
 done
+
+if [ ! -x "$VENV_PATH/bin/python" ] || [ ! -x "$VENV_PATH/bin/pip" ] || venv_has_invalid_distributions; then
+	echo -e "\033[1;31mCould not create a clean virtual environment at $VENV_PATH\033[0m"
+	exit 1
+fi
 
 pip install --upgrade pip setuptools wheel
 install_pip_package "numpy<2"
@@ -188,7 +228,7 @@ if [ "$python_ver" = '3.9' ]; then
 	install_pip_package "pyobjc-framework-ColorSync<12.0"
 	install_pip_package "pyobjc-framework-ApplicationServices<12.0"
 
-elif echo -e "$os_ver \n10.15.0" | sort -V | tail -n1 | grep -Fq "10.15.0"; then
+elif macos_version_lt "$os_ver" "10.15.0"; then
 	printf "\033[1;35mInstalling rust\n\n\033[0m"
 	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 	source "$HOME/.cargo/env"

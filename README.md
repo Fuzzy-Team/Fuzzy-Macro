@@ -24,6 +24,19 @@ Roblox Bee Swarm Simulator macro for macOS. Free, open source, and actively main
 
 Follow our [installation guide](https://fuzzy-team.gitbook.io/fuzzy-macro) to get started, if you have any questions or need help feel free to [join our discord](https://discord.gg/rGRVG8Rpsb).
 
+## macOS Compatibility
+
+- Apple Silicon Macs (M1-M5): macOS 13.0 or later.
+- Intel Macs: macOS 10.12 or later.
+- Older macOS versions are not supported.
+
+Release packages are architecture-specific:
+
+- `Fuzzy Macro Intel.pkg` installs the Intel build.
+- `Fuzzy Macro Apple-Silicon.pkg` installs the Apple Silicon build.
+
+To build locally, run `./build_release.command`. Local builds default to your Mac's native architecture. For CI releases, use the `Build macOS Packages` GitHub Actions workflow; it builds and uploads both installer packages.
+
 ## Features
 
 ### Field Management & Gathering
