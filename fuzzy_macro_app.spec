@@ -9,6 +9,8 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 ROOT = Path.cwd()
 TARGET_ARCH = os.environ.get("FUZZY_TARGET_ARCH", "universal2") or None
+CODE_SIGN_IDENTITY = os.environ.get("FUZZY_CODESIGN_IDENTITY") or None
+ENTITLEMENTS_FILE = os.environ.get("FUZZY_ENTITLEMENTS_FILE") or None
 INTEL_MIN_MACOS = "10.12.0"
 APPLE_SILICON_MIN_MACOS = "13.0.0"
 if TARGET_ARCH == "arm64":
@@ -127,8 +129,8 @@ exe = EXE(
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=TARGET_ARCH,
-    codesign_identity=None,
-    entitlements_file=None,
+    codesign_identity=CODE_SIGN_IDENTITY,
+    entitlements_file=ENTITLEMENTS_FILE,
 )
 
 coll = COLLECT(

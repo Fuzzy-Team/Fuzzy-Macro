@@ -9,7 +9,6 @@ import json
 import webbrowser
 import time
 import threading
-import subprocess
 from modules.submacros.autoGiftedBasicBee import AutoGiftedBasicBeeRunner
 import modules.controls.keyboard as keyboardModule
 
@@ -1282,19 +1281,36 @@ def clearRecentLogs():
 def launch():
 
     import socket
+    import urllib.request
+
     def get_free_port(start_port=8000, max_tries=100):
         port = start_port
         for _ in range(max_tries):
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 try:
-                    s.bind(("localhost", port))
+                    s.bind(("127.0.0.1", port))
                     return port
                 except OSError:
                     port += 1
         raise RuntimeError(f"No free port found in range {start_port}-{port}")
 
+    def wait_for_eel_server(base_url, timeout=8):
+        deadline = time.time() + timeout
+        last_error = None
+        while time.time() < deadline:
+            try:
+                for path in ("/index.html", "/eel.js"):
+                    with urllib.request.urlopen(f"{base_url}{path}", timeout=0.75) as response:
+                        if response.status >= 400:
+                            raise RuntimeError(f"{path} returned HTTP {response.status}")
+                return True
+            except Exception as e:
+                last_error = e
+                time.sleep(0.15)
+        raise RuntimeError(f"Eel server did not become ready: {last_error}")
+
     port = get_free_port(8000, 100)
-    port_url = f"http://localhost:{port}"
+    port_url = f"http://127.0.0.1:{port}"
 
     # Ensure important functions are exposed to the frontend before eel starts
     try:
@@ -1304,18 +1320,18 @@ def launch():
         pass
 
     try:
-        eel.start('index.html', block=False, mode=False, port=port)
-        time.sleep(1)
-        if getattr(sys, "frozen", False):
-            webview_command = [sys.executable, "--webview-url", f"{port_url}/index.html"]
-        else:
-            main_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "main.py"))
-            webview_command = [sys.executable, main_path, "--webview-url", f"{port_url}/index.html"]
-        subprocess.Popen(
-            webview_command,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            stdin=subprocess.DEVNULL,
-        )
+        eel.start('index.html', block=False, mode=False, port=port, host="127.0.0.1")
+        wait_for_eel_server(port_url)
+        return f"{port_url}/index.html"
     except Exception as e:
         print(f"Embedded app window failed: {e}")
+        return None
+
+
+def open_embedded_window(url):
+    if not url:
+        return
+    import webview
+
+    webview.create_window("Fuzzy Macro", url, width=1280, height=900)
+    webview.start(private_mode=True)

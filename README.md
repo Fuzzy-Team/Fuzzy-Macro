@@ -37,6 +37,14 @@ Release packages are architecture-specific:
 
 To build locally, run `./build_release.command`. Local builds default to your Mac's native architecture. For CI releases, use the `Build macOS Packages` GitHub Actions workflow; it builds and uploads both installer packages.
 
+macOS permissions such as Accessibility, Input Monitoring, and Screen Recording are tied to the app's code signature. If you rebuild unsigned/ad-hoc builds, macOS can treat each build as a new app and ask for permissions again. Use a stable signing identity for builds that should keep permissions:
+
+```bash
+FUZZY_CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./build_release.command
+```
+
+For local testing, a persistent self-signed code signing certificate can also be used. Release builds should use a Developer ID Application certificate.
+
 ## Features
 
 ### Field Management & Gathering

@@ -6,28 +6,18 @@ import sys
 import traceback
 
 
-def _run_webview_window_if_requested():
-    if len(sys.argv) < 3 or sys.argv[1] != "--webview-url":
+def _hide_packaged_child_process_from_dock():
+    if not getattr(sys, "frozen", False) or sys.platform != "darwin" or __name__ == "__main__":
         return
     try:
-        def hide_helper_from_dock():
-            if sys.platform != "darwin":
-                return
-            try:
-                from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
+        from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
 
-                NSApplication.sharedApplication().setActivationPolicy_(NSApplicationActivationPolicyAccessory)
-            except Exception as e:
-                print(f"Could not hide embedded window helper from Dock: {e}")
-
-        hide_helper_from_dock()
-        import webview
-
-        webview.create_window("Fuzzy Macro", sys.argv[2], width=1280, height=900)
-        webview.start(hide_helper_from_dock, private_mode=True)
+        NSApplication.sharedApplication().setActivationPolicy_(NSApplicationActivationPolicyAccessory)
     except Exception as e:
-        print(f"Could not open embedded app window: {e}")
-    sys.exit(0)
+        print(f"Could not hide background process from Dock: {e}")
+
+
+_hide_packaged_child_process_from_dock()
 
 
 def _configure_frozen_logging():
@@ -114,11 +104,176 @@ def _configure_runtime_directory():
             return
 
 
+def _write_text_file_if_missing(path, content):
+    if os.path.exists(path):
+        return
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        f.write(content)
+
+
+def _write_json_file_if_missing(path, content):
+    if os.path.exists(path):
+        return
+    import json
+
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(content, f, indent=3)
+
+
+def _write_pickle_file_if_missing(path, content):
+    if os.path.exists(path):
+        return
+    import pickle
+
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "wb") as f:
+        pickle.dump(content, f)
+
+
+def _ensure_runtime_user_state():
+    """Create neutral user data files that are excluded from release bundles."""
+    project_root = os.path.dirname(os.getcwd()) if os.path.basename(os.getcwd()) == "src" else os.getcwd()
+    src_dir = os.path.join(project_root, "src")
+    user_dir = os.path.join(src_dir, "data", "user")
+    os.makedirs(user_dir, exist_ok=True)
+
+    _write_text_file_if_missing(
+        os.path.join(user_dir, "screen.txt"),
+        "\n".join(
+            [
+                "display_type=built-in",
+                "screen_width=2880",
+                "screen_height=1800",
+                "reference_width=2880",
+                "reference_height=1800",
+                "x_scale=1",
+                "y_scale=1",
+                "y_multiplier=1",
+                "x_multiplier=1",
+                "y_length_multiplier=1",
+                "x_length_multiplier=1",
+                "",
+            ]
+        ),
+    )
+
+    timing_keys = [
+        "wealth_clock",
+        "blueberry_dispenser",
+        "strawberry_dispenser",
+        "royal_jelly_dispenser",
+        "treat_dispenser",
+        "ant_pass_dispenser",
+        "stockings",
+        "feast",
+        "samovar",
+        "snow_machine",
+        "lid_art",
+        "candles",
+        "wreath",
+        "glue_dispenser",
+        "mondo",
+        "sticker_printer",
+        "stump_snail",
+        "ladybug_strawberry",
+        "ladybug_mushroom",
+        "ladybug_clover",
+        "mantis_pineapple",
+        "mantis_pine tree",
+        "scorpion_rose",
+        "werewolf",
+        "spider_spider",
+        "rhinobeetle_blue flower",
+        "rhinobeetle_bamboo",
+        "rhinobeetle_pineapple",
+        "rhinobeetle_clover",
+        "rejoin_every",
+        "coconut_crab",
+        "memory_match",
+        "mega_memory_match",
+        "extreme_memory_match",
+        "winter_memory_match",
+        "blue_booster",
+        "red_booster",
+        "mountain_booster",
+        "last_booster",
+        "sticker_stack",
+        "convert_balloon",
+        "honeystorm",
+        "brown_bear_quest_cd",
+        "black_bear_quest_cd",
+        "brown_bear_quest_state",
+        "black_bear_quest_state",
+        "wind_shrine",
+    ]
+    _write_text_file_if_missing(
+        os.path.join(user_dir, "timings.txt"),
+        "".join(f"{key}=0\n" for key in timing_keys),
+    )
+    _write_text_file_if_missing(os.path.join(user_dir, "AFB.txt"), "AFB_dice_cd=0\nAFB_glitter_cd=0\nAFB_limit=0\n")
+    _write_text_file_if_missing(os.path.join(user_dir, "current_profile.txt"), "a")
+    _write_text_file_if_missing(os.path.join(user_dir, "manualplanters.txt"), "")
+    _write_text_file_if_missing(os.path.join(user_dir, "sticker_stack.txt"), "0")
+    _write_text_file_if_missing(os.path.join(user_dir, "hourly_report_history.txt"), "[]")
+    _write_text_file_if_missing(
+        os.path.join(user_dir, "blender.txt"),
+        "{'item': 0, 'collectTime': 0}",
+    )
+    _write_text_file_if_missing(
+        os.path.join(user_dir, "hotbar_timings.txt"),
+        "{1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0}",
+    )
+    _write_text_file_if_missing(
+        os.path.join(user_dir, "hourly_report_bg.txt"),
+        "start_honey=0\nstart_time=0\nhoney_per_min=[]\nbackpack_per_min=[]\n",
+    )
+    _write_text_file_if_missing(
+        os.path.join(user_dir, "hourly_report_main.txt"),
+        "bugs=0\nquests_completed=0\nvicious_bees=0\ngathering_time=0\nconverting_time=0\nbug_run_time=0\nmisc_time=0\n",
+    )
+    _write_json_file_if_missing(
+        os.path.join(user_dir, "app_state.json"),
+        {"schema_version": 1, "current_profile": "a"},
+    )
+    _write_json_file_if_missing(
+        os.path.join(user_dir, "auto_planters.json"),
+        {
+            "planters": [
+                {"planter": "", "nectar": "", "field": "", "harvest_time": 0, "nectar_est_percent": 0},
+                {"planter": "", "nectar": "", "field": "", "harvest_time": 0, "nectar_est_percent": 0},
+                {"planter": "", "nectar": "", "field": "", "harvest_time": 0, "nectar_est_percent": 0},
+            ],
+            "nectar_last_field": {
+                "comforting": "",
+                "refreshing": "",
+                "satisfying": "",
+                "motivating": "",
+                "invigorating": "",
+            },
+        },
+    )
+    _write_pickle_file_if_missing(os.path.join(user_dir, "hourly_report_stats.pkl"), {})
+
+    profile_dir = os.path.join(project_root, "settings", "profiles", "a")
+    defaults_dir = os.path.join(project_root, "settings", "defaults")
+    os.makedirs(profile_dir, exist_ok=True)
+    for name, source in {
+        "fields.txt": os.path.join(defaults_dir, "profiles", "a", "fields.txt"),
+        "settings.txt": os.path.join(defaults_dir, "profiles", "a", "settings.txt"),
+        "generalsettings.txt": os.path.join(defaults_dir, "generalsettings.txt"),
+    }.items():
+        destination = os.path.join(profile_dir, name)
+        if not os.path.exists(destination) and os.path.exists(source):
+            shutil.copy2(source, destination)
+
+
 _configure_frozen_logging()
 if getattr(sys, "frozen", False):
     multiprocessing.freeze_support()
-_run_webview_window_if_requested()
 _configure_runtime_directory()
+_ensure_runtime_user_state()
 
 from modules.misc import messageBox
 from modules.misc import macPermissions
@@ -202,14 +357,14 @@ except ImportError:
 
 class RichPresenceManager:
     """Manages Discord Rich Presence updates based on macro status"""
-    
+
     # Hardcoded Application ID for Fuzzy Macro
     DISCORD_APP_ID = "1468035015194710068"
-    
+
     def __init__(self, status_value, enabled: bool = False, presence_value=None):
         """
         Initialize Rich Presence Manager
-        
+
         Args:
             status_value: Shared multiprocessing.Value containing current macro status
             enabled: Whether Rich Presence is enabled
@@ -225,7 +380,7 @@ class RichPresenceManager:
         self.running = False
         self.thread = None
         self.start_time = int(time.time())
-        
+
         # Load external mapping file for presence (if present)
         self.map = {}
         map_candidates = [
@@ -271,15 +426,15 @@ class RichPresenceManager:
             asset_mapping[k] = v
 
         self.asset_mapping = asset_mapping
-        
+
     def connect(self) -> bool:
         """Initialize Discord RPC connection"""
         if not PYPRESENCE_AVAILABLE:
             return False
-            
+
         if not self.application_id or self.application_id == "":
             return False
-            
+
         try:
             self.rpc = Presence(self.application_id)
             self.rpc.connect()
@@ -290,7 +445,7 @@ class RichPresenceManager:
             # Silently fail if Discord client isn't running
             self.connected = False
             return False
-    
+
     def disconnect(self):
         """Close Discord RPC connection"""
         if self.rpc and self.connected:
@@ -310,7 +465,7 @@ class RichPresenceManager:
                 self.connected = False
                 self.rpc = None
                 print("Discord Rich Presence disconnected")
-    
+
     def parse_activity(self, status_str: str) -> dict:
         """Parse status string into Rich Presence data"""
         payload_overrides = {}
@@ -335,7 +490,7 @@ class RichPresenceManager:
         # Treat empty, whitespace-only, or explicit 'none' values as idle
         if not status_str or (isinstance(status_str, str) and status_str.strip().lower() in ("", "none")):
             status_str = "idle_main_menu"
-        
+
         status_lower = str(status_str).lower()
 
         # exact matches from map (use lowercase keys for safety)
@@ -424,12 +579,12 @@ class RichPresenceManager:
             if activity.get("small_text") == "":
                 activity["small_text"] = None
         return activity
-    
+
     def update_presence(self, activity_data: dict):
         """Update Discord Rich Presence with new activity data"""
         if not self.connected or not self.rpc:
             return
-        
+
         try:
             # Build presence payload
             payload = {
@@ -439,17 +594,17 @@ class RichPresenceManager:
                 "large_text": activity_data["large_text"],
                 "start": self.start_time,
             }
-            
+
             # Add small image if available
             if activity_data["small_image"]:
                 payload["small_image"] = activity_data["small_image"]
                 payload["small_text"] = activity_data["small_text"]
-            
+
             self.rpc.update(**payload)
         except Exception as e:
             # Silently handle errors (e.g., Discord closed)
             self.connected = False
-    
+
     def update_loop(self):
         """Background thread to monitor status and update RPC"""
         while self.running:
@@ -460,13 +615,13 @@ class RichPresenceManager:
                         self.disconnect()
                     time.sleep(2)
                     continue
-                
+
                 # Try to connect if not connected
                 if not self.connected:
                     self.connect()
                     time.sleep(2)
                     continue
-                
+
                 # Get current status (presence overrides status when available)
                 presence_status = ""
                 if self.presence is not None:
@@ -479,30 +634,30 @@ class RichPresenceManager:
                     current_status = presence_status
                 else:
                     current_status = self.status.value
-                
+
                 # Update if status changed
                 if current_status != self.last_activity:
                     activity_data = self.parse_activity(current_status)
                     self.update_presence(activity_data)
                     self.last_activity = current_status
-                
+
                 time.sleep(1)  # Check every second
             except Exception as e:
                 # Silently handle any errors
                 time.sleep(2)
-    
+
     def start(self):
         """Start the Rich Presence update thread"""
         if self.running:
             return
-        
+
         if not PYPRESENCE_AVAILABLE:
             return
-        
+
         self.running = True
         self.thread = Thread(target=self.update_loop, daemon=True)
         self.thread.start()
-    
+
     def stop(self):
         """Stop the Rich Presence update thread"""
         self.running = False
@@ -567,7 +722,7 @@ def canClaimTimedBearQuest(name):
         return False
     # state == 0 -> allow claiming
     return True
-    
+
 # (set_enabled moved into RichPresenceManager class)
 #controller for the macro
 def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
@@ -581,16 +736,16 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 regularMobData[x].append(k)
             else:
                 regularMobData[x] = [k]
-    #Limit werewolf to just pumpkin 
+    #Limit werewolf to just pumpkin
     regularMobData["werewolf"] = ["pumpkin"]
-    
+
     private_server_link = macro.setdat.get("private_server_link", "")
     # Accept share links — the rejoin deeplink handler now supports the newer share link format.
 
     taskCompleted = True
     questCache = {}
     questScanScreens = None
-    
+
     macro.start()
     #macro.useItemInInventory("blueclayplanter")
     #function to run a task
@@ -631,18 +786,18 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         pending_action = int(skipTask.value)
         if pending_action != INTERRUPT_NONE:
             return handle_interrupt(pending_action)
-        
+
         try:
             #execute the task
             if func:
-                returnVal = func(*args) 
+                returnVal = func(*args)
                 taskCompleted = True
             else:
                 returnVal = None
             #task done
-            if resetAfter: 
+            if resetAfter:
                 macro.reset(convert=convertAfter)
-            
+
             #do priority tasks
             if macro.night and macro.setdat["stinger_hunt"]:
                 macro.stingerHunt()
@@ -651,7 +806,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             if macro.hasScheduledRejoinArrived():
                 macro.rejoin("Rejoining (Scheduled)")
                 macro.saveTiming("rejoin_every")
-            
+
             #auto field boost (can be disabled per-call via allowAFB)
             if allowAFB and macro.setdat["Auto_Field_Boost"] and not macro.AFBLIMIT:
                 if macro.hasAFBRespawned("AFB_dice_cd", macro.setdat["AFB_rebuff"]*60) or macro.hasAFBRespawned("AFB_glitter_cd", macro.setdat["AFB_rebuff"]*60-30):
@@ -661,7 +816,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
 
         macro.clear_task_status()
         return returnVal
-    
+
 
     def isBackpackReadyForWreath():
         try:
@@ -686,9 +841,9 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
 
     def handleQuest(questGiver, executeQuest=True):
         nonlocal questCache, questScanScreens, taskCompleted
-        
-        
-        
+
+
+
         gatherFieldsList = []
         gumdropGatherFieldsList = []
         petalGatherFieldsList = []
@@ -904,7 +1059,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
     settings_cache = {}
     last_settings_load = 0
     settings_cache_duration = 0.5  # Reload settings every 0.5 seconds max
-    
+
     def get_cached_settings():
         nonlocal settings_cache, last_settings_load
         current_time = time.time()
@@ -936,7 +1091,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         if returnToHive != "no override":
             overrides["return"] = returnToHive
         return overrides
-    
+
     while True:
         # Check for pause - wait while paused
         while run.value == 6:  # 6 = paused
@@ -949,7 +1104,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         # Clearing here guarantees the board is re-read after the task list recycles.
         questCache.clear()
         questScanScreens = None
-        
+
         macro.setdat = get_cached_settings()
         # Check if profile has changed and reload settings if needed
         macro.checkAndReloadSettings()
@@ -1282,10 +1437,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         redGumdropFieldOverride = {}
         blueGumdropFieldOverride = {}
         defaultQuestFieldOverride = {}
-        
+
         # Track which quests have been executed in priority order (for feeding bees)
         executedQuests = set()
-        
+
         # Store quest feed requirements per quest (to feed only when quest appears in priority)
         questFeedRequirements = {}
 
@@ -1341,8 +1496,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     defaultQuestFieldOverride = dict(questGatherOverrides)
                 # Store feed requirements (will be used when quest appears in priority queue)
                 questFeedRequirements[questName] = feedBees
-        
-                    
+
+
         taskCompleted = False
 
         # Quest completer feature removed. Quest-giver handling and brown bear logic remain.
@@ -1356,7 +1511,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     cycle = 1
                 if macro.setdat[f"cycle{cycle}_{slot+1}_planter"] != "none" and macro.setdat[f"cycle{cycle}_{slot+1}_field"] != "none":
                     return cycle
-            else: 
+            else:
                 return False
 
         def emptyManualPlanterData():
@@ -1410,24 +1565,24 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             with open("./data/user/manualplanters.txt", "w") as f:
                 f.write(planterDataRaw)
             return normalized
-        
+
         # Get priority order from settings, or use empty list if not set
         priorityOrder = get_task_list_order(macro.setdat)
-        
+
         # Track which tasks have been executed to avoid duplicates
         executedTasks = set()
-        
+
         # Track planter data for gather fields
         planterDataRaw = None
-        
+
         # Helper function to execute a task by its ID
         def executeTask(taskId):
             nonlocal planterDataRaw, executedTasks, taskCompleted
-            
+
             # Skip if already executed
             if taskId in executedTasks:
                 return False
-            
+
             # Handle quest tasks - execute quest (submit/get) and feed bees when quest appears in priority order
             if taskId.startswith("quest_"):
                 questName = taskId.replace("quest_", "").replace("_", " ")
@@ -1444,14 +1599,14 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 # For Brown Bear, capture the objectives and gather them immediately
                 if questName == "brown bear":
                     setdatEnable, gatherFields, gumdropFields, petalGatherFields, needsRed, needsBlue, feedBees, needsRedGumdrop, needsBlueGumdrop, needsField = handleQuest(questName, executeQuest=True)
-                    
+
                     # Gather the fields for this quest
                     questGatherOverrides = getQuestGatherOverrides(questName)
-                    
+
                     # Gather regular fields
                     for field in gatherFields:
                         runTask(macro.gather, args=(field, questAIFieldCenterOverride(field, questGatherOverrides)), resetAfter=False)
-                    
+
                     # Gather gumdrop fields (if any)
                     for field in gumdropFields:
                         runTask(macro.gather, args=(field, questAIFieldCenterOverride(field, questGatherOverrides), True), resetAfter=False)
@@ -1459,29 +1614,29 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     # Gather bloom-petal fields using BloomsAI
                     for field in petalGatherFields:
                         runTask(macro.gather, args=(field, bloomsAIQuestOverride(questGatherOverrides)), resetAfter=False)
-                    
+
                     # Feed bees if needed
                     for item, quantity in feedBees:
                         macro.feedBee(item, quantity)
                         taskCompleted = True
                 else:
                     handleQuest(questName, executeQuest=True)
-                    
+
                     # Feed bees for this quest (requirements were already checked above)
                     if questName in questFeedRequirements:
                         feedBees = questFeedRequirements[questName]
                         for item, quantity in feedBees:
                             macro.feedBee(item, quantity)
                             taskCompleted = True
-                
+
                 executedTasks.add(taskId)
                 executedQuests.add(questName)
                 return True
-            
+
             # Handle collect tasks
             if taskId.startswith("collect_"):
                 collectName = taskId.replace("collect_", "")
-                
+
                 # Special case: sticker_printer
                 if collectName == "sticker_printer":
                     if macro.setdat["sticker_printer"] and macro.hasRespawned("sticker_printer", macro.collectCooldowns["sticker_printer"]):
@@ -1489,7 +1644,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         executedTasks.add(taskId)
                         return True
                     return False
-                
+
                 # Special case: sticker_stack
                 if collectName == "sticker_stack":
                     if macro.setdat["sticker_stack"]:
@@ -1501,7 +1656,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                             executedTasks.add(taskId)
                             return True
                     return False
-                
+
                 # Field boosters (handled separately due to gather logic)
                 if collectName in ["blue_booster", "red_booster", "mountain_booster"]:
                     if collectName in macroModule.fieldBoosterData:
@@ -1515,7 +1670,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                             executedTasks.add(taskId)
                             return True
                     return False
-                
+
                 # Regular collect items
                 if collectName in macroModule.collectData:
                     if macro.setdat[collectName] and macro.hasRespawned(collectName, macro.collectCooldowns[collectName]):
@@ -1525,11 +1680,11 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         runTask(macro.collect, args=(collectName,))
                         executedTasks.add(taskId)
                         return True
-            
+
             # Handle kill tasks
             if taskId.startswith("kill_"):
                 mob = taskId.replace("kill_", "")
-                
+
                 # Special cases: coconut_crab, king_beetle, tunnel_bear, and stump_snail
                 if mob == "coconut_crab":
                     if macro.setdat["coconut_crab"] and macro.hasRespawned("coconut_crab", 36*60*60, applyMobRespawnBonus=True):
@@ -1537,7 +1692,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         executedTasks.add(taskId)
                         return True
                     return False
-                
+
 
                 # King Beetle respawns every 24 hours (20 hours 24 minutes with Gifted Vicious Bee)
                 if mob == "king_beetle":
@@ -1554,14 +1709,14 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         executedTasks.add(taskId)
                         return True
                     return False
-                
+
                 if mob == "stump_snail":
                     if macro.setdat["stump_snail"] and macro.hasRespawned("stump_snail", 96*60*60, applyMobRespawnBonus=True):
                         runTask(macro.stumpSnail)
                         executedTasks.add(taskId)
                         return True
                     return False
-                
+
                 # Regular mobs
                 if mob in regularMobData:
                     if macro.setdat[mob]:
@@ -1579,7 +1734,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         # This will allow the loop to move to the next task
                         return False
                 return False
-            
+
             # Handle gather tasks
             if taskId.startswith("gather_"):
                 fieldName = taskId.replace("gather_", "").replace("_", " ")
@@ -1588,14 +1743,14 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 # in quest order instead of the global gather priority queue.
                 if fieldName in questGatherFields or fieldName in questGumdropGatherFields or fieldName in questPetalGatherFields:
                     return False
-                
+
                 # Check if this field is enabled in gather tab
                 for i in range(len(macro.setdat["fields_enabled"])):
                     if macro.setdat["fields_enabled"][i] and macro.setdat["fields"][i] == fieldName:
                         runTask(macro.gather, args=(fieldName,), resetAfter=False)
                         executedTasks.add(taskId)
                         return True
-                
+
                 return False
 
             if taskId.startswith("gatherpetal_"):
@@ -1605,7 +1760,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     executedTasks.add(taskId)
                     return True
                 return False
-            
+
             # Handle special tasks
             if taskId == "blender":
                 if macro.setdat["blender_enable"]:
@@ -1617,18 +1772,18 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         executedTasks.add(taskId)
                         return True
                 return False
-            
+
             if taskId == "planters":
                 if not macro.setdat["planters_mode"]:
                     return False
-                
+
                 # Manual planters
                 if macro.setdat["planters_mode"] == 1:
                     if planterDataRaw is None:
                         with open("./data/user/manualplanters.txt", "r") as f:
                             planterDataRaw = f.read()
                         f.close()
-                    
+
                     if not planterDataRaw.strip():
                         planterData = emptyManualPlanterData()
                         for i in range(3):
@@ -1659,7 +1814,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                     planterData["gatherFields"][i] = ""
                                     planterData = saveManualPlanterData(planterData)
                                     updateGUI.value = 1
-                        
+
                         for i in range(3):
                             cycle = planterData["cycles"][i]
                             if planterData["planters"][i]:
@@ -1667,17 +1822,17 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                             nextCycle = goToNextCycle(cycle, i)
                             if not nextCycle:
                                 continue
-                            
+
                             planterToPlace = macro.setdat[f"cycle{nextCycle}_{i+1}_planter"]
                             otherSlotPlanters = planterData["planters"][:i] + planterData["planters"][i+1:]
                             if planterToPlace in otherSlotPlanters:
                                 continue
-                            
+
                             fieldToPlace = macro.setdat[f"cycle{nextCycle}_{i+1}_field"]
                             otherSlotFields = planterData["fields"][:i] + planterData["fields"][i+1:]
                             if fieldToPlace in otherSlotFields:
                                 continue
-                            
+
                             planter = runTask(macro.placePlanterInCycle, args = (i, nextCycle),resetAfter=False, allowAFB=False)
                             if planter:
                                 planterData["cycles"][i] = nextCycle
@@ -1689,7 +1844,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                 updateGUI.value = 1
                         executedTasks.add(taskId)
                         return True
-                
+
                 # Auto planters
                 elif macro.setdat["planters_mode"] == 2:
                     try:
@@ -2217,17 +2372,17 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                 runTask(macro.gather, args=(candidate["field"],), resetAfter=False)
                         else:
                             blockedPlacements.add((candidate["planter"], candidate["field"]))
-                    
+
                     executedTasks.add(taskId)
                     return True
-                
+
             if taskId == "ant_challenge":
                 if macro.setdat["ant_challenge"]:
                     runTask(macro.antChallenge, resetAfter=False)
                     executedTasks.add(taskId)
                     return True
                 return False
-            
+
             # Handle feed bee actions (from quest completer)
             if taskId.startswith("feed_bee_"):
                 parts = taskId.split("_")
@@ -2262,7 +2417,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 return False
 
             return False
-        
+
         # Track quest task execution times to prevent spam
         questTaskCooldowns = {}
 
@@ -2503,7 +2658,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     if k == "wreath" and not isBackpackReadyForWreath():
                         macro.logger.webhook("", "Honey Wreath ready, but backpack is not full yet. Deferring claim", "dark brown", "screen")
                         continue
-            
+
             #blender
             if macro.setdat["blender_enable"]:
                 with open("./data/user/blender.txt", "r") as f:
@@ -2516,10 +2671,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         # These need to be handled separately as they depend on quest requirements
         blueFields = ["blue flower", "bamboo", "pine tree", "stump"]
         redFields = ["mushroom", "strawberry", "rose", "pepper"]
-        
+
         # Track all gathered fields to avoid duplicates
         allGatheredFields = []
-        
+
         # Handle gumdrop gather fields first
         if blueGumdropFieldNeeded:
             for f in blueFields:
@@ -2528,7 +2683,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             else:
                 questGumdropGatherFields.append("pine tree")
                 questGumdropFieldOverrides["pine tree"] = dict(blueGumdropFieldOverride)
-        
+
         if redGumdropFieldNeeded:
             for f in redFields:
                 if f in questGumdropGatherFields:
@@ -2562,7 +2717,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 field = "pine tree"
                 allGatheredFields.append(field)
                 runTask(macro.gather, args=(field, questAIFieldCenterOverride(field, blueFieldOverride)), resetAfter=False)
-        
+
         if redFieldNeeded:
             for f in redFields:
                 if f in allGatheredFields:
@@ -2571,13 +2726,13 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 field = "rose"
                 allGatheredFields.append(field)
                 runTask(macro.gather, args=(field, questAIFieldCenterOverride(field, redFieldOverride)), resetAfter=False)
-        
+
         if fieldNeeded and not allGatheredFields:
             if defaultQuestFieldOverride:
                 runTask(macro.gather, args=("pine tree", questAIFieldCenterOverride("pine tree", defaultQuestFieldOverride)), resetAfter=False)
             else:
                 runTask(macro.gather, args=("pine tree", questAIFieldCenterOverride("pine tree")), resetAfter=False)
-        
+
         # Handle planter gather fields (if not already gathered)
         if planterDataRaw:
             try:
@@ -2604,9 +2759,9 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                             allGatheredFields.append(field)
         except Exception:
             pass
-        
+
         # Old code removed - all tasks now execute via priority order
-        
+
         mouse.click()
 
 
@@ -2640,29 +2795,29 @@ def has_input_monitoring_permission():
 def watch_for_hotkeys(run):
     # Track currently pressed keys for combination detection
     pressed_keys = set()
-    
+
     # Add debouncing to prevent duplicate triggers
     last_trigger_time = {"start": 0.0, "stop": 0.0, "pause": 0.0, "hotbar_buff_start": 0.0}
     debounce_duration = 0.3  # 300ms debounce
-    
+
     # Add threading lock for synchronization
     import threading
     key_lock = threading.Lock()
-    
+
     # Add key state cleanup to handle stuck keys
     last_cleanup_time = 0
     cleanup_interval = 5.0  # Clean up every 5 seconds
-    
+
     # Force stop tracking
     stop_key_held = False
     force_stop_check_interval = 0.1  # Check every 100ms
     last_force_stop_check = 0
-    
+
     # Cache settings to avoid reloading on every keypress
     settings_cache = {}
     last_settings_load = 0
     settings_cache_duration = 1.0  # Reload settings every 1 second max
-    
+
     # Cache Eel recording state to avoid repeated calls
     recording_cache = {"start": False, "pause": False, "stop": False, "hotbar_buff_start": False}
     last_recording_check = 0
@@ -2707,7 +2862,7 @@ def watch_for_hotkeys(run):
         "ß": "S", "†": "T", "√": "V", "∑": "W", "≈": "X",
         "¥": "Y", "Ω": "Z", "ω": "Z",
     }
-    
+
     def get_cached_settings():
         nonlocal settings_cache, last_settings_load
         current_time = time.time()
@@ -2715,7 +2870,7 @@ def watch_for_hotkeys(run):
             settings_cache = settingsManager.loadAllSettings()
             last_settings_load = current_time
         return settings_cache
-    
+
     def is_recording_keybind():
         nonlocal recording_cache, last_recording_check
         current_time = time.time()
@@ -2730,7 +2885,7 @@ def watch_for_hotkeys(run):
             except:
                 recording_cache = {"start": False, "pause": False, "stop": False, "hotbar_buff_start": False}
             return recording_cache["start"] or recording_cache["pause"] or recording_cache["stop"] or recording_cache["hotbar_buff_start"]
-    
+
     def normalize_key_name(key_name):
         key_name = str(key_name or "").strip()
         if not key_name:
@@ -2786,26 +2941,26 @@ def watch_for_hotkeys(run):
             # Log error but don't crash the listener
             print(f"Error converting key {key}: {e}")
             return normalize_key_name(str(key))
-    
+
     def is_stop_keybind_held():
         """Check if the stop keybind is currently held down"""
         try:
             settings = get_cached_settings()
             if not settings:
                 return False
-                
+
             stop_keybind = settings.get("stop_keybind", "F3")
             if not stop_keybind:
                 return False
-            
+
             return keybind_is_held(stop_keybind)
         except Exception as e:
             print(f"Error checking stop keybind: {e}")
             return False
-    
+
     def on_press(key):
         nonlocal run, last_cleanup_time, stop_key_held, last_force_stop_check
-        
+
         # Use lock to prevent race conditions
         with key_lock:
             try:
@@ -2815,18 +2970,18 @@ def watch_for_hotkeys(run):
                     # Clear all pressed keys to reset state
                     pressed_keys.clear()
                     last_cleanup_time = current_time
-                
+
                 # Get cached settings
                 settings = get_cached_settings()
                 start_keybind = settings.get("start_keybind", "F1")
                 stop_keybind = settings.get("stop_keybind", "F3")
                 pause_keybind = settings.get("pause_keybind", "F2")
                 hotbar_buff_start_keybind = settings.get("hotbar_buff_start_keybind", "F4")
-                
+
                 # Convert key to string for comparison
                 key_str = convert_key_to_string(key)
                 pressed_keys.add(key_str)
-                
+
                 # Don't start/stop macro if we're recording a keybind
                 if is_recording_keybind():
                     return  # Ignore keybind during recording
@@ -2856,7 +3011,7 @@ def watch_for_hotkeys(run):
 
                 # Add debouncing to prevent duplicate triggers
                 current_time = time.time()
-                
+
                 if keys_match_keybind(start_keybind):
                     if run.value != 3: #only start from fully stopped state
                         return
@@ -2954,14 +3109,14 @@ def watch_for_hotkeys(run):
                 # Log error but don't crash the listener
                 print(f"Error in on_press: {e}")
                 return
-    
+
     def on_release(key):
         # Remove released key from pressed keys using optimized conversion
         with key_lock:
             try:
                 key_str = convert_key_to_string(key)
                 pressed_keys.discard(key_str)
-                
+
                 # Check if stop keybind is no longer held
                 if not is_stop_keybind_held():
                     nonlocal stop_key_held
@@ -2989,7 +3144,7 @@ def watch_for_hotkeys(run):
                         title="Input Monitoring Permission",
                         details="This is required for global start, pause, and stop hotkeys.",
                     )
-            
+
             listener = keyboard.Listener(on_press=on_press, on_release=on_release)
             listener.start()
             return listener
@@ -3012,14 +3167,14 @@ def watch_for_hotkeys(run):
                     print("Keyboard listener restarted successfully")
                 except Exception as e2:
                     print(f"Failed to restart keyboard listener: {e2}")
-            
+
             restart_thread = threading.Thread(target=restart_listener, daemon=True)
             restart_thread.start()
             return None
-    
+
     # Don't start the listener here - it will be started after GUI launch on main thread
     # start_keyboard_listener()
-    
+
     # Return the function so it can be called later on the main thread
     return start_keyboard_listener
 
@@ -3109,7 +3264,7 @@ if __name__ == "__main__":
                 f.close()
             except:
                 messageBox.msgBox(title="Failed to convert pattern", text=f"There was an error converting {pattern}. The pattern will not be used.")
-    
+
     #setup stream class
     stream = cloudflaredStream()
 
@@ -3151,7 +3306,7 @@ if __name__ == "__main__":
                 richPresenceManager.stop()
         except NameError:
             pass
-        
+
     def stopApp(page= None, sockets = None):
         global stopThreads
         global macroProc
@@ -3175,18 +3330,18 @@ if __name__ == "__main__":
         stream.stop()
         #if discordBotProc.is_alive(): discordBotProc.kill()
         releaseInputsSafely()
-    
+
     atexit.register(onExit)
-        
+
     #setup and launch gui
     gui.run = run
-    gui.launch()
+    gui_url = gui.launch()
     # Ensure GUI loads current settings immediately on open (adds Brown Bear if missing)
     try:
         gui.updateGUI()
     except Exception:
         pass
-    
+
     # Start keyboard listener after GUI launch to ensure it's on the main thread (required on macOS)
     # This prevents TIS/TSM errors on macOS
     if start_keyboard_listener_fn:
@@ -3195,7 +3350,7 @@ if __name__ == "__main__":
             print("Keyboard listener started successfully")
         except Exception as e:
             print(f"Failed to start keyboard listener after GUI launch: {e}")
-    
+
     #use run.value to control the macro loop
 
     #check color profile
@@ -3213,7 +3368,7 @@ if __name__ == "__main__":
                 messageBox.msgBox(title="Failed to change color profile", text=e)
     except Exception as e:
         pass
-    
+
     #check screen recording permissions
     try:
         cg = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
@@ -3254,10 +3409,10 @@ if __name__ == "__main__":
     autoStopDeadline = None
     autoStopHours = 0.0
     macroCrashTimes = []
-    
+
     # Initialize Rich Presence Manager
     richPresenceManager = None
-    
+
     # Cache settings for main GUI loop to avoid reloading every 0.5 seconds
     gui_settings_cache = {}
     last_gui_settings_load = 0
@@ -3270,369 +3425,387 @@ if __name__ == "__main__":
             return 0.0
         return max(0.0, hours)
 
-    while True:
-        eel.sleep(0.5)
-        
-        # Get cached settings
-        current_time = time.time()
-        if current_time - last_gui_settings_load > gui_settings_cache_duration:
-            gui_settings_cache = settingsManager.loadAllSettings()
-            last_gui_settings_load = current_time
-        setdat = gui_settings_cache
+    def macro_supervision_loop():
+        global macroProc
+        global autoStopDeadline
+        global autoStopHours
+        global autoStopStartTime
+        global discordBotProc
+        global disconnectCooldownUntil
+        global gui_settings_cache
+        global last_gui_settings_load
+        global macroCrashTimes
+        global prevDiscordBotToken
+        global prevRunState
+        global richPresenceManager
 
-        if autoStopStartTime is not None and run.value in (2, 4, 6):
-            latestAutoStopHours = parseAutoStopHours(setdat)
-            if latestAutoStopHours != autoStopHours:
-                autoStopHours = latestAutoStopHours
-                autoStopDeadline = autoStopStartTime + (autoStopHours * 3600) if autoStopHours > 0 else None
+        while True:
+            eel.sleep(0.5)
 
-        if autoStopDeadline is not None and run.value in (2, 4, 6) and current_time >= autoStopDeadline:
-            logger.webhook(
-                "Macro Auto Stopped",
-                f"Stopped after {autoStopHours:g} hour{'s' if autoStopHours != 1 else ''}.",
-                "orange",
-            )
-            run.value = 0
+            # Get cached settings
+            current_time = time.time()
+            if current_time - last_gui_settings_load > gui_settings_cache_duration:
+                gui_settings_cache = settingsManager.loadAllSettings()
+                last_gui_settings_load = current_time
+            setdat = gui_settings_cache
 
-        #discord bot. Look for changes in the bot token
-        currentDiscordBotToken = setdat.get("discord_bot_token", "")
-        if setdat.get("discord_bot", False) and currentDiscordBotToken and currentDiscordBotToken.strip() and currentDiscordBotToken != prevDiscordBotToken:
-            if discordBotProc is not None and discordBotProc.is_alive():
-                print("Detected change in discord bot token, killing previous bot process")
-                discordBotProc.terminate()
-                discordBotProc.join()
-            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI), daemon=True)
-            prevDiscordBotToken = currentDiscordBotToken
-            discordBotProc.start()
+            if autoStopStartTime is not None and run.value in (2, 4, 6):
+                latestAutoStopHours = parseAutoStopHours(setdat)
+                if latestAutoStopHours != autoStopHours:
+                    autoStopHours = latestAutoStopHours
+                    autoStopDeadline = autoStopStartTime + (autoStopHours * 3600) if autoStopHours > 0 else None
 
-        # Discord Rich Presence - Initialize and always show status
-        discord_rp_enabled = setdat.get("discord_rich_presence", False)
-        
-        if richPresenceManager is None and discord_rp_enabled:
-            # Initialize Rich Presence Manager
-            richPresenceManager = RichPresenceManager(status, enabled=True, presence_value=presence)
-            richPresenceManager.start()
-            print("Discord Rich Presence started")
-        elif richPresenceManager is not None:
-            # Update settings if they changed
-            richPresenceManager.set_enabled(discord_rp_enabled)
-            
-            # Update status based on macro run state
-            if run.value == 0 or run.value == 3:  # Stopped
-                # Clear any presence override and show "On main menu" when not running
-                try:
-                    if presence is not None:
-                        presence.value = ""
-                except Exception:
-                    pass
-                if status.value != "idle_main_menu":
-                    status.value = "idle_main_menu"
-            elif run.value == 6:  # Paused
-                # Show "Paused" status
-                if status.value != "paused":
-                    status.value = "paused"
+            if autoStopDeadline is not None and run.value in (2, 4, 6) and current_time >= autoStopDeadline:
+                logger.webhook(
+                    "Macro Auto Stopped",
+                    f"Stopped after {autoStopHours:g} hour{'s' if autoStopHours != 1 else ''}.",
+                    "orange",
+                )
+                run.value = 0
 
-        # Check if run state changed
-        if run.value != prevRunState:
-            # Check for resume (transition from paused to running)
-            if prevRunState == 6 and run.value == 2:
-                try:
-                    appManager.openApp("Roblox")
-                except Exception:
-                    pass
-                logger.webhook("Macro Resumed", "Fuzzy Macro", "bright green")
-            # Check for pause (transition from running to paused)
-            elif prevRunState == 2 and run.value == 6:
-                keyboardModule.releaseMovement()
-                mouse.mouseUp()
-                logger.webhook("Macro Paused", "Use F2 or /resume to continue", "orange")
+            #discord bot. Look for changes in the bot token
+            currentDiscordBotToken = setdat.get("discord_bot_token", "")
+            if setdat.get("discord_bot", False) and currentDiscordBotToken and currentDiscordBotToken.strip() and currentDiscordBotToken != prevDiscordBotToken:
+                if discordBotProc is not None and discordBotProc.is_alive():
+                    print("Detected change in discord bot token, killing previous bot process")
+                    discordBotProc.terminate()
+                    discordBotProc.join()
+                discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI), daemon=True)
+                prevDiscordBotToken = currentDiscordBotToken
+                discordBotProc.start()
 
-            gui.setRunState(run.value)
-            try:
-                gui.toggleStartStop()  # Update UI
-            except:
-                pass  # If eel is not ready, continue
-            prevRunState = run.value
+            # Discord Rich Presence - Initialize and always show status
+            discord_rp_enabled = setdat.get("discord_rich_presence", False)
 
-        if run.value == 1:
-            #create and set webhook obj for the logger
-            logger.enableWebhook = setdat.get("enable_webhook", False)
-            logger.webhookURL = setdat.get("webhook_link", "")
-            logger.sendScreenshots = setdat.get("send_screenshot", True)
-            stopThreads = False
+            if richPresenceManager is None and discord_rp_enabled:
+                # Initialize Rich Presence Manager
+                richPresenceManager = RichPresenceManager(status, enabled=True, presence_value=presence)
+                richPresenceManager.start()
+                print("Discord Rich Presence started")
+            elif richPresenceManager is not None:
+                # Update settings if they changed
+                richPresenceManager.set_enabled(discord_rp_enabled)
 
-            #reset hourly report data
-            hourlyReport = HourlyReport()
-            hourlyReport.resetAllStats()
-            #stream
-            def waitForStreamURL():
-                #wait for up to 15 seconds for the public link
-                for _ in range(150):
-                    time.sleep(0.1)
-                    if stream.publicURL:
-                        logger.webhook("Stream Started", f'Stream URL: {stream.publicURL}', "purple")
-                        
-                        # If bot is enabled, request pinning of the stream message
-                        if setdat.get("discord_bot", False) and setdat.get("pin_stream_url", False):
-                            import modules.logging.webhook as webhookModule
-                            if webhookModule.last_channel_id:
-                                try:
-                                    pin_requests.put({
-                                        'channel_id': webhookModule.last_channel_id,
-                                        'search_text': 'Stream URL'
-                                    })
-                                    print("Pin request queued for stream URL message")
-                                except Exception as e:
-                                    print(f"Error queueing pin request: {e}")
-                        return
-
-                logger.webhook("", f'Stream could not start. Check terminal for more info', "red", ping_category="ping_critical_errors")
-
-            streamLink = None
-            if setdat.get("enable_stream", False):
-                if stream.isCloudflaredInstalled():
-                    logger.webhook("", "Starting Stream...", "light blue")
-                    streamLink = stream.start(setdat.get("stream_resolution", 0.75))
-                    Thread(target=waitForStreamURL, daemon=True).start()
-                else:
-                    messageBox.msgBox(text='Cloudflared is required for streaming but is not installed. Visit https://fuzzy-team.gitbook.io/fuzzy-macro/discord-setup/stream-setup for installation instructions', title='Cloudflared not installed')
-
-            print("starting macro proc")
-            #check if user enabled field drift compensation but sprinkler is not supreme saturator
-            fieldSettings = settingsManager.loadFields()
-            sprinkler = setdat["sprinkler_type"]
-            for field in setdat.get("fields", []):
-                fs = fieldSettings.get(field, {})
-                if fs.get("field_drift_compensation", False) and setdat.get("sprinkler_type") != "saturator":
-                    messageBox.msgBox(title="Field Drift Compensation", text=f"You have Field Drift Compensation enabled for {field} field, \
-                                    but you do not have Supreme Saturator as your sprinkler type in configs.\n\
-                                    Field Drift Compensation requires you to own the Supreme Saturator.\n\
-                                    Kindly disable field drift compensation if you do not have the Supreme Saturator")
-                    break
-            #check if blender is enabled but there are no items to craft
-            validBlender = not setdat["blender_enable"] #valid blender set to false if blender is enabled, else its true since blender is disabled
-            for i in range(1, macroModule.BLENDER_ITEM_SLOTS + 1):
-                if setdat[f"blender_item_{i}"] != "none" and (setdat[f"blender_repeat_{i}"] or setdat[f"blender_repeat_inf_{i}"]):
-                    validBlender = True
-            if not validBlender:
-                messageBox.msgBox(title="Blender", text=f"You have blender enabled, \
-                                    but there are no more items left to craft.\n\
-				                    Check the 'repeat' setting on your blender items and reset blender data.")
-            #macro proc
-            macroProc = multiprocessing.Process(target=macro_process_entry, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
-            macroProc.start()
-
-            macro_version = settingsManager.getMacroVersion()
-            logger.webhook("Macro Started", f'Fuzzy Macro v{macro_version}\nDisplay: {screenInfo["display_type"]}, {screenInfo["screen_width"]}x{screenInfo["screen_height"]}', "purple")
-            run.value = 2
-            autoStopStartTime = time.time()
-            autoStopHours = parseAutoStopHours(setdat)
-            autoStopDeadline = autoStopStartTime + (autoStopHours * 3600) if autoStopHours > 0 else None
-            gui.setRunState(2)  # Update the global run state
-            try:
-                gui.toggleStartStop()  # Update UI
-            except:
-                pass  # If eel is not ready, continue
-            try:
-                gui.toggleStartStop()  # Update UI
-            except:
-                pass  # If eel is not ready, continue
-        elif run.value == 0:
-            had_macro_proc = bool(macroProc)
-            autoStopStartTime = None
-            autoStopDeadline = None
-            autoStopHours = 0.0
-
-            # Stop macro/tools and release all inputs first.
-            gui.setRunState(0)
-            try:
-                gui.toggleStartStop()
-            except:
-                pass
-
-            if had_macro_proc:
-                logger.webhook("Macro Stopped", "Fuzzy Macro", "red")
-            try:
-                gui.stopAllTools()
-            except Exception:
-                pass
-
-            stopApp()
-
-            run.value = 3
-            gui.setRunState(3)
-            try:
-                gui.toggleStartStop()
-            except:
-                pass
-
-            if not had_macro_proc:
-                continue
-
-            # Generate and send final report AFTER stopping inputs
-            try:
-                print("Generating final report...")
-                from modules.submacros.finalReport import FinalReport
-                import os
-                
-                # Create final report object
-                finalReportObj = FinalReport()
-                sessionStats = finalReportObj.generateFinalReport(setdat)
-                
-                # Check if report was generated successfully
-                if sessionStats and os.path.exists("finalReport.png"):
-                    # Format session summary for webhook
-                    sessionTime = sessionStats.get("total_session_time", 0)
-                    hours = int(sessionTime / 3600)
-                    minutes = int((sessionTime % 3600) / 60)
-                    timeStr = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
-                    
-                    totalHoney = sessionStats.get("total_honey", 0)
-                    avgHoneyPerHour = sessionStats.get("avg_honey_per_hour", 0)
-                    
-                    def millify(n):
-                        """Format large numbers with suffixes"""
-                        if n < 1000:
-                            return str(int(n))
-                        elif n < 1000000:
-                            return f"{n/1000:.1f}K"
-                        elif n < 1000000000:
-                            return f"{n/1000000:.1f}M"
-                        elif n < 1000000000000:
-                            return f"{n/1000000000:.1f}B"
-                        else:
-                            return f"{n/1000000000000:.1f}T"
-                    
-                    # Add "Estimated" label if session was less than 1 hour
-                    avgLabel = "Est. Avg/Hour" if sessionTime < 3600 else "Avg/Hour"
-                    description = f"Runtime: {timeStr}\nTotal Honey: {millify(totalHoney)}\n{avgLabel}: {millify(avgHoneyPerHour)}"
-                    
-                    # Send final report webhook
-                    logger.finalReport("Session Complete", description, "purple")
-                    print("Final report sent successfully")
-                else:
-                    print("Failed to generate final report - no data available")
-                    
-            except Exception as e:
-                print(f"Error generating final report: {e}")
-                import traceback
-                traceback.print_exc()
-        elif run.value == 4: #disconnected
-            if macroProc and macroProc.is_alive():
-                macroProc.kill()
-                macroProc.join()
-            logger.webhook("","Disconnected", "red", "screen", ping_category="ping_disconnects")
-            appManager.closeApp("Roblox")
-            keyboardModule.releaseMovement()
-            mouse.mouseUp()
-            macroProc = multiprocessing.Process(target=macro_process_entry, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
-            macroProc.start()
-            run.value = 2
-            gui.setRunState(2)  # Update the global run state
-            try:
-                gui.toggleStartStop()  # Update UI
-            except:
-                pass  # If eel is not ready, continue
-        # Note: run.value == 6 (paused) is handled in the macro process loop - it waits for resume
-        
-        # Check for crash (non-zero exitcodes). Log signal name to aid diagnosis.
-        if macroProc and not macroProc.is_alive() and hasattr(macroProc, "exitcode") and macroProc.exitcode is not None and macroProc.exitcode != 0:
-            exitcode = macroProc.exitcode
-            try:
-                import signal
-                if exitcode < 0:
-                    signum = -exitcode
+                # Update status based on macro run state
+                if run.value == 0 or run.value == 3:  # Stopped
+                    # Clear any presence override and show "On main menu" when not running
                     try:
-                        signame = signal.Signals(signum).name
+                        if presence is not None:
+                            presence.value = ""
                     except Exception:
-                        signame = str(signum)
-                    extra = f" (terminated by signal {signame})"
-                else:
-                    extra = ""
-            except Exception:
-                extra = ""
-            print(f"Macro process exited with exit code {exitcode}{extra}")
-            now = time.time()
-            macroCrashTimes = [crash_time for crash_time in macroCrashTimes if now - crash_time < 60]
-            macroCrashTimes.append(now)
-            logger.webhook("","Macro Crashed{0}".format(extra), "red", "screen", ping_category="ping_critical_errors")
-            macroProc.join()
-            appManager.openApp("Roblox")
-            keyboardModule.releaseMovement()
-            mouse.mouseUp()
-            if len(macroCrashTimes) >= 5:
-                print("Macro crashed 5 times within 60 seconds; stopping automatic restart.")
-                logger.webhook("", "Macro stopped after repeated crashes. Check the app log before restarting.", "red", ping_category="ping_critical_errors")
-                macroProc = None
+                        pass
+                    if status.value != "idle_main_menu":
+                        status.value = "idle_main_menu"
+                elif run.value == 6:  # Paused
+                    # Show "Paused" status
+                    if status.value != "paused":
+                        status.value = "paused"
+
+            # Check if run state changed
+            if run.value != prevRunState:
+                # Check for resume (transition from paused to running)
+                if prevRunState == 6 and run.value == 2:
+                    try:
+                        appManager.openApp("Roblox")
+                    except Exception:
+                        pass
+                    logger.webhook("Macro Resumed", "Fuzzy Macro", "bright green")
+                # Check for pause (transition from running to paused)
+                elif prevRunState == 2 and run.value == 6:
+                    keyboardModule.releaseMovement()
+                    mouse.mouseUp()
+                    logger.webhook("Macro Paused", "Use F2 or /resume to continue", "orange")
+
+                gui.setRunState(run.value)
+                try:
+                    gui.toggleStartStop()  # Update UI
+                except:
+                    pass  # If eel is not ready, continue
+                prevRunState = run.value
+
+            if run.value == 1:
+                #create and set webhook obj for the logger
+                logger.enableWebhook = setdat.get("enable_webhook", False)
+                logger.webhookURL = setdat.get("webhook_link", "")
+                logger.sendScreenshots = setdat.get("send_screenshot", True)
+                stopThreads = False
+
+                #reset hourly report data
+                hourlyReport = HourlyReport()
+                hourlyReport.resetAllStats()
+                #stream
+                def waitForStreamURL():
+                    #wait for up to 15 seconds for the public link
+                    for _ in range(150):
+                        time.sleep(0.1)
+                        if stream.publicURL:
+                            logger.webhook("Stream Started", f'Stream URL: {stream.publicURL}', "purple")
+
+                            # If bot is enabled, request pinning of the stream message
+                            if setdat.get("discord_bot", False) and setdat.get("pin_stream_url", False):
+                                import modules.logging.webhook as webhookModule
+                                if webhookModule.last_channel_id:
+                                    try:
+                                        pin_requests.put({
+                                            'channel_id': webhookModule.last_channel_id,
+                                            'search_text': 'Stream URL'
+                                        })
+                                        print("Pin request queued for stream URL message")
+                                    except Exception as e:
+                                        print(f"Error queueing pin request: {e}")
+                            return
+
+                    logger.webhook("", f'Stream could not start. Check terminal for more info', "red", ping_category="ping_critical_errors")
+
+                streamLink = None
+                if setdat.get("enable_stream", False):
+                    if stream.isCloudflaredInstalled():
+                        logger.webhook("", "Starting Stream...", "light blue")
+                        streamLink = stream.start(setdat.get("stream_resolution", 0.75))
+                        Thread(target=waitForStreamURL, daemon=True).start()
+                    else:
+                        messageBox.msgBox(text='Cloudflared is required for streaming but is not installed. Visit https://fuzzy-team.gitbook.io/fuzzy-macro/discord-setup/stream-setup for installation instructions', title='Cloudflared not installed')
+
+                print("starting macro proc")
+                #check if user enabled field drift compensation but sprinkler is not supreme saturator
+                fieldSettings = settingsManager.loadFields()
+                sprinkler = setdat["sprinkler_type"]
+                for field in setdat.get("fields", []):
+                    fs = fieldSettings.get(field, {})
+                    if fs.get("field_drift_compensation", False) and setdat.get("sprinkler_type") != "saturator":
+                        messageBox.msgBox(title="Field Drift Compensation", text=f"You have Field Drift Compensation enabled for {field} field, \
+                                        but you do not have Supreme Saturator as your sprinkler type in configs.\n\
+                                        Field Drift Compensation requires you to own the Supreme Saturator.\n\
+                                        Kindly disable field drift compensation if you do not have the Supreme Saturator")
+                        break
+                #check if blender is enabled but there are no items to craft
+                validBlender = not setdat["blender_enable"] #valid blender set to false if blender is enabled, else its true since blender is disabled
+                for i in range(1, macroModule.BLENDER_ITEM_SLOTS + 1):
+                    if setdat[f"blender_item_{i}"] != "none" and (setdat[f"blender_repeat_{i}"] or setdat[f"blender_repeat_inf_{i}"]):
+                        validBlender = True
+                if not validBlender:
+                    messageBox.msgBox(title="Blender", text=f"You have blender enabled, \
+                                        but there are no more items left to craft.\n\
+                                        Check the 'repeat' setting on your blender items and reset blender data.")
+                #macro proc
+                macroProc = multiprocessing.Process(target=macro_process_entry, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
+                macroProc.start()
+
+                macro_version = settingsManager.getMacroVersion()
+                logger.webhook("Macro Started", f'Fuzzy Macro v{macro_version}\nDisplay: {screenInfo["display_type"]}, {screenInfo["screen_width"]}x{screenInfo["screen_height"]}', "purple")
+                run.value = 2
+                autoStopStartTime = time.time()
+                autoStopHours = parseAutoStopHours(setdat)
+                autoStopDeadline = autoStopStartTime + (autoStopHours * 3600) if autoStopHours > 0 else None
+                gui.setRunState(2)  # Update the global run state
+                try:
+                    gui.toggleStartStop()  # Update UI
+                except:
+                    pass  # If eel is not ready, continue
+                try:
+                    gui.toggleStartStop()  # Update UI
+                except:
+                    pass  # If eel is not ready, continue
+            elif run.value == 0:
+                had_macro_proc = bool(macroProc)
+                autoStopStartTime = None
+                autoStopDeadline = None
+                autoStopHours = 0.0
+
+                # Stop macro/tools and release all inputs first.
+                gui.setRunState(0)
+                try:
+                    gui.toggleStartStop()
+                except:
+                    pass
+
+                if had_macro_proc:
+                    logger.webhook("Macro Stopped", "Fuzzy Macro", "red")
+                try:
+                    gui.stopAllTools()
+                except Exception:
+                    pass
+
+                stopApp()
+
                 run.value = 3
                 gui.setRunState(3)
                 try:
                     gui.toggleStartStop()
                 except:
                     pass
-                continue
-            # restart macro process
-            macroProc = multiprocessing.Process(target=macro_process_entry, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
-            macroProc.start()
-            run.value = 2
-            gui.setRunState(2)  # Update the global run state
-            try:
-                gui.toggleStartStop()  # Update UI
-            except:
-                pass  # If eel is not ready, continue
 
-        #detect a new log message
-        if not logQueue.empty():
-            logData = logQueue.get()
-            if logData["type"] == "webhook": #webhook
-                msg = f"{logData['title']}<br>{logData['desc']}"
+                if not had_macro_proc:
+                    continue
 
-                # Add to recent logs list (keep last 100 entries)
-                log_entry = {
-                    'time': logData['time'],
-                    'title': logData['title'],
-                    'desc': logData['desc'],
-                    'color': logData['color']
-                }
-                recentLogs.append(log_entry)
-                # Keep only the last 100 entries. Manager proxies can fail
-                # if the manager process closes; guard with fallbacks.
-                if len(recentLogs) > 100:
-                    try:
-                        # fast path: use slice operations on proxy
-                        recentLogs[:] = recentLogs[-100:]
-                    except Exception:
-                        # fallback: build a local snapshot and replace contents
+                # Generate and send final report AFTER stopping inputs
+                try:
+                    print("Generating final report...")
+                    from modules.submacros.finalReport import FinalReport
+                    import os
+
+                    # Create final report object
+                    finalReportObj = FinalReport()
+                    sessionStats = finalReportObj.generateFinalReport(setdat)
+
+                    # Check if report was generated successfully
+                    if sessionStats and os.path.exists("finalReport.png"):
+                        # Format session summary for webhook
+                        sessionTime = sessionStats.get("total_session_time", 0)
+                        hours = int(sessionTime / 3600)
+                        minutes = int((sessionTime % 3600) / 60)
+                        timeStr = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+
+                        totalHoney = sessionStats.get("total_honey", 0)
+                        avgHoneyPerHour = sessionStats.get("avg_honey_per_hour", 0)
+
+                        def millify(n):
+                            """Format large numbers with suffixes"""
+                            if n < 1000:
+                                return str(int(n))
+                            elif n < 1000000:
+                                return f"{n/1000:.1f}K"
+                            elif n < 1000000000:
+                                return f"{n/1000000:.1f}M"
+                            elif n < 1000000000000:
+                                return f"{n/1000000000:.1f}B"
+                            else:
+                                return f"{n/1000000000000:.1f}T"
+
+                        # Add "Estimated" label if session was less than 1 hour
+                        avgLabel = "Est. Avg/Hour" if sessionTime < 3600 else "Avg/Hour"
+                        description = f"Runtime: {timeStr}\nTotal Honey: {millify(totalHoney)}\n{avgLabel}: {millify(avgHoneyPerHour)}"
+
+                        # Send final report webhook
+                        logger.finalReport("Session Complete", description, "purple")
+                        print("Final report sent successfully")
+                    else:
+                        print("Failed to generate final report - no data available")
+
+                except Exception as e:
+                    print(f"Error generating final report: {e}")
+                    import traceback
+                    traceback.print_exc()
+            elif run.value == 4: #disconnected
+                if macroProc and macroProc.is_alive():
+                    macroProc.kill()
+                    macroProc.join()
+                logger.webhook("","Disconnected", "red", "screen", ping_category="ping_disconnects")
+                appManager.closeApp("Roblox")
+                keyboardModule.releaseMovement()
+                mouse.mouseUp()
+                macroProc = multiprocessing.Process(target=macro_process_entry, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
+                macroProc.start()
+                run.value = 2
+                gui.setRunState(2)  # Update the global run state
+                try:
+                    gui.toggleStartStop()  # Update UI
+                except:
+                    pass  # If eel is not ready, continue
+            # Note: run.value == 6 (paused) is handled in the macro process loop - it waits for resume
+
+            # Check for crash (non-zero exitcodes). Log signal name to aid diagnosis.
+            if macroProc and not macroProc.is_alive() and hasattr(macroProc, "exitcode") and macroProc.exitcode is not None and macroProc.exitcode != 0:
+                exitcode = macroProc.exitcode
+                try:
+                    import signal
+                    if exitcode < 0:
+                        signum = -exitcode
                         try:
-                            snapshot = list(recentLogs)
-                            snapshot = snapshot[-100:]
-                            # clear and extend the proxy list in-place
-                            try:
-                                del recentLogs[:]
-                                recentLogs.extend(snapshot)
-                            except Exception:
-                                # best-effort: if in-place replace fails, attempt to set by index
-                                for i, v in enumerate(snapshot):
-                                    if i < len(recentLogs):
-                                        recentLogs[i] = v
-                                    else:
-                                        recentLogs.append(v)
+                            signame = signal.Signals(signum).name
                         except Exception:
-                            # give up silently to avoid crashing the main loop
-                            pass
+                            signame = str(signum)
+                        extra = f" (terminated by signal {signame})"
+                    else:
+                        extra = ""
+                except Exception:
+                    extra = ""
+                print(f"Macro process exited with exit code {exitcode}{extra}")
+                now = time.time()
+                macroCrashTimes = [crash_time for crash_time in macroCrashTimes if now - crash_time < 60]
+                macroCrashTimes.append(now)
+                logger.webhook("","Macro Crashed{0}".format(extra), "red", "screen", ping_category="ping_critical_errors")
+                macroProc.join()
+                appManager.openApp("Roblox")
+                keyboardModule.releaseMovement()
+                mouse.mouseUp()
+                if len(macroCrashTimes) >= 5:
+                    print("Macro crashed 5 times within 60 seconds; stopping automatic restart.")
+                    logger.webhook("", "Macro stopped after repeated crashes. Check the app log before restarting.", "red", ping_category="ping_critical_errors")
+                    macroProc = None
+                    run.value = 3
+                    gui.setRunState(3)
+                    try:
+                        gui.toggleStartStop()
+                    except:
+                        pass
+                    continue
+                # restart macro process
+                macroProc = multiprocessing.Process(target=macro_process_entry, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
+                macroProc.start()
+                run.value = 2
+                gui.setRunState(2)  # Update the global run state
+                try:
+                    gui.toggleStartStop()  # Update UI
+                except:
+                    pass  # If eel is not ready, continue
 
-            #add it to gui
-            gui.log(logData["time"], msg, logData["color"])
-        
-        #detect if the gui needs to be updated
-        if updateGUI.value:
-            gui.updateGUI()
-            updateGUI.value = 0
-        
-        if run.value == 2 and time.time() > disconnectCooldownUntil:
-            img = adjustImage("./images/menu", "disconnect", screenInfo["display_type"])
-            wmx, wmy, wmw, wmh = getWindowSize("roblox roblox")
-            if locateImageOnScreen(img, wmx+wmw/3, wmy+wmh/2.8, wmw/2.3, wmh/5, 0.7):
-                print("disconnected")
-                run.value = 4
-                disconnectCooldownUntil = time.time() + 300  # 5 min cooldown
+            #detect a new log message
+            if not logQueue.empty():
+                logData = logQueue.get()
+                if logData["type"] == "webhook": #webhook
+                    msg = f"{logData['title']}<br>{logData['desc']}"
+
+                    # Add to recent logs list (keep last 100 entries)
+                    log_entry = {
+                        'time': logData['time'],
+                        'title': logData['title'],
+                        'desc': logData['desc'],
+                        'color': logData['color']
+                    }
+                    recentLogs.append(log_entry)
+                    # Keep only the last 100 entries. Manager proxies can fail
+                    # if the manager process closes; guard with fallbacks.
+                    if len(recentLogs) > 100:
+                        try:
+                            # fast path: use slice operations on proxy
+                            recentLogs[:] = recentLogs[-100:]
+                        except Exception:
+                            # fallback: build a local snapshot and replace contents
+                            try:
+                                snapshot = list(recentLogs)
+                                snapshot = snapshot[-100:]
+                                # clear and extend the proxy list in-place
+                                try:
+                                    del recentLogs[:]
+                                    recentLogs.extend(snapshot)
+                                except Exception:
+                                    # best-effort: if in-place replace fails, attempt to set by index
+                                    for i, v in enumerate(snapshot):
+                                        if i < len(recentLogs):
+                                            recentLogs[i] = v
+                                        else:
+                                            recentLogs.append(v)
+                            except Exception:
+                                # give up silently to avoid crashing the main loop
+                                pass
+
+                #add it to gui
+                gui.log(logData["time"], msg, logData["color"])
+
+            #detect if the gui needs to be updated
+            if updateGUI.value:
+                gui.updateGUI()
+                updateGUI.value = 0
+
+            if run.value == 2 and time.time() > disconnectCooldownUntil:
+                img = adjustImage("./images/menu", "disconnect", screenInfo["display_type"])
+                wmx, wmy, wmw, wmh = getWindowSize("roblox roblox")
+                if locateImageOnScreen(img, wmx+wmw/3, wmy+wmh/2.8, wmw/2.3, wmh/5, 0.7):
+                    print("disconnected")
+                    run.value = 4
+                    disconnectCooldownUntil = time.time() + 300  # 5 min cooldown
+
+    supervision_thread = Thread(target=macro_supervision_loop, daemon=True)
+    supervision_thread.start()
+    gui.open_embedded_window(gui_url)

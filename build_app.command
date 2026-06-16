@@ -53,4 +53,18 @@ fi
 printf "Building Fuzzy Macro.app for %s with macOS deployment target %s...\n" "$FUZZY_TARGET_ARCH" "$MACOSX_DEPLOYMENT_TARGET"
 "$PYTHON" -m PyInstaller --clean --noconfirm fuzzy_macro_app.spec
 
+if [ -n "${FUZZY_CODESIGN_IDENTITY:-}" ]; then
+    printf "Signing Fuzzy Macro.app with identity: %s\n" "$FUZZY_CODESIGN_IDENTITY"
+    CODESIGN_ARGS=(--force --deep --strict --options runtime --sign "$FUZZY_CODESIGN_IDENTITY")
+    if [ "${FUZZY_CODESIGN_TIMESTAMP:-0}" = "1" ]; then
+        CODESIGN_ARGS+=(--timestamp)
+    fi
+    if [ -n "${FUZZY_ENTITLEMENTS_FILE:-}" ]; then
+        CODESIGN_ARGS+=(--entitlements "$FUZZY_ENTITLEMENTS_FILE")
+    fi
+    codesign "${CODESIGN_ARGS[@]}" "dist/Fuzzy Macro.app"
+else
+    printf "\033[33;1mNo FUZZY_CODESIGN_IDENTITY set; macOS may ask for permissions again after each rebuild.\033[0m\n"
+fi
+
 printf "\nBuild complete: %s/dist/Fuzzy Macro.app\n" "$(pwd)"
