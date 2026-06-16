@@ -28,19 +28,6 @@ def versionTuple(v):
     return tuple(map(int, (v.split("."))))
 macVer = platform.mac_ver()[0]
 
-# try:
-#     hti = Html2Image(size=(1900, 850))
-#     if hasattr(hti.browser, 'use_new_headless'):
-#         hti.browser.use_new_headless = None
-
-    
-# except FileNotFoundError:
-#     if versionTuple(macVer) >= versionTuple("10.15"):
-#         msgBox(title = "error", text = "Google Chrome could not be found. Ensure that:\
-#     \n1. Google Chrome is installed\nGoogle chrome is in the applications folder (open the google chrome dmg file. From the pop up, drag the icon into the folder)")
-#     else:
-#         hti = None
-
 class BuffDetector():
     def __init__(self, robloxWindow: RobloxWindowBounds):
 

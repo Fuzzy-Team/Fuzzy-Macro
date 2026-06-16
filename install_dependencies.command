@@ -265,9 +265,9 @@ install_pip_package "matplotlib"
 install_pip_package "fuzzywuzzy"
 install_pip_package "python-Levenshtein"
 install_pip_package "pyscreeze<0.1.29"
-install_pip_package "html2image"
 install_pip_package "gevent"
 install_pip_package "eel"
+install_pip_package "pywebview"
 install_pip_package "ImageHash"
 install_pip_package "httpx"
 install_pip_package "flask"
@@ -322,35 +322,5 @@ def main():
 
 if __name__ == '__main__':
     main()
-EOF
-"$VENV_PATH/bin/python" << "EOF"
-
-# remove self-documented expressions from chrome_cdp.py for python 3.7 compatibility
-import os
-import importlib.util
-
-spec = importlib.util.find_spec('html2image')
-if spec and spec.origin:
-    path = os.path.join(os.path.dirname(spec.origin), "browsers", "chrome_cdp.py")
-    if os.path.exists(path):
-        print(f"html2image found at {path}")
-        linesToRemove = ["print(f'{r.json()=}')", "print(f'cdp_send: {method=} {params=}')", "print(f'{method=}')", "print(f'{message=}')"]
-        with open(path, "r") as f:
-            data = f.read()
-        
-        original_data = data
-        for i in linesToRemove:
-            data = data.replace(i, "")
-        
-        if data != original_data:
-            with open(path, "w") as f:
-                f.write(data)
-            print("Fixed html2image")
-        else:
-            print("html2image already fixed or lines not found")
-    else:
-        print(f"chrome_cdp.py not found at {path}")
-else:
-    print("html2image package not found")
 EOF
 printf "\n\n\n\033[32;1mInstallation complete!\033[0m\n"

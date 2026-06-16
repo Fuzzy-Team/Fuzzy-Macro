@@ -1,5 +1,4 @@
 import eel
-import webbrowser
 import modules.misc.settingsManager as settingsManager
 import os
 import modules.misc.update as updateModule
@@ -1304,27 +1303,19 @@ def launch():
         # ignore if already exposed or if exposure fails at import time
         pass
 
-    if getattr(sys, "frozen", False) or os.environ.get("FUZZY_MACRO_WEBVIEW") == "1":
-        try:
-            eel.start('index.html', block=False, mode=False, port=port)
-            time.sleep(1)
-            subprocess.Popen(
-                [sys.executable, "--webview-url", f"{port_url}/index.html"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL,
-            )
-            return
-        except Exception as e:
-            print(f"Embedded app window failed: {e}")
-
     try:
-        eel.start('index.html', mode = "chrome", app_mode = True, block = False, port=port, cmdline_args=["--incognito", f"--app={port_url}"])
-    except EnvironmentError:
-        try:
-            eel.start('index.html', mode = "chrome-app", app_mode = True, block = False, port=port, cmdline_args=["--incognito", f"--app={port_url}"])
-        except EnvironmentError:
-            print("Chrome/Chromium could not be found. Opening in default browser...")
-            eel.start('index.html', block=False, mode=None, port=port)
-            time.sleep(2)
-            webbrowser.open(f"{port_url}/", new=2)
+        eel.start('index.html', block=False, mode=False, port=port)
+        time.sleep(1)
+        if getattr(sys, "frozen", False):
+            webview_command = [sys.executable, "--webview-url", f"{port_url}/index.html"]
+        else:
+            main_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "main.py"))
+            webview_command = [sys.executable, main_path, "--webview-url", f"{port_url}/index.html"]
+        subprocess.Popen(
+            webview_command,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+        )
+    except Exception as e:
+        print(f"Embedded app window failed: {e}")
