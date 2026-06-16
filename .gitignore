@@ -19,14 +19,10 @@ src/latest-quest.png
 src/webhook_nectar.png
 TODO.md
 
-.github/*
-!.github/workflows/
-!.github/workflows/**
+.github
 src/data/user
 src/data/models/
-settings/profiles/*
-!settings/profiles/a/
-!settings/profiles/a/**
+settings/profiles
 .backup_pending
 backup_macro.zip
 backups/
