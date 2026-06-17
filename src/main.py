@@ -53,7 +53,12 @@ def _configure_frozen_logging():
         try:
             os.makedirs(log_dir, exist_ok=True)
             log_path = os.path.join(log_dir, "app.log")
-            log_file = open(log_path, "a", buffering=1)
+            is_primary_process = (
+                __name__ == "__main__"
+                and getattr(multiprocessing, "parent_process", lambda: None)() is None
+            )
+            log_mode = "w" if is_primary_process else "a"
+            log_file = open(log_path, log_mode, buffering=1)
             break
         except Exception:
             log_file = None

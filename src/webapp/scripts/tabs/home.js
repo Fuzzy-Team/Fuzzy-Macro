@@ -154,6 +154,15 @@ function currentLogTab() {
   return activeTab ? activeTab.dataset.logTab : activeLogTab;
 }
 
+function escapeLogText(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function switchLogTab(tabName) {
   activeLogTab = tabName === "dev" ? "dev" : "macro";
 
@@ -179,11 +188,18 @@ async function refreshDevLogs() {
 
   try {
     const lines = await eel.getDevLogs(700)();
-    const text = lines && lines.length ? lines.join("\n") : "No dev logs yet.";
+    const html = lines && lines.length
+      ? lines
+        .map((line) => {
+          const text = escapeLogText(line) || "&nbsp;";
+          return `<div class="log-msg"><span style="background-color: #ADB5BD; align-self: start"></span>${text}</div>`;
+        })
+        .join("")
+      : `<div class="log-msg"><span style="background-color: #ADB5BD; align-self: start"></span>No dev logs yet.</div>`;
     const shouldStickToBottom =
       devLogs.scrollTop + devLogs.clientHeight >= devLogs.scrollHeight - 24;
-    if (devLogs.textContent !== text) {
-      devLogs.textContent = text;
+    if (devLogs.innerHTML !== html) {
+      devLogs.innerHTML = html;
       if (shouldStickToBottom || activeLogTab === "dev") {
         devLogs.scrollTop = devLogs.scrollHeight;
       }

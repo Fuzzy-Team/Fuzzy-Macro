@@ -1530,16 +1530,10 @@ select:focus {
 }
 
 #dev-logs {
-  background: #111;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
-  color: #f1f3f5;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 0.78rem;
-  line-height: 1.45;
-  margin: 0;
   min-height: 0;
-  padding: 0.75rem;
+}
+
+#dev-logs .log-msg {
   white-space: pre-wrap;
   word-break: break-word;
 }
