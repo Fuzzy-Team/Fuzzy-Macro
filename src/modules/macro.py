@@ -3264,7 +3264,31 @@ class macro:
                 self.reset(convert=False)
                 self.collectMondoBuff()
                 break
-            elif self.died:
+            else:
+                questMobsByGiver = getattr(self, "questGatherInterruptMobs", {})
+                questMobs = {
+                    mob
+                    for questGiver, mobs in questMobsByGiver.items()
+                    if self.setdat.get(f"{questGiver.replace(' ', '_')}_quest_gather_interrupt", False)
+                    for mob in mobs
+                }
+                respawnedQuestMobs = [
+                    (mob, mobField)
+                    for mob in questMobs
+                    for mobField in regularMobTypesInFields
+                    if mob in regularMobTypesInFields[mobField] and self.hasMobRespawned(mob, mobField)
+                ]
+                if respawnedQuestMobs:
+                    stopGather()
+                    mobNames = ", ".join(sorted({mob.replace("_", " ").title() for mob, _ in respawnedQuestMobs}))
+                    self.logger.webhook("Gathering: interrupted", f"Quest mobs ready: {mobNames}", "dark brown")
+                    self.reset(convert=False)
+                    for mob, mobField in respawnedQuestMobs:
+                        # Recheck because another field run can update shared mob timings.
+                        if self.hasMobRespawned(mob, mobField):
+                            self.killMob(mob, mobField)
+                    break
+            if self.died:
                 self.clear_task_status()
                 stopGather()
                 self.logger.webhook("","Player died", "dark brown","screen", ping_category="ping_character_deaths")
