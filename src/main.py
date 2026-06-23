@@ -468,6 +468,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
     taskCompleted = True
     questCache = {}
     questScanScreens = None
+    macro.questGatherInterruptMobs = {}
     
     macro.start()
     #macro.useItemInInventory("blueclayplanter")
@@ -678,6 +679,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     # enable the mob setting (e.g. "rhinobeetle", "werewolf", etc.)
                     if mob_name not in setdatEnable:
                         setdatEnable.append(mob_name)
+                    if mob_name in regularMobData:
+                        macro.questGatherInterruptMobs.setdefault(questGiver, set()).add(mob_name)
             elif objData[0] == "token" and len(objData) > 1 and objData[1] == "honey":
                 if "honeytoken" not in setdatEnable:
                     setdatEnable.append("honeytoken")
@@ -827,6 +830,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         # Clearing here guarantees the board is re-read after the task list recycles.
         questCache.clear()
         questScanScreens = None
+        macro.questGatherInterruptMobs.clear()
         
         macro.setdat = get_cached_settings()
         # Check if profile has changed and reload settings if needed
