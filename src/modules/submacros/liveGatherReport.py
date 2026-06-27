@@ -5,6 +5,7 @@ import threading
 import time
 
 import requests
+from PIL import Image, ImageDraw
 
 from modules.screen.screenshot import mssScreenshot
 from modules.logging.log import resolve_bot_route, resolve_route, resolve_webhook_route
@@ -45,7 +46,7 @@ class LiveGatherReport:
         self.webhook_id = match.group(1)
         self.webhook_token = match.group(2)
 
-    def start(self, field, gather_time_limit, get_elapsed_seconds, is_paused=None):
+    def start(self, field, gather_time_limit, get_elapsed_seconds, is_paused=None, activity="Gathering"):
         if self.route_kind == "webhook" and (not self.webhook_id or not self.webhook_token):
             return
         if self.route_kind == "bot" and (not self.channel_id or not self.bot_token):
@@ -57,7 +58,7 @@ class LiveGatherReport:
         self.stop_event.clear()
         self.thread = threading.Thread(
             target=self._run,
-            args=(field, gather_time_limit, get_elapsed_seconds, is_paused),
+            args=(field, gather_time_limit, get_elapsed_seconds, is_paused, activity),
             daemon=True,
         )
         self.thread.start()
@@ -65,22 +66,22 @@ class LiveGatherReport:
     def stop(self):
         self.stop_event.set()
 
-    def _run(self, field, gather_time_limit, get_elapsed_seconds, is_paused=None):
+    def _run(self, field, gather_time_limit, get_elapsed_seconds, is_paused=None, activity="Gathering"):
         while not self.stop_event.is_set():
             while is_paused and is_paused():
                 if self.stop_event.wait(0.1):
                     return
 
             try:
-                self._send_or_edit(field, gather_time_limit, get_elapsed_seconds())
+                self._send_or_edit(field, gather_time_limit, get_elapsed_seconds(), activity)
             except Exception as e:
                 print(f"Live Gather Report Error: {e}")
 
             if self.stop_event.wait(self.interval):
                 break
 
-    def _send_or_edit(self, field, gather_time_limit, elapsed_seconds):
-        embed = self._build_embed(field, gather_time_limit, elapsed_seconds)
+    def _send_or_edit(self, field, gather_time_limit, elapsed_seconds, activity="Gathering"):
+        embed = self._build_embed(field, gather_time_limit, elapsed_seconds, activity)
         image_bytes = self._capture_honey_pollen()
         if self.route_kind == "bot":
             self._send_or_edit_bot(embed, image_bytes)
@@ -172,21 +173,41 @@ class LiveGatherReport:
         rw = self.roblox_window
         x = rw.mx + rw.mw // 2 - 320
         y = rw.my + rw.yOffset
-        img = mssScreenshot(x, y, 650, 100)
+        img = mssScreenshot(x, y, 650, 100).convert("RGBA")
+        honey = self._crop_hud_card(img, (20, 0, 315, 36))
+        pollen = self._crop_hud_card(img, (320, 0, 615, 36))
+        stacked = Image.new("RGBA", (max(honey.width, pollen.width), honey.height + pollen.height), (0, 0, 0, 0))
+        stacked.paste(honey, (0, 0), honey)
+        stacked.paste(pollen, (0, honey.height), pollen)
         out = io.BytesIO()
-        img.save(out, format="PNG")
+        stacked.save(out, format="PNG")
         out.seek(0)
         return out.getvalue()
 
-    def _build_embed(self, field, gather_time_limit, elapsed_seconds):
+    @staticmethod
+    def _crop_hud_card(img, box):
+        card = img.crop(box)
+        mask = Image.new("L", card.size, 0)
+        draw = ImageDraw.Draw(mask)
+        draw.rounded_rectangle((0, 0, card.width - 1, card.height - 1), radius=7, fill=255)
+        card.putalpha(mask)
+        return card
+
+    def _build_embed(self, field, gather_time_limit, elapsed_seconds, activity="Gathering"):
         now = time.strftime("%H:%M:%S", time.localtime())
         if self.time_format == 12:
             now = time.strftime("%I:%M:%S %p", time.localtime()).lstrip("0")
         elapsed = self._format_duration(elapsed_seconds)
         field_name = str(field).replace("_", " ").title()
+        if activity == "Converting":
+            title = f"[{now}] Converting: {elapsed}"
+            color = 0xA52A2A
+        else:
+            title = f"[{now}] Gathering {field_name}: {elapsed}/{gather_time_limit}"
+            color = 0x98FB98
         return {
-            "title": f"[{now}] Gathering {field_name}: {elapsed}/{gather_time_limit}",
-            "color": 0x98FB98,
+            "title": title,
+            "color": color,
             "image": {"url": "attachment://live_gather_report.png"},
         }
 
