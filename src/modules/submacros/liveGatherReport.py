@@ -7,11 +7,27 @@ import time
 import requests
 
 from modules.screen.screenshot import mssScreenshot
+from modules.logging.log import resolve_bot_route, resolve_route, resolve_webhook_route
 
 
 class LiveGatherReport:
-    def __init__(self, webhook_url, roblox_window, interval=15, time_format=24):
-        self.webhook_url = webhook_url
+    def __init__(self, webhook_url, roblox_window, interval=15, time_format=24, route_settings=None, bot_token="", ping_user_id=None, delivery_mode="both"):
+        if delivery_mode == "discord_bot":
+            self.route, self.route_category, self.route_kind = resolve_route(route_settings or {}, "gathering", "")
+            if not self.route:
+                self.route, self.route_category, self.route_kind = resolve_bot_route(route_settings or {}, "gathering", webhook_url)
+        elif delivery_mode == "both":
+            self.route, self.route_category, self.route_kind = resolve_route(route_settings or {}, "gathering", "")
+            if not self.route:
+                self.route, self.route_category, self.route_kind = resolve_webhook_route(route_settings or {}, "gathering", webhook_url)
+        elif delivery_mode == "webhook":
+            self.route, self.route_category, self.route_kind = resolve_webhook_route(route_settings or {}, "gathering", webhook_url)
+        else:
+            self.route, self.route_category, self.route_kind = resolve_route(route_settings or {}, "gathering", webhook_url)
+        self.webhook_url = self.route if self.route_kind == "webhook" else ""
+        self.channel_id = self.route if self.route_kind == "bot" else ""
+        self.bot_token = bot_token or ""
+        self.ping_user_id = ping_user_id
         self.roblox_window = roblox_window
         self.interval = max(10, min(20, int(interval or 15)))
         self.time_format = time_format
@@ -30,7 +46,11 @@ class LiveGatherReport:
         self.webhook_token = match.group(2)
 
     def start(self, field, gather_time_limit, get_elapsed_seconds, is_paused=None):
-        if not self.webhook_id or not self.webhook_token:
+        if self.route_kind == "webhook" and (not self.webhook_id or not self.webhook_token):
+            return
+        if self.route_kind == "bot" and (not self.channel_id or not self.bot_token):
+            return
+        if self.route_kind not in ("webhook", "bot"):
             return
         if self.thread and self.thread.is_alive():
             return
@@ -62,6 +82,12 @@ class LiveGatherReport:
     def _send_or_edit(self, field, gather_time_limit, elapsed_seconds):
         embed = self._build_embed(field, gather_time_limit, elapsed_seconds)
         image_bytes = self._capture_honey_pollen()
+        if self.route_kind == "bot":
+            self._send_or_edit_bot(embed, image_bytes)
+        else:
+            self._send_or_edit_webhook(embed, image_bytes)
+
+    def _send_or_edit_webhook(self, embed, image_bytes):
         files = {
             "files[0]": ("live_gather_report.png", image_bytes, "image/png"),
         }
@@ -69,6 +95,8 @@ class LiveGatherReport:
             "embeds": [embed],
             "attachments": [{"id": 0, "filename": "live_gather_report.png"}],
         }
+        if self.ping_user_id:
+            payload["content"] = f"<@{self.ping_user_id}>"
 
         if self.message_id:
             url = f"https://discord.com/api/webhooks/{self.webhook_id}/{self.webhook_token}/messages/{self.message_id}"
@@ -82,6 +110,48 @@ class LiveGatherReport:
             url = f"https://discord.com/api/webhooks/{self.webhook_id}/{self.webhook_token}?wait=true"
             response = requests.post(
                 url,
+                data={"payload_json": json.dumps(payload)},
+                files=files,
+                timeout=15,
+            )
+
+        if response.status_code >= 400:
+            raise requests.HTTPError(
+                f"{response.status_code} Client Error: {response.text}",
+                response=response,
+            )
+        if not self.message_id:
+            try:
+                self.message_id = response.json().get("id")
+            except Exception:
+                self.message_id = None
+
+    def _send_or_edit_bot(self, embed, image_bytes):
+        headers = {"Authorization": f"Bot {self.bot_token}"}
+        files = {
+            "files[0]": ("live_gather_report.png", image_bytes, "image/png"),
+        }
+        payload = {
+            "embeds": [embed],
+            "attachments": [{"id": 0, "filename": "live_gather_report.png"}],
+        }
+        if self.ping_user_id:
+            payload["content"] = f"<@{self.ping_user_id}>"
+
+        if self.message_id:
+            url = f"https://discord.com/api/channels/{self.channel_id}/messages/{self.message_id}"
+            response = requests.patch(
+                url,
+                headers=headers,
+                data={"payload_json": json.dumps(payload)},
+                files=files,
+                timeout=15,
+            )
+        else:
+            url = f"https://discord.com/api/channels/{self.channel_id}/messages"
+            response = requests.post(
+                url,
+                headers=headers,
                 data={"payload_json": json.dumps(payload)},
                 files=files,
                 timeout=15,
