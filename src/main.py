@@ -1701,6 +1701,13 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                             if normalized["nectar_est_percent"] <= 0:
                                 normalized["nectar_est_percent"] = estimateNectarGain(ranking, normalized["grow_duration"])
 
+                        if normalized["planter"] and normalized.get("special_drop_id") and normalized["natural_grow_duration"] > 0:
+                            fullGrowHarvestTime = normalized["placed_time"] + normalized["natural_grow_duration"]
+                            if normalized["placed_time"] > 0 and normalized["harvest_time"] < fullGrowHarvestTime:
+                                normalized["harvest_time"] = fullGrowHarvestTime
+                                normalized["grow_duration"] = normalized["natural_grow_duration"]
+                                normalized["nectar_est_percent"] = estimateNectarGain(ranking, normalized["natural_grow_duration"]) if ranking else normalized["nectar_est_percent"]
+
                         return normalized
 
                     normalizeFieldDegradation()
@@ -1970,6 +1977,13 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                         drop = getSpecialDropById(dropId)
                         if not drop:
                             return
+                        if getNaturalPlanterProgress(planter) < 0.995:
+                            macro.logger.webhook(
+                                "",
+                                f"Special planter drop route for {drop['reward']} was not fully grown. Progress was not advanced.",
+                                "orange"
+                            )
+                            return
                         state = specialDropState.setdefault(dropId, {"progress": 0, "cooldown_until": 0})
                         expectedIndex = min(int(state.get("progress", 0) or 0), len(drop["fields"]) - 1)
                         if planter.get("field") != drop["fields"][expectedIndex]:
@@ -2069,7 +2083,16 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                     break
 
                     for slot, planter in enumerate(planterData):
-                        if planter["planter"] and time.time() > planter["harvest_time"]:
+                        if not planter["planter"]:
+                            continue
+                        if planter.get("special_drop_id") and getNaturalPlanterProgress(planter) < 0.995:
+                            fullGrowHarvestTime = planter.get("placed_time", 0) + planter.get("natural_grow_duration", 0)
+                            if fullGrowHarvestTime > planter.get("harvest_time", 0):
+                                planter["harvest_time"] = fullGrowHarvestTime
+                                planter["grow_duration"] = planter.get("natural_grow_duration", planter.get("grow_duration", 0))
+                                saveAutoPlanterData()
+                            continue
+                        if time.time() > planter["harvest_time"]:
                             planterSlotsToHarvest.append(slot)
 
                     planterSlotsToHarvest = sorted(set(planterSlotsToHarvest))
