@@ -431,11 +431,11 @@ specialPlanterDrops = [
     {"id": "candy_cactus_swirled_wax", "planter": "candy", "fields": ["cactus"], "reward": "1 Swirled Wax", "cooldown_days": 36},
     {"id": "candy_mountain_top_caustic_wax", "planter": "candy", "fields": ["mountain top"], "reward": "1 Caustic Wax", "cooldown_days": 36},
     {"id": "candy_stump_glue", "planter": "candy", "fields": ["stump", "stump", "stump"], "reward": "10 Glue", "cooldown_days": 7},
-    {"id": "red_clay_clover_spider_cactus_stingers", "planter": "red_clay", "fields": ["clover", "spider", "cactus"], "reward": "10 Stingers", "cooldown_days": 14},
-    {"id": "red_clay_sunflower_swirled_wax", "planter": "red_clay", "fields": ["sunflower"], "reward": "1 Swirled Wax", "cooldown_days": 30},
-    {"id": "red_clay_clover_caustic_wax", "planter": "red_clay", "fields": ["clover"], "reward": "1 Caustic Wax", "cooldown_days": 30},
-    {"id": "blue_clay_spider_swirled_wax", "planter": "blue_clay", "fields": ["spider"], "reward": "1 Swirled Wax", "cooldown_days": 30},
-    {"id": "blue_clay_clover_caustic_wax", "planter": "blue_clay", "fields": ["clover"], "reward": "1 Caustic Wax", "cooldown_days": 30},
+    {"id": "red_clay_clover_spider_cactus_stingers", "planter": "red clay", "fields": ["clover", "spider", "cactus"], "reward": "10 Stingers", "cooldown_days": 14},
+    {"id": "red_clay_sunflower_swirled_wax", "planter": "red clay", "fields": ["sunflower"], "reward": "1 Swirled Wax", "cooldown_days": 30},
+    {"id": "red_clay_clover_caustic_wax", "planter": "red clay", "fields": ["clover"], "reward": "1 Caustic Wax", "cooldown_days": 30},
+    {"id": "blue_clay_spider_swirled_wax", "planter": "blue clay", "fields": ["spider"], "reward": "1 Swirled Wax", "cooldown_days": 30},
+    {"id": "blue_clay_clover_caustic_wax", "planter": "blue clay", "fields": ["clover"], "reward": "1 Caustic Wax", "cooldown_days": 30},
     {"id": "tacky_bamboo_caustic_wax", "planter": "tacky", "fields": ["bamboo"], "reward": "1 Caustic Wax", "cooldown_days": 30},
     {"id": "tacky_pumpkin_swirled_wax", "planter": "tacky", "fields": ["pumpkin"], "reward": "1 Swirled Wax", "cooldown_days": 30},
     {"id": "tacky_mountain_top_loaded_dice", "planter": "tacky", "fields": ["mountain top"], "reward": "1 Loaded Dice", "cooldown_days": 30},
@@ -449,7 +449,7 @@ specialPlanterDrops = [
     {"id": "hydroponic_coconut_caustic_wax", "planter": "hydroponic", "fields": ["coconut"], "reward": "1 Caustic Wax", "cooldown_days": 36},
     {"id": "petal_strawberry_swirled_wax", "planter": "petal", "fields": ["strawberry"], "reward": "1 Swirled Wax", "cooldown_days": 30},
     {"id": "petal_dandelion_caustic_wax", "planter": "petal", "fields": ["dandelion"], "reward": "1 Caustic Wax", "cooldown_days": 30},
-    {"id": "planter_of_plenty_bamboo_super_smoothies", "planter": "planter_of_plenty", "fields": ["bamboo"], "reward": "10 Super Smoothies", "cooldown_days": 30},
+    {"id": "planter_of_plenty_bamboo_super_smoothies", "planter": "planter of plenty", "fields": ["bamboo"], "reward": "10 Super Smoothies", "cooldown_days": 30},
 ]
 
 
