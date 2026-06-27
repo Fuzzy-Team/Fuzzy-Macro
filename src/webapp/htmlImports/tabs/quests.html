@@ -97,6 +97,27 @@
 
       buildStandardContainer(questsSettingsParent, "Petal Gather", "Petal quest objectives use BloomsAI.", [
         {
+          id: "petal_quest_gather_mins",
+          title: "Gather Until Mins",
+          desc: "Override gather time for petal quest objectives only. Set to 0 to use the quest giver override.",
+          type: {
+            name: "textbox",
+            inputType: "float",
+            inputLimit: 4,
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "petal_quest_gather_return",
+          title: "Return To Hive",
+          desc: "Override return behavior for petal quest objectives only",
+          type: {
+            name: "dropdown",
+            data: ["No Override", "💀 Reset", "👟 Walk", "🔄 Rejoin", "🌱 Whirligig"],
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
           id: "ignore_petal_quests",
           title: "Ignore Petal Quests",
           desc: "Skip known petal quest titles instead of gathering bloom petals",

@@ -817,6 +817,17 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         if returnToHive != "no override":
             overrides["return"] = returnToHive
         return overrides
+
+    def getPetalQuestGatherOverrides(questName):
+        overrides = getQuestGatherOverrides(questName)
+        mins = macro.setdat.get("petal_quest_gather_mins", 0)
+        returnToHive = macro.setdat.get("petal_quest_gather_return", "no override")
+
+        if mins:
+            overrides["mins"] = mins
+        if returnToHive != "no override":
+            overrides["return"] = returnToHive
+        return overrides
     
     while True:
         # Check for pause - wait while paused
@@ -961,6 +972,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                 else:
                                     setdatEnable, gatherFields, gumdropFields, petalGatherFields, needsRed, needsBlue, feedBees, needsRedGumdrop, needsBlueGumdrop, needsField = handleQuest(questName)
                                 questGatherOverrides = getQuestGatherOverrides(questName)
+                                petalQuestGatherOverrides = getPetalQuestGatherOverrides(questName)
                                 for k in setdatEnable:
                                     macro.setdat[k] = True
                                 runQuestSupportTasks(setdatEnable)
@@ -975,7 +987,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                                 for field in petalGatherFields:
                                     questPetalGatherFields.append(field)
                                     if field not in questPetalGatherFieldOverrides:
-                                        questPetalGatherFieldOverrides[field] = dict(questGatherOverrides)
+                                        questPetalGatherFieldOverrides[field] = dict(petalQuestGatherOverrides)
                                 redFieldNeeded = redFieldNeeded or needsRed
                                 blueFieldNeeded = blueFieldNeeded or needsBlue
                                 itemsToFeedBees.extend(feedBees)
@@ -1193,6 +1205,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 for k in setdatEnable:
                     macro.setdat[k] = True
                 questGatherOverrides = getQuestGatherOverrides(questName)
+                petalQuestGatherOverrides = getPetalQuestGatherOverrides(questName)
                 # Store gather fields (will be used after priority queue)
                 for field in gatherFields:
                     questGatherFields.append(field)
@@ -1205,7 +1218,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                 for field in petalGatherFields:
                     questPetalGatherFields.append(field)
                     if field not in questPetalGatherFieldOverrides:
-                        questPetalGatherFieldOverrides[field] = dict(questGatherOverrides)
+                        questPetalGatherFieldOverrides[field] = dict(petalQuestGatherOverrides)
                 redFieldNeeded = redFieldNeeded or needsRed
                 blueFieldNeeded = blueFieldNeeded or needsBlue
                 redGumdropFieldNeeded = redGumdropFieldNeeded or needsRedGumdrop
@@ -1329,6 +1342,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     
                     # Gather the fields for this quest
                     questGatherOverrides = getQuestGatherOverrides(questName)
+                    petalQuestGatherOverrides = getPetalQuestGatherOverrides(questName)
                     
                     # Gather regular fields
                     for field in gatherFields:
@@ -1340,7 +1354,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
 
                     # Gather bloom-petal fields using BloomsAI
                     for field in petalGatherFields:
-                        runTask(macro.gather, args=(field, bloomsAIQuestOverride(questGatherOverrides)), resetAfter=False)
+                        runTask(macro.gather, args=(field, bloomsAIQuestOverride(petalQuestGatherOverrides)), resetAfter=False)
                     
                     # Feed bees if needed
                     for item, quantity in feedBees:
