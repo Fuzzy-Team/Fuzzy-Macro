@@ -1,5 +1,4 @@
 import numpy as np
-import cv2
 import os
 from PIL import Image
 import imagehash
@@ -15,9 +14,9 @@ def pillowToCv2(img):
     if arr.ndim == 2:
         return arr
     if arr.ndim == 3 and arr.shape[2] == 3:
-        return cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+        return arr[:, :, ::-1].copy()
     if arr.ndim == 3 and arr.shape[2] == 4:
-        return cv2.cvtColor(arr, cv2.COLOR_RGBA2BGR)
+        return arr[:, :, [2, 1, 0]].copy()
 
     raise ValueError(f"Unsupported image shape for cv2 conversion: {arr.shape}")
 
