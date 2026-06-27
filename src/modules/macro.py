@@ -3662,8 +3662,10 @@ class macro:
                     self.keyboard.walk("s",0.20)
                     self.keyboard.walk("a",2.65)
         else: #if loot off, just idle
-            end_time = time.perf_counter() + self.setdat["mondo_buff_wait"] * 60  
-            self.logger.webhook("", f"Collecting for: {self.setdat['mondo_buff_wait']} minutes", "yellow")
+            mondo_buff_wait = self.setdat["mondo_buff_wait"]
+            mondo_buff_wait_label = f"{mondo_buff_wait:g}" if isinstance(mondo_buff_wait, float) else str(mondo_buff_wait)
+            end_time = time.perf_counter() + mondo_buff_wait * 60  
+            self.logger.webhook("", f"Collecting for: {mondo_buff_wait_label} minutes", "yellow")
             # if collecting tokens produced by bees
             if self.setdat["mondo_collect_token"]:
                 # enable shiftlock
@@ -3675,7 +3677,7 @@ class macro:
                         time.sleep(0.035) 
                     time.sleep(3) #longer since we are not detecting anything
             else:
-                time.sleep(self.setdat['mondo_buff_wait'] * 60)
+                time.sleep(mondo_buff_wait * 60)
             self.saveTiming("mondo") 
             self.logger.webhook("","Collected: Mondo Buff","light green", ping_category="ping_mondo_buff")
         #done

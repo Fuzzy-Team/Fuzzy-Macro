@@ -170,12 +170,12 @@
         },
         {
           id: "mondo_buff_wait",
-          title: "Damage Mondo for X mins",
-          desc: "The duration to attack mondo chick for. ",
+          title: "Damage Mondo for X minutes",
+          desc: "The duration to attack mondo chick for. Decimals are allowed, e.g. 1.5 minutes = 90 seconds.",
           type: {
             name: "textbox",
-            inputType: "int",
-            inputLimit: 3,
+            inputType: "float",
+            inputLimit: 5,
             triggerFunction: saveProfileTriggerFunction,
           },
         },
