@@ -527,12 +527,36 @@ def _set_shift_lock_mode(mode: str):
         return f"⚠️ Sent shift input, but shift lock still appears {state_text}."
     return "⚠️ Sent shift input, but I could not verify the shift lock state afterwards."
 
-def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None, updateGUI=None):
+def _format_logger_time(time_value, time_format=24):
+    if time_format == 12:
+        try:
+            return datetime.strptime(time_value, "%H:%M:%S").strftime("%I:%M:%S %p")
+        except Exception:
+            return time_value
+    return time_value
+
+
+def _build_logger_embed(data):
+    formatted_time = _format_logger_time(data.get("time", ""), data.get("time_format", 24))
+    title = data.get("title", "") or ""
+    desc = data.get("desc", "") or ""
+    color = int(str(data.get("color", "FFFFFF")).replace("#", ""), 16)
+    if title:
+        embed = discord.Embed(title=f"[{formatted_time}] {title}", description=desc, color=color)
+    else:
+        embed = discord.Embed(title="", description=f"[{formatted_time}] {desc}", color=color)
+    if data.get("imagePath"):
+        embed.set_image(url="attachment://screenshot.png")
+    return embed
+
+
+def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None, updateGUI=None, discord_message_queue=None):
     import modules.macro
     bot = commands.Bot(command_prefix="fuzz!", intents=discord.Intents.all())
     
     # Store pin requests queue
     _pin_requests = pin_requests
+    _discord_message_queue = discord_message_queue
 
     @bot.event
     async def on_ready():
@@ -565,6 +589,48 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         # Start background task to process pin requests
         if _pin_requests is not None:
             bot.loop.create_task(process_pin_requests())
+        if _discord_message_queue is not None:
+            bot.loop.create_task(process_discord_messages())
+
+    async def process_discord_messages():
+        """Process outbound logger messages routed through the bot."""
+        while True:
+            try:
+                await discord.utils.sleep_until(datetime.now() + timedelta(seconds=1))
+                while _discord_message_queue and not _discord_message_queue.empty():
+                    try:
+                        data = _discord_message_queue.get_nowait()
+                        await send_logger_message(data)
+                    except Exception as e:
+                        print(f"Error processing Discord logger message: {e}")
+            except Exception as e:
+                print(f"Error in process_discord_messages loop: {e}")
+                await discord.utils.sleep_until(datetime.now() + timedelta(seconds=1))
+
+    async def send_logger_message(data):
+        channel_id = str(data.get("channel_id", "")).strip()
+        if not channel_id.isdigit():
+            print(f"Invalid Discord channel route: {channel_id}")
+            return
+        channel = bot.get_channel(int(channel_id))
+        if not channel:
+            channel = await bot.fetch_channel(int(channel_id))
+        if not channel:
+            print(f"Discord channel not found: {channel_id}")
+            return
+
+        content = None
+        if data.get("ping_user_id"):
+            content = f"<@{data.get('ping_user_id')}>"
+        embed = _build_logger_embed(data)
+        image_path = data.get("imagePath")
+        file_obj = None
+        try:
+            if image_path and os.path.exists(image_path):
+                file_obj = discord.File(image_path, filename="screenshot.png")
+            await channel.send(content=content, embed=embed, file=file_obj)
+        except Exception as e:
+            print(f"Discord logger send error: {e}")
     
     async def process_pin_requests():
         """Process pin requests from the queue"""

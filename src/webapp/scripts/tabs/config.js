@@ -29,6 +29,7 @@ async function switchConfigTab(target) {
 async function loadConfig() {
   const settings = await loadAllSettings();
   loadInputs(settings);
+  updateDiscordUniversalRouteText();
 
   // Restore active subtab
   switchConfigTab(
@@ -301,6 +302,7 @@ async function refreshAllSettings() {
 
     // Update all input elements with new settings
     loadInputs(settings);
+    updateDiscordUniversalRouteText();
 
     // Reload gather tab (field settings)
     const currentGatherTab = document.querySelector(".gather-tab-item.active");
@@ -351,6 +353,23 @@ async function refreshAllSettings() {
   } catch (error) {
     console.error("Error refreshing settings:", error);
   }
+}
+
+function updateDiscordUniversalRouteText() {
+  const modeElement = document.getElementById("discord_delivery_mode");
+  const webhookInput = document.getElementById("webhook_link");
+  const channelInput = document.getElementById("discord_channel_id");
+  const botTokenInput = document.getElementById("discord_bot_token");
+  if (!modeElement || !webhookInput || !channelInput) return;
+
+  const mode = getDropdownValue(modeElement) || "both";
+  const webhookForm = webhookInput.closest("form");
+  const channelForm = channelInput.closest("form");
+  const botTokenForm = botTokenInput?.closest("form");
+
+  if (botTokenForm) botTokenForm.style.display = mode === "webhook" ? "none" : "flex";
+  if (webhookForm) webhookForm.style.display = mode === "discord_bot" ? "none" : "flex";
+  if (channelForm) channelForm.style.display = mode === "discord_bot" ? "flex" : "none";
 }
 
 async function createNewProfile() {

@@ -12,6 +12,7 @@ import time
 import threading
 from modules.submacros.autoGiftedBasicBee import AutoGiftedBasicBeeRunner
 import modules.controls.keyboard as keyboardModule
+import modules.logging.log as logModule
 
 eel.init('webapp')
 run = None
@@ -31,10 +32,12 @@ def _refresh_tool_logger_settings():
         settings = settingsManager.loadAllSettings()
     except Exception:
         settings = {}
-    _tool_logger.enableWebhook = settings.get("enable_webhook", False)
-    _tool_logger.webhookURL = settings.get("webhook_link", "")
+    _tool_logger.enableWebhook = logModule.delivery_uses_webhook(settings)
+    _tool_logger.enableDiscordBot = logModule.delivery_uses_bot_messages(settings)
+    _tool_logger.webhookURL = logModule.get_default_delivery_route(settings)
+    _tool_logger.routeSettings = logModule.build_route_settings(settings)
     _tool_logger.sendScreenshots = settings.get("send_screenshot", True)
-    _tool_logger.enableDiscordPing = settings.get("enable_discord_ping", False)
+    _tool_logger.enableDiscordPing = True
     _tool_logger.discordUserID = settings.get("discord_user_id", "")
     _tool_logger.pingSettings = {
         key: value for key, value in settings.items() if str(key).startswith("ping_")

@@ -576,8 +576,33 @@ questCompleterCollectNames = {
     "wind shrine": "wind_shrine"
 } 
 
+PING_SETTING_KEYS = [
+    "ping_critical_errors",
+    "ping_disconnects",
+    "ping_character_deaths",
+    "ping_vicious_bee",
+    "ping_mondo_buff",
+    "ping_ant_challenge",
+    "ping_sticker_events",
+    "ping_mob_events",
+    "ping_conversion_events",
+    "ping_hourly_reports",
+    "ping_guiding_star",
+    "ping_macro_status",
+    "ping_gathering",
+    "ping_live_gather_report",
+    "ping_final_reports",
+    "ping_planters",
+    "ping_collectibles",
+    "ping_quests",
+    "ping_boosts",
+    "ping_crafting",
+    "ping_stream",
+]
+
+
 class macro:
-    def __init__(self, status, logQueue, updateGUI, run=None, skipTask=None, presence=None):
+    def __init__(self, status, logQueue, updateGUI, run=None, skipTask=None, presence=None, discordMessageQueue=None):
         self.status = status
         self.presence = presence
         self.updateGUI = updateGUI
@@ -601,22 +626,9 @@ class macro:
         self.hasteCompensation = HasteCompensationRevamped(self.robloxWindow, self.setdat["movespeed"])
         self.fieldDriftCompensation = fieldDriftCompensationClass(self.robloxWindow)
         self.keyboard = keyboard(self.setdat["movespeed"], self.setdat["haste_compensation"], self.hasteCompensation)
-        # Prepare ping settings
-        pingSettings = {
-            "ping_critical_errors": self.setdat.get("ping_critical_errors", False),
-            "ping_disconnects": self.setdat.get("ping_disconnects", False),
-            "ping_character_deaths": self.setdat.get("ping_character_deaths", False),
-            "ping_vicious_bee": self.setdat.get("ping_vicious_bee", False),
-            "ping_mondo_buff": self.setdat.get("ping_mondo_buff", False),
-            "ping_ant_challenge": self.setdat.get("ping_ant_challenge", False),
-            "ping_sticker_events": self.setdat.get("ping_sticker_events", False),
-            "ping_mob_events": self.setdat.get("ping_mob_events", False),
-            "ping_conversion_events": self.setdat.get("ping_conversion_events", False),
-            "ping_hourly_reports": self.setdat.get("ping_hourly_reports", False),
-            "ping_guiding_star": self.setdat.get("ping_guiding_star", False)
-        }
+        pingSettings = {key: self.setdat.get(key, False) for key in PING_SETTING_KEYS}
         
-        self.logger = logModule.log(logQueue, self.setdat.get("enable_webhook", False), self.setdat.get("webhook_link", ""), self.setdat.get("send_screenshot", True), blocking=self.setdat.get("low_performance", False), hourlyReportOnly=self.setdat.get("only_send_hourly_report", False), robloxWindow=self.robloxWindow, enableDiscordPing=self.setdat.get("enable_discord_ping", False), discordUserID=self.setdat.get("discord_user_id", ""), pingSettings=pingSettings, webhookTimeFormat=self.setdat.get("webhook_time_format", 24))
+        self.logger = logModule.log(logQueue, logModule.delivery_uses_webhook(self.setdat), logModule.get_default_delivery_route(self.setdat), self.setdat.get("send_screenshot", True), blocking=self.setdat.get("low_performance", False), hourlyReportOnly=self.setdat.get("only_send_hourly_report", False), robloxWindow=self.robloxWindow, enableDiscordPing=True, discordUserID=self.setdat.get("discord_user_id", ""), pingSettings=pingSettings, webhookTimeFormat=self.setdat.get("webhook_time_format", 24), enableDiscordBot=logModule.delivery_uses_bot_messages(self.setdat), discordMessageQueue=discordMessageQueue, routeSettings=logModule.build_route_settings(self.setdat))
         self.buffDetector = BuffDetector(self.robloxWindow)
         self.hourlyReport = HourlyReport(self.buffDetector, self.setdat.get("hourly_report_time_format", 24))
         self.memoryMatch = MemoryMatch(self.robloxWindow, debug=True)
@@ -674,23 +686,13 @@ class macro:
             self.setdat = settingsManager.loadAllSettings()
             self.fieldSettings = settingsManager.loadFields()
             # Update logger with new webhook settings
-            pingSettings = {
-                "ping_critical_errors": self.setdat.get("ping_critical_errors", False),
-                "ping_disconnects": self.setdat.get("ping_disconnects", False),
-                "ping_character_deaths": self.setdat.get("ping_character_deaths", False),
-                "ping_vicious_bee": self.setdat.get("ping_vicious_bee", False),
-                "ping_mondo_buff": self.setdat.get("ping_mondo_buff", False),
-                "ping_ant_challenge": self.setdat.get("ping_ant_challenge", False),
-                "ping_sticker_events": self.setdat.get("ping_sticker_events", False),
-                "ping_mob_events": self.setdat.get("ping_mob_events", False),
-                "ping_conversion_events": self.setdat.get("ping_conversion_events", False),
-                "ping_hourly_reports": self.setdat.get("ping_hourly_reports", False),
-                "ping_guiding_star": self.setdat.get("ping_guiding_star", False)
-            }
-            self.logger.enableWebhook = self.setdat.get("enable_webhook", False)
-            self.logger.webhookURL = self.setdat.get("webhook_link", "")
+            pingSettings = {key: self.setdat.get(key, False) for key in PING_SETTING_KEYS}
+            self.logger.enableWebhook = logModule.delivery_uses_webhook(self.setdat)
+            self.logger.enableDiscordBot = logModule.delivery_uses_bot_messages(self.setdat)
+            self.logger.webhookURL = logModule.get_default_delivery_route(self.setdat)
+            self.logger.routeSettings = logModule.build_route_settings(self.setdat)
             self.logger.sendScreenshots = self.setdat.get("send_screenshot", True)
-            self.logger.enableDiscordPing = self.setdat.get("enable_discord_ping", False)
+            self.logger.enableDiscordPing = True
             self.logger.discordUserID = self.setdat.get("discord_user_id", "")
             self.logger.pingSettings = pingSettings
             self.logger.webhookTimeFormat = self.setdat.get("webhook_time_format", 24)
@@ -3040,7 +3042,7 @@ class macro:
         # Add goo status to webhook message
         gooStatus = " - Goo Enabled" if fieldSetting.get("goo", False) else ""
         backpackLimitLabel = "Ignored" if infiniteGather else f"{fieldSetting['backpack']}%"
-        self.logger.webhook(f"Gathering: {field.title()}", f"Limit: {gatherTimeLimit} - {fieldSetting['shape']} - Backpack: {backpackLimitLabel}{gooStatus}", "light green")
+        self.logger.webhook(f"Gathering: {field.title()}", f"Limit: {gatherTimeLimit} - {fieldSetting['shape']} - Backpack: {backpackLimitLabel}{gooStatus}", "light green", route_category="gathering")
 
         # Goo timer thread: always 3s interval if goo quest, else field setting
         def gooTimerThread():
@@ -3119,15 +3121,19 @@ class macro:
 
         liveGatherReport = None
         if (
-            self.setdat.get("enable_webhook", False)
+            (logModule.delivery_uses_webhook(self.setdat) or logModule.delivery_uses_bot_messages(self.setdat))
             and self.setdat.get("live_gather_report", self.setdat.get("live_honey_report", False))
             and not self.setdat.get("only_send_hourly_report", False)
         ):
             liveGatherReport = LiveGatherReport(
-                self.setdat.get("webhook_link", ""),
+                logModule.get_default_delivery_route(self.setdat),
                 self.robloxWindow,
-                self.setdat.get("live_gather_report_interval", self.setdat.get("live_honey_report_interval", 15)),
+                10,
                 self.setdat.get("webhook_time_format", 24),
+                logModule.build_route_settings(self.setdat),
+                self.setdat.get("discord_bot_token", ""),
+                None,
+                logModule.get_delivery_mode(self.setdat),
             )
             liveGatherReport.start(field, gatherTimeLimit, getGatherTime, isGatherPaused)
         
@@ -3316,7 +3322,7 @@ class macro:
                         )
                         honeyWreathWaitLogged = True
                 else:
-                    self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Time Limit - Return: {returnType.title()}", "light green", "screen")
+                    self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Time Limit - Return: {returnType.title()}", "light green", "screen", route_category="gathering")
                     keepGathering = False
             #check backpack
             elif isHiveHubField or infiniteGather:
@@ -3343,7 +3349,7 @@ class macro:
                             )
                             honeyWreathWaitLogged = True
                     else:
-                        self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Backpack - Return: {returnType.title()}", "light green", "screen")
+                        self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Backpack - Return: {returnType.title()}", "light green", "screen", route_category="gathering")
                         keepGathering = False
 
         #gathering was interrupted

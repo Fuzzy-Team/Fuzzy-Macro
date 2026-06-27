@@ -672,81 +672,26 @@
   <div id="discord" class="standard-container sub-tab-panel" style="display: none">
     <script>
       const parentDiscord = document.getElementById("discord");
-      buildStandardContainer(parentDiscord, "Webhook", "", [
+      buildStandardContainer(parentDiscord, "Discord Delivery", "", [
         {
-          id: "enable_webhook",
-          title: "Enable Webhook",
-          desc: "A webhook to send the macro's status. Does not receive commands",
+          id: "discord_delivery_mode",
+          title: "Delivery Mode",
+          desc: "Choose how Discord messages and commands are handled",
           type: {
-            name: "checkbox",
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-        {
-          id: "webhook_link",
-          title: "Webhook Link",
-          desc: "The link of the webhook for the macro to use",
-          type: {
-            name: "textbox",
-            inputType: "string",
+            name: "dropdown",
+            data: [
+              { label: "Use Both", value: "both" },
+              { label: "Use Webhook", value: "webhook" },
+              { label: "Use Discord Bot", value: "discord_bot" },
+            ],
             length: 13,
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-        {
-          id: "send_screenshot",
-          title: "Send Screenshots",
-          desc: "Send screenshots of the game via the webhook",
-          type: {
-            name: "checkbox",
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-        {
-          id: "only_send_hourly_report",
-          title: "Only Send Hourly Reports",
-          desc: "Disable sending the regular status messages in the webhook and only send hourly reports",
-          type: {
-            name: "checkbox",
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-        {
-          id: "live_gather_report",
-          title: "Live Gather Report",
-          desc: "While gathering, edit one Discord webhook message with a honey/pollen screenshot and gather timer",
-          type: {
-            name: "checkbox",
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-        {
-          id: "live_gather_report_interval",
-          title: "Live Gather Report Interval",
-          desc: "Seconds between updates. Values below 10 or above 20 are clamped automatically",
-          type: {
-            name: "textbox",
-            inputType: "int",
-            inputLimit: 2,
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-      ]);
-
-      buildStandardContainer(parentDiscord, "Discord Bot", "", [
-        {
-          id: "discord_bot",
-          title: "Enable Discord Bot",
-          desc: "A discord bot to receive commands",
-          type: {
-            name: "checkbox",
-            triggerFunction: saveGeneralTriggerFunction,
+            triggerFunction: "saveSetting(this, 'general'); updateDiscordUniversalRouteText();",
           },
         },
         {
           id: "discord_bot_token",
           title: "Discord Bot Token",
-          desc: "The token of your discord bot",
+          desc: "Required for Discord bot commands and bot channel delivery",
           type: {
             name: "textbox",
             inputType: "string",
@@ -754,9 +699,28 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
-      ]);
-
-      buildStandardContainer(parentDiscord, "Discord Rich Presence", "", [
+        {
+          id: "webhook_link",
+          title: "Webhook URL",
+          desc: "Default webhook used for Discord notifications.",
+          type: {
+            name: "textbox",
+            inputType: "string",
+            length: 13,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "discord_channel_id",
+          title: "Channel ID",
+          desc: "Default Discord channel ID used for bot-sent notifications.",
+          type: {
+            name: "textbox",
+            inputType: "string",
+            length: 13,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
         {
           id: "discord_rich_presence",
           title: "Enable Discord Rich Presence",
@@ -768,20 +732,67 @@
         },
       ]);
 
-      buildStandardContainer(parentDiscord, "Discord Pings", "", [
+      buildStandardContainer(parentDiscord, "Message Options", "", [
         {
-          id: "enable_discord_ping",
-          title: "Enable Discord Pings",
-          desc: "Enable pinging your Discord user for important events",
+          id: "send_screenshot",
+          title: "Send Screenshots",
+          desc: "Attach game screenshots to Discord notifications",
           type: {
             name: "checkbox",
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
         {
+          id: "only_send_hourly_report",
+          title: "Only Send Reports",
+          desc: "Disable regular status messages and only send hourly and session reports",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "live_gather_report",
+          title: "Enable Live Gather Report",
+          desc: "While gathering, edit one Discord message every 10 seconds with a honey/pollen screenshot and gather timer",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+      ]);
+
+      const discordRouteCategories = [
+        ["route_macro_status", "Macro", "Start, stop, pause, resume, and profile messages"],
+        ["route_reports", "Reports", "Hourly and final report images"],
+        ["route_gathering", "Gathering", "Gathering start/end and live gather report messages"],
+        ["route_combat", "Combat", "Mobs, Vicious Bee, and character death messages"],
+        ["route_activities", "Activities", "Boosts, crafting, stickers, ant challenge, planters, quests, collectibles, and conversion messages"],
+        ["route_system", "System", "Critical errors, disconnects, stream messages, and other system-level notices"],
+      ];
+
+      buildStandardContainer(
+        parentDiscord,
+        "Notification Routes",
+        "Optional category-specific destinations. Paste a Discord webhook URL or a Discord channel ID.",
+        discordRouteCategories.map(([routeId, title, desc]) => ({
+          id: routeId,
+          title,
+          desc,
+          type: {
+            name: "textbox",
+            inputType: "string",
+            length: 16,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        }))
+      );
+
+      buildStandardContainer(parentDiscord, "Discord Pings", "", [
+        {
           id: "discord_user_id",
           title: "Discord User ID",
-          desc: "Your Discord User ID to ping for important events",
+          desc: "Used by the ping options below",
           type: {
             name: "textbox",
             inputType: "string",
@@ -789,114 +800,44 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
+        {
+          id: "ping_critical_errors",
+          title: "Critical Errors",
+          desc: "Ping when a critical error is sent",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "ping_disconnects",
+          title: "Disconnects",
+          desc: "Ping for reconnect and connection issue messages",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "ping_character_deaths",
+          title: "Character Deaths",
+          desc: "Ping when the character dies",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "ping_hourly_reports",
+          title: "Hourly Reports",
+          desc: "Ping when hourly reports are sent",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
       ]);
 
-      buildStandardContainer(
-        parentDiscord,
-        "Ping Categories",
-        "Choose which types of events should trigger Discord pings",
-        [
-          {
-            id: "ping_critical_errors",
-            title: "Critical Errors",
-            desc: "Ping for critical errors like failed operations, system failures, and major issues",
-            type: {
-              name: "checkbox",
-              triggerFunction: saveGeneralTriggerFunction,
-            },
-          },
-          {
-            id: "ping_disconnects",
-            title: "Disconnects",
-            desc: "Ping when the macro fails to reconnect or has connection issues",
-            type: {
-              name: "checkbox",
-              triggerFunction: saveGeneralTriggerFunction,
-            },
-          },
-          {
-            id: "ping_character_deaths",
-            title: "Character Deaths",
-            desc: "Ping for all character deaths during gameplay",
-            type: {
-              name: "checkbox",
-              triggerFunction: saveGeneralTriggerFunction,
-            },
-          },
-          {
-            id: "ping_vicious_bee",
-            title: "Vicious Bee Events",
-            desc: "Ping for Vicious Bee defeats and related events",
-            type: {
-              name: "checkbox",
-              triggerFunction: saveGeneralTriggerFunction,
-            },
-          },
-          {
-            id: "ping_mondo_buff",
-            title: "Mondo Buff Events",
-            desc: "Ping for Mondo Buff collection and related events",
-            type: {
-              name: "checkbox",
-              triggerFunction: saveGeneralTriggerFunction,
-            },
-          },
-          {
-            id: "ping_ant_challenge",
-            title: "Ant Challenge Events",
-            desc: "Ping for Ant Challenge completions and related events",
-            type: {
-              name: "checkbox",
-              triggerFunction: saveGeneralTriggerFunction,
-            },
-          },
-          {
-            id: "ping_sticker_events",
-            title: "Sticker Events",
-            desc: "Ping for sticker printer claims and sticker-related events",
-            type: {
-              name: "checkbox",
-              triggerFunction: saveGeneralTriggerFunction,
-            },
-          },
-          {
-            id: "ping_mob_events",
-            title: "Mob Events",
-            desc: "Ping for mob defeats like Stump Snail, Coconut Crab, and other mobs",
-            type: {
-              name: "checkbox",
-              triggerFunction: saveGeneralTriggerFunction,
-            },
-          },
-          {
-            id: "ping_conversion_events",
-            title: "Conversion Events",
-            desc: "Ping for pollen conversion completions and related events",
-            type: {
-              name: "checkbox",
-              triggerFunction: saveGeneralTriggerFunction,
-            },
-          },
-          {
-            id: "ping_hourly_reports",
-            title: "Hourly Reports",
-            desc: "Ping when hourly reports are generated and sent",
-            type: {
-              name: "checkbox",
-              triggerFunction: saveGeneralTriggerFunction,
-            },
-          },
-          {
-            id: "ping_guiding_star",
-            title: "Guiding Star",
-            desc: "Ping when a Guiding Star field is detected",
-            type: {
-              name: "checkbox",
-              triggerFunction: saveGeneralTriggerFunction,
-            },
-          },
-        ]
-      );
     </script>
   </div>
   <div id="stream" class="standard-container sub-tab-panel" style="display: none">

@@ -448,8 +448,8 @@ def canClaimTimedBearQuest(name):
     
 # (set_enabled moved into RichPresenceManager class)
 #controller for the macro
-def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
-    macro = macroModule.macro(status, logQueue, updateGUI, run, skipTask, presence)
+def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMessageQueue=None):
+    macro = macroModule.macro(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue)
     #invert the regularMobsInFields dict
     #instead of storing mobs in field, store the fields associated with each mob
     regularMobData = {}
@@ -2915,9 +2915,10 @@ if __name__ == "__main__":
     status = manager.Value(ctypes.c_wchar_p, "none")
     presence = manager.Value(ctypes.c_wchar_p, "")
     logQueue = manager.Queue()
+    discordMessageQueue = manager.Queue()
     pin_requests = manager.Queue()  # Shared queue for pin requests
     start_keyboard_listener_fn = watch_for_hotkeys(run)
-    logger = logModule.log(logQueue, False, None, False, blocking=False)
+    logger = logModule.log(logQueue, False, None, False, blocking=False, discordMessageQueue=discordMessageQueue)
     gui.configureToolRuntime(logger=logger, status=status, presence=presence)
 
     disconnectCooldownUntil = 0 #only for running disconnect check on low performance
@@ -3118,6 +3119,17 @@ if __name__ == "__main__":
             gui_settings_cache = settingsManager.loadAllSettings()
             last_gui_settings_load = current_time
         setdat = gui_settings_cache
+        logger.enableWebhook = logModule.delivery_uses_webhook(setdat)
+        logger.enableDiscordBot = logModule.delivery_uses_bot_messages(setdat)
+        logger.webhookURL = logModule.get_default_delivery_route(setdat)
+        logger.routeSettings = logModule.build_route_settings(setdat)
+        logger.sendScreenshots = setdat.get("send_screenshot", True)
+        logger.hourlyReportOnly = setdat.get("only_send_hourly_report", False)
+        logger.enableDiscordPing = True
+        logger.discordUserID = setdat.get("discord_user_id", "")
+        logger.pingSettings = {
+            key: value for key, value in setdat.items() if str(key).startswith("ping_")
+        }
 
         if autoStopStartTime is not None and run.value in (2, 4, 6):
             latestAutoStopHours = parseAutoStopHours(setdat)
@@ -3130,19 +3142,27 @@ if __name__ == "__main__":
                 "Macro Auto Stopped",
                 f"Stopped after {autoStopHours:g} hour{'s' if autoStopHours != 1 else ''}.",
                 "orange",
+                route_category="macro_status",
             )
             run.value = 0
 
         #discord bot. Look for changes in the bot token
         currentDiscordBotToken = setdat.get("discord_bot_token", "")
-        if setdat.get("discord_bot", False) and currentDiscordBotToken and currentDiscordBotToken.strip() and currentDiscordBotToken != prevDiscordBotToken:
+        shouldRunDiscordBot = logModule.delivery_uses_bot_commands(setdat) and currentDiscordBotToken and currentDiscordBotToken.strip()
+        if shouldRunDiscordBot and currentDiscordBotToken != prevDiscordBotToken:
             if discordBotProc is not None and discordBotProc.is_alive():
                 print("Detected change in discord bot token, killing previous bot process")
                 discordBotProc.terminate()
                 discordBotProc.join()
-            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI), daemon=True)
+            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI, discordMessageQueue), daemon=True)
             prevDiscordBotToken = currentDiscordBotToken
             discordBotProc.start()
+        elif not shouldRunDiscordBot and discordBotProc is not None and discordBotProc.is_alive():
+            print("Discord bot mode disabled, stopping bot process")
+            discordBotProc.terminate()
+            discordBotProc.join()
+            discordBotProc = None
+            prevDiscordBotToken = None
 
         # Discord Rich Presence - Initialize and always show status
         discord_rp_enabled = setdat.get("discord_rich_presence", False)
@@ -3179,12 +3199,12 @@ if __name__ == "__main__":
                     appManager.openApp("Roblox")
                 except Exception:
                     pass
-                logger.webhook("Macro Resumed", "Fuzzy Macro", "bright green")
+                logger.webhook("Macro Resumed", "Fuzzy Macro", "bright green", route_category="macro_status")
             # Check for pause (transition from running to paused)
             elif prevRunState == 2 and run.value == 6:
                 keyboardModule.releaseMovement()
                 mouse.mouseUp()
-                logger.webhook("Macro Paused", "Use F2 or /resume to continue", "orange")
+                logger.webhook("Macro Paused", "Use F2 or /resume to continue", "orange", route_category="macro_status")
 
             gui.setRunState(run.value)
             try:
@@ -3195,8 +3215,10 @@ if __name__ == "__main__":
 
         if run.value == 1:
             #create and set webhook obj for the logger
-            logger.enableWebhook = setdat.get("enable_webhook", False)
-            logger.webhookURL = setdat.get("webhook_link", "")
+            logger.enableWebhook = logModule.delivery_uses_webhook(setdat)
+            logger.enableDiscordBot = logModule.delivery_uses_bot_messages(setdat)
+            logger.webhookURL = logModule.get_default_delivery_route(setdat)
+            logger.routeSettings = logModule.build_route_settings(setdat)
             logger.sendScreenshots = setdat.get("send_screenshot", True)
             stopThreads = False
 
@@ -3209,10 +3231,10 @@ if __name__ == "__main__":
                 for _ in range(150):
                     time.sleep(0.1)
                     if stream.publicURL:
-                        logger.webhook("Stream Started", f'Stream URL: {stream.publicURL}', "purple")
+                        logger.webhook("Stream Started", f'Stream URL: {stream.publicURL}', "purple", route_category="stream")
                         
                         # If bot is enabled, request pinning of the stream message
-                        if setdat.get("discord_bot", False) and setdat.get("pin_stream_url", False):
+                        if logModule.delivery_uses_bot_commands(setdat) and setdat.get("pin_stream_url", False):
                             import modules.logging.webhook as webhookModule
                             if webhookModule.last_channel_id:
                                 try:
@@ -3225,12 +3247,12 @@ if __name__ == "__main__":
                                     print(f"Error queueing pin request: {e}")
                         return
 
-                logger.webhook("", f'Stream could not start. Check terminal for more info', "red", ping_category="ping_critical_errors")
+                logger.webhook("", f'Stream could not start. Check terminal for more info', "red", ping_category="ping_critical_errors", route_category="stream")
 
             streamLink = None
             if setdat.get("enable_stream", False):
                 if stream.isCloudflaredInstalled():
-                    logger.webhook("", "Starting Stream...", "light blue")
+                    logger.webhook("", "Starting Stream...", "light blue", route_category="stream")
                     streamLink = stream.start(setdat.get("stream_resolution", 0.75))
                     Thread(target=waitForStreamURL, daemon=True).start()
                 else:
@@ -3258,11 +3280,11 @@ if __name__ == "__main__":
                                     but there are no more items left to craft.\n\
 				                    Check the 'repeat' setting on your blender items and reset blender data.")
             #macro proc
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue), daemon=True)
             macroProc.start()
 
             macro_version = settingsManager.getMacroVersion()
-            logger.webhook("Macro Started", f'Fuzzy Macro v{macro_version}\nDisplay: {screenInfo["display_type"]}, {screenInfo["screen_width"]}x{screenInfo["screen_height"]}', "purple")
+            logger.webhook("Macro Started", f'Fuzzy Macro v{macro_version}\nDisplay: {screenInfo["display_type"]}, {screenInfo["screen_width"]}x{screenInfo["screen_height"]}', "purple", route_category="macro_status")
             run.value = 2
             autoStopStartTime = time.time()
             autoStopHours = parseAutoStopHours(setdat)
@@ -3290,7 +3312,7 @@ if __name__ == "__main__":
                 pass
 
             if had_macro_proc:
-                logger.webhook("Macro Stopped", "Fuzzy Macro", "red")
+                logger.webhook("Macro Stopped", "Fuzzy Macro", "red", route_category="macro_status")
             try:
                 gui.stopAllTools()
             except Exception:
@@ -3364,7 +3386,7 @@ if __name__ == "__main__":
             appManager.closeApp("Roblox")
             keyboardModule.releaseMovement()
             mouse.mouseUp()
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state
@@ -3397,7 +3419,7 @@ if __name__ == "__main__":
             keyboardModule.releaseMovement()
             mouse.mouseUp()
             # restart macro process
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state
