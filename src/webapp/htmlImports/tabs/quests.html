@@ -76,7 +76,36 @@
         },
       ]);
 
-      buildStandardContainer(questsSettingsParent, "Petal Gather", "Petal quest objectives use BloomsAI.", []);
+      buildStandardContainer(questsSettingsParent, "Quest Gather Interrupt", "Choose which quest givers may interrupt gathering when a required mob respawns.", [
+        ...[
+          ["polar_bear", "Polar Bear"],
+          ["brown_bear", "Brown Bear"],
+          ["black_bear", "Black Bear"],
+          ["honey_bee", "Honey Bee"],
+          ["bucko_bee", "Bucko Bee"],
+          ["riley_bee", "Riley Bee"],
+        ].map(([key, label]) => ({
+          id: `${key}_quest_gather_interrupt`,
+          title: label,
+          desc: `Interrupt gathering for mobs required by ${label}'s active quest`,
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        })),
+      ]);
+
+      buildStandardContainer(questsSettingsParent, "Petal Gather", "Petal quest objectives use BloomsAI.", [
+        {
+          id: "ignore_petal_quests",
+          title: "Ignore Petal Quests",
+          desc: "Skip known petal quest titles instead of gathering bloom petals",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+      ]);
     </script>
   </div>
 

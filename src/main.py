@@ -67,6 +67,9 @@ except ModuleNotFoundError:
 from modules.submacros.hourlyReport import HourlyReport
 mw, mh = pag.size()
 
+# Quest titles that are primarily bloom-petal objectives and can be skipped by setting.
+HARDCODED_PETAL_IGNORE_TITLES = {"petal tabbouleh", "petals", "mashed blooms"}
+
 # Discord Rich Presence Manager
 try:
     from pypresence import Presence, exceptions as pypresence_exceptions
@@ -465,6 +468,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
     taskCompleted = True
     questCache = {}
     questScanScreens = None
+    macro.questGatherInterruptMobs = {}
     
     macro.start()
     #macro.useItemInInventory("blueclayplanter")
@@ -575,6 +579,25 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         feedBees = []
         setdatEnable = []
 
+        def emptyQuestResult():
+            return setdatEnable, gatherFieldsList, gumdropGatherFieldsList, petalGatherFieldsList, requireRedField, requireBlueField, feedBees, requireRedGumdropField, requireBlueGumdropField, requireField
+
+        def shouldIgnoreDetectedPetalQuest():
+            if not macro.setdat.get("ignore_petal_quests", False):
+                return False
+            title = ((getattr(macro, "_last_quest_title", {}) or {}).get(questGiver, "") or "").strip()
+            if title.lower() not in HARDCODED_PETAL_IGNORE_TITLES:
+                return False
+            try:
+                gui.log(time.strftime("%H:%M:%S"), f"Skipping ignored petal quest '{title}' for {questGiver}", "orange")
+            except Exception:
+                pass
+            try:
+                macro.logger.webhook("Skipping ignored petal quest", f"Quest: {title}", "orange")
+            except Exception:
+                pass
+            return True
+
         # Refresh quest detection only when cache is stale to avoid duplicate scans in one cycle
         cacheFresh = questGiver in questCache and not taskCompleted
         if cacheFresh and questCache[questGiver] is not None:
@@ -590,11 +613,14 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             if not executeQuest:
                 taskCompleted = False
 
+        if shouldIgnoreDetectedPetalQuest():
+            return emptyQuestResult()
+
         # Only submit/get quests if executeQuest is True (when quest appears in priority queue)
         if executeQuest:
             if questObjective is None:  # Quest does not exist -> try to claim a new quest
                 if not canClaimTimedBearQuest(questGiver):
-                    return setdatEnable, gatherFieldsList, gumdropGatherFieldsList, petalGatherFieldsList, requireRedField, requireBlueField, feedBees, requireRedGumdropField, requireBlueGumdropField, requireField
+                    return emptyQuestResult()
                 questObjective = macro.getNewQuest(questGiver, False)
                 # Clear cached entry for this quest giver so subsequent checks re-read the UI
                 if questGiver in questCache:
@@ -610,10 +636,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
             if questObjective is None or not len(questObjective):
                 # No quest found or quest completed - we're not executing, so we can't determine requirements
                 # Return empty requirements (will be determined when quest executes in priority order)
-                return setdatEnable, gatherFieldsList, gumdropGatherFieldsList, petalGatherFieldsList, requireRedField, requireBlueField, feedBees, requireRedGumdropField, requireBlueGumdropField, requireField
+                return emptyQuestResult()
 
         if questObjective is None: #still not able to find quest
-            return setdatEnable, gatherFieldsList, gumdropGatherFieldsList, petalGatherFieldsList, requireRedField, requireBlueField, feedBees, requireRedGumdropField, requireBlueGumdropField, requireField
+            return emptyQuestResult()
 
         for obj in questObjective:
             objData = obj.split("_")
@@ -653,6 +679,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
                     # enable the mob setting (e.g. "rhinobeetle", "werewolf", etc.)
                     if mob_name not in setdatEnable:
                         setdatEnable.append(mob_name)
+                    if mob_name in regularMobData:
+                        macro.questGatherInterruptMobs.setdefault(questGiver, set()).add(mob_name)
             elif objData[0] == "token" and len(objData) > 1 and objData[1] == "honey":
                 if "honeytoken" not in setdatEnable:
                     setdatEnable.append("honeytoken")
@@ -802,6 +830,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None):
         # Clearing here guarantees the board is re-read after the task list recycles.
         questCache.clear()
         questScanScreens = None
+        macro.questGatherInterruptMobs.clear()
         
         macro.setdat = get_cached_settings()
         # Check if profile has changed and reload settings if needed
