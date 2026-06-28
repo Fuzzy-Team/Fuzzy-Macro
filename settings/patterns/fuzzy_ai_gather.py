@@ -157,8 +157,8 @@ LABELS_TOKENS_MINI = {
 
 TOKEN_MODEL_OPTIONS = {
     "standard": ("Standard", None, LABELS_TOKENS, INPUT_WIDTH, INPUT_HEIGHT),
-    "light": ("Light", "token_detection.mlmodelc", LABELS_TOKENS_LIGHT, 768, 416),
-    "mini": ("Mini", "token_detection_eco.mlmodelc", LABELS_TOKENS_MINI, 768, 416),
+    "light": ("Light", "token_detection_small.mlmodelc", LABELS_TOKENS_LIGHT, 768, 416),
+    "mini": ("Mini", "token_detection_mini.mlmodelc", LABELS_TOKENS_MINI, 768, 416),
 }
 
 LABELS_SPRINKLER = {
@@ -1732,6 +1732,9 @@ def _initialise_runtime():
     requested_label, requested_filename, requested_labels, requested_width, requested_height = TOKEN_MODEL_OPTIONS.get(
         requested_model, TOKEN_MODEL_OPTIONS["standard"]
     )
+    requested_filename_override = _coerce_text(globals().get("pattern_ai_gather_model_file"), "")
+    if requested_filename_override:
+        requested_filename = requested_filename_override
     standard_candidates = [
         (MODEL_DIR / "best.mlpackage", "coreml", LABELS_TOKENS, "Standard", INPUT_WIDTH, INPUT_HEIGHT),
         (MODEL_DIR / "tokens.onnx", "opencv_onnx", LABELS_TOKENS, "Standard", INPUT_WIDTH, INPUT_HEIGHT),
