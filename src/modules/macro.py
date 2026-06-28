@@ -704,6 +704,7 @@ class macro:
         self.unusualSproutLastAnnounced = {}
         self.sproutBeansUsed = 0
         self.sproutWaitingForBlueMessage = False
+        self.lastSproutBeanLimitLog = 0
 
         self.isGathering = False
         self.converting = False
@@ -1216,10 +1217,8 @@ class macro:
             return
 
         rarity = None
-        planter = ""
         plantedMatch = re.search(r"(.+?)\s+planted\s+a(?:n)?\s+(moon|gummy|festive|epic|legendary|supreme)\s+sprout", text)
         if plantedMatch:
-            planter = plantedMatch.group(1).strip()
             rarity = plantedMatch.group(2).title()
         elif "appeared" in text:
             if "supreme" in text:
@@ -1240,9 +1239,7 @@ class macro:
         if now - self.unusualSproutLastAnnounced.get(rarity, 0) < 10 * 60:
             return
         self.unusualSproutLastAnnounced[rarity] = now
-        message = f"{rarity} Sprout announcement detected"
-        if planter:
-            message = f"{planter} planted a {rarity} Sprout"
+        message = f"{rarity} Sprout"
         self.logger.webhook(
             "Unusual Sprout",
             message,
@@ -1303,6 +1300,13 @@ class macro:
             value = 60
         return max(0, min(999, value))
 
+    def logSproutBeanLimitReached(self, message, color="light blue"):
+        now = time.time()
+        if now - getattr(self, "lastSproutBeanLimitLog", 0) < 60:
+            return
+        self.lastSproutBeanLimitLog = now
+        self.logger.webhook("Sprouts", message, color, route_category="activities")
+
     def canUseSproutBeanSlot(self, slot):
         if not self.setdat.get("sprouts_enable", False):
             return True
@@ -1333,7 +1337,7 @@ class macro:
                 self.logger.webhook("Sprouts", "Waiting for a blue sprout message before planting another Magic Bean.", "light blue", route_category="activities")
                 return False
         if self.sproutBeansUsed >= self._sproutBeanLimit():
-            self.logger.webhook("", "Sprout bean limit reached", "orange", route_category="activities")
+            self.logSproutBeanLimitReached("Sprout bean limit reached", "orange")
             return False
 
         field = str(self.setdat.get("sprouts_field", "sunflower") or "sunflower").replace("_", " ").strip().lower()
@@ -3560,18 +3564,19 @@ class macro:
                         if self.sproutBeansUsed >= self._sproutBeanLimit():
                             if sproutFinalLootStart is None:
                                 sproutFinalLootStart = time.time()
-                                self.logger.webhook("Sprouts", f"Sprout bean limit reached. Collecting remaining drops for {sproutFinalLootSeconds} seconds before resetting.", "light blue", route_category="activities")
+                                self.logSproutBeanLimitReached(f"Sprout bean limit reached. Collecting remaining drops for {sproutFinalLootSeconds} seconds before resetting.")
                         else:
                             self.logger.webhook("Sprouts", f"Blue sprout message detected; planting next sprout ({self.sproutBeansUsed + 1}/{self._sproutBeanLimit()}).", "light blue", route_category="activities")
                             plantSproutBean()
                 elif sproutFinalLootStart is None and self.sproutBeansUsed >= self._sproutBeanLimit():
                     sproutFinalLootStart = time.time()
                     if not sproutLimitLogged:
-                        self.logger.webhook("Sprouts", f"Sprout bean limit reached. Collecting remaining drops for {sproutFinalLootSeconds} seconds before resetting.", "light blue", route_category="activities")
+                        self.logSproutBeanLimitReached(f"Sprout bean limit reached. Collecting remaining drops for {sproutFinalLootSeconds} seconds before resetting.")
                         sproutLimitLogged = True
                 if sproutFinalLootStart is not None and time.time() - sproutFinalLootStart >= sproutFinalLootSeconds:
                     stopGather()
                     self.logger.webhook("Sprouts", "Final sprout loot collection finished. Resetting to hive.", "light green", route_category="activities")
+                    self.sproutWaitingForBlueMessage = False
                     self.reset()
                     return
             elif self.setdat["Auto_Field_Boost"] and not self.AFBLIMIT and self.AFB(gatherInterrupt=True, turnOffShiftLock = fieldSetting["shift_lock"]):
