@@ -1926,6 +1926,10 @@ class macro:
         self.logger.webhook("", "Converting", "brown", "screen")
         self.alreadyConverted = True
         self.converting = True
+        liveGatherReport = None
+        if self.liveGatherReportEnabled():
+            liveGatherReport = self.createLiveGatherReport()
+            liveGatherReport.start("converting", "", lambda: time.time() - st, activity="Converting")
 
         #check if convert balloon
         conv_setting = str(self.setdat.get("convert_balloon", "")).lower().replace(" ", "_")
@@ -1944,6 +1948,8 @@ class macro:
             if self.checkPauseAndWait():
                 # Stop was requested while paused
                 self.clear_task_status()
+                if liveGatherReport:
+                    liveGatherReport.stop()
                 self.converting = False
                 return False
             
@@ -1971,6 +1977,8 @@ class macro:
                     if inactiveHoneyChecks > 30:
                         self.logger.webhook("Converting: interrupted", "Inactive Honey Reset (Beta)", "orange", "screen")
                         self.clear_task_status()
+                        if liveGatherReport:
+                            liveGatherReport.stop()
                         if self.enableNightDetection:
                             self.keyboard.press(".")
                         self.converting = False
@@ -1981,6 +1989,8 @@ class macro:
 
             if self.night and self.setdat["stinger_hunt"]:
                 self.hourlyReport.addHourlyStat("converting_time", time.time()-st)
+                if liveGatherReport:
+                    liveGatherReport.stop()
                 self.keyboard.press(".")
                 self.converting = False
                 self.stingerHunt()
@@ -2039,6 +2049,8 @@ class macro:
 
         if convertBalloon: self.saveTiming("convert_balloon")
         self.clear_task_status()
+        if liveGatherReport:
+            liveGatherReport.stop()
         #deal with the extra delay
         self.logger.webhook("", f"Finished converting (Time: {self.convertSecsToMinsAndSecs(time.time()-st)})", "brown", "screen", ping_category="ping_conversion_events")
         wait = self.setdat["convert_wait"]
@@ -2051,6 +2063,25 @@ class macro:
         self.converting = False
         self.hourlyReport.addHourlyStat("converting_time", time.time()-st)
         return True
+
+    def liveGatherReportEnabled(self):
+        return (
+            (logModule.delivery_uses_webhook(self.setdat) or logModule.delivery_uses_bot_messages(self.setdat))
+            and self.setdat.get("live_gather_report", self.setdat.get("live_honey_report", False))
+            and not self.setdat.get("only_send_hourly_report", False)
+        )
+
+    def createLiveGatherReport(self):
+        return LiveGatherReport(
+            logModule.get_default_delivery_route(self.setdat),
+            self.robloxWindow,
+            10,
+            self.setdat.get("webhook_time_format", 24),
+            logModule.build_route_settings(self.setdat),
+            self.setdat.get("discord_bot_token", ""),
+            None,
+            logModule.get_delivery_mode(self.setdat),
+        )
 
     def moveMouseToDefault(self):
         mouse.moveTo(self.robloxWindow.mx+370, self.robloxWindow.my+self.robloxWindow.yOffset+110)
@@ -3120,21 +3151,8 @@ class macro:
             return now - st - pausedDuration
 
         liveGatherReport = None
-        if (
-            (logModule.delivery_uses_webhook(self.setdat) or logModule.delivery_uses_bot_messages(self.setdat))
-            and self.setdat.get("live_gather_report", self.setdat.get("live_honey_report", False))
-            and not self.setdat.get("only_send_hourly_report", False)
-        ):
-            liveGatherReport = LiveGatherReport(
-                logModule.get_default_delivery_route(self.setdat),
-                self.robloxWindow,
-                10,
-                self.setdat.get("webhook_time_format", 24),
-                logModule.build_route_settings(self.setdat),
-                self.setdat.get("discord_bot_token", ""),
-                None,
-                logModule.get_delivery_mode(self.setdat),
-            )
+        if self.liveGatherReportEnabled():
+            liveGatherReport = self.createLiveGatherReport()
             liveGatherReport.start(field, gatherTimeLimit, getGatherTime, isGatherPaused)
         
         def stopGather():
@@ -3644,8 +3662,10 @@ class macro:
                     self.keyboard.walk("s",0.20)
                     self.keyboard.walk("a",2.65)
         else: #if loot off, just idle
-            end_time = time.perf_counter() + self.setdat["mondo_buff_wait"] * 60  
-            self.logger.webhook("", f"Collecting for: {self.setdat['mondo_buff_wait']} minutes", "yellow")
+            mondo_buff_wait = self.setdat["mondo_buff_wait"]
+            mondo_buff_wait_label = f"{mondo_buff_wait:g}" if isinstance(mondo_buff_wait, float) else str(mondo_buff_wait)
+            end_time = time.perf_counter() + mondo_buff_wait * 60  
+            self.logger.webhook("", f"Collecting for: {mondo_buff_wait_label} minutes", "yellow")
             # if collecting tokens produced by bees
             if self.setdat["mondo_collect_token"]:
                 # enable shiftlock
@@ -3657,7 +3677,7 @@ class macro:
                         time.sleep(0.035) 
                     time.sleep(3) #longer since we are not detecting anything
             else:
-                time.sleep(self.setdat['mondo_buff_wait'] * 60)
+                time.sleep(mondo_buff_wait * 60)
             self.saveTiming("mondo") 
             self.logger.webhook("","Collected: Mondo Buff","light green", ping_category="ping_mondo_buff")
         #done
