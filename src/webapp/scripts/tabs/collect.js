@@ -148,7 +148,9 @@ function refreshSproutAIModelOptions() {
     const tokenButton = document.getElementById("configure-sprout-ai-tokens-button")
     const tokenPriorityRow = tokenButton?.closest("form")
     if (!tokenPriorityRow) return
-    tokenPriorityRow.style.display = getSelectedSproutAIModel() === "standard" ? "flex" : "none"
+    const model = getSelectedSproutAIModel().replace(/\s+/g, "_").replace(/-/g, "_")
+    const isLootModel = model === "loot_light" || model === "loot_mini" || model === "light" || model === "mini"
+    tokenPriorityRow.style.display = isLootModel ? "none" : "flex"
 }
 
 function applySproutAITokenPreset(presetName) {
