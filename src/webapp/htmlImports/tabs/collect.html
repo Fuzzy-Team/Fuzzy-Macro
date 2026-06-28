@@ -564,8 +564,20 @@
         },
         {
           id: "sprouts_max_beans",
-          title: "Magic Beans",
+          title: "Max Per Session",
           desc: "How many Magic Beans the macro may use this session.",
+          type: {
+            name: "textbox",
+            inputType: "int",
+            inputLimit: 3,
+            length: 6,
+            triggerFunction: "saveSetting(this, 'profile')",
+          },
+        },
+        {
+          id: "sprouts_max_beans_per_gather",
+          title: "Max Per Gather",
+          desc: "How many Magic Beans the macro may use during one Sprouts gather before moving on.",
           type: {
             name: "textbox",
             inputType: "int",
