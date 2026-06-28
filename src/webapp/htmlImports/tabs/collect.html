@@ -9,6 +9,9 @@
     <div id="collect-seasonal" class="collect-tab-item">
       Seasonal
     </div>
+    <div id="collect-sprouts" class="collect-tab-item">
+      Sprouts
+    </div>
     <div id="collect-blender" class="collect-tab-item">
       Blender
     </div>
@@ -509,6 +512,160 @@
                 />
             `;
       petalsContainer.appendChild(petalsImageContainer);
+    </script>
+  </div>
+
+  <div id="collect-sprouts-tab" class="standard-container sub-tab-panel">
+    <script>
+      const parentCollectSprouts = document.getElementById("collect-sprouts-tab");
+      const sproutFields = [
+        "sunflower",
+        "dandelion",
+        "mushroom",
+        "blue flower",
+        "clover",
+        "strawberry",
+        "spider",
+        "bamboo",
+        "pineapple",
+        "stump",
+        "cactus",
+        "pumpkin",
+        "pine tree",
+        "rose",
+        "mountain top",
+        "coconut",
+        "pepper",
+      ];
+      const sproutFieldOptions = sproutFields.map((field) => ({
+        label: field.split(" ").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" "),
+        value: field,
+      }));
+
+      buildStandardContainer(parentCollectSprouts, "Sprouts", "", [
+        {
+          id: "sprouts_enable",
+          title: "Enable Task",
+          desc: "Plant Magic Beans in the selected field and gather sprout drops with AI token targeting.",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "sprouts_magic_bean_slot",
+          title: "Magic Bean Slot",
+          desc: "Hotbar slot containing Magic Beans.",
+          type: {
+            name: "dropdown",
+            data: slotArray,
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "sprouts_max_beans",
+          title: "Magic Beans",
+          desc: "How many Magic Beans the macro may use this session.",
+          type: {
+            name: "textbox",
+            inputType: "int",
+            inputLimit: 3,
+            length: 6,
+            triggerFunction: "saveSetting(this, 'profile')",
+          },
+        },
+        {
+          id: "sprouts_field",
+          title: "Field",
+          desc: "Field where the sprout should be planted.",
+          type: {
+            name: "dropdown",
+            data: sproutFieldOptions,
+            length: 13,
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "sprouts_ai_model",
+          title: "AI Model",
+          desc: "Model used to search for and prioritize sprout tokens.",
+          type: {
+            name: "dropdown",
+            data: ["Standard"],
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "configure-sprout-ai-tokens-button",
+          title: "Token Priority",
+          desc: "Choose which sprout drop tokens the AI should chase after the sprout pops, then sort them from highest to lowest priority.",
+          type: {
+            name: "button",
+            text: "Customize Tokens",
+            length: 10,
+            triggerFunction: "openSproutAITokenPopup()",
+          },
+        },
+      ]);
+      parentCollectSprouts.insertAdjacentHTML(
+        "beforeend",
+        `
+          <input type="hidden" id="sprouts_preferred_tokens">
+          <input type="hidden" id="sprouts_ignored_tokens">
+          <div id="sprout-ai-token-modal" class="modal-overlay" style="display:none;">
+            <div class="modal-dialog poppins-regular" style="max-width: 42rem; width: 90%; max-height: 85vh; overflow: hidden; display:flex; flex-direction:column;">
+              <h3>Sprout Token Priority</h3>
+              <p>Enable sprout drop tokens the AI should chase after the sprout pops. Drag tokens to sort them from highest to lowest priority.</p>
+              <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.5rem;">
+                <button class="import-export-button sprout-ai-token-preset" data-preset="field">Field Drops</button>
+                <button class="import-export-button sprout-ai-token-preset" data-preset="all">All Sprout Drops</button>
+                <button class="import-export-button sprout-ai-token-preset" data-preset="clear">Clear</button>
+              </div>
+              <div id="sprout-ai-token-list" style="overflow:auto; padding-right:0.5rem; margin-top:0.5rem;"></div>
+              <div class="modal-actions" style="margin-top:1rem;">
+                <button id="cancel-sprout-ai-tokens-button" class="btn-cancel">Cancel</button>
+                <button id="save-sprout-ai-tokens-button" class="btn-confirm">Save Tokens</button>
+              </div>
+            </div>
+          </div>
+        `
+      );
+
+      buildStandardContainer(parentCollectSprouts, "Drop Guide", "Common and rare sprout drop reference by field and sprout type.", []);
+      const sproutContainers = parentCollectSprouts.querySelectorAll(".standard-container");
+      const sproutGuideContainer = sproutContainers[sproutContainers.length - 1];
+      const sproutGuide = document.createElement("div");
+      sproutGuide.className = "sprout-guide poppins-regular";
+      sproutGuide.innerHTML = `
+        <div class="sprout-guide-grid">
+          <div class="sprout-guide-card">
+            <h3>Field Multipliers</h3>
+            <ul>
+              <li><strong>Red fields:</strong> 4x Strawberries, no Blueberries.</li>
+              <li><strong>Strawberry:</strong> 2x more Strawberries than other red fields.</li>
+              <li><strong>Blue fields:</strong> 6x Blueberries, no Strawberries.</li>
+              <li><strong>Sunflower:</strong> 7x Sunflower Seeds.</li>
+              <li><strong>Pineapple:</strong> 7x Pineapples.</li>
+              <li><strong>35 Bee Zone:</strong> 20% more rewards and higher pollen requirement.</li>
+              <li><strong>Coconut:</strong> adds Coconuts and Tropical Drinks.</li>
+            </ul>
+          </div>
+          <div class="sprout-guide-card">
+            <h3>Common / Rare</h3>
+            <p><strong>Common:</strong> Crafting Materials, Tickets, Royal Jelly, Treats, Honey.</p>
+            <p><strong>Rare:</strong> Silver Egg, Star Jelly, Crafting Materials, Tickets, Royal Jelly, Treats, Honey.</p>
+            <p>Crafting Materials include Red Extract, Blue Extract, Oil, Enzymes, and Glitter.</p>
+          </div>
+          <div class="sprout-guide-card">
+            <h3>Higher Rarities</h3>
+            <p><strong>Epic:</strong> Gold Egg, Star Jelly, Crafting Materials.</p>
+            <p><strong>Legendary / Supreme:</strong> Diamond Egg, Star Jelly, Crafting Materials.</p>
+            <p><strong>Gummy / Moon / Festive / Sticker:</strong> special event items where supported by token detection.</p>
+          </div>
+        </div>
+      `;
+      sproutGuideContainer.appendChild(sproutGuide);
+
     </script>
   </div>
 

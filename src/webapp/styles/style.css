@@ -1653,3 +1653,66 @@ select:focus {
 #import-profile-modal h3 {
   color: var(--text-main) !important;
 }
+
+.sprout-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  width: 100%;
+}
+
+.sprout-guide-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.sprout-guide-card h3 {
+  margin: 0 0 0.6rem;
+  color: var(--text-main);
+  font-size: 1rem;
+}
+
+.sprout-guide-card p,
+.sprout-guide-card li {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.sprout-guide-card ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.sprout-ai-token-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sprout-ai-token-row label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.sprout-ai-token-row>div {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.sprout-ai-token-drag-handle {
+  cursor: grab;
+  user-select: none;
+  opacity: 0.75;
+}
+
+.sprout-ai-token-row.dragging {
+  opacity: 0.45;
+}

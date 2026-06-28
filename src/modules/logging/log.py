@@ -35,6 +35,7 @@ PING_CATEGORY_ROUTES = {
     "ping_conversion_events": "activities",
     "ping_hourly_reports": "reports",
     "ping_guiding_star": "activities",
+    "ping_unusual_sprouts": "activities",
 }
 
 ALLOWED_PING_KEYS = {
@@ -42,6 +43,7 @@ ALLOWED_PING_KEYS = {
     "ping_disconnects",
     "ping_character_deaths",
     "ping_hourly_reports",
+    "ping_unusual_sprouts",
 }
 
 ROUTE_FALLBACKS = {
@@ -69,6 +71,7 @@ ROUTE_FALLBACKS = {
     "boosts": ["activities", "default"],
     "crafting": ["activities", "default"],
     "guiding_star": ["activities", "default"],
+    "unusual_sprouts": ["activities", "default"],
 }
 
 ROUTE_CATEGORIES = [
@@ -97,6 +100,7 @@ ROUTE_CATEGORIES = [
     "boosts",
     "crafting",
     "guiding_star",
+    "unusual_sprouts",
     "stream",
 ]
 

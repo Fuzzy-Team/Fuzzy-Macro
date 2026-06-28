@@ -289,6 +289,50 @@ blenderItems = ["red extract", "blue extract", "enzymes", "oil", "glue", "tropic
 MAIN_GAME_PLACE_ID = "1537690962"
 HIVE_HUB_PLACE_ID = "15579077077"
 
+SPROUT_AI_TOKEN_LABELS = {
+    "Beesmas Cheer Token",
+    "Blueberry",
+    "Coconut",
+    "Festive Blessing Token",
+    "Honey Token",
+    "Jelly Bean",
+    "Pineapple",
+    "Snowflake",
+    "Strawberry",
+    "Sunflower Seed",
+    "Token Link",
+    "Treat",
+}
+
+SPROUT_FIELD_TOKEN_PRIORITY = {
+    "sunflower": ["Sunflower Seed"],
+    "pineapple": ["Pineapple"],
+    "strawberry": ["Strawberry"],
+    "coconut": ["Coconut"],
+    "blue flower": ["Blueberry"],
+    "bamboo": ["Blueberry"],
+    "pine tree": ["Blueberry"],
+    "stump": ["Blueberry"],
+    "mushroom": ["Strawberry"],
+    "rose": ["Strawberry"],
+    "pepper": ["Strawberry"],
+}
+
+SPROUT_BASE_TOKEN_PRIORITY = [
+    "Token Link",
+    "Coconut",
+    "Pineapple",
+    "Blueberry",
+    "Strawberry",
+    "Sunflower Seed",
+    "Jelly Bean",
+    "Snowflake",
+    "Beesmas Cheer Token",
+    "Festive Blessing Token",
+    "Treat",
+    "Honey Token",
+]
+
 #a list of keys to press to face north after running the cannon_to_field path
 fieldFaceNorthKeys = {
     "sunflower": ["."]*2,
@@ -588,6 +632,7 @@ PING_SETTING_KEYS = [
     "ping_conversion_events",
     "ping_hourly_reports",
     "ping_guiding_star",
+    "ping_unusual_sprouts",
     "ping_macro_status",
     "ping_gathering",
     "ping_live_gather_report",
@@ -655,6 +700,10 @@ class macro:
         self.latestMM = "normal"
         self.lastGuidingStarScan = 0
         self.guidingStarLastAnnounced = {}
+        self.lastUnusualSproutScan = 0
+        self.unusualSproutLastAnnounced = {}
+        self.sproutBeansUsed = 0
+        self.sproutWaitingForBlueMessage = False
 
         self.isGathering = False
         self.converting = False
@@ -896,7 +945,7 @@ class macro:
 
         return last_detection
 
-    def ensure_shift_lock_off_on_start(self):
+    def ensure_shift_lock_off(self, reason=""):
         try:
             detection = self._detect_shift_lock_state_with_retries()
         except Exception:
@@ -906,9 +955,15 @@ class macro:
             return
 
         if detection["state"]:
-            self.logger.webhook("", "Shift Lock detected on startup, turning it off", "dark brown")
+            message = "Shift Lock detected, turning it off"
+            if reason:
+                message = f"Shift Lock detected during {reason}, turning it off"
+            self.logger.webhook("", message, "dark brown")
             self.keyboard.press("shift")
             time.sleep(0.35)
+
+    def ensure_shift_lock_off_on_start(self):
+        self.ensure_shift_lock_off("startup")
     
     def _set_presence_payload(self, payload: dict):
         if self.presence is None:
@@ -1141,6 +1196,129 @@ class macro:
             return
         self.guidingStarLastAnnounced[field] = now
         self.logger.webhook("Guiding Star", f"Detected in {field.title()}", "light blue", "screen", ping_category="ping_guiding_star")
+
+    def detectUnusualSproutAnnouncement(self):
+        if not self.setdat.get("ping_unusual_sprouts", False):
+            return
+        if self.status.value == "rejoining":
+            return
+        now = time.time()
+        if now - self.lastUnusualSproutScan < 10:
+            return
+        self.lastUnusualSproutScan = now
+
+        try:
+            text = ocr.imToString("blue").lower()
+        except Exception:
+            return
+
+        if "sprout" not in text:
+            return
+        hasAppearedPattern = "appeared" in text
+        hasPlantedPattern = "planted" in text
+        if not hasAppearedPattern and not hasPlantedPattern:
+            return
+
+        rarity = None
+        if "legendary" in text:
+            rarity = "Legendary"
+        elif "epic" in text:
+            rarity = "Epic"
+        if not rarity:
+            return
+
+        if now - self.unusualSproutLastAnnounced.get(rarity, 0) < 10 * 60:
+            return
+        self.unusualSproutLastAnnounced[rarity] = now
+        self.logger.webhook(
+            "Unusual Sprout",
+            f"{rarity} Sprout announcement detected",
+            "light blue",
+            "screen",
+            ping_category="ping_unusual_sprouts",
+            route_category="activities",
+        )
+
+    def blueSproutMessageVisible(self):
+        try:
+            text = ocr.imToString("blue").lower()
+        except Exception:
+            return False
+        return "sprout" in text
+
+    def buildSproutTokenPriority(self, field):
+        configuredPriority = str(self.setdat.get("sprouts_preferred_tokens", "") or "").strip()
+        if configuredPriority:
+            return configuredPriority
+        normalizedField = str(field or "").replace("_", " ").strip().lower()
+        priority = []
+        for token in SPROUT_FIELD_TOKEN_PRIORITY.get(normalizedField, []):
+            if token in SPROUT_AI_TOKEN_LABELS and token not in priority:
+                priority.append(token)
+        for token in SPROUT_BASE_TOKEN_PRIORITY:
+            if token in SPROUT_AI_TOKEN_LABELS and token not in priority:
+                priority.append(token)
+        return ",".join(priority)
+
+    def _sproutBeanLimit(self):
+        try:
+            value = int(self.setdat.get("sprouts_max_beans", 500) or 500)
+        except Exception:
+            value = 500
+        return max(1, min(500, value))
+
+    def canUseSproutBeanSlot(self, slot):
+        if not self.setdat.get("sprouts_enable", False):
+            return True
+        try:
+            sproutSlot = int(self.setdat.get("sprouts_magic_bean_slot", 1) or 1)
+            currentSlot = int(slot)
+        except Exception:
+            return True
+        if currentSlot != sproutSlot:
+            return True
+        return self.sproutBeansUsed < self._sproutBeanLimit()
+
+    def markSproutBeanUsed(self):
+        self.sproutBeansUsed += 1
+
+    def collectSprouts(self):
+        if not self.setdat.get("sprouts_enable", False):
+            return False
+        if self.sproutWaitingForBlueMessage:
+            if self.blueSproutMessageVisible():
+                self.sproutWaitingForBlueMessage = False
+            else:
+                self.logger.webhook("Sprouts", "Waiting for a blue sprout message before planting another Magic Bean.", "light blue", route_category="activities")
+                return False
+        if self.sproutBeansUsed >= self._sproutBeanLimit():
+            self.logger.webhook("", "Sprout bean limit reached", "orange", route_category="activities")
+            return False
+
+        field = str(self.setdat.get("sprouts_field", "sunflower") or "sunflower").replace("_", " ").strip().lower()
+        if field not in startLocationDimensions:
+            field = "sunflower"
+        try:
+            slot = max(1, min(7, int(self.setdat.get("sprouts_magic_bean_slot", 1) or 1)))
+        except Exception:
+            slot = 1
+
+        sproutOverride = {
+            "shape": "fuzzy_ai_gather",
+            "shift_lock": False,
+            "field_drift_compensation": True,
+            "start_location": "center",
+            "distance": 1,
+            "turn": "none",
+            "turn_times": 0,
+            "plant_sprout": True,
+            "sprout_magic_bean_slot": slot,
+            "fuzzy_ai_preferred_tokens": self.buildSproutTokenPriority(field),
+            "fuzzy_ai_ignored_tokens": str(self.setdat.get("sprouts_ignored_tokens", "") or ""),
+        }
+        self.logger.webhook("Sprouts", f"Planting in {field.title()} ({self.sproutBeansUsed + 1}/{self._sproutBeanLimit()})", "light blue", route_category="activities")
+        self.gather(field, sproutOverride)
+        return True
 
     def collectWindShrine(self, reached):
         displayName = "Wind Shrine"
@@ -2963,7 +3141,7 @@ class macro:
             "fuzzy_ai_gather": ("_FUZZY_AI_GATHER_STATE", "_fuzzy_ai_gather_state"),
             "blooms_ai": ("_BLOOMS_AI_STATE", "_blooms_ai_state"),
         }
-        if pattern in aiPatternLabels:
+        def configureAIGatherCamera():
             for _ in range(11):
                 self.keyboard.keyDown("pageup", False)
                 sleep(0.01)
@@ -2974,6 +3152,27 @@ class macro:
                 sleep(0.01)
                 self.keyboard.keyUp("pagedown", False)
                 sleep(0.01)
+
+        aiCameraConfigured = False
+        if pattern in aiPatternLabels:
+            configureAIGatherCamera()
+            aiCameraConfigured = True
+        sproutPlantTime = 0
+        sproutCompletionLogged = False
+        if fieldSetting.get("plant_sprout", False):
+            self.ensure_shift_lock_off("sprouts")
+            if pattern in aiPatternLabels and not aiCameraConfigured:
+                configureAIGatherCamera()
+            sproutSlot = str(fieldSetting.get("sprout_magic_bean_slot", self.setdat.get("sprouts_magic_bean_slot", 1)))
+            if self.canUseSproutBeanSlot(sproutSlot):
+                self.keyboard.press(sproutSlot)
+                self.markSproutBeanUsed()
+                sproutPlantTime = time.time()
+                self.sproutWaitingForBlueMessage = True
+                time.sleep(0.6)
+            else:
+                self.logger.webhook("", "Sprout bean limit reached before planting", "orange", route_category="activities")
+                return
         #key variables
         #check invert L/R and invert B/R
         fwdkey = "w"
@@ -3045,8 +3244,8 @@ class macro:
             str(self.setdat.get("sprinkler_type", "")).strip().lower(),
             "",
         )
-        pattern_preferred_tokens = fuzzyAITokenRanking.get("preferred_tokens", "")
-        pattern_ignored_tokens = fuzzyAITokenRanking.get("ignored_tokens", "")
+        pattern_preferred_tokens = fieldSetting.get("fuzzy_ai_preferred_tokens", fuzzyAITokenRanking.get("preferred_tokens", ""))
+        pattern_ignored_tokens = fieldSetting.get("fuzzy_ai_ignored_tokens", fuzzyAITokenRanking.get("ignored_tokens", ""))
         st = time.time()
         keepGathering = True
         self.died = False
@@ -3271,6 +3470,13 @@ class macro:
                 stopGather()
                 self.logger.webhook("Gathering: interrupted", "Inactive Honey Reset (Beta)", "orange", "screen")
                 self.reset()
+                return
+            elif fieldSetting.get("plant_sprout", False) and sproutPlantTime and time.time() - sproutPlantTime > 20 and self.blueSproutMessageVisible():
+                if not sproutCompletionLogged:
+                    self.logger.webhook("Sprouts", "Blue sprout message detected; ready for the next sprout.", "light blue", route_category="activities")
+                    sproutCompletionLogged = True
+                self.sproutWaitingForBlueMessage = False
+                stopGather()
                 return
             elif self.setdat["Auto_Field_Boost"] and not self.AFBLIMIT and self.AFB(gatherInterrupt=True, turnOffShiftLock = fieldSetting["shift_lock"]):
                 stopGather()
@@ -5140,6 +5346,7 @@ class macro:
         if self.enableNightDetection:
             self.detectNight()
         self.detectGuidingStarAnnouncement()
+        self.detectUnusualSproutAnnouncement()
 
         #hotbar
         for i in range(1,8):
@@ -5165,11 +5372,24 @@ class macro:
             if self.setdat[f"hotbar{i}_use_every_format"] == "mins": 
                 cdSecs *= 60
             if time.time() - hotbarSlotTimings[i] < cdSecs: continue
+            if not self.canUseSproutBeanSlot(i):
+                continue
+            sproutHotbarSlot = False
+            if self.setdat.get("sprouts_enable", False):
+                try:
+                    sproutHotbarSlot = int(self.setdat.get("sprouts_magic_bean_slot", 1) or 1) == i
+                except Exception:
+                    sproutHotbarSlot = False
+                if sproutHotbarSlot and self.sproutBeansUsed + 2 > self._sproutBeanLimit():
+                    continue
             print(f"pressed hotbar {i}")
             #press the key
             for _ in range(2):
                 keyboard.pagPress(str(i))
                 time.sleep(0.4)
+            if sproutHotbarSlot:
+                self.markSproutBeanUsed()
+                self.markSproutBeanUsed()
             #update the time pressed
             hotbarSlotTimings[i] = time.time()
             with open("./data/user/hotbar_timings.txt", "w") as f:
