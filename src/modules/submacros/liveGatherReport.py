@@ -12,19 +12,20 @@ from modules.logging.log import resolve_bot_route, resolve_route, resolve_webhoo
 
 
 class LiveGatherReport:
-    def __init__(self, webhook_url, roblox_window, interval=15, time_format=24, route_settings=None, bot_token="", ping_user_id=None, delivery_mode="both"):
+    def __init__(self, webhook_url, roblox_window, interval=15, time_format=24, route_settings=None, bot_token="", ping_user_id=None, delivery_mode="both", route_category="gathering"):
+        route_category = route_category or "gathering"
         if delivery_mode == "discord_bot":
-            self.route, self.route_category, self.route_kind = resolve_route(route_settings or {}, "gathering", "")
+            self.route, self.route_category, self.route_kind = resolve_route(route_settings or {}, route_category, "")
             if not self.route:
-                self.route, self.route_category, self.route_kind = resolve_bot_route(route_settings or {}, "gathering", webhook_url)
+                self.route, self.route_category, self.route_kind = resolve_bot_route(route_settings or {}, route_category, webhook_url)
         elif delivery_mode == "both":
-            self.route, self.route_category, self.route_kind = resolve_route(route_settings or {}, "gathering", "")
+            self.route, self.route_category, self.route_kind = resolve_route(route_settings or {}, route_category, "")
             if not self.route:
-                self.route, self.route_category, self.route_kind = resolve_webhook_route(route_settings or {}, "gathering", webhook_url)
+                self.route, self.route_category, self.route_kind = resolve_webhook_route(route_settings or {}, route_category, webhook_url)
         elif delivery_mode == "webhook":
-            self.route, self.route_category, self.route_kind = resolve_webhook_route(route_settings or {}, "gathering", webhook_url)
+            self.route, self.route_category, self.route_kind = resolve_webhook_route(route_settings or {}, route_category, webhook_url)
         else:
-            self.route, self.route_category, self.route_kind = resolve_route(route_settings or {}, "gathering", webhook_url)
+            self.route, self.route_category, self.route_kind = resolve_route(route_settings or {}, route_category, webhook_url)
         self.webhook_url = self.route if self.route_kind == "webhook" else ""
         self.channel_id = self.route if self.route_kind == "bot" else ""
         self.bot_token = bot_token or ""
