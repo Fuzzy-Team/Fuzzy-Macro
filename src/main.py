@@ -2987,11 +2987,26 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Failed to release mouse during shutdown: {e}")
 
+    def releaseInputsSafely():
+        try:
+            keyboardModule.releaseMovement()
+        except pag.FailSafeException:
+            print("PyAutoGUI fail-safe triggered while releasing movement during shutdown.")
+        except Exception as e:
+            print(f"Failed to release movement during shutdown: {e}")
+        try:
+            mouse.mouseUp()
+        except pag.FailSafeException:
+            print("PyAutoGUI fail-safe triggered while releasing mouse during shutdown.")
+        except Exception as e:
+            print(f"Failed to release mouse during shutdown: {e}")
+
     def onExit():
         try:
             stopApp()
         except Exception as e:
             print(f"Error during shutdown cleanup: {e}")
+        # Reset timed bear quest states on exit so macro resumes checking next run
         try:
             settingsManager.saveSettingFile("brown_bear_quest_state", 0, "./data/user/timings.txt")
         except Exception:
@@ -3017,12 +3032,14 @@ if __name__ == "__main__":
         global macroProc
         stopThreads = True
         releaseInputsSafely()
+        releaseInputsSafely()
         #print(sockets)
         if macroProc and macroProc.is_alive():
             # Give the macro process a chance to observe run.value == 0 and run
             # gather cleanup hooks, including AI gather video finalization.
             stop_wait_deadline = time.time() + 1
             while macroProc.is_alive() and time.time() < stop_wait_deadline:
+                releaseInputsSafely()
                 releaseInputsSafely()
                 macroProc.join(timeout=0.05)
         if macroProc and macroProc.is_alive():
@@ -3034,6 +3051,7 @@ if __name__ == "__main__":
         macroProc = None
         stream.stop()
         #if discordBotProc.is_alive(): discordBotProc.kill()
+        releaseInputsSafely()
         releaseInputsSafely()
     
     atexit.register(onExit)
@@ -3346,7 +3364,7 @@ if __name__ == "__main__":
                 
                 # Create final report object
                 finalReportObj = FinalReport()
-                sessionStats = finalReportObj.generateFinalReport(setdat)
+                sessionStats = finalReportObj.generateFinalReport(setdat, stop_time=time.time())
                 
                 # Check if report was generated successfully
                 if sessionStats and os.path.exists("finalReport.png"):
@@ -3354,7 +3372,13 @@ if __name__ == "__main__":
                     sessionTime = sessionStats.get("total_session_time", 0)
                     hours = int(sessionTime / 3600)
                     minutes = int((sessionTime % 3600) / 60)
-                    timeStr = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+                    seconds = int(sessionTime % 60)
+                    if hours > 0:
+                        timeStr = f"{hours}h {minutes}m {seconds}s"
+                    elif minutes > 0:
+                        timeStr = f"{minutes}m {seconds}s"
+                    else:
+                        timeStr = f"{seconds}s"
                     
                     totalHoney = sessionStats.get("total_honey", 0)
                     avgHoneyPerHour = sessionStats.get("avg_honey_per_hour", 0)
@@ -3377,7 +3401,7 @@ if __name__ == "__main__":
                     description = f"Runtime: {timeStr}\nTotal Honey: {millify(totalHoney)}\n{avgLabel}: {millify(avgHoneyPerHour)}"
                     
                     # Send final report webhook
-                    logger.finalReport("Session Complete", description, "purple")
+                    logger.finalReport("Session Complete", description, "purple", fields=getattr(finalReportObj, "lastEmbedFields", None))
                     print("Final report sent successfully")
                 else:
                     print("Failed to generate final report - no data available")

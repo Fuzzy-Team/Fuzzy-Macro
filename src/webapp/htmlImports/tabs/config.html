@@ -587,11 +587,11 @@
         },
       ]);
 
-      buildStandardContainer(parentOther, "Time Format", "", [
+      buildStandardContainer(parentOther, "Hourly / Session Reports", "", [
         {
           id: "hourly_report_time_format",
-          title: "Hourly Report Time Format",
-          desc: "Choose between 12-hour (AM/PM) or 24-hour format for hourly report time labels",
+          title: "Report Time Format",
+          desc: "Choose between 12-hour (AM/PM) or 24-hour format for report time labels",
           type: {
             name: "dropdown",
             data: [12, 24],
@@ -599,12 +599,25 @@
           },
         },
         {
-          id: "webhook_time_format",
-          title: "Webhook Time Format",
-          desc: "Choose between 12-hour (AM/PM) or 24-hour format for webhook message timestamps",
+          id: "hourly_report_uptime_buffs",
+          title: "Buff Uptime Options",
+          desc: "Choose buff keys to track for hourly/session reports. The first 16 selected keys are visible.",
           type: {
-            name: "dropdown",
-            data: [12, 24],
+            name: "multicheck",
+            variant: "report-buffs",
+            data: hourlyReportUptimeBuffOptions,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "hourly_report_hourly_buffs",
+          title: "Side Buff Options",
+          desc: "Choose up to 5 buff keys to show in the report side Buffs card.",
+          type: {
+            name: "multicheck",
+            variant: "report-buffs compact",
+            maxSelections: 5,
+            data: hourlyReportSideBuffOptions,
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
@@ -711,6 +724,16 @@
             name: "textbox",
             inputType: "string",
             length: 13,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "webhook_time_format",
+          title: "Webhook Time Format",
+          desc: "Choose between 12-hour (AM/PM) or 24-hour format for webhook message timestamps",
+          type: {
+            name: "dropdown",
+            data: [12, 24],
             triggerFunction: saveGeneralTriggerFunction,
           },
         },

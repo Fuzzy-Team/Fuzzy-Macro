@@ -44,6 +44,94 @@ _cache_timestamp = 0
 _cache_duration = 5  # seconds
 _shift_lock_template_cache = None
 
+
+def response_footer():
+    return f"Fuzzy Macro - Version {settingsManager.getMacroVersion()}"
+
+
+def _content_with_footer(content):
+    footer = response_footer()
+    if content is None:
+        return footer
+
+    content = str(content)
+    if "Fuzzy Macro - Version" in content:
+        return content
+    return f"{content}\n\n{footer}"
+
+
+def _apply_embed_footer(embed):
+    if embed is None or not hasattr(embed, "set_footer"):
+        return embed
+
+    footer = response_footer()
+    existing_footer = getattr(getattr(embed, "footer", None), "text", None)
+    if existing_footer:
+        if "Fuzzy Macro - Version" not in existing_footer:
+            embed.set_footer(text=f"{existing_footer} | {footer}")
+    else:
+        embed.set_footer(text=footer)
+    return embed
+
+
+def _format_bot_response(args, kwargs, add_default_content=True):
+    args = list(args)
+
+    if "embed" in kwargs:
+        kwargs["embed"] = _apply_embed_footer(kwargs["embed"])
+    if "embeds" in kwargs and kwargs["embeds"]:
+        kwargs["embeds"] = [_apply_embed_footer(embed) for embed in kwargs["embeds"]]
+
+    has_embed = kwargs.get("embed") is not None or bool(kwargs.get("embeds"))
+    if args:
+        if not has_embed:
+            args[0] = _content_with_footer(args[0])
+    elif "content" in kwargs:
+        if not has_embed:
+            kwargs["content"] = _content_with_footer(kwargs["content"])
+    elif add_default_content and not has_embed:
+        kwargs["content"] = response_footer()
+
+    return tuple(args), kwargs
+
+
+def _patch_discord_response_footers():
+    if not getattr(discord.InteractionResponse, "_fuzzy_footer_patched", False):
+        original_send_message = discord.InteractionResponse.send_message
+        original_edit_message = discord.InteractionResponse.edit_message
+
+        async def send_message_with_footer(self, *args, **kwargs):
+            args, kwargs = _format_bot_response(args, kwargs)
+            return await original_send_message(self, *args, **kwargs)
+
+        async def edit_message_with_footer(self, *args, **kwargs):
+            args, kwargs = _format_bot_response(args, kwargs, add_default_content=False)
+            return await original_edit_message(self, *args, **kwargs)
+
+        discord.InteractionResponse.send_message = send_message_with_footer
+        discord.InteractionResponse.edit_message = edit_message_with_footer
+        discord.InteractionResponse._fuzzy_footer_patched = True
+
+    if not getattr(discord.Webhook, "_fuzzy_footer_patched", False):
+        original_webhook_send = discord.Webhook.send
+
+        async def webhook_send_with_footer(self, *args, **kwargs):
+            args, kwargs = _format_bot_response(args, kwargs)
+            return await original_webhook_send(self, *args, **kwargs)
+
+        discord.Webhook.send = webhook_send_with_footer
+        discord.Webhook._fuzzy_footer_patched = True
+
+    if not getattr(discord.Message, "_fuzzy_footer_patched", False):
+        original_message_edit = discord.Message.edit
+
+        async def message_edit_with_footer(self, *args, **kwargs):
+            args, kwargs = _format_bot_response(args, kwargs, add_default_content=False)
+            return await original_message_edit(self, *args, **kwargs)
+
+        discord.Message.edit = message_edit_with_footer
+        discord.Message._fuzzy_footer_patched = True
+
 def get_cached_settings():
     """Get settings with caching to improve performance"""
     global _settings_cache, _cache_timestamp
@@ -545,6 +633,8 @@ def _build_logger_embed(data):
         embed = discord.Embed(title=f"[{formatted_time}] {title}", description=desc, color=color)
     else:
         embed = discord.Embed(title="", description=f"[{formatted_time}] {desc}", color=color)
+    for field in data.get("fields") or []:
+        embed.add_field(name=field["name"], value=field["value"], inline=field.get("inline", False))
     if data.get("imagePath"):
         embed.set_image(url="attachment://screenshot.png")
     return embed
@@ -552,6 +642,7 @@ def _build_logger_embed(data):
 
 def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None, updateGUI=None, discord_message_queue=None):
     import modules.macro
+    _patch_discord_response_footers()
     bot = commands.Bot(command_prefix="fuzz!", intents=discord.Intents.all())
     
     # Store pin requests queue
@@ -3632,7 +3723,16 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
             # Generate the image (saves to hourlyReport.png)
             hr.generateHourlyReport(setdat)
-            await interaction.followup.send(file = discord.File("hourlyReport.png"))
+            embed_fields = getattr(hr, "lastEmbedFields", None)
+            if embed_fields:
+                from discord import Embed, File
+                embed = Embed(title="Hourly Report", color=0x9966FF)
+                for f in embed_fields:
+                    embed.add_field(name=f["name"], value=f["value"], inline=f.get("inline", False))
+                embed.set_image(url="attachment://hourlyReport.png")
+                await interaction.followup.send(embed=embed, file=discord.File("hourlyReport.png"))
+            else:
+                await interaction.followup.send(file=discord.File("hourlyReport.png"))
 
         except Exception as e:
             await interaction.followup.send(f"❌ Error generating hourly report: {str(e)}")
@@ -3649,7 +3749,16 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             sessionStats = finalReportObj.generateFinalReport(setdat)
 
             if sessionStats and os.path.exists("finalReport.png"):
-                await interaction.followup.send(file=discord.File("finalReport.png"))
+                embed_fields = getattr(finalReportObj, "lastEmbedFields", None)
+                if embed_fields:
+                    from discord import Embed
+                    embed = Embed(title="Session Report", color=0x9966FF)
+                    for f in embed_fields:
+                        embed.add_field(name=f["name"], value=f["value"], inline=f.get("inline", False))
+                    embed.set_image(url="attachment://finalReport.png")
+                    await interaction.followup.send(embed=embed, file=discord.File("finalReport.png"))
+                else:
+                    await interaction.followup.send(file=discord.File("finalReport.png"))
             else:
                 await interaction.followup.send("❌ Failed to generate final session report - no data available.")
 

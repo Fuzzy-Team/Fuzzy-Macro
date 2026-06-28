@@ -836,6 +836,13 @@ select:focus {
   color: var(--text-main);
 }
 
+.custom-select .value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .custom-select .select-menu {
   position: absolute;
   top: 100%;
@@ -1100,6 +1107,69 @@ select:focus {
 
 .multi-check-option:hover .multi-check-tile {
   border-color: #4f3a19;
+}
+
+.multi-checklist-report-buffs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  width: 100%;
+  max-height: 34rem;
+  padding: 1rem;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 92%, var(--primary) 8%), var(--background));
+  border: 1px solid var(--border);
+}
+
+.multi-checklist-report-buffs .multi-check-tile {
+  width: 100%;
+  min-height: 3.35rem;
+  aspect-ratio: auto;
+  justify-content: flex-start;
+  gap: 0.75rem;
+  padding: 0.45rem 0.65rem;
+  background: color-mix(in srgb, var(--surface) 86%, #ffffff 4%);
+  border-color: var(--border);
+  color: var(--text-main);
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-align: left;
+}
+
+.standard-container .multi-checklist-report-buffs .multi-check-tile img {
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: 0 0 auto;
+}
+
+.multi-checklist-report-buffs .multi-check-label {
+  display: block;
+  width: 100%;
+  color: var(--text-main);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.multi-checklist-report-buffs .multi-check-badge {
+  left: auto;
+  right: 0.28rem;
+  top: 0.28rem;
+  bottom: auto;
+  background: color-mix(in srgb, var(--primary) 84%, #000000 16%);
+  color: #121212;
+}
+
+.multi-checklist-report-buffs .multi-check-option input:checked~.multi-check-tile {
+  background: color-mix(in srgb, var(--primary) 24%, var(--surface));
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 70%, #ffffff 30%);
+}
+
+.multi-checklist-report-buffs .multi-check-option:hover .multi-check-tile {
+  border-color: color-mix(in srgb, var(--primary) 70%, #ffffff 30%);
+}
+
+.multi-checklist-compact {
+  width: 100%;
 }
 
 /* Drag List */

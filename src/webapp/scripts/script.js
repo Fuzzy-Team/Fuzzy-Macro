@@ -708,7 +708,15 @@ function loadInputs(obj, save = "") {
       // Handle drag list elements
       loadDragListOrder(ele, v, obj);
     } else if (ele.className.includes("multi-checklist")) {
-      const selected = Array.isArray(v) ? v : [];
+      let selected = Array.isArray(v) ? v : [];
+      if (!Array.isArray(v) && typeof v === "string") {
+        try {
+          const parsed = JSON.parse(v.replaceAll("'", '"'));
+          selected = Array.isArray(parsed) ? parsed : [];
+        } catch (error) {
+          selected = v.split(",").map((value) => value.trim()).filter(Boolean);
+        }
+      }
       Array.from(ele.querySelectorAll("input[type='checkbox']")).forEach((input) => {
         input.checked = selected.includes(input.value);
       });
@@ -994,6 +1002,11 @@ function isMultiSelectDropdown(ele) {
   return ele?.dataset?.multiple === "true";
 }
 
+function getDropdownMaxSelections(ele) {
+  const maxSelections = Number(ele?.dataset?.maxSelections || 0);
+  return Number.isFinite(maxSelections) && maxSelections > 0 ? maxSelections : 0;
+}
+
 function normalizeDropdownOptionValue(value) {
   if (typeof value === "number") return value;
   const text = String(value ?? "").trim();
@@ -1022,13 +1035,23 @@ function normalizeDropdownMultiValue(value) {
         // fall through and treat as scalar
       }
     }
+    if (trimmed.includes(",")) {
+      return trimmed
+        .split(",")
+        .map(normalizeDropdownOptionValue)
+        .filter((item) => item !== "");
+    }
   }
   const normalized = normalizeDropdownOptionValue(value);
   return normalized === 0 || normalized === "0" || normalized === "" ? [] : [normalized];
 }
 
 function updateMultiDropdownDisplay(parentEle, values) {
-  const normalizedValues = normalizeDropdownMultiValue(values);
+  let normalizedValues = normalizeDropdownMultiValue(values);
+  const maxSelections = getDropdownMaxSelections(parentEle);
+  if (maxSelections && normalizedValues.length > maxSelections) {
+    normalizedValues = normalizedValues.slice(0, maxSelections);
+  }
   const selectEle = parentEle.children[0].children[0];
   const optionsEle = parentEle.children[1].children[0];
   const selectedLabels = [];
@@ -1053,6 +1076,12 @@ function updateDropDownDisplay(optionEle) {
   if (isMultiSelectDropdown(parentEle)) {
     const currentValues = normalizeDropdownMultiValue(getDropdownValue(parentEle));
     const optionValue = normalizeDropdownOptionValue(optionEle.dataset.value);
+    const isSelected = currentValues.some((value) => value == optionValue);
+    const maxSelections = getDropdownMaxSelections(parentEle);
+    if (!isSelected && maxSelections && currentValues.length >= maxSelections) {
+      updateMultiDropdownDisplay(parentEle, currentValues);
+      return;
+    }
     const nextValues = currentValues.some((value) => value == optionValue)
       ? currentValues.filter((value) => value != optionValue)
       : [...currentValues, optionValue];
@@ -1124,15 +1153,16 @@ function dropdownClicked(event) {
   }
 
   if (dropdownOption) {
-    closeAllDropdowns();
     const parentEle = dropdownOption.parentElement.parentElement.parentElement;
+    const isMulti = isMultiSelectDropdown(parentEle);
+    if (!isMulti) closeAllDropdowns();
     updateDropDownDisplay(dropdownOption);
     if (parentEle.id === "gui_theme") {
       applyTheme(getDropdownValue(parentEle));
     }
     let funcParams = parentEle.dataset.onchange.replace("this", "parentEle");
     eval(funcParams);
-    dropdownOpen = false;
+    if (!isMulti) dropdownOpen = false;
     return;
   }
 
