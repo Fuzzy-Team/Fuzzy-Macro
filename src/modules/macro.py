@@ -1431,7 +1431,15 @@ class macro:
             "fuzzy_ai_preferred_tokens": self.buildSproutTokenPriority(field),
             "fuzzy_ai_ignored_tokens": str(self.setdat.get("sprouts_ignored_tokens", "") or ""),
         }
-        self.logger.webhook("Sprouts", f"Travelling to {field.title()} to plant sprout ({self.sproutBeansUsed + 1}/{self._sproutBeanLimit()})", "light blue", "screen", route_category="activities")
+        nextSessionBean = self.sproutBeansUsed + 1
+        gatherLimit = self._sproutGatherBeanLimit()
+        sessionLimit = self._sproutBeanLimit()
+        self.logger.webhook(
+            "Sprouts",
+            f"Travelling to {field.title()} to plant sprout (1/{gatherLimit} gather and {nextSessionBean}/{sessionLimit} session)",
+            "light blue",
+            route_category="activities",
+        )
         self.gather(field, sproutOverride)
         return True
 
