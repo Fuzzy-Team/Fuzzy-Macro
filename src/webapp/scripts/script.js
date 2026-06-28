@@ -554,6 +554,7 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
 
     if (taskId.startsWith("collect_")) {
       const collectName = taskId.replace("collect_", "");
+      if (collectName === "sprouts") return settingsObj.sprouts_enable || false;
       if (collectName === "sticker_printer") return settingsObj.sticker_printer || false;
       if (collectName === "sticker_stack") return settingsObj.sticker_stack || false;
       return settingsObj[collectName] || false;
@@ -636,6 +637,7 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
       collect_mountain_booster: "Collect: Mountain Booster",
       collect_sticker_stack: "Collect: Sticker Stack",
       collect_sticker_printer: "Collect: Sticker Printer",
+      collect_sprouts: "Collect: Sprouts",
       kill_stump_snail: "Kill: Stump Snail",
       kill_ladybug: "Kill: Ladybug",
       kill_rhinobeetle: "Kill: Rhinobeetle",

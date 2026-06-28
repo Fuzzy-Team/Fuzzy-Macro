@@ -997,6 +997,13 @@ def loadSettings():
             settings[k] = v
             merged_new_keys = True
 
+    taskPriorityOrder = settings.get("task_priority_order", [])
+    if isinstance(taskPriorityOrder, list) and "collect_sprouts" not in taskPriorityOrder:
+        insertIndex = taskPriorityOrder.index("collect_sticker_printer") + 1 if "collect_sticker_printer" in taskPriorityOrder else len(taskPriorityOrder)
+        taskPriorityOrder.insert(insertIndex, "collect_sprouts")
+        settings["task_priority_order"] = taskPriorityOrder
+        merged_new_keys = True
+
     # Migrate legacy global quest gather override to per-quest keys on first load
     try:
         legacy_present = any(k in profile_raw for k in ("quest_gather_mins", "quest_gather_return"))

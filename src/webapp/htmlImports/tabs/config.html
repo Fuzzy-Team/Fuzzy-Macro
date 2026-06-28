@@ -321,6 +321,7 @@
             <div class="drag-item" data-id="collect_mountain_booster" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Mountain Booster</span></div>
             <div class="drag-item" data-id="collect_sticker_stack" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Sticker Stack</span></div>
             <div class="drag-item" data-id="collect_sticker_printer" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Sticker Printer</span></div>
+            <div class="drag-item" data-id="collect_sprouts" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Sprouts</span></div>
             <div class="drag-item" data-id="kill_stump_snail" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Kill: Stump Snail</span></div>
             <div class="drag-item" data-id="kill_king_beetle" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Kill: King Beetle</span></div>
             <div class="drag-item" data-id="kill_tunnel_bear" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Kill: Tunnel Bear</span></div>
@@ -831,6 +832,15 @@
           id: "ping_hourly_reports",
           title: "Hourly/Session Reports",
           desc: "Ping when hourly or session reports are sent",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "ping_unusual_sprouts",
+          title: "Unusual Sprouts",
+          desc: "Ping when an Epic or Legendary Sprout announcement is detected",
           type: {
             name: "checkbox",
             triggerFunction: saveGeneralTriggerFunction,

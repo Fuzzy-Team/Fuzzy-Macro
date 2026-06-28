@@ -1377,6 +1377,14 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             # Handle collect tasks
             if taskId.startswith("collect_"):
                 collectName = taskId.replace("collect_", "")
+
+                # Special case: sprouts
+                if collectName == "sprouts":
+                    if macro.setdat.get("sprouts_enable", False):
+                        if runTask(macro.collectSprouts, resetAfter=False):
+                            executedTasks.add(taskId)
+                            return True
+                    return False
                 
                 # Special case: sticker_printer
                 if collectName == "sticker_printer":
