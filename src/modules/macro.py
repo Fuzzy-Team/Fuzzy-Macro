@@ -1300,6 +1300,8 @@ class macro:
             slot = max(1, min(7, int(self.setdat.get("sprouts_magic_bean_slot", 1) or 1)))
         except Exception:
             slot = 1
+        sproutAIModel = str(self.setdat.get("sprouts_ai_model", "Standard") or "Standard")
+        usesLootModel = sproutAIModel.strip().lower() in ("light", "mini")
 
         sproutOverride = {
             "shape": "fuzzy_ai_gather",
@@ -1312,8 +1314,9 @@ class macro:
             "skip_travel": reuseCurrentPosition or self.location == field,
             "plant_sprout": True,
             "sprout_magic_bean_slot": slot,
-            "fuzzy_ai_preferred_tokens": self.buildSproutTokenPriority(field),
-            "fuzzy_ai_ignored_tokens": str(self.setdat.get("sprouts_ignored_tokens", "") or ""),
+            "ai_gather_model": sproutAIModel,
+            "fuzzy_ai_preferred_tokens": "Loot" if usesLootModel else self.buildSproutTokenPriority(field),
+            "fuzzy_ai_ignored_tokens": "" if usesLootModel else str(self.setdat.get("sprouts_ignored_tokens", "") or ""),
         }
         self.logger.webhook("Sprouts", f"Planting in {field.title()} ({self.sproutBeansUsed + 1}/{self._sproutBeanLimit()})", "light blue", route_category="activities")
         self.gather(field, sproutOverride)
@@ -3222,7 +3225,7 @@ class macro:
         gatherTimeLimit = "Infinite" if infiniteGather else self.convertSecsToMinsAndSecs(maxGatherTime)
         returnType = "rejoin" if isHiveHubField else fieldSetting["return"]
         fuzzyAIRuntimeDefaults = settingsManager.FUZZY_AI_RUNTIME_DEFAULTS
-        pattern_ai_gather_model = str(self.setdat.get("ai_gather_model", "Standard"))
+        pattern_ai_gather_model = str(fieldSetting.get("ai_gather_model", self.setdat.get("ai_gather_model", "Standard")))
         fuzzyAITokenRanking = settingsManager.loadFuzzyAITokenRanking(field, pattern_ai_gather_model)
         pattern_capture_backend = fuzzyAIRuntimeDefaults["fuzzy_ai_capture_backend"]
         pattern_confidence_threshold = fuzzyAIRuntimeDefaults["fuzzy_ai_confidence_threshold"]
@@ -3242,7 +3245,7 @@ class macro:
         pattern_use_sprinkler_model_for_drift_compensation = bool(
             self.setdat.get("use_sprinkler_model_for_drift_compensation", False)
         )
-        pattern_ai_gather_model = str(self.setdat.get("ai_gather_model", "Standard"))
+        pattern_ai_gather_model = str(fieldSetting.get("ai_gather_model", self.setdat.get("ai_gather_model", "Standard")))
         sprinklerLabelMap = {
             "basic": "Sprinkler",
             "silver": "Sprinkler",
