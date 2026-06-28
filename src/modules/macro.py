@@ -3224,7 +3224,8 @@ class macro:
         gatherTimeLimit = "Infinite" if infiniteGather else self.convertSecsToMinsAndSecs(maxGatherTime)
         returnType = "rejoin" if isHiveHubField else fieldSetting["return"]
         fuzzyAIRuntimeDefaults = settingsManager.FUZZY_AI_RUNTIME_DEFAULTS
-        fuzzyAITokenRanking = settingsManager.loadFuzzyAITokenRanking(field)
+        pattern_ai_gather_model = str(self.setdat.get("ai_gather_model", "Standard"))
+        fuzzyAITokenRanking = settingsManager.loadFuzzyAITokenRanking(field, pattern_ai_gather_model)
         pattern_capture_backend = fuzzyAIRuntimeDefaults["fuzzy_ai_capture_backend"]
         pattern_confidence_threshold = fuzzyAIRuntimeDefaults["fuzzy_ai_confidence_threshold"]
         pattern_sprinkler_confidence_threshold = fuzzyAIRuntimeDefaults["fuzzy_ai_sprinkler_confidence_threshold"]
@@ -3243,6 +3244,7 @@ class macro:
         pattern_use_sprinkler_model_for_drift_compensation = bool(
             self.setdat.get("use_sprinkler_model_for_drift_compensation", False)
         )
+        pattern_ai_gather_model = str(self.setdat.get("ai_gather_model", "Standard"))
         sprinklerLabelMap = {
             "basic": "Sprinkler",
             "silver": "Sprinkler",
