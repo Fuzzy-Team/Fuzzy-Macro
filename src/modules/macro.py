@@ -1349,7 +1349,12 @@ class macro:
         except Exception:
             slot = 1
         sproutAIModel = str(self.setdat.get("sprouts_ai_model", "Standard") or "Standard")
-        usesLootModel = sproutAIModel.strip().lower() in ("light", "mini")
+        sproutAIModelKey = sproutAIModel.strip().lower()
+        sproutLootModelFiles = {
+            "light": "loot_detection_small.mlmodelc",
+            "mini": "loot_detection_mini.mlmodelc",
+        }
+        usesLootModel = sproutAIModelKey in sproutLootModelFiles
 
         sproutOverride = {
             "shape": "fuzzy_ai_gather",
@@ -1365,6 +1370,7 @@ class macro:
             "plant_sprout": True,
             "sprout_magic_bean_slot": slot,
             "ai_gather_model": sproutAIModel,
+            "ai_gather_model_file": sproutLootModelFiles.get(sproutAIModelKey, ""),
             "fuzzy_ai_preferred_tokens": "Loot" if usesLootModel else self.buildSproutTokenPriority(field),
             "fuzzy_ai_ignored_tokens": "" if usesLootModel else str(self.setdat.get("sprouts_ignored_tokens", "") or ""),
         }
@@ -3303,11 +3309,13 @@ class macro:
         pattern_debug_mode = fuzzyAIRuntimeDefaults["fuzzy_ai_debug_mode"]
         pattern_record_video = fuzzyAIRuntimeDefaults["fuzzy_ai_record_video"]
         pattern_record_video_fps = fuzzyAIRuntimeDefaults["fuzzy_ai_record_video_fps"]
+        pattern_ai_gather_model_file = str(fieldSetting.get("ai_gather_model_file", ""))
         pattern_field_drift_compensation = bool(fieldSetting.get("field_drift_compensation", False))
         pattern_use_sprinkler_model_for_drift_compensation = bool(
             self.setdat.get("use_sprinkler_model_for_drift_compensation", False)
         )
         pattern_ai_gather_model = str(fieldSetting.get("ai_gather_model", self.setdat.get("ai_gather_model", "Standard")))
+        pattern_ai_gather_model_file = str(fieldSetting.get("ai_gather_model_file", ""))
         sprinklerLabelMap = {
             "basic": "Sprinkler",
             "silver": "Sprinkler",

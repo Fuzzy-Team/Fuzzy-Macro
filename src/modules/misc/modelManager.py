@@ -12,7 +12,14 @@ import requests
 MODELS_API_URL = "https://api.github.com/repos/Fuzzy-Team/fuzzymacroaimodels/contents"
 MODELS_ZIP_URL = "https://github.com/Fuzzy-Team/fuzzymacroaimodels/archive/refs/heads/main.zip"
 MODEL_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", "models"))
-COREML_MODELS = ("best.mlpackage", "sprinkler.mlpackage")
+COREML_MODELS = (
+    "best.mlpackage",
+    "sprinkler.mlpackage",
+    "token_detection_small.mlmodelc",
+    "token_detection_mini.mlmodelc",
+    "loot_detection_small.mlmodelc",
+    "loot_detection_mini.mlmodelc",
+)
 ONNX_MODELS = ("tokens.onnx", "sprinkler.onnx")
 
 
