@@ -1305,7 +1305,7 @@ class macro:
         if now - getattr(self, "lastSproutBeanLimitLog", 0) < 60:
             return
         self.lastSproutBeanLimitLog = now
-        self.logger.webhook("Sprouts", message, color, route_category="activities")
+        self.logger.webhook("Sprouts", message, color, "screen", route_category="activities")
 
     def canUseSproutBeanSlot(self, slot):
         if not self.setdat.get("sprouts_enable", False):
@@ -1368,7 +1368,7 @@ class macro:
             "fuzzy_ai_preferred_tokens": "Loot" if usesLootModel else self.buildSproutTokenPriority(field),
             "fuzzy_ai_ignored_tokens": "" if usesLootModel else str(self.setdat.get("sprouts_ignored_tokens", "") or ""),
         }
-        self.logger.webhook("Sprouts", f"Planting in {field.title()} ({self.sproutBeansUsed + 1}/{self._sproutBeanLimit()})", "light blue", route_category="activities")
+        self.logger.webhook("Sprouts", f"Planting in {field.title()} ({self.sproutBeansUsed + 1}/{self._sproutBeanLimit()})", "light blue", "screen", route_category="activities")
         self.gather(field, sproutOverride)
         return True
 
@@ -3147,7 +3147,7 @@ class macro:
         landedInField = False
         if skipTravel:
             landedInField = True
-            self.logger.webhook("Sprouts", f"Planting next sprout from current position in {field.title()}", "light blue", route_category="activities")
+            self.logger.webhook("Sprouts", f"Planting next sprout from current position in {field.title()}", "light blue", "screen", route_category="activities")
         else:
             for i in range(3):
                 self.waitForBees()
@@ -3236,7 +3236,7 @@ class macro:
                 if self.blueSproutAlreadyInFieldVisible():
                     self.unmarkSproutBeanUsed()
                     self.sproutWaitingForBlueMessage = True
-                    self.logger.webhook("Sprouts", "A sprout is already in this field; Magic Bean use was not counted. Collecting existing sprout before planting another.", "orange", route_category="activities")
+                    self.logger.webhook("Sprouts", "A sprout is already in this field; Magic Bean use was not counted. Collecting existing sprout before planting another.", "orange", "screen", route_category="activities")
                     return True
                 time.sleep(0.4)
             return True
@@ -3566,7 +3566,7 @@ class macro:
                                 sproutFinalLootStart = time.time()
                                 self.logSproutBeanLimitReached(f"Sprout bean limit reached. Collecting remaining drops for {sproutFinalLootSeconds} seconds before resetting.")
                         else:
-                            self.logger.webhook("Sprouts", f"Blue sprout message detected; planting next sprout ({self.sproutBeansUsed + 1}/{self._sproutBeanLimit()}).", "light blue", route_category="activities")
+                            self.logger.webhook("Sprouts", f"Blue sprout message detected; planting next sprout ({self.sproutBeansUsed + 1}/{self._sproutBeanLimit()}).", "light blue", "screen", route_category="activities")
                             plantSproutBean()
                 elif sproutFinalLootStart is None and self.sproutBeansUsed >= self._sproutBeanLimit():
                     sproutFinalLootStart = time.time()
