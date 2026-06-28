@@ -1336,6 +1336,13 @@ class macro:
             value = 500
         return max(1, min(500, value))
 
+    def _sproutGatherBeanLimit(self):
+        try:
+            value = int(self.setdat.get("sprouts_max_beans_per_gather", 500) or 500)
+        except Exception:
+            value = 500
+        return max(1, min(500, value))
+
     def _sproutFinalLootSeconds(self):
         try:
             value = int(self.setdat.get("sprouts_final_loot_seconds", 60) or 0)
@@ -1418,6 +1425,7 @@ class macro:
             "infinite_gather": True,
             "plant_sprout": True,
             "sprout_magic_bean_slot": slot,
+            "sprout_max_beans_per_gather": self._sproutGatherBeanLimit(),
             "ai_gather_model": sproutModelName,
             "ai_gather_model_file": sproutModelFile,
             "fuzzy_ai_preferred_tokens": self.buildSproutTokenPriority(field),
@@ -3342,9 +3350,16 @@ class macro:
         lastSproutPlantAttempt = 0
         currentSproutRarity = None
         sproutCompletionMessageSeen = False
+        sproutBeansUsedThisGather = 0
+        try:
+            sproutGatherBeanLimit = max(1, min(500, int(fieldSetting.get("sprout_max_beans_per_gather", self._sproutGatherBeanLimit()) or 500)))
+        except Exception:
+            sproutGatherBeanLimit = self._sproutGatherBeanLimit()
         def plantSproutBean():
-            nonlocal lastSproutPlantAttempt, currentSproutRarity, sproutCompletionMessageSeen
+            nonlocal lastSproutPlantAttempt, currentSproutRarity, sproutCompletionMessageSeen, sproutBeansUsedThisGather
             sproutSlot = str(fieldSetting.get("sprout_magic_bean_slot", self.setdat.get("sprouts_magic_bean_slot", 1)))
+            if sproutBeansUsedThisGather >= sproutGatherBeanLimit:
+                return "gather_limit"
             if not self.canUseSproutBeanSlot(sproutSlot):
                 return "limit"
             lastSproutPlantAttempt = time.time()
@@ -3354,6 +3369,7 @@ class macro:
             self.logger.webhook("Sprouts", f"Planting sprout in {field.title()} ({self.sproutBeansUsed + 1}/{self._sproutBeanLimit()})", "light blue", "screen", route_category="activities")
             self.keyboard.press(sproutSlot)
             self.markSproutBeanUsed()
+            sproutBeansUsedThisGather += 1
             time.sleep(0.6)
             for _ in range(5):
                 sproutInfo = self.blueSproutMessageInfo()
@@ -3361,6 +3377,7 @@ class macro:
                     currentSproutRarity = sproutInfo["rarity"]
                 if sproutInfo and "already" in sproutInfo.get("text", "") and "field" in sproutInfo.get("text", ""):
                     self.unmarkSproutBeanUsed()
+                    sproutBeansUsedThisGather = max(0, sproutBeansUsedThisGather - 1)
                     currentSproutRarity = previousSproutRarity
                     self.logger.webhook("Sprouts", "A sprout is already in this field; Magic Bean use was not counted. Continuing to collect.", "orange", "screen", route_category="activities")
                     return "already"
@@ -3371,8 +3388,12 @@ class macro:
             self.ensure_shift_lock_off("sprouts")
             if pattern in aiPatternLabels and not aiCameraConfigured:
                 configureAIGatherCamera()
-            if plantSproutBean() == "limit":
+            initialSproutPlantResult = plantSproutBean()
+            if initialSproutPlantResult == "limit":
                 self.logger.webhook("", "Sprout bean limit reached before planting", "orange", route_category="activities")
+                return
+            if initialSproutPlantResult == "gather_limit":
+                self.logger.webhook("", "Sprout gather limit reached before planting", "orange", route_category="activities")
                 return
         #key variables
         #check invert L/R and invert B/R
@@ -3689,7 +3710,9 @@ class macro:
                 self.reset()
                 return
             elif fieldSetting.get("plant_sprout", False):
-                if sproutFinalLootStart is None and self.sproutBeansUsed < self._sproutBeanLimit():
+                sproutGatherLimitReached = sproutBeansUsedThisGather >= sproutGatherBeanLimit
+                sproutSessionLimitReached = self.sproutBeansUsed >= self._sproutBeanLimit()
+                if sproutFinalLootStart is None and not sproutGatherLimitReached and not sproutSessionLimitReached:
                     sproutInfo = self.blueSproutMessageInfo()
                     if sproutInfo:
                         if sproutInfo.get("rarity"):
@@ -3705,10 +3728,15 @@ class macro:
                             rarityLabel = currentSproutRarity.title() if currentSproutRarity else "unknown"
                             self.logger.webhook("Sprouts", f"No sprout pop message detected for {fallbackSeconds} seconds ({rarityLabel}); trying next sprout ({self.sproutBeansUsed + 1}/{self._sproutBeanLimit()}).", "light blue", "screen", route_category="activities")
                             plantSproutBean()
-                if sproutFinalLootStart is None and self.sproutBeansUsed >= self._sproutBeanLimit():
+                sproutGatherLimitReached = sproutBeansUsedThisGather >= sproutGatherBeanLimit
+                sproutSessionLimitReached = self.sproutBeansUsed >= self._sproutBeanLimit()
+                if sproutFinalLootStart is None and (sproutSessionLimitReached or sproutGatherLimitReached):
                     sproutFinalLootStart = time.time()
                     if not sproutLimitLogged:
-                        self.logSproutBeanLimitReached(f"Sprout bean limit reached. Collecting remaining drops for {sproutFinalLootSeconds} seconds before resetting.")
+                        if sproutSessionLimitReached:
+                            self.logSproutBeanLimitReached(f"Sprout session limit reached. Collecting remaining drops for {sproutFinalLootSeconds} seconds before resetting.")
+                        else:
+                            self.logger.webhook("Sprouts", f"Sprout gather limit reached ({sproutBeansUsedThisGather}/{sproutGatherBeanLimit}). Collecting remaining drops for {sproutFinalLootSeconds} seconds before moving on.", "light blue", "screen", route_category="activities")
                         sproutLimitLogged = True
                 if sproutFinalLootStart is not None and time.time() - sproutFinalLootStart >= sproutFinalLootSeconds:
                     stopGather()
