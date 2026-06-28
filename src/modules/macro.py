@@ -1236,11 +1236,9 @@ class macro:
         if "sprout" not in text:
             return
 
-        rarity = self.extractSproutRarity(text)
+        rarity = self.extractPlantedSproutRarity(text)
         unusualRarities = {"epic", "legendary", "supreme", "gummy", "festive", "moon", "sticker", "debug"}
         if rarity not in unusualRarities:
-            return
-        if not re.search(r"\bplanted\s+a(?:n)?\s+\w+\s+sprout\b", text):
             return
 
         rarity = rarity.title()
@@ -1274,13 +1272,23 @@ class macro:
                 return rarity
         return None
 
+    def extractPlantedSproutRarity(self, text):
+        if "sprout" not in text or "planted" not in text:
+            return None
+        rarityPattern = "|".join(re.escape(rarity) for rarity in SPROUT_RARITIES)
+        match = re.search(rf"\bplanted\s+a(?:n)?\s+({rarityPattern})\s+sprout\b", text)
+        return match.group(1) if match else None
+
     def blueSproutMessageInfo(self):
         text = self.readBlueText()
         if "sprout" not in text:
             return None
+        rarity = self.extractPlantedSproutRarity(text)
+        if rarity is None and "appeared" not in text and "planted" not in text:
+            rarity = self.extractSproutRarity(text)
         return {
             "text": text,
-            "rarity": None if "appeared" in text else self.extractSproutRarity(text),
+            "rarity": rarity,
         }
 
     def isSproutCompletionMessage(self, text):
