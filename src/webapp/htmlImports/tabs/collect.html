@@ -575,6 +575,18 @@
           },
         },
         {
+          id: "sprouts_final_loot_seconds",
+          title: "Final Loot Time",
+          desc: "Seconds to keep collecting drops after the Magic Bean limit is reached.",
+          type: {
+            name: "textbox",
+            inputType: "int",
+            inputLimit: 3,
+            length: 6,
+            triggerFunction: "saveSetting(this, 'profile')",
+          },
+        },
+        {
           id: "sprouts_field",
           title: "Field",
           desc: "Field where the sprout should be planted.",

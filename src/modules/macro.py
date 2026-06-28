@@ -703,6 +703,7 @@ class macro:
         self.lastUnusualSproutScan = 0
         self.unusualSproutLastAnnounced = {}
         self.sproutBeansUsed = 0
+        self.sproutWaitingForBlueMessage = False
 
         self.isGathering = False
         self.converting = False
@@ -1238,6 +1239,22 @@ class macro:
             route_category="activities",
         )
 
+    def blueSproutMessageVisible(self):
+        try:
+            text = ocr.imToString("blue").lower()
+        except Exception:
+            return False
+        return "sprout" in text
+
+    def blueSproutCompletionMessageVisible(self):
+        try:
+            text = ocr.imToString("blue").lower()
+        except Exception:
+            return False
+        if "sprout" not in text:
+            return False
+        return "planted" not in text and not ("already" in text and "field" in text)
+
     def blueSproutAlreadyInFieldVisible(self):
         try:
             text = ocr.imToString("blue").lower()
@@ -1266,6 +1283,13 @@ class macro:
             value = 500
         return max(1, min(500, value))
 
+    def _sproutFinalLootSeconds(self):
+        try:
+            value = int(self.setdat.get("sprouts_final_loot_seconds", 60) or 0)
+        except Exception:
+            value = 60
+        return max(0, min(999, value))
+
     def canUseSproutBeanSlot(self, slot):
         if not self.setdat.get("sprouts_enable", False):
             return True
@@ -1288,6 +1312,13 @@ class macro:
         if not self.setdat.get("sprouts_enable", False):
             return False
         reuseCurrentPosition = False
+        if self.sproutWaitingForBlueMessage:
+            if self.blueSproutMessageVisible():
+                self.sproutWaitingForBlueMessage = False
+                reuseCurrentPosition = True
+            else:
+                self.logger.webhook("Sprouts", "Waiting for a blue sprout message before planting another Magic Bean.", "light blue", route_category="activities")
+                return False
         if self.sproutBeansUsed >= self._sproutBeanLimit():
             self.logger.webhook("", "Sprout bean limit reached", "orange", route_category="activities")
             return False
@@ -1295,7 +1326,7 @@ class macro:
         field = str(self.setdat.get("sprouts_field", "sunflower") or "sunflower").replace("_", " ").strip().lower()
         if field not in startLocationDimensions:
             field = "sunflower"
-        reuseCurrentPosition = self.location == field
+        reuseCurrentPosition = reuseCurrentPosition or self.location == field
         try:
             slot = max(1, min(7, int(self.setdat.get("sprouts_magic_bean_slot", 1) or 1)))
         except Exception:
@@ -1312,6 +1343,7 @@ class macro:
             "turn": "none",
             "turn_times": 0,
             "skip_travel": reuseCurrentPosition or self.location == field,
+            "infinite_gather": True,
             "plant_sprout": True,
             "sprout_magic_bean_slot": slot,
             "ai_gather_model": sproutAIModel,
@@ -3168,22 +3200,34 @@ class macro:
         if pattern in aiPatternLabels:
             configureAIGatherCamera()
             aiCameraConfigured = True
+        sproutCompletionMessageSeen = False
+        sproutFinalLootStart = None
+        sproutFinalLootSeconds = self._sproutFinalLootSeconds()
+        sproutLimitLogged = False
+        def plantSproutBean():
+            nonlocal sproutCompletionMessageSeen
+            sproutSlot = str(fieldSetting.get("sprout_magic_bean_slot", self.setdat.get("sprouts_magic_bean_slot", 1)))
+            if not self.canUseSproutBeanSlot(sproutSlot):
+                return False
+            self.keyboard.press(sproutSlot)
+            self.markSproutBeanUsed()
+            self.sproutWaitingForBlueMessage = True
+            sproutCompletionMessageSeen = False
+            time.sleep(0.6)
+            for _ in range(5):
+                if self.blueSproutAlreadyInFieldVisible():
+                    self.unmarkSproutBeanUsed()
+                    self.sproutWaitingForBlueMessage = True
+                    self.logger.webhook("Sprouts", "A sprout is already in this field; Magic Bean use was not counted. Collecting existing sprout before planting another.", "orange", route_category="activities")
+                    return True
+                time.sleep(0.4)
+            return True
+
         if fieldSetting.get("plant_sprout", False):
             self.ensure_shift_lock_off("sprouts")
             if pattern in aiPatternLabels and not aiCameraConfigured:
                 configureAIGatherCamera()
-            sproutSlot = str(fieldSetting.get("sprout_magic_bean_slot", self.setdat.get("sprouts_magic_bean_slot", 1)))
-            if self.canUseSproutBeanSlot(sproutSlot):
-                self.keyboard.press(sproutSlot)
-                self.markSproutBeanUsed()
-                time.sleep(0.6)
-                for _ in range(5):
-                    if self.blueSproutAlreadyInFieldVisible():
-                        self.unmarkSproutBeanUsed()
-                        self.logger.webhook("Sprouts", "A sprout is already in this field; Magic Bean use was not counted.", "orange", route_category="activities")
-                        break
-                    time.sleep(0.4)
-            else:
+            if not plantSproutBean():
                 self.logger.webhook("", "Sprout bean limit reached before planting", "orange", route_category="activities")
                 return
         #key variables
@@ -3493,6 +3537,29 @@ class macro:
                 self.logger.webhook("Gathering: interrupted", "Inactive Honey Reset (Beta)", "orange", "screen")
                 self.reset()
                 return
+            elif fieldSetting.get("plant_sprout", False):
+                if self.sproutWaitingForBlueMessage:
+                    if self.blueSproutCompletionMessageVisible():
+                        sproutCompletionMessageSeen = True
+                    elif sproutCompletionMessageSeen and not self.blueSproutMessageVisible():
+                        self.sproutWaitingForBlueMessage = False
+                        if self.sproutBeansUsed >= self._sproutBeanLimit():
+                            if sproutFinalLootStart is None:
+                                sproutFinalLootStart = time.time()
+                                self.logger.webhook("Sprouts", f"Sprout bean limit reached. Collecting remaining drops for {sproutFinalLootSeconds} seconds before resetting.", "light blue", route_category="activities")
+                        else:
+                            self.logger.webhook("Sprouts", f"Blue sprout message detected; planting next sprout ({self.sproutBeansUsed + 1}/{self._sproutBeanLimit()}).", "light blue", route_category="activities")
+                            plantSproutBean()
+                elif sproutFinalLootStart is None and self.sproutBeansUsed >= self._sproutBeanLimit():
+                    sproutFinalLootStart = time.time()
+                    if not sproutLimitLogged:
+                        self.logger.webhook("Sprouts", f"Sprout bean limit reached. Collecting remaining drops for {sproutFinalLootSeconds} seconds before resetting.", "light blue", route_category="activities")
+                        sproutLimitLogged = True
+                if sproutFinalLootStart is not None and time.time() - sproutFinalLootStart >= sproutFinalLootSeconds:
+                    stopGather()
+                    self.logger.webhook("Sprouts", "Final sprout loot collection finished. Resetting to hive.", "light green", route_category="activities")
+                    self.reset()
+                    return
             elif self.setdat["Auto_Field_Boost"] and not self.AFBLIMIT and self.AFB(gatherInterrupt=True, turnOffShiftLock = fieldSetting["shift_lock"]):
                 stopGather()
                 return

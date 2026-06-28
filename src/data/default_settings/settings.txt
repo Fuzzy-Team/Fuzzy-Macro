@@ -229,6 +229,7 @@ guiding_star_announcements=False
 sprouts_enable=False
 sprouts_magic_bean_slot=1
 sprouts_max_beans=500
+sprouts_final_loot_seconds=15
 sprouts_field=sunflower
 sprouts_ai_model=standard
 sprouts_preferred_tokens=Token Link,Coconut,Pineapple,Blueberry,Strawberry,Sunflower Seed,Jelly Bean,Snowflake,Beesmas Cheer Token,Festive Blessing Token,Treat,Honey Token
