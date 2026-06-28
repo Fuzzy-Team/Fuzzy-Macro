@@ -67,6 +67,7 @@ ping_mob_events=False
 ping_conversion_events=False
 ping_hourly_reports=False
 ping_guiding_star=False
+ping_unusual_sprouts=False
 ping_macro_status=False
 ping_gathering=False
 ping_live_gather_report=False
