@@ -1378,17 +1378,17 @@ class macro:
         sproutAIModel = str(self.setdat.get("sprouts_ai_model", "Standard") or "Standard")
         sproutAIModelKey = sproutAIModel.strip().lower().replace(" ", "_").replace("-", "_")
         sproutModelConfig = {
-            "standard": ("Standard", "", False),
-            "loot_light": ("Light", "loot_detection_small.mlmodelc", True),
-            "light": ("Light", "loot_detection_small.mlmodelc", True),
-            "token_light": ("Light", "", False),
-            "loot_mini": ("Mini", "loot_detection_mini.mlmodelc", True),
-            "mini": ("Mini", "loot_detection_mini.mlmodelc", True),
-            "token_mini": ("Mini", "", False),
+            "standard": ("Standard", ""),
+            "loot_light": ("Light", "loot_detection_small.mlmodelc"),
+            "light": ("Light", "loot_detection_small.mlmodelc"),
+            "token_light": ("Light", ""),
+            "loot_mini": ("Mini", "loot_detection_mini.mlmodelc"),
+            "mini": ("Mini", "loot_detection_mini.mlmodelc"),
+            "token_mini": ("Mini", ""),
         }
-        sproutModelName, sproutModelFile, usesLootModel = sproutModelConfig.get(
+        sproutModelName, sproutModelFile = sproutModelConfig.get(
             sproutAIModelKey,
-            ("Standard", "", False),
+            ("Standard", ""),
         )
         try:
             sproutPatternWidth = max(1, min(10, int(self.setdat.get("sprouts_pattern_width", 5) or 5)))
@@ -1412,8 +1412,8 @@ class macro:
             "sprout_magic_bean_slot": slot,
             "ai_gather_model": sproutModelName,
             "ai_gather_model_file": sproutModelFile,
-            "fuzzy_ai_preferred_tokens": "Loot" if usesLootModel else self.buildSproutTokenPriority(field),
-            "fuzzy_ai_ignored_tokens": "" if usesLootModel else str(self.setdat.get("sprouts_ignored_tokens", "") or ""),
+            "fuzzy_ai_preferred_tokens": self.buildSproutTokenPriority(field),
+            "fuzzy_ai_ignored_tokens": str(self.setdat.get("sprouts_ignored_tokens", "") or ""),
         }
         self.logger.webhook("Sprouts", f"Travelling to {field.title()} to plant sprout ({self.sproutBeansUsed + 1}/{self._sproutBeanLimit()})", "light blue", "screen", route_category="activities")
         self.gather(field, sproutOverride)
@@ -3240,6 +3240,7 @@ class macro:
                 )
                 pattern_preferred_tokens = fieldSetting.get("fuzzy_ai_preferred_tokens", fuzzyAITokenRanking.get("preferred_tokens", ""))
                 pattern_ignored_tokens = fieldSetting.get("fuzzy_ai_ignored_tokens", fuzzyAITokenRanking.get("ignored_tokens", ""))
+                pattern_sprout_idle_square = isSproutGather
                 sizeData = {
                     "xs": 0.25,
                     "s": 0.5,
@@ -3441,6 +3442,7 @@ class macro:
         )
         pattern_preferred_tokens = fieldSetting.get("fuzzy_ai_preferred_tokens", fuzzyAITokenRanking.get("preferred_tokens", ""))
         pattern_ignored_tokens = fieldSetting.get("fuzzy_ai_ignored_tokens", fuzzyAITokenRanking.get("ignored_tokens", ""))
+        pattern_sprout_idle_square = isSproutGather
         st = time.time()
         keepGathering = True
         self.died = False
