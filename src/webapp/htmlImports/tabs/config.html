@@ -120,7 +120,11 @@
           desc: "Choose the token detection model used by AI Gathering. Light and Mini automatically fall back to Standard if they cannot load.",
           type: {
             name: "dropdown",
-            data: ["Standard", "Light", "Mini"],
+            data: [
+              "Standard",
+              { label: "Light (macOS 12+)", value: "Light" },
+              { label: "Mini (macOS 12+)", value: "Mini" },
+            ],
             triggerFunction: saveGeneralTriggerFunction,
           },
         },

@@ -603,7 +603,11 @@
           desc: "Model used to search for sprout drops. Light and Mini use the model's Loot class instead of token priorities.",
           type: {
             name: "dropdown",
-            data: ["Standard", "Light", "Mini"],
+            data: [
+              "Standard",
+              { label: "Light (macOS 12+)", value: "Light" },
+              { label: "Mini (macOS 12+)", value: "Mini" },
+            ],
             triggerFunction: "saveSetting(this, 'profile'); refreshSproutAIModelOptions();",
           },
         },
