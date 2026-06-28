@@ -10,7 +10,8 @@ Requirements:
 - opencv-python
 - numpy
 - mss or Pillow
-- best.mlpackage and sprinkler.mlpackage
+- token_detection_standard.mlmodelc or token_detection_standard.onnx
+- sprinkler_detection_standard.mlmodelc or sprinkler_detection_standard.onnx
 
 - Version 2.2
 """
@@ -1739,8 +1740,8 @@ def _initialise_runtime():
             requested_label = f"{requested_label} Loot"
             requested_labels = {0: "Loot"}
     standard_candidates = [
-        (MODEL_DIR / "best.mlpackage", "coreml", LABELS_TOKENS, "Standard", INPUT_WIDTH, INPUT_HEIGHT),
-        (MODEL_DIR / "tokens.onnx", "opencv_onnx", LABELS_TOKENS, "Standard", INPUT_WIDTH, INPUT_HEIGHT),
+        (MODEL_DIR / "token_detection_standard.mlmodelc", "coreml", LABELS_TOKENS, "Standard", INPUT_WIDTH, INPUT_HEIGHT),
+        (MODEL_DIR / "token_detection_standard.onnx", "opencv_onnx", LABELS_TOKENS, "Standard", INPUT_WIDTH, INPUT_HEIGHT),
     ]
     token_candidates = []
     if requested_filename is not None:
@@ -1768,11 +1769,11 @@ def _initialise_runtime():
         raise RuntimeError("Pillow is required for CoreML AI Gathering, please run install dependencies before continuing.")
 
     sprinkler_model_kind = None
-    sprinkler_candidate = MODEL_DIR / "sprinkler.mlpackage"
+    sprinkler_candidate = MODEL_DIR / "sprinkler_detection_standard.mlmodelc"
     if sprinkler_candidate.exists():
         sprinkler_model_kind = "coreml"
     else:
-        sprinkler_candidate = MODEL_DIR / "sprinkler.onnx"
+        sprinkler_candidate = MODEL_DIR / "sprinkler_detection_standard.onnx"
         if sprinkler_candidate.exists():
             sprinkler_model_kind = "opencv_onnx"
     sprinkler_path = sprinkler_candidate if sprinkler_candidate.exists() else None
@@ -1837,16 +1838,22 @@ def _initialise_runtime():
             print(f"[fuzzy_ai_gather] token model load failed: {error_message}")
     else:
         raise RuntimeError("Could not load any token AI model: " + "; ".join(token_load_errors))
+    if token_path.name == "token_detection_standard.onnx":
+        _delete_model_path(MODEL_DIR / "token_detection_standard.mlmodelc")
+    elif token_path.name == "token_detection_standard.mlmodelc":
+        _delete_model_path(MODEL_DIR / "token_detection_standard.onnx")
+    _delete_model_path(MODEL_DIR / "best.mlpackage")
+    _delete_model_path(MODEL_DIR / "sprinkler.mlpackage")
     sprinkler_session = None
     sprinkler_input = None
     sprinkler_output = None
     if sprinkler_path is not None:
         if sprinkler_model_kind == "opencv_onnx":
             sprinkler_session, sprinkler_input, sprinkler_output = _load_onnx_model(sprinkler_path)
-            _delete_model_path(MODEL_DIR / "sprinkler.mlpackage")
+            _delete_model_path(MODEL_DIR / "sprinkler_detection_standard.mlmodelc")
         else:
             sprinkler_session, sprinkler_input, sprinkler_output = _load_coreml_model(sprinkler_path)
-            _delete_model_path(MODEL_DIR / "sprinkler.onnx")
+            _delete_model_path(MODEL_DIR / "sprinkler_detection_standard.onnx")
 
     return {
         "capture": capture,
@@ -1915,9 +1922,14 @@ if not runtime.get("ready"):
         _debug_log(f"initialisation failed: {exc}")
 
 
+warmup_only = _coerce_bool(globals().get("pattern_ai_warmup_only"), False)
+
 if not runtime.get("ready"):
     print(f"[fuzzy_ai_gather] {runtime.get('error', 'initialisation failed')}")
-    _fallback_pattern()
+    if not warmup_only:
+        _fallback_pattern()
+elif warmup_only:
+    _debug_log("warmup complete; movement skipped", min_interval=0.5, key="warmup")
 else:
     try:
         if not runtime.get("latest_scan_time"):
