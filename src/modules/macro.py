@@ -1214,25 +1214,38 @@ class macro:
 
         if "sprout" not in text:
             return
-        hasAppearedPattern = "appeared" in text
-        hasPlantedPattern = "planted" in text
-        if not hasAppearedPattern and not hasPlantedPattern:
-            return
 
         rarity = None
-        if "legendary" in text:
-            rarity = "Legendary"
-        elif "epic" in text:
-            rarity = "Epic"
+        planter = ""
+        plantedMatch = re.search(r"(.+?)\s+planted\s+a(?:n)?\s+(moon|gummy|festive|epic|legendary|supreme)\s+sprout", text)
+        if plantedMatch:
+            planter = plantedMatch.group(1).strip()
+            rarity = plantedMatch.group(2).title()
+        elif "appeared" in text:
+            if "supreme" in text:
+                rarity = "Supreme"
+            elif "legendary" in text:
+                rarity = "Legendary"
+            elif "gummy" in text:
+                rarity = "Gummy"
+            elif "festive" in text:
+                rarity = "Festive"
+            elif "moon" in text:
+                rarity = "Moon"
+            elif "epic" in text:
+                rarity = "Epic"
         if not rarity:
             return
 
         if now - self.unusualSproutLastAnnounced.get(rarity, 0) < 10 * 60:
             return
         self.unusualSproutLastAnnounced[rarity] = now
+        message = f"{rarity} Sprout announcement detected"
+        if planter:
+            message = f"{planter} planted a {rarity} Sprout"
         self.logger.webhook(
             "Unusual Sprout",
-            f"{rarity} Sprout announcement detected",
+            message,
             "light blue",
             "screen",
             ping_category="ping_unusual_sprouts",
@@ -1340,6 +1353,7 @@ class macro:
             "field_drift_compensation": True,
             "start_location": "center",
             "distance": 1,
+            "width": 5,
             "turn": "none",
             "turn_times": 0,
             "skip_travel": reuseCurrentPosition or self.location == field,
