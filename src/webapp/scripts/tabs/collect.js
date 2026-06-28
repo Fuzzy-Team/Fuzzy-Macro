@@ -139,6 +139,18 @@ function getSelectedSproutField() {
     return fieldDropdown ? getDropdownValue(fieldDropdown) : "sunflower"
 }
 
+function getSelectedSproutAIModel() {
+    const modelDropdown = document.getElementById("sprouts_ai_model")
+    return String(modelDropdown ? getDropdownValue(modelDropdown) : "standard").trim().toLowerCase()
+}
+
+function refreshSproutAIModelOptions() {
+    const tokenButton = document.getElementById("configure-sprout-ai-tokens-button")
+    const tokenPriorityRow = tokenButton?.closest("form")
+    if (!tokenPriorityRow) return
+    tokenPriorityRow.style.display = getSelectedSproutAIModel() === "standard" ? "flex" : "none"
+}
+
 function applySproutAITokenPreset(presetName) {
     const allTokenNames = getAllSproutAITokenNames()
     const tokenNames = allTokenNames.filter((token) => !isHiddenSproutAIToken(token))
@@ -189,6 +201,7 @@ function closeSproutAITokenPopup() {
 async function loadCollect(){
     const settings = await loadAllSettings()
     loadInputs(settings)
+    refreshSproutAIModelOptions()
     switchCollectTab(document.getElementById(getActiveSubtab("activeCollectSubtab", "collect-dispensers")))
 }
 

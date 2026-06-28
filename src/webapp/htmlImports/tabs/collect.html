@@ -588,11 +588,11 @@
         {
           id: "sprouts_ai_model",
           title: "AI Model",
-          desc: "Model used to search for and prioritize sprout tokens.",
+          desc: "Model used to search for sprout drops. Light and Mini use the model's Loot class instead of token priorities.",
           type: {
             name: "dropdown",
-            data: ["Standard"],
-            triggerFunction: saveProfileTriggerFunction,
+            data: ["Standard", "Light", "Mini"],
+            triggerFunction: "saveSetting(this, 'profile'); refreshSproutAIModelOptions();",
           },
         },
         {
