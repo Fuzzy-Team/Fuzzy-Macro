@@ -156,6 +156,16 @@ LABELS_TOKENS_MINI = {
     7: "Long Buff", 8: "Loot", 9: "Mark", 10: "Token Link",
 }
 
+LABELS_LOOT_LIGHT = {
+    0: "Beans", 1: "Berry", 2: "Buffs", 3: "Consumables",
+    4: "Eggs", 5: "Fruits", 6: "Passes", 7: "Rare Items",
+    8: "Tickets", 9: "Token Link", 10: "Waxes",
+}
+
+LABELS_LOOT_MINI = {
+    0: "Token Link", 1: "Loot",
+}
+
 TOKEN_MODEL_OPTIONS = {
     "standard": ("Standard", None, LABELS_TOKENS, INPUT_WIDTH, INPUT_HEIGHT),
     "light": ("Light", "token_detection_small.mlmodelc", LABELS_TOKENS_LIGHT, 768, 416),
@@ -299,6 +309,7 @@ RECORD_VIDEO_FPS = _coerce_float(globals().get("pattern_record_video_fps"), RECO
 PREFERRED_TOKENS = _preferred_token_weights(globals().get("pattern_preferred_tokens"), PREFERRED_TOKENS)
 PREFERRED_TOKEN_RANKS = {name: index for index, name in enumerate(PREFERRED_TOKENS.keys())}
 IGNORED_TOKENS = _ignored_token_names(globals().get("pattern_ignored_tokens"), IGNORED_TOKENS)
+SPROUT_IDLE_SQUARE = _coerce_bool(globals().get("pattern_sprout_idle_square"), False)
 
 
 try:
@@ -1291,7 +1302,7 @@ def _tile_multi_walk(keys, tiles):
     return True
 
 
-def _execute_movement(tx, ty):
+def _execute_movement(tx, ty, update_token_time=True):
     magnitude = math.hypot(tx, ty)
     if magnitude <= 0.001:
         return False
@@ -1310,7 +1321,8 @@ def _execute_movement(tx, ty):
             runtime["current_x"] += tx
             runtime["current_y"] += ty
             runtime["movement_count"] += 1
-            runtime["last_token_time"] = time.time()
+            if update_token_time:
+                runtime["last_token_time"] = time.time()
     finally:
         runtime["movement_active"] = False
 
@@ -1323,6 +1335,10 @@ def _execute_movement_to_target(tx, ty):
         return False
 
     return _execute_movement(tx, ty)
+
+
+def _execute_idle_movement(tx, ty):
+    return _execute_movement(tx, ty, update_token_time=False)
 
 
 def _execute_active_sweep(runtime):
@@ -1363,6 +1379,39 @@ def _execute_active_sweep(runtime):
         key="active_sweep",
     )
     return _execute_movement(tx, ty)
+
+
+def _execute_sprinkler_idle_square(runtime):
+    now = time.time()
+    if now - runtime.get("last_no_target_sweep_time", 0.0) < NO_TARGET_SWEEP_INTERVAL:
+        return False
+
+    runtime["last_no_target_sweep_time"] = now
+    current_x = runtime.get("current_x", 0.0)
+    current_y = runtime.get("current_y", 0.0)
+    current_dist = math.hypot(current_x, current_y)
+    if current_dist > SPRINKLER_ARRIVAL_THRESHOLD:
+        if now - runtime.get("last_idle_return_time", 0.0) >= IDLE_RETURN_INTERVAL:
+            runtime["last_idle_return_time"] = now
+            return _recalibrate(runtime)
+        return False
+
+    step = max(0.06, min(0.12, 0.08 + (0.01 * min(int(width), 4))))
+    square_index = int(runtime.get("idle_square_index", 0))
+    runtime["idle_square_index"] = square_index + 1
+    square = (
+        (step, 0.0),
+        (0.0, step),
+        (-step, 0.0),
+        (0.0, -step),
+    )
+    tx, ty = square[square_index % len(square)]
+    _debug_log(
+        f"idle sprinkler square move=({tx:.2f},{ty:.2f}) pos=({current_x:.2f},{current_y:.2f})",
+        min_interval=0.5,
+        key="idle_sprinkler_square",
+    )
+    return _execute_idle_movement(tx, ty)
 
 
 def _latest_target(runtime):
@@ -1736,7 +1785,13 @@ def _initialise_runtime():
     requested_filename_override = _coerce_text(globals().get("pattern_ai_gather_model_file"), "")
     if requested_filename_override:
         requested_filename = requested_filename_override
-        if requested_filename_override.startswith("loot_detection_"):
+        if requested_filename_override == "loot_detection_small.mlmodelc":
+            requested_label = "Light Loot"
+            requested_labels = LABELS_LOOT_LIGHT
+        elif requested_filename_override == "loot_detection_mini.mlmodelc":
+            requested_label = "Mini Loot"
+            requested_labels = LABELS_LOOT_MINI
+        elif requested_filename_override.startswith("loot_detection_"):
             requested_label = f"{requested_label} Loot"
             requested_labels = {0: "Loot"}
     standard_candidates = [
@@ -1965,7 +2020,9 @@ else:
 
             if recalibrated:
                 pass
-            elif _execute_active_sweep(runtime):
+            elif SPROUT_IDLE_SQUARE and _execute_sprinkler_idle_square(runtime):
+                pass
+            elif not SPROUT_IDLE_SQUARE and _execute_active_sweep(runtime):
                 pass
             elif now - runtime["last_idle_return_time"] >= IDLE_RETURN_INTERVAL:
                 runtime["last_idle_return_time"] = now
