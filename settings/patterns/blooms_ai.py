@@ -10,7 +10,8 @@ Requirements:
 - opencv-python
 - numpy
 - mss or Pillow
-- best.mlpackage and sprinkler.mlpackage
+- token_detection_standard.mlmodelc or token_detection_standard.onnx
+- sprinkler_detection_standard.mlmodelc or sprinkler_detection_standard.onnx
 
 - Version 1.5
 """
@@ -2073,13 +2074,13 @@ def _initialise_runtime():
 
     _set_start_camera_angle()
 
-    token_path = MODEL_DIR / "best.mlpackage"
+    token_path = MODEL_DIR / "token_detection_standard.mlmodelc"
     token_model_kind = "coreml"
     if not token_path.exists():
-        token_path = MODEL_DIR / "tokens.onnx"
+        token_path = MODEL_DIR / "token_detection_standard.onnx"
         token_model_kind = "opencv_onnx"
     if not token_path.exists():
-        raise FileNotFoundError(f"No token AI model was found at fixed path: {MODEL_DIR / 'tokens.onnx'} or {MODEL_DIR / 'best.mlpackage'}")
+        raise FileNotFoundError(f"No token AI model was found at fixed path: {MODEL_DIR / 'token_detection_standard.mlmodelc'} or {MODEL_DIR / 'token_detection_standard.onnx'}")
     if token_model_kind == "coreml" and ct is None:
         try:
             import subprocess
@@ -2096,11 +2097,11 @@ def _initialise_runtime():
         raise RuntimeError("Pillow is required for CoreML BloomsAI, please run install dependencies before continuing.")
 
     sprinkler_model_kind = None
-    sprinkler_candidate = MODEL_DIR / "sprinkler.mlpackage"
+    sprinkler_candidate = MODEL_DIR / "sprinkler_detection_standard.mlmodelc"
     if sprinkler_candidate.exists():
         sprinkler_model_kind = "coreml"
     else:
-        sprinkler_candidate = MODEL_DIR / "sprinkler.onnx"
+        sprinkler_candidate = MODEL_DIR / "sprinkler_detection_standard.onnx"
         if sprinkler_candidate.exists():
             sprinkler_model_kind = "opencv_onnx"
     sprinkler_path = sprinkler_candidate if sprinkler_candidate.exists() else None
@@ -2157,20 +2158,22 @@ def _initialise_runtime():
 
     if token_model_kind == "opencv_onnx":
         token_session, token_input, token_output = _load_onnx_model(token_path)
-        _delete_model_path(MODEL_DIR / "best.mlpackage")
+        _delete_model_path(MODEL_DIR / "token_detection_standard.mlmodelc")
     else:
         token_session, token_input, token_output = _load_coreml_model(token_path)
-        _delete_model_path(MODEL_DIR / "tokens.onnx")
+        _delete_model_path(MODEL_DIR / "token_detection_standard.onnx")
+    _delete_model_path(MODEL_DIR / "best.mlpackage")
+    _delete_model_path(MODEL_DIR / "sprinkler.mlpackage")
     sprinkler_session = None
     sprinkler_input = None
     sprinkler_output = None
     if sprinkler_path is not None:
         if sprinkler_model_kind == "opencv_onnx":
             sprinkler_session, sprinkler_input, sprinkler_output = _load_onnx_model(sprinkler_path)
-            _delete_model_path(MODEL_DIR / "sprinkler.mlpackage")
+            _delete_model_path(MODEL_DIR / "sprinkler_detection_standard.mlmodelc")
         else:
             sprinkler_session, sprinkler_input, sprinkler_output = _load_coreml_model(sprinkler_path)
-            _delete_model_path(MODEL_DIR / "sprinkler.onnx")
+            _delete_model_path(MODEL_DIR / "sprinkler_detection_standard.onnx")
 
     return {
         "capture": capture,

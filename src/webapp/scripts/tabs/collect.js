@@ -66,6 +66,10 @@ function isHiddenSproutAIToken(token) {
 }
 
 function getAllSproutAITokenNames() {
+    const modelName = getSelectedSproutTokenModelName()
+    if (typeof fuzzyAITokenNamesByModel !== "undefined" && fuzzyAITokenNamesByModel[modelName]) {
+        return fuzzyAITokenNamesByModel[modelName]
+    }
     if (typeof fuzzyAITokenNames !== "undefined" && Array.isArray(fuzzyAITokenNames)) {
         return fuzzyAITokenNames
     }
@@ -144,11 +148,22 @@ function getSelectedSproutAIModel() {
     return String(modelDropdown ? getDropdownValue(modelDropdown) : "standard").trim().toLowerCase()
 }
 
+function normalizeSproutAIModel(value) {
+    return String(value || "standard").trim().toLowerCase().replace(/\s+/g, "_").replace(/-/g, "_")
+}
+
+function getSelectedSproutTokenModelName() {
+    const model = normalizeSproutAIModel(getSelectedSproutAIModel())
+    if (model === "token_light" || model === "loot_light" || model === "light") return "Light"
+    if (model === "token_mini" || model === "loot_mini" || model === "mini") return "Mini"
+    return "Standard"
+}
+
 function refreshSproutAIModelOptions() {
     const tokenButton = document.getElementById("configure-sprout-ai-tokens-button")
     const tokenPriorityRow = tokenButton?.closest("form")
     if (!tokenPriorityRow) return
-    const model = getSelectedSproutAIModel().replace(/\s+/g, "_").replace(/-/g, "_")
+    const model = normalizeSproutAIModel(getSelectedSproutAIModel())
     const isLootModel = model === "loot_light" || model === "loot_mini" || model === "light" || model === "mini"
     tokenPriorityRow.style.display = isLootModel ? "none" : "flex"
 }
@@ -158,10 +173,10 @@ function applySproutAITokenPreset(presetName) {
     const tokenNames = allTokenNames.filter((token) => !isHiddenSproutAIToken(token))
     let preferred = []
     if (presetName === "all") {
-        preferred = sproutAITokenPriority.filter((token) => tokenNames.includes(token))
+        preferred = tokenNames
     } else if (presetName === "field") {
         const fieldTokens = sproutAIFieldTokens[getSelectedSproutField()] || []
-        preferred = [...fieldTokens, ...sproutAITokenPriority].filter((token, index, arr) => tokenNames.includes(token) && arr.indexOf(token) === index)
+        preferred = [...fieldTokens, ...tokenNames].filter((token, index, arr) => tokenNames.includes(token) && arr.indexOf(token) === index)
     }
     preferred = preferred.filter((token, index, arr) => arr.indexOf(token) === index)
     const ignored = allTokenNames.filter((token) => isHiddenSproutAIToken(token) || !preferred.includes(token))
