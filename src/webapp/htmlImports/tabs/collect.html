@@ -587,6 +587,16 @@
           },
         },
         {
+          id: "sprouts_pattern_width",
+          title: "Pattern Width",
+          desc: "Width used by the AI gather pattern while collecting sprout drops.",
+          type: {
+            name: "dropdown",
+            data: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
           id: "sprouts_field",
           title: "Field",
           desc: "Field where the sprout should be planted.",
@@ -600,13 +610,15 @@
         {
           id: "sprouts_ai_model",
           title: "AI Model",
-          desc: "Model used to search for sprout drops. Light and Mini use the model's Loot class instead of token priorities.",
+          desc: "Model used to search for sprout drops. Loot models chase loot drops; token models use the token priority list.",
           type: {
             name: "dropdown",
             data: [
               "Standard",
-              { label: "Light (macOS 12+)", value: "Light" },
-              { label: "Mini (macOS 12+)", value: "Mini" },
+              { label: "Loot Light (macOS 12+)", value: "loot_light" },
+              { label: "Token Light (macOS 12+)", value: "token_light" },
+              { label: "Loot Mini (macOS 12+)", value: "loot_mini" },
+              { label: "Token Mini (macOS 12+)", value: "token_mini" },
             ],
             triggerFunction: "saveSetting(this, 'profile'); refreshSproutAIModelOptions();",
           },

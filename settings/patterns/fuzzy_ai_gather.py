@@ -1735,6 +1735,9 @@ def _initialise_runtime():
     requested_filename_override = _coerce_text(globals().get("pattern_ai_gather_model_file"), "")
     if requested_filename_override:
         requested_filename = requested_filename_override
+        if requested_filename_override.startswith("loot_detection_"):
+            requested_label = f"{requested_label} Loot"
+            requested_labels = {0: "Loot"}
     standard_candidates = [
         (MODEL_DIR / "best.mlpackage", "coreml", LABELS_TOKENS, "Standard", INPUT_WIDTH, INPUT_HEIGHT),
         (MODEL_DIR / "tokens.onnx", "opencv_onnx", LABELS_TOKENS, "Standard", INPUT_WIDTH, INPUT_HEIGHT),

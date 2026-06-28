@@ -55,6 +55,31 @@ import json
 
 _shift_lock_template_cache = None
 
+SPROUT_RARITIES = (
+    "legendary",
+    "supreme",
+    "sticker",
+    "gummy",
+    "debug",
+    "festive",
+    "moon",
+    "epic",
+    "rare",
+    "common",
+)
+SPROUT_REPLANT_FALLBACK_SECONDS = {
+    "common": 15,
+    "rare": 30,
+    "moon": 45,
+    "epic": 60,
+    "gummy": 75,
+    "festive": 75,
+    "legendary": 90,
+    "supreme": 120,
+    "sticker": 120,
+    "debug": 120,
+}
+
 class _PauseAwareTimeModule:
     def __init__(self, time_module):
         self._time = time_module
@@ -703,7 +728,6 @@ class macro:
         self.lastUnusualSproutScan = 0
         self.unusualSproutLastAnnounced = {}
         self.sproutBeansUsed = 0
-        self.sproutWaitingForBlueMessage = False
         self.lastSproutBeanLimitLog = 0
 
         self.isGathering = False
@@ -1208,31 +1232,18 @@ class macro:
             return
         self.lastUnusualSproutScan = now
 
-        try:
-            text = ocr.imToString("blue").lower()
-        except Exception:
-            return
-
+        text = self.readBlueText()
         if "sprout" not in text:
             return
 
-        rarity = None
-        plantedMatch = re.search(r"(.+?)\s+planted\s+a(?:n)?\s+(moon|gummy|festive|epic|legendary|supreme)\s+sprout", text)
-        if plantedMatch:
-            rarity = plantedMatch.group(2).title()
-        elif "appeared" in text:
-            if "supreme" in text:
-                rarity = "Supreme"
-            elif "legendary" in text:
-                rarity = "Legendary"
-            elif "gummy" in text:
-                rarity = "Gummy"
-            elif "festive" in text:
-                rarity = "Festive"
-            elif "moon" in text:
-                rarity = "Moon"
-            elif "epic" in text:
-                rarity = "Epic"
+        rarity = self.extractSproutRarity(text)
+        unusualRarities = {"epic", "legendary", "supreme", "gummy", "festive", "moon", "sticker", "debug"}
+        if rarity not in unusualRarities:
+            return
+        if not re.search(r"\bplanted\s+a(?:n)?\s+\w+\s+sprout\b", text):
+            return
+
+        rarity = rarity.title()
         if not rarity:
             return
 
@@ -1249,27 +1260,51 @@ class macro:
             route_category="activities",
         )
 
-    def blueSproutMessageVisible(self):
+    def readBlueText(self):
         try:
-            text = ocr.imToString("blue").lower()
+            return ocr.imToString("blue").lower()
         except Exception:
+            return ""
+
+    def extractSproutRarity(self, text):
+        if "sprout" not in text:
+            return None
+        for rarity in SPROUT_RARITIES:
+            if re.search(rf"\b{re.escape(rarity)}\b", text):
+                return rarity
+        return None
+
+    def blueSproutMessageInfo(self):
+        text = self.readBlueText()
+        if "sprout" not in text:
+            return None
+        return {
+            "text": text,
+            "rarity": None if "appeared" in text else self.extractSproutRarity(text),
+        }
+
+    def isSproutCompletionMessage(self, text):
+        if "sprout" not in text:
             return False
+        if "already" in text and "field" in text:
+            return False
+        if "planted" in text or "appeared" in text:
+            return False
+        return True
+
+    def sproutReplantFallbackSeconds(self, rarity):
+        return SPROUT_REPLANT_FALLBACK_SECONDS.get(rarity or "", 120)
+
+    def blueSproutMessageVisible(self):
+        text = self.readBlueText()
         return "sprout" in text
 
     def blueSproutCompletionMessageVisible(self):
-        try:
-            text = ocr.imToString("blue").lower()
-        except Exception:
-            return False
-        if "sprout" not in text:
-            return False
-        return "planted" not in text and not ("already" in text and "field" in text)
+        text = self.readBlueText()
+        return self.isSproutCompletionMessage(text)
 
     def blueSproutAlreadyInFieldVisible(self):
-        try:
-            text = ocr.imToString("blue").lower()
-        except Exception:
-            return False
+        text = self.readBlueText()
         return "sprout" in text and "already" in text and "field" in text
 
     def buildSproutTokenPriority(self, field):
@@ -1328,14 +1363,6 @@ class macro:
     def collectSprouts(self):
         if not self.setdat.get("sprouts_enable", False):
             return False
-        reuseCurrentPosition = False
-        if self.sproutWaitingForBlueMessage:
-            if self.blueSproutMessageVisible():
-                self.sproutWaitingForBlueMessage = False
-                reuseCurrentPosition = True
-            else:
-                self.logger.webhook("Sprouts", "Waiting for a blue sprout message before planting another Magic Bean.", "light blue", route_category="activities")
-                return False
         if self.sproutBeansUsed >= self._sproutBeanLimit():
             self.logSproutBeanLimitReached("Sprout bean limit reached", "orange")
             return False
@@ -1343,18 +1370,30 @@ class macro:
         field = str(self.setdat.get("sprouts_field", "sunflower") or "sunflower").replace("_", " ").strip().lower()
         if field not in startLocationDimensions:
             field = "sunflower"
-        reuseCurrentPosition = reuseCurrentPosition or self.location == field
+        reuseCurrentPosition = self.location == field
         try:
             slot = max(1, min(7, int(self.setdat.get("sprouts_magic_bean_slot", 1) or 1)))
         except Exception:
             slot = 1
         sproutAIModel = str(self.setdat.get("sprouts_ai_model", "Standard") or "Standard")
-        sproutAIModelKey = sproutAIModel.strip().lower()
-        sproutLootModelFiles = {
-            "light": "loot_detection_small.mlmodelc",
-            "mini": "loot_detection_mini.mlmodelc",
+        sproutAIModelKey = sproutAIModel.strip().lower().replace(" ", "_").replace("-", "_")
+        sproutModelConfig = {
+            "standard": ("Standard", "", False),
+            "loot_light": ("Light", "loot_detection_small.mlmodelc", True),
+            "light": ("Light", "loot_detection_small.mlmodelc", True),
+            "token_light": ("Light", "", False),
+            "loot_mini": ("Mini", "loot_detection_mini.mlmodelc", True),
+            "mini": ("Mini", "loot_detection_mini.mlmodelc", True),
+            "token_mini": ("Mini", "", False),
         }
-        usesLootModel = sproutAIModelKey in sproutLootModelFiles
+        sproutModelName, sproutModelFile, usesLootModel = sproutModelConfig.get(
+            sproutAIModelKey,
+            ("Standard", "", False),
+        )
+        try:
+            sproutPatternWidth = max(1, min(10, int(self.setdat.get("sprouts_pattern_width", 5) or 5)))
+        except Exception:
+            sproutPatternWidth = 5
 
         sproutOverride = {
             "shape": "fuzzy_ai_gather",
@@ -1362,15 +1401,17 @@ class macro:
             "field_drift_compensation": True,
             "start_location": "center",
             "distance": 1,
-            "width": 5,
+            "width": sproutPatternWidth,
             "turn": "none",
             "turn_times": 0,
+            "goo": False,
+            "gumdrops": False,
             "skip_travel": reuseCurrentPosition or self.location == field,
             "infinite_gather": True,
             "plant_sprout": True,
             "sprout_magic_bean_slot": slot,
-            "ai_gather_model": sproutAIModel,
-            "ai_gather_model_file": sproutLootModelFiles.get(sproutAIModelKey, ""),
+            "ai_gather_model": sproutModelName,
+            "ai_gather_model_file": sproutModelFile,
             "fuzzy_ai_preferred_tokens": "Loot" if usesLootModel else self.buildSproutTokenPriority(field),
             "fuzzy_ai_ignored_tokens": "" if usesLootModel else str(self.setdat.get("sprouts_ignored_tokens", "") or ""),
         }
@@ -3224,34 +3265,41 @@ class macro:
         if pattern in aiPatternLabels:
             configureAIGatherCamera()
             aiCameraConfigured = True
-        sproutCompletionMessageSeen = False
         sproutFinalLootStart = None
         sproutFinalLootSeconds = self._sproutFinalLootSeconds()
         sproutLimitLogged = False
+        lastSproutPlantAttempt = 0
+        currentSproutRarity = None
+        sproutCompletionMessageSeen = False
         def plantSproutBean():
-            nonlocal sproutCompletionMessageSeen
+            nonlocal lastSproutPlantAttempt, currentSproutRarity, sproutCompletionMessageSeen
             sproutSlot = str(fieldSetting.get("sprout_magic_bean_slot", self.setdat.get("sprouts_magic_bean_slot", 1)))
             if not self.canUseSproutBeanSlot(sproutSlot):
-                return False
+                return "limit"
+            lastSproutPlantAttempt = time.time()
+            previousSproutRarity = currentSproutRarity
+            currentSproutRarity = None
+            sproutCompletionMessageSeen = False
             self.keyboard.press(sproutSlot)
             self.markSproutBeanUsed()
-            self.sproutWaitingForBlueMessage = True
-            sproutCompletionMessageSeen = False
             time.sleep(0.6)
             for _ in range(5):
-                if self.blueSproutAlreadyInFieldVisible():
+                sproutInfo = self.blueSproutMessageInfo()
+                if sproutInfo and sproutInfo.get("rarity"):
+                    currentSproutRarity = sproutInfo["rarity"]
+                if sproutInfo and "already" in sproutInfo.get("text", "") and "field" in sproutInfo.get("text", ""):
                     self.unmarkSproutBeanUsed()
-                    self.sproutWaitingForBlueMessage = True
-                    self.logger.webhook("Sprouts", "A sprout is already in this field; Magic Bean use was not counted. Collecting existing sprout before planting another.", "orange", "screen", route_category="activities")
-                    return True
+                    currentSproutRarity = previousSproutRarity
+                    self.logger.webhook("Sprouts", "A sprout is already in this field; Magic Bean use was not counted. Continuing to collect.", "orange", "screen", route_category="activities")
+                    return "already"
                 time.sleep(0.4)
-            return True
+            return "planted"
 
         if fieldSetting.get("plant_sprout", False):
             self.ensure_shift_lock_off("sprouts")
             if pattern in aiPatternLabels and not aiCameraConfigured:
                 configureAIGatherCamera()
-            if not plantSproutBean():
+            if plantSproutBean() == "limit":
                 self.logger.webhook("", "Sprout bean limit reached before planting", "orange", route_category="activities")
                 return
         #key variables
@@ -3564,19 +3612,23 @@ class macro:
                 self.reset()
                 return
             elif fieldSetting.get("plant_sprout", False):
-                if self.sproutWaitingForBlueMessage:
-                    if self.blueSproutCompletionMessageVisible():
-                        sproutCompletionMessageSeen = True
-                    elif sproutCompletionMessageSeen and not self.blueSproutMessageVisible():
-                        self.sproutWaitingForBlueMessage = False
-                        if self.sproutBeansUsed >= self._sproutBeanLimit():
-                            if sproutFinalLootStart is None:
-                                sproutFinalLootStart = time.time()
-                                self.logSproutBeanLimitReached(f"Sprout bean limit reached. Collecting remaining drops for {sproutFinalLootSeconds} seconds before resetting.")
-                        else:
-                            self.logger.webhook("Sprouts", f"Blue sprout message detected; planting next sprout ({self.sproutBeansUsed + 1}/{self._sproutBeanLimit()}).", "light blue", "screen", route_category="activities")
+                if sproutFinalLootStart is None and self.sproutBeansUsed < self._sproutBeanLimit():
+                    sproutInfo = self.blueSproutMessageInfo()
+                    if sproutInfo:
+                        if sproutInfo.get("rarity"):
+                            currentSproutRarity = sproutInfo["rarity"]
+                        if self.isSproutCompletionMessage(sproutInfo.get("text", "")):
+                            sproutCompletionMessageSeen = True
+                    if sproutCompletionMessageSeen and not self.blueSproutMessageVisible():
+                        self.logger.webhook("Sprouts", f"Detected sprout pop message; planting next sprout ({self.sproutBeansUsed + 1}/{self._sproutBeanLimit()}).", "light blue", "screen", route_category="activities")
+                        plantSproutBean()
+                    else:
+                        fallbackSeconds = self.sproutReplantFallbackSeconds(currentSproutRarity)
+                        if time.time() - lastSproutPlantAttempt >= fallbackSeconds:
+                            rarityLabel = currentSproutRarity.title() if currentSproutRarity else "unknown"
+                            self.logger.webhook("Sprouts", f"No sprout pop message detected for {fallbackSeconds} seconds ({rarityLabel}); trying next sprout ({self.sproutBeansUsed + 1}/{self._sproutBeanLimit()}).", "light blue", "screen", route_category="activities")
                             plantSproutBean()
-                elif sproutFinalLootStart is None and self.sproutBeansUsed >= self._sproutBeanLimit():
+                if sproutFinalLootStart is None and self.sproutBeansUsed >= self._sproutBeanLimit():
                     sproutFinalLootStart = time.time()
                     if not sproutLimitLogged:
                         self.logSproutBeanLimitReached(f"Sprout bean limit reached. Collecting remaining drops for {sproutFinalLootSeconds} seconds before resetting.")
@@ -3584,7 +3636,6 @@ class macro:
                 if sproutFinalLootStart is not None and time.time() - sproutFinalLootStart >= sproutFinalLootSeconds:
                     stopGather()
                     self.logger.webhook("Sprouts", "Final sprout loot collection finished. Resetting to hive.", "light green", route_category="activities")
-                    self.sproutWaitingForBlueMessage = False
                     self.reset()
                     return
             elif self.setdat["Auto_Field_Boost"] and not self.AFBLIMIT and self.AFB(gatherInterrupt=True, turnOffShiftLock = fieldSetting["shift_lock"]):
