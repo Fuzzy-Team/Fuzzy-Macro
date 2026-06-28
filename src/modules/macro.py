@@ -1285,9 +1285,11 @@ class macro:
     def collectSprouts(self):
         if not self.setdat.get("sprouts_enable", False):
             return False
+        reuseCurrentPosition = False
         if self.sproutWaitingForBlueMessage:
             if self.blueSproutMessageVisible():
                 self.sproutWaitingForBlueMessage = False
+                reuseCurrentPosition = True
             else:
                 self.logger.webhook("Sprouts", "Waiting for a blue sprout message before planting another Magic Bean.", "light blue", route_category="activities")
                 return False
@@ -1311,6 +1313,7 @@ class macro:
             "distance": 1,
             "turn": "none",
             "turn_times": 0,
+            "skip_travel": reuseCurrentPosition or self.location == field,
             "plant_sprout": True,
             "sprout_magic_bean_slot": slot,
             "fuzzy_ai_preferred_tokens": self.buildSproutTokenPriority(field),
@@ -3045,7 +3048,7 @@ class macro:
             self.died = True
 
     def gatherBackground(self):
-        field = self.status.value.split("_")[1]
+        field = self.get_task_status().get("field") or self.location
         while self.isGathering:
             self.gatherBackgroundOnce(field)
             time.sleep(1)
@@ -3067,6 +3070,8 @@ class macro:
         normalized_field = field.replace('_', ' ')
         isHiveHubField = normalized_field == "hive hub"
         fieldSetting = {**self.fieldSettings[normalized_field], **settingsOverride}
+        isSproutGather = bool(fieldSetting.get("plant_sprout", False))
+        skipTravel = bool(fieldSetting.get("skip_travel", False)) and self.location == normalized_field and not isHiveHubField
         def shouldUseHoneyWreathReturn():
             if not self.setdat.get("wreath", False):
                 return False
@@ -3090,40 +3095,47 @@ class macro:
                 backpack = self.getBackpack()
             return backpack >= fieldSetting["backpack"]
 
-        for i in range(3):
-            self.waitForBees()
-            #go to field
-            try:
-                self.set_task_status(f"travelling_{field}", activity="travelling", field=field)
-            except Exception:
-                pass
-            if not isHiveHubField:
-                self.cannon()
-            self.logger.webhook("",f"Travelling: {field.title()}, Attempt {i+1}", "dark brown")
-            self.goToField(field)
-            if isHiveHubField:
-                break
-            #go to start location (match natro's)
-            startLocation = fieldSetting["start_location"]
-            moveSpeedFactor = 18/self.setdat["movespeed"]
-            flen, fwid = [x*fieldSetting["distance"]/10 for x in startLocationDimensions[normalized_field]]
-            if "upper" in startLocation or "top" in startLocation:
-                self.sleepMSMove("w", flen*moveSpeedFactor)
-            elif "lower" in startLocation or "bottom" in startLocation:
-                 self.sleepMSMove("s", flen*moveSpeedFactor)
+        landedInField = False
+        if skipTravel:
+            landedInField = True
+            self.logger.webhook("Sprouts", f"Planting next sprout from current position in {field.title()}", "light blue", route_category="activities")
+        else:
+            for i in range(3):
+                self.waitForBees()
+                #go to field
+                try:
+                    self.set_task_status(f"travelling_{field}", activity="travelling", field=field)
+                except Exception:
+                    pass
+                if not isHiveHubField:
+                    self.cannon()
+                self.logger.webhook("",f"Travelling: {field.title()}, Attempt {i+1}", "dark brown")
+                self.goToField(field)
+                if isHiveHubField:
+                    landedInField = True
+                    break
+                #go to start location (match natro's)
+                startLocation = fieldSetting["start_location"]
+                moveSpeedFactor = 18/self.setdat["movespeed"]
+                flen, fwid = [x*fieldSetting["distance"]/10 for x in startLocationDimensions[normalized_field]]
+                if "upper" in startLocation or "top" in startLocation:
+                    self.sleepMSMove("w", flen*moveSpeedFactor)
+                elif "lower" in startLocation or "bottom" in startLocation:
+                     self.sleepMSMove("s", flen*moveSpeedFactor)
 
-            if "left" in startLocation:
-                 self.sleepMSMove("a", fwid*moveSpeedFactor)
-            elif "right" in startLocation:
-                 self.sleepMSMove("d", fwid*moveSpeedFactor)
+                if "left" in startLocation:
+                     self.sleepMSMove("a", fwid*moveSpeedFactor)
+                elif "right" in startLocation:
+                     self.sleepMSMove("d", fwid*moveSpeedFactor)
 
-            time.sleep(0.4)
-            #place sprinkler + check if in field
-            if self.placeSprinkler(): 
-                break
-            self.logger.webhook("", f"Failed to land in field", "red", "screen", ping_category="ping_critical_errors")
-            self.reset()
-        else: #failed too many times
+                time.sleep(0.4)
+                #place sprinkler + check if in field
+                if self.placeSprinkler():
+                    landedInField = True
+                    break
+                self.logger.webhook("", f"Failed to land in field", "red", "screen", ping_category="ping_critical_errors")
+                self.reset()
+        if not landedInField: #failed too many times
             return
         pattern = fieldSetting['shape']
         #rotate camera
@@ -3251,7 +3263,10 @@ class macro:
         self.died = False
         #time to gather
         gatherNameSpace = {**locals(), **globals()}
-        self.set_task_status(f"gather_{field}", task="gather", field=field)
+        if isSproutGather:
+            self.set_task_status("collect_sprouts", task="collect", field=field, activity="sprouts")
+        else:
+            self.set_task_status(f"gather_{field}", task="gather", field=field)
         self.isGathering = True
         firstPattern = True
         fuzzyAIInitStartedLogged = False
@@ -3272,7 +3287,10 @@ class macro:
         # Add goo status to webhook message
         gooStatus = " - Goo Enabled" if fieldSetting.get("goo", False) else ""
         backpackLimitLabel = "Ignored" if infiniteGather else f"{fieldSetting['backpack']}%"
-        self.logger.webhook(f"Gathering: {field.title()}", f"Limit: {gatherTimeLimit} - {fieldSetting['shape']} - Backpack: {backpackLimitLabel}{gooStatus}", "light green", route_category="gathering")
+        if isSproutGather:
+            self.logger.webhook("Sprouts", f"Collecting drops in {field.title()} with AI Gathering", "light green", route_category="activities")
+        else:
+            self.logger.webhook(f"Gathering: {field.title()}", f"Limit: {gatherTimeLimit} - {fieldSetting['shape']} - Backpack: {backpackLimitLabel}{gooStatus}", "light green", route_category="gathering")
 
         # Goo timer thread: always 3s interval if goo quest, else field setting
         def gooTimerThread():
@@ -3350,7 +3368,7 @@ class macro:
             return now - st - pausedDuration
 
         liveGatherReport = None
-        if self.liveGatherReportEnabled():
+        if self.liveGatherReportEnabled() and not isSproutGather:
             liveGatherReport = self.createLiveGatherReport()
             liveGatherReport.start(field, gatherTimeLimit, getGatherTime, isGatherPaused)
         
@@ -3462,7 +3480,8 @@ class macro:
             #cycle ends
             mouse.mouseUp()
             #add gather time stat
-            self.hourlyReport.addHourlyStat("gathering_time", time.time()-patternStartTime)
+            if not isSproutGather:
+                self.hourlyReport.addHourlyStat("gathering_time", time.time()-patternStartTime)
             gatherTime = self.convertSecsToMinsAndSecs(getGatherTime())
 
             #check for AFB
