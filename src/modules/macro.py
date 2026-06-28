@@ -1314,10 +1314,10 @@ class macro:
         normalizedField = str(field or "").replace("_", " ").strip().lower()
         priority = []
         for token in SPROUT_FIELD_TOKEN_PRIORITY.get(normalizedField, []):
-            if token in SPROUT_AI_TOKEN_LABELS and token not in priority:
+            if token not in priority:
                 priority.append(token)
         for token in SPROUT_BASE_TOKEN_PRIORITY:
-            if token in SPROUT_AI_TOKEN_LABELS and token not in priority:
+            if token not in priority:
                 priority.append(token)
         return ",".join(priority)
 
@@ -1415,7 +1415,7 @@ class macro:
             "fuzzy_ai_preferred_tokens": "Loot" if usesLootModel else self.buildSproutTokenPriority(field),
             "fuzzy_ai_ignored_tokens": "" if usesLootModel else str(self.setdat.get("sprouts_ignored_tokens", "") or ""),
         }
-        self.logger.webhook("Sprouts", f"Planting in {field.title()} ({self.sproutBeansUsed + 1}/{self._sproutBeanLimit()})", "light blue", "screen", route_category="activities")
+        self.logger.webhook("Sprouts", f"Travelling to {field.title()} to plant sprout ({self.sproutBeansUsed + 1}/{self._sproutBeanLimit()})", "light blue", "screen", route_category="activities")
         self.gather(field, sproutOverride)
         return True
 
@@ -3168,6 +3168,15 @@ class macro:
         fieldSetting = {**self.fieldSettings[normalized_field], **settingsOverride}
         isSproutGather = bool(fieldSetting.get("plant_sprout", False))
         skipTravel = bool(fieldSetting.get("skip_travel", False)) and self.location == normalized_field and not isHiveHubField
+        pattern = fieldSetting['shape']
+        aiPatternLabels = {
+            "fuzzy_ai_gather": "Fuzzy AI Gather",
+            "blooms_ai": "BloomsAI",
+        }
+        aiPatternStateKeys = {
+            "fuzzy_ai_gather": ("_FUZZY_AI_GATHER_STATE", "_fuzzy_ai_gather_state"),
+            "blooms_ai": ("_BLOOMS_AI_STATE", "_blooms_ai_state"),
+        }
         def shouldUseHoneyWreathReturn():
             if not self.setdat.get("wreath", False):
                 return False
@@ -3190,6 +3199,66 @@ class macro:
             if backpack is None:
                 backpack = self.getBackpack()
             return backpack >= fieldSetting["backpack"]
+
+        preloadedAIGatherNameSpace = None
+        if pattern == "fuzzy_ai_gather":
+            try:
+                fuzzyAIRuntimeDefaults = settingsManager.FUZZY_AI_RUNTIME_DEFAULTS
+                pattern_ai_gather_model = str(fieldSetting.get("ai_gather_model", self.setdat.get("ai_gather_model", "Standard")))
+                fuzzyAITokenRanking = settingsManager.loadFuzzyAITokenRanking(field, pattern_ai_gather_model)
+                pattern_capture_backend = fuzzyAIRuntimeDefaults["fuzzy_ai_capture_backend"]
+                pattern_confidence_threshold = fuzzyAIRuntimeDefaults["fuzzy_ai_confidence_threshold"]
+                pattern_sprinkler_confidence_threshold = fuzzyAIRuntimeDefaults["fuzzy_ai_sprinkler_confidence_threshold"]
+                pattern_min_token_distance = fuzzyAIRuntimeDefaults["fuzzy_ai_min_token_distance"]
+                pattern_idle_return_interval = fuzzyAIRuntimeDefaults["fuzzy_ai_idle_return_interval"]
+                pattern_no_token_recalibration_timeout = fuzzyAIRuntimeDefaults["fuzzy_ai_no_token_recalibration_timeout"]
+                pattern_movements_before_recalibration = fuzzyAIRuntimeDefaults["fuzzy_ai_movements_before_recalibration"]
+                pattern_sprinkler_arrival_threshold = fuzzyAIRuntimeDefaults["fuzzy_ai_sprinkler_arrival_threshold"]
+                pattern_max_sprinkler_distance = fuzzyAIRuntimeDefaults["fuzzy_ai_max_sprinkler_distance"]
+                pattern_sprinkler_rescan_attempts = fuzzyAIRuntimeDefaults["fuzzy_ai_sprinkler_rescan_attempts"]
+                pattern_sprinkler_rescan_delay = fuzzyAIRuntimeDefaults["fuzzy_ai_sprinkler_rescan_delay"]
+                pattern_debug_mode = fuzzyAIRuntimeDefaults["fuzzy_ai_debug_mode"]
+                pattern_record_video = fuzzyAIRuntimeDefaults["fuzzy_ai_record_video"]
+                pattern_record_video_fps = fuzzyAIRuntimeDefaults["fuzzy_ai_record_video_fps"]
+                pattern_ai_gather_model_file = str(fieldSetting.get("ai_gather_model_file", ""))
+                pattern_field_drift_compensation = bool(fieldSetting.get("field_drift_compensation", False))
+                pattern_use_sprinkler_model_for_drift_compensation = bool(
+                    self.setdat.get("use_sprinkler_model_for_drift_compensation", False)
+                )
+                sprinklerLabelMap = {
+                    "basic": "Sprinkler",
+                    "silver": "Sprinkler",
+                    "golden": "Sprinkler",
+                    "gold": "Sprinkler",
+                    "diamond": "Sprinkler",
+                    "saturator": "Supreme",
+                    "supreme": "Supreme",
+                }
+                pattern_target_sprinkler_label = sprinklerLabelMap.get(
+                    str(self.setdat.get("sprinkler_type", "")).strip().lower(),
+                    "",
+                )
+                pattern_preferred_tokens = fieldSetting.get("fuzzy_ai_preferred_tokens", fuzzyAITokenRanking.get("preferred_tokens", ""))
+                pattern_ignored_tokens = fieldSetting.get("fuzzy_ai_ignored_tokens", fuzzyAITokenRanking.get("ignored_tokens", ""))
+                sizeData = {
+                    "xs": 0.25,
+                    "s": 0.5,
+                    "m": 1,
+                    "l": 1.5,
+                    "xl": 2
+                }
+                sizeword = fieldSetting["size"]
+                size = sizeData[sizeword]
+                width = fieldSetting["width"]
+                pattern_ai_warmup_only = True
+                if isSproutGather and pattern == "fuzzy_ai_gather":
+                    self._fuzzy_ai_gather_state = {}
+                preloadedAIGatherNameSpace = {**locals(), **globals()}
+                self.logger.webhook(aiPatternLabels.get(pattern, "AI Gather"), "Initialization started before travel.", "light blue")
+                exec(open(f"../settings/patterns/{pattern}.py").read(), preloadedAIGatherNameSpace)
+            except Exception as e:
+                print(traceback.format_exc())
+                self.logger.webhook(aiPatternLabels.get(pattern, "AI Gather"), f"Pre-travel initialization failed: {e}", "orange")
 
         landedInField = False
         if skipTravel:
@@ -3241,14 +3310,6 @@ class macro:
         elif fieldSetting["turn"] == "right":
             for _ in range(fieldSetting["turn_times"]):
                 self.keyboard.press(".")
-        aiPatternLabels = {
-            "fuzzy_ai_gather": "Fuzzy AI Gather",
-            "blooms_ai": "BloomsAI",
-        }
-        aiPatternStateKeys = {
-            "fuzzy_ai_gather": ("_FUZZY_AI_GATHER_STATE", "_fuzzy_ai_gather_state"),
-            "blooms_ai": ("_BLOOMS_AI_STATE", "_blooms_ai_state"),
-        }
         def configureAIGatherCamera():
             for _ in range(11):
                 self.keyboard.keyDown("pageup", False)
@@ -3280,6 +3341,7 @@ class macro:
             previousSproutRarity = currentSproutRarity
             currentSproutRarity = None
             sproutCompletionMessageSeen = False
+            self.logger.webhook("Sprouts", f"Planting sprout in {field.title()} ({self.sproutBeansUsed + 1}/{self._sproutBeanLimit()})", "light blue", "screen", route_category="activities")
             self.keyboard.press(sproutSlot)
             self.markSproutBeanUsed()
             time.sleep(0.6)
@@ -3383,7 +3445,11 @@ class macro:
         keepGathering = True
         self.died = False
         #time to gather
-        gatherNameSpace = {**locals(), **globals()}
+        if preloadedAIGatherNameSpace is not None:
+            preloadedAIGatherNameSpace.update({**locals(), **globals(), "pattern_ai_warmup_only": False})
+            gatherNameSpace = preloadedAIGatherNameSpace
+        else:
+            gatherNameSpace = {**locals(), **globals()}
         if isSproutGather:
             self.set_task_status("collect_sprouts", task="collect", field=field, activity="sprouts")
         else:

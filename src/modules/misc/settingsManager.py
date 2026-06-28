@@ -706,14 +706,14 @@ def importFieldSettings(field_name, json_settings):
                 missing_patterns.append(f"'{requested_pattern}' → '{default_pattern}'")
 
         if settings.get("shape") in ("fuzzy_ai_gather", "blooms_ai"):
-            blue_model = getFuzzyAIModelPath("tokens.onnx")
-            blue_model_coreml = getFuzzyAIModelPath("best.mlpackage")
-            sprinkler_model = getFuzzyAIModelPath("sprinkler.onnx")
-            sprinkler_model_coreml = getFuzzyAIModelPath("sprinkler.mlpackage")
-            if not os.path.exists(blue_model) and not os.path.exists(blue_model_coreml):
-                warnings.append("Missing blue model: src/data/models/tokens.onnx or src/data/models/best.mlpackage")
-            if not os.path.exists(sprinkler_model) and not os.path.exists(sprinkler_model_coreml):
-                warnings.append("Missing sprinkler model: src/data/models/sprinkler.onnx or src/data/models/sprinkler.mlpackage")
+            token_model = getFuzzyAIModelPath("token_detection_standard.mlmodelc")
+            token_model_onnx = getFuzzyAIModelPath("token_detection_standard.onnx")
+            sprinkler_model = getFuzzyAIModelPath("sprinkler_detection_standard.mlmodelc")
+            sprinkler_model_onnx = getFuzzyAIModelPath("sprinkler_detection_standard.onnx")
+            if not os.path.exists(token_model) and not os.path.exists(token_model_onnx):
+                warnings.append("Missing token model: src/data/models/token_detection_standard.mlmodelc or src/data/models/token_detection_standard.onnx")
+            if not os.path.exists(sprinkler_model) and not os.path.exists(sprinkler_model_onnx):
+                warnings.append("Missing sprinkler model: src/data/models/sprinkler_detection_standard.mlmodelc or src/data/models/sprinkler_detection_standard.onnx")
 
         # Save the imported settings
         saveField(field_name, settings)

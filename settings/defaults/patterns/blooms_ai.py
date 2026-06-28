@@ -10,9 +10,10 @@ Requirements:
 - opencv-python
 - numpy
 - mss or Pillow
-- best.mlpackage and sprinkler.mlpackage
+- token_detection_standard.mlmodelc or token_detection_standard.onnx
+- sprinkler_detection_standard.mlmodelc or sprinkler_detection_standard.onnx
 
-- Version 1.2
+- Version 1.5
 """
 
 import math
@@ -93,10 +94,15 @@ BLOOM_PETAL_HINT_MAX_MOVE = 2.0
 BLOOM_PETAL_HINT_MIN_SCREEN_DISTANCE = 0.12
 BLOOM_MAX_DISTANCE = 13.0
 BLOOM_SETTLE_DISTANCE = 0.55
-BLOOM_MIN_CONFIDENCE = 0.25
+BLOOM_MIN_CONFIDENCE = 0.10
 BLOOM_SPRINKLER_ANCHOR_INTERVAL = 0.35
 BLOOM_FORCE_ANCHOR_DISTANCE = 4.0
 BLOOM_MAX_MOVE_STEP = 2.4
+BLOOM_IDLE_SQUARE_SIZE = 4.0
+BLOOM_WORK_SQUARE_SIZE = 0.75
+BLOOM_CLEANUP_SQUARE_SIZE = 3.0
+BLOOM_DISAPPEAR_TIMEOUT = 0.9
+BLOOM_PATROL_SCAN_STEP_TILES = 0.15
 
 PREFERRED_TOKENS = {}
 IGNORED_TOKENS = {}
@@ -290,6 +296,9 @@ RECORD_VIDEO = _coerce_bool(globals().get("pattern_record_video"), RECORD_VIDEO)
 RECORD_VIDEO_FPS = _coerce_float(globals().get("pattern_record_video_fps"), RECORD_VIDEO_FPS)
 PREFERRED_TOKENS = _preferred_token_weights(globals().get("pattern_preferred_tokens"), PREFERRED_TOKENS)
 IGNORED_TOKENS = _ignored_token_names(globals().get("pattern_ignored_tokens"), IGNORED_TOKENS)
+# BloomsAI exists specifically to target blooms. Field token-ranking defaults may
+# ignore Bloom for normal gathering, but that setting must never apply here.
+IGNORED_TOKENS.discard(BLOOM_LABEL)
 
 
 try:
@@ -554,6 +563,39 @@ def _grab_token_frame(runtime):
         return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
 
     return _grab_frame(runtime)
+
+
+def _grab_upper_token_frame(runtime):
+    monitor = runtime.get("upper_token_monitor")
+    if runtime["capture"]["backend"] == "mss" and monitor:
+        return _mss_grab_to_array(runtime["capture"]["session"], monitor)
+    bbox = runtime.get("upper_token_bbox")
+    if bbox and ImageGrab is not None:
+        image = ImageGrab.grab(bbox=bbox)
+        return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+    return None
+
+
+def _remap_upper_detections(runtime, detections):
+    base_left, base_top, base_w, base_h = runtime["token_crop"]
+    upper_left, upper_top, upper_w, upper_h = runtime["upper_token_crop"]
+    remapped = []
+    for (x1, y1, x2, y2), class_id, confidence in detections:
+        capture_x1 = upper_left + (x1 * upper_w / float(INPUT_WIDTH))
+        capture_y1 = upper_top + (y1 * upper_h / float(INPUT_HEIGHT))
+        capture_x2 = upper_left + (x2 * upper_w / float(INPUT_WIDTH))
+        capture_y2 = upper_top + (y2 * upper_h / float(INPUT_HEIGHT))
+        remapped.append((
+            (
+                (capture_x1 - base_left) * INPUT_WIDTH / base_w,
+                (capture_y1 - base_top) * INPUT_HEIGHT / base_h,
+                (capture_x2 - base_left) * INPUT_WIDTH / base_w,
+                (capture_y2 - base_top) * INPUT_HEIGHT / base_h,
+            ),
+            class_id,
+            confidence,
+        ))
+    return remapped
 
 
 def _mss_grab_to_array(session, monitor):
@@ -915,6 +957,16 @@ def _scan_tokens_once(runtime):
     inference_elapsed = time.time() - inference_start
     postprocess_start = time.time()
     detections = _postprocess_tokens(output, CONFIDENCE_THRESHOLD)
+    upper_frame = _grab_upper_token_frame(runtime)
+    if upper_frame is not None:
+        upper_image = _preprocess_token_frame(upper_frame, {**runtime, "token_frame_is_crop": True})
+        upper_output = _run_model(runtime, "token", upper_image)
+        upper_detections = _postprocess_tokens(upper_output, min(CONFIDENCE_THRESHOLD, BLOOM_MIN_CONFIDENCE))
+        detections.extend(
+            detection
+            for detection in _remap_upper_detections(runtime, upper_detections)
+            if LABELS_TOKENS.get(detection[1]) == BLOOM_LABEL
+        )
     postprocess_elapsed = time.time() - postprocess_start
     _refresh_bloom_sprinkler_anchor(runtime)
     scoring_start = time.time()
@@ -1125,7 +1177,7 @@ def _find_best_token(runtime, detections):
         if not token_name:
             rejected.append({"class_id": class_id, "reason": "unknown", "confidence": confidence})
             continue
-        if token_name != BLOOM_LABEL and (bloom_seen or token_name != TOKEN_LINK_LABEL):
+        if token_name != BLOOM_LABEL:
             rejected.append({"name": token_name, "reason": "not_bloom", "confidence": confidence})
             continue
         if token_name == BLOOM_LABEL and confidence < BLOOM_MIN_CONFIDENCE:
@@ -1227,6 +1279,39 @@ def _tile_multi_walk(keys, tiles):
     return True
 
 
+def _tile_walk_until_bloom(key, tiles):
+    """Keep one movement key held, but release it as soon as scanning finds a bloom."""
+    moved = 0.0
+    self.keyboard.keyDown(key, False)
+    try:
+        while moved < tiles:
+            if _bloom_is_visible(_runtime_state()):
+                break
+            step = min(BLOOM_PATROL_SCAN_STEP_TILES, tiles - moved)
+            self.keyboard.tileWait(step)
+            moved += step
+    finally:
+        self.keyboard.keyUp(key, False)
+    return moved
+
+
+def _execute_interruptible_patrol_side(runtime, tx, ty):
+    if abs(tx) > 0.001:
+        key = afclrkey if tx > 0 else tclrkey
+        moved = _tile_walk_until_bloom(key, abs(tx))
+        runtime["current_x"] += math.copysign(moved, tx)
+    elif abs(ty) > 0.001:
+        key = tcfbkey if ty > 0 else afcfbkey
+        moved = _tile_walk_until_bloom(key, abs(ty))
+        runtime["current_y"] += math.copysign(moved, ty)
+    else:
+        return True
+    if moved > 0:
+        runtime["movement_count"] += 1
+        runtime["last_token_time"] = time.time()
+    return moved >= max(abs(tx), abs(ty)) - 0.001
+
+
 def _execute_movement(tx, ty):
     magnitude = math.hypot(tx, ty)
     if magnitude <= 0.001:
@@ -1298,6 +1383,129 @@ def _execute_active_sweep(runtime):
         key="active_sweep",
     )
     return _execute_movement(tx, ty)
+
+
+def _square_waypoints(center_x, center_y, side, include_center=False):
+    half = side / 2.0
+    points = [
+        (center_x - half, center_y - half),
+        (center_x + half, center_y - half),
+        (center_x + half, center_y + half),
+        (center_x - half, center_y + half),
+    ]
+    if include_center:
+        points.append((center_x, center_y))
+    return points
+
+
+def _walk_square_state(runtime, state_key, waypoints, repeat):
+    index = int(runtime.get(state_key, 0))
+    if index >= len(waypoints):
+        if not repeat:
+            return False
+        index = 0
+    target_x, target_y = waypoints[index]
+    tx = target_x - runtime["current_x"]
+    ty = target_y - runtime["current_y"]
+    distance = math.hypot(tx, ty)
+    if distance <= CONTINUOUS_MIN_REPLAN_DISTANCE:
+        runtime[state_key] = index + 1
+        return True
+    if distance > BLOOM_MAX_MOVE_STEP:
+        scale = BLOOM_MAX_MOVE_STEP / distance
+        tx *= scale
+        ty *= scale
+    moved = _execute_movement(tx, ty)
+    if moved and math.hypot(target_x - runtime["current_x"], target_y - runtime["current_y"]) <= CONTINUOUS_MIN_REPLAN_DISTANCE:
+        runtime[state_key] = index + 1
+    return moved
+
+
+def _execute_idle_square(runtime):
+    # Start at one corner, then walk four uninterrupted, full-length sides.
+    # The scanner continues running and may interrupt between sides for a bloom.
+    half = BLOOM_IDLE_SQUARE_SIZE / 2.0
+    if not runtime.get("idle_square_positioned", False):
+        _execute_movement(-half - runtime["current_x"], -half - runtime["current_y"])
+        runtime["idle_square_positioned"] = True
+
+    sides = (
+        (BLOOM_IDLE_SQUARE_SIZE, 0.0),
+        (0.0, BLOOM_IDLE_SQUARE_SIZE),
+        (-BLOOM_IDLE_SQUARE_SIZE, 0.0),
+        (0.0, -BLOOM_IDLE_SQUARE_SIZE),
+    )
+    for tx, ty in sides:
+        if _bloom_is_visible(runtime):
+            return False
+        if not _execute_interruptible_patrol_side(runtime, tx, ty):
+            runtime["idle_square_positioned"] = False
+            return False
+    return True
+
+
+def _bloom_is_visible(runtime):
+    target = _latest_target(runtime)
+    return isinstance(target, dict) and target.get("name") == BLOOM_LABEL
+
+
+def _start_bloom_work(runtime):
+    runtime["bloom_mode"] = "work"
+    runtime["bloom_center"] = (runtime["current_x"], runtime["current_y"])
+    runtime["bloom_work_square_index"] = 0
+    runtime["bloom_work_positioned"] = False
+    runtime["bloom_last_visible_time"] = time.time()
+    _clear_locked_target(runtime)
+
+
+def _execute_bloom_sequence(runtime):
+    mode = runtime.get("bloom_mode", "patrol")
+    center = runtime.get("bloom_center")
+    if mode == "work" and center:
+        if _bloom_is_visible(runtime):
+            runtime["bloom_last_visible_time"] = time.time()
+        elif time.time() - runtime.get("bloom_last_visible_time", 0.0) >= BLOOM_DISAPPEAR_TIMEOUT:
+            runtime["bloom_mode"] = "cleanup"
+            runtime["bloom_cleanup_square_index"] = 0
+            mode = "cleanup"
+        if mode == "work":
+            half = BLOOM_WORK_SQUARE_SIZE / 2.0
+            if not runtime.get("bloom_work_positioned", False):
+                _execute_movement(
+                    center[0] - half - runtime["current_x"],
+                    center[1] - half - runtime["current_y"],
+                )
+                runtime["bloom_work_positioned"] = True
+            for tx, ty in (
+                (BLOOM_WORK_SQUARE_SIZE, 0.0),
+                (0.0, BLOOM_WORK_SQUARE_SIZE),
+                (-BLOOM_WORK_SQUARE_SIZE, 0.0),
+                (0.0, -BLOOM_WORK_SQUARE_SIZE),
+            ):
+                if not _bloom_is_visible(runtime):
+                    break
+                _execute_movement(tx, ty)
+            return True
+    if mode == "cleanup" and center:
+        half = BLOOM_CLEANUP_SQUARE_SIZE / 2.0
+        _execute_movement(
+            center[0] - half - runtime["current_x"],
+            center[1] - half - runtime["current_y"],
+        )
+        for tx, ty in (
+            (BLOOM_CLEANUP_SQUARE_SIZE, 0.0),
+            (0.0, BLOOM_CLEANUP_SQUARE_SIZE),
+            (-BLOOM_CLEANUP_SQUARE_SIZE, 0.0),
+            (0.0, -BLOOM_CLEANUP_SQUARE_SIZE),
+        ):
+            _execute_movement(tx, ty)
+        _execute_movement(center[0] - runtime["current_x"], center[1] - runtime["current_y"])
+        runtime["bloom_mode"] = "patrol"
+        runtime["bloom_center"] = None
+        runtime["idle_square_index"] = 0
+        runtime["idle_square_positioned"] = False
+        return True
+    return False
 
 
 def _latest_target(runtime):
@@ -1378,6 +1586,32 @@ def _execute_planned_movement(runtime):
     target = _select_movement_target(runtime)
     if not target:
         return False
+
+    if target.get("name") == BLOOM_LABEL:
+        # Bloom detections are refreshed continuously relative to the player.
+        # Chasing an old absolute future_x/future_y can falsely report arrival
+        # after an anchor update, so only the live relative vector determines
+        # whether we are standing on the bloom.
+        latest = _latest_target(runtime)
+        if isinstance(latest, dict) and latest.get("name") == BLOOM_LABEL:
+            target = latest
+            runtime["locked_target"] = dict(latest)
+        move_x = float(target.get("tx", 0.0))
+        move_y = float(target.get("ty", 0.0))
+        distance = math.hypot(move_x, move_y)
+        if distance <= BLOOM_SETTLE_DISTANCE:
+            _clear_locked_target(runtime)
+            return False
+        if distance > BLOOM_MAX_MOVE_STEP:
+            scale = BLOOM_MAX_MOVE_STEP / distance
+            move_x *= scale
+            move_y *= scale
+        _debug_log(
+            f"chasing live bloom vector=({move_x:.2f},{move_y:.2f}) distance={distance:.2f}",
+            min_interval=0.2,
+            key="bloom_live_chase",
+        )
+        return _execute_movement_to_target(move_x, move_y)
 
     target_x = target.get("future_x")
     target_y = target.get("future_y")
@@ -1769,6 +2003,11 @@ def _refresh_sprinkler_anchor(runtime, force=False):
 
 
 def _refresh_bloom_sprinkler_anchor(runtime):
+    # A passive model hit can jump the coordinate origin several tiles and turn
+    # a deterministic square into an erratic path. Re-anchor only while idle at
+    # the origin; explicit recalibration remains available when needed.
+    if runtime.get("movement_count", 0) > 0:
+        return False
     now = time.time()
     if not force_anchor_needed(runtime) and now - runtime.get("last_anchor_time", 0.0) < BLOOM_SPRINKLER_ANCHOR_INTERVAL:
         return False
@@ -1835,13 +2074,13 @@ def _initialise_runtime():
 
     _set_start_camera_angle()
 
-    token_path = MODEL_DIR / "best.mlpackage"
+    token_path = MODEL_DIR / "token_detection_standard.mlmodelc"
     token_model_kind = "coreml"
     if not token_path.exists():
-        token_path = MODEL_DIR / "tokens.onnx"
+        token_path = MODEL_DIR / "token_detection_standard.onnx"
         token_model_kind = "opencv_onnx"
     if not token_path.exists():
-        raise FileNotFoundError(f"No token AI model was found at fixed path: {MODEL_DIR / 'tokens.onnx'} or {MODEL_DIR / 'best.mlpackage'}")
+        raise FileNotFoundError(f"No token AI model was found at fixed path: {MODEL_DIR / 'token_detection_standard.mlmodelc'} or {MODEL_DIR / 'token_detection_standard.onnx'}")
     if token_model_kind == "coreml" and ct is None:
         try:
             import subprocess
@@ -1858,11 +2097,11 @@ def _initialise_runtime():
         raise RuntimeError("Pillow is required for CoreML BloomsAI, please run install dependencies before continuing.")
 
     sprinkler_model_kind = None
-    sprinkler_candidate = MODEL_DIR / "sprinkler.mlpackage"
+    sprinkler_candidate = MODEL_DIR / "sprinkler_detection_standard.mlmodelc"
     if sprinkler_candidate.exists():
         sprinkler_model_kind = "coreml"
     else:
-        sprinkler_candidate = MODEL_DIR / "sprinkler.onnx"
+        sprinkler_candidate = MODEL_DIR / "sprinkler_detection_standard.onnx"
         if sprinkler_candidate.exists():
             sprinkler_model_kind = "opencv_onnx"
     sprinkler_path = sprinkler_candidate if sprinkler_candidate.exists() else None
@@ -1872,6 +2111,10 @@ def _initialise_runtime():
     token_left, token_top, token_width, token_height = token_crop_info["rect"]
     token_monitor = None
     token_bbox = None
+    upper_token_monitor = None
+    upper_token_bbox = None
+    # Supplemental full-viewport inference catches blooms near every screen edge.
+    upper_token_crop = (0, 0, int(capture["width"]), int(capture["height"]))
     if capture["backend"] == "mss":
         monitor = capture["monitor"]
         token_monitor = {
@@ -1880,6 +2123,12 @@ def _initialise_runtime():
             "width": int(token_width),
             "height": int(token_height),
         }
+        upper_token_monitor = {
+            "left": int(monitor["left"]),
+            "top": int(monitor["top"]),
+            "width": int(capture["width"]),
+            "height": int(capture["height"]),
+        }
     elif capture["backend"] == "pil":
         left, top, _right, _bottom = capture["bbox"]
         token_bbox = (
@@ -1887,6 +2136,12 @@ def _initialise_runtime():
             int(top + token_top),
             int(left + token_left + token_width),
             int(top + token_top + token_height),
+        )
+        upper_token_bbox = (
+            int(left),
+            int(top),
+            int(left + capture["width"]),
+            int(top + capture["height"]),
         )
     _debug_log(
         f"capture backend={capture['backend']} size={capture['width']}x{capture['height']} token_capture={token_monitor or token_bbox or token_crop_info['rect']} token_resize={token_crop_info['resize']} token_model={token_path} sprinkler_model={sprinkler_path or 'missing'}"
@@ -1903,26 +2158,31 @@ def _initialise_runtime():
 
     if token_model_kind == "opencv_onnx":
         token_session, token_input, token_output = _load_onnx_model(token_path)
-        _delete_model_path(MODEL_DIR / "best.mlpackage")
+        _delete_model_path(MODEL_DIR / "token_detection_standard.mlmodelc")
     else:
         token_session, token_input, token_output = _load_coreml_model(token_path)
-        _delete_model_path(MODEL_DIR / "tokens.onnx")
+        _delete_model_path(MODEL_DIR / "token_detection_standard.onnx")
+    _delete_model_path(MODEL_DIR / "best.mlpackage")
+    _delete_model_path(MODEL_DIR / "sprinkler.mlpackage")
     sprinkler_session = None
     sprinkler_input = None
     sprinkler_output = None
     if sprinkler_path is not None:
         if sprinkler_model_kind == "opencv_onnx":
             sprinkler_session, sprinkler_input, sprinkler_output = _load_onnx_model(sprinkler_path)
-            _delete_model_path(MODEL_DIR / "sprinkler.mlpackage")
+            _delete_model_path(MODEL_DIR / "sprinkler_detection_standard.mlmodelc")
         else:
             sprinkler_session, sprinkler_input, sprinkler_output = _load_coreml_model(sprinkler_path)
-            _delete_model_path(MODEL_DIR / "sprinkler.onnx")
+            _delete_model_path(MODEL_DIR / "sprinkler_detection_standard.onnx")
 
     return {
         "capture": capture,
         "token_crop": token_crop_info["rect"],
         "token_monitor": token_monitor,
         "token_bbox": token_bbox,
+        "upper_token_monitor": upper_token_monitor,
+        "upper_token_bbox": upper_token_bbox,
+        "upper_token_crop": upper_token_crop,
         "token_frame_is_crop": token_monitor is not None or token_bbox is not None,
         "token_resize": token_crop_info["resize"],
         "token_session": token_session,
@@ -1967,6 +2227,14 @@ def _initialise_runtime():
         "petal_sweep_index": 0,
         "petal_sweep_anchor": {},
         "pending_petal_sweep": False,
+        "bloom_mode": "patrol",
+        "bloom_center": None,
+        "bloom_last_visible_time": 0.0,
+        "bloom_work_square_index": 0,
+        "bloom_cleanup_square_index": 0,
+        "idle_square_index": 0,
+        "idle_square_positioned": False,
+        "bloom_work_positioned": False,
     }
 
 
@@ -1996,11 +2264,11 @@ else:
         _ensure_scanner_thread(runtime)
         _refresh_bloom_sprinkler_anchor(runtime)
 
-        if _should_recalibrate(runtime):
-            _recalibrate(runtime)
-
         target = _locked_target(runtime) or _latest_target(runtime)
-        if target:
+        bloom_mode = runtime.get("bloom_mode", "patrol")
+        if bloom_mode in ("work", "cleanup"):
+            _execute_bloom_sequence(runtime)
+        elif target:
             if target.get("name") == BLOOM_LABEL:
                 runtime["last_bloom_seen_time"] = time.time()
             _debug_log(
@@ -2009,10 +2277,11 @@ else:
                 key="target",
             )
             if not _execute_planned_movement(runtime):
-                if _should_sweep_for_petals(runtime):
-                    _execute_petal_sweep(runtime)
+                if target.get("name") == BLOOM_LABEL:
+                    _start_bloom_work(runtime)
+                    _execute_bloom_sequence(runtime)
                 else:
-                    _execute_active_sweep(runtime)
+                    _execute_idle_square(runtime)
         else:
             detections = runtime.get("latest_detections", [])
             _debug_log(
@@ -2029,9 +2298,7 @@ else:
 
             if recalibrated:
                 pass
-            elif _should_sweep_for_petals(runtime):
-                _execute_petal_sweep(runtime)
-            elif _execute_active_sweep(runtime):
+            elif _execute_idle_square(runtime):
                 pass
             elif now - runtime["last_idle_return_time"] >= IDLE_RETURN_INTERVAL:
                 runtime["last_idle_return_time"] = now
