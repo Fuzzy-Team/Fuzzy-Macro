@@ -2213,7 +2213,7 @@ class macro:
         self.converting = True
         liveGatherReport = None
         if self.liveGatherReportEnabled():
-            liveGatherReport = self.createLiveGatherReport()
+            liveGatherReport = self.createLiveGatherReport("conversion_events")
             liveGatherReport.start("converting", "", lambda: time.time() - st, activity="Converting")
 
         #check if convert balloon
@@ -2356,7 +2356,7 @@ class macro:
             and not self.setdat.get("only_send_hourly_report", False)
         )
 
-    def createLiveGatherReport(self):
+    def createLiveGatherReport(self, route_category="gathering"):
         return LiveGatherReport(
             logModule.get_default_delivery_route(self.setdat),
             self.robloxWindow,
@@ -2366,6 +2366,7 @@ class macro:
             self.setdat.get("discord_bot_token", ""),
             None,
             logModule.get_delivery_mode(self.setdat),
+            route_category,
         )
 
     def moveMouseToDefault(self):
