@@ -20,7 +20,7 @@ import cv2
 import numpy as np
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Tuple
-from modules.controls.sleep import INTERRUPT_SKIP, INTERRUPT_RESET, INTERRUPT_AFB_REROLL
+from modules.controls.sleep import INTERRUPT_SKIP, INTERRUPT_RESET, INTERRUPT_AFB_REROLL, INTERRUPT_COLLECT_PLANTER
 
 # Import settings manager functions
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'misc'))
@@ -158,26 +158,43 @@ def _get_enabled_auto_planters(settings: Dict) -> List[str]:
 
 
 def _get_active_planter_choices(settings: Dict) -> List[Tuple[str, int]]:
+    return [(target["canonical"], target["index"]) for target in _get_active_planter_targets(settings)]
+
+
+def _get_active_planter_targets(settings: Dict) -> List[Dict]:
     mode = int(settings.get("planters_mode", 0) or 0)
-    choices = []
+    targets = []
 
     if mode == 1:
         enabled_manual = set(_get_enabled_manual_planters(settings))
         manual_data = _load_manual_planter_data()
+        fields = manual_data.get("fields", [])
         for index, planter in enumerate(manual_data.get("planters", [])):
             canonical = _canonicalize_planter_name(planter)
-            if canonical and canonical in enabled_manual and canonical not in [choice[0] for choice in choices]:
-                choices.append((canonical, index))
+            if canonical and canonical in enabled_manual and canonical not in [target["canonical"] for target in targets]:
+                targets.append({
+                    "canonical": canonical,
+                    "index": index,
+                    "mode": mode,
+                    "planter": planter,
+                    "field": fields[index] if index < len(fields) else "",
+                })
     elif mode == 2:
         enabled_auto = set(_get_enabled_auto_planters(settings))
         auto_data = _load_auto_planter_data()
         for index, planter_slot in enumerate(auto_data.get("planters", [])):
             planter_name = planter_slot.get("planter", "") if isinstance(planter_slot, dict) else ""
             canonical = _canonicalize_planter_name(planter_name)
-            if canonical and canonical in enabled_auto and canonical not in [choice[0] for choice in choices]:
-                choices.append((canonical, index))
+            if canonical and canonical in enabled_auto and canonical not in [target["canonical"] for target in targets]:
+                targets.append({
+                    "canonical": canonical,
+                    "index": index,
+                    "mode": mode,
+                    "planter": planter_name,
+                    "field": planter_slot.get("field", "") if isinstance(planter_slot, dict) else "",
+                })
 
-    return choices
+    return targets
 
 
 def _get_active_planter_timers(settings: Dict) -> Tuple[int, List[Dict]]:
@@ -550,13 +567,14 @@ def _build_logger_embed(data):
     return embed
 
 
-def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None, updateGUI=None, discord_message_queue=None):
+def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None, updateGUI=None, discord_message_queue=None, planter_command_queue=None):
     import modules.macro
     bot = commands.Bot(command_prefix="fuzz!", intents=discord.Intents.all())
     
     # Store pin requests queue
     _pin_requests = pin_requests
     _discord_message_queue = discord_message_queue
+    _planter_command_queue = planter_command_queue
 
     @bot.event
     async def on_ready():
@@ -3354,6 +3372,43 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         except Exception as e:
             await interaction.response.send_message(f"❌ Error resetting planter timer: {str(e)}")
 
+    @bot.tree.command(name="collectplanter", description="Interrupt the macro and collect one active planter")
+    @app_commands.describe(planter="Choose one of the currently active enabled planters")
+    @app_commands.autocomplete(planter=planter_reset_autocomplete)
+    async def collect_planter(interaction: discord.Interaction, planter: str):
+        """Queue an immediate planter collection in the running macro."""
+        if run.value != 2:
+            await interaction.response.send_message("Macro is not running")
+            return
+        if _planter_command_queue is None:
+            await interaction.response.send_message("❌ Planter command queue is not available.")
+            return
+
+        try:
+            settings = get_cached_settings()
+            canonical = _canonicalize_planter_name(planter)
+            target = next((item for item in _get_active_planter_targets(settings) if item["canonical"] == canonical), None)
+            if target is None:
+                await interaction.response.send_message(f"❌ No active planter was found for {_format_planter_name(planter)}.")
+                return
+            if not target.get("field"):
+                await interaction.response.send_message(f"❌ {_format_planter_name(planter)} has no saved field to collect from.")
+                return
+
+            _planter_command_queue.put({
+                "action": "collect",
+                "mode": target["mode"],
+                "index": target["index"],
+                "planter": target["planter"],
+                "field": target["field"],
+            })
+            skipTask.value = INTERRUPT_COLLECT_PLANTER
+            await interaction.response.send_message(
+                f"Collecting {_format_planter_name(target['planter'])} from {str(target['field']).replace('_', ' ').title()}. The macro will interrupt its current task."
+            )
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error queueing planter collection: {str(e)}")
+
     @bot.tree.command(name="plantertimers", description="View active planter timers")
     async def planter_timers(interaction: discord.Interaction):
         """View active planter timers without generating an hourly report"""
@@ -3577,7 +3632,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         embed.add_field(name="**Collectibles**", value="`/collectibles` - View collectibles\n`/collectible <item> <true/false>` - Enable or disable collectible", inline=False)
 
-        embed.add_field(name="**Planters**", value="`/plantertimers` - View active planter timers\n`/planterreset <planter>` - Reset the timer for one active enabled planter", inline=False)
+        embed.add_field(name="**Planters**", value="`/plantertimers` - View active planter timers\n`/planterreset <planter>` - Reset the timer for one active enabled planter\n`/collectplanter <planter>` - Interrupt the macro and collect one active planter", inline=False)
 
         embed.add_field(name="**Mob Runs**", value="`/mobs` - View mob configuration\n`/mob <mob> <true/false>` - Enable or disable mob run", inline=False)
 

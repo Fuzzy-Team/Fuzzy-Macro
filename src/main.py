@@ -39,6 +39,7 @@ from modules.controls.sleep import (
     INTERRUPT_SKIP,
     INTERRUPT_RESET,
     INTERRUPT_AFB_REROLL,
+    INTERRUPT_COLLECT_PLANTER,
 )
 # delete backup from previous update if pending
 try:
@@ -448,7 +449,7 @@ def canClaimTimedBearQuest(name):
     
 # (set_enabled moved into RichPresenceManager class)
 #controller for the macro
-def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMessageQueue=None):
+def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMessageQueue=None, planterCommandQueue=None):
     macro = macroModule.macro(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue)
     #invert the regularMobsInFields dict
     #instead of storing mobs in field, store the fields associated with each mob
@@ -472,6 +473,65 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
     
     macro.start()
     #macro.useItemInInventory("blueclayplanter")
+
+    def emptyAutoPlanterSlot():
+        return {
+            "planter": "",
+            "nectar": "",
+            "field": "",
+            "harvest_time": 0,
+            "nectar_est_percent": 0,
+            "placed_time": 0,
+            "grow_duration": 0,
+            "natural_grow_duration": 0,
+        }
+
+    def clearCollectedPlanterState(command):
+        mode = int(command.get("mode", 0) or 0)
+        index = int(command.get("index", -1) or -1)
+        if index < 0:
+            return
+
+        if mode == 1:
+            with open("./data/user/manualplanters.txt", "r") as f:
+                raw = f.read().strip()
+            planterData = ast.literal_eval(raw) if raw else {"planters": ["", "", ""], "fields": ["", "", ""], "gatherFields": ["", "", ""], "harvestTimes": [0, 0, 0], "cycles": [1, 1, 1]}
+            for key, emptyValue in (("planters", ""), ("fields", ""), ("gatherFields", "")):
+                if key in planterData and index < len(planterData[key]):
+                    planterData[key][index] = emptyValue
+            if "harvestTimes" in planterData and index < len(planterData["harvestTimes"]):
+                planterData["harvestTimes"][index] = 0
+            with open("./data/user/manualplanters.txt", "w") as f:
+                f.write(str(planterData))
+        elif mode == 2:
+            with open("./data/user/auto_planters.json", "r") as f:
+                autoData = json.load(f)
+            planters = autoData.get("planters", [])
+            if index < len(planters):
+                planters[index] = emptyAutoPlanterSlot()
+            autoData["planters"] = planters
+            with open("./data/user/auto_planters.json", "w") as f:
+                json.dump(autoData, f, indent=3)
+
+    def processPlanterCommandQueue():
+        if planterCommandQueue is None:
+            return False
+        handled = False
+        while not planterCommandQueue.empty():
+            command = planterCommandQueue.get()
+            if command.get("action") != "collect":
+                continue
+            planter = command.get("planter", "")
+            field = command.get("field", "")
+            if not planter or not field:
+                continue
+            macro.logger.webhook("", f"Collect planter command received: {planter.title()} in {field.title()}", "orange")
+            if runTask(macro.collectPlanter, args=(planter, field), resetAfter=True, allowAFB=False):
+                clearCollectedPlanterState(command)
+                macro.logger.webhook("", f"Collected {planter.title()} planter from {field.title()} and cleared its timer.", "bright green")
+            handled = True
+        return handled
+
     #function to run a task
     #makes it easy to do any checks after a task is complete (like stinger hunt, rejoin every, etc)
     def runTask(func = None, args = (), resetAfter = True, convertAfter = True, allowAFB = True):
@@ -490,7 +550,12 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 macro.logger.webhook("Task Reset", f"Resetting and retrying: {interrupted_status}", "orange")
             elif action == INTERRUPT_AFB_REROLL:
                 macro.logger.webhook("AFB Reroll", f"Reroll requested during: {interrupted_status}", "orange")
+            elif action == INTERRUPT_COLLECT_PLANTER:
+                macro.logger.webhook("Collect Planter", f"Collect planter requested during: {interrupted_status}", "orange")
             macro.reset(convert=True)
+            if action == INTERRUPT_COLLECT_PLANTER:
+                processPlanterCommandQueue()
+                return None
             if action == INTERRUPT_AFB_REROLL:
                 macro.AFBLIMIT = False
                 macro.AFBglitter = False
@@ -1955,6 +2020,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                     maxAllowedPlanters = min(maxAllowedPlanters, macro.setdat["auto_max_planters"])
 
                     blockedPlacements = set()
+                    blockedPlanters = set()
 
                     def getAvailableFields(occupiedFields):
                         return [
@@ -1968,7 +2034,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                             addedForField = 0
                             for planterObj in macroModule.autoPlanterRankings.get(field, []):
                                 planterName = planterObj["name"]
-                                if planterName in occupiedPlanters or (planterName, field) in blockedPlacements:
+                                if planterName in occupiedPlanters or planterName in blockedPlanters or (planterName, field) in blockedPlacements:
                                     continue
 
                                 settingPlanter = planterName.replace(" ", "_")
@@ -2112,7 +2178,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                             if gatherFlag:
                                 runTask(macro.gather, args=(candidate["field"],), resetAfter=False)
                         else:
-                            blockedPlacements.add((candidate["planter"], candidate["field"]))
+                            if getattr(macro, "lastPlanterPlacementFailure", None) == "missing_inventory":
+                                blockedPlanters.add(candidate["planter"])
+                            else:
+                                blockedPlacements.add((candidate["planter"], candidate["field"]))
                     
                     executedTasks.add(taskId)
                     return True
@@ -2916,6 +2985,7 @@ if __name__ == "__main__":
     presence = manager.Value(ctypes.c_wchar_p, "")
     logQueue = manager.Queue()
     discordMessageQueue = manager.Queue()
+    planterCommandQueue = manager.Queue()
     pin_requests = manager.Queue()  # Shared queue for pin requests
     start_keyboard_listener_fn = watch_for_hotkeys(run)
     logger = logModule.log(logQueue, False, None, False, blocking=False, discordMessageQueue=discordMessageQueue)
@@ -3154,7 +3224,7 @@ if __name__ == "__main__":
                 print("Detected change in discord bot token, killing previous bot process")
                 discordBotProc.terminate()
                 discordBotProc.join()
-            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI, discordMessageQueue), daemon=True)
+            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI, discordMessageQueue, planterCommandQueue), daemon=True)
             prevDiscordBotToken = currentDiscordBotToken
             discordBotProc.start()
         elif not shouldRunDiscordBot and discordBotProc is not None and discordBotProc.is_alive():
@@ -3280,7 +3350,7 @@ if __name__ == "__main__":
                                     but there are no more items left to craft.\n\
 				                    Check the 'repeat' setting on your blender items and reset blender data.")
             #macro proc
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue), daemon=True)
             macroProc.start()
 
             macro_version = settingsManager.getMacroVersion()
@@ -3386,7 +3456,7 @@ if __name__ == "__main__":
             appManager.closeApp("Roblox")
             keyboardModule.releaseMovement()
             mouse.mouseUp()
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state
@@ -3419,7 +3489,7 @@ if __name__ == "__main__":
             keyboardModule.releaseMovement()
             mouse.mouseUp()
             # restart macro process
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state

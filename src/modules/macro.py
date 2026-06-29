@@ -4510,7 +4510,7 @@ class macro:
                 self.planterCoords = res
                 return
             else:
-                self.logger.webhook("", f"Could not find {name}planter in inventory (attempt {attempt+1}) - invalidating cache and retrying", "red")
+                self.logger.webhook("", f"Could not find {name}planter in inventory (attempt {attempt+1}) - retrying", "red")
                 self.planterCoords = None
                 time.sleep(1)
 
@@ -4527,6 +4527,7 @@ class macro:
     #place the planter and return true if successfully placed
     def placePlanter(self, planter, field, glitter):
         st = time.time()
+        self.lastPlanterPlacementFailure = None
         name = planter.lower().replace(" ","").replace("-","")
         hotbarSlot = self.getPlanterHotbarSlot(planter)
 
@@ -4583,6 +4584,7 @@ class macro:
                     # Do not auto-disable planter settings here.
                     # A temporary state desync (already placed / stale planter data)
                     # can also make the planter unavailable in inventory.
+                    self.lastPlanterPlacementFailure = "missing_inventory"
                     updateHourlyTime()
                     return False
             #place planter
@@ -4638,6 +4640,7 @@ class macro:
                 updateHourlyTime()
                 return True
             self.logger.webhook("",f"Failed to Place Planter: {planter.title()}", "red", "screen", ping_category="ping_critical_errors")
+            self.lastPlanterPlacementFailure = placementError or "placement_failed"
             self.reset()
             # If failed to place, wait before next attempt
             if attempt < max_attempts - 1:
