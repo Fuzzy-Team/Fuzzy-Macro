@@ -1724,36 +1724,20 @@ select:focus {
   color: var(--text-main) !important;
 }
 
-.sprout-guide-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 1rem;
+.sprout-guide-image-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 1rem;
   width: 100%;
 }
 
-.sprout-guide-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
+.sprout-guide-image {
+  width: 100%;
+  max-width: 755px;
+  height: auto;
   border-radius: 8px;
-  padding: 1rem;
-}
-
-.sprout-guide-card h3 {
-  margin: 0 0 0.6rem;
-  color: var(--text-main);
-  font-size: 1rem;
-}
-
-.sprout-guide-card p,
-.sprout-guide-card li {
-  color: var(--text-muted);
-  font-size: 0.9rem;
-  line-height: 1.45;
-}
-
-.sprout-guide-card ul {
-  margin: 0;
-  padding-left: 1.1rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
 }
 
 .sprout-ai-token-row {
