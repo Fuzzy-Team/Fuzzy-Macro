@@ -1797,6 +1797,8 @@ def _initialise_runtime():
     standard_candidates = [
         (MODEL_DIR / "token_detection_standard.mlmodelc", "coreml", LABELS_TOKENS, "Standard", INPUT_WIDTH, INPUT_HEIGHT),
         (MODEL_DIR / "token_detection_standard.onnx", "opencv_onnx", LABELS_TOKENS, "Standard", INPUT_WIDTH, INPUT_HEIGHT),
+        (MODEL_DIR / "best.mlpackage", "coreml", LABELS_TOKENS, "Legacy Standard", INPUT_WIDTH, INPUT_HEIGHT),
+        (MODEL_DIR / "tokens.onnx", "opencv_onnx", LABELS_TOKENS, "Legacy Standard", INPUT_WIDTH, INPUT_HEIGHT),
     ]
     token_candidates = []
     if requested_filename is not None:
@@ -1895,10 +1897,18 @@ def _initialise_runtime():
         raise RuntimeError("Could not load any token AI model: " + "; ".join(token_load_errors))
     if token_path.name == "token_detection_standard.onnx":
         _delete_model_path(MODEL_DIR / "token_detection_standard.mlmodelc")
+        _delete_model_path(MODEL_DIR / "best.mlpackage")
     elif token_path.name == "token_detection_standard.mlmodelc":
         _delete_model_path(MODEL_DIR / "token_detection_standard.onnx")
-    _delete_model_path(MODEL_DIR / "best.mlpackage")
-    _delete_model_path(MODEL_DIR / "sprinkler.mlpackage")
+        _delete_model_path(MODEL_DIR / "tokens.onnx")
+        _delete_model_path(MODEL_DIR / "best.mlpackage")
+    elif token_path.name == "best.mlpackage":
+        _delete_model_path(MODEL_DIR / "token_detection_standard.mlmodelc")
+        _delete_model_path(MODEL_DIR / "token_detection_standard.onnx")
+        _delete_model_path(MODEL_DIR / "tokens.onnx")
+    elif token_path.name == "tokens.onnx":
+        _delete_model_path(MODEL_DIR / "token_detection_standard.mlmodelc")
+        _delete_model_path(MODEL_DIR / "best.mlpackage")
     sprinkler_session = None
     sprinkler_input = None
     sprinkler_output = None
@@ -1906,9 +1916,12 @@ def _initialise_runtime():
         if sprinkler_model_kind == "opencv_onnx":
             sprinkler_session, sprinkler_input, sprinkler_output = _load_onnx_model(sprinkler_path)
             _delete_model_path(MODEL_DIR / "sprinkler_detection_standard.mlmodelc")
+            _delete_model_path(MODEL_DIR / "sprinkler.mlpackage")
         else:
             sprinkler_session, sprinkler_input, sprinkler_output = _load_coreml_model(sprinkler_path)
             _delete_model_path(MODEL_DIR / "sprinkler_detection_standard.onnx")
+            _delete_model_path(MODEL_DIR / "sprinkler.onnx")
+            _delete_model_path(MODEL_DIR / "sprinkler.mlpackage")
 
     return {
         "capture": capture,
