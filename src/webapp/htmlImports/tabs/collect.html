@@ -675,34 +675,13 @@
       const sproutContainers = parentCollectSprouts.querySelectorAll(".standard-container");
       const sproutGuideContainer = sproutContainers[sproutContainers.length - 1];
       const sproutGuide = document.createElement("div");
-      sproutGuide.className = "sprout-guide poppins-regular";
+      sproutGuide.className = "sprout-guide-image-container";
       sproutGuide.innerHTML = `
-        <div class="sprout-guide-grid">
-          <div class="sprout-guide-card">
-            <h3>Field Multipliers</h3>
-            <ul>
-              <li><strong>Red fields:</strong> 4x Strawberries, no Blueberries.</li>
-              <li><strong>Strawberry:</strong> 2x more Strawberries than other red fields.</li>
-              <li><strong>Blue fields:</strong> 6x Blueberries, no Strawberries.</li>
-              <li><strong>Sunflower:</strong> 7x Sunflower Seeds.</li>
-              <li><strong>Pineapple:</strong> 7x Pineapples.</li>
-              <li><strong>35 Bee Zone:</strong> 20% more rewards and higher pollen requirement.</li>
-              <li><strong>Coconut:</strong> adds Coconuts and Tropical Drinks.</li>
-            </ul>
-          </div>
-          <div class="sprout-guide-card">
-            <h3>Common / Rare</h3>
-            <p><strong>Common:</strong> Crafting Materials, Tickets, Royal Jelly, Treats, Honey.</p>
-            <p><strong>Rare:</strong> Silver Egg, Star Jelly, Crafting Materials, Tickets, Royal Jelly, Treats, Honey.</p>
-            <p>Crafting Materials include Red Extract, Blue Extract, Oil, Enzymes, and Glitter.</p>
-          </div>
-          <div class="sprout-guide-card">
-            <h3>Higher Rarities</h3>
-            <p><strong>Epic:</strong> Gold Egg, Star Jelly, Crafting Materials.</p>
-            <p><strong>Legendary / Supreme:</strong> Diamond Egg, Star Jelly, Crafting Materials.</p>
-            <p><strong>Gummy / Moon / Festive / Sticker:</strong> special event items where supported by token detection.</p>
-          </div>
-        </div>
+        <img
+          src="./assets/cheatsheet/sprouts.png"
+          alt="Sprout Drops Cheat Sheet"
+          class="zoomable-image sprout-guide-image"
+        />
       `;
       sproutGuideContainer.appendChild(sproutGuide);
 
