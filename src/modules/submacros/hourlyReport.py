@@ -1418,13 +1418,24 @@ class HourlyReportDrawer:
                 labels.append(t.strftime("%H:%M"))
         return labels
 
-    def _drawTimeLabels(self, graph, y):
+    def _elapsedTimeLabels(self, duration, count=7):
+        duration = max(0, int(duration or 0))
+        labels = []
+        for i in range(count):
+            seconds = round(duration * i / max(count - 1, 1))
+            if duration >= 3600:
+                labels.append(self._durationHMS(seconds))
+            else:
+                labels.append(f"{seconds // 60:02d}:{seconds % 60:02d}")
+        return labels
+
+    def _drawTimeLabels(self, graph, y, labels=None):
         x, _, w, _ = graph
         font = self.getFont("bold", 44)
-        labels = self._timeLabels()
+        labels = labels or self._timeLabels()
         for i, label in enumerate(labels):
             bbox = self.draw.textbbox((0, 0), label, font=font)
-            self.draw.text((x + w * i / 6 - (bbox[2] - bbox[0]) / 2, y), label, font=font, fill=self.bodyColor)
+            self.draw.text((x + w * i / max(len(labels) - 1, 1) - (bbox[2] - bbox[0]) / 2, y), label, font=font, fill=self.bodyColor)
 
     def _drawAreaSeries(self, graph, data, color, maxY=None, minY=0, width=6, alpha=115, smooth=False):
         x, y, w, h = graph
@@ -1501,7 +1512,7 @@ class HourlyReportDrawer:
                 small = self.getFont("bold", 30)
                 for i, label in enumerate(honeyGraphLabels):
                     bbox = self.draw.textbbox((0, 0), label, font=small)
-                    self.draw.text((graph[0] + graph[2] * i / 6 - (bbox[2] - bbox[0]) / 2, graph[1] + graph[3] + 14), label, font=small, fill=self.bodyColor)
+                    self.draw.text((graph[0] + graph[2] * i / max(len(honeyGraphLabels) - 1, 1) - (bbox[2] - bbox[0]) / 2, graph[1] + graph[3] + 14), label, font=small, fill=self.bodyColor)
 
     def _currentBuffValue(self, values, key):
         data = values.get(key, []) if isinstance(values, dict) else []
@@ -1631,7 +1642,7 @@ class HourlyReportDrawer:
             self.draw.text((cx - (bbox[2] - bbox[0]) / 2, yy), text, font=font, fill=color)
             yy += 74
 
-    def _drawUptimeRows(self, region, uptimeBuffList, uptimeBuffsValues, buffGatherIntervals, reportKind):
+    def _drawUptimeRows(self, region, uptimeBuffList, uptimeBuffsValues, buffGatherIntervals, reportKind, timeLabels=None):
         self._drawPanel(region, "BUFF UPTIME")
         x, y, w, h = region
         graphX = x + 320
@@ -1663,7 +1674,7 @@ class HourlyReportDrawer:
                 self._drawAreaSeries(graph, data, rgb, maxY=maxY, width=4, alpha=115)
             label = f"x0-{maxY}" if chartType != "binary" else "x0-1"
             self.draw.text((x + 74, gy + gh - 38), label, font=labelFont, fill=self.bodyColor)
-        self._drawTimeLabels((graphX, top, graphW, h - 260), y + h - 85)
+        self._drawTimeLabels((graphX, top, graphW, h - 260), y + h - 85, timeLabels)
 
     def _drawStatMonitorReport(self, reportTitle, hourlyReportStats, sessionTime, honeyPerSec, sessionHoney,
                                honeyThisHour, onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData,
@@ -1693,6 +1704,7 @@ class HourlyReportDrawer:
             self._drawPanel(region, None)
         for key, region in statRegions.items():
             self._drawPanel(region, None)
+        timeLabels = self._elapsedTimeLabels(sessionTime) if reportTitle == "Session Report" else self._timeLabels()
 
         self._drawPanel(regions["honey/sec"], "HONEY/SEC")
         honeyGraph = (440, 250, 3600, 800)
@@ -1701,17 +1713,17 @@ class HourlyReportDrawer:
         maxHoney = max(max(honeyData), 1)
         self._drawYAxisLabels(honeyGraph, [self.millify(maxHoney - maxHoney * i / 4) for i in range(5)], 40)
         self._drawAreaSeries(honeyGraph, honeyData, (254, 202, 64), maxY=maxHoney, alpha=125)
-        self._drawTimeLabels(honeyGraph, regions["honey/sec"][1] + regions["honey/sec"][3] - 85)
+        self._drawTimeLabels(honeyGraph, regions["honey/sec"][1] + regions["honey/sec"][3] - 85, timeLabels)
 
         self._drawPanel(regions["backpack"], "BACKPACK")
         backpackGraph = (440, 1450, 3600, 860)
         self._drawGraphGrid(backpackGraph, xTicks=6, yTicks=2)
         self._drawYAxisLabels(backpackGraph, ["100%", "50%", "0%"], 40)
         self._drawAreaSeries(backpackGraph, hourlyReportStats.get("backpack_per_min", [0]), (65, 255, 128), maxY=100, alpha=130)
-        self._drawTimeLabels(backpackGraph, regions["backpack"][1] + regions["backpack"][3] - 85)
+        self._drawTimeLabels(backpackGraph, regions["backpack"][1] + regions["backpack"][3] - 85, timeLabels)
 
         uptimeList = self.normalizeUptimeBuffList(configuredUptimeBuffs)
-        self._drawUptimeRows(regions["buffs"], uptimeList, uptimeBuffsValues, buffGatherIntervals, reportTitle)
+        self._drawUptimeRows(regions["buffs"], uptimeList, uptimeBuffsValues, buffGatherIntervals, reportTitle, timeLabels)
 
         totalBreakdown = max(1, sessionTime)
         hourRows = [
@@ -1726,7 +1738,7 @@ class HourlyReportDrawer:
             {"label": "Other", "seconds": sessionSource.get("bug_run_time", hourlyReportStats.get("bug_run_time", 0)) + sessionSource.get("misc_time", hourlyReportStats.get("misc_time", 0)), "color": self.otherColor},
         ]
 
-        self._drawActivityCard(statRegions["lasthour"], "LAST HOUR", hourRows, honeyData, self._timeLabels())
+        self._drawActivityCard(statRegions["lasthour"], "LAST HOUR", hourRows, honeyData, timeLabels)
         x, y, w, _ = statRegions["lasthour"]
         topFont = self.getFont("bold", 60)
         self.draw.text((x + 200, y + 96), "Honey Earned", font=topFont, fill=self.bodyColor)
@@ -1736,7 +1748,7 @@ class HourlyReportDrawer:
         self.draw.text((x + 170, y + 180), "Hourly Average", font=topFont, fill=self.bodyColor)
         self.draw.text((x + 720, y + 180), self.millify(avg), font=topFont, fill=self.bodyColor)
 
-        self._drawActivityCard(statRegions["session"], "SESSION", sessionRows, onlyValidHourlyHoney or [0], self._timeLabels())
+        self._drawActivityCard(statRegions["session"], "SESSION", sessionRows, onlyValidHourlyHoney or [0], timeLabels)
         x, y, w, _ = statRegions["session"]
         currentHoney = onlyValidHourlyHoney[-1] if onlyValidHourlyHoney else 0
         sessionLines = [("Current Honey", self.millify(currentHoney)), ("Session Honey", self.millify(sessionHoney)), ("Session Time", self._durationHMS(sessionTime))]
