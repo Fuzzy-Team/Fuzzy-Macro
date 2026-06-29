@@ -44,10 +44,7 @@ def _macos_version():
 
 
 def _supported_model_names():
-    # .mlpackage is the preferred Core ML package format on macOS 12+.
-    if _macos_version() >= (12, 0):
-        return COREML_MODELS
-    return ONNX_MODELS
+    return COREML_MODELS + ONNX_MODELS
 
 
 def _delete_path(path):

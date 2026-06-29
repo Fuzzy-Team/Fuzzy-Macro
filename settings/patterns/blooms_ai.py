@@ -1091,6 +1091,14 @@ def _load_coreml_model(model_path):
     if ct is None:
         raise RuntimeError("coremltools is required for BloomsAI gathering. Install coremltools, then restart the macro.")
 
+    model_path = Path(model_path)
+    if model_path.suffix.lower() == ".mlmodelc":
+        compiled_model_class = getattr(ct.models, "CompiledMLModel", None)
+        if compiled_model_class is None:
+            raise RuntimeError("This coremltools version cannot load compiled .mlmodelc bundles. Upgrade coremltools, then restart the macro.")
+        model = compiled_model_class(str(model_path), compute_units=ct.ComputeUnit.ALL)
+        return model, "image", "var_1445"
+
     model = ct.models.MLModel(str(model_path), compute_units=ct.ComputeUnit.ALL)
     description = model.get_spec().description
     input_name = description.input[0].name
@@ -2159,11 +2167,12 @@ def _initialise_runtime():
     if token_model_kind == "opencv_onnx":
         token_session, token_input, token_output = _load_onnx_model(token_path)
         _delete_model_path(MODEL_DIR / "token_detection_standard.mlmodelc")
+        _delete_model_path(MODEL_DIR / "best.mlpackage")
     else:
         token_session, token_input, token_output = _load_coreml_model(token_path)
         _delete_model_path(MODEL_DIR / "token_detection_standard.onnx")
-    _delete_model_path(MODEL_DIR / "best.mlpackage")
-    _delete_model_path(MODEL_DIR / "sprinkler.mlpackage")
+        _delete_model_path(MODEL_DIR / "tokens.onnx")
+        _delete_model_path(MODEL_DIR / "best.mlpackage")
     sprinkler_session = None
     sprinkler_input = None
     sprinkler_output = None
@@ -2171,9 +2180,12 @@ def _initialise_runtime():
         if sprinkler_model_kind == "opencv_onnx":
             sprinkler_session, sprinkler_input, sprinkler_output = _load_onnx_model(sprinkler_path)
             _delete_model_path(MODEL_DIR / "sprinkler_detection_standard.mlmodelc")
+            _delete_model_path(MODEL_DIR / "sprinkler.mlpackage")
         else:
             sprinkler_session, sprinkler_input, sprinkler_output = _load_coreml_model(sprinkler_path)
             _delete_model_path(MODEL_DIR / "sprinkler_detection_standard.onnx")
+            _delete_model_path(MODEL_DIR / "sprinkler.onnx")
+            _delete_model_path(MODEL_DIR / "sprinkler.mlpackage")
 
     return {
         "capture": capture,
