@@ -540,8 +540,6 @@ class FinalReport:
         if not rawHoneyPerMin:
             rawHoneyPerMin = [0]
         originalHoneySampleCount = len(rawHoneyPerMin)
-        if originalHoneySampleCount < 3:
-            rawHoneyPerMin = [0] * (3 - originalHoneySampleCount) + rawHoneyPerMin
 
         startHoney = self.hourlyReport.hourlyReportStats.get("start_honey", 0)
         normalizedHoneyPerMin = self._normalizeCumulativeHoneySeries(rawHoneyPerMin, baseline=startHoney)
