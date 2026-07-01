@@ -855,6 +855,13 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
 
         updateGUI.value = 1
 
+        # Check if Vic Hop mode is enabled
+        if macro.setdat.get("macro_mode", "normal") == "vic_hop":
+            macro.setdat["stinger_hunt"] = True
+            macro.enableNightDetection = True
+            runTask(macro.vicHop, resetAfter=False, allowAFB=False)
+            continue
+
         # Check if field-only mode is enabled
         if macro.setdat.get("macro_mode", "normal") == "field":
             # Field-only mode: skip all tasks except field gathering

@@ -93,6 +93,7 @@ start_keybind=F1
 stop_keybind=F3
 pause_keybind=F2
 hotbar_buff_start_keybind=F4
+macro_mode=normal
 gui_theme=Brown
 ignore_petal_quests=False
 auto_update_check_disabled=False

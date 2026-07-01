@@ -2,6 +2,7 @@
   <div id="kill-nav" class="sub-nav-bar">
     <div id="kill-settings" class="kill-tab-item">Settings</div>
     <div id="kill-regular" class="kill-tab-item">Regular</div>
+    <div id="kill-vicious-bee" class="kill-tab-item">Vicious Bee</div>
     <div id="kill-boss" class="kill-tab-item">Bosses</div>
     <div id="kill-misc" class="kill-tab-item">Misc</div>
   </div>
@@ -43,6 +44,7 @@
           },
         },
       ]);
+
     </script>
   </div>
 
@@ -108,10 +110,10 @@
     </script>
   </div>
 
-  <div id="kill-boss-tab" class="standard-container sub-tab-panel">
+  <div id="kill-vicious-bee-tab" class="standard-container sub-tab-panel">
     <script>
-      const bossMobsParent = document.getElementById("kill-boss-tab");
-      buildStandardContainer(bossMobsParent, "Stinger Hunt 🌙", "", [
+      const viciousBeeParent = document.getElementById("kill-vicious-bee-tab");
+      buildStandardContainer(viciousBeeParent, "Stinger Hunt 🌙", "", [
         {
           id: "stinger_hunt",
           title: "Enable Task",
@@ -177,6 +179,88 @@
         },
       ]);
 
+      buildStandardContainer(viciousBeeParent, "Vic Hop", "", [
+        {
+          id: "vic_hop_hop_timeout",
+          title: "Hop Timeout",
+          desc: "Seconds to wait before checking after a hop.",
+          type: {
+            name: "textbox",
+            inputType: "int",
+            inputLimit: 3,
+            triggerFunction: saveProfileTriggerFunction,
+            length: 6,
+          },
+        },
+        {
+          id: "vic_hop_claim_hive",
+          title: "Claim Hive Before Searching",
+          desc: "After a night server is confirmed, claim a hive before searching.",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "vic_hop_reopen_after_hours",
+          title: "Re-Open Roblox After",
+          desc: "Force a fresh Roblox launch after this many hours searching.",
+          type: {
+            name: "textbox",
+            inputType: "float",
+            inputLimit: 4,
+            triggerFunction: saveProfileTriggerFunction,
+            length: 6,
+          },
+        },
+      ]);
+
+      viciousBeeParent.insertAdjacentHTML(
+        "beforeend",
+        `
+          <div class="poppins-medium standard-container" style="display:block; justify-items:unset; padding-top:1rem;">
+            <h2 id="vic-hop-stats">Vic Hop Stats</h2>
+            <p style="font-weight:500; font-size:1rem;">Tracked from Vic Hop mode.</p>
+            <div class="seperator"></div>
+            <table class="standard-stats-table">
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>Servers Hopped</th>
+                  <th>Nights Detected</th>
+                  <th>Vics Detected</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>This Macro</td>
+                  <td id="vic-hop-session-servers">0</td>
+                  <td id="vic-hop-session-nights">0</td>
+                  <td id="vic-hop-session-vics">0</td>
+                </tr>
+                <tr>
+                  <td>All Macros</td>
+                  <td id="vic-hop-all-servers">0</td>
+                  <td id="vic-hop-all-nights">0</td>
+                  <td id="vic-hop-all-vics">0</td>
+                </tr>
+                <tr>
+                  <td>Lifetime</td>
+                  <td id="vic-hop-lifetime-servers">0</td>
+                  <td id="vic-hop-lifetime-nights">0</td>
+                  <td id="vic-hop-lifetime-vics">0</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        `
+      );
+    </script>
+  </div>
+
+  <div id="kill-boss-tab" class="standard-container sub-tab-panel">
+    <script>
+      const bossMobsParent = document.getElementById("kill-boss-tab");
       buildStandardContainer(bossMobsParent, "Stump Snail 🐌", "", [
         {
           id: "stump_snail",

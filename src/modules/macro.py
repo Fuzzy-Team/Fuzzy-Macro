@@ -52,6 +52,10 @@ import pygetwindow as gw
 from modules.submacros.hasteCompensation import HasteCompensationRevamped
 from modules import bitmap_matcher
 import json
+from pathlib import Path
+import importlib
+
+ct = None
 
 _shift_lock_template_cache = None
 
@@ -79,6 +83,17 @@ SPROUT_REPLANT_FALLBACK_SECONDS = {
     "sticker": 120,
     "debug": 120,
 }
+
+MODEL_DIRS = (
+    Path("models"),
+    Path("src/data/models"),
+    Path("../models"),
+    Path("../src/data/models"),
+)
+NIGHT_SKY_AVERAGE_THRESHOLDS = (50.0, 50.0, 51.0)
+VIC_DETECTION_INPUT_SIZE = (800, 640)
+VIC_DETECTION_MIN_CONFIDENCE = 0.20
+VIC_DETECTION_SCAN_INTERVAL = 0.75
 
 class _PauseAwareTimeModule:
     def __init__(self, time_module):
@@ -708,10 +723,33 @@ class macro:
         self.collectCooldowns["sticker_printer"] = 1*60*60
 
         #night detection variables
-        self.enableNightDetection = True if self.setdat["stinger_hunt"] else False
+        self.enableNightDetection = True if self.setdat["stinger_hunt"] or self.setdat.get("macro_mode") == "vic_hop" else False
         self.canDetectNight = True
         self.night = False
         self.location = "spawn"
+        self.vicDetectionModel = None
+        self.vicDetectionModelPath = None
+        self.vicDetectionModelError = None
+        self.vicDetectionModelWarned = False
+        self.vicSearchField = None
+        self.lastVicDetectionModelScan = 0
+        self.lastNightSkyAverageLog = 0
+        self.vicHopStartedAt = None
+        self.lastVicHopRobloxReopen = 0
+        self.vicHopJoinedPublicServer = False
+        self.vicHopStats = {
+            "servers_hopped": 0,
+            "nights_detected": 0,
+            "vics_detected": 0,
+        }
+        for stat in self.vicHopStats:
+            sessionSetting = f"vic_hop_session_{stat}"
+            self.setdat[sessionSetting] = 0
+            try:
+                settingsManager.saveProfileSetting(sessionSetting, 0)
+            except Exception:
+                pass
+        self.countVicDetectionForVicHop = False
         #all fields that vic can appear in
         self.vicFields = ["pepper", "mountain top", "rose", "cactus", "spider", "clover"]
         #filter it to only include fields the player has enabled
@@ -783,7 +821,7 @@ class macro:
             self.collectCooldowns = dict([(k, v[2]) for k,v in mergedCollectData.items()])
             self.collectCooldowns["sticker_printer"] = 1*60*60
             # Update night detection
-            self.enableNightDetection = True if self.setdat["stinger_hunt"] else False
+            self.enableNightDetection = True if self.setdat["stinger_hunt"] or self.setdat.get("macro_mode") == "vic_hop" else False
             # Update vic fields
             self.vicFields = ["pepper", "mountain top", "rose", "cactus", "spider", "clover"]
             self.vicFields = [x for x in self.vicFields if self.setdat["stinger_{}".format(x.replace(" ","_"))]]
@@ -1081,114 +1119,127 @@ class macro:
             return True
         return time.monotonic() < self._inactiveHoneyResetResumeBlockUntil
     
-    #thread to detect night
-    #night detection is done by converting the screenshot to hsv and checking the average brightness
-    #TODO:
-    # MAYBE this doesnt actually need to be a thread? Check for night after each reset, when converting and when gathering
-    def detectNight(self):
-        #detects the average brightness of the screen. This isn't very reliable since things like lights can mess it up
-        #the threshold isnt accurate
-        def isNightBrightness(hsv):
-            hsv = hsv[int(hsv.shape[0]/3):hsv.shape[0]]
-            vValues = np.sum(hsv[:, :, 2])
-            area = hsv.shape[0] * hsv.shape[1]
-            avg_brightness = vValues/area
-            #threshold for night. It must be > 10 to deal with cases where the player is inside a fruit or stuck against a wall 
-            return 10 < avg_brightness < 80 
+    def _night_screen(self):
+        screen = mssScreenshotNP(self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw, self.robloxWindow.mh)
+        return cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
 
-        #Detect the color of the floor at spawn
-        #Useful when resetting/converting
-        def isSpawnFloorNight(hsv):
-            hsv = hsv[int(hsv.shape[0]/2):hsv.shape[0]]
-            lower = np.array([99, 45, 102])
-            upper = np.array([105, 51, 112])
+    def _night_sky_region(self, bgr):
+        height = max(1, int(bgr.shape[0]))
+        width = max(1, int(bgr.shape[1]))
+        sky_top = max(0, int(height * 0.04))
+        sky_bottom = min(height, max(sky_top + 1, int(height * 0.24)))
+        sky_left = max(0, int(width * 0.22))
+        sky_right = min(width, max(sky_left + 1, int(width * 0.78)))
+        return bgr[sky_top:sky_bottom, sky_left:sky_right]
 
-            #might increase kernel size on retina
-            kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(15,15))
+    def _is_night_by_sky_averages(self, bgr):
+        sky = self._night_sky_region(bgr)
+        if sky.size == 0:
+            return None
+        averages = tuple(float(x) for x in cv2.mean(sky)[:3])
+        now = time.monotonic()
+        if now - self.lastNightSkyAverageLog > 5:
+            self.lastNightSkyAverageLog = now
+            try:
+                self.logger.log("Skybox color averages: %.2f, %.2f, %.2f" % averages)
+            except Exception:
+                pass
+        return all(
+            averages[index] < NIGHT_SKY_AVERAGE_THRESHOLDS[index]
+            for index in range(3)
+        )
 
-            mask = cv2.inRange(hsv, lower, upper)   
-            mask = cv2.erode(mask, kernel, 2)
-
-            #if np.mean = 0, no color ranges are detected, is day, hence return false
-            return np.mean(mask)
-        
-        def isNightSky(bgr):
-            y = 30*self.robloxWindow.multi
-            #crop the image to only the area above buff
-            bgr = bgr[0:y, 180*self.robloxWindow.multi:int(self.robloxWindow.mw)]
-            w,h = bgr.shape[:2]
-            #check if a 15x15 area that is entirely black
-            for x in range(w-15):
-                for y in range(h-15):
-                    area = bgr[x:x+15, y:y+15]
-                    if np.all(area == [0, 0, 0]):
-                        return True
+    def _has_night_sky(self, bgr):
+        sky_height = max(1, int(38 * self.robloxWindow.multi))
+        left = max(0, int(160 * self.robloxWindow.multi))
+        right = max(left + 1, min(int(self.robloxWindow.mw), bgr.shape[1]))
+        sky = bgr[:sky_height, left:right]
+        if sky.size == 0:
             return False
-        
-        #detect the color of the grass in fields
-        #useful when gathering
-        def isGrassNight(bgr):       
-            dayColors = [
-                [(47, 117, 57), cv2.getStructuringElement(cv2.MORPH_RECT, (6, 6))], #ground
-                [(46, 117, 58), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))], #dande
-                [(60, 156, 74), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))], #stump
-                [(38, 114, 51), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))], #pa
-                [(66, 123, 40), cv2.getStructuringElement(cv2.MORPH_RECT, (6, 6))], #clov
-                [(32, 211, 22), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))], #ant
-            ]
+        black_mask = cv2.inRange(sky, np.array([0, 0, 0]), np.array([7, 7, 7]))
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15))
+        return bool(np.any(cv2.erode(black_mask, kernel, iterations=1) == 255))
 
-            nightColors = [
-                [(23, 72, 30), cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))], #a
-                [(17, 71, 28), cv2.getStructuringElement(cv2.MORPH_RECT, (6, 6))], #dande
-            ]
+    def _has_night_floor(self, bgr):
+        hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+        lower, upper = nightFloorDetectThresholds[0]
+        lower_half = hsv[int(hsv.shape[0] / 2):hsv.shape[0]]
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15))
+        mask = cv2.inRange(lower_half, lower, upper)
+        mask = cv2.erode(mask, kernel, 2)
+        return bool(np.mean(mask) > 0)
 
-            bgr = bgr[0:bgr.shape[0]- (100*self.robloxWindow.multi)]
-            dayScreen = bgr[int(bgr.shape[0]*2/5):bgr.shape[0]].copy()
-            #detect day
-            for color, kernel in dayColors:
-                if findColorObjectRGB(dayScreen, color, variance=6, kernel=kernel, mode="box"):
-                    return False
-            #day not found, detect Night
-            nightScreen = bgr[int(bgr.shape[0]/2):bgr.shape[0]].copy()
-            for color, kernel in nightColors:
-                if findColorObjectRGB(nightScreen, color, variance=6, kernel=kernel, mode="box"):
-                    return True
-                
-            return False
+    def _has_night_grass(self, bgr):
+        dayColors = [
+            [(47, 117, 57), cv2.getStructuringElement(cv2.MORPH_RECT, (6, 6))],
+            [(46, 117, 58), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))],
+            [(60, 156, 74), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))],
+            [(38, 114, 51), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))],
+            [(66, 123, 40), cv2.getStructuringElement(cv2.MORPH_RECT, (6, 6))],
+            [(32, 211, 22), cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))],
+        ]
+        nightColors = [
+            [(23, 72, 30), cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))],
+            [(17, 71, 28), cv2.getStructuringElement(cv2.MORPH_RECT, (6, 6))],
+        ]
 
-        def isNight():
-            screen = mssScreenshotNP(self.robloxWindow.mx,self.robloxWindow.my, self.robloxWindow.mw, self.robloxWindow.mh)
-            # Convert the image from BGRA to HSV
-            bgr = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
-            hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+        usable_height = max(1, bgr.shape[0] - int(100 * self.robloxWindow.multi))
+        bgr = bgr[:usable_height]
+        dayScreen = bgr[int(bgr.shape[0] * 2 / 5):bgr.shape[0]].copy()
+        for color, kernel in dayColors:
+            if findColorObjectRGB(dayScreen, color, variance=6, kernel=kernel, mode="box"):
+                return False
 
-            if self.converting:
-                nightDetected = isNightSky(bgr)
-            else:
-                nightDetected = isGrassNight(bgr)
-
-            #night detected
-            if nightDetected:
-                self.nightDetectStreaks += 1
-                #self.logger.webhook("", f"Night Detected? ({self.nightDetectStreaks})", "red", "screen")
-                #im = Image.fromarray(cv2.cvtColor(screen, cv2.COLOR_BGR2RGB))
-                #im.save(f"night-{time.time()}.png")
-            else: 
-                #failed to detect night, reset streak counter
-                self.nightDetectStreaks = 0
-
-            #detected night consecutively for 5 times or more
-            if self.nightDetectStreaks >= 5:
+        nightScreen = bgr[int(bgr.shape[0] / 2):bgr.shape[0]].copy()
+        for color, kernel in nightColors:
+            if findColorObjectRGB(nightScreen, color, variance=6, kernel=kernel, mode="box"):
                 return True
-            
+        return False
+
+    def isNightNow(self):
+        bgr = self._night_screen()
+        sky_average_result = self._is_night_by_sky_averages(bgr)
+        if sky_average_result is not None:
+            return sky_average_result
+        if self._has_night_sky(bgr):
+            return True
+        if self.converting or self.location == "spawn":
+            return self._has_night_floor(bgr)
+        return self._has_night_grass(bgr) or self._has_night_floor(bgr)
+
+    def confirmNight(self, confirmations=5, delay=0.4):
+        hits = 0
+        for _ in range(confirmations):
+            if not self.canDetectNight:
+                self.nightDetectStreaks = 0
+                return False
+            if self.isNightNow():
+                hits += 1
+            else:
+                hits = 0
+            if hits >= confirmations:
+                self.nightDetectStreaks = confirmations
+                return True
+            time.sleep(delay)
+        self.nightDetectStreaks = hits
+        return False
+
+    def detectNight(self):
+        if not self.canDetectNight:
             return False
-        
-        if self.canDetectNight and isNight():
-            self.night = True
-            self.logger.webhook("","Night detected","dark brown", "screen")
-            time.sleep(200) #wait for night to end
-            self.night = False
+        if self.isNightNow():
+            self.nightDetectStreaks += 1
+        else:
             self.nightDetectStreaks = 0
+        if self.nightDetectStreaks < 5:
+            return False
+
+        self.night = True
+        self.logger.webhook("", "Night detected", "dark brown", "screen")
+        time.sleep(200)
+        self.night = False
+        self.nightDetectStreaks = 0
+        return True
 
     def detectGuidingStarAnnouncement(self):
         if not self.setdat.get("guiding_star_announcements", False):
@@ -2241,9 +2292,6 @@ class macro:
         convertedBackpack = False
         inactiveHoneyChecks = 0
 
-        if self.enableNightDetection:
-            self.keyboard.press(",")
-        
         while True:
             # Check if paused and wait
             if self.checkPauseAndWait():
@@ -2280,8 +2328,6 @@ class macro:
                         self.clear_task_status()
                         if liveGatherReport:
                             liveGatherReport.stop()
-                        if self.enableNightDetection:
-                            self.keyboard.press(".")
                         self.converting = False
                         self.reset(convert=False)
                         return False
@@ -2292,7 +2338,6 @@ class macro:
                 self.hourlyReport.addHourlyStat("converting_time", time.time()-st)
                 if liveGatherReport:
                     liveGatherReport.stop()
-                self.keyboard.press(".")
                 self.converting = False
                 self.stingerHunt()
                 return
@@ -2359,8 +2404,6 @@ class macro:
             self.logger.webhook("", f'Waiting for an additional {wait} seconds', "light green")
         time.sleep(wait)
 
-        if self.enableNightDetection:
-            self.keyboard.press(".")
         self.converting = False
         self.hourlyReport.addHourlyStat("converting_time", time.time()-st)
         return True
@@ -2944,220 +2987,411 @@ class macro:
             #find hive
             time.sleep(7) #wait for the joined friend popup to disappear
             mouse.click()
-            # self.keyboard.press("space")
-            # time.sleep(0.5)
-            # self.keyboard.walk("w",5+(i*0.5),0)
-            # self.keyboard.walk("s",0.3,0)
-            # self.keyboard.walk("d",5,0)
-            # self.keyboard.walk("s",0.3,0)
-            hiveNumber = self.setdat["hive_number"]
-            excludedHiveSlotsRaw = self.setdat.get("hive_exclude_slot", [])
-            if not isinstance(excludedHiveSlotsRaw, (list, tuple, set)):
-                excludedHiveSlotsRaw = [] if excludedHiveSlotsRaw in (None, "", 0, "0") else [excludedHiveSlotsRaw]
-            excludedHiveSlots = set()
-            for slot in excludedHiveSlotsRaw:
-                try:
-                    slotNumber = int(slot)
-                except (TypeError, ValueError):
-                    continue
-                if 1 <= slotNumber <= 6:
-                    excludedHiveSlots.add(slotNumber)
-            rejoinSuccess = False
-            claimFirstAvailableHive = self.setdat.get("claim_first_available_hive", True)
-            claimFirstAvailableHive = claimFirstAvailableHive is not False
-            availableSlots = [] #store hive slots that are claimable when not claiming the first available hive
-            newHiveNumber = 0
-            hiveAlreadyClaimed = False
-        
-            # self.keyboard.keyDown("d", False)
-            # self.keyboard.tileWait(4)
-            # self.keyboard.keyDown("w", False)
-            # self.keyboard.tileWait(20)
-            # self.keyboard.keyUp("d", False)
-            # self.keyboard.keyUp("w", False)
-            self.setRobloxWindowInfo()
-            self.keyboard.keyDown("d", False)
-            self.keyboard.timeWaitNoHasteCompensation(0.548)
-            self.keyboard.keyDown("w", False)
-            self.keyboard.timeWaitNoHasteCompensation(2.9)
-            self.keyboard.keyUp("d", False)
-            self.keyboard.keyUp("w", False)
-            for _ in range(3):
-                time.sleep(0.4)
-                if self.isBesideE(["claim", "hive", "send", "trad", "has"]):
-                    break
-                self.stepBackOntoHivePad()
-
-            def isHiveAvailable():
-                return self.isBesideE(["claim", "hive"], ["send", "trade"], log=True)
-
-            def isOtherHive():
-                return self.isBesideE(["send", "trad", "trade"], ["claim"], log=True)
-
-            def isExcludedSlot(slot):
-                return slot in excludedHiveSlots
-
-            def settleOnHivePad():
-                if not (
-                    self.isMakeHoneyPrompt(log=True)
-                    or self.isBesideE(["claim", "hive", "send", "trad", "trade", "has"], log=True)
-                ):
-                    self.stepBackOntoHivePad()
-
-            def boundedHiveSlot(slot):
-                return max(1, min(6, int(slot)))
-
-            currentHiveSlot = 1
-
-            def moveToHiveSlot(targetSlot):
-                nonlocal currentHiveSlot
-                targetSlot = boundedHiveSlot(targetSlot)
-                slotDelta = targetSlot - currentHiveSlot
-                if slotDelta > 0:
-                    self.walkHiveSlots("a", slotDelta)
-                elif slotDelta < 0:
-                    self.walkHiveSlots("d", abs(slotDelta))
-                currentHiveSlot = targetSlot
-                time.sleep(0.4)
-                settleOnHivePad()
-
-            hiveNumber = boundedHiveSlot(hiveNumber)
-
-            # Go directly to the selected hive first. If that fails, scan all hives as a fallback.
-            self.logger.webhook("", f'Claiming hive {hiveNumber}', "dark brown")
-            # Move directly to the selected hive (slot 1 is nearest cannon)
-            moveToHiveSlot(hiveNumber)
-            # Check selected hive first
-            if isExcludedSlot(hiveNumber):
-                self.logger.webhook("", f'Hive {hiveNumber} is excluded, scanning other hives', 'dark brown', "screen")
-            elif self.isMakeHoneyPrompt(log=True):
-                newHiveNumber = hiveNumber
-                rejoinSuccess = True
-                hiveAlreadyClaimed = True
-            elif isHiveAvailable():
-                newHiveNumber = hiveNumber
-                rejoinSuccess = True
-            else:
-                # Selected hive unavailable — fallback to scanning all hive slots.
-                if isOtherHive():
-                    self.logger.webhook("", f'Hive {hiveNumber} belongs to another player, scanning hives for your slot','dark brown', "screen")
-                else:
-                    self.logger.webhook("", f'Hive {hiveNumber} is already claimed, scanning all hives','dark brown', "screen")
-                # Scan once and optionally use the first claimable slot reached.
-                forwardScanSlots = list(range(hiveNumber + 1, 7))
-                wrapScanSlots = list(range(1, hiveNumber))
-                for j in forwardScanSlots:
-                    moveToHiveSlot(j)
-                    if self.isMakeHoneyPrompt(log=True):
-                        newHiveNumber = j
-                        rejoinSuccess = True
-                        hiveAlreadyClaimed = True
-                        break
-                    if not isExcludedSlot(j) and isHiveAvailable():
-                        if claimFirstAvailableHive:
-                            newHiveNumber = j
-                            rejoinSuccess = True
-                            break
-                        availableSlots.append(j)
-
-                for j in wrapScanSlots:
-                    if rejoinSuccess:
-                        break
-                    moveToHiveSlot(j)
-                    if self.isMakeHoneyPrompt(log=True):
-                        newHiveNumber = j
-                        rejoinSuccess = True
-                        hiveAlreadyClaimed = True
-                        break
-                    if not isExcludedSlot(j) and isHiveAvailable():
-                        if claimFirstAvailableHive:
-                            newHiveNumber = j
-                            rejoinSuccess = True
-                            break
-                        availableSlots.append(j)
-
-                # If immediate claiming is disabled, preserve the old nearest-open-slot behavior.
-                if not rejoinSuccess and availableSlots:
-                    newHiveNumber = min(availableSlots, key=lambda slot: abs(slot - currentHiveSlot))
-                    moveToHiveSlot(newHiveNumber)
-                    rejoinSuccess = True
-
-            # #find the hive in hive number
-            # self.logger.webhook("",f'Claiming hive {hiveNumber} (guessing hive location)', "dark brown")
-            # steps = round(hiveNumber*2.5) if hiveNumber != 1 else 0
-            # for _ in range(steps):
-            #     self.keyboard.walk("a",0.4, 0)
-
-            # def findHive():
-            #     self.keyboard.walk("a",0.4)
-            #     #$time.sleep(0.15)
-            #     if self.isBesideEImage("claimhive"):
-            #         #check for overrun
-            #         for _ in range(7):
-            #             time.sleep(0.4)
-            #             if self.isBesideEImage("claimhive"): break
-            #             self.keyboard.walk("d",0.2)
-            #         self.keyboard.press("e")
-            #         return True
-            #     return False
-            
-            # for _ in range(3):
-            #     if findHive():
-            #         self.logger.webhook("",f'Claimed hive {hiveNumber}', "bright green", "screen")
-            #         rejoinSuccess = True
-            #         break 
-            # #find a new hive
-            # else:
-            #     self.logger.webhook("",f'Hive {hiveNumber} is already claimed, finding new hive','dark brown', "screen")
-            #     #walk closer to the hives so the player wont walk up the ramp
-            #     self.keyboard.walk("w",0.3,0)
-            #     self.keyboard.walk("d",0.9*(hiveNumber)+2,0)
-            #     self.keyboard.walk("s",0.3,0)
-            #     for j in range(40):
-
-            #         if findHive():
-            #             guessedSlot = max(1,min(6, round(j//2.5)))
-            #             hiveClaim = guessedSlot
-            #             #if 3 < guessedSlot < 6:
-            #                 #hiveClaim += 1
-            #             self.logger.webhook("",f"Claimed hive {hiveClaim}", "bright green", "screen")
-            #             rejoinSuccess = True
-            #             self.setdat["hive_number"] = hiveClaim
-            #             break
-            #claim hive and convert
-            if rejoinSuccess:
-                claimedHive = False
-                if hiveAlreadyClaimed:
-                    claimedHive = True
-                elif isHiveAvailable():
-                    self.keyboard.press("e")
-                    for _ in range(6):
-                        time.sleep(0.5)
-                        if self.isMakeHoneyPrompt(log=True):
-                            claimedHive = True
-                            break
-                if not claimedHive:
-                    self.logger.webhook("",f'Claimed hive {newHiveNumber} prompt not detected; retrying rejoin','dark brown', "screen")
-                    continue
-                self.logger.webhook("",f'Claimed hive {newHiveNumber}', "bright green", "screen", ping_category="ping_critical_errors")
-                self.setdat["hive_number"] = newHiveNumber
-                settingsManager.saveGeneralSetting("hive_number", newHiveNumber)
-                for _ in range(8):
-                    self.keyboard.press("o")
-                self.moveMouseToDefault()
-                time.sleep(1)
-                self.convert(bypass=True)
-                #no need to reset
-                self.canDetectNight = True
-                self.clear_task_status()
-                return True
-            self.logger.webhook("",f'Rejoin unsuccessful, attempt {i+2}','dark brown', "screen")
+            claimedHiveNumber = self._walk_and_claim_hive()
+            if claimedHiveNumber is None:
+                self.logger.webhook("", f'Rejoin unsuccessful, attempt {i+2}', 'dark brown', "screen")
+                continue
+            for _ in range(8):
+                self.keyboard.press("o")
+            self.moveMouseToDefault()
+            time.sleep(1)
+            self.convert(bypass=True)
+            self.canDetectNight = True
+            self.clear_task_status()
+            return True
         self.clear_task_status()
         return False
     
     def blueTextImageSearch(self, text, threshold=0.7):
         target = self.adjustImage("./images/blue", text)
         return locateImageOnScreen(target, self.robloxWindow.mx+(self.robloxWindow.mw*3/4), self.robloxWindow.my+(self.robloxWindow.mh*3/5), self.robloxWindow.mw/4, self.robloxWindow.mh-self.robloxWindow.mh*3/5, threshold)
+
+    def _find_model_path(self, names):
+        for model_dir in MODEL_DIRS:
+            for name in names:
+                candidate = model_dir / name
+                if candidate.exists():
+                    return candidate
+        return None
+
+    def _load_vic_detection_model(self):
+        if self.vicDetectionModel is not None:
+            return self.vicDetectionModel
+        if self.vicDetectionModelError is not None:
+            return None
+        model_path = self._find_model_path((
+            "vic_detection.mlmodelc",
+            "vicious_detection.mlmodelc",
+            "vicious_centernet.mlmodelc",
+        ))
+        if model_path is None:
+            self.vicDetectionModelError = "missing"
+            return None
+        global ct
+        if ct is None:
+            try:
+                ct = importlib.import_module("coremltools")
+            except Exception:
+                self.vicDetectionModelError = "coremltools unavailable"
+                return None
+        try:
+            compiled_model_class = getattr(ct.models, "CompiledMLModel", None)
+            if compiled_model_class is None:
+                self.vicDetectionModelError = "CompiledMLModel unavailable"
+                return None
+            self.vicDetectionModel = compiled_model_class(str(model_path))
+            self.vicDetectionModelPath = model_path
+            return self.vicDetectionModel
+        except Exception as exc:
+            self.vicDetectionModelError = str(exc)
+            return None
+
+    def _warn_vic_detection_model_once(self):
+        if self.vicDetectionModelWarned or self.vicDetectionModelError is None:
+            return
+        self.vicDetectionModelWarned = True
+        if self.vicDetectionModelError == "missing":
+            return
+        try:
+            self.logger.webhook("", f"Vicious model unavailable: {self.vicDetectionModelError}", "red")
+        except Exception:
+            pass
+
+    def _run_vic_detection_model(self, bgr):
+        model = self._load_vic_detection_model()
+        if model is None:
+            self._warn_vic_detection_model_once()
+            return []
+        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+        image = Image.fromarray(rgb).resize(VIC_DETECTION_INPUT_SIZE)
+        try:
+            outputs = model.predict({"image": image})
+        except Exception as exc:
+            self.vicDetectionModelError = str(exc)
+            self._warn_vic_detection_model_once()
+            return []
+
+        detections = []
+        for output in outputs.values():
+            arr = np.asarray(output)
+            if arr.ndim == 3 and arr.shape[-1] >= 5:
+                rows = arr.reshape(-1, arr.shape[-1])
+                for row in rows:
+                    confidence = float(row[4])
+                    if confidence >= VIC_DETECTION_MIN_CONFIDENCE:
+                        detections.append({
+                            "box": tuple(float(x) for x in row[:4]),
+                            "confidence": confidence,
+                            "class_id": int(row[5]) if row.shape[0] > 5 else 0,
+                        })
+            elif arr.ndim == 2 and arr.shape[-1] >= 5:
+                for row in arr:
+                    confidence = float(row[4])
+                    if confidence >= VIC_DETECTION_MIN_CONFIDENCE:
+                        detections.append({
+                            "box": tuple(float(x) for x in row[:4]),
+                            "confidence": confidence,
+                            "class_id": int(row[5]) if row.shape[0] > 5 else 0,
+                        })
+        detections.sort(key=lambda item: item["confidence"], reverse=True)
+        return detections
+
+    def detectViciousBeeModel(self):
+        now = time.monotonic()
+        if now - self.lastVicDetectionModelScan < VIC_DETECTION_SCAN_INTERVAL:
+            return None
+        self.lastVicDetectionModelScan = now
+        bgr = self._night_screen()
+        detections = self._run_vic_detection_model(bgr)
+        return detections[0] if detections else None
+
+    def scanViciousBeeStatus(self):
+        if self.vicField is None:
+            detection = self.detectViciousBeeModel()
+            if detection is not None:
+                field = self.vicSearchField if self.vicSearchField in self.vicFields else self.location
+                if field in self.vicFields:
+                    self.vicField = field
+                    return "found"
+
+        if self.vicField is None:
+            for field in self.vicFields:
+                if self.blueTextImageSearch(f"vic{field}", 0.75):
+                    self.vicField = field
+                    return "found"
+        elif self.blueTextImageSearch("died"):
+            self.died = True
+            return "died"
+
+        if self.blueTextImageSearch("vicdefeat"):
+            self.vicStatus = "defeated"
+            return "defeated"
+        return None
+
+    def _vic_hop_fields(self):
+        allVicFields = ["pepper", "mountain top", "rose", "cactus", "spider", "clover"]
+        return [
+            field for field in allVicFields
+            if self.setdat.get("stinger_{}".format(field.replace(" ", "_")), False)
+        ] or allVicFields
+
+    def _vic_hop_timeout(self):
+        try:
+            return max(0, int(float(self.setdat.get("vic_hop_hop_timeout", 30))))
+        except Exception:
+            return 30
+
+    def _increment_vic_hop_stat(self, stat):
+        if stat not in self.vicHopStats:
+            return
+        self.vicHopStats[stat] += 1
+        sessionSetting = f"vic_hop_session_{stat}"
+        self.setdat[sessionSetting] = self.vicHopStats[stat]
+        try:
+            settingsManager.saveProfileSetting(sessionSetting, self.vicHopStats[stat])
+        except Exception:
+            pass
+        setting = f"vic_hop_{stat}"
+        current = self.setdat.get(setting, 0)
+        try:
+            current = int(current)
+        except Exception:
+            current = 0
+        current += 1
+        self.setdat[setting] = current
+        try:
+            settingsManager.saveProfileSetting(setting, current)
+        except Exception:
+            pass
+
+    def _maybe_reopen_roblox_for_vic_hop(self):
+        try:
+            reopen_after_hours = float(self.setdat.get("vic_hop_reopen_after_hours", 2))
+        except Exception:
+            reopen_after_hours = 2
+        if reopen_after_hours <= 0:
+            return
+        now = time.time()
+        if self.vicHopStartedAt is None:
+            self.vicHopStartedAt = now
+            self.lastVicHopRobloxReopen = now
+            return
+        if now - self.lastVicHopRobloxReopen < reopen_after_hours * 60 * 60:
+            return
+        self.lastVicHopRobloxReopen = now
+        self.logger.webhook("", "Vic Hop: reopening Roblox", "dark brown")
+        try:
+            appManager.forceCloseApp("Roblox")
+        except Exception:
+            appManager.closeApp("Roblox")
+        self.vicHopJoinedPublicServer = False
+        self._join_public_for_vic_hop("Vic Hop: reopening Roblox")
+
+    def _join_public_for_vic_hop(self, reason="Vic Hop: joining public server"):
+        self.canDetectNight = False
+        joined = self.rejoin(
+            reason,
+            claimHive=False,
+            usePrivateServer=False,
+        )
+        if joined:
+            self.vicHopJoinedPublicServer = True
+            self.night = False
+            self.nightDetectStreaks = 0
+            self.canDetectNight = False
+        return joined
+
+    def _walk_and_claim_hive(self):
+        """
+        Walk from spawn to the hive row and claim a slot.
+        Returns the claimed hive number on success, or None on failure.
+        Does NOT convert honey — callers decide what to do after claiming.
+        """
+        self.setRobloxWindowInfo()
+        self.keyboard.keyDown("d", False)
+        self.keyboard.timeWaitNoHasteCompensation(0.548)
+        self.keyboard.keyDown("w", False)
+        self.keyboard.timeWaitNoHasteCompensation(2.9)
+        self.keyboard.keyUp("d", False)
+        self.keyboard.keyUp("w", False)
+        for _ in range(3):
+            time.sleep(0.4)
+            if self.isBesideE(["claim", "hive", "send", "trad", "has"]):
+                break
+            self.stepBackOntoHivePad()
+
+        hiveNumber = self.setdat["hive_number"]
+        excludedHiveSlotsRaw = self.setdat.get("hive_exclude_slot", [])
+        if not isinstance(excludedHiveSlotsRaw, (list, tuple, set)):
+            excludedHiveSlotsRaw = [] if excludedHiveSlotsRaw in (None, "", 0, "0") else [excludedHiveSlotsRaw]
+        excludedHiveSlots = set()
+        for slot in excludedHiveSlotsRaw:
+            try:
+                slotNumber = int(slot)
+            except (TypeError, ValueError):
+                continue
+            if 1 <= slotNumber <= 6:
+                excludedHiveSlots.add(slotNumber)
+
+        claimFirstAvailableHive = self.setdat.get("claim_first_available_hive", True)
+        claimFirstAvailableHive = claimFirstAvailableHive is not False
+        availableSlots = []
+        newHiveNumber = 0
+        hiveAlreadyClaimed = False
+        claimSuccess = False
+
+        def isHiveAvailable():
+            return self.isBesideE(["claim", "hive"], ["send", "trade"], log=True)
+
+        def isOtherHive():
+            return self.isBesideE(["send", "trad", "trade"], ["claim"], log=True)
+
+        def isExcludedSlot(slot):
+            return slot in excludedHiveSlots
+
+        def settleOnHivePad():
+            if not (
+                self.isMakeHoneyPrompt(log=True)
+                or self.isBesideE(["claim", "hive", "send", "trad", "trade", "has"], log=True)
+            ):
+                self.stepBackOntoHivePad()
+
+        def boundedHiveSlot(slot):
+            return max(1, min(6, int(slot)))
+
+        currentHiveSlot = 1
+
+        def moveToHiveSlot(targetSlot):
+            nonlocal currentHiveSlot
+            targetSlot = boundedHiveSlot(targetSlot)
+            slotDelta = targetSlot - currentHiveSlot
+            if slotDelta > 0:
+                self.walkHiveSlots("a", slotDelta)
+            elif slotDelta < 0:
+                self.walkHiveSlots("d", abs(slotDelta))
+            currentHiveSlot = targetSlot
+            time.sleep(0.4)
+            settleOnHivePad()
+
+        hiveNumber = boundedHiveSlot(hiveNumber)
+        self.logger.webhook("", f'Claiming hive {hiveNumber}', "dark brown")
+        moveToHiveSlot(hiveNumber)
+
+        if isExcludedSlot(hiveNumber):
+            self.logger.webhook("", f'Hive {hiveNumber} is excluded, scanning other hives', 'dark brown', "screen")
+        elif self.isMakeHoneyPrompt(log=True):
+            newHiveNumber = hiveNumber
+            claimSuccess = True
+            hiveAlreadyClaimed = True
+        elif isHiveAvailable():
+            newHiveNumber = hiveNumber
+            claimSuccess = True
+        else:
+            if isOtherHive():
+                self.logger.webhook("", f'Hive {hiveNumber} belongs to another player, scanning hives for your slot', 'dark brown', "screen")
+            else:
+                self.logger.webhook("", f'Hive {hiveNumber} is already claimed, scanning all hives', 'dark brown', "screen")
+            forwardScanSlots = list(range(hiveNumber + 1, 7))
+            wrapScanSlots = list(range(1, hiveNumber))
+            for j in forwardScanSlots:
+                moveToHiveSlot(j)
+                if self.isMakeHoneyPrompt(log=True):
+                    newHiveNumber = j
+                    claimSuccess = True
+                    hiveAlreadyClaimed = True
+                    break
+                if not isExcludedSlot(j) and isHiveAvailable():
+                    if claimFirstAvailableHive:
+                        newHiveNumber = j
+                        claimSuccess = True
+                        break
+                    availableSlots.append(j)
+
+            for j in wrapScanSlots:
+                if claimSuccess:
+                    break
+                moveToHiveSlot(j)
+                if self.isMakeHoneyPrompt(log=True):
+                    newHiveNumber = j
+                    claimSuccess = True
+                    hiveAlreadyClaimed = True
+                    break
+                if not isExcludedSlot(j) and isHiveAvailable():
+                    if claimFirstAvailableHive:
+                        newHiveNumber = j
+                        claimSuccess = True
+                        break
+                    availableSlots.append(j)
+
+            if not claimSuccess and availableSlots:
+                newHiveNumber = min(availableSlots, key=lambda slot: abs(slot - currentHiveSlot))
+                moveToHiveSlot(newHiveNumber)
+                claimSuccess = True
+
+        if not claimSuccess:
+            return None
+
+        claimedHive = False
+        if hiveAlreadyClaimed:
+            claimedHive = True
+        elif isHiveAvailable():
+            self.keyboard.press("e")
+            for _ in range(6):
+                time.sleep(0.5)
+                if self.isMakeHoneyPrompt(log=True):
+                    claimedHive = True
+                    break
+
+        if not claimedHive:
+            return None
+
+        self.logger.webhook("", f'Claimed hive {newHiveNumber}', "bright green", "screen", ping_category="ping_critical_errors")
+        self.setdat["hive_number"] = newHiveNumber
+        settingsManager.saveGeneralSetting("hive_number", newHiveNumber)
+        return newHiveNumber
+
+    def vicHop(self):
+        self.vicFields = self._vic_hop_fields()
+
+        self.enableNightDetection = True
+        self.canDetectNight = False
+        self.set_task_status("vic_hop", activity="vicious")
+        self._maybe_reopen_roblox_for_vic_hop()
+        if not self.vicHopJoinedPublicServer:
+            if not self._join_public_for_vic_hop():
+                self.clear_task_status()
+                return False
+
+        # Tilt camera for sky detection (matches Revolution Macro behavior)
+        self.canDetectNight = False
+        for _ in range(2):
+            self.keyboard.press("pagedown")
+        time.sleep(0.3)
+        self.canDetectNight = True
+
+        if self.night or self.confirmNight(confirmations=3, delay=0.35):
+            self.night = True
+            self._increment_vic_hop_stat("nights_detected")
+            self.logger.webhook("", "Vic Hop: night server found", "light blue", "screen", ping_category="ping_vicious_bee")
+            if self.setdat.get("vic_hop_claim_hive", True):
+                self._walk_and_claim_hive()
+            self.countVicDetectionForVicHop = True
+            self.stingerHunt()
+            self.countVicDetectionForVicHop = False
+            self.vicHopJoinedPublicServer = False
+            self.clear_task_status()
+            return True
+
+        self.night = False
+        self.nightDetectStreaks = 0
+        hopTimeout = self._vic_hop_timeout()
+        self.logger.webhook("", "Vic Hop: hopping to another public server", "dark brown", "screen")
+        self._increment_vic_hop_stat("servers_hopped")
+        self._join_public_for_vic_hop("Vic Hop: hopping servers")
+        if hopTimeout:
+            time.sleep(hopTimeout)
+        self.clear_task_status()
+        return False
     #background thread for gather
     #check if mobs have been killed and reset their timings
     #check if player died
@@ -4612,17 +4846,8 @@ class macro:
     def stingerHuntBackground(self):
         #find vic
         while not self.stopVic:
-            #detect which field the vic is in
-            if self.vicField is None:
-                for field in self.vicFields:
-                    if self.blueTextImageSearch(f"vic{field}", 0.75):
-                        self.vicField = field
-                        break
-            else:
-                if self.blueTextImageSearch("died"): self.died = True
-            
-            if self.blueTextImageSearch("vicdefeat"):
-                self.vicStatus = "defeated"
+            self.scanViciousBeeStatus()
+            time.sleep(0.1)
                 
     def stingerHunt(self):
         self.set_task_status("stinger_hunt", activity="vicious")
@@ -4637,6 +4862,7 @@ class macro:
 
         self.vicStatus = None
         self.vicField = None
+        self.vicSearchField = None
         self.stopVic = False
         currField = None
         self.clear_task_status()
@@ -4649,6 +4875,7 @@ class macro:
             self.hourlyReport.addHourlyStat("bug_run_time", time.time()-vicStartTime)
 
         for currField in self.vicFields:
+            self.vicSearchField = currField
             #go to field
             self.cannon()
             self.logger.webhook("",f"Travelling to {currField} (stinger hunt)","dark brown")
@@ -4659,11 +4886,15 @@ class macro:
             except VicStopPathException:
                 pass
             if self.vicField:
+                if self.countVicDetectionForVicHop:
+                    self._increment_vic_hop_stat("vics_detected")
+                    self.countVicDetectionForVicHop = False
                 self.logger.webhook("",f"Vicious Bee detected ({self.vicField})", "light blue", "screen") 
                 break
             print(self.vicField)
             self.reset(convert=False)
         else: #unable to find vic
+            self.countVicDetectionForVicHop = False
             self.stopVic = True
             stingerHuntThread.join()
             self.convert()
@@ -4695,6 +4926,7 @@ class macro:
             if self.checkPauseAndWait():
                 # Stop was requested while paused
                 self.night = False
+                self.countVicDetectionForVicHop = False
                 self.stopVic = True
                 updateHourlyTime()
                 return
@@ -4714,6 +4946,8 @@ class macro:
                 self.logger.webhook("","Took too long to kill Vicious Bee","red", "screen", ping_category="ping_critical_errors")
                 break
         self.night = False
+        self.countVicDetectionForVicHop = False
+        self.vicSearchField = None
         updateHourlyTime()
         self.stopVic = True
         stingerHuntThread.join()
@@ -8063,7 +8297,10 @@ class macro:
         
         #if roblox is not open, rejoin
         if not appManager.openApp("Roblox"):
-            self.rejoin()
+            if self.setdat.get("macro_mode") == "vic_hop":
+                self._join_public_for_vic_hop("Vic Hop: joining public server")
+            else:
+                self.rejoin()
         else:
             #toggle fullscreen
             # if not self.isFullScreen():
@@ -8077,5 +8314,6 @@ class macro:
         if not self.hourlyReport.hourlyReportStats["start_time"] or not self.hourlyReport.hourlyReportStats["start_honey"]:
             self.hourlyReport.setSessionStats(self.getHoney(), time.time())
 
-        self.reset(convert=True)
+        if self.setdat.get("macro_mode") != "vic_hop":
+            self.reset(convert=True)
         self.saveTiming("rejoin_every")

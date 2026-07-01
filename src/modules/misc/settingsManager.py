@@ -1018,6 +1018,22 @@ def loadSettings():
             settings[k] = v
             merged_new_keys = True
 
+    deprecated_keys = [
+        "vic_hop_enabled",
+        "vic_hop_server_hop",
+        "vic_hop_role",
+        "vic_hop_join_new_battles",
+        "vic_hop_join_in_progress_battles",
+        "vic_hop_min_health",
+        "vic_hop_skip_spider",
+        "vic_hop_skip_pepper",
+        "vic_hop_join_empty_servers",
+    ]
+    for key in deprecated_keys:
+        if key in settings:
+            del settings[key]
+            merged_new_keys = True
+
     taskPriorityOrder = settings.get("task_priority_order", [])
     if isinstance(taskPriorityOrder, list) and "collect_sprouts" not in taskPriorityOrder:
         insertIndex = taskPriorityOrder.index("collect_sticker_printer") + 1 if "collect_sticker_printer" in taskPriorityOrder else len(taskPriorityOrder)

@@ -213,6 +213,17 @@ async function loadTasks() {
     }
   }
 
+  if (setdat.macro_mode === "vic_hop") {
+    out += taskHTML("Vic Hop Mode", "🌙 Hop servers until night, then hunt Vicious Bee");
+    const fields = ["clover", "spider", "cactus", "rose", "mountain top", "pepper"];
+    const enabledFields = fields.filter((field) => setdat[`stinger_${field.replaceAll(" ", "_")}`]);
+    for (const field of enabledFields.length ? enabledFields : fields) {
+      out += taskHTML("Search", `${fieldEmojis[field.replaceAll(" ", "_")] || ""} ${toTitleCase(field)}`);
+    }
+    document.getElementById("task-list").innerHTML = out;
+    return;
+  }
+
   // Check if field-only mode is enabled
   if (setdat.macro_mode === "field") {
     out += taskHTML("Field Only Mode", "🌾 Gathering in fields only");

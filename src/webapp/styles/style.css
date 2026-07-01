@@ -1770,3 +1770,22 @@ select:focus {
 .sprout-ai-token-row.dragging {
   opacity: 0.45;
 }
+
+.standard-stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.75rem;
+  color: var(--text-main);
+}
+
+.standard-stats-table th,
+.standard-stats-table td {
+  padding: 0.65rem 0.75rem;
+  text-align: left;
+  border: 1px solid var(--border);
+}
+
+.standard-stats-table th {
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.04);
+}
