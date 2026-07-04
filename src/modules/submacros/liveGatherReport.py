@@ -12,6 +12,16 @@ from modules.logging.log import resolve_bot_route, resolve_route, resolve_webhoo
 
 
 class LiveGatherReport:
+    REFERENCE_WINDOW_WIDTH = 1920
+    REFERENCE_WINDOW_HEIGHT = 1080
+    REFERENCE_CAPTURE = (650, 100)
+    REFERENCE_CAPTURE_LEFT_OFFSET = -320
+    REFERENCE_HUD_CARDS = (
+        (20, 0, 315, 36),
+        (320, 0, 615, 36),
+    )
+    REFERENCE_CARD_RADIUS = 7
+
     def __init__(self, webhook_url, roblox_window, interval=15, time_format=24, route_settings=None, bot_token="", ping_user_id=None, delivery_mode="both", route_category="gathering"):
         route_category = route_category or "gathering"
         if delivery_mode == "discord_bot":
@@ -172,11 +182,14 @@ class LiveGatherReport:
 
     def _capture_honey_pollen(self):
         rw = self.roblox_window
-        x = rw.mx + rw.mw // 2 - 320
-        y = rw.my + rw.yOffset
-        img = mssScreenshot(x, y, 650, 100).convert("RGBA")
-        honey = self._crop_hud_card(img, (20, 0, 315, 36))
-        pollen = self._crop_hud_card(img, (320, 0, 615, 36))
+        scale_x, scale_y = self._hud_scale()
+        capture_w = self._scale_x(self.REFERENCE_CAPTURE[0], scale_x)
+        capture_h = self._scale_y(self.REFERENCE_CAPTURE[1], scale_y)
+        x = rw.mx + rw.mw // 2 + self._scale_x(self.REFERENCE_CAPTURE_LEFT_OFFSET, scale_x)
+        y = rw.my + self._scale_y(rw.yOffset, scale_y)
+        img = mssScreenshot(x, y, capture_w, capture_h).convert("RGBA")
+        honey = self._crop_hud_card(img, self._scale_box(self.REFERENCE_HUD_CARDS[0], scale_x, scale_y), scale_y)
+        pollen = self._crop_hud_card(img, self._scale_box(self.REFERENCE_HUD_CARDS[1], scale_x, scale_y), scale_y)
         stacked = Image.new("RGBA", (max(honey.width, pollen.width), honey.height + pollen.height), (0, 0, 0, 0))
         stacked.paste(honey, (0, 0), honey)
         stacked.paste(pollen, (0, honey.height), pollen)
@@ -185,12 +198,41 @@ class LiveGatherReport:
         out.seek(0)
         return out.getvalue()
 
+    def _hud_scale(self):
+        rw = self.roblox_window
+        scale_x = max(0.1, rw.mw / float(self.REFERENCE_WINDOW_WIDTH))
+        scale_y = max(0.1, rw.mh / float(self.REFERENCE_WINDOW_HEIGHT))
+        return scale_x, scale_y
+
     @staticmethod
-    def _crop_hud_card(img, box):
+    def _scale_x(value, scale_x):
+        return int(round(value * scale_x))
+
+    @staticmethod
+    def _scale_y(value, scale_y):
+        return int(round(value * scale_y))
+
+    @classmethod
+    def _scale_box(cls, box, scale_x, scale_y):
+        left, top, right, bottom = box
+        scaled = (
+            cls._scale_x(left, scale_x),
+            cls._scale_y(top, scale_y),
+            cls._scale_x(right, scale_x),
+            cls._scale_y(bottom, scale_y),
+        )
+        if scaled[2] <= scaled[0]:
+            scaled = (scaled[0], scaled[1], scaled[0] + 1, scaled[3])
+        if scaled[3] <= scaled[1]:
+            scaled = (scaled[0], scaled[1], scaled[2], scaled[1] + 1)
+        return scaled
+
+    def _crop_hud_card(self, img, box, scale_y):
         card = img.crop(box)
         mask = Image.new("L", card.size, 0)
         draw = ImageDraw.Draw(mask)
-        draw.rounded_rectangle((0, 0, card.width - 1, card.height - 1), radius=7, fill=255)
+        radius = max(1, self._scale_y(self.REFERENCE_CARD_RADIUS, scale_y))
+        draw.rounded_rectangle((0, 0, card.width - 1, card.height - 1), radius=radius, fill=255)
         card.putalpha(mask)
         return card
 
