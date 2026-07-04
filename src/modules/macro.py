@@ -2642,7 +2642,7 @@ class macro:
         self.logger.webhook("", f"Updated hive slot to {hiveNumber}; retrying cannon", "bright green", "screen")
         return True
 
-    def cannon(self, fast = False, allowHiveResync = True):
+    def cannon(self, fast = False, allowHiveResync = True, allowRejoin = True):
         def detect_rejoin_mode_color():
             try:
                 if not appManager.isAppFocused("Roblox"):
@@ -2701,7 +2701,7 @@ class macro:
             if fast:
                 self.keyboard.walk("d",0.95)
                 time.sleep(0.1)
-                return
+                return True
             self.keyboard.walk("d",0.2)
             self.keyboard.walk("s",0.07)
             st = time.time()
@@ -2717,7 +2717,7 @@ class macro:
                 for _ in range(3):
                     time.sleep(0.4)
                     if self.isBesideEImage("cannon"):
-                        return
+                        return True
                     self.keyboard.walk("a",0.2)
             self.logger.webhook(
                 "Notice",
@@ -2728,11 +2728,11 @@ class macro:
             detected_color = detect_rejoin_mode_color()
             if allowHiveResync and hive_resync_attempts and i + 1 >= hive_resync_attempts:
                 if self.resyncHiveSlotFromHive():
-                    self.cannon(fast=fast, allowHiveResync=False)
-                    return
+                    return self.cannon(fast=fast, allowHiveResync=False, allowRejoin=allowRejoin)
                 self.logger.webhook("", "Hive slot recheck failed; rejoining", "dark brown", "screen")
-                self.rejoin()
-                return
+                if allowRejoin and self.rejoin():
+                    return self.cannon(fast=fast, allowHiveResync=False, allowRejoin=False)
+                return False
 
             # Reset between failed attempts until the configured limit is exhausted.
             if i < max_attempts - 1:
@@ -2756,15 +2756,19 @@ class macro:
                 self.logger.webhook("", "Detected light/dark-mode screen again while searching for cannon. Rejoining.", "dark brown", "screen")
             self.logger.webhook(
                 "Notice",
-                f"Failed to reach cannon after {max_attempts} attempts; rejoining",
+                f"Failed to reach cannon after {max_attempts} attempts"
+                + ("; rejoining" if allowRejoin else "; aborting travel"),
                 "red",
                 ping_category="ping_critical_errors",
             )
-            self.rejoin()
-            return
+            if allowRejoin and self.rejoin():
+                return self.cannon(fast=fast, allowHiveResync=False, allowRejoin=False)
+            return False
         else:
             self.logger.webhook("Notice", f"Failed to reach cannon too many times", "red", ping_category="ping_critical_errors")
-            self.rejoin()
+            if allowRejoin and self.rejoin():
+                return self.cannon(fast=fast, allowHiveResync=False, allowRejoin=False)
+            return False
     
     def rejoin(self, rejoinMsg = "Rejoining", placeId = MAIN_GAME_PLACE_ID, claimHive = True, usePrivateServer = True):
         self.canDetectNight = False
@@ -3299,7 +3303,15 @@ class macro:
                 except Exception:
                     pass
                 if not isHiveHubField:
-                    self.cannon()
+                    if not self.cannon():
+                        self.logger.webhook(
+                            "Gathering: aborted",
+                            "Could not confirm cannon access after rejoin/hive claim recovery",
+                            "red",
+                            "screen",
+                            ping_category="ping_critical_errors",
+                        )
+                        return
                 self.logger.webhook("",f"Travelling: {field.title()}, Attempt {i+1}", "dark brown")
                 self.goToField(field)
                 if isHiveHubField:
