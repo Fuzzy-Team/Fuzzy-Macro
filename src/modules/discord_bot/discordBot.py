@@ -601,7 +601,8 @@ def _detect_shift_lock_state_with_retries(retries: int = 4, delay: float = 0.2):
     for attempt in range(retries):
         try:
             last_detection = _detect_shift_lock_button()
-        except Exception:
+        except Exception as error:
+            print(f"Shift lock detection attempt {attempt + 1} failed: {error}")
             last_detection = None
 
         if last_detection and last_detection.get("state") is not None:
