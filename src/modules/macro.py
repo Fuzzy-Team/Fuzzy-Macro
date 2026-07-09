@@ -429,6 +429,18 @@ startLocationDimensions = {
     "hive hub": [0, 0]
 }
 
+hiveHubStartLocationOffsets = {
+    "center": [],
+    "right": [("d", 2)],
+    "left": [("a", 2)],
+    "top": [("w", 2)],
+    "bottom": [("s", 2)],
+    "upper right": [("w", 2), ("d", 2)],
+    "lower right": [("s", 2), ("d", 2)],
+    "upper left": [("a", 2), ("w", 2)],
+    "lower left": [("a", 2), ("s", 2)],
+}
+
 #for the ocr
 #sometimes, it reads the bss font as crillic characters, so it'll need to be converted back to latin
 #This isn't an actual translation, the characters are mapped visually
@@ -1827,7 +1839,7 @@ class macro:
 
     #run the path to go to a field
     #faceDir what direction to face after landing in a field (default, north, south)
-    def goToField(self, field, faceDir = "default"):
+    def goToField(self, field, faceDir = "default", startLocation = "center"):
         # Accept a string or a list/tuple of tokens/words and normalize to a
         # single field name (e.g. ["blue", "flower"] -> "blue flower").
         if isinstance(field, (list, tuple)):
@@ -1840,6 +1852,9 @@ class macro:
         normalized_field = str(field).replace('_', ' ').strip()
         self.location = normalized_field
         if normalized_field == "hive hub":
+            startLocation = str(startLocation or "center").replace("_", " ").strip().lower()
+            if startLocation not in hiveHubStartLocationOffsets:
+                startLocation = "center"
             self.rejoin(
                 rejoinMsg="Travelling: Hive Hub",
                 placeId=HIVE_HUB_PLACE_ID,
@@ -1857,11 +1872,19 @@ class macro:
             self.keyboard.keyDown("w")
             time.sleep(1.25)
             self.keyboard.keyUp("w")
-            self.keyboard.press(",")
-            self.keyboard.press(",")
-            self.keyboard.keyDown("s")
-            time.sleep(0.7)
-            self.keyboard.keyUp("s")
+            self.keyboard.keyDown("a")
+            time.sleep(0.5)
+            self.keyboard.keyUp("a")
+            self.keyboard.press(".")
+            self.keyboard.press(".")
+            self.keyboard.press("O")
+            self.keyboard.press("O")
+            self.keyboard.press("O")
+            self.keyboard.press("O")
+            for key, seconds in hiveHubStartLocationOffsets[startLocation]:
+                self.keyboard.keyDown(key)
+                time.sleep(seconds)
+                self.keyboard.keyUp(key)
             self.keyboard.press("shift")
             return
         self.runPath(f"cannon_to_field/{normalized_field}")
@@ -3447,7 +3470,10 @@ class macro:
                     if not self.travelViaCannon("Gathering", resetIfAway=False):
                         return
                 self.logger.webhook("",f"Travelling: {field.title()}, Attempt {i+1}", "dark brown")
-                self.goToField(field)
+                self.goToField(
+                    field,
+                    startLocation=fieldSetting.get("start_location", "center"),
+                )
                 if isHiveHubField:
                     landedInField = True
                     break
