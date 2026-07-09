@@ -74,6 +74,41 @@ def _apply_embed_footer(embed):
     return embed
 
 
+def _build_response_embed(content=None):
+    embed = discord.Embed(color=0x00ff00)
+    if content is not None:
+        embed.description = str(content)
+    else:
+        embed.title = "Fuzzy Macro"
+    return _apply_embed_footer(embed)
+
+
+def _pop_first_content_arg(args):
+    if not args:
+        return None
+    content = args.pop(0)
+    return content
+
+
+def _merge_content_into_embed(kwargs, content):
+    if content is None:
+        return
+
+    embed = kwargs.get("embed")
+    if embed is None and kwargs.get("embeds"):
+        embed = kwargs["embeds"][0]
+    if embed is None:
+        kwargs["embed"] = _build_response_embed(content)
+        return
+
+    content = str(content)
+    existing_description = getattr(embed, "description", None)
+    if existing_description:
+        embed.description = f"{content}\n\n{existing_description}"
+    else:
+        embed.description = content
+
+
 def _format_bot_response(args, kwargs, add_default_content=True):
     args = list(args)
 
@@ -83,14 +118,19 @@ def _format_bot_response(args, kwargs, add_default_content=True):
         kwargs["embeds"] = [_apply_embed_footer(embed) for embed in kwargs["embeds"]]
 
     has_embed = kwargs.get("embed") is not None or bool(kwargs.get("embeds"))
-    if args:
-        if not has_embed:
-            args[0] = _content_with_footer(args[0])
-    elif "content" in kwargs:
-        if not has_embed:
-            kwargs["content"] = _content_with_footer(kwargs["content"])
-    elif add_default_content and not has_embed:
-        kwargs["content"] = response_footer()
+    if not has_embed:
+        if args:
+            kwargs["embed"] = _build_response_embed(_pop_first_content_arg(args))
+        elif "content" in kwargs:
+            content = kwargs.pop("content")
+            kwargs["embed"] = _build_response_embed(content)
+        elif add_default_content:
+            kwargs["embed"] = _build_response_embed()
+    else:
+        if args:
+            _merge_content_into_embed(kwargs, _pop_first_content_arg(args))
+        if "content" in kwargs:
+            _merge_content_into_embed(kwargs, kwargs.pop("content"))
 
     return tuple(args), kwargs
 
