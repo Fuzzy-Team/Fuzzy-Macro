@@ -472,6 +472,12 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
     if (taskId.startsWith("collect_")) {
       const collectName = taskId.replace("collect_", "");
       // Handle special cases
+      if (collectName === "sprouts") {
+        return settings.sprouts_enable || false;
+      }
+      if (collectName === "sticker_sprout") {
+        return settings.sticker_sprout_watch || false;
+      }
       if (collectName === "sticker_printer") {
         return settings.sticker_printer || false;
       }
@@ -555,6 +561,7 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
     if (taskId.startsWith("collect_")) {
       const collectName = taskId.replace("collect_", "");
       if (collectName === "sprouts") return settingsObj.sprouts_enable || false;
+      if (collectName === "sticker_sprout") return settingsObj.sticker_sprout_watch || false;
       if (collectName === "sticker_printer") return settingsObj.sticker_printer || false;
       if (collectName === "sticker_stack") return settingsObj.sticker_stack || false;
       return settingsObj[collectName] || false;
@@ -638,6 +645,7 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
       collect_sticker_stack: "Collect: Sticker Stack",
       collect_sticker_printer: "Collect: Sticker Printer",
       collect_sprouts: "Collect: Sprouts",
+      collect_sticker_sprout: "Collect: Sticker Sprout",
       kill_stump_snail: "Kill: Stump Snail",
       kill_ladybug: "Kill: Ladybug",
       kill_rhinobeetle: "Kill: Rhinobeetle",

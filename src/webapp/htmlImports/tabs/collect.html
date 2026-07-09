@@ -647,6 +647,31 @@
           },
         },
       ]);
+
+      buildStandardContainer(parentCollectSprouts, "Sticker Sprout", "", [
+        {
+          id: "sticker_sprout_watch",
+          title: "Watch For Sticker Sprout",
+          desc: "Watch blue text for Sticker Sprout Hive Hub spawn messages, then travel to Hive Hub and collect drops.",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "sticker_sprout_gather_minutes",
+          title: "Gather Time",
+          desc: "Minutes to gather in Hive Hub after a Sticker Sprout spawn is detected.",
+          type: {
+            name: "textbox",
+            inputType: "int",
+            inputLimit: 2,
+            length: 6,
+            triggerFunction: "saveSetting(this, 'profile')",
+          },
+        },
+      ]);
+
       parentCollectSprouts.insertAdjacentHTML(
         "beforeend",
         `

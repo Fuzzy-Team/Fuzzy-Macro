@@ -40,6 +40,7 @@ from modules.controls.sleep import (
     INTERRUPT_RESET,
     INTERRUPT_AFB_REROLL,
     INTERRUPT_COLLECT_PLANTER,
+    INTERRUPT_STICKER_SPROUT,
 )
 # delete backup from previous update if pending
 try:
@@ -552,10 +553,14 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 macro.logger.webhook("AFB Reroll", f"Reroll requested during: {interrupted_status}", "orange")
             elif action == INTERRUPT_COLLECT_PLANTER:
                 macro.logger.webhook("Collect Planter", f"Collect planter requested during: {interrupted_status}", "orange")
+            elif action == INTERRUPT_STICKER_SPROUT:
+                macro.logger.webhook("Sticker Sprout", f"Interrupting {interrupted_status} to collect in Hive Hub", "orange")
             macro.reset(convert=True)
             if action == INTERRUPT_COLLECT_PLANTER:
                 processPlanterCommandQueue()
                 return None
+            if action == INTERRUPT_STICKER_SPROUT:
+                return runTask(macro.collectStickerSprout, resetAfter=False)
             if action == INTERRUPT_AFB_REROLL:
                 macro.AFBLIMIT = False
                 macro.AFBglitter = False
@@ -1447,6 +1452,14 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 if collectName == "sprouts":
                     if macro.setdat.get("sprouts_enable", False):
                         if runTask(macro.collectSprouts, resetAfter=False):
+                            executedTasks.add(taskId)
+                            return True
+                    return False
+
+                # Special case: sticker_sprout
+                if collectName == "sticker_sprout":
+                    if macro.stickerSproutReady():
+                        if runTask(macro.collectStickerSprout, resetAfter=False):
                             executedTasks.add(taskId)
                             return True
                     return False

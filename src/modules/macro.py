@@ -17,6 +17,7 @@ from modules.controls.sleep import (
     get_interrupt_action,
     InterruptRequested,
     INTERRUPT_NONE,
+    INTERRUPT_STICKER_SPROUT,
 )
 import modules.controls.mouse as mouse
 import modules.logging.log as logModule
@@ -79,6 +80,9 @@ SPROUT_REPLANT_FALLBACK_SECONDS = {
     "sticker": 120,
     "debug": 120,
 }
+STICKER_SPROUT_SPAWN_MINUTE_OF_DAY = (2 * 60) + 30
+STICKER_SPROUT_INTERVAL_SECONDS = 3 * 60 * 60
+STICKER_SPROUT_COLLECTION_WINDOW_SECONDS = 12 * 60
 
 class _PauseAwareTimeModule:
     def __init__(self, time_module):
@@ -133,6 +137,7 @@ fieldBoosterData = {
 
 mergedCollectData = {**collectData, **fieldBoosterData}
 mergedCollectData["sticker_stack"] = [["add", "sticker"], None, 0]
+mergedCollectData["sticker_sprout"] = [["sticker", "sprout"], None, 3*60*60]
 
 windShrineDonationItems = [
     "ticket", "tickets",
@@ -727,6 +732,10 @@ class macro:
         self.guidingStarLastAnnounced = {}
         self.lastUnusualSproutScan = 0
         self.unusualSproutLastAnnounced = {}
+        self.lastStickerSproutScan = 0
+        self.stickerSproutDetectedAt = 0
+        self.stickerSproutLastAnnounced = 0
+        self.stickerSproutInterruptRequested = False
         self.sproutBeansUsed = 0
         self.lastSproutBeanLimitLog = 0
 
@@ -1258,6 +1267,92 @@ class macro:
             route_category="activities",
         )
 
+    def isStickerSproutSpawnMessage(self, text):
+        if "sticker" not in text or "sprout" not in text:
+            return False
+        if "spawned" not in text:
+            return False
+        return "hive hub" in text or "hive hubs" in text
+
+    def isStickerSproutSoonMessage(self, text):
+        if "sticker" not in text or "sprout" not in text:
+            return False
+        if "spawn" not in text:
+            return False
+        return "about" in text and ("hive hub" in text or "hive hubs" in text)
+
+    def secondsSinceScheduledStickerSprout(self):
+        now = datetime.now()
+        secondsIntoDay = now.hour * 60 * 60 + now.minute * 60 + now.second
+        firstSpawnSecond = STICKER_SPROUT_SPAWN_MINUTE_OF_DAY * 60
+        return (secondsIntoDay - firstSpawnSecond) % STICKER_SPROUT_INTERVAL_SECONDS
+
+    def isScheduledStickerSproutWindow(self):
+        return self.secondsSinceScheduledStickerSprout() < STICKER_SPROUT_COLLECTION_WINDOW_SECONDS
+
+    def stickerSproutTimingAnchor(self):
+        if self.isScheduledStickerSproutWindow():
+            return time.time() - self.secondsSinceScheduledStickerSprout()
+        if self.stickerSproutDetectedAt:
+            return self.stickerSproutDetectedAt
+        return time.time()
+
+    def detectStickerSproutAnnouncement(self):
+        if not self.setdat.get("sticker_sprout_watch", False):
+            return
+        if self.status.value == "rejoining":
+            return
+        now = time.time()
+        if now - self.lastStickerSproutScan < 5:
+            return
+        self.lastStickerSproutScan = now
+
+        text = self.readBlueText()
+        if "sticker" not in text or "sprout" not in text:
+            return
+
+        if self.isStickerSproutSpawnMessage(text):
+            self.stickerSproutDetectedAt = now
+            if (
+                self.skipTask is not None
+                and not self.stickerSproutInterruptRequested
+                and self.status.value != "collect_sticker_sprout"
+                and self.stickerSproutReady()
+            ):
+                self.stickerSproutInterruptRequested = True
+                self.skipTask.value = INTERRUPT_STICKER_SPROUT
+            if now - self.stickerSproutLastAnnounced >= 10 * 60:
+                self.stickerSproutLastAnnounced = now
+                self.logger.webhook(
+                    "Sticker Sprout",
+                    "Spawn detected in Hive Hub",
+                    "light green",
+                    "screen",
+                    ping_category="ping_sticker_events",
+                    route_category="activities",
+                )
+        elif self.isStickerSproutSoonMessage(text) and now - self.stickerSproutLastAnnounced >= 10 * 60:
+            self.stickerSproutLastAnnounced = now
+            self.logger.webhook(
+                "Sticker Sprout",
+                "Hive Hub spawn soon",
+                "light blue",
+                "screen",
+                ping_category="ping_sticker_events",
+                route_category="activities",
+            )
+
+    def stickerSproutReady(self):
+        if not self.setdat.get("sticker_sprout_watch", False):
+            return False
+        cooldownReady = self.hasRespawned("sticker_sprout", self.collectCooldowns.get("sticker_sprout", 3*60*60))
+        if cooldownReady:
+            text = self.readBlueText()
+            if self.isStickerSproutSpawnMessage(text):
+                self.stickerSproutDetectedAt = time.time()
+        recentlyDetected = self.stickerSproutDetectedAt and time.time() - self.stickerSproutDetectedAt < 10 * 60
+        return cooldownReady and (recentlyDetected or self.isScheduledStickerSproutWindow())
+
     def readBlueText(self):
         try:
             return ocr.imToString("blue").lower()
@@ -1442,6 +1537,35 @@ class macro:
         )
         self.gather(field, sproutOverride)
         return True
+
+    def collectStickerSprout(self):
+        if not self.stickerSproutReady():
+            return False
+        try:
+            gatherMinutes = max(1, min(30, int(self.setdat.get("sticker_sprout_gather_minutes", 8) or 8)))
+        except Exception:
+            gatherMinutes = 8
+        timingAnchor = self.stickerSproutTimingAnchor()
+        self.stickerSproutDetectedAt = 0
+        self.stickerSproutInterruptRequested = False
+        settingsManager.saveSettingFile("sticker_sprout", timingAnchor, "./data/user/timings.txt")
+        self.collectCooldowns["sticker_sprout"] = 3 * 60 * 60
+        self.logger.webhook(
+            "Sticker Sprout",
+            f"Travelling to Hive Hub to collect for {gatherMinutes} minutes",
+            "light green",
+            "screen",
+            ping_category="ping_sticker_events",
+            route_category="activities",
+        )
+        self.gather("hive hub", {
+            "mins": gatherMinutes,
+            "infinite_gather": False,
+            "backpack": 100,
+            "return": "rejoin",
+        })
+        return True
+
 
     def collectWindShrine(self, reached):
         displayName = "Wind Shrine"
@@ -5679,6 +5803,7 @@ class macro:
             self.detectNight()
         self.detectGuidingStarAnnouncement()
         self.detectUnusualSproutAnnouncement()
+        self.detectStickerSproutAnnouncement()
 
         #hotbar
         for i in range(1,8):
