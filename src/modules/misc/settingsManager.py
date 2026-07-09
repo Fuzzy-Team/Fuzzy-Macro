@@ -1024,6 +1024,11 @@ def loadSettings():
         taskPriorityOrder.insert(insertIndex, "collect_sprouts")
         settings["task_priority_order"] = taskPriorityOrder
         merged_new_keys = True
+    if isinstance(taskPriorityOrder, list) and "collect_sticker_sprout" not in taskPriorityOrder:
+        insertIndex = taskPriorityOrder.index("collect_sprouts") + 1 if "collect_sprouts" in taskPriorityOrder else len(taskPriorityOrder)
+        taskPriorityOrder.insert(insertIndex, "collect_sticker_sprout")
+        settings["task_priority_order"] = taskPriorityOrder
+        merged_new_keys = True
 
     # Migrate legacy global quest gather override to per-quest keys on first load
     try:
