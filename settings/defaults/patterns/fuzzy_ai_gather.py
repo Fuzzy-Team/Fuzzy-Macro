@@ -258,6 +258,19 @@ def _project_root():
 MODEL_DIR = (_project_root() / "src" / "data" / "models").resolve()
 
 
+def _check_missing_models(model_names):
+    try:
+        from modules.misc.modelManager import ensure_missing_models
+
+        result = ensure_missing_models(model_names)
+        if result.get("downloaded"):
+            print(f"[fuzzy_ai_gather] Downloaded missing AI model(s): {', '.join(result['downloaded'])}")
+        elif result.get("missing_remote"):
+            print(f"[fuzzy_ai_gather] Missing AI model(s) were not found remotely: {', '.join(result['missing_remote'])}")
+    except Exception as exc:
+        print(f"[fuzzy_ai_gather] Could not check missing AI models: {exc}")
+
+
 CONFIDENCE_THRESHOLD = _coerce_float(globals().get("pattern_confidence_threshold"), CONFIDENCE_THRESHOLD)
 SPRINKLER_CONFIDENCE_THRESHOLD = _coerce_float(
     globals().get("pattern_sprinkler_confidence_threshold"),
@@ -1805,6 +1818,17 @@ def _initialise_runtime():
         token_candidates.append((MODEL_DIR / requested_filename, "coreml", requested_labels, requested_label, requested_width, requested_height))
     token_candidates.extend(standard_candidates)
     token_candidates = [candidate for candidate in token_candidates if candidate[0].exists()]
+    if not token_candidates:
+        missing_model_names = []
+        if requested_filename is not None:
+            missing_model_names.append(requested_filename)
+        missing_model_names.extend(["token_detection_standard.mlmodelc", "token_detection_standard.onnx"])
+        _check_missing_models(missing_model_names)
+        token_candidates = []
+        if requested_filename is not None:
+            token_candidates.append((MODEL_DIR / requested_filename, "coreml", requested_labels, requested_label, requested_width, requested_height))
+        token_candidates.extend(standard_candidates)
+        token_candidates = [candidate for candidate in token_candidates if candidate[0].exists()]
     if not token_candidates:
         raise FileNotFoundError(
             f"No usable token AI model was found. Checked selected {requested_label} model and Standard models in {MODEL_DIR}"

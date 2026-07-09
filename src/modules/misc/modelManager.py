@@ -270,7 +270,48 @@ def ensure_missing_supported_models():
         if os.path.exists(local_path):
             skipped.append(model_name)
             continue
-        _copy_from_repo_zip(model_name, local_path)
+        try:
+            remote_files = _remote_tree(f"{MODELS_API_URL}/{model_name}")
+            print(f"[models] Downloading missing {model_name}...")
+            _download_remote_tree(remote_files, model_name, local_path)
+        except Exception as exc:
+            print(f"[models] Could not download {model_name} directly: {exc}")
+            print(f"[models] Checking repository zip for {model_name}...")
+            _copy_from_repo_zip(model_name, local_path)
         downloaded.append(model_name)
     cleanup_unused_models()
     return {"downloaded": downloaded, "skipped": skipped, "model_dir": MODEL_DIR}
+
+
+def ensure_missing_models(model_names):
+    os.makedirs(MODEL_DIR, exist_ok=True)
+    downloaded = []
+    skipped = []
+    missing_remote = []
+    for model_name in model_names:
+        if model_name not in _supported_model_names():
+            raise ValueError(f"{model_name} is not a supported model.")
+        local_path = os.path.join(MODEL_DIR, model_name)
+        if os.path.exists(local_path):
+            skipped.append(model_name)
+            continue
+        try:
+            remote_files = _remote_tree(f"{MODELS_API_URL}/{model_name}")
+            print(f"[models] Downloading missing {model_name}...")
+            _download_remote_tree(remote_files, model_name, local_path)
+            downloaded.append(model_name)
+        except Exception as exc:
+            print(f"[models] Remote check failed for {model_name}: {exc}")
+            try:
+                print(f"[models] Checking repository zip for {model_name}...")
+                _copy_from_repo_zip(model_name, local_path)
+                downloaded.append(model_name)
+            except Exception:
+                missing_remote.append(model_name)
+    cleanup_unused_models()
+    return {
+        "downloaded": downloaded,
+        "skipped": skipped,
+        "missing_remote": missing_remote,
+        "model_dir": MODEL_DIR,
+    }

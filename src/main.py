@@ -2994,6 +2994,7 @@ if __name__ == "__main__":
     logQueue = manager.Queue()
     discordMessageQueue = manager.Queue()
     planterCommandQueue = manager.Queue()
+    streamControlQueue = manager.Queue()
     pin_requests = manager.Queue()  # Shared queue for pin requests
     start_keyboard_listener_fn = watch_for_hotkeys(run)
     logger = logModule.log(logQueue, False, None, False, blocking=False, discordMessageQueue=discordMessageQueue)
@@ -3206,6 +3207,60 @@ if __name__ == "__main__":
             return 0.0
         return max(0.0, hours)
 
+    def startStreamIfNeeded(settings):
+        if stream.streaming:
+            return True
+
+        def waitForStreamURL():
+            #wait for up to 15 seconds for the public link
+            for _ in range(150):
+                time.sleep(0.1)
+                if stream.publicURL:
+                    logger.webhook("Stream Started", f'Stream URL: {stream.publicURL}', "purple", route_category="stream")
+
+                    # If bot is enabled, request pinning of the stream message
+                    if logModule.delivery_uses_bot_commands(settings) and settings.get("pin_stream_url", False):
+                        import modules.logging.webhook as webhookModule
+                        if webhookModule.last_channel_id:
+                            try:
+                                pin_requests.put({
+                                    'channel_id': webhookModule.last_channel_id,
+                                    'search_text': 'Stream URL'
+                                })
+                                print("Pin request queued for stream URL message")
+                            except Exception as e:
+                                print(f"Error queueing pin request: {e}")
+                    return
+
+            logger.webhook("", f'Stream could not start. Check terminal for more info', "red", ping_category="ping_critical_errors", route_category="stream")
+
+        if stream.isCloudflaredInstalled():
+            logger.webhook("", "Starting Stream...", "light blue", route_category="stream")
+            stream.start(settings.get("stream_resolution", 0.75))
+            Thread(target=waitForStreamURL, daemon=True).start()
+            return True
+
+        messageBox.msgBox(text='Cloudflared is required for streaming but is not installed. Visit https://fuzzy-team.gitbook.io/fuzzy-macro/discord-setup/stream-setup for installation instructions', title='Cloudflared not installed')
+        return False
+
+    def processStreamControlCommands(settings):
+        while not streamControlQueue.empty():
+            try:
+                command = streamControlQueue.get_nowait()
+            except Exception:
+                break
+
+            action = str(command.get("action", "")).lower()
+            if action == "enable":
+                if run.value in (2, 4, 6):
+                    startStreamIfNeeded(settings)
+            elif action == "disable":
+                if stream.streaming:
+                    stream.stop()
+                    logger.webhook("Stream Stopped", "Stream disabled from Discord.", "orange", route_category="stream")
+                else:
+                    stream.stop()
+
     while True:
         eel.sleep(0.5)
         
@@ -3226,6 +3281,7 @@ if __name__ == "__main__":
         logger.pingSettings = {
             key: value for key, value in setdat.items() if str(key).startswith("ping_")
         }
+        processStreamControlCommands(setdat)
 
         if autoStopStartTime is not None and run.value in (2, 4, 6):
             latestAutoStopHours = parseAutoStopHours(setdat)
@@ -3250,7 +3306,7 @@ if __name__ == "__main__":
                 print("Detected change in discord bot token, killing previous bot process")
                 discordBotProc.terminate()
                 discordBotProc.join()
-            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI, discordMessageQueue, planterCommandQueue), daemon=True)
+            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI, discordMessageQueue, planterCommandQueue, streamControlQueue), daemon=True)
             prevDiscordBotToken = currentDiscordBotToken
             discordBotProc.start()
         elif not shouldRunDiscordBot and discordBotProc is not None and discordBotProc.is_alive():
@@ -3321,38 +3377,8 @@ if __name__ == "__main__":
             #reset hourly report data
             hourlyReport = HourlyReport()
             hourlyReport.resetAllStats()
-            #stream
-            def waitForStreamURL():
-                #wait for up to 15 seconds for the public link
-                for _ in range(150):
-                    time.sleep(0.1)
-                    if stream.publicURL:
-                        logger.webhook("Stream Started", f'Stream URL: {stream.publicURL}', "purple", route_category="stream")
-                        
-                        # If bot is enabled, request pinning of the stream message
-                        if logModule.delivery_uses_bot_commands(setdat) and setdat.get("pin_stream_url", False):
-                            import modules.logging.webhook as webhookModule
-                            if webhookModule.last_channel_id:
-                                try:
-                                    pin_requests.put({
-                                        'channel_id': webhookModule.last_channel_id,
-                                        'search_text': 'Stream URL'
-                                    })
-                                    print("Pin request queued for stream URL message")
-                                except Exception as e:
-                                    print(f"Error queueing pin request: {e}")
-                        return
-
-                logger.webhook("", f'Stream could not start. Check terminal for more info', "red", ping_category="ping_critical_errors", route_category="stream")
-
-            streamLink = None
             if setdat.get("enable_stream", False):
-                if stream.isCloudflaredInstalled():
-                    logger.webhook("", "Starting Stream...", "light blue", route_category="stream")
-                    streamLink = stream.start(setdat.get("stream_resolution", 0.75))
-                    Thread(target=waitForStreamURL, daemon=True).start()
-                else:
-                    messageBox.msgBox(text='Cloudflared is required for streaming but is not installed. Visit https://fuzzy-team.gitbook.io/fuzzy-macro/discord-setup/stream-setup for installation instructions', title='Cloudflared not installed')
+                startStreamIfNeeded(setdat)
 
             print("starting macro proc")
             #check if user enabled field drift compensation but sprinkler is not supreme saturator

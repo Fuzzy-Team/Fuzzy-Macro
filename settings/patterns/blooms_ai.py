@@ -246,6 +246,19 @@ def _project_root():
 MODEL_DIR = (_project_root() / "src" / "data" / "models").resolve()
 
 
+def _check_missing_models(model_names):
+    try:
+        from modules.misc.modelManager import ensure_missing_models
+
+        result = ensure_missing_models(model_names)
+        if result.get("downloaded"):
+            print(f"[blooms_ai] Downloaded missing AI model(s): {', '.join(result['downloaded'])}")
+        elif result.get("missing_remote"):
+            print(f"[blooms_ai] Missing AI model(s) were not found remotely: {', '.join(result['missing_remote'])}")
+    except Exception as exc:
+        print(f"[blooms_ai] Could not check missing AI models: {exc}")
+
+
 CONFIDENCE_THRESHOLD = _coerce_float(globals().get("pattern_confidence_threshold"), CONFIDENCE_THRESHOLD)
 SPRINKLER_CONFIDENCE_THRESHOLD = _coerce_float(
     globals().get("pattern_sprinkler_confidence_threshold"),
@@ -2087,6 +2100,13 @@ def _initialise_runtime():
     if not token_path.exists():
         token_path = MODEL_DIR / "token_detection_standard.onnx"
         token_model_kind = "opencv_onnx"
+    if not token_path.exists():
+        _check_missing_models(["token_detection_standard.mlmodelc", "token_detection_standard.onnx"])
+        token_path = MODEL_DIR / "token_detection_standard.mlmodelc"
+        token_model_kind = "coreml"
+        if not token_path.exists():
+            token_path = MODEL_DIR / "token_detection_standard.onnx"
+            token_model_kind = "opencv_onnx"
     if not token_path.exists():
         raise FileNotFoundError(f"No token AI model was found at fixed path: {MODEL_DIR / 'token_detection_standard.mlmodelc'} or {MODEL_DIR / 'token_detection_standard.onnx'}")
     if token_model_kind == "coreml" and ct is None:
