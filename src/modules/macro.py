@@ -2769,6 +2769,22 @@ class macro:
             if allowRejoin and self.rejoin():
                 return self.cannon(fast=fast, allowHiveResync=False, allowRejoin=False)
             return False
+
+    def travelViaCannon(self, context="Travel", resetIfAway=True, convertOnReset=False):
+        if resetIfAway and self.location != "spawn":
+            self.logger.webhook("", f"Returning to hive before {context.lower()}", "dark brown")
+            if not self.reset(convert=convertOnReset):
+                return False
+        if self.cannon():
+            return True
+        self.logger.webhook(
+            f"{context}: aborted",
+            "Could not confirm cannon access before travel",
+            "red",
+            "screen",
+            ping_category="ping_critical_errors",
+        )
+        return False
     
     def rejoin(self, rejoinMsg = "Rejoining", placeId = MAIN_GAME_PLACE_ID, claimHive = True, usePrivateServer = True):
         self.canDetectNight = False
@@ -3303,14 +3319,7 @@ class macro:
                 except Exception:
                     pass
                 if not isHiveHubField:
-                    if not self.cannon():
-                        self.logger.webhook(
-                            "Gathering: aborted",
-                            "Could not confirm cannon access after rejoin/hive claim recovery",
-                            "red",
-                            "screen",
-                            ping_category="ping_critical_errors",
-                        )
+                    if not self.travelViaCannon("Gathering", resetIfAway=False):
                         return
                 self.logger.webhook("",f"Travelling: {field.title()}, Attempt {i+1}", "dark brown")
                 self.goToField(field)
@@ -4085,7 +4094,8 @@ class macro:
         st = time.perf_counter()
         self.logger.webhook("","Travelling: Mondo Buff","dark brown")
         #go to mondo buff
-        self.cannon()
+        if not self.travelViaCannon("Mondo Buff"):
+            return False
         self.keyboard.press("e")
         sleep(2.5)
         self.logger.webhook("","Collecting: Mondo Buff","yellow", "screen")
@@ -4180,8 +4190,10 @@ class macro:
         reached = False
         for _ in range(2):
             self.logger.webhook("",f"Travelling: Sticker Printer","dark brown")
-            self.cannon()
+            if not self.travelViaCannon("Sticker Printer"):
+                return
             self.runPath("collect/sticker_printer")
+            self.location = "collect"
             for _ in range(6):
                 self.keyboard.walk("w", 0.2)
                 reached = self.isBesideE(["inspect", "stick", "print"])
@@ -4291,7 +4303,6 @@ class macro:
         reached = None
         objectiveData = mergedCollectData[objective]
         displayName = objective.replace("_"," ").title()
-        self.location = "collect"
         st = time.time()
         def updateHourlyTime():
             self.hourlyReport.addHourlyStat("misc_time", time.time()-st)
@@ -4301,7 +4312,10 @@ class macro:
             if objective in ["honey_dispenser", "gingerbread"]:
                 self.reset(convert=False)
             else:
-                self.cannon()
+                if not self.travelViaCannon(displayName):
+                    updateHourlyTime()
+                    return
+            self.location = "collect"
             # Special-case: run a bespoke sequence for Honey Storm instead of the
             # default path/walk system.
             if objective == "honeystorm":
@@ -4521,7 +4535,8 @@ class macro:
         attackThread.daemon = True
         if walkPath is None:
             self.waitForBees()
-            self.cannon()
+            if not self.travelViaCannon(f"{mobName.title()}"):
+                return
             self.goToField(field, "north")
             #attack the mob
             attackThread.start()
@@ -4662,7 +4677,12 @@ class macro:
 
         for currField in self.vicFields:
             #go to field
-            self.cannon()
+            if not self.travelViaCannon("Stinger Hunt"):
+                self.stopVic = True
+                stingerHuntThread.join()
+                updateHourlyTime()
+                self.night = False
+                return
             self.logger.webhook("",f"Travelling to {currField} (stinger hunt)","dark brown")
             self.goToField(currField, "south")
             time.sleep(0.8)
@@ -4689,12 +4709,19 @@ class macro:
             if wait:
                 time.sleep(10)
             self.logger.webhook("",f"Travelling to {self.vicField} (vicious bee)","dark brown")
-            self.cannon()
+            if not self.travelViaCannon("Vicious Bee", resetIfAway=False):
+                return False
             self.goToField(self.vicField, "south")
+            return True
 
         #first, check if vic is found in the same field as the player
         if currField != self.vicField: 
-            goToVicField()
+            if not goToVicField():
+                self.night = False
+                self.stopVic = True
+                updateHourlyTime()
+                stingerHuntThread.join()
+                return
         
         #run the dodge pattern
         #similar to the search pattern, between each line of code, check if vic has been defeated/player died
@@ -4720,7 +4747,8 @@ class macro:
                 break
             elif self.died:
                 self.logger.webhook("","Player Died","dark brown", "screen", ping_category="ping_character_deaths")
-                goToVicField(wait=True)
+                if not goToVicField(wait=True):
+                    break
                 self.died = False
             elif time.time()-st > 180: #max 3 mins to kill vic
                 self.logger.webhook("","Took too long to kill Vicious Bee","red", "screen", ping_category="ping_critical_errors")
@@ -4733,7 +4761,8 @@ class macro:
 
     def stumpSnail(self):
         for _ in range(3):
-            self.cannon()
+            if not self.travelViaCannon("Stump Snail"):
+                return
             self.logger.webhook("","Travelling: Stump Snail", "dark brown")
             self.goToField("stump")
             if self.placeSprinkler():
@@ -4823,7 +4852,10 @@ class macro:
         cocoThread.start()
         st = time.time()
         for _ in range(2):
-            self.cannon()
+            if not self.travelViaCannon("Coconut Crab"):
+                self.bossStatus = "travel_failed"
+                cocoThread.join()
+                return
             self.logger.webhook("","Travelling: Coconut Crab","dark brown")
             self.goToField("coconut")
             self.keyboard.walk("s", 1)
@@ -4874,7 +4906,8 @@ class macro:
     def kingBeetle(self):
         st = time.time()
         for _ in range(2):
-            self.cannon()
+            if not self.travelViaCannon("King Beetle"):
+                return
             self.logger.webhook("","Travelling: King Beetle","dark brown")
             self.goToField("blue_flower")
             self.died = False
@@ -4921,7 +4954,8 @@ class macro:
     def tunnelBear(self):
         st = time.time()
         for _ in range(2):
-            self.cannon()
+            if not self.travelViaCannon("Tunnel Bear"):
+                return
             self.logger.webhook("","Travelling: Tunnel Bear","dark brown")
             self.goToField("pineapple")
             self.died = False
@@ -4961,7 +4995,8 @@ class macro:
     
     def goToPlanter(self, planter, field, method):
         global finalKey
-        self.cannon()
+        if not self.travelViaCannon("Planters"):
+            return False
         self.logger.webhook("", f"Travelling: {planter.title()} Planter ({field.title()}), {method.title()}", "dark brown")
         self.goToField(field, "north")
         #move from center of field to planter spot
@@ -5049,7 +5084,9 @@ class macro:
                 findPlanterInventoryThread.daemon = True
                 findPlanterInventoryThread.start()
 
-            self.goToPlanter(planter, field, "place")
+            if not self.goToPlanter(planter, field, "place"):
+                updateHourlyTime()
+                return False
             if hotbarSlot:
                 self.logger.webhook("", f"Using hotbar slot {hotbarSlot} for {planter.title()} planter", "dark brown")
                 self.keyboard.press(str(hotbarSlot))
@@ -5103,7 +5140,9 @@ class macro:
                 if self.planterCoords is None:
                     placedPlanter = False
                 else:
-                    self.goToPlanter(planter, field, "place")
+                    if not self.goToPlanter(planter, field, "place"):
+                        updateHourlyTime()
+                        return False
                     self.useItemInInventory(x=self.planterCoords[0], y=self.planterCoords[1])
                     time.sleep(0.5)
                     placementError = None
@@ -5225,12 +5264,18 @@ class macro:
                     return
             i += 1
             
-    def collectPlanter(self, planter, field):
+    def collectPlanter(self, planter, field, returnToHive=True):
         field_key = field.replace(" ", "_")
         self.set_task_status(f"planter_{field_key}", task="planter", field=field)
         st = time.time()
         def updateHourlyTime():
             self.hourlyReport.addHourlyStat("misc_time", time.time()-st)
+
+        def finishCollected():
+            updateHourlyTime()
+            if returnToHive:
+                self.reset()
+            return True
         # Determine whether planter-check retry behavior is enabled for current mode
         try:
             mode = int(self.setdat.get("planters_mode", 0))
@@ -5258,8 +5303,7 @@ class macro:
                 self.findPlanterInInventory(name)
                 if self.planterCoords is not None:
                     self.logger.webhook("", f"{planter.title()} not found in field, but found in inventory. Marking as collected.", "orange", "screen")
-                    updateHourlyTime()
-                    return True
+                    return finishCollected()
                 self.logger.webhook("", f"Unable to find Planter: {planter.title()}", "dark brown", "screen")
                 self.reset()
                 # if this was the last attempt, update time and return False
@@ -5278,11 +5322,10 @@ class macro:
             else:
                 self.logger.webhook("", f"Skipping loot collection for {planter.title()} planter", "orange")
             self.setMobTimer(field)
-            updateHourlyTime()
 
             # If planter-check not enabled, we're done
             if not check_enabled:
-                return True
+                return finishCollected()
 
             # Planter-check enabled: verify the planter is now in inventory
             # findPlanterInInventory will set self.planterCoords if found
@@ -5291,7 +5334,7 @@ class macro:
             if self.planterCoords is not None:
                 # found the planter in inventory — success
                 self.logger.webhook("", f"Found {planter.title()} in inventory after collect", "bright green", "screen", ping_category="ping_conversion_events")
-                return True
+                return finishCollected()
 
             # Not found: log and retry (if attempts remain)
             self.logger.webhook("", f"Planter {planter.title()} not found in inventory after looting (attempt {attempt+1}/{attempts}), retrying.", "red", "screen")
@@ -5379,8 +5422,11 @@ class macro:
 
         for _ in range(2):
             self.logger.webhook("","Travelling: Blender","dark brown")
-            self.cannon()
+            if not self.travelViaCannon("Blender"):
+                updateHourlyTime()
+                return
             self.runPath("collect/blender")
+            self.location = "collect"
             for _ in range(6):
                 self.keyboard.walk("d", 0.2)
                 reached = self.isBesideE(["open"])
@@ -7495,9 +7541,11 @@ class macro:
 
     def goToQuestGiver(self, questGiver, reason):
         for _ in range(3):
-            self.cannon()
+            if not self.travelViaCannon(questGiver.title()):
+                return False
             self.logger.webhook("",f"Travelling: {questGiver} ({reason}) ","brown")
             self.runPath(f"quests/{questGiver}")
+            self.location = "quest"
             time.sleep(0.5)
 
             #check if player reached the quest giver
@@ -7719,7 +7767,8 @@ class macro:
             except Exception:
                 glitterCoords = None
 
-        self.cannon()
+        if not self.travelViaCannon("Auto Field Boost"):
+            return False
 
         if glitterslot == 0 and glitterCoords:
             self.useItemInInventory(x=glitterCoords[0], y=glitterCoords[1], closeInventoryAfter=False)
@@ -7883,7 +7932,8 @@ class macro:
             self.failed = False
             if self.setdat["Auto_Field_Boost"]:
                 if self.AFBglitter and glitterReady:
-                    self._AFBApplyGlitter(targetFields[0], glitterslot)
+                    if self._AFBApplyGlitter(targetFields[0], glitterslot) is False:
+                        return
                     return targetFields
 
                 if self.cAFBDice or (diceReady and not self.AFBglitter):
@@ -7894,7 +7944,8 @@ class macro:
                     self.keyboard.press("pageup")
 
                     if "loaded" in dice:
-                        self.cannon()
+                        if not self.travelViaCannon("Auto Field Boost"):
+                            return
                         self.goToField(targetFields[0])
 
                     diceCoords = None
@@ -7979,7 +8030,8 @@ class macro:
 
                             if glitter and not self.failed and self.hasAFBRespawned("AFB_glitter_cd", rebuff*60):
                                 if self.AFBglitter:
-                                    self._AFBApplyGlitter(targetFields[0], glitterslot)
+                                    if self._AFBApplyGlitter(targetFields[0], glitterslot) is False:
+                                        return
                                     return targetFields
 
             if returnVal is None:
