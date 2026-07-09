@@ -885,6 +885,71 @@
         },
       ]);
 
+      const discordPermissionCategories = [
+        [
+          "discord_permission_public_info_ids",
+          "Public Info",
+          "Commands: /help, /ping. Leave blank to let anyone use these commands.",
+        ],
+        [
+          "discord_permission_observation_ids",
+          "Observation",
+          "Commands: /battery, /logs, /nectar, /screenshot, /status, /tasklist, /plantertimers.",
+        ],
+        [
+          "discord_permission_macro_control_ids",
+          "Macro Control",
+          "Commands: /start, /stop, /pause, /resume, /rejoin.",
+        ],
+        [
+          "discord_permission_task_interrupt_ids",
+          "Task Interrupts",
+          "Commands: /amulet, /collectplanter, /planterreset, /reroll, /reset, /skip, /usehotbar.",
+        ],
+        [
+          "discord_permission_configuration_ids",
+          "Configuration",
+          "Commands that view or change macro configuration, fields, quests, collectibles, mobs, hive slot, shift lock, and macro mode.",
+        ],
+        [
+          "discord_permission_system_action_ids",
+          "System Actions",
+          "Commands: /close, /mute, /unmute.",
+        ],
+        [
+          "discord_permission_profile_access_ids",
+          "Profile Access",
+          "Commands: /privateserver, /swapprofile.",
+        ],
+        [
+          "discord_permission_streaming_ids",
+          "Streaming",
+          "Commands: /stream, /streamurl.",
+        ],
+        [
+          "discord_permission_reports_ids",
+          "Reports",
+          "Commands: /hourlyreport, /session.",
+        ],
+      ];
+
+      buildStandardContainer(
+        parentDiscord,
+        "Bot Command Permissions",
+        "Enter Discord user IDs allowed to use each category. Separate multiple IDs with commas. Leave a category blank to allow everyone.",
+        discordPermissionCategories.map(([id, title, desc]) => ({
+          id,
+          title,
+          desc,
+          type: {
+            name: "textbox",
+            inputType: "string",
+            length: 18,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        }))
+      );
+
     </script>
   </div>
   <div id="stream" class="standard-container sub-tab-panel" style="display: none">
