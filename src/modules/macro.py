@@ -3301,7 +3301,8 @@ class macro:
                     self._fuzzy_ai_gather_state = {}
                 preloadedAIGatherNameSpace = {**locals(), **globals()}
                 self.logger.webhook(aiPatternLabels.get(pattern, "AI Gather"), "Initialization started before travel.", "light blue")
-                exec(open(f"../settings/patterns/{pattern}.py").read(), preloadedAIGatherNameSpace)
+                with open(f"../settings/patterns/{pattern}.py") as patternFile:
+                    exec(patternFile.read(), preloadedAIGatherNameSpace)
             except Exception as e:
                 print(traceback.format_exc())
                 self.logger.webhook(aiPatternLabels.get(pattern, "AI Gather"), f"Pre-travel initialization failed: {e}", "orange")
