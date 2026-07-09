@@ -166,6 +166,64 @@ AUTO_PLANTER_OPTIONS = [
     ("planter_of_plenty", "auto_planter_planter_of_plenty", "Planter Of Plenty"),
 ]
 
+DISCORD_COMMAND_PERMISSION_CATEGORIES = {
+    "public_info": {
+        "label": "Public Info",
+        "setting": "discord_permission_public_info_ids",
+        "commands": ["help", "ping"],
+    },
+    "observation": {
+        "label": "Observation",
+        "setting": "discord_permission_observation_ids",
+        "commands": ["battery", "logs", "nectar", "plantertimers", "screenshot", "status", "tasklist"],
+    },
+    "macro_control": {
+        "label": "Macro Control",
+        "setting": "discord_permission_macro_control_ids",
+        "commands": ["pause", "rejoin", "resume", "start", "stop"],
+    },
+    "task_interrupts": {
+        "label": "Task Interrupts",
+        "setting": "discord_permission_task_interrupt_ids",
+        "commands": ["amulet", "collectplanter", "planterreset", "reroll", "reset", "skip", "usehotbar"],
+    },
+    "configuration": {
+        "label": "Configuration",
+        "setting": "discord_permission_configuration_ids",
+        "commands": [
+            "collectible", "collectibles", "disablegoo", "enablegoo", "field", "fields",
+            "goostatus", "hiveslot", "macromode", "mob", "mobs", "planters", "quest",
+            "quests", "setmaxplanters", "setplantermode", "settings", "shiftlock", "swapfield",
+        ],
+    },
+    "system_actions": {
+        "label": "System Actions",
+        "setting": "discord_permission_system_action_ids",
+        "commands": ["close", "mute", "unmute"],
+    },
+    "profile_access": {
+        "label": "Profile Access",
+        "setting": "discord_permission_profile_access_ids",
+        "commands": ["privateserver", "swapprofile"],
+    },
+    "streaming": {
+        "label": "Streaming",
+        "setting": "discord_permission_streaming_ids",
+        "commands": ["stream", "streamurl"],
+    },
+    "reports": {
+        "label": "Reports",
+        "setting": "discord_permission_reports_ids",
+        "commands": ["hourlyreport", "session"],
+    },
+}
+
+DISCORD_COMMAND_TO_PERMISSION_CATEGORY = {
+    command: category
+    for category, data in DISCORD_COMMAND_PERMISSION_CATEGORIES.items()
+    for command in data["commands"]
+}
+
 
 def _canonicalize_planter_name(name: str) -> str:
     if not name:
@@ -667,6 +725,73 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     _discord_message_queue = discord_message_queue
     _planter_command_queue = planter_command_queue
     _stream_control_queue = stream_control_queue
+
+    def _parse_allowed_discord_ids(value):
+        if value is None:
+            return set()
+        if isinstance(value, (list, tuple, set)):
+            raw_items = value
+        else:
+            raw_value = str(value).strip()
+            if not raw_value:
+                return set()
+            try:
+                parsed = ast.literal_eval(raw_value)
+                raw_items = parsed if isinstance(parsed, (list, tuple, set)) else [parsed]
+            except Exception:
+                raw_items = raw_value.split(",")
+
+        allowed_ids = set()
+        for item in raw_items:
+            item_text = str(item).strip()
+            if item_text.startswith("<@") and item_text.endswith(">"):
+                item_text = item_text.strip("<@!>")
+            if item_text:
+                allowed_ids.add(item_text)
+        return allowed_ids
+
+    def _permission_category_label(category_key):
+        return DISCORD_COMMAND_PERMISSION_CATEGORIES.get(category_key, {}).get("label", category_key)
+
+    async def _send_permission_denied(interaction, category_key):
+        label = _permission_category_label(category_key)
+        message = f"❌ You do not have permission to use this command. Required category: **{label}**."
+        if interaction.response.is_done():
+            await interaction.followup.send(message, ephemeral=True)
+        else:
+            await interaction.response.send_message(message, ephemeral=True)
+
+    def _user_can_use_permission_category(interaction, category_key):
+        category = DISCORD_COMMAND_PERMISSION_CATEGORIES.get(category_key)
+        if not category:
+            return False
+
+        settings = get_cached_settings()
+        allowed_ids = _parse_allowed_discord_ids(settings.get(category["setting"], ""))
+        if not allowed_ids:
+            return True
+        return str(interaction.user.id) in allowed_ids
+
+    def requires_discord_permission(category_key):
+        async def predicate(interaction):
+            if _user_can_use_permission_category(interaction, category_key):
+                return True
+            await _send_permission_denied(interaction, category_key)
+            return False
+        return app_commands.check(predicate)
+
+    @bot.tree.error
+    async def on_app_command_error(interaction, error):
+        if isinstance(error, app_commands.CheckFailure):
+            return
+        print(f"Discord command error: {error}")
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send(f"❌ Command failed: {str(error)}", ephemeral=True)
+            else:
+                await interaction.response.send_message(f"❌ Command failed: {str(error)}", ephemeral=True)
+        except Exception:
+            pass
 
     @bot.event
     async def on_ready():
@@ -2402,10 +2527,12 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             self.add_item(BackButton())
 
     @bot.tree.command(name = "ping", description = "Check if the bot is online")
+    @requires_discord_permission("public_info")
     async def ping(interaction: discord.Interaction):
         await interaction.response.send_message("Pong!")
     
     @bot.tree.command(name = "screenshot", description = "Send a screenshot of your screen")
+    @requires_discord_permission("observation")
     async def screenshot(interaction: discord.Interaction):
         await interaction.response.defer()
         img = screenshotRobloxWindow()
@@ -2415,6 +2542,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.followup.send(file = discord.File(fp=imageBinary, filename="screenshot.png"))
 
     @bot.tree.command(name = "start", description = "Start")
+    @requires_discord_permission("macro_control")
     async def start(interaction: discord.Interaction):
         if run.value != 3:
             await interaction.response.send_message("Macro is not fully stopped yet")
@@ -2432,6 +2560,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"Starting Macro. Error: {str(e)}")
 
     @bot.tree.command(name = "stop", description = "Stop the macro")
+    @requires_discord_permission("macro_control")
     async def stop(interaction: discord.Interaction):
         if run.value == 3:
             await interaction.response.send_message("Macro is already stopped")
@@ -2449,6 +2578,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"Stopping Macro. Error: {str(e)}")
 
     @bot.tree.command(name = "pause", description = "Pause the macro")
+    @requires_discord_permission("macro_control")
     async def pause(interaction: discord.Interaction):
         if run.value == 6:
             await interaction.response.send_message("Macro is already paused")
@@ -2461,6 +2591,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         await interaction.response.send_message("Macro Paused")
 
     @bot.tree.command(name = "resume", description = "Resume the macro")
+    @requires_discord_permission("macro_control")
     async def resume(interaction: discord.Interaction):
         if run.value == 2:
             await interaction.response.send_message("Macro is already running")
@@ -2473,11 +2604,13 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         await interaction.response.send_message("Macro Resumed")
 
     @bot.tree.command(name = "rejoin", description = "Make the macro rejoin the game.")
+    @requires_discord_permission("macro_control")
     async def rejoin(interaction: discord.Interaction):
         run.value = 4
         await interaction.response.send_message("Macro is rejoining")
 
     @bot.tree.command(name = "reset", description = "Reset the character and return to hive")
+    @requires_discord_permission("task_interrupts")
     async def reset(interaction: discord.Interaction):
         if run.value != 2:
             await interaction.response.send_message("Macro is not running")
@@ -2486,6 +2619,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         await interaction.response.send_message("Interrupting the current task. The macro will reset, convert, and retry it.")
 
     @bot.tree.command(name = "reroll", description = "Interrupt the current task and reroll Auto Field Boost")
+    @requires_discord_permission("task_interrupts")
     async def reroll(interaction: discord.Interaction):
         if run.value != 2:
             await interaction.response.send_message("Macro is not running")
@@ -2498,6 +2632,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         await interaction.response.send_message("Rerolling Auto Field Boost. The macro will reset, convert, and roll dice again.")
 
     @bot.tree.command(name = "skip", description = "Skip the current task and move to the next one")
+    @requires_discord_permission("task_interrupts")
     async def skip(interaction: discord.Interaction):
         if run.value != 2:
             await interaction.response.send_message("Macro is not running")
@@ -2506,6 +2641,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         await interaction.response.send_message("Interrupting the current task. The macro will reset, convert, and move to the next task.")
     
     @bot.tree.command(name = "logs", description = "Show recent macro actions (optionally specify count)")
+    @requires_discord_permission("observation")
     @app_commands.describe(count="Number of recent log entries to show (1-50)")
     async def show_logs(interaction: discord.Interaction, count: int = 10):
         """Show recent actions from the macro log (limit by `count`)"""
@@ -2575,6 +2711,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error retrieving logs: {str(e)}")
 
     @bot.tree.command(name = "status", description = "Get the current macro status")
+    @requires_discord_permission("observation")
     async def get_status(interaction: discord.Interaction):
         status_messages = {
             0: "⏹️ Stopping",
@@ -2603,6 +2740,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         await interaction.response.send_message(embed=embed)
 
     @bot.tree.command(name="tasklist", description="Show enabled task order with current and next task")
+    @requires_discord_permission("observation")
     async def tasklist(interaction: discord.Interaction):
         try:
             settings = get_cached_settings()
@@ -2664,6 +2802,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error retrieving task list: {str(e)}")
 
     @bot.tree.command(name="nectar", description="Show current nectar percentages (current + estimated)")
+    @requires_discord_permission("observation")
     async def show_nectar(interaction: discord.Interaction):
         await interaction.response.defer()
         try:
@@ -2760,6 +2899,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error reading nectar: {str(e)}")
 
     @bot.tree.command(name = "amulet", description = "Choose to keep or replace an amulet")
+    @requires_discord_permission("task_interrupts")
     @app_commands.describe(option = "keep or replace an amulet")
     async def amulet(interaction: discord.Interaction, option: str):
         if run.value != 2:
@@ -2781,6 +2921,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message("Replacing amulet")
 
     @bot.tree.command(name = "battery", description = "Get your current battery status")
+    @requires_discord_permission("observation")
     async def battery(interaction: discord.Interaction):
         try:
             output = subprocess.check_output(["pmset", "-g", "batt"], text=True)
@@ -2797,6 +2938,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"An error occurred: {e}")
     
     @bot.tree.command(name = "close", description = "Close the macro and/or Roblox")
+    @requires_discord_permission("system_actions")
     @app_commands.describe(action="What to close: both, roblox, macro")
     @app_commands.choices(action=[
         app_commands.Choice(name="Both", value="both"),
@@ -2836,6 +2978,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             raise
 
     @bot.tree.command(name = "mute", description = "Mute system audio (macOS only)")
+    @requires_discord_permission("system_actions")
     async def mute_audio(interaction: discord.Interaction):
         try:
             if sys.platform != "darwin":
@@ -2847,6 +2990,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Failed to mute audio: {e}")
 
     @bot.tree.command(name = "unmute", description = "Unmute system audio (macOS only)")
+    @requires_discord_permission("system_actions")
     async def unmute_audio(interaction: discord.Interaction):
         try:
             if sys.platform != "darwin":
@@ -2858,6 +3002,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Failed to unmute audio: {e}")
     
     @bot.tree.command(name = "disablegoo", description = "Disable goo for a specific field")
+    @requires_discord_permission("configuration")
     async def disable_goo(interaction: discord.Interaction, field: str):
         print("disablegoo command called")
         try:
@@ -2887,6 +3032,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error disabling goo: {str(e)}")
     
     @bot.tree.command(name = "enablegoo", description = "Enable goo for a specific field")
+    @requires_discord_permission("configuration")
     async def enable_goo(interaction: discord.Interaction, field: str):
         print("enablegoo command called")
         try:
@@ -2916,6 +3062,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error enabling goo: {str(e)}")
     
     @bot.tree.command(name = "goostatus", description = "Check goo status for all fields")
+    @requires_discord_permission("configuration")
     async def goo_status(interaction: discord.Interaction):
         print("goostatus command called")
         try:
@@ -2959,6 +3106,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             return []
 
     @bot.tree.command(name="swapprofile", description="Swap to a different profile (macro must be stopped)")
+    @requires_discord_permission("profile_access")
     @app_commands.describe(profile="Profile name to switch to")
     @app_commands.autocomplete(profile=profile_autocomplete)
     async def swap_profile(interaction: discord.Interaction, profile: str):
@@ -2996,6 +3144,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error swapping profile: {str(e)}")
 
     @bot.tree.command(name = "streamurl", description = "Get the current stream URL")
+    @requires_discord_permission("streaming")
     async def stream_url(interaction: discord.Interaction):
         try:
             # Read stream URL from file (use absolute path for reliability)
@@ -3016,6 +3165,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error getting stream URL: {str(e)}")
 
     @bot.tree.command(name="stream", description="Enable, disable, or check the stream")
+    @requires_discord_permission("streaming")
     @app_commands.describe(action="Choose whether to enable, disable, or check stream status")
     @app_commands.choices(action=[
         app_commands.Choice(name="Enable", value="enable"),
@@ -3068,6 +3218,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
 
     @bot.tree.command(name="privateserver", description="Get or set the configured private server link")
+    @requires_discord_permission("profile_access")
     @app_commands.describe(link="Private server link to save (optional)")
     async def private_server(interaction: discord.Interaction, link: Optional[str] = None):
         """Get the private server link or set it when `link` is provided."""
@@ -3095,6 +3246,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     # === COMPREHENSIVE SETTINGS MANAGEMENT COMMANDS ===
 
     @bot.tree.command(name="settings", description="Open the settings panel")
+    @requires_discord_permission("configuration")
     async def view_settings(interaction: discord.Interaction):
         """Open the interactive settings panel"""
         try:
@@ -3109,6 +3261,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     # === FIELD CONFIGURATION COMMANDS ===
 
     @bot.tree.command(name="fields", description="View field configuration")
+    @requires_discord_permission("configuration")
     async def view_fields(interaction: discord.Interaction):
         """View current field configuration"""
         await interaction.response.defer()
@@ -3257,6 +3410,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         return booleans
 
     @bot.tree.command(name="field", description="Enable or disable a specific field")
+    @requires_discord_permission("configuration")
     @app_commands.describe(field="Field name", enabled="Enable or disable")
     @app_commands.autocomplete(field=field_autocomplete, enabled=boolean_autocomplete)
     async def set_field(interaction: discord.Interaction, field: str, enabled: str):
@@ -3290,6 +3444,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error updating field: {str(e)}")
 
     @bot.tree.command(name="swapfield", description="Swap one field for another")
+    @requires_discord_permission("configuration")
     @app_commands.describe(current="Current field to replace (e.g., pine_tree)", new="New field to use (e.g., rose)")
     @app_commands.autocomplete(current=field_autocomplete, new=all_fields_autocomplete)
     async def swap_field(interaction: discord.Interaction, current: str, new: str):
@@ -3331,6 +3486,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     # === QUEST MANAGEMENT COMMANDS ===
 
     @bot.tree.command(name="quests", description="View quest configuration")
+    @requires_discord_permission("configuration")
     async def view_quests(interaction: discord.Interaction):
         """View current quest configuration"""
         try:
@@ -3358,6 +3514,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error retrieving quest settings: {str(e)}")
 
     @bot.tree.command(name="quest", description="Enable or disable a specific quest")
+    @requires_discord_permission("configuration")
     @app_commands.describe(quest="Quest name (polar_bear, brown_bear, black_bear, honey_bee, bucko_bee, riley_bee)", enabled="Enable or disable")
     @app_commands.autocomplete(quest=quest_autocomplete, enabled=boolean_autocomplete)
     async def set_quest(interaction: discord.Interaction, quest: str, enabled: str):
@@ -3382,6 +3539,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     # === COLLECTIBLES MANAGEMENT COMMANDS ===
 
     @bot.tree.command(name="collectibles", description="View collectibles configuration")
+    @requires_discord_permission("configuration")
     async def view_collectibles(interaction: discord.Interaction):
         """View current collectibles configuration"""
         try:
@@ -3421,6 +3579,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error retrieving collectible settings: {str(e)}")
 
     @bot.tree.command(name="collectible", description="Enable or disable a specific collectible")
+    @requires_discord_permission("configuration")
     @app_commands.describe(collectible="Collectible name", enabled="Enable or disable")
     @app_commands.autocomplete(collectible=collectible_autocomplete, enabled=boolean_autocomplete)
     async def set_collectible(interaction: discord.Interaction, collectible: str, enabled: str):
@@ -3504,6 +3663,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         await interaction.response.send_message(message)
     '''
     @bot.tree.command(name="planterreset", description="Reset the timer for one active planter")
+    @requires_discord_permission("task_interrupts")
     @app_commands.describe(planter="Choose one of the currently active enabled planters")
     @app_commands.autocomplete(planter=planter_reset_autocomplete)
     async def planter_reset(interaction: discord.Interaction, planter: str):
@@ -3516,6 +3676,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error resetting planter timer: {str(e)}")
 
     @bot.tree.command(name="collectplanter", description="Interrupt the macro and collect one active planter")
+    @requires_discord_permission("task_interrupts")
     @app_commands.describe(planter="Choose one of the currently active enabled planters")
     @app_commands.autocomplete(planter=planter_reset_autocomplete)
     async def collect_planter(interaction: discord.Interaction, planter: str):
@@ -3553,6 +3714,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error queueing planter collection: {str(e)}")
 
     @bot.tree.command(name="plantertimers", description="View active planter timers")
+    @requires_discord_permission("observation")
     async def planter_timers(interaction: discord.Interaction):
         """View active planter timers without generating an hourly report"""
         try:
@@ -3586,6 +3748,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     # === MOB RUN COMMANDS ===
 
     @bot.tree.command(name="mobs", description="View mob run configuration")
+    @requires_discord_permission("configuration")
     async def view_mobs(interaction: discord.Interaction):
         """View current mob run configuration"""
         try:
@@ -3626,6 +3789,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error retrieving mob settings: {str(e)}")
 
     @bot.tree.command(name="mob", description="Enable or disable a specific mob run")
+    @requires_discord_permission("configuration")
     @app_commands.describe(mob="Mob name", enabled="Enable or disable")
     @app_commands.autocomplete(mob=mob_autocomplete, enabled=boolean_autocomplete)
     async def set_mob(interaction: discord.Interaction, mob: str, enabled: str):
@@ -3652,6 +3816,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         await interaction.response.send_message(message)
     
     @bot.tree.command(name="hiveslot", description = "Change the hive slot number (1-6)")
+    @requires_discord_permission("configuration")
     @app_commands.describe(slot="Hive slot number (1-6, where 1 is closest to cannon)")
     async def hive_slot(interaction: discord.Interaction, slot: int):
         """Change the hive slot number"""
@@ -3676,6 +3841,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error changing hive slot: {str(e)}")
 
     @bot.tree.command(name="usehotbar", description="Use a hotbar slot (1-7)")
+    @requires_discord_permission("task_interrupts")
     @app_commands.describe(slot="Hotbar slot number (1-7)")
     async def use_hotbar(interaction: discord.Interaction, slot: int):
         """Manually trigger a hotbar slot (updates timings and presses the key)"""
@@ -3716,6 +3882,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error using hotbar slot: {str(e)}")
 
     @bot.tree.command(name="shiftlock", description="Set or toggle shift lock")
+    @requires_discord_permission("configuration")
     @app_commands.describe(mode="Choose whether shift lock should be on, off, or toggled")
     @app_commands.choices(mode=[
         app_commands.Choice(name="on", value="on"),
@@ -3732,6 +3899,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.followup.send(f"❌ Error controlling shift lock: {str(e)}")
 
     @bot.tree.command(name="macromode", description="Set macro mode (normal, quests, or field)")
+    @requires_discord_permission("configuration")
     @app_commands.describe(mode="Macro mode to set")
     @app_commands.choices(mode=[
         app_commands.Choice(name="normal", value="normal"),
@@ -3761,6 +3929,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error setting macro mode: {str(e)}")
 
     @bot.tree.command(name="help", description="Show available commands")
+    @requires_discord_permission("public_info")
     async def help_command(interaction: discord.Interaction):
         """Show available commands"""
         embed = discord.Embed(title="BSS Macro Discord Bot", description="Available Commands:", color=0x0099ff)
@@ -3785,10 +3954,21 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         
         embed.add_field(name="**Advanced**", value="`/amulet <keep/replace>` - Choose amulet action\n`/close <both/roblox/macro>` - Close both, Roblox only, or macro only", inline=False)
 
+        permission_lines = [
+            f"**{data['label']}**: `{data['setting']}`"
+            for data in DISCORD_COMMAND_PERMISSION_CATEGORIES.values()
+        ]
+        embed.add_field(
+            name="**Permission Categories**",
+            value="\n".join(permission_lines) + "\nLeave a category blank to allow everyone, or add Discord user IDs to restrict it.",
+            inline=False,
+        )
+
         await interaction.response.send_message(embed=embed)
 
 
     @bot.tree.command(name = "hourlyreport", description = "Send the hourly report")
+    @requires_discord_permission("reports")
     async def hourlyReport(interaction: discord.Interaction):
         await interaction.response.defer()
         try:
@@ -3845,6 +4025,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.followup.send(f"❌ Error generating hourly report: {str(e)}")
 
     @bot.tree.command(name = "session", description = "Generate and send the final session report")
+    @requires_discord_permission("reports")
     async def sessionReport(interaction: discord.Interaction):
         await interaction.response.defer()
         try:
