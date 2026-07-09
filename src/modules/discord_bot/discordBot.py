@@ -657,7 +657,7 @@ def _build_logger_embed(data):
     return embed
 
 
-def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None, updateGUI=None, discord_message_queue=None, planter_command_queue=None):
+def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None, updateGUI=None, discord_message_queue=None, planter_command_queue=None, stream_control_queue=None):
     import modules.macro
     _patch_discord_response_footers()
     bot = commands.Bot(command_prefix="fuzz!", intents=discord.Intents.all())
@@ -666,6 +666,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     _pin_requests = pin_requests
     _discord_message_queue = discord_message_queue
     _planter_command_queue = planter_command_queue
+    _stream_control_queue = stream_control_queue
 
     @bot.event
     async def on_ready():
@@ -3014,6 +3015,57 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         except Exception as e:
             await interaction.response.send_message(f"❌ Error getting stream URL: {str(e)}")
 
+    @bot.tree.command(name="stream", description="Enable, disable, or check the stream")
+    @app_commands.describe(action="Choose whether to enable, disable, or check stream status")
+    @app_commands.choices(action=[
+        app_commands.Choice(name="Enable", value="enable"),
+        app_commands.Choice(name="Disable", value="disable"),
+        app_commands.Choice(name="Status", value="status"),
+    ])
+    async def stream_control(interaction: discord.Interaction, action: str):
+        try:
+            action = str(action).lower().strip()
+            settings = get_cached_settings()
+            currently_enabled = bool(settings.get("enable_stream", False))
+
+            if action == "status":
+                stream_url = ""
+                src_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+                stream_url_file = os.path.join(src_dir, "stream_url.txt")
+                if os.path.exists(stream_url_file):
+                    with open(stream_url_file, "r") as f:
+                        stream_url = f.read().strip()
+
+                if stream_url:
+                    await interaction.response.send_message(f"✅ Stream is enabled and active:\n{stream_url}")
+                elif currently_enabled:
+                    await interaction.response.send_message("✅ Stream is enabled, but no active URL is available yet.")
+                else:
+                    await interaction.response.send_message("⏹️ Stream is disabled.")
+                return
+
+            enabled = action == "enable"
+            if action not in ("enable", "disable"):
+                await interaction.response.send_message("❌ Unknown stream action. Use enable, disable, or status.")
+                return
+
+            settingsManager.saveGeneralSetting("enable_stream", enabled)
+            clear_settings_cache()
+
+            if _stream_control_queue is not None:
+                _stream_control_queue.put({"action": action, "requested_at": time.time()})
+
+            if updateGUI is not None:
+                updateGUI.value = 1
+
+            if enabled:
+                await interaction.response.send_message("✅ Stream enabled. If the macro is running, the stream will start now.")
+            else:
+                await interaction.response.send_message("⏹️ Stream disabled. Any active stream will stop now.")
+
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error controlling stream: {str(e)}")
+
 
     @bot.tree.command(name="privateserver", description="Get or set the configured private server link")
     @app_commands.describe(link="Private server link to save (optional)")
@@ -3729,7 +3781,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         embed.add_field(name="**Profile Management**", value="`/swapprofile <name>` - Switch to a different profile (macro must be stopped)", inline=False)
 
-        embed.add_field(name="**Status & Monitoring**", value="`/status` - Get macro status and current task\n`/tasklist` - Show enabled task order, current task, and next task\n`/logs` - Show recent macro actions\n`/battery` - Check battery status\n`/streamurl` - Get stream URL\n`/hourlyreport` - Generate and send the hourly report\n`/session` - Generate and send the final session report", inline=False)
+        embed.add_field(name="**Status & Monitoring**", value="`/status` - Get macro status and current task\n`/tasklist` - Show enabled task order, current task, and next task\n`/logs` - Show recent macro actions\n`/battery` - Check battery status\n`/stream <enable/disable/status>` - Control stream\n`/streamurl` - Get stream URL\n`/hourlyreport` - Generate and send the hourly report\n`/session` - Generate and send the final session report", inline=False)
         
         embed.add_field(name="**Advanced**", value="`/amulet <keep/replace>` - Choose amulet action\n`/close <both/roblox/macro>` - Close both, Roblox only, or macro only", inline=False)
 
