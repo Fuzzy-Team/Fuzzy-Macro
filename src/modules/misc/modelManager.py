@@ -44,7 +44,12 @@ def _macos_version():
 
 
 def _supported_model_names():
-    return COREML_MODELS + ONNX_MODELS
+    # Core ML is the native model format on supported macOS versions. Download
+    # ONNX only as the cross-platform fallback; fetching both makes startup
+    # repeatedly restore ONNX models that the Core ML runtime later removes.
+    if _macos_version() >= (12, 0):
+        return COREML_MODELS
+    return ONNX_MODELS
 
 
 def _delete_path(path):
