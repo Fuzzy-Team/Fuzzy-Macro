@@ -48,6 +48,7 @@ class LiveGatherReport:
         self.message_id = None
         self.webhook_id = None
         self.webhook_token = None
+        self.image_filename = "live_gather_report.png"
         self._parse_webhook_url()
 
     def _parse_webhook_url(self):
@@ -101,11 +102,11 @@ class LiveGatherReport:
 
     def _send_or_edit_webhook(self, embed, image_bytes):
         files = {
-            "files[0]": ("live_gather_report.png", image_bytes, "image/png"),
+            "files[0]": (self.image_filename, image_bytes, "image/png"),
         }
         payload = {
             "embeds": [embed],
-            "attachments": [{"id": 0, "filename": "live_gather_report.png"}],
+            "attachments": [{"id": 0, "filename": self.image_filename}],
         }
         if self.ping_user_id:
             payload["content"] = f"<@{self.ping_user_id}>"
@@ -141,11 +142,11 @@ class LiveGatherReport:
     def _send_or_edit_bot(self, embed, image_bytes):
         headers = {"Authorization": f"Bot {self.bot_token}"}
         files = {
-            "files[0]": ("live_gather_report.png", image_bytes, "image/png"),
+            "files[0]": (self.image_filename, image_bytes, "image/png"),
         }
         payload = {
             "embeds": [embed],
-            "attachments": [{"id": 0, "filename": "live_gather_report.png"}],
+            "attachments": [{"id": 0, "filename": self.image_filename}],
         }
         if self.ping_user_id:
             payload["content"] = f"<@{self.ping_user_id}>"
@@ -251,7 +252,7 @@ class LiveGatherReport:
         return {
             "title": title,
             "color": color,
-            "image": {"url": "attachment://live_gather_report.png"},
+            "image": {"url": f"attachment://{self.image_filename}"},
         }
 
     @staticmethod
@@ -262,3 +263,35 @@ class LiveGatherReport:
         if hours:
             return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
         return f"{minutes:02d}:{seconds:02d}"
+
+
+class LiveQuestProgressReport(LiveGatherReport):
+    """An auto-updating Discord attachment showing the visible quest panel."""
+
+    def __init__(self, *args, capture_quest_screen=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.capture_quest_screen = capture_quest_screen
+        self.image_filename = "live_quest_progress.png"
+
+    def _capture_honey_pollen(self):
+        if not callable(self.capture_quest_screen):
+            raise RuntimeError("Quest screen capture is unavailable")
+        image = self.capture_quest_screen()
+        out = io.BytesIO()
+        image.save(out, format="PNG")
+        out.seek(0)
+        return out.getvalue()
+
+    def _build_embed(self, quest_giver, objective, elapsed_seconds, activity="Quest Progress"):
+        now = time.strftime("%H:%M:%S", time.localtime())
+        if self.time_format == 12:
+            now = time.strftime("%I:%M:%S %p", time.localtime()).lstrip("0")
+        giver_name = str(quest_giver).replace("_", " ").title()
+        objective_name = str(objective).replace("_", " ").title()
+        elapsed = self._format_duration(elapsed_seconds)
+        return {
+            "title": f"[{now}] Live Quest Progress: {giver_name}",
+            "description": f"Watching: {objective_name}\nElapsed: {elapsed}",
+            "color": 0x89CFF0,
+            "image": {"url": f"attachment://{self.image_filename}"},
+        }

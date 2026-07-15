@@ -471,6 +471,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
     questCache = {}
     questScanScreens = None
     macro.questGatherInterruptMobs = {}
+    macro.questGatherWatchers = {}
+    macro.questTaskWatchers = {}
+    macro.completedQuestWatchTasks = set()
+    macro.completedQuestWatchObjectives = set()
     
     macro.start()
     #macro.useItemInInventory("blueclayplanter")
@@ -538,6 +542,26 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
     def runTask(func = None, args = (), resetAfter = True, convertAfter = True, allowAFB = True):
         nonlocal taskCompleted
 
+        def watchedTaskKey():
+            if func is None:
+                return None
+            functionName = getattr(func, "__name__", "")
+            if functionName == "killMob" and args:
+                return f"kill_{str(args[0]).replace(' ', '_')}"
+            if functionName == "collect" and args:
+                return f"collect_{str(args[0]).replace('-', '_').replace(' ', '_')}"
+            if functionName == "feedBee" and args:
+                return f"feed_{str(args[0]).replace(' ', '_')}"
+            taskKeys = {
+                "antChallenge": "ant_challenge",
+                "coconutCrab": "kill_coconut_crab",
+                "kingBeetle": "kill_king_beetle",
+                "tunnelBear": "kill_tunnel_bear",
+                "stumpSnail": "kill_stump_snail",
+                "stingerHunt": "stinger_hunt",
+            }
+            return taskKeys.get(functionName)
+
         def handle_interrupt(action):
             skipTask.value = INTERRUPT_NONE
             macro.keyboard.releaseMovement()
@@ -581,13 +605,27 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         if pending_action != INTERRUPT_NONE:
             return handle_interrupt(pending_action)
         
+        questWatchContext = None
+        taskWatchKey = watchedTaskKey()
+        if taskWatchKey and taskWatchKey in macro.completedQuestWatchTasks:
+            return None
+
         try:
+            if taskWatchKey:
+                questWatchContext = macro.startQuestTaskWatch(taskWatchKey)
+                if questWatchContext and questWatchContext.get("skip_task"):
+                    questWatchContext = None
+                    return None
             #execute the task
             if func:
                 returnVal = func(*args) 
                 taskCompleted = True
             else:
                 returnVal = None
+            if questWatchContext:
+                if macro.finishQuestTaskWatch(questWatchContext):
+                    macro.markQuestTaskWatchCompleted(questWatchContext)
+                questWatchContext = None
             #task done
             if resetAfter: 
                 macro.reset(convert=convertAfter)
@@ -606,7 +644,14 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 if macro.hasAFBRespawned("AFB_dice_cd", macro.setdat["AFB_rebuff"]*60) or macro.hasAFBRespawned("AFB_glitter_cd", macro.setdat["AFB_rebuff"]*60-30):
                     macro.AFB(gatherInterrupt=False)
         except InterruptRequested as interrupt:
+            if questWatchContext:
+                macro.finishQuestTaskWatch(questWatchContext, checkCompletion=False)
+                questWatchContext = None
             return handle_interrupt(interrupt.action)
+        finally:
+            if questWatchContext:
+                if macro.finishQuestTaskWatch(questWatchContext):
+                    macro.markQuestTaskWatchCompleted(questWatchContext)
 
         macro.clear_task_status()
         return returnVal
@@ -648,6 +693,21 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         requireRedGumdropField = False
         feedBees = []
         setdatEnable = []
+
+        def registerGatherWatcher(field, objective):
+            """Remember which quest objective a field gather is intended to advance."""
+            normalizedField = str(field).replace("_", " ").strip().lower()
+            watcher = (questGiver, objective)
+            watchers = macro.questGatherWatchers.setdefault(normalizedField, [])
+            if watcher not in watchers:
+                watchers.append(watcher)
+
+        def registerTaskWatcher(task, objective):
+            normalizedTask = str(task).replace("-", "_").replace(" ", "_").strip().lower()
+            watcher = (questGiver, objective)
+            watchers = macro.questTaskWatchers.setdefault(normalizedTask, [])
+            if watcher not in watchers:
+                watchers.append(watcher)
 
         def emptyQuestResult():
             return setdatEnable, gatherFieldsList, gumdropGatherFieldsList, petalGatherFieldsList, requireRedField, requireBlueField, feedBees, requireRedGumdropField, requireBlueGumdropField, requireField
@@ -717,30 +777,38 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 field_name = "_".join(objData[1:]).replace("_", " ").strip()
                 if field_name:
                     gatherFieldsList.append(field_name)
+                    registerGatherWatcher(field_name, obj)
             elif objData[0] == "gathergoo":
                 field_name = "_".join(objData[1:]).replace("_", " ").strip()
                 if macro.setdat["quest_use_gumdrops"]:
                     if field_name:
                         gumdropGatherFieldsList.append(field_name)
+                        registerGatherWatcher(field_name, obj)
                 else:
                     if field_name:
                         gatherFieldsList.append(field_name)
+                        registerGatherWatcher(field_name, obj)
             elif objData[0] == "gatherpetal":
                 field_name = "_".join(objData[1:]).replace("_", " ").strip()
                 if field_name:
                     petalGatherFieldsList.append(field_name)
+                    registerGatherWatcher(field_name, obj)
             elif objData[0] == "kill":
                 # kill objectives can be in the form "kill_<num>_<mob>" or "kill_<mob>"
                 # determine the mob name robustly
-                if len(objData) >= 3:
-                    mob_name = objData[2]
-                elif len(objData) == 2:
-                    mob_name = objData[1]
+                if len(objData) >= 3 and objData[1].isdigit():
+                    mob_name = "_".join(objData[2:])
+                elif len(objData) >= 2:
+                    mob_name = "_".join(objData[1:])
                 else:
                     continue
 
+                registerTaskWatcher(f"kill_{mob_name}", obj)
+
                 # ants are handled via the ant challenge flow
                 if "ant" in mob_name and mob_name != "mantis":
+                    registerTaskWatcher("ant_challenge", obj)
+                    registerTaskWatcher("collect_ant_pass_dispenser", obj)
                     if "ant_challenge" not in setdatEnable:
                         setdatEnable.append("ant_challenge")
                     if "ant_pass_dispenser" not in setdatEnable:
@@ -754,47 +822,62 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             elif objData[0] == "token" and len(objData) > 1 and objData[1] == "honey":
                 if "honeytoken" not in setdatEnable:
                     setdatEnable.append("honeytoken")
+                registerGatherWatcher("__any__", obj)
             elif objData[0] == "token":
                 if questGiver == "riley bee":
                     requireRedField = True
+                    registerGatherWatcher("__red__", obj)
                 elif questGiver == "bucko bee":
                     requireBlueField = True
+                    registerGatherWatcher("__blue__", obj)
                 else:
                     requireField = True
+                    registerGatherWatcher("__any__", obj)
 
             elif objData[0] == "fieldtoken" and objData[1] == "blueberry":
                 requireBlueField = True
+                registerGatherWatcher("__blue__", obj)
             elif objData[0] == "fieldtoken" and objData[1] == "strawberry":
                 requireRedField = True
+                registerGatherWatcher("__red__", obj)
             elif objData[0] == "feed":
                 if objData[1] == "*":
                     amount = 25
                 else:
                     amount = int(objData[1])
                 feedBees.append((objData[2], amount))
+                registerTaskWatcher(f"feed_{objData[2]}", obj)
             elif objData[0] == "pollen" and objData[1] == "blue":
                 requireBlueField = True
+                registerGatherWatcher("__blue__", obj)
             elif objData[0] == "pollen" and objData[1] == "red":
                 requireRedField = True
+                registerGatherWatcher("__red__", obj)
             elif objData[0] == "pollen" and objData[1] == "white":
                 requireField = True
+                registerGatherWatcher("__any__", obj)
             elif objData[0] == "pollengoo" and objData[1] == "blue":
                 if macro.setdat["quest_use_gumdrops"]:
                     requireBlueGumdropField = True
                 else:
                     requireBlueField = True
+                registerGatherWatcher("__blue__", obj)
             elif objData[0] == "pollengoo" and objData[1] == "red":
                 if macro.setdat["quest_use_gumdrops"]:
                     requireRedGumdropField = True
                 else:
                     requireRedField = True
+                registerGatherWatcher("__red__", obj)
             elif objData[0] == "pollengoo" and objData[1] == "white":
                 if macro.setdat["quest_use_gumdrops"]:
                     requireBlueGumdropField = True
                 else:
                     requireField = True
+                registerGatherWatcher("__any__", obj)
             elif objData[0] == "collect":
-                setdatEnable.append(objData[1].replace("-","_"))
+                collectTask = objData[1].replace("-", "_")
+                setdatEnable.append(collectTask)
+                registerTaskWatcher(f"collect_{collectTask}", obj)
 
         return setdatEnable, gatherFieldsList, gumdropGatherFieldsList, petalGatherFieldsList, requireRedField, requireBlueField, feedBees, requireRedGumdropField, requireBlueGumdropField, requireField
 
@@ -912,6 +995,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         questCache.clear()
         questScanScreens = None
         macro.questGatherInterruptMobs.clear()
+        macro.questGatherWatchers.clear()
+        macro.questTaskWatchers.clear()
+        macro.completedQuestWatchTasks.clear()
+        macro.completedQuestWatchObjectives.clear()
         
         macro.setdat = get_cached_settings()
         # Check if profile has changed and reload settings if needed
@@ -1080,7 +1167,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
 
             # Feed bees for quests (done once per cycle)
             for item, quantity in itemsToFeedBees:
-                macro.feedBee(item, quantity)
+                runTask(macro.feedBee, args=(item, quantity), resetAfter=False)
                 taskCompleted = True
 
             allGatheredFields = []
@@ -1193,19 +1280,19 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
 
                 if mob == "coconut_crab":
                     if macro.setdat["coconut_crab"] and macro.hasRespawned("coconut_crab", 36*60*60, applyMobRespawnBonus=True):
-                        macro.coconutCrab()
+                        runTask(macro.coconutCrab)
                         executedTasks.add(taskId)
                     continue
 
                 if mob == "king_beetle":
                     if macro.setdat["king_beetle"] and macro.hasRespawned("king_beetle", 24*60*60, applyMobRespawnBonus=True):
-                        macro.kingBeetle()
+                        runTask(macro.kingBeetle)
                         executedTasks.add(taskId)
                     continue
 
                 if mob == "tunnel_bear":
                     if macro.setdat["tunnel_bear"] and macro.hasRespawned("tunnel_bear", 48*60*60, applyMobRespawnBonus=True):
-                        macro.tunnelBear()
+                        runTask(macro.tunnelBear)
                         executedTasks.add(taskId)
                     continue
 
@@ -1428,7 +1515,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                     
                     # Feed bees if needed
                     for item, quantity in feedBees:
-                        macro.feedBee(item, quantity)
+                        runTask(macro.feedBee, args=(item, quantity), resetAfter=False)
                         taskCompleted = True
                 else:
                     handleQuest(questName, executeQuest=True)
@@ -1437,7 +1524,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                     if questName in questFeedRequirements:
                         feedBees = questFeedRequirements[questName]
                         for item, quantity in feedBees:
-                            macro.feedBee(item, quantity)
+                            runTask(macro.feedBee, args=(item, quantity), resetAfter=False)
                             taskCompleted = True
                 
                 executedTasks.add(taskId)
@@ -1515,7 +1602,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 # Special cases: coconut_crab, king_beetle, tunnel_bear, and stump_snail
                 if mob == "coconut_crab":
                     if macro.setdat["coconut_crab"] and macro.hasRespawned("coconut_crab", 36*60*60, applyMobRespawnBonus=True):
-                        macro.coconutCrab()
+                        runTask(macro.coconutCrab)
                         executedTasks.add(taskId)
                         return True
                     return False
@@ -1524,7 +1611,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 # King Beetle respawns every 24 hours (20 hours 24 minutes with Gifted Vicious Bee)
                 if mob == "king_beetle":
                     if macro.setdat["king_beetle"] and macro.hasRespawned("king_beetle", 24*60*60, applyMobRespawnBonus=True):
-                        macro.kingBeetle()
+                        runTask(macro.kingBeetle)
                         executedTasks.add(taskId)
                         return True
                     return False
@@ -1532,7 +1619,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 # Tunnel Bear respawns every 48 hours (40 hours 48 minutes with Gifted Vicious Bee)
                 if mob == "tunnel_bear":
                     if macro.setdat["tunnel_bear"] and macro.hasRespawned("tunnel_bear", 48*60*60, applyMobRespawnBonus=True):
-                        macro.tunnelBear()
+                        runTask(macro.tunnelBear)
                         executedTasks.add(taskId)
                         return True
                     return False

@@ -44,7 +44,7 @@ import math
 import re
 import ast
 from modules.submacros.hourlyReport import BUFF_RENDER_CONFIG, HourlyReport, BuffDetector
-from modules.submacros.liveGatherReport import LiveGatherReport
+from modules.submacros.liveGatherReport import LiveGatherReport, LiveQuestProgressReport
 from difflib import SequenceMatcher
 import fuzzywuzzy.process
 import fuzzywuzzy
@@ -2523,7 +2523,7 @@ class macro:
         return LiveGatherReport(
             logModule.get_default_delivery_route(self.setdat),
             self.robloxWindow,
-            10,
+            self.setdat.get("live_gather_report_interval", 10),
             self.setdat.get("webhook_time_format", 24),
             logModule.build_route_settings(self.setdat),
             self.setdat.get("discord_bot_token", ""),
@@ -2531,6 +2531,143 @@ class macro:
             logModule.get_delivery_mode(self.setdat),
             route_category,
         )
+
+    def createLiveQuestProgressReport(self):
+        return LiveQuestProgressReport(
+            logModule.get_default_delivery_route(self.setdat),
+            self.robloxWindow,
+            self.setdat.get("live_gather_report_interval", 10),
+            self.setdat.get("webhook_time_format", 24),
+            logModule.build_route_settings(self.setdat),
+            self.setdat.get("discord_bot_token", ""),
+            None,
+            logModule.get_delivery_mode(self.setdat),
+            "quests",
+            capture_quest_screen=self.captureQuestWatchScreen,
+        )
+
+    def startQuestTaskWatch(self, taskKey):
+        """Open and publish the quest tied to a non-gather quest task."""
+        if not self.setdat.get("quest_progress_watch", False):
+            return None
+
+        normalizedTask = str(taskKey).replace("-", "_").replace(" ", "_").strip().lower()
+        watchers = (getattr(self, "questTaskWatchers", {}) or {}).get(normalizedTask, [])
+        if not watchers:
+            return None
+
+        completedObjectives = getattr(self, "completedQuestWatchObjectives", set())
+        for questGiver, objective in watchers:
+            identity = (normalizedTask, questGiver, objective)
+            if identity in completedObjectives:
+                continue
+
+            menuOpen = False
+            try:
+                menuOpen = True
+                visibleObjectives = self.findQuest(
+                    questGiver,
+                    keepQuestMenuOpen=True,
+                    logDetection=False,
+                )
+                if visibleObjectives is None:
+                    # findQuest closes the menu when the quest cannot be located.
+                    return None
+                if objective not in visibleObjectives:
+                    self.toggleQuest()
+                    self.moveMouseToDefault()
+                    completedObjectives.add(identity)
+                    continue
+
+                startedAt = time.time()
+                report = self.createLiveQuestProgressReport()
+                report.start(
+                    questGiver,
+                    objective,
+                    lambda: time.time() - startedAt,
+                    lambda: self.run is not None and self.run.value == 6,
+                    activity="Quest Progress",
+                )
+                self.moveMouseToDefault()
+                self.logger.webhook(
+                    "Live Quest Progress",
+                    f"Watching {questGiver.title()}: {objective.replace('_', ' ').title()}",
+                    "light blue",
+                )
+                return {
+                    "task": normalizedTask,
+                    "quest_giver": questGiver,
+                    "objective": objective,
+                    "report": report,
+                    "menu_open": True,
+                }
+            except Exception:
+                print(traceback.format_exc())
+                if menuOpen:
+                    self.toggleQuest()
+                    self.moveMouseToDefault()
+                return None
+
+        self.completedQuestWatchTasks.add(normalizedTask)
+        return {"skip_task": True, "task": normalizedTask}
+
+    def markQuestTaskWatchCompleted(self, context):
+        """Mark one objective done and skip the task only when no quest still needs it."""
+        taskKey = context["task"]
+        identity = (taskKey, context["quest_giver"], context["objective"])
+        self.completedQuestWatchObjectives.add(identity)
+        watchers = (getattr(self, "questTaskWatchers", {}) or {}).get(taskKey, [])
+        allComplete = all(
+            (taskKey, questGiver, objective) in self.completedQuestWatchObjectives
+            for questGiver, objective in watchers
+        )
+        if allComplete:
+            self.completedQuestWatchTasks.add(taskKey)
+            self.logger.webhook(
+                "Quest Task Complete",
+                f"Skipping remaining {taskKey.replace('_', ' ').title()} runs; no watched quest still needs them.",
+                "light green",
+                "screen",
+                route_category="quests",
+            )
+        else:
+            self.logger.webhook(
+                "Quest Objective Complete",
+                f"{context['quest_giver'].title()} no longer needs {taskKey.replace('_', ' ').title()}; continuing for another active quest.",
+                "light green",
+                route_category="quests",
+            )
+
+    def finishQuestTaskWatch(self, context, checkCompletion=True):
+        """Close a task watcher and report whether its objective just completed."""
+        if not context:
+            return False
+
+        report = context.get("report")
+        if report:
+            report.stop()
+
+        completed = False
+        try:
+            if checkCompletion and context.get("menu_open"):
+                time.sleep(0.5)
+                visibleObjectives = self.findQuest(
+                    context["quest_giver"],
+                    questScreens=[self.captureQuestWatchScreen()],
+                    logDetection=False,
+                )
+                completed = (
+                    visibleObjectives is not None
+                    and context["objective"] not in visibleObjectives
+                )
+        except Exception:
+            print(traceback.format_exc())
+        finally:
+            if context.get("menu_open"):
+                self.toggleQuest()
+            self.moveMouseToDefault()
+
+        return completed
 
     def moveMouseToDefault(self):
         mouse.moveTo(self.robloxWindow.mx+370, self.robloxWindow.my+self.robloxWindow.yOffset+110)
@@ -3666,6 +3803,56 @@ class macro:
             self.set_task_status("collect_sprouts", task="collect", field=field, activity="sprouts")
         else:
             self.set_task_status(f"gather_{field}", task="gather", field=field)
+
+        questMenuKeptOpen = False
+        questWatchGiver = None
+        questWatchObjective = None
+        lastQuestProgressCheck = 0
+        if self.setdat.get("quest_progress_watch", False) and not isSproutGather:
+            questWatchers = getattr(self, "questGatherWatchers", {}) or {}
+            watcherCandidates = list(questWatchers.get(normalized_field.lower(), []))
+            if normalized_field.lower() in {"blue flower", "bamboo", "pine tree", "stump"}:
+                watcherCandidates.extend(questWatchers.get("__blue__", []))
+            if normalized_field.lower() in {"mushroom", "strawberry", "rose", "pepper"}:
+                watcherCandidates.extend(questWatchers.get("__red__", []))
+            watcherCandidates.extend(questWatchers.get("__any__", []))
+
+            if watcherCandidates:
+                questWatchGiver, questWatchObjective = watcherCandidates[0]
+                try:
+                    # findQuest opens the menu before scanning. Mark it here so
+                    # an OCR exception still closes the overlay safely.
+                    questMenuKeptOpen = True
+                    visibleObjectives = self.findQuest(
+                        questWatchGiver,
+                        keepQuestMenuOpen=True,
+                        logDetection=False,
+                    )
+                    if visibleObjectives is not None and questWatchObjective in visibleObjectives:
+                        lastQuestProgressCheck = time.time()
+                        self.moveMouseToDefault()
+                        self.logger.webhook(
+                            "Live Quest Progress",
+                            f"Watching {questWatchGiver.title()}: {questWatchObjective.replace('_', ' ').title()}",
+                            "light blue",
+                        )
+                    elif visibleObjectives is not None:
+                        # The menu was deliberately left open by findQuest, but the
+                        # objective is no longer incomplete, so do not watch it.
+                        self.toggleQuest()
+                        self.moveMouseToDefault()
+                        questMenuKeptOpen = False
+                    else:
+                        # findQuest closes the menu itself when it cannot locate
+                        # the requested quest giver.
+                        questMenuKeptOpen = False
+                except Exception:
+                    print(traceback.format_exc())
+                    if questMenuKeptOpen:
+                        self.toggleQuest()
+                        self.moveMouseToDefault()
+                    questMenuKeptOpen = False
+
         self.isGathering = True
         firstPattern = True
         fuzzyAIInitStartedLogged = False
@@ -3770,16 +3957,32 @@ class macro:
         if self.liveGatherReportEnabled() and not isSproutGather:
             liveGatherReport = self.createLiveGatherReport()
             liveGatherReport.start(field, gatherTimeLimit, getGatherTime, isGatherPaused)
+
+        liveQuestProgressReport = None
+        if questMenuKeptOpen:
+            liveQuestProgressReport = self.createLiveQuestProgressReport()
+            liveQuestProgressReport.start(
+                questWatchGiver,
+                questWatchObjective,
+                getGatherTime,
+                isGatherPaused,
+                activity="Quest Progress",
+            )
         
         def stopGather():
-            nonlocal gooTimerActive, gumdropTimerActive, inactiveHoneyTimerActive
+            nonlocal gooTimerActive, gumdropTimerActive, inactiveHoneyTimerActive, questMenuKeptOpen
             gooTimerActive = False  # Stop the goo timer thread
             gumdropTimerActive = False  # Stop the gumdrop timer thread
             inactiveHoneyTimerActive = False
             if liveGatherReport:
                 liveGatherReport.stop()
+            if liveQuestProgressReport:
+                liveQuestProgressReport.stop()
             if fieldSetting["shift_lock"]: 
                 self.keyboard.press('shift')
+            if questMenuKeptOpen:
+                self.toggleQuest()
+                questMenuKeptOpen = False
             self.moveMouseToDefault()
             self.clear_task_status()
             self.isGathering = False
@@ -3796,7 +3999,11 @@ class macro:
                 stopGather()
                 return
             
-            self.raiseIfInterrupted()
+            try:
+                self.raiseIfInterrupted()
+            except InterruptRequested:
+                stopGather()
+                raise
             
             # goo and gumdrop timers are now handled by background threads
 
@@ -3882,6 +4089,29 @@ class macro:
             if not isSproutGather:
                 self.hourlyReport.addHourlyStat("gathering_time", time.time()-patternStartTime)
             gatherTime = self.convertSecsToMinsAndSecs(getGatherTime())
+
+            if questMenuKeptOpen and time.time() - lastQuestProgressCheck >= 2:
+                lastQuestProgressCheck = time.time()
+                try:
+                    visibleObjectives = self.findQuest(
+                        questWatchGiver,
+                        questScreens=[self.captureQuestWatchScreen()],
+                        logDetection=False,
+                    )
+                    if visibleObjectives is not None and questWatchObjective not in visibleObjectives:
+                        self.logger.webhook(
+                            "Gathering: Ended",
+                            f"{questWatchGiver.title()} objective completed: {questWatchObjective.replace('_', ' ').title()}",
+                            "light green",
+                            "screen",
+                            route_category="gathering",
+                        )
+                        keepGathering = False
+                        continue
+                except Exception:
+                    # A single bad OCR frame should never end a gather. The next
+                    # pattern cycle will try the visible objective again.
+                    print(traceback.format_exc())
 
             #check for AFB
             if inactiveHoneyEvent.is_set():
@@ -6110,7 +6340,17 @@ class macro:
         self.moveMouseToDefault()
         return screens
 
-    def findQuest(self, questGiver, questScreens=None):
+    def captureQuestWatchScreen(self):
+        """Capture the visible quest section without scrolling or toggling its UI."""
+        screenshotHeight = max(1, min(800, self.robloxWindow.mh - 150))
+        return mssScreenshotPillowRGBA(
+            self.robloxWindow.mx,
+            self.robloxWindow.my + 150,
+            300,
+            screenshotHeight,
+        )
+
+    def findQuest(self, questGiver, questScreens=None, keepQuestMenuOpen=False, logDetection=True):
         #map quest giver to a shorthand form for ocr searching
         questGiverShort = {
             "polar bear": "polar",
@@ -6582,7 +6822,8 @@ class macro:
                     questTitle = questTitleRaw
                 else:
                     questTitle, _ = fuzzywuzzy.process.extractOne(questTitleRaw, quest_data[questGiver].keys())
-                self.logger.webhook("", f"Quest Title: {questTitle}", "dark brown")
+                if logDetection:
+                    self.logger.webhook("", f"Quest Title: {questTitle}", "dark brown")
                 break
 
             res = None
@@ -6608,12 +6849,14 @@ class macro:
                         break
                 else:
                     questTitleYPos = ry
-                    print(questTitleYPos)
+                    if logDetection:
+                        print(questTitleYPos)
                     if questGiver == "brown bear":
                         questTitle = text
                     else:
                         questTitle, _ = fuzzywuzzy.process.extractOne(text, quest_data[questGiver].keys())
-                    self.logger.webhook("", f"Quest Title: {questTitle}", "dark brown")
+                    if logDetection:
+                        self.logger.webhook("", f"Quest Title: {questTitle}", "dark brown")
                     break
                 
             if manageQuestUi:
@@ -6625,7 +6868,8 @@ class macro:
                 prevHash = hash
 
         if questTitle is None:
-            self.logger.webhook("", f"Could not find {questGiver} quest", "dark brown")
+            if logDetection:
+                self.logger.webhook("", f"Could not find {questGiver} quest", "dark brown")
             if manageQuestUi:
                 self.toggleQuest()
                 self.moveMouseToDefault()
@@ -6762,17 +7006,17 @@ class macro:
             screenshotStack = annotatedScreen
             if titleScreen is not None and titleScreen.size:
                 screenshotStack = np.vstack([titleScreen, annotatedScreen])
-            cv2.imwrite(questImgPath, screenshotStack)
-
-            self.logger.webhook(
-                f"Detected Brown Bear Quest: {questTitle.title()}",
-                "**Completed Objectives:**\n{}\n\n**Incomplete Objectives:**\n{}".format(
-                    '\n'.join(completedObjectives) if completedObjectives else "None",
-                    '\n'.join(incompleteObjectives) if incompleteObjectives else "None"
-                ),
-                "light blue",
-                imagePath=questImgPath
-            )
+            if logDetection:
+                cv2.imwrite(questImgPath, screenshotStack)
+                self.logger.webhook(
+                    f"Detected Brown Bear Quest: {questTitle.title()}",
+                    "**Completed Objectives:**\n{}\n\n**Incomplete Objectives:**\n{}".format(
+                        '\n'.join(completedObjectives) if completedObjectives else "None",
+                        '\n'.join(incompleteObjectives) if incompleteObjectives else "None"
+                    ),
+                    "light blue",
+                    imagePath=questImgPath
+                )
             # record the detected quest title for external callers
             try:
                 if not hasattr(self, '_last_quest_title'):
@@ -6781,7 +7025,7 @@ class macro:
             except Exception:
                 pass
 
-            if manageQuestUi:
+            if manageQuestUi and not keepQuestMenuOpen:
                 self.toggleQuest()
                 self.moveMouseToDefault()
             return incompleteObjectives
@@ -6908,7 +7152,8 @@ class macro:
                 for line in ocr.ocrRead(textImg):
                     textChunk.append(self.convertCyrillic(line[1][0].strip().lower()))
                 textChunk = ''.join(textChunk)
-                print(textChunk)
+                if logDetection:
+                    print(textChunk)
 
                 objectiveData = objectives[i].split("_")
                 if objectiveData[0] == "feed":
@@ -6980,7 +7225,8 @@ class macro:
                 for line in ocr.ocrRead(textImg):
                     textChunk.append(self.convertCyrillic(line[1][0].strip().lower()))
                 textChunk = ''.join(textChunk)
-                print(textChunk)
+                if logDetection:
+                    print(textChunk)
 
                 #detect amount of items to feed
                 objectiveData = objectives[i].split("_")
@@ -7013,7 +7259,8 @@ class macro:
                 
                 #draw bounding boxes and add the quest text
                 drawY = y+endIndex
-                print(drawY)
+                if logDetection:
+                    print(drawY)
                 cv2.rectangle(screenOriginal, (x, drawY), (x+w, drawY+h), color, 2)
                 cv2.putText(screenOriginal, objectives[i], (x, drawY-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
 
@@ -7027,16 +7274,16 @@ class macro:
                 incompleteObjectives.append(objective)
         
         questImgPath = "latest-quest.png"
-        cv2.imwrite(questImgPath, screenOriginal)
-        
-        print(completedObjectives)
-        print(incompleteObjectives)
-        self.logger.webhook(f"Detected {questGiver.title()} Quest: {questTitle.title()}", 
-                            "**Completed Objectives:**\n{}\n\n**Incomplete Objectives:**\n{}".format(
-                                '\n'.join(completedObjectives) if completedObjectives else "None", 
-                                '\n'.join(incompleteObjectives) if incompleteObjectives else "None"), 
-                            "light blue", imagePath=questImgPath)
-        if manageQuestUi:
+        if logDetection:
+            cv2.imwrite(questImgPath, screenOriginal)
+            print(completedObjectives)
+            print(incompleteObjectives)
+            self.logger.webhook(f"Detected {questGiver.title()} Quest: {questTitle.title()}",
+                                "**Completed Objectives:**\n{}\n\n**Incomplete Objectives:**\n{}".format(
+                                    '\n'.join(completedObjectives) if completedObjectives else "None",
+                                    '\n'.join(incompleteObjectives) if incompleteObjectives else "None"),
+                                "light blue", imagePath=questImgPath)
+        if manageQuestUi and not keepQuestMenuOpen:
             self.toggleQuest()
             self.moveMouseToDefault()
         return incompleteObjectives

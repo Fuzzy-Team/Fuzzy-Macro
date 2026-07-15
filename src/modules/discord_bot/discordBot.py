@@ -1047,6 +1047,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         ("bucko_bee_quest", "Bucko Bee"),
         ("riley_bee_quest", "Riley Bee"),
         ("quest_use_gumdrops", "Use Gumdrops"),
+        ("quest_progress_watch", "Keep Quest Menu Open"),
     ]
 
     COLLECTIBLE_SETTINGS = [
