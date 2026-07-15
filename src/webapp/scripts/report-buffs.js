@@ -12,6 +12,8 @@ window.hourlyReportUptimeBuffOptions = [
   { label: "Pollen Mark", value: "pollen_mark", image: `${reportBuffAssetPath}pollen_mark_buff.png` },
   { label: "Festive Mark", value: "festive_mark", image: `${reportBuffAssetPath}festive_mark_buff.png` },
   { label: "Pop Star", value: "popstar", image: `${reportBuffAssetPath}popstar_buff.png` },
+  { label: "Scorching Star", value: "scorching_star", image: `${reportBuffAssetPath}scorching_star_buff.png` },
+  { label: "Gummy Star", value: "gummy_star", image: `${reportBuffAssetPath}gummy_star_buff.png` },
   { label: "Melody", value: "melody", image: `${reportBuffAssetPath}melody_buff.png` },
   { label: "Bear Morph", value: "bear", image: `${reportBuffAssetPath}bear_buff.png` },
   { label: "Baby Love", value: "baby_love", image: `${reportBuffAssetPath}baby_love_buff.png` },

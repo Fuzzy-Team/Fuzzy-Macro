@@ -228,6 +228,8 @@ BUFF_RENDER_CONFIG = {
     "jb_share":      ("binary",    1,   (249, 204, 255), "jb_share_buff"),
     "festive_mark":  ("binary",    1,   (200, 67,  53),  "festive_mark_buff"),
     "popstar":       ("binary",    1,   (0,   150, 255), "popstar_buff"),
+    "scorching_star": ("binary",   1,   (255, 52,  0),   "scorching_star_buff"),
+    "gummy_star":    ("binary",    1,   (241, 145, 255), "gummy_star_buff"),
     "guiding":       ("binary",    1,   (255, 255, 128), "guiding_buff"),
 }
 
@@ -854,6 +856,8 @@ class HourlyReport():
             "jb_share":     [0xfff9ccff, (5, 1)],
             "festive_mark": [0xffc84335, (5, 1)],
             "popstar":      [0xff0096ff, (5, 1)],
+            "scorching_star": [0xffff3400, (5, 1)],
+            "gummy_star":   [0xfff191ff, (5, 1)],
             "guiding":      [0xffffff80, (5, 1)],
         }
         # The in-game buff icons are sampled from a very small strip, and their
@@ -881,6 +885,8 @@ class HourlyReport():
             "jb_share": 8,
             "festive_mark": 8,
             "popstar": 8,
+            "scorching_star": 30,
+            "gummy_star": 30,
             "guiding": 8,
         }
 
