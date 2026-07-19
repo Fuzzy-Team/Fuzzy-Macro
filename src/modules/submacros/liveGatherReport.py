@@ -183,14 +183,14 @@ class LiveGatherReport:
 
     def _capture_honey_pollen(self):
         rw = self.roblox_window
-        scale_x, scale_y = self._hud_scale()
-        capture_w = self._scale_x(self.REFERENCE_CAPTURE[0], scale_x)
-        capture_h = self._scale_y(self.REFERENCE_CAPTURE[1], scale_y)
-        x = rw.mx + rw.mw // 2 + self._scale_x(self.REFERENCE_CAPTURE_LEFT_OFFSET, scale_x)
-        y = rw.my + self._scale_y(rw.yOffset, scale_y)
+        viewport_left, viewport_top, viewport_width, _viewport_height, scale = self._hud_viewport()
+        capture_w = self._scale_length(self.REFERENCE_CAPTURE[0], scale)
+        capture_h = self._scale_length(self.REFERENCE_CAPTURE[1], scale)
+        x = self._round_coord(viewport_left + viewport_width / 2.0 + self.REFERENCE_CAPTURE_LEFT_OFFSET * scale)
+        y = self._round_coord(viewport_top + rw.yOffset * scale)
         img = mssScreenshot(x, y, capture_w, capture_h).convert("RGBA")
-        honey = self._crop_hud_card(img, self._scale_box(self.REFERENCE_HUD_CARDS[0], scale_x, scale_y), scale_y)
-        pollen = self._crop_hud_card(img, self._scale_box(self.REFERENCE_HUD_CARDS[1], scale_x, scale_y), scale_y)
+        honey = self._crop_hud_card(img, self._scale_box(self.REFERENCE_HUD_CARDS[0], scale), scale)
+        pollen = self._crop_hud_card(img, self._scale_box(self.REFERENCE_HUD_CARDS[1], scale), scale)
         stacked = Image.new("RGBA", (max(honey.width, pollen.width), honey.height + pollen.height), (0, 0, 0, 0))
         stacked.paste(honey, (0, 0), honey)
         stacked.paste(pollen, (0, honey.height), pollen)
@@ -199,28 +199,41 @@ class LiveGatherReport:
         out.seek(0)
         return out.getvalue()
 
-    def _hud_scale(self):
+    def _hud_viewport(self):
         rw = self.roblox_window
-        scale_x = max(0.1, rw.mw / float(self.REFERENCE_WINDOW_WIDTH))
-        scale_y = max(0.1, rw.mh / float(self.REFERENCE_WINDOW_HEIGHT))
-        return scale_x, scale_y
+        scale = max(
+            0.1,
+            min(
+                rw.mw / float(self.REFERENCE_WINDOW_WIDTH),
+                rw.mh / float(self.REFERENCE_WINDOW_HEIGHT),
+            ),
+        )
+        viewport_width = self.REFERENCE_WINDOW_WIDTH * scale
+        viewport_height = self.REFERENCE_WINDOW_HEIGHT * scale
+        viewport_left = rw.mx + (rw.mw - viewport_width) / 2.0
+        viewport_top = rw.my + (rw.mh - viewport_height) / 2.0
+        return viewport_left, viewport_top, viewport_width, viewport_height, scale
 
     @staticmethod
-    def _scale_x(value, scale_x):
-        return int(round(value * scale_x))
+    def _round_coord(value):
+        return int(round(value))
 
     @staticmethod
-    def _scale_y(value, scale_y):
-        return int(round(value * scale_y))
+    def _scale(value, scale):
+        return int(round(value * scale))
 
     @classmethod
-    def _scale_box(cls, box, scale_x, scale_y):
+    def _scale_length(cls, value, scale):
+        return max(1, cls._scale(value, scale))
+
+    @classmethod
+    def _scale_box(cls, box, scale):
         left, top, right, bottom = box
         scaled = (
-            cls._scale_x(left, scale_x),
-            cls._scale_y(top, scale_y),
-            cls._scale_x(right, scale_x),
-            cls._scale_y(bottom, scale_y),
+            cls._scale(left, scale),
+            cls._scale(top, scale),
+            cls._scale(right, scale),
+            cls._scale(bottom, scale),
         )
         if scaled[2] <= scaled[0]:
             scaled = (scaled[0], scaled[1], scaled[0] + 1, scaled[3])
@@ -228,11 +241,11 @@ class LiveGatherReport:
             scaled = (scaled[0], scaled[1], scaled[2], scaled[1] + 1)
         return scaled
 
-    def _crop_hud_card(self, img, box, scale_y):
+    def _crop_hud_card(self, img, box, scale):
         card = img.crop(box)
         mask = Image.new("L", card.size, 0)
         draw = ImageDraw.Draw(mask)
-        radius = max(1, self._scale_y(self.REFERENCE_CARD_RADIUS, scale_y))
+        radius = self._scale_length(self.REFERENCE_CARD_RADIUS, scale)
         draw.rounded_rectangle((0, 0, card.width - 1, card.height - 1), radius=radius, fill=255)
         card.putalpha(mask)
         return card
