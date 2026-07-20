@@ -403,13 +403,9 @@ class HasteCompensationRevamped():
         self.melodyBitmap = Image.new('RGBA', (3, 2), '#2b2b2bff')
 
         if self.robloxWindow.isRetina:
-            
-            for i in range(2,11):
-                self.countBitmaps.append(Image.open(f"images/buffs/counts/{i}.png").convert('RGBA'))
-
             for i in range(6):
                 self.bearMorphs.append(Image.open(f"./images/buffs/bearmorph{i+1}-retina.png").convert('RGBA'))
-            
+
             self.hastePlus = Image.open("./images/buffs/haste+-retina.png").convert('RGBA')
         else:
             #base64 images taken directly from natro macro
@@ -428,6 +424,12 @@ class HasteCompensationRevamped():
         self.endTime = 0
 
     def _loadCountBitmaps(self):
+        if self.robloxWindow.isRetina:
+            return [
+                Image.open(f"images/buffs/counts/{value}.png").convert("RGBA")
+                for value in range(2, 11)
+            ]
+
         scale = max(1, int(round(getattr(self.robloxWindow, "multi", 1) or 1)))
         bitmaps = []
         for value in range(2, 11):
