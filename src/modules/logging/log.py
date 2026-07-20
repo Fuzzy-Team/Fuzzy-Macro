@@ -35,6 +35,7 @@ PING_CATEGORY_ROUTES = {
     "ping_conversion_events": "activities",
     "ping_hourly_reports": "reports",
     "ping_guiding_star": "activities",
+    "ping_unusual_sprouts": "activities",
 }
 
 ALLOWED_PING_KEYS = {
@@ -42,6 +43,7 @@ ALLOWED_PING_KEYS = {
     "ping_disconnects",
     "ping_character_deaths",
     "ping_hourly_reports",
+    "ping_unusual_sprouts",
 }
 
 ROUTE_FALLBACKS = {
@@ -69,6 +71,7 @@ ROUTE_FALLBACKS = {
     "boosts": ["activities", "default"],
     "crafting": ["activities", "default"],
     "guiding_star": ["activities", "default"],
+    "unusual_sprouts": ["activities", "default"],
 }
 
 ROUTE_CATEGORIES = [
@@ -97,6 +100,7 @@ ROUTE_CATEGORIES = [
     "boosts",
     "crafting",
     "guiding_star",
+    "unusual_sprouts",
     "stream",
 ]
 
@@ -323,7 +327,7 @@ class log:
             return self.discordUserID
         return None
 
-    def _send_discord_bot(self, channel_id, title, desc, time, color, imagePath=None, ping_user_id=None, time_format=None):
+    def _send_discord_bot(self, channel_id, title, desc, time, color, imagePath=None, ping_user_id=None, time_format=None, fields=None):
         if not self.enableDiscordBot or not self.discordMessageQueue:
             return None
         data = {
@@ -335,6 +339,7 @@ class log:
             "imagePath": imagePath,
             "ping_user_id": ping_user_id,
             "time_format": time_format if time_format is not None else self.webhookTimeFormat,
+            "fields": fields,
         }
         try:
             self.discordMessageQueue.put(data)
@@ -342,7 +347,7 @@ class log:
             print(f"Discord bot queue error: {e}")
         return None
 
-    def _deliver(self, title, desc, color, imagePath=None, ping_category=None, route_category=None, time_format=None, allow_hourly_only_filter=True):
+    def _deliver(self, title, desc, color, imagePath=None, ping_category=None, route_category=None, time_format=None, allow_hourly_only_filter=True, fields=None):
         if allow_hourly_only_filter and self.hourlyReportOnly:
             return
 
@@ -376,6 +381,7 @@ class log:
                 "imagePath": imagePath,
                 "ping_user_id": ping_user_id,
                 "time_format": time_format,
+                "fields": fields,
             }
             if self.blocking:
                 logWebhook.webhook(**webhookData)
@@ -383,7 +389,7 @@ class log:
                 self.webhookQueue.add_to_queue(webhookData)
             return
         if resolved_type == "bot":
-            self._send_discord_bot(route, title, desc, time, colors[color], imagePath, ping_user_id, time_format)
+            self._send_discord_bot(route, title, desc, time, colors[color], imagePath, ping_user_id, time_format, fields)
             return
         print(f"Warning: Invalid Discord route '{route}'. Expected https:// webhook or numeric channel ID.")
 
@@ -404,8 +410,8 @@ class log:
         webhookImgPath = self._capture_image(ss, imagePath)
         self._deliver(title, desc, color, webhookImgPath, ping_category, route_category, self.webhookTimeFormat)
 
-    def hourlyReport(self, title, desc, color, time_format=None):
-        self._deliver(title, desc, color, "hourlyReport.png", "ping_hourly_reports", "reports", time_format, allow_hourly_only_filter=False)
+    def hourlyReport(self, title, desc, color, time_format=None, fields=None):
+        self._deliver(title, desc, color, "hourlyReport.png", "ping_hourly_reports", "reports", time_format, allow_hourly_only_filter=False, fields=fields)
     
-    def finalReport(self, title, desc, color, time_format=None):
-        self._deliver(title, desc, color, "finalReport.png", "ping_hourly_reports", "reports", time_format, allow_hourly_only_filter=False)
+    def finalReport(self, title, desc, color, time_format=None, fields=None):
+        self._deliver(title, desc, color, "finalReport.png", "ping_hourly_reports", "reports", time_format, allow_hourly_only_filter=False, fields=fields)

@@ -40,6 +40,7 @@ from modules.controls.sleep import (
     INTERRUPT_RESET,
     INTERRUPT_AFB_REROLL,
     INTERRUPT_COLLECT_PLANTER,
+    INTERRUPT_STICKER_SPROUT,
 )
 # delete backup from previous update if pending
 try:
@@ -470,6 +471,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
     questCache = {}
     questScanScreens = None
     macro.questGatherInterruptMobs = {}
+    macro.questGatherWatchers = {}
+    macro.questTaskWatchers = {}
+    macro.completedQuestWatchTasks = set()
+    macro.completedQuestWatchObjectives = set()
     
     macro.start()
     #macro.useItemInInventory("blueclayplanter")
@@ -537,6 +542,26 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
     def runTask(func = None, args = (), resetAfter = True, convertAfter = True, allowAFB = True):
         nonlocal taskCompleted
 
+        def watchedTaskKey():
+            if func is None:
+                return None
+            functionName = getattr(func, "__name__", "")
+            if functionName == "killMob" and args:
+                return f"kill_{str(args[0]).replace(' ', '_')}"
+            if functionName == "collect" and args:
+                return f"collect_{str(args[0]).replace('-', '_').replace(' ', '_')}"
+            if functionName == "feedBee" and args:
+                return f"feed_{str(args[0]).replace(' ', '_')}"
+            taskKeys = {
+                "antChallenge": "ant_challenge",
+                "coconutCrab": "kill_coconut_crab",
+                "kingBeetle": "kill_king_beetle",
+                "tunnelBear": "kill_tunnel_bear",
+                "stumpSnail": "kill_stump_snail",
+                "stingerHunt": "stinger_hunt",
+            }
+            return taskKeys.get(functionName)
+
         def handle_interrupt(action):
             skipTask.value = INTERRUPT_NONE
             macro.keyboard.releaseMovement()
@@ -552,10 +577,14 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 macro.logger.webhook("AFB Reroll", f"Reroll requested during: {interrupted_status}", "orange")
             elif action == INTERRUPT_COLLECT_PLANTER:
                 macro.logger.webhook("Collect Planter", f"Collect planter requested during: {interrupted_status}", "orange")
+            elif action == INTERRUPT_STICKER_SPROUT:
+                macro.logger.webhook("Sticker Sprout", f"Interrupting {interrupted_status} to collect in Hive Hub", "orange")
             macro.reset(convert=True)
             if action == INTERRUPT_COLLECT_PLANTER:
                 processPlanterCommandQueue()
                 return None
+            if action == INTERRUPT_STICKER_SPROUT:
+                return runTask(macro.collectStickerSprout, resetAfter=False)
             if action == INTERRUPT_AFB_REROLL:
                 macro.AFBLIMIT = False
                 macro.AFBglitter = False
@@ -576,13 +605,27 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         if pending_action != INTERRUPT_NONE:
             return handle_interrupt(pending_action)
         
+        questWatchContext = None
+        taskWatchKey = watchedTaskKey()
+        if taskWatchKey and taskWatchKey in macro.completedQuestWatchTasks:
+            return None
+
         try:
+            if taskWatchKey:
+                questWatchContext = macro.startQuestTaskWatch(taskWatchKey)
+                if questWatchContext and questWatchContext.get("skip_task"):
+                    questWatchContext = None
+                    return None
             #execute the task
             if func:
                 returnVal = func(*args) 
                 taskCompleted = True
             else:
                 returnVal = None
+            if questWatchContext:
+                if macro.finishQuestTaskWatch(questWatchContext):
+                    macro.markQuestTaskWatchCompleted(questWatchContext)
+                questWatchContext = None
             #task done
             if resetAfter: 
                 macro.reset(convert=convertAfter)
@@ -601,7 +644,14 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 if macro.hasAFBRespawned("AFB_dice_cd", macro.setdat["AFB_rebuff"]*60) or macro.hasAFBRespawned("AFB_glitter_cd", macro.setdat["AFB_rebuff"]*60-30):
                     macro.AFB(gatherInterrupt=False)
         except InterruptRequested as interrupt:
+            if questWatchContext:
+                macro.finishQuestTaskWatch(questWatchContext, checkCompletion=False)
+                questWatchContext = None
             return handle_interrupt(interrupt.action)
+        finally:
+            if questWatchContext:
+                if macro.finishQuestTaskWatch(questWatchContext):
+                    macro.markQuestTaskWatchCompleted(questWatchContext)
 
         macro.clear_task_status()
         return returnVal
@@ -643,6 +693,21 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         requireRedGumdropField = False
         feedBees = []
         setdatEnable = []
+
+        def registerGatherWatcher(field, objective):
+            """Remember which quest objective a field gather is intended to advance."""
+            normalizedField = str(field).replace("_", " ").strip().lower()
+            watcher = (questGiver, objective)
+            watchers = macro.questGatherWatchers.setdefault(normalizedField, [])
+            if watcher not in watchers:
+                watchers.append(watcher)
+
+        def registerTaskWatcher(task, objective):
+            normalizedTask = str(task).replace("-", "_").replace(" ", "_").strip().lower()
+            watcher = (questGiver, objective)
+            watchers = macro.questTaskWatchers.setdefault(normalizedTask, [])
+            if watcher not in watchers:
+                watchers.append(watcher)
 
         def emptyQuestResult():
             return setdatEnable, gatherFieldsList, gumdropGatherFieldsList, petalGatherFieldsList, requireRedField, requireBlueField, feedBees, requireRedGumdropField, requireBlueGumdropField, requireField
@@ -712,30 +777,38 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 field_name = "_".join(objData[1:]).replace("_", " ").strip()
                 if field_name:
                     gatherFieldsList.append(field_name)
+                    registerGatherWatcher(field_name, obj)
             elif objData[0] == "gathergoo":
                 field_name = "_".join(objData[1:]).replace("_", " ").strip()
                 if macro.setdat["quest_use_gumdrops"]:
                     if field_name:
                         gumdropGatherFieldsList.append(field_name)
+                        registerGatherWatcher(field_name, obj)
                 else:
                     if field_name:
                         gatherFieldsList.append(field_name)
+                        registerGatherWatcher(field_name, obj)
             elif objData[0] == "gatherpetal":
                 field_name = "_".join(objData[1:]).replace("_", " ").strip()
                 if field_name:
                     petalGatherFieldsList.append(field_name)
+                    registerGatherWatcher(field_name, obj)
             elif objData[0] == "kill":
                 # kill objectives can be in the form "kill_<num>_<mob>" or "kill_<mob>"
                 # determine the mob name robustly
-                if len(objData) >= 3:
-                    mob_name = objData[2]
-                elif len(objData) == 2:
-                    mob_name = objData[1]
+                if len(objData) >= 3 and objData[1].isdigit():
+                    mob_name = "_".join(objData[2:])
+                elif len(objData) >= 2:
+                    mob_name = "_".join(objData[1:])
                 else:
                     continue
 
+                registerTaskWatcher(f"kill_{mob_name}", obj)
+
                 # ants are handled via the ant challenge flow
                 if "ant" in mob_name and mob_name != "mantis":
+                    registerTaskWatcher("ant_challenge", obj)
+                    registerTaskWatcher("collect_ant_pass_dispenser", obj)
                     if "ant_challenge" not in setdatEnable:
                         setdatEnable.append("ant_challenge")
                     if "ant_pass_dispenser" not in setdatEnable:
@@ -749,47 +822,62 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             elif objData[0] == "token" and len(objData) > 1 and objData[1] == "honey":
                 if "honeytoken" not in setdatEnable:
                     setdatEnable.append("honeytoken")
+                registerGatherWatcher("__any__", obj)
             elif objData[0] == "token":
                 if questGiver == "riley bee":
                     requireRedField = True
+                    registerGatherWatcher("__red__", obj)
                 elif questGiver == "bucko bee":
                     requireBlueField = True
+                    registerGatherWatcher("__blue__", obj)
                 else:
                     requireField = True
+                    registerGatherWatcher("__any__", obj)
 
             elif objData[0] == "fieldtoken" and objData[1] == "blueberry":
                 requireBlueField = True
+                registerGatherWatcher("__blue__", obj)
             elif objData[0] == "fieldtoken" and objData[1] == "strawberry":
                 requireRedField = True
+                registerGatherWatcher("__red__", obj)
             elif objData[0] == "feed":
                 if objData[1] == "*":
                     amount = 25
                 else:
                     amount = int(objData[1])
                 feedBees.append((objData[2], amount))
+                registerTaskWatcher(f"feed_{objData[2]}", obj)
             elif objData[0] == "pollen" and objData[1] == "blue":
                 requireBlueField = True
+                registerGatherWatcher("__blue__", obj)
             elif objData[0] == "pollen" and objData[1] == "red":
                 requireRedField = True
+                registerGatherWatcher("__red__", obj)
             elif objData[0] == "pollen" and objData[1] == "white":
                 requireField = True
+                registerGatherWatcher("__any__", obj)
             elif objData[0] == "pollengoo" and objData[1] == "blue":
                 if macro.setdat["quest_use_gumdrops"]:
                     requireBlueGumdropField = True
                 else:
                     requireBlueField = True
+                registerGatherWatcher("__blue__", obj)
             elif objData[0] == "pollengoo" and objData[1] == "red":
                 if macro.setdat["quest_use_gumdrops"]:
                     requireRedGumdropField = True
                 else:
                     requireRedField = True
+                registerGatherWatcher("__red__", obj)
             elif objData[0] == "pollengoo" and objData[1] == "white":
                 if macro.setdat["quest_use_gumdrops"]:
                     requireBlueGumdropField = True
                 else:
                     requireField = True
+                registerGatherWatcher("__any__", obj)
             elif objData[0] == "collect":
-                setdatEnable.append(objData[1].replace("-","_"))
+                collectTask = objData[1].replace("-", "_")
+                setdatEnable.append(collectTask)
+                registerTaskWatcher(f"collect_{collectTask}", obj)
 
         return setdatEnable, gatherFieldsList, gumdropGatherFieldsList, petalGatherFieldsList, requireRedField, requireBlueField, feedBees, requireRedGumdropField, requireBlueGumdropField, requireField
 
@@ -907,6 +995,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         questCache.clear()
         questScanScreens = None
         macro.questGatherInterruptMobs.clear()
+        macro.questGatherWatchers.clear()
+        macro.questTaskWatchers.clear()
+        macro.completedQuestWatchTasks.clear()
+        macro.completedQuestWatchObjectives.clear()
         
         macro.setdat = get_cached_settings()
         # Check if profile has changed and reload settings if needed
@@ -1075,7 +1167,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
 
             # Feed bees for quests (done once per cycle)
             for item, quantity in itemsToFeedBees:
-                macro.feedBee(item, quantity)
+                runTask(macro.feedBee, args=(item, quantity), resetAfter=False)
                 taskCompleted = True
 
             allGatheredFields = []
@@ -1188,19 +1280,19 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
 
                 if mob == "coconut_crab":
                     if macro.setdat["coconut_crab"] and macro.hasRespawned("coconut_crab", 36*60*60, applyMobRespawnBonus=True):
-                        macro.coconutCrab()
+                        runTask(macro.coconutCrab)
                         executedTasks.add(taskId)
                     continue
 
                 if mob == "king_beetle":
                     if macro.setdat["king_beetle"] and macro.hasRespawned("king_beetle", 24*60*60, applyMobRespawnBonus=True):
-                        macro.kingBeetle()
+                        runTask(macro.kingBeetle)
                         executedTasks.add(taskId)
                     continue
 
                 if mob == "tunnel_bear":
                     if macro.setdat["tunnel_bear"] and macro.hasRespawned("tunnel_bear", 48*60*60, applyMobRespawnBonus=True):
-                        macro.tunnelBear()
+                        runTask(macro.tunnelBear)
                         executedTasks.add(taskId)
                     continue
 
@@ -1423,7 +1515,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                     
                     # Feed bees if needed
                     for item, quantity in feedBees:
-                        macro.feedBee(item, quantity)
+                        runTask(macro.feedBee, args=(item, quantity), resetAfter=False)
                         taskCompleted = True
                 else:
                     handleQuest(questName, executeQuest=True)
@@ -1432,7 +1524,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                     if questName in questFeedRequirements:
                         feedBees = questFeedRequirements[questName]
                         for item, quantity in feedBees:
-                            macro.feedBee(item, quantity)
+                            runTask(macro.feedBee, args=(item, quantity), resetAfter=False)
                             taskCompleted = True
                 
                 executedTasks.add(taskId)
@@ -1442,6 +1534,22 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             # Handle collect tasks
             if taskId.startswith("collect_"):
                 collectName = taskId.replace("collect_", "")
+
+                # Special case: sprouts
+                if collectName == "sprouts":
+                    if macro.setdat.get("sprouts_enable", False):
+                        if runTask(macro.collectSprouts, resetAfter=False):
+                            executedTasks.add(taskId)
+                            return True
+                    return False
+
+                # Special case: sticker_sprout
+                if collectName == "sticker_sprout":
+                    if macro.stickerSproutReady():
+                        if runTask(macro.collectStickerSprout, resetAfter=False):
+                            executedTasks.add(taskId)
+                            return True
+                    return False
                 
                 # Special case: sticker_printer
                 if collectName == "sticker_printer":
@@ -1494,7 +1602,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 # Special cases: coconut_crab, king_beetle, tunnel_bear, and stump_snail
                 if mob == "coconut_crab":
                     if macro.setdat["coconut_crab"] and macro.hasRespawned("coconut_crab", 36*60*60, applyMobRespawnBonus=True):
-                        macro.coconutCrab()
+                        runTask(macro.coconutCrab)
                         executedTasks.add(taskId)
                         return True
                     return False
@@ -1503,7 +1611,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 # King Beetle respawns every 24 hours (20 hours 24 minutes with Gifted Vicious Bee)
                 if mob == "king_beetle":
                     if macro.setdat["king_beetle"] and macro.hasRespawned("king_beetle", 24*60*60, applyMobRespawnBonus=True):
-                        macro.kingBeetle()
+                        runTask(macro.kingBeetle)
                         executedTasks.add(taskId)
                         return True
                     return False
@@ -1511,7 +1619,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 # Tunnel Bear respawns every 48 hours (40 hours 48 minutes with Gifted Vicious Bee)
                 if mob == "tunnel_bear":
                     if macro.setdat["tunnel_bear"] and macro.hasRespawned("tunnel_bear", 48*60*60, applyMobRespawnBonus=True):
-                        macro.tunnelBear()
+                        runTask(macro.tunnelBear)
                         executedTasks.add(taskId)
                         return True
                     return False
@@ -2986,6 +3094,7 @@ if __name__ == "__main__":
     logQueue = manager.Queue()
     discordMessageQueue = manager.Queue()
     planterCommandQueue = manager.Queue()
+    streamControlQueue = manager.Queue()
     pin_requests = manager.Queue()  # Shared queue for pin requests
     start_keyboard_listener_fn = watch_for_hotkeys(run)
     logger = logModule.log(logQueue, False, None, False, blocking=False, discordMessageQueue=discordMessageQueue)
@@ -3049,11 +3158,26 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Failed to release mouse during shutdown: {e}")
 
+    def releaseInputsSafely():
+        try:
+            keyboardModule.releaseMovement()
+        except pag.FailSafeException:
+            print("PyAutoGUI fail-safe triggered while releasing movement during shutdown.")
+        except Exception as e:
+            print(f"Failed to release movement during shutdown: {e}")
+        try:
+            mouse.mouseUp()
+        except pag.FailSafeException:
+            print("PyAutoGUI fail-safe triggered while releasing mouse during shutdown.")
+        except Exception as e:
+            print(f"Failed to release mouse during shutdown: {e}")
+
     def onExit():
         try:
             stopApp()
         except Exception as e:
             print(f"Error during shutdown cleanup: {e}")
+        # Reset timed bear quest states on exit so macro resumes checking next run
         try:
             settingsManager.saveSettingFile("brown_bear_quest_state", 0, "./data/user/timings.txt")
         except Exception:
@@ -3079,12 +3203,14 @@ if __name__ == "__main__":
         global macroProc
         stopThreads = True
         releaseInputsSafely()
+        releaseInputsSafely()
         #print(sockets)
         if macroProc and macroProc.is_alive():
             # Give the macro process a chance to observe run.value == 0 and run
             # gather cleanup hooks, including AI gather video finalization.
             stop_wait_deadline = time.time() + 1
             while macroProc.is_alive() and time.time() < stop_wait_deadline:
+                releaseInputsSafely()
                 releaseInputsSafely()
                 macroProc.join(timeout=0.05)
         if macroProc and macroProc.is_alive():
@@ -3096,6 +3222,7 @@ if __name__ == "__main__":
         macroProc = None
         stream.stop()
         #if discordBotProc.is_alive(): discordBotProc.kill()
+        releaseInputsSafely()
         releaseInputsSafely()
     
     atexit.register(onExit)
@@ -3180,6 +3307,60 @@ if __name__ == "__main__":
             return 0.0
         return max(0.0, hours)
 
+    def startStreamIfNeeded(settings):
+        if stream.streaming:
+            return True
+
+        def waitForStreamURL():
+            #wait for up to 15 seconds for the public link
+            for _ in range(150):
+                time.sleep(0.1)
+                if stream.publicURL:
+                    logger.webhook("Stream Started", f'Stream URL: {stream.publicURL}', "purple", route_category="stream")
+
+                    # If bot is enabled, request pinning of the stream message
+                    if logModule.delivery_uses_bot_commands(settings) and settings.get("pin_stream_url", False):
+                        import modules.logging.webhook as webhookModule
+                        if webhookModule.last_channel_id:
+                            try:
+                                pin_requests.put({
+                                    'channel_id': webhookModule.last_channel_id,
+                                    'search_text': 'Stream URL'
+                                })
+                                print("Pin request queued for stream URL message")
+                            except Exception as e:
+                                print(f"Error queueing pin request: {e}")
+                    return
+
+            logger.webhook("", f'Stream could not start. Check terminal for more info', "red", ping_category="ping_critical_errors", route_category="stream")
+
+        if stream.isCloudflaredInstalled():
+            logger.webhook("", "Starting Stream...", "light blue", route_category="stream")
+            stream.start(settings.get("stream_resolution", 0.75))
+            Thread(target=waitForStreamURL, daemon=True).start()
+            return True
+
+        messageBox.msgBox(text='Cloudflared is required for streaming but is not installed. Visit https://fuzzy-team.gitbook.io/fuzzy-macro/discord-setup/stream-setup for installation instructions', title='Cloudflared not installed')
+        return False
+
+    def processStreamControlCommands(settings):
+        while not streamControlQueue.empty():
+            try:
+                command = streamControlQueue.get_nowait()
+            except Exception:
+                break
+
+            action = str(command.get("action", "")).lower()
+            if action == "enable":
+                if run.value in (2, 4, 6):
+                    startStreamIfNeeded(settings)
+            elif action == "disable":
+                if stream.streaming:
+                    stream.stop()
+                    logger.webhook("Stream Stopped", "Stream disabled from Discord.", "orange", route_category="stream")
+                else:
+                    stream.stop()
+
     while True:
         eel.sleep(0.5)
         
@@ -3200,6 +3381,7 @@ if __name__ == "__main__":
         logger.pingSettings = {
             key: value for key, value in setdat.items() if str(key).startswith("ping_")
         }
+        processStreamControlCommands(setdat)
 
         if autoStopStartTime is not None and run.value in (2, 4, 6):
             latestAutoStopHours = parseAutoStopHours(setdat)
@@ -3224,7 +3406,7 @@ if __name__ == "__main__":
                 print("Detected change in discord bot token, killing previous bot process")
                 discordBotProc.terminate()
                 discordBotProc.join()
-            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI, discordMessageQueue, planterCommandQueue), daemon=True)
+            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI, discordMessageQueue, planterCommandQueue, streamControlQueue), daemon=True)
             prevDiscordBotToken = currentDiscordBotToken
             discordBotProc.start()
         elif not shouldRunDiscordBot and discordBotProc is not None and discordBotProc.is_alive():
@@ -3295,38 +3477,8 @@ if __name__ == "__main__":
             #reset hourly report data
             hourlyReport = HourlyReport()
             hourlyReport.resetAllStats()
-            #stream
-            def waitForStreamURL():
-                #wait for up to 15 seconds for the public link
-                for _ in range(150):
-                    time.sleep(0.1)
-                    if stream.publicURL:
-                        logger.webhook("Stream Started", f'Stream URL: {stream.publicURL}', "purple", route_category="stream")
-                        
-                        # If bot is enabled, request pinning of the stream message
-                        if logModule.delivery_uses_bot_commands(setdat) and setdat.get("pin_stream_url", False):
-                            import modules.logging.webhook as webhookModule
-                            if webhookModule.last_channel_id:
-                                try:
-                                    pin_requests.put({
-                                        'channel_id': webhookModule.last_channel_id,
-                                        'search_text': 'Stream URL'
-                                    })
-                                    print("Pin request queued for stream URL message")
-                                except Exception as e:
-                                    print(f"Error queueing pin request: {e}")
-                        return
-
-                logger.webhook("", f'Stream could not start. Check terminal for more info', "red", ping_category="ping_critical_errors", route_category="stream")
-
-            streamLink = None
             if setdat.get("enable_stream", False):
-                if stream.isCloudflaredInstalled():
-                    logger.webhook("", "Starting Stream...", "light blue", route_category="stream")
-                    streamLink = stream.start(setdat.get("stream_resolution", 0.75))
-                    Thread(target=waitForStreamURL, daemon=True).start()
-                else:
-                    messageBox.msgBox(text='Cloudflared is required for streaming but is not installed. Visit https://fuzzy-team.gitbook.io/fuzzy-macro/discord-setup/stream-setup for installation instructions', title='Cloudflared not installed')
+                startStreamIfNeeded(setdat)
 
             print("starting macro proc")
             #check if user enabled field drift compensation but sprinkler is not supreme saturator
@@ -3408,7 +3560,7 @@ if __name__ == "__main__":
                 
                 # Create final report object
                 finalReportObj = FinalReport()
-                sessionStats = finalReportObj.generateFinalReport(setdat)
+                sessionStats = finalReportObj.generateFinalReport(setdat, stop_time=time.time())
                 
                 # Check if report was generated successfully
                 if sessionStats and os.path.exists("finalReport.png"):
@@ -3416,7 +3568,13 @@ if __name__ == "__main__":
                     sessionTime = sessionStats.get("total_session_time", 0)
                     hours = int(sessionTime / 3600)
                     minutes = int((sessionTime % 3600) / 60)
-                    timeStr = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+                    seconds = int(sessionTime % 60)
+                    if hours > 0:
+                        timeStr = f"{hours}h {minutes}m {seconds}s"
+                    elif minutes > 0:
+                        timeStr = f"{minutes}m {seconds}s"
+                    else:
+                        timeStr = f"{seconds}s"
                     
                     totalHoney = sessionStats.get("total_honey", 0)
                     avgHoneyPerHour = sessionStats.get("avg_honey_per_hour", 0)
@@ -3439,7 +3597,7 @@ if __name__ == "__main__":
                     description = f"Runtime: {timeStr}\nTotal Honey: {millify(totalHoney)}\n{avgLabel}: {millify(avgHoneyPerHour)}"
                     
                     # Send final report webhook
-                    logger.finalReport("Session Complete", description, "purple")
+                    logger.finalReport("Session Complete", description, "purple", fields=getattr(finalReportObj, "lastEmbedFields", None))
                     print("Final report sent successfully")
                 else:
                     print("Failed to generate final report - no data available")

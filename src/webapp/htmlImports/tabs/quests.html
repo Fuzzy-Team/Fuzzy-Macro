@@ -76,6 +76,18 @@
         },
       ]);
 
+      buildStandardContainer(questsSettingsParent, "Live Quest Progress", "Watch the open quest menu while gathering for quests.", [
+        {
+          id: "quest_progress_watch",
+          title: "Keep Quest Menu Open",
+          desc: "Keep the active quest visible and stop gathering as soon as its field objective is complete",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+      ]);
+
       buildStandardContainer(questsSettingsParent, "Quest Gather Interrupt", "Choose which quest givers may interrupt gathering when a required mob respawns.", [
         ...[
           ["polar_bear", "Polar Bear"],

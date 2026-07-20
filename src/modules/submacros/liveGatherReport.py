@@ -12,19 +12,30 @@ from modules.logging.log import resolve_bot_route, resolve_route, resolve_webhoo
 
 
 class LiveGatherReport:
-    def __init__(self, webhook_url, roblox_window, interval=15, time_format=24, route_settings=None, bot_token="", ping_user_id=None, delivery_mode="both"):
+    REFERENCE_WINDOW_WIDTH = 1920
+    REFERENCE_WINDOW_HEIGHT = 1080
+    REFERENCE_CAPTURE = (650, 100)
+    REFERENCE_CAPTURE_LEFT_OFFSET = -320
+    REFERENCE_HUD_CARDS = (
+        (20, 0, 315, 36),
+        (320, 0, 615, 36),
+    )
+    REFERENCE_CARD_RADIUS = 7
+
+    def __init__(self, webhook_url, roblox_window, interval=15, time_format=24, route_settings=None, bot_token="", ping_user_id=None, delivery_mode="both", route_category="gathering"):
+        route_category = route_category or "gathering"
         if delivery_mode == "discord_bot":
-            self.route, self.route_category, self.route_kind = resolve_route(route_settings or {}, "gathering", "")
+            self.route, self.route_category, self.route_kind = resolve_route(route_settings or {}, route_category, "")
             if not self.route:
-                self.route, self.route_category, self.route_kind = resolve_bot_route(route_settings or {}, "gathering", webhook_url)
+                self.route, self.route_category, self.route_kind = resolve_bot_route(route_settings or {}, route_category, webhook_url)
         elif delivery_mode == "both":
-            self.route, self.route_category, self.route_kind = resolve_route(route_settings or {}, "gathering", "")
+            self.route, self.route_category, self.route_kind = resolve_route(route_settings or {}, route_category, "")
             if not self.route:
-                self.route, self.route_category, self.route_kind = resolve_webhook_route(route_settings or {}, "gathering", webhook_url)
+                self.route, self.route_category, self.route_kind = resolve_webhook_route(route_settings or {}, route_category, webhook_url)
         elif delivery_mode == "webhook":
-            self.route, self.route_category, self.route_kind = resolve_webhook_route(route_settings or {}, "gathering", webhook_url)
+            self.route, self.route_category, self.route_kind = resolve_webhook_route(route_settings or {}, route_category, webhook_url)
         else:
-            self.route, self.route_category, self.route_kind = resolve_route(route_settings or {}, "gathering", webhook_url)
+            self.route, self.route_category, self.route_kind = resolve_route(route_settings or {}, route_category, webhook_url)
         self.webhook_url = self.route if self.route_kind == "webhook" else ""
         self.channel_id = self.route if self.route_kind == "bot" else ""
         self.bot_token = bot_token or ""
@@ -37,6 +48,7 @@ class LiveGatherReport:
         self.message_id = None
         self.webhook_id = None
         self.webhook_token = None
+        self.image_filename = "live_gather_report.png"
         self._parse_webhook_url()
 
     def _parse_webhook_url(self):
@@ -90,11 +102,11 @@ class LiveGatherReport:
 
     def _send_or_edit_webhook(self, embed, image_bytes):
         files = {
-            "files[0]": ("live_gather_report.png", image_bytes, "image/png"),
+            "files[0]": (self.image_filename, image_bytes, "image/png"),
         }
         payload = {
             "embeds": [embed],
-            "attachments": [{"id": 0, "filename": "live_gather_report.png"}],
+            "attachments": [{"id": 0, "filename": self.image_filename}],
         }
         if self.ping_user_id:
             payload["content"] = f"<@{self.ping_user_id}>"
@@ -130,11 +142,11 @@ class LiveGatherReport:
     def _send_or_edit_bot(self, embed, image_bytes):
         headers = {"Authorization": f"Bot {self.bot_token}"}
         files = {
-            "files[0]": ("live_gather_report.png", image_bytes, "image/png"),
+            "files[0]": (self.image_filename, image_bytes, "image/png"),
         }
         payload = {
             "embeds": [embed],
-            "attachments": [{"id": 0, "filename": "live_gather_report.png"}],
+            "attachments": [{"id": 0, "filename": self.image_filename}],
         }
         if self.ping_user_id:
             payload["content"] = f"<@{self.ping_user_id}>"
@@ -171,11 +183,14 @@ class LiveGatherReport:
 
     def _capture_honey_pollen(self):
         rw = self.roblox_window
-        x = rw.mx + rw.mw // 2 - 320
-        y = rw.my + rw.yOffset
-        img = mssScreenshot(x, y, 650, 100).convert("RGBA")
-        honey = self._crop_hud_card(img, (20, 0, 315, 36))
-        pollen = self._crop_hud_card(img, (320, 0, 615, 36))
+        viewport_left, viewport_top, viewport_width, _viewport_height, scale = self._hud_viewport()
+        capture_w = self._scale_length(self.REFERENCE_CAPTURE[0], scale)
+        capture_h = self._scale_length(self.REFERENCE_CAPTURE[1], scale)
+        x = self._round_coord(viewport_left + viewport_width / 2.0 + self.REFERENCE_CAPTURE_LEFT_OFFSET * scale)
+        y = self._round_coord(viewport_top + rw.yOffset * scale)
+        img = mssScreenshot(x, y, capture_w, capture_h).convert("RGBA")
+        honey = self._crop_hud_card(img, self._scale_box(self.REFERENCE_HUD_CARDS[0], scale), scale)
+        pollen = self._crop_hud_card(img, self._scale_box(self.REFERENCE_HUD_CARDS[1], scale), scale)
         stacked = Image.new("RGBA", (max(honey.width, pollen.width), honey.height + pollen.height), (0, 0, 0, 0))
         stacked.paste(honey, (0, 0), honey)
         stacked.paste(pollen, (0, honey.height), pollen)
@@ -184,12 +199,54 @@ class LiveGatherReport:
         out.seek(0)
         return out.getvalue()
 
+    def _hud_viewport(self):
+        rw = self.roblox_window
+        scale = max(
+            0.1,
+            min(
+                rw.mw / float(self.REFERENCE_WINDOW_WIDTH),
+                rw.mh / float(self.REFERENCE_WINDOW_HEIGHT),
+            ),
+        )
+        viewport_width = self.REFERENCE_WINDOW_WIDTH * scale
+        viewport_height = self.REFERENCE_WINDOW_HEIGHT * scale
+        viewport_left = rw.mx + (rw.mw - viewport_width) / 2.0
+        viewport_top = rw.my + (rw.mh - viewport_height) / 2.0
+        return viewport_left, viewport_top, viewport_width, viewport_height, scale
+
     @staticmethod
-    def _crop_hud_card(img, box):
+    def _round_coord(value):
+        return int(round(value))
+
+    @staticmethod
+    def _scale(value, scale):
+        return int(round(value * scale))
+
+    @classmethod
+    def _scale_length(cls, value, scale):
+        return max(1, cls._scale(value, scale))
+
+    @classmethod
+    def _scale_box(cls, box, scale):
+        left, top, right, bottom = box
+        scaled = (
+            cls._scale(left, scale),
+            cls._scale(top, scale),
+            cls._scale(right, scale),
+            cls._scale(bottom, scale),
+        )
+        if scaled[2] <= scaled[0]:
+            scaled = (scaled[0], scaled[1], scaled[0] + 1, scaled[3])
+        if scaled[3] <= scaled[1]:
+            scaled = (scaled[0], scaled[1], scaled[2], scaled[1] + 1)
+        return scaled
+
+    def _crop_hud_card(self, img, box, scale):
         card = img.crop(box)
         mask = Image.new("L", card.size, 0)
         draw = ImageDraw.Draw(mask)
-        draw.rounded_rectangle((0, 0, card.width - 1, card.height - 1), radius=7, fill=255)
+        radius = self._scale_length(self.REFERENCE_CARD_RADIUS, scale)
+        draw.rounded_rectangle((0, 0, card.width - 1, card.height - 1), radius=radius, fill=255)
         card.putalpha(mask)
         return card
 
@@ -208,7 +265,7 @@ class LiveGatherReport:
         return {
             "title": title,
             "color": color,
-            "image": {"url": "attachment://live_gather_report.png"},
+            "image": {"url": f"attachment://{self.image_filename}"},
         }
 
     @staticmethod
@@ -219,3 +276,35 @@ class LiveGatherReport:
         if hours:
             return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
         return f"{minutes:02d}:{seconds:02d}"
+
+
+class LiveQuestProgressReport(LiveGatherReport):
+    """An auto-updating Discord attachment showing the visible quest panel."""
+
+    def __init__(self, *args, capture_quest_screen=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.capture_quest_screen = capture_quest_screen
+        self.image_filename = "live_quest_progress.png"
+
+    def _capture_honey_pollen(self):
+        if not callable(self.capture_quest_screen):
+            raise RuntimeError("Quest screen capture is unavailable")
+        image = self.capture_quest_screen()
+        out = io.BytesIO()
+        image.save(out, format="PNG")
+        out.seek(0)
+        return out.getvalue()
+
+    def _build_embed(self, quest_giver, objective, elapsed_seconds, activity="Quest Progress"):
+        now = time.strftime("%H:%M:%S", time.localtime())
+        if self.time_format == 12:
+            now = time.strftime("%I:%M:%S %p", time.localtime()).lstrip("0")
+        giver_name = str(quest_giver).replace("_", " ").title()
+        objective_name = str(objective).replace("_", " ").title()
+        elapsed = self._format_duration(elapsed_seconds)
+        return {
+            "title": f"[{now}] Live Quest Progress: {giver_name}",
+            "description": f"Watching: {objective_name}\nElapsed: {elapsed}",
+            "color": 0x89CFF0,
+            "image": {"url": f"attachment://{self.image_filename}"},
+        }

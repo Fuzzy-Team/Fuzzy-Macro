@@ -16,7 +16,7 @@ import modules.misc.appManager as appManager
 from modules.misc import messageBox
 import modules.screen.ocr as ocr
 from modules.misc.imageManipulation import adjustImage
-from modules.screen.imageSearch import locateImageOnScreen, templateMatch
+from modules.screen.imageSearch import templateMatch
 from modules.screen.robloxWindow import RobloxWindowBounds
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP
 
@@ -188,7 +188,6 @@ class AutoGiftedBasicBeeRunner:
         self._templates = {
             "royal_jelly_pil": self._decode_template(self.ROYAL_JELLY_B64),
             "gifted_star_pil": self._decode_template(self.GIFTED_STAR_B64),
-            "yes_cv2": adjustImage("./images/menu", "yes", self._roblox_window.display_type),
         }
         self._templates["royal_jelly_cv2"] = cv2.cvtColor(
             self._as_np(self._templates["royal_jelly_pil"]),
@@ -377,30 +376,66 @@ class AutoGiftedBasicBeeRunner:
         time.sleep(0.1)
         pag.mouseUp(button="left")
 
-    def _find_yes_button(self):
+    def _get_confirm_prompt_ocr(self):
         x = self._roblox_window.mx + self._roblox_window.mw // 2 - 270
         y = self._roblox_window.my + self._roblox_window.mh // 2 - 60
-        result = locateImageOnScreen(self._templates["yes_cv2"], x, y, 580, 265, 0.75)
-        if not result:
-            return None
-        _, loc = result
-        best_x, best_y = [value // self._roblox_window.multi for value in loc]
-        return best_x + x, best_y + y
+        prompt_image = mssScreenshot(x, y, 580, 265)
+        return x, y, ocr.ocrRead(prompt_image)
+
+    def _bbox_center(self, bbox, offset_x, offset_y):
+        xs = [point[0] for point in bbox]
+        ys = [point[1] for point in bbox]
+        return offset_x + int((min(xs) + max(xs)) / 2), offset_y + int((min(ys) + max(ys)) / 2)
+
+    def _find_confirm_prompt(self):
+        _, _, entries = self._get_confirm_prompt_ocr()
+        raw_text = " ".join(entry[1][0] for entry in entries if entry and len(entry) > 1 and entry[1][0])
+        _, collapsed = self._normalize_text(raw_text)
+        tokens = self._word_tokens(raw_text)
+        confirmation_words = {"sure", "confirm", "replace", "transform", "feed", "use", "using"}
+        item_words = {"royal", "jelly", "basic", "egg"}
+        has_confirmation_word = any(
+            self._contains_fuzzy_token(tokens, word, 0.75) for word in confirmation_words
+        )
+        has_item_word = any(self._contains_fuzzy_token(tokens, word, 0.78) for word in item_words)
+        has_yes_no = "yes" in collapsed or "no" in collapsed
+        return (has_confirmation_word and has_item_word) or (has_yes_no and (has_confirmation_word or has_item_word))
+
+    def _find_yes_button_ocr(self):
+        x, y, entries = self._get_confirm_prompt_ocr()
+        for entry in entries:
+            if not entry or len(entry) < 2:
+                continue
+            bbox, data = entry
+            text = data[0] if data else ""
+            _, collapsed = self._normalize_text(text)
+            tokens = self._word_tokens(text)
+            if collapsed == "yes" or self._contains_fuzzy_token(tokens, "yes", 0.8):
+                return self._bbox_center(bbox, x, y)
+        return None
 
     def _click_yes_button(self):
-        button_pos = self._find_yes_button()
+        button_pos = self._find_yes_button_ocr()
+        if not button_pos:
+            if not self._find_confirm_prompt():
+                return False
+            button_pos = (
+                self._roblox_window.mx + self._roblox_window.mw // 2 - 105,
+                self._roblox_window.my + self._roblox_window.mh // 2 + 95,
+            )
         if not button_pos:
             return False
-        best_x, best_y = button_pos
-        mouse.moveTo(best_x, best_y)
-        time.sleep(0.2)
-        mouse.moveBy(5, 5)
+
+        yes_x, yes_y = button_pos
+        mouse.moveTo(yes_x, yes_y)
         time.sleep(0.1)
+        mouse.moveBy(5, 5)
+        time.sleep(0.05)
         mouse.click()
         return True
 
     def _wait_for_yes_and_click(self):
-        for _ in range(6):
+        for _ in range(10):
             self._raise_if_stopped()
             time.sleep(0.12)
             if not self._click_yes_button():
@@ -408,7 +443,7 @@ class AutoGiftedBasicBeeRunner:
             for _ in range(8):
                 self._raise_if_stopped()
                 time.sleep(0.08)
-                if not self._find_yes_button():
+                if not self._find_confirm_prompt():
                     return True
         return False
 

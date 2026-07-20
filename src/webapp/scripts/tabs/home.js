@@ -371,6 +371,24 @@ async function loadTasks() {
         };
       }
 
+      if (collectName === "sprouts") {
+        if (!setdat.sprouts_enable) return { enabled: false };
+        return {
+          enabled: true,
+          title: "Collect",
+          desc: `🌱 Sprouts`,
+        };
+      }
+
+      if (collectName === "sticker_sprout") {
+        if (!setdat.sticker_sprout_watch) return { enabled: false };
+        return {
+          enabled: true,
+          title: "Collect",
+          desc: `🌱 Sticker Sprout`,
+        };
+      }
+
       // Regular collect items
       if (!setdat[collectName]) return { enabled: false };
       const emoji = collectEmojis[collectName] || "";

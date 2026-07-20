@@ -12,8 +12,22 @@ import requests
 MODELS_API_URL = "https://api.github.com/repos/Fuzzy-Team/fuzzymacroaimodels/contents"
 MODELS_ZIP_URL = "https://github.com/Fuzzy-Team/fuzzymacroaimodels/archive/refs/heads/main.zip"
 MODEL_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", "models"))
-COREML_MODELS = ("best.mlpackage", "sprinkler.mlpackage")
-ONNX_MODELS = ("tokens.onnx", "sprinkler.onnx")
+COREML_MODELS = (
+    "token_detection_standard.mlmodelc",
+    "sprinkler_detection_standard.mlmodelc",
+    "token_detection_small.mlmodelc",
+    "token_detection_mini.mlmodelc",
+    "loot_detection_small.mlmodelc",
+    "loot_detection_mini.mlmodelc",
+)
+ONNX_MODELS = (
+    "token_detection_standard.onnx",
+    "sprinkler_detection_standard.onnx",
+)
+OBSOLETE_MODELS = (
+    "best.mlpackage",
+    "sprinkler.mlpackage",
+)
 
 
 def _macos_version():
@@ -30,10 +44,57 @@ def _macos_version():
 
 
 def _supported_model_names():
-    # .mlpackage is the preferred Core ML package format on macOS 12+.
+    # Core ML is the native model format on supported macOS versions. Download
+    # ONNX only as the cross-platform fallback; fetching both makes startup
+    # repeatedly restore ONNX models that the Core ML runtime later removes.
     if _macos_version() >= (12, 0):
         return COREML_MODELS
     return ONNX_MODELS
+
+
+def _delete_path(path):
+    try:
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+        elif os.path.exists(path):
+            os.remove(path)
+        else:
+            return False
+        return True
+    except Exception as exc:
+        print(f"[models] Could not delete obsolete model {path}: {exc}")
+        return False
+
+
+def cleanup_obsolete_models():
+    deleted = []
+    for model_name in OBSOLETE_MODELS:
+        model_path = os.path.join(MODEL_DIR, model_name)
+        if _delete_path(model_path):
+            deleted.append(model_name)
+    if deleted:
+        print(f"[models] Deleted obsolete models: {', '.join(deleted)}")
+    return deleted
+
+
+def cleanup_unsupported_model_formats():
+    supported = set(_supported_model_names())
+    all_known = set(COREML_MODELS).union(ONNX_MODELS)
+    deleted = []
+    for model_name in sorted(all_known - supported):
+        model_path = os.path.join(MODEL_DIR, model_name)
+        if _delete_path(model_path):
+            deleted.append(model_name)
+    if deleted:
+        print(f"[models] Deleted unsupported model format: {', '.join(deleted)}")
+    return deleted
+
+
+def cleanup_unused_models():
+    deleted = []
+    deleted.extend(cleanup_obsolete_models())
+    deleted.extend(cleanup_unsupported_model_formats())
+    return deleted
 
 
 def _git_blob_sha(path):
@@ -201,6 +262,7 @@ def ensure_supported_models():
         print(f"[models] Downloaded/updated: {', '.join(downloaded)}")
     elif skipped:
         print("[models] Models are up to date")
+    cleanup_unused_models()
     return {"downloaded": downloaded, "skipped": skipped, "model_dir": MODEL_DIR}
 
 
@@ -213,6 +275,48 @@ def ensure_missing_supported_models():
         if os.path.exists(local_path):
             skipped.append(model_name)
             continue
-        _copy_from_repo_zip(model_name, local_path)
+        try:
+            remote_files = _remote_tree(f"{MODELS_API_URL}/{model_name}")
+            print(f"[models] Downloading missing {model_name}...")
+            _download_remote_tree(remote_files, model_name, local_path)
+        except Exception as exc:
+            print(f"[models] Could not download {model_name} directly: {exc}")
+            print(f"[models] Checking repository zip for {model_name}...")
+            _copy_from_repo_zip(model_name, local_path)
         downloaded.append(model_name)
+    cleanup_unused_models()
     return {"downloaded": downloaded, "skipped": skipped, "model_dir": MODEL_DIR}
+
+
+def ensure_missing_models(model_names):
+    os.makedirs(MODEL_DIR, exist_ok=True)
+    downloaded = []
+    skipped = []
+    missing_remote = []
+    for model_name in model_names:
+        if model_name not in _supported_model_names():
+            raise ValueError(f"{model_name} is not a supported model.")
+        local_path = os.path.join(MODEL_DIR, model_name)
+        if os.path.exists(local_path):
+            skipped.append(model_name)
+            continue
+        try:
+            remote_files = _remote_tree(f"{MODELS_API_URL}/{model_name}")
+            print(f"[models] Downloading missing {model_name}...")
+            _download_remote_tree(remote_files, model_name, local_path)
+            downloaded.append(model_name)
+        except Exception as exc:
+            print(f"[models] Remote check failed for {model_name}: {exc}")
+            try:
+                print(f"[models] Checking repository zip for {model_name}...")
+                _copy_from_repo_zip(model_name, local_path)
+                downloaded.append(model_name)
+            except Exception:
+                missing_remote.append(model_name)
+    cleanup_unused_models()
+    return {
+        "downloaded": downloaded,
+        "skipped": skipped,
+        "missing_remote": missing_remote,
+        "model_dir": MODEL_DIR,
+    }

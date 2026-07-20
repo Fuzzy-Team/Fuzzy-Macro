@@ -235,10 +235,23 @@ def saveFuzzyAITokenRankings(data):
     with open(FUZZY_AI_TOKEN_RANKINGS_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
-def loadFuzzyAITokenRanking(field_name):
+def _normalizeFuzzyAIModel(model):
+    value = str(model or "standard").strip().lower()
+    return value if value in ("standard", "light", "mini") else "standard"
+
+def loadFuzzyAITokenRanking(field_name, model="standard"):
     rankings = loadFuzzyAITokenRankings()
-    ranking = rankings.get(field_name, {})
+    field_rankings = rankings.get(field_name, {})
+    model = _normalizeFuzzyAIModel(model)
     defaults = _tokenRankingDefaults()
+    if not isinstance(field_rankings, dict):
+        field_rankings = {}
+
+    # Existing files stored one flat ranking per field. Preserve it as Standard.
+    if "preferred_tokens" in field_rankings or "ignored_tokens" in field_rankings:
+        ranking = field_rankings if model == "standard" else {}
+    else:
+        ranking = field_rankings.get(model, {})
     if not isinstance(ranking, dict):
         ranking = {}
     return {
@@ -246,13 +259,21 @@ def loadFuzzyAITokenRanking(field_name):
         "ignored_tokens": ranking.get("ignored_tokens") or defaults["ignored_tokens"],
     }
 
-def saveFuzzyAITokenRanking(field_name, ranking):
+def saveFuzzyAITokenRanking(field_name, ranking, model="standard"):
     rankings = loadFuzzyAITokenRankings()
-    current = loadFuzzyAITokenRanking(field_name)
+    model = _normalizeFuzzyAIModel(model)
+    field_rankings = rankings.get(field_name, {})
+    if not isinstance(field_rankings, dict):
+        field_rankings = {}
+    if "preferred_tokens" in field_rankings or "ignored_tokens" in field_rankings:
+        field_rankings = {"standard": field_rankings}
+
+    current = loadFuzzyAITokenRanking(field_name, model)
     if isinstance(ranking, dict):
         current["preferred_tokens"] = str(ranking.get("preferred_tokens", current["preferred_tokens"]))
         current["ignored_tokens"] = str(ranking.get("ignored_tokens", current["ignored_tokens"]))
-    rankings[field_name] = current
+    field_rankings[model] = current
+    rankings[field_name] = field_rankings
     saveFuzzyAITokenRankings(rankings)
     return current
 
@@ -685,14 +706,14 @@ def importFieldSettings(field_name, json_settings):
                 missing_patterns.append(f"'{requested_pattern}' → '{default_pattern}'")
 
         if settings.get("shape") in ("fuzzy_ai_gather", "blooms_ai"):
-            blue_model = getFuzzyAIModelPath("tokens.onnx")
-            blue_model_coreml = getFuzzyAIModelPath("best.mlpackage")
-            sprinkler_model = getFuzzyAIModelPath("sprinkler.onnx")
-            sprinkler_model_coreml = getFuzzyAIModelPath("sprinkler.mlpackage")
-            if not os.path.exists(blue_model) and not os.path.exists(blue_model_coreml):
-                warnings.append("Missing blue model: src/data/models/tokens.onnx or src/data/models/best.mlpackage")
-            if not os.path.exists(sprinkler_model) and not os.path.exists(sprinkler_model_coreml):
-                warnings.append("Missing sprinkler model: src/data/models/sprinkler.onnx or src/data/models/sprinkler.mlpackage")
+            token_model = getFuzzyAIModelPath("token_detection_standard.mlmodelc")
+            token_model_onnx = getFuzzyAIModelPath("token_detection_standard.onnx")
+            sprinkler_model = getFuzzyAIModelPath("sprinkler_detection_standard.mlmodelc")
+            sprinkler_model_onnx = getFuzzyAIModelPath("sprinkler_detection_standard.onnx")
+            if not os.path.exists(token_model) and not os.path.exists(token_model_onnx):
+                warnings.append("Missing token model: src/data/models/token_detection_standard.mlmodelc or src/data/models/token_detection_standard.onnx")
+            if not os.path.exists(sprinkler_model) and not os.path.exists(sprinkler_model_onnx):
+                warnings.append("Missing sprinkler model: src/data/models/sprinkler_detection_standard.mlmodelc or src/data/models/sprinkler_detection_standard.onnx")
 
         # Save the imported settings
         saveField(field_name, settings)
@@ -996,6 +1017,18 @@ def loadSettings():
         if k not in settings:
             settings[k] = v
             merged_new_keys = True
+
+    taskPriorityOrder = settings.get("task_priority_order", [])
+    if isinstance(taskPriorityOrder, list) and "collect_sprouts" not in taskPriorityOrder:
+        insertIndex = taskPriorityOrder.index("collect_sticker_printer") + 1 if "collect_sticker_printer" in taskPriorityOrder else len(taskPriorityOrder)
+        taskPriorityOrder.insert(insertIndex, "collect_sprouts")
+        settings["task_priority_order"] = taskPriorityOrder
+        merged_new_keys = True
+    if isinstance(taskPriorityOrder, list) and "collect_sticker_sprout" not in taskPriorityOrder:
+        insertIndex = taskPriorityOrder.index("collect_sprouts") + 1 if "collect_sprouts" in taskPriorityOrder else len(taskPriorityOrder)
+        taskPriorityOrder.insert(insertIndex, "collect_sticker_sprout")
+        settings["task_priority_order"] = taskPriorityOrder
+        merged_new_keys = True
 
     # Migrate legacy global quest gather override to per-quest keys on first load
     try:
