@@ -9,6 +9,9 @@
     <div id="collect-seasonal" class="collect-tab-item">
       Seasonal
     </div>
+    <div id="collect-sprouts" class="collect-tab-item">
+      Sprouts
+    </div>
     <div id="collect-blender" class="collect-tab-item">
       Blender
     </div>
@@ -509,6 +512,205 @@
                 />
             `;
       petalsContainer.appendChild(petalsImageContainer);
+    </script>
+  </div>
+
+  <div id="collect-sprouts-tab" class="standard-container sub-tab-panel">
+    <script>
+      const parentCollectSprouts = document.getElementById("collect-sprouts-tab");
+      const sproutFields = [
+        "sunflower",
+        "dandelion",
+        "mushroom",
+        "blue flower",
+        "clover",
+        "strawberry",
+        "spider",
+        "bamboo",
+        "pineapple",
+        "stump",
+        "cactus",
+        "pumpkin",
+        "pine tree",
+        "rose",
+        "mountain top",
+        "coconut",
+        "pepper",
+        "hive hub",
+      ];
+      const sproutFieldOptions = sproutFields.map((field) => ({
+        label: field.split(" ").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" "),
+        value: field,
+      }));
+
+      buildStandardContainer(parentCollectSprouts, "Sprouts", "", [
+        {
+          id: "sprouts_enable",
+          title: "Enable Task",
+          desc: "Plant Magic Beans in the selected field and gather sprout drops with AI token targeting.",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "sprouts_magic_bean_slot",
+          title: "Magic Bean Slot",
+          desc: "Hotbar slot containing Magic Beans.",
+          type: {
+            name: "dropdown",
+            data: slotArray,
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "sprouts_max_beans",
+          title: "Max Per Session",
+          desc: "How many Magic Beans the macro may use this session.",
+          type: {
+            name: "textbox",
+            inputType: "int",
+            inputLimit: 3,
+            length: 6,
+            triggerFunction: "saveSetting(this, 'profile')",
+          },
+        },
+        {
+          id: "sprouts_max_beans_per_gather",
+          title: "Max Per Gather",
+          desc: "How many Magic Beans the macro may use during one Sprouts gather before moving on.",
+          type: {
+            name: "textbox",
+            inputType: "int",
+            inputLimit: 3,
+            length: 6,
+            triggerFunction: "saveSetting(this, 'profile')",
+          },
+        },
+        {
+          id: "sprouts_final_loot_seconds",
+          title: "Final Loot Time",
+          desc: "Seconds to keep collecting drops after the Magic Bean limit is reached.",
+          type: {
+            name: "textbox",
+            inputType: "int",
+            inputLimit: 3,
+            length: 6,
+            triggerFunction: "saveSetting(this, 'profile')",
+          },
+        },
+        {
+          id: "sprouts_pattern_width",
+          title: "Pattern Width",
+          desc: "Width used by the AI gather pattern while collecting sprout drops.",
+          type: {
+            name: "dropdown",
+            data: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "sprouts_field",
+          title: "Field",
+          desc: "Field where the sprout should be planted.",
+          type: {
+            name: "dropdown",
+            data: sproutFieldOptions,
+            length: 13,
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "sprouts_ai_model",
+          title: "AI Model",
+          desc: "Model used to search for sprout drops. Loot models chase loot drops; token models use the token priority list.",
+          type: {
+            name: "dropdown",
+            data: [
+              "Standard",
+              { label: "Loot Light (macOS 12+)", value: "loot_light" },
+              { label: "Token Light (macOS 12+)", value: "token_light" },
+              { label: "Loot Mini (macOS 12+)", value: "loot_mini" },
+              { label: "Token Mini (macOS 12+)", value: "token_mini" },
+            ],
+            triggerFunction: "saveSetting(this, 'profile'); refreshSproutAIModelOptions();",
+          },
+        },
+        {
+          id: "configure-sprout-ai-tokens-button",
+          title: "Token Priority",
+          desc: "Choose which sprout drop tokens the AI should chase after the sprout pops, then sort them from highest to lowest priority.",
+          type: {
+            name: "button",
+            text: "Customize Tokens",
+            length: 10,
+            triggerFunction: "openSproutAITokenPopup()",
+          },
+        },
+      ]);
+
+      buildStandardContainer(parentCollectSprouts, "Sticker Sprout", "", [
+        {
+          id: "sticker_sprout_watch",
+          title: "Watch For Sticker Sprout",
+          desc: "Watch blue text for Sticker Sprout Hive Hub spawn messages, then travel to Hive Hub and collect drops.",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "sticker_sprout_gather_minutes",
+          title: "Gather Time",
+          desc: "Minutes to gather in Hive Hub after a Sticker Sprout spawn is detected.",
+          type: {
+            name: "textbox",
+            inputType: "int",
+            inputLimit: 2,
+            length: 6,
+            triggerFunction: "saveSetting(this, 'profile')",
+          },
+        },
+      ]);
+
+      parentCollectSprouts.insertAdjacentHTML(
+        "beforeend",
+        `
+          <input type="hidden" id="sprouts_preferred_tokens">
+          <input type="hidden" id="sprouts_ignored_tokens">
+          <div id="sprout-ai-token-modal" class="modal-overlay" style="display:none;">
+            <div class="modal-dialog poppins-regular" style="max-width: 42rem; width: 90%; max-height: 85vh; overflow: hidden; display:flex; flex-direction:column;">
+              <h3>Sprout Token Priority</h3>
+              <p>Enable sprout drop tokens the AI should chase after the sprout pops. Drag tokens to sort them from highest to lowest priority.</p>
+              <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.5rem;">
+                <button class="import-export-button sprout-ai-token-preset" data-preset="field">Field Drops</button>
+                <button class="import-export-button sprout-ai-token-preset" data-preset="all">All Sprout Drops</button>
+                <button class="import-export-button sprout-ai-token-preset" data-preset="clear">Clear</button>
+              </div>
+              <div id="sprout-ai-token-list" style="overflow:auto; padding-right:0.5rem; margin-top:0.5rem;"></div>
+              <div class="modal-actions" style="margin-top:1rem;">
+                <button id="cancel-sprout-ai-tokens-button" class="btn-cancel">Cancel</button>
+                <button id="save-sprout-ai-tokens-button" class="btn-confirm">Save Tokens</button>
+              </div>
+            </div>
+          </div>
+        `
+      );
+
+      buildStandardContainer(parentCollectSprouts, "Drop Guide", "Common and rare sprout drop reference by field and sprout type.", []);
+      const sproutContainers = parentCollectSprouts.querySelectorAll(".standard-container");
+      const sproutGuideContainer = sproutContainers[sproutContainers.length - 1];
+      const sproutGuide = document.createElement("div");
+      sproutGuide.className = "sprout-guide-image-container";
+      sproutGuide.innerHTML = `
+        <img
+          src="./assets/cheatsheet/sprouts.png"
+          alt="Sprout Drops Cheat Sheet"
+          class="zoomable-image sprout-guide-image"
+        />
+      `;
+      sproutGuideContainer.appendChild(sproutGuide);
+
     </script>
   </div>
 

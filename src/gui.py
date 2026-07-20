@@ -10,11 +10,19 @@ import json
 import webbrowser
 import time
 import threading
+from bottle import route, static_file
 from modules.submacros.autoGiftedBasicBee import AutoGiftedBasicBeeRunner
 import modules.controls.keyboard as keyboardModule
 import modules.logging.log as logModule
 
 eel.init('webapp')
+HOURLY_REPORT_ASSET_ROOT = os.path.join(settingsManager.getProjectRoot(), "src", "hourly_report", "assets")
+
+
+@route("/hourly-report-assets/<filename:re:[A-Za-z0-9_\\-]+\\.png>")
+def serve_hourly_report_asset(filename):
+    return static_file(filename, root=HOURLY_REPORT_ASSET_ROOT)
+
 run = None
 _recent_logs = []
 _tool_logger = None
@@ -933,12 +941,12 @@ def importFieldSettings(field_name, json_settings):
         return False
 
 @eel.expose
-def loadFuzzyAITokenRanking(field_name):
-    return settingsManager.loadFuzzyAITokenRanking(field_name)
+def loadFuzzyAITokenRanking(field_name, model="standard"):
+    return settingsManager.loadFuzzyAITokenRanking(field_name, model)
 
 @eel.expose
-def saveFuzzyAITokenRanking(field_name, ranking):
-    return settingsManager.saveFuzzyAITokenRanking(field_name, ranking)
+def saveFuzzyAITokenRanking(field_name, ranking, model="standard"):
+    return settingsManager.saveFuzzyAITokenRanking(field_name, ranking, model)
   
 @eel.expose
 def exportPlanterSettings():

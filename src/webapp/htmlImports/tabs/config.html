@@ -114,6 +114,20 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
+        {
+          id: "ai_gather_model",
+          title: "AI Gather Model",
+          desc: "Choose the token detection model used by AI Gathering. Light and Mini automatically fall back to Standard if they cannot load.",
+          type: {
+            name: "dropdown",
+            data: [
+              "Standard",
+              { label: "Light (macOS 12+)", value: "Light" },
+              { label: "Mini (macOS 12+)", value: "Mini" },
+            ],
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
       ]);
 
       buildStandardContainer(parentBSS, "Goo", "", [
@@ -321,6 +335,7 @@
             <div class="drag-item" data-id="collect_mountain_booster" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Mountain Booster</span></div>
             <div class="drag-item" data-id="collect_sticker_stack" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Sticker Stack</span></div>
             <div class="drag-item" data-id="collect_sticker_printer" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Sticker Printer</span></div>
+            <div class="drag-item" data-id="collect_sprouts" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Sprouts</span></div>
             <div class="drag-item" data-id="kill_stump_snail" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Kill: Stump Snail</span></div>
             <div class="drag-item" data-id="kill_king_beetle" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Kill: King Beetle</span></div>
             <div class="drag-item" data-id="kill_tunnel_bear" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Kill: Tunnel Bear</span></div>
@@ -572,11 +587,11 @@
         },
       ]);
 
-      buildStandardContainer(parentOther, "Time Format", "", [
+      buildStandardContainer(parentOther, "Hourly / Session Reports", "", [
         {
           id: "hourly_report_time_format",
-          title: "Hourly Report Time Format",
-          desc: "Choose between 12-hour (AM/PM) or 24-hour format for hourly report time labels",
+          title: "Report Time Format",
+          desc: "Choose between 12-hour (AM/PM) or 24-hour format for report time labels",
           type: {
             name: "dropdown",
             data: [12, 24],
@@ -584,12 +599,25 @@
           },
         },
         {
-          id: "webhook_time_format",
-          title: "Webhook Time Format",
-          desc: "Choose between 12-hour (AM/PM) or 24-hour format for webhook message timestamps",
+          id: "hourly_report_uptime_buffs",
+          title: "Buff Uptime Options",
+          desc: "Choose buff keys to track for hourly/session reports. The first 16 selected keys are visible.",
           type: {
-            name: "dropdown",
-            data: [12, 24],
+            name: "multicheck",
+            variant: "report-buffs",
+            data: hourlyReportUptimeBuffOptions,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "hourly_report_hourly_buffs",
+          title: "Side Buff Options",
+          desc: "Choose up to 5 buff keys to show in the report side Buffs card.",
+          type: {
+            name: "multicheck",
+            variant: "report-buffs compact",
+            maxSelections: 5,
+            data: hourlyReportSideBuffOptions,
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
@@ -696,6 +724,16 @@
             name: "textbox",
             inputType: "string",
             length: 13,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "webhook_time_format",
+          title: "Webhook Time Format",
+          desc: "Choose between 12-hour (AM/PM) or 24-hour format for webhook message timestamps",
+          type: {
+            name: "dropdown",
+            data: [12, 24],
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
@@ -836,7 +874,81 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
+        {
+          id: "ping_unusual_sprouts",
+          title: "Unusual Sprouts",
+          desc: "Ping when a Moon, Gummy, Festive, Epic, Legendary, or Supreme Sprout announcement is detected",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
       ]);
+
+      const discordPermissionCategories = [
+        [
+          "discord_permission_public_info_ids",
+          "Public Info",
+          "Commands: /help, /ping. Leave blank to let anyone use these commands.",
+        ],
+        [
+          "discord_permission_observation_ids",
+          "Observation",
+          "Commands: /battery, /logs, /nectar, /screenshot, /status, /tasklist, /plantertimers.",
+        ],
+        [
+          "discord_permission_macro_control_ids",
+          "Macro Control",
+          "Commands: /start, /stop, /pause, /resume, /rejoin.",
+        ],
+        [
+          "discord_permission_task_interrupt_ids",
+          "Task Interrupts",
+          "Commands: /amulet, /collectplanter, /planterreset, /reroll, /reset, /skip, /usehotbar.",
+        ],
+        [
+          "discord_permission_configuration_ids",
+          "Configuration",
+          "Commands that view or change macro configuration, fields, quests, collectibles, mobs, hive slot, shift lock, and macro mode.",
+        ],
+        [
+          "discord_permission_system_action_ids",
+          "System Actions",
+          "Commands: /close, /mute, /unmute.",
+        ],
+        [
+          "discord_permission_profile_access_ids",
+          "Profile Access",
+          "Commands: /privateserver, /swapprofile.",
+        ],
+        [
+          "discord_permission_streaming_ids",
+          "Streaming",
+          "Commands: /stream, /streamurl.",
+        ],
+        [
+          "discord_permission_reports_ids",
+          "Reports",
+          "Commands: /hourlyreport, /session.",
+        ],
+      ];
+
+      buildStandardContainer(
+        parentDiscord,
+        "Bot Command Permissions",
+        "Enter Discord user IDs allowed to use each category. Separate multiple IDs with commas. Leave a category blank to allow everyone.",
+        discordPermissionCategories.map(([id, title, desc]) => ({
+          id,
+          title,
+          desc,
+          type: {
+            name: "textbox",
+            inputType: "string",
+            length: 18,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        }))
+      );
 
     </script>
   </div>

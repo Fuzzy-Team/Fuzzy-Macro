@@ -10,7 +10,8 @@ Requirements:
 - opencv-python
 - numpy
 - mss or Pillow
-- best.mlpackage and sprinkler.mlpackage
+- token_detection_standard.mlmodelc or token_detection_standard.onnx
+- sprinkler_detection_standard.mlmodelc or sprinkler_detection_standard.onnx
 
 - Version 2.2
 """
@@ -140,6 +141,37 @@ LABELS_TOKENS = {
     128: "Unactivated Target", 129: "White Boost",
 }
 
+LABELS_TOKENS_LIGHT = {
+    0: "Baby Love", 1: "Bear Morph", 2: "Bomb", 3: "Boost",
+    4: "Festive Gift Token", 5: "Focus", 6: "Summon Frog Token",
+    7: "Fuzz Bombs Token", 8: "Haste", 9: "Honey Token",
+    10: "Inflate Balloons", 11: "Inspire Token", 12: "Loot",
+    13: "Mark", 14: "Melody", 15: "Party Balloons",
+    16: "Tabby Love", 17: "Token Link",
+}
+
+LABELS_TOKENS_MINI = {
+    0: "Balloon", 1: "Bear Morph", 2: "Bomb", 3: "Boost",
+    4: "Summon Frog Token", 5: "Haste", 6: "Inspire Token",
+    7: "Long Buff", 8: "Loot", 9: "Mark", 10: "Token Link",
+}
+
+LABELS_LOOT_LIGHT = {
+    0: "Beans", 1: "Berry", 2: "Buffs", 3: "Consumables",
+    4: "Eggs", 5: "Fruits", 6: "Passes", 7: "Rare Items",
+    8: "Tickets", 9: "Token Link", 10: "Waxes",
+}
+
+LABELS_LOOT_MINI = {
+    0: "Token Link", 1: "Loot",
+}
+
+TOKEN_MODEL_OPTIONS = {
+    "standard": ("Standard", None, LABELS_TOKENS, INPUT_WIDTH, INPUT_HEIGHT),
+    "light": ("Light", "token_detection_small.mlmodelc", LABELS_TOKENS_LIGHT, 768, 416),
+    "mini": ("Mini", "token_detection_mini.mlmodelc", LABELS_TOKENS_MINI, 768, 416),
+}
+
 LABELS_SPRINKLER = {
     0: "Sprinkler",
     1: "Supreme",
@@ -226,6 +258,19 @@ def _project_root():
 MODEL_DIR = (_project_root() / "src" / "data" / "models").resolve()
 
 
+def _check_missing_models(model_names):
+    try:
+        from modules.misc.modelManager import ensure_missing_models
+
+        result = ensure_missing_models(model_names)
+        if result.get("downloaded"):
+            print(f"[fuzzy_ai_gather] Downloaded missing AI model(s): {', '.join(result['downloaded'])}")
+        elif result.get("missing_remote"):
+            print(f"[fuzzy_ai_gather] Missing AI model(s) were not found remotely: {', '.join(result['missing_remote'])}")
+    except Exception as exc:
+        print(f"[fuzzy_ai_gather] Could not check missing AI models: {exc}")
+
+
 CONFIDENCE_THRESHOLD = _coerce_float(globals().get("pattern_confidence_threshold"), CONFIDENCE_THRESHOLD)
 SPRINKLER_CONFIDENCE_THRESHOLD = _coerce_float(
     globals().get("pattern_sprinkler_confidence_threshold"),
@@ -277,6 +322,7 @@ RECORD_VIDEO_FPS = _coerce_float(globals().get("pattern_record_video_fps"), RECO
 PREFERRED_TOKENS = _preferred_token_weights(globals().get("pattern_preferred_tokens"), PREFERRED_TOKENS)
 PREFERRED_TOKEN_RANKS = {name: index for index, name in enumerate(PREFERRED_TOKENS.keys())}
 IGNORED_TOKENS = _ignored_token_names(globals().get("pattern_ignored_tokens"), IGNORED_TOKENS)
+SPROUT_IDLE_SQUARE = _coerce_bool(globals().get("pattern_sprout_idle_square"), False)
 
 
 try:
@@ -338,8 +384,10 @@ def _preprocess_token_frame(frame, runtime):
         left, top, width_px, height_px = runtime["token_crop"]
         cropped = frame[top:top + height_px, left:left + width_px]
 
-    if cropped.shape[1] != INPUT_WIDTH or cropped.shape[0] != INPUT_HEIGHT:
-        cropped = cv2.resize(cropped, (INPUT_WIDTH, INPUT_HEIGHT), interpolation=cv2.INTER_LINEAR)
+    input_width = int(runtime.get("token_input_width", INPUT_WIDTH))
+    input_height = int(runtime.get("token_input_height", INPUT_HEIGHT))
+    if cropped.shape[1] != input_width or cropped.shape[0] != input_height:
+        cropped = cv2.resize(cropped, (input_width, input_height), interpolation=cv2.INTER_LINEAR)
 
     if cropped.ndim == 3 and cropped.shape[2] == 4:
         rgb = cv2.cvtColor(cropped, cv2.COLOR_BGRA2RGB)
@@ -712,6 +760,8 @@ def _record_debug_frame(runtime, frame, detections, target):
     runtime["latest_recording_overlay"] = {
         "detections": list(detections),
         "target": dict(target) if isinstance(target, dict) else None,
+        "token_model_label": runtime.get("token_model_label", "Standard"),
+        "token_model_kind": runtime.get("token_model_kind", "unknown"),
         "current_x": runtime.get("current_x", 0.0),
         "current_y": runtime.get("current_y", 0.0),
         "movement_count": runtime.get("movement_count", 0),
@@ -737,12 +787,13 @@ def _annotate_recording_frame(runtime, frame):
     frame_h, frame_w = annotated.shape[:2]
 
     overlay = runtime.get("latest_recording_overlay", {})
+    token_labels = runtime.get("token_labels", LABELS_TOKENS)
     detections = overlay.get("detections", [])
     target = overlay.get("target")
     target_box = target.get("box") if isinstance(target, dict) else None
 
     for box, class_id, confidence in detections:
-        token_name = LABELS_TOKENS.get(class_id, f"class {class_id}")
+        token_name = token_labels.get(class_id, f"class {class_id}")
         x1, y1, x2, y2 = box
         left_f, top_f = _model_point_to_capture(runtime, x1, y1)
         right_f, bottom_f = _model_point_to_capture(runtime, x2, y2)
@@ -780,7 +831,7 @@ def _annotate_recording_frame(runtime, frame):
 
     anchor = overlay.get("anchor") or {}
     status_lines = [
-        f"tokens={len(detections)} candidates={overlay.get('candidate_count', 0)} pos=({overlay.get('current_x', 0.0):.2f},{overlay.get('current_y', 0.0):.2f}) moves={overlay.get('movement_count', 0)}",
+        f"token_model={overlay.get('token_model_label', 'Standard')} ({overlay.get('token_model_kind', 'unknown')}) tokens={len(detections)} candidates={overlay.get('candidate_count', 0)} pos=({overlay.get('current_x', 0.0):.2f},{overlay.get('current_y', 0.0):.2f}) moves={overlay.get('movement_count', 0)}",
         f"target={target['name']} score={target['score']:.2f} move=({target['tx']:.2f},{target['ty']:.2f})" if target else "target=None",
         f"sprinkler_status={overlay.get('sprinkler_status', '')} target={overlay.get('target_sprinkler_label', '') or 'any'} drift={overlay.get('field_drift_compensation')} model={overlay.get('use_sprinkler_model_for_drift_compensation')}",
     ]
@@ -912,6 +963,15 @@ def _scan_tokens_once(runtime):
     inference_elapsed = time.time() - inference_start
     postprocess_start = time.time()
     detections = _postprocess_tokens(output, CONFIDENCE_THRESHOLD)
+    input_width = float(runtime.get("token_input_width", INPUT_WIDTH))
+    input_height = float(runtime.get("token_input_height", INPUT_HEIGHT))
+    if input_width != INPUT_WIDTH or input_height != INPUT_HEIGHT:
+        scale_x = INPUT_WIDTH / input_width
+        scale_y = INPUT_HEIGHT / input_height
+        detections = [
+            ((box[0] * scale_x, box[1] * scale_y, box[2] * scale_x, box[3] * scale_y), class_id, confidence)
+            for box, class_id, confidence in detections
+        ]
     postprocess_elapsed = time.time() - postprocess_start
     _refresh_sprinkler_anchor(runtime)
     scoring_start = time.time()
@@ -1030,6 +1090,14 @@ def _load_coreml_model(model_path):
     if ct is None:
         raise RuntimeError("coremltools is required for AI token gathering. Install coremltools, then restart the macro.")
 
+    model_path = Path(model_path)
+    if model_path.suffix.lower() == ".mlmodelc":
+        compiled_model_class = getattr(ct.models, "CompiledMLModel", None)
+        if compiled_model_class is None:
+            raise RuntimeError("This coremltools version cannot load compiled .mlmodelc bundles. Upgrade coremltools, then restart the macro.")
+        model = compiled_model_class(str(model_path), compute_units=ct.ComputeUnit.ALL)
+        return model, "image", "var_1445"
+
     model = ct.models.MLModel(str(model_path), compute_units=ct.ComputeUnit.ALL)
     description = model.get_spec().description
     input_name = description.input[0].name
@@ -1120,7 +1188,7 @@ def _find_best_token(runtime, detections):
     candidates = []
     rejected = []
     for box, class_id, confidence in detections:
-        token_name = LABELS_TOKENS.get(class_id)
+        token_name = runtime.get("token_labels", LABELS_TOKENS).get(class_id)
         if not token_name:
             rejected.append({"class_id": class_id, "reason": "unknown", "confidence": confidence})
             continue
@@ -1247,7 +1315,7 @@ def _tile_multi_walk(keys, tiles):
     return True
 
 
-def _execute_movement(tx, ty):
+def _execute_movement(tx, ty, update_token_time=True):
     magnitude = math.hypot(tx, ty)
     if magnitude <= 0.001:
         return False
@@ -1266,7 +1334,8 @@ def _execute_movement(tx, ty):
             runtime["current_x"] += tx
             runtime["current_y"] += ty
             runtime["movement_count"] += 1
-            runtime["last_token_time"] = time.time()
+            if update_token_time:
+                runtime["last_token_time"] = time.time()
     finally:
         runtime["movement_active"] = False
 
@@ -1279,6 +1348,10 @@ def _execute_movement_to_target(tx, ty):
         return False
 
     return _execute_movement(tx, ty)
+
+
+def _execute_idle_movement(tx, ty):
+    return _execute_movement(tx, ty, update_token_time=False)
 
 
 def _execute_active_sweep(runtime):
@@ -1319,6 +1392,39 @@ def _execute_active_sweep(runtime):
         key="active_sweep",
     )
     return _execute_movement(tx, ty)
+
+
+def _execute_sprinkler_idle_square(runtime):
+    now = time.time()
+    if now - runtime.get("last_no_target_sweep_time", 0.0) < NO_TARGET_SWEEP_INTERVAL:
+        return False
+
+    runtime["last_no_target_sweep_time"] = now
+    current_x = runtime.get("current_x", 0.0)
+    current_y = runtime.get("current_y", 0.0)
+    current_dist = math.hypot(current_x, current_y)
+    if current_dist > SPRINKLER_ARRIVAL_THRESHOLD:
+        if now - runtime.get("last_idle_return_time", 0.0) >= IDLE_RETURN_INTERVAL:
+            runtime["last_idle_return_time"] = now
+            return _recalibrate(runtime)
+        return False
+
+    step = max(0.06, min(0.12, 0.08 + (0.01 * min(int(width), 4))))
+    square_index = int(runtime.get("idle_square_index", 0))
+    runtime["idle_square_index"] = square_index + 1
+    square = (
+        (step, 0.0),
+        (0.0, step),
+        (-step, 0.0),
+        (0.0, -step),
+    )
+    tx, ty = square[square_index % len(square)]
+    _debug_log(
+        f"idle sprinkler square move=({tx:.2f},{ty:.2f}) pos=({current_x:.2f},{current_y:.2f})",
+        min_interval=0.5,
+        key="idle_sprinkler_square",
+    )
+    return _execute_idle_movement(tx, ty)
 
 
 def _latest_target(runtime):
@@ -1685,13 +1791,49 @@ def _initialise_runtime():
             "Must install opencv-python and numpy before using AI Gathering, please run install dependencies before continuing."
         )
 
-    token_path = MODEL_DIR / "best.mlpackage"
-    token_model_kind = "coreml"
-    if not token_path.exists():
-        token_path = MODEL_DIR / "tokens.onnx"
-        token_model_kind = "opencv_onnx"
-    if not token_path.exists():
-        raise FileNotFoundError(f"No token AI model was found at fixed path: {MODEL_DIR / 'tokens.onnx'} or {MODEL_DIR / 'best.mlpackage'}")
+    requested_model = _coerce_text(globals().get("pattern_ai_gather_model"), "Standard").strip().lower()
+    requested_label, requested_filename, requested_labels, requested_width, requested_height = TOKEN_MODEL_OPTIONS.get(
+        requested_model, TOKEN_MODEL_OPTIONS["standard"]
+    )
+    requested_filename_override = _coerce_text(globals().get("pattern_ai_gather_model_file"), "")
+    if requested_filename_override:
+        requested_filename = requested_filename_override
+        if requested_filename_override == "loot_detection_small.mlmodelc":
+            requested_label = "Light Loot"
+            requested_labels = LABELS_LOOT_LIGHT
+        elif requested_filename_override == "loot_detection_mini.mlmodelc":
+            requested_label = "Mini Loot"
+            requested_labels = LABELS_LOOT_MINI
+        elif requested_filename_override.startswith("loot_detection_"):
+            requested_label = f"{requested_label} Loot"
+            requested_labels = {0: "Loot"}
+    standard_candidates = [
+        (MODEL_DIR / "token_detection_standard.mlmodelc", "coreml", LABELS_TOKENS, "Standard", INPUT_WIDTH, INPUT_HEIGHT),
+        (MODEL_DIR / "token_detection_standard.onnx", "opencv_onnx", LABELS_TOKENS, "Standard", INPUT_WIDTH, INPUT_HEIGHT),
+        (MODEL_DIR / "best.mlpackage", "coreml", LABELS_TOKENS, "Legacy Standard", INPUT_WIDTH, INPUT_HEIGHT),
+        (MODEL_DIR / "tokens.onnx", "opencv_onnx", LABELS_TOKENS, "Legacy Standard", INPUT_WIDTH, INPUT_HEIGHT),
+    ]
+    token_candidates = []
+    if requested_filename is not None:
+        token_candidates.append((MODEL_DIR / requested_filename, "coreml", requested_labels, requested_label, requested_width, requested_height))
+    token_candidates.extend(standard_candidates)
+    token_candidates = [candidate for candidate in token_candidates if candidate[0].exists()]
+    if not token_candidates:
+        missing_model_names = []
+        if requested_filename is not None:
+            missing_model_names.append(requested_filename)
+        missing_model_names.extend(["token_detection_standard.mlmodelc", "token_detection_standard.onnx"])
+        _check_missing_models(missing_model_names)
+        token_candidates = []
+        if requested_filename is not None:
+            token_candidates.append((MODEL_DIR / requested_filename, "coreml", requested_labels, requested_label, requested_width, requested_height))
+        token_candidates.extend(standard_candidates)
+        token_candidates = [candidate for candidate in token_candidates if candidate[0].exists()]
+    if not token_candidates:
+        raise FileNotFoundError(
+            f"No usable token AI model was found. Checked selected {requested_label} model and Standard models in {MODEL_DIR}"
+        )
+    token_path, token_model_kind, token_labels, token_model_label, token_input_width, token_input_height = token_candidates[0]
     if token_model_kind == "coreml" and ct is None:
         try:
             import subprocess
@@ -1708,11 +1850,11 @@ def _initialise_runtime():
         raise RuntimeError("Pillow is required for CoreML AI Gathering, please run install dependencies before continuing.")
 
     sprinkler_model_kind = None
-    sprinkler_candidate = MODEL_DIR / "sprinkler.mlpackage"
+    sprinkler_candidate = MODEL_DIR / "sprinkler_detection_standard.mlmodelc"
     if sprinkler_candidate.exists():
         sprinkler_model_kind = "coreml"
     else:
-        sprinkler_candidate = MODEL_DIR / "sprinkler.onnx"
+        sprinkler_candidate = MODEL_DIR / "sprinkler_detection_standard.onnx"
         if sprinkler_candidate.exists():
             sprinkler_model_kind = "opencv_onnx"
     sprinkler_path = sprinkler_candidate if sprinkler_candidate.exists() else None
@@ -1751,22 +1893,59 @@ def _initialise_runtime():
     if homography is None:
         raise RuntimeError("Could not compute AI gather homography.")
 
-    if token_model_kind == "opencv_onnx":
-        token_session, token_input, token_output = _load_onnx_model(token_path)
-        _delete_model_path(MODEL_DIR / "best.mlpackage")
+    token_load_errors = []
+    token_session = token_input = token_output = None
+    for candidate_path, candidate_kind, candidate_labels, candidate_label, candidate_width, candidate_height in token_candidates:
+        try:
+            if candidate_kind == "opencv_onnx":
+                token_session, token_input, token_output = _load_onnx_model(candidate_path)
+            else:
+                token_session, token_input, token_output = _load_coreml_model(candidate_path)
+            if candidate_label != requested_label:
+                print(
+                    f"[fuzzy_ai_gather] {requested_label} model failed or was unavailable; falling back to Standard ({candidate_path.name})"
+                )
+            token_path = candidate_path
+            token_model_kind = candidate_kind
+            token_labels = candidate_labels
+            token_model_label = candidate_label
+            token_input_width = candidate_width
+            token_input_height = candidate_height
+            globals()["LABELS_TOKENS"] = dict(token_labels)
+            break
+        except Exception as exc:
+            error_message = f"{candidate_label} ({candidate_path.name}): {exc}"
+            token_load_errors.append(error_message)
+            print(f"[fuzzy_ai_gather] token model load failed: {error_message}")
     else:
-        token_session, token_input, token_output = _load_coreml_model(token_path)
+        raise RuntimeError("Could not load any token AI model: " + "; ".join(token_load_errors))
+    if token_path.name == "token_detection_standard.onnx":
+        _delete_model_path(MODEL_DIR / "token_detection_standard.mlmodelc")
+        _delete_model_path(MODEL_DIR / "best.mlpackage")
+    elif token_path.name == "token_detection_standard.mlmodelc":
+        _delete_model_path(MODEL_DIR / "token_detection_standard.onnx")
         _delete_model_path(MODEL_DIR / "tokens.onnx")
+        _delete_model_path(MODEL_DIR / "best.mlpackage")
+    elif token_path.name == "best.mlpackage":
+        _delete_model_path(MODEL_DIR / "token_detection_standard.mlmodelc")
+        _delete_model_path(MODEL_DIR / "token_detection_standard.onnx")
+        _delete_model_path(MODEL_DIR / "tokens.onnx")
+    elif token_path.name == "tokens.onnx":
+        _delete_model_path(MODEL_DIR / "token_detection_standard.mlmodelc")
+        _delete_model_path(MODEL_DIR / "best.mlpackage")
     sprinkler_session = None
     sprinkler_input = None
     sprinkler_output = None
     if sprinkler_path is not None:
         if sprinkler_model_kind == "opencv_onnx":
             sprinkler_session, sprinkler_input, sprinkler_output = _load_onnx_model(sprinkler_path)
+            _delete_model_path(MODEL_DIR / "sprinkler_detection_standard.mlmodelc")
             _delete_model_path(MODEL_DIR / "sprinkler.mlpackage")
         else:
             sprinkler_session, sprinkler_input, sprinkler_output = _load_coreml_model(sprinkler_path)
+            _delete_model_path(MODEL_DIR / "sprinkler_detection_standard.onnx")
             _delete_model_path(MODEL_DIR / "sprinkler.onnx")
+            _delete_model_path(MODEL_DIR / "sprinkler.mlpackage")
 
     return {
         "capture": capture,
@@ -1779,6 +1958,11 @@ def _initialise_runtime():
         "token_input": token_input,
         "token_output": token_output,
         "token_model_kind": token_model_kind,
+        "token_model_label": token_model_label,
+        "token_model_path": str(token_path),
+        "token_labels": dict(token_labels),
+        "token_input_width": token_input_width,
+        "token_input_height": token_input_height,
         "sprinkler_session": sprinkler_session,
         "sprinkler_input": sprinkler_input,
         "sprinkler_output": sprinkler_output,
@@ -1822,7 +2006,7 @@ if not runtime.get("ready"):
         runtime["ready"] = True
         runtime["error"] = ""
         _debug_log(
-            f"runtime ready token_model={runtime['token_model_kind']} input={runtime['token_input']} output={runtime['token_output']} confidence={CONFIDENCE_THRESHOLD} ignored={sorted(IGNORED_TOKENS)} record={RECORD_VIDEO}"
+            f"runtime ready token_model={runtime['token_model_label']} kind={runtime['token_model_kind']} input={runtime['token_input']} output={runtime['token_output']} confidence={CONFIDENCE_THRESHOLD} ignored={sorted(IGNORED_TOKENS)} record={RECORD_VIDEO}"
         )
     except Exception as exc:
         runtime["ready"] = False
@@ -1830,9 +2014,14 @@ if not runtime.get("ready"):
         _debug_log(f"initialisation failed: {exc}")
 
 
+warmup_only = _coerce_bool(globals().get("pattern_ai_warmup_only"), False)
+
 if not runtime.get("ready"):
     print(f"[fuzzy_ai_gather] {runtime.get('error', 'initialisation failed')}")
-    _fallback_pattern()
+    if not warmup_only:
+        _fallback_pattern()
+elif warmup_only:
+    _debug_log("warmup complete; movement skipped", min_interval=0.5, key="warmup")
 else:
     try:
         if not runtime.get("latest_scan_time"):
@@ -1868,7 +2057,9 @@ else:
 
             if recalibrated:
                 pass
-            elif _execute_active_sweep(runtime):
+            elif SPROUT_IDLE_SQUARE and _execute_sprinkler_idle_square(runtime):
+                pass
+            elif not SPROUT_IDLE_SQUARE and _execute_active_sweep(runtime):
                 pass
             elif now - runtime["last_idle_return_time"] >= IDLE_RETURN_INTERVAL:
                 runtime["last_idle_return_time"] = now
