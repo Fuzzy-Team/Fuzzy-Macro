@@ -425,6 +425,17 @@
           },
         },
         {
+          id: "manage-fallback-private-servers-button",
+          title: "Fallback Private Servers",
+          desc: "Configure up to three backup servers. Fuzzy tries each one after the primary server fails, before trying public servers.",
+          type: {
+            name: "button",
+            text: "Manage Servers",
+            length: 11,
+            triggerFunction: "openFallbackPrivateServersPopup()",
+          },
+        },
+        {
           id: "rejoin_method",
           title: "Rejoin Method",
           desc: "How the macro should rejoin. Deeplink is highly recommended, and all other methods use the browser",
@@ -505,6 +516,25 @@
           },
         },
       ]);
+
+      parentOther.insertAdjacentHTML("beforeend", `
+        <div id="fallback-private-servers-modal" class="modal-overlay" style="display:none;">
+          <div class="modal-dialog poppins-regular" style="max-width:42rem;">
+            <h3>Fallback Private Servers</h3>
+            <p>Fuzzy tries these in order after the main private server fails. Leave a field blank to skip it.</p>
+            <label for="fallback_private_server_link_1">Backup server 1</label>
+            <input id="fallback_private_server_link_1" class="poppins-regular textbox" type="text" style="width:100%; box-sizing:border-box; margin:0.4rem 0 1rem;" data-input-type="string">
+            <label for="fallback_private_server_link_2">Backup server 2</label>
+            <input id="fallback_private_server_link_2" class="poppins-regular textbox" type="text" style="width:100%; box-sizing:border-box; margin:0.4rem 0 1rem;" data-input-type="string">
+            <label for="fallback_private_server_link_3">Backup server 3</label>
+            <input id="fallback_private_server_link_3" class="poppins-regular textbox" type="text" style="width:100%; box-sizing:border-box; margin:0.4rem 0;" data-input-type="string">
+            <div class="modal-actions">
+              <button id="cancel-fallback-private-servers-button" class="btn-cancel">Cancel</button>
+              <button id="save-fallback-private-servers-button" class="btn-confirm">Save Servers</button>
+            </div>
+          </div>
+        </div>
+      `);
 
       buildStandardContainer(parentOther, "Auto Stop", "", [
         {

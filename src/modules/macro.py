@@ -3073,68 +3073,125 @@ class macro:
         )
         return False
     
+    def _getRejoinServerLinks(self, usePrivateServer):
+        """Return unique private-server links in their configured failover order."""
+        if not usePrivateServer:
+            return []
+
+        keys = (
+            "private_server_link",
+            "fallback_private_server_link_1",
+            "fallback_private_server_link_2",
+            "fallback_private_server_link_3",
+        )
+        links = []
+        seen = set()
+        for key in keys:
+            link = str(self.setdat.get(key, "") or "").strip()
+            normalized = link.casefold()
+            if link and normalized not in seen:
+                links.append((key, link))
+                seen.add(normalized)
+        return links
+
+    def _privateServerDeeplink(self, placeId, privateServerLink):
+        """Convert Roblox private and share links into a Roblox deeplink."""
+        from urllib.parse import parse_qs, urlparse
+
+        parsed = urlparse(privateServerLink)
+        query = {key.lower(): values for key, values in parse_qs(parsed.query).items()}
+        code = None
+        is_share_link = "share" in parsed.path.lower()
+        for key in ("code", "privateserverlinkcode", "privateserverlink", "linkcode"):
+            if query.get(key):
+                code = query[key][0]
+                is_share_link = is_share_link or key == "code"
+                break
+        if not code and "=" in privateServerLink:
+            code = privateServerLink.rsplit("=", 1)[-1].split("&", 1)[0]
+        if not code:
+            return None
+        if is_share_link:
+            link_type = query.get("type", ["Server"])[0]
+            return f"roblox://navigation/share_links?code={code}&type={link_type}"
+        return f"roblox://placeID={placeId}&linkCode={code}"
+
+    @staticmethod
+    def _joinErrorFromText(rawText):
+        """Classify OCR text from a Roblox join-error dialog."""
+        text = " ".join(str(rawText or "").lower().split())
+        codeMatch = re.search(r"error\s*code\s*[:;]?\s*([0-9s]+)", text)
+        code = codeMatch.group(1).replace("s", "5") if codeMatch else ""
+        if not code and re.search(r"\bid\s*=\s*17\b", text):
+            code = "279"
+
+        errors = {
+            "279": ("connection failure", "retry"),
+            "524": ("permission denied", "fallback"),
+            "267": ("banned from this experience", "abort"),
+            "256": ("server data failure or active ban", "retry"),
+            "429": ("too many requests", "cooldown"),
+        }
+        if code in errors:
+            reason, action = errors[code]
+            return {"code": code, "reason": reason, "action": action}
+        if "permission to join" in text or "do not have permission" in text:
+            return {"code": "524", "reason": "permission denied", "action": "fallback"}
+        if "join error" in text:
+            return {"code": code, "reason": "join error", "action": "retry"}
+        return None
+
+    def _detectJoinError(self):
+        """OCR the central Roblox dialog area for invalid-server errors."""
+        width = max(1, int(self.robloxWindow.mw * 0.7))
+        height = max(1, int(self.robloxWindow.mh * 0.55))
+        x = int(self.robloxWindow.mx + (self.robloxWindow.mw - width) / 2)
+        y = int(self.robloxWindow.my + (self.robloxWindow.mh - height) / 2)
+        dialog = mssScreenshot(x, y, width, height)
+        text = " ".join(result[1][0] for result in ocr.ocrRead(dialog))
+        return self._joinErrorFromText(text)
+
     def rejoin(self, rejoinMsg = "Rejoining", placeId = MAIN_GAME_PLACE_ID, claimHive = True, usePrivateServer = True):
         self.canDetectNight = False
         placeId = str(placeId or MAIN_GAME_PLACE_ID)
-        psLink = self.setdat.get("private_server_link", "")
+        privateServerLinks = self._getRejoinServerLinks(usePrivateServer)
         self.logger.webhook("",rejoinMsg, "dark brown")
         self.set_task_status("rejoining", activity="rejoining")
         mouse.mouseUp()
         keyboard.releaseMovement()
-        for i in range(3):
-            joinPS = bool(usePrivateServer and psLink and psLink.strip()) #join private server?
-            rejoinMethod = self.setdat.get("rejoin_method", "deeplink")
+        # Give each target two chances, then retain the previous three public
+        # retries. This mirrors Natro's staged failover without an unbounded loop.
+        attempts = [server for server in privateServerLinks for _ in range(2)] + [("public", "")] * 3
+        invalidServerLinks = set()
+        launchedAttempts = 0
+        for i, (serverKey, psLink) in enumerate(attempts):
+            joinPS = bool(psLink)
+            if joinPS and psLink in invalidServerLinks:
+                continue
+            launchedAttempts += 1
+            rejoinMethod = str(self.setdat.get("rejoin_method", "deeplink")).strip().lower()
             browserLink = f"https://www.roblox.com/games/{placeId}"
-            if i == 2 and joinPS: 
-                self.logger.webhook("", "Failed rejoining too many times, falling back to a public server", "red", "screen", ping_category="ping_disconnects")
-                joinPS = False
+            if serverKey != "public":
+                serverName = "primary private server" if serverKey == "private_server_link" else serverKey.replace("_", " ")
+                self.logger.webhook("", f"Rejoin attempt {launchedAttempts}/{len(attempts)}: {serverName}", "dark brown")
+            elif privateServerLinks and i == len(privateServerLinks) * 2:
+                self.logger.webhook("", "All configured private servers failed; falling back to a public server", "red", "screen", ping_category="ping_disconnects")
             
             time.sleep(8)
             #execute rejoin method
             if joinPS:
                 browserLink = psLink
             if rejoinMethod == "deeplink":
-                try:
-                    appManager.forceCloseApp("Roblox")
-                except Exception:
-                    appManager.closeApp("Roblox")
-                appManager.openApp("Roblox")
-                time.sleep(2)
+                # A Roblox deeplink can teleport an already-running client and
+                # launches the client itself when Roblox is not open. Keeping
+                # the process alive avoids a full restart on every rejoin.
                 deeplink = f"roblox://placeID={placeId}"
                 if joinPS:
-                    # Parse the provided private server link robustly using url parsing
-                    from urllib.parse import urlparse, parse_qs
-                    try:
-                        parsed = urlparse(psLink)
-                        qs = {k.lower(): v for k, v in parse_qs(parsed.query).items()}
-                        code_val = None
-                        is_share = False
-                        if 'code' in qs and qs['code']:
-                            code_val = qs['code'][0]
-                            is_share = True
-                        elif 'privateserverlinkcode' in qs and qs['privateserverlinkcode']:
-                            code_val = qs['privateserverlinkcode'][0]
-                        elif 'privateserverlink' in qs and qs['privateserverlink']:
-                            code_val = qs['privateserverlink'][0]
-                        elif 'linkcode' in qs and qs['linkcode']:
-                            code_val = qs['linkcode'][0]
-                        else:
-                            # Fallback: try to extract a trailing query value after '='
-                            if '=' in psLink:
-                                code_val = psLink.split('=')[-1].split('&')[0]
-
-                        if not code_val:
-                            self.logger.webhook("", "Invalid private server link format. Could not extract code. Falling back to public server.", "red", ping_category="ping_critical_errors")
-                            joinPS = False
-                        else:
-                            if is_share:
-                                type_val = qs.get('type', ['Server'])[0]
-                                deeplink = f"roblox://navigation/share_links?code={code_val}&type={type_val}"
-                            else:
-                                deeplink += f"&linkCode={code_val}"
-                    except Exception as e:
-                        self.logger.webhook("", f"Error parsing private server link: {e}. Falling back to public server.", "red", ping_category="ping_critical_errors")
-                        joinPS = False
+                    deeplink = self._privateServerDeeplink(placeId, psLink)
+                    if not deeplink:
+                        invalidServerLinks.add(psLink)
+                        self.logger.webhook("", f"Invalid {serverKey.replace('_', ' ')}; trying the next server.", "red", "screen", ping_category="ping_critical_errors")
+                        continue
                 appManager.openDeeplink(deeplink)
             elif rejoinMethod == "new tab":
                 webbrowser.open(browserLink, new = 2)
@@ -3150,13 +3207,16 @@ class macro:
                     self.keyboard.keyUp("command")
                 else:
                     self.keyboard.keyUp("ctrl")
-            #wait for bss to load
-            #if sprinkler image is found, bss is loaded
-            #max 80s of waiting
+            # The sprinkler prompt is Fuzzy's established indicator that the
+            # joined Bee Swarm session is ready for macro inputs.
             sprinklerImg = self.adjustImage("./images/menu", "sprinkler")
             loadStartTime = time.time()
+            # A deeplink is asynchronous, so ignore the old join-error dialog
+            # briefly while Roblox starts processing this new request.
+            joinErrorScanAfter = loadStartTime + 5
             signUpImage = self.adjustImage("./images/menu", "signup")
             robloxHomeImage = self.adjustImage("./images/menu", "robloxhome")
+            disconnectImage = self.adjustImage("./images/menu", "disconnect")
             # prepare rejoin color-based detection
             try:
                 sample_colors = get_sample_colors()
@@ -3168,14 +3228,73 @@ class macro:
             sustained_start = 0
             rejoinSuccess = True
             robloxOpenTime = 0
-            while not locateImageOnScreen(sprinklerImg, self.robloxWindow.mx, self.robloxWindow.my+(self.robloxWindow.mh*3/4), self.robloxWindow.mw, self.robloxWindow.mh*1/4, 0.75) and time.time() - loadStartTime < 240:
+            gameLoaded = False
+            lastJoinErrorScan = 0
+            while time.time() - loadStartTime < 240:
+                # Roblox can recreate its window during launch, so refresh bounds
+                # before every round of visual checks.
                 if appManager.isAppOpen("roblox"):
-                    robloxOpenTime = time.time()
-                if self.setdat["rejoin_method"] == "deeplink":
+                    if not robloxOpenTime:
+                        robloxOpenTime = time.time()
+                    try:
+                        self.setRobloxWindowInfo(setYOffset=False)
+                    except Exception:
+                        pass
+                else:
+                    robloxOpenTime = 0
+                if (
+                    robloxOpenTime
+                    and time.time() >= joinErrorScanAfter
+                    and time.time() - lastJoinErrorScan >= 2
+                ):
+                    lastJoinErrorScan = time.time()
+                    try:
+                        joinError = self._detectJoinError()
+                    except Exception:
+                        joinError = None
+                    if joinError:
+                        code = joinError["code"] or "unknown"
+                        action = joinError["action"]
+                        if action == "fallback" and joinPS:
+                            invalidServerLinks.add(psLink)
+                            nextStep = "trying the next configured server"
+                        elif action == "cooldown":
+                            nextStep = "waiting 30 seconds before retrying"
+                        elif action == "abort":
+                            nextStep = "stopping rejoin attempts"
+                        else:
+                            nextStep = "retrying the connection"
+                        self.logger.webhook(
+                            f"Join error {code}",
+                            f"Detected {joinError['reason']}; {nextStep}.",
+                            "red",
+                            "screen",
+                            ping_category="ping_disconnects",
+                        )
+                        mouse.mouseUp()
+                        keyboard.releaseMovement()
+                        if action == "abort":
+                            self.clear_task_status()
+                            return False
+                        if action == "cooldown":
+                            time.sleep(30)
+                        rejoinSuccess = False
+                        break
+                if locateImageOnScreen(
+                    sprinklerImg,
+                    self.robloxWindow.mx,
+                    self.robloxWindow.my + (self.robloxWindow.mh * 3 / 4),
+                    self.robloxWindow.mw,
+                    self.robloxWindow.mh / 4,
+                    0.75,
+                ):
+                    gameLoaded = True
+                    break
+                if rejoinMethod == "deeplink":
                     #check if the user is stuck on the sign up screen
                     if robloxOpenTime and locateImageOnScreen(signUpImage, self.robloxWindow.mx+(self.robloxWindow.mw/4), self.robloxWindow.my+(self.robloxWindow.mh/3), self.robloxWindow.mw/2, self.robloxWindow.mh*2/3, 0.7):
                         self.logger.webhook("","Not logged into the roblox app. Rejoining via the browser. For a smoother experience, please ensure you are logged into the Roblox app beforehand.","red","screen", ping_category="ping_disconnects")
-                        self.setdat["rejoin_method"] = "new tab"
+                        rejoinMethod = "new tab"
                         continue
                     #check if home page is opened instead of the app
                     # if locateImageOnScreen(robloxHomeImage, self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw/10, self.robloxWindow.mh/6, 0.7) and time.time() - loadStartTime > 10:
@@ -3187,6 +3306,11 @@ class macro:
                             self.logger.webhook("","Roblox Home Page is open","brown","screen")
                             rejoinSuccess = False
                             break
+
+                if locateImageOnScreen(disconnectImage, self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw, self.robloxWindow.mh, 0.75):
+                    self.logger.webhook("", "Roblox disconnected while loading; retrying rejoin", "dark brown", "screen")
+                    rejoinSuccess = False
+                    break
 
                 # Check for sustained dominant color (light/dark) that indicates a stuck screen.
                 try:
@@ -3210,12 +3334,20 @@ class macro:
                         sustained_start = 0
                 except Exception:
                     sustained_start = 0
+                time.sleep(1)
 
-                    self.setRobloxWindowInfo(setYOffset=False)
-
-            appManager.openApp("Roblox")
+            if not gameLoaded and rejoinSuccess:
+                self.logger.webhook(
+                    "",
+                    f"Game load was not confirmed within four minutes; trying the next rejoin target ({launchedAttempts}/{len(attempts)}).",
+                    "red",
+                    "screen",
+                    ping_category="ping_disconnects",
+                )
+                rejoinSuccess = False
             if not rejoinSuccess:
                 continue
+            appManager.openApp("Roblox")
             #run fullscreen check
             # if self.isFullScreen(): #check if roblox can be found in menu bar
             #     self.logger.webhook("","Roblox is already in fullscreen, not activating fullscreen", "dark brown")
@@ -3224,7 +3356,7 @@ class macro:
             #     self.toggleFullScreen()
 
             #if use browser to rejoin, close the browser
-            if self.setdat["rejoin_method"] != "deeplink":
+            if rejoinMethod != "deeplink":
                 time.sleep(2)
                 webbrowser.open("https://docs.python.org/3/library/webbrowser.html", autoraise=True)
                 time.sleep(0.5)
@@ -3243,13 +3375,11 @@ class macro:
             
             self.startDetect()
             if not claimHive:
-                time.sleep(7) #wait for the joined friend popup to disappear
                 mouse.click()
                 self.canDetectNight = True
                 self.clear_task_status()
                 return True
             #find hive
-            time.sleep(7) #wait for the joined friend popup to disappear
             mouse.click()
             # self.keyboard.press("space")
             # time.sleep(0.5)
