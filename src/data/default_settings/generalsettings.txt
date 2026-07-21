@@ -1,6 +1,7 @@
 hive_number=1
 hive_exclude_slot=[]
 claim_first_available_hive=True
+disable_tool_at_hive=False
 sprinkler_slot=1
 movespeed=29
 sprinkler_type=saturator
