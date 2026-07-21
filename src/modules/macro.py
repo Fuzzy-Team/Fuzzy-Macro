@@ -2433,7 +2433,10 @@ class macro:
                         self.reset(convert=False)
                         return False
 
-            mouse.click()
+            # Clicking during conversion keeps the equipped tool active. Allow users
+            # to leave it idle while they are at their hive instead.
+            if not self.setdat.get("disable_tool_at_hive", False):
+                mouse.click()
 
             if self.night and self.setdat["stinger_hunt"]:
                 self.hourlyReport.addHourlyStat("converting_time", time.time()-st)
