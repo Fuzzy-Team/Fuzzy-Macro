@@ -8,7 +8,10 @@ from io import BytesIO
 from modules.misc.messageBox import msgBox
 
 
-PATTERN_OVERWRITE_EXCEPTIONS = {"fuzzy_ai_gather.py"}
+# These are shipped patterns whose implementation must stay in sync with the
+# bundled model manager.  They are not user-authored patterns, so always
+# replace them during an update instead of preserving an obsolete copy.
+PATTERN_OVERWRITE_EXCEPTIONS = {"blooms_ai.py", "fuzzy_ai_gather.py"}
 
 # Helper: parse version strings like 1.2.3 or 1.2.3a
 def _parse_version(v):
