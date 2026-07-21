@@ -1001,7 +1001,28 @@ class HourlyReport():
         def planterEmoji(planterName):
             return "🪴" if planterName else "🌱"
         def fieldEmoji(fieldName):
-            return "🌼" if fieldName else ""
+            field_emojis = {
+                "sunflower": "🌻",
+                "dandelion": "🌼",
+                "mushroom": "🍄",
+                "blue flower": "🔷",
+                "clover": "🍀",
+                "strawberry": "🍓",
+                "spider": "🕷️",
+                "bamboo": "🐼",
+                "pineapple": "🍍",
+                "stump": "🐌",
+                "cactus": "🌵",
+                "pumpkin": "🎃",
+                "pine tree": "🌲",
+                "rose": "🌹",
+                "mountain top": "⛰️",
+                "pepper": "🌶️",
+                "coconut": "🥥",
+                "hive hub": "🏠",
+            }
+            normalized_name = fieldName.replace("_", " ").strip().lower()
+            return field_emojis.get(normalized_name, "🌼" if normalized_name else "")
         def nectarEmoji(nectarName):
             return {
                 "comforting": "🌙",
