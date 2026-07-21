@@ -46,6 +46,54 @@ async function loadConfig() {
   initializeQuickActions();
 }
 
+const FALLBACK_PRIVATE_SERVER_KEYS = [
+  "fallback_private_server_link_1",
+  "fallback_private_server_link_2",
+  "fallback_private_server_link_3",
+];
+
+async function openFallbackPrivateServersPopup() {
+  const modal = document.getElementById("fallback-private-servers-modal");
+  if (!modal) return;
+
+  const settings = await loadAllSettings();
+  FALLBACK_PRIVATE_SERVER_KEYS.forEach((key) => {
+    const input = document.getElementById(key);
+    if (input) input.value = settings[key] || "";
+  });
+  modal.style.display = "flex";
+}
+
+function closeFallbackPrivateServersPopup() {
+  const modal = document.getElementById("fallback-private-servers-modal");
+  if (modal) modal.style.display = "none";
+}
+
+async function saveFallbackPrivateServersPopup() {
+  for (const key of FALLBACK_PRIVATE_SERVER_KEYS) {
+    const input = document.getElementById(key);
+    if (input) await saveSetting(input, "general");
+  }
+  closeFallbackPrivateServersPopup();
+}
+
+$(document)
+  .on("click", "#manage-fallback-private-servers-button", (event) => {
+    event.preventDefault();
+    openFallbackPrivateServersPopup();
+  })
+  .on("click", "#cancel-fallback-private-servers-button", (event) => {
+    event.preventDefault();
+    closeFallbackPrivateServersPopup();
+  })
+  .on("click", "#save-fallback-private-servers-button", async (event) => {
+    event.preventDefault();
+    await saveFallbackPrivateServersPopup();
+  })
+  .on("click", "#fallback-private-servers-modal", function (event) {
+    if (event.target === this) closeFallbackPrivateServersPopup();
+  });
+
 function initializeDragAndDrop() {
   const dragContainers = document.querySelectorAll(".drag-list-container");
 
