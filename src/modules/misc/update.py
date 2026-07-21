@@ -1,6 +1,8 @@
 import stat
 import os
 import re
+import importlib
+import sys
 import requests
 import zipfile
 import shutil
@@ -12,6 +14,11 @@ from modules.misc.messageBox import msgBox
 # bundled model manager.  They are not user-authored patterns, so always
 # replace them during an update instead of preserving an obsolete copy.
 PATTERN_OVERWRITE_EXCEPTIONS = {"blooms_ai.py", "fuzzy_ai_gather.py"}
+
+# Preserve this flag across importlib.reload().  It prevents the freshly
+# loaded updater from handing off to itself a second time.
+if "_UPDATER_HANDOFF_ACTIVE" not in globals():
+    _UPDATER_HANDOFF_ACTIVE = False
 
 # Helper: parse version strings like 1.2.3 or 1.2.3a
 def _parse_version(v):
@@ -118,6 +125,56 @@ def _refresh_updater(destination, progress_callback=None):
                 os.remove(tmp_path)
         except Exception:
             pass
+
+
+def _run_refreshed_updater(destination, entry_point, *args, **kwargs):
+    """Refresh update.py and run its latest entry point in this update run.
+
+    Return ``None`` when the current updater should continue as a safe
+    fallback; otherwise return ``(True, result)`` from the refreshed updater.
+    """
+    global _UPDATER_HANDOFF_ACTIVE
+    if _UPDATER_HANDOFF_ACTIVE:
+        return None
+
+    try:
+        _refresh_updater(destination, kwargs.get("progress_callback"))
+    except Exception as exc:
+        print(f"[updater] Could not refresh updater; continuing with current version: {exc}")
+        return None
+
+    current_module = sys.modules.get(__name__)
+    if current_module is None:
+        return None
+
+    try:
+        _UPDATER_HANDOFF_ACTIVE = True
+        cached_bytecode = getattr(current_module, "__cached__", None)
+        if cached_bytecode and os.path.exists(cached_bytecode):
+            try:
+                os.remove(cached_bytecode)
+            except OSError:
+                # Reload can still validate the source itself; a read-only
+                # bytecode cache should not prevent a normal update.
+                pass
+        importlib.invalidate_caches()
+        refreshed_module = importlib.reload(current_module)
+
+        # The refreshed entry point begins with the same handoff check.  Make
+        # its refresh call a no-op so it proceeds directly with the newly
+        # loaded implementation instead of fetching/reloading recursively.
+        original_refresh = refreshed_module._refresh_updater
+        refreshed_module._refresh_updater = lambda *unused_args, **unused_kwargs: None
+        try:
+            print("[updater] Running refreshed updater")
+            return True, getattr(refreshed_module, entry_point)(*args, **kwargs)
+        finally:
+            refreshed_module._refresh_updater = original_refresh
+    except Exception as exc:
+        print(f"[updater] Could not reload refreshed updater; continuing with current version: {exc}")
+        return None
+    finally:
+        _UPDATER_HANDOFF_ACTIVE = False
 
 
 # Recursively copy from src to dst, overwriting files. Skip protected names.
@@ -303,11 +360,15 @@ def update(t="main", update_channel="stable", progress_callback=None):
     pattern_overwrite_exceptions = PATTERN_OVERWRITE_EXCEPTIONS
     destination = os.getcwd().replace("/src", "")
 
-    try:
-        _refresh_updater(destination, progress_callback)
-    except Exception:
-        # non-fatal: continue with current updater if fetch fails
-        pass
+    refreshed_result = _run_refreshed_updater(
+        destination,
+        "update",
+        t=t,
+        update_channel=update_channel,
+        progress_callback=progress_callback,
+    )
+    if refreshed_result is not None:
+        return refreshed_result[1]
 
     # remote version URL and zip link
     import time
@@ -558,7 +619,6 @@ def update(t="main", update_channel="stable", progress_callback=None):
 def update_from_commit(commit_hash, progress_callback=None):
     """Update the macro from a specific commit hash (zip at /archive/<hash>.zip)."""
     _report_update_progress(progress_callback, 0, f"Starting update to {commit_hash}")
-    msgBox("Update in progress", f"Updating to commit {commit_hash}... Do not close terminal")
     protected_folders = [
         os.path.join("src", "data", "user"),
         os.path.join("src", "data", "models"),
@@ -569,11 +629,16 @@ def update_from_commit(commit_hash, progress_callback=None):
     pattern_overwrite_exceptions = PATTERN_OVERWRITE_EXCEPTIONS
     destination = os.getcwd().replace("/src", "")
 
-    try:
-        _refresh_updater(destination, progress_callback)
-    except Exception:
-        # non-fatal: continue with current updater if fetch fails
-        pass
+    refreshed_result = _run_refreshed_updater(
+        destination,
+        "update_from_commit",
+        commit_hash=commit_hash,
+        progress_callback=progress_callback,
+    )
+    if refreshed_result is not None:
+        return refreshed_result[1]
+
+    msgBox("Update in progress", f"Updating to commit {commit_hash}... Do not close terminal")
 
     remote_zip = f"https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/{commit_hash}.zip"
     backup_path = os.path.join(destination, "backup_macro.zip")
