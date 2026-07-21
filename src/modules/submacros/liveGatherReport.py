@@ -182,19 +182,22 @@ class LiveGatherReport:
                 self.message_id = None
 
     def _capture_honey_pollen(self):
-        rw = self.roblox_window
-        scale_x, scale_y = self._hud_scales()
-        capture_w = self._scale_length(self.REFERENCE_CAPTURE[0], scale_x)
-        capture_h = self._scale_length(self.REFERENCE_CAPTURE[1], scale_y)
+        x, y, window_width, _window_height = self._hud_capture_window()
+        scale = self._hud_pixel_scale()
+        capture_w = self._scale_length(self.REFERENCE_CAPTURE[0], scale)
+        capture_h = self._scale_length(self.REFERENCE_CAPTURE[1], scale)
 
-        # Roblox lays out its HUD against the window dimensions.  Scaling this
-        # region uniformly assumes every window is 16:9 and shifts the crop on
-        # ultrawide, 4:3, and resized windows.
-        x = self._round_coord(rw.mx + rw.mw / 2.0 + self.REFERENCE_CAPTURE_LEFT_OFFSET * scale_x)
-        y = self._round_coord(rw.my + rw.yOffset * scale_y)
-        img = mssScreenshot(x, y, capture_w, capture_h).convert("RGBA")
-        honey = self._crop_hud_card(img, self._scale_box(self.REFERENCE_HUD_CARDS[0], scale_x, scale_y), scale_x, scale_y)
-        pollen = self._crop_hud_card(img, self._scale_box(self.REFERENCE_HUD_CARDS[1], scale_x, scale_y), scale_x, scale_y)
+        # The Honey and Pollen cards are offset-sized Roblox UI elements. They
+        # retain their size at different window resolutions and move as a
+        # centered group.  mss uses physical pixels, so only apply the display
+        # backing scale (for example, 2x on Retina), never the window size.
+        capture_x = self._round_coord(
+            x + window_width / 2.0 + self.REFERENCE_CAPTURE_LEFT_OFFSET * scale
+        )
+        capture_y = self._round_coord(y + self.roblox_window.yOffset * scale)
+        img = mssScreenshot(capture_x, capture_y, capture_w, capture_h).convert("RGBA")
+        honey = self._crop_hud_card(img, self._scale_box(self.REFERENCE_HUD_CARDS[0], scale, scale), scale, scale)
+        pollen = self._crop_hud_card(img, self._scale_box(self.REFERENCE_HUD_CARDS[1], scale, scale), scale, scale)
         stacked = Image.new("RGBA", (max(honey.width, pollen.width), honey.height + pollen.height), (0, 0, 0, 0))
         stacked.paste(honey, (0, 0), honey)
         stacked.paste(pollen, (0, honey.height), pollen)
@@ -203,12 +206,19 @@ class LiveGatherReport:
         out.seek(0)
         return out.getvalue()
 
-    def _hud_scales(self):
+    def _hud_capture_window(self):
+        """Return Roblox bounds in the physical-pixel space used by mss."""
         rw = self.roblox_window
+        pixel_ratio = max(1.0, float(getattr(rw, "multi", 1) or 1))
         return (
-            max(0.1, rw.mw / float(self.REFERENCE_WINDOW_WIDTH)),
-            max(0.1, rw.mh / float(self.REFERENCE_WINDOW_HEIGHT)),
+            rw.mx * pixel_ratio,
+            rw.my * pixel_ratio,
+            rw.mw * pixel_ratio,
+            rw.mh * pixel_ratio,
         )
+
+    def _hud_pixel_scale(self):
+        return max(1.0, float(getattr(self.roblox_window, "multi", 1) or 1))
 
     @staticmethod
     def _round_coord(value):
