@@ -267,8 +267,10 @@ def _check_missing_models(model_names):
             print(f"[fuzzy_ai_gather] Downloaded missing AI model(s): {', '.join(result['downloaded'])}")
         elif result.get("missing_remote"):
             print(f"[fuzzy_ai_gather] Missing AI model(s) were not found remotely: {', '.join(result['missing_remote'])}")
+        return result
     except Exception as exc:
         print(f"[fuzzy_ai_gather] Could not check missing AI models: {exc}")
+        return {"failures": {"model download": str(exc)}}
 
 
 CONFIDENCE_THRESHOLD = _coerce_float(globals().get("pattern_confidence_threshold"), CONFIDENCE_THRESHOLD)
@@ -1823,15 +1825,18 @@ def _initialise_runtime():
         if requested_filename is not None:
             missing_model_names.append(requested_filename)
         missing_model_names.extend(["token_detection_standard.mlmodelc", "token_detection_standard.onnx"])
-        _check_missing_models(missing_model_names)
+        download_result = _check_missing_models(missing_model_names)
         token_candidates = []
         if requested_filename is not None:
             token_candidates.append((MODEL_DIR / requested_filename, "coreml", requested_labels, requested_label, requested_width, requested_height))
         token_candidates.extend(standard_candidates)
         token_candidates = [candidate for candidate in token_candidates if candidate[0].exists()]
     if not token_candidates:
+        failures = download_result.get("failures", {})
+        detail = f" Download attempt failed: {'; '.join(failures.values())}" if failures else ""
         raise FileNotFoundError(
-            f"No usable token AI model was found. Checked selected {requested_label} model and Standard models in {MODEL_DIR}"
+            f"No usable token AI model was found after attempting to download it. "
+            f"Checked selected {requested_label} model and Standard models in {MODEL_DIR}.{detail}"
         )
     token_path, token_model_kind, token_labels, token_model_label, token_input_width, token_input_height = token_candidates[0]
     if token_model_kind == "coreml" and ct is None:

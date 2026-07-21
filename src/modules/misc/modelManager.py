@@ -293,9 +293,13 @@ def ensure_missing_models(model_names):
     downloaded = []
     skipped = []
     missing_remote = []
+    failures = {}
     for model_name in model_names:
         if model_name not in _supported_model_names():
-            raise ValueError(f"{model_name} is not a supported model.")
+            # Continue so callers requesting multiple formats can still
+            # download a supported fallback (for example ONNX on older macOS).
+            failures[model_name] = "this model format is not supported on this platform"
+            continue
         local_path = os.path.join(MODEL_DIR, model_name)
         if os.path.exists(local_path):
             skipped.append(model_name)
@@ -311,12 +315,19 @@ def ensure_missing_models(model_names):
                 print(f"[models] Checking repository zip for {model_name}...")
                 _copy_from_repo_zip(model_name, local_path)
                 downloaded.append(model_name)
-            except Exception:
+            except Exception as zip_exc:
                 missing_remote.append(model_name)
-    cleanup_unused_models()
+                failures[model_name] = (
+                    f"direct download failed: {exc}; repository zip fallback failed: {zip_exc}"
+                )
+
+    # Callers can explicitly request the ONNX fallback on macOS.  Do not run
+    # the platform cleanup here, as it would delete that fallback before the
+    # caller has a chance to load it.
     return {
         "downloaded": downloaded,
         "skipped": skipped,
         "missing_remote": missing_remote,
+        "failures": failures,
         "model_dir": MODEL_DIR,
     }
