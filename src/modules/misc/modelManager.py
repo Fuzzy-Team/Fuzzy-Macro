@@ -14,7 +14,9 @@ MODELS_ZIP_URL = "https://github.com/Fuzzy-Team/fuzzymacroaimodels/archive/refs/
 MODEL_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", "models"))
 COREML_MODELS = (
     "token_detection_standard.mlmodelc",
-    "petals-yolo26.mlmodelc",
+    "blooms-and-petals-standard.mlmodelc",
+    "Blooms-and-petals-light.mlmodelc",
+    "Blooms-and-petals-mini.mlmodelc",
     "sprinkler_detection_standard.mlmodelc",
     "token_detection_small.mlmodelc",
     "token_detection_mini.mlmodelc",
