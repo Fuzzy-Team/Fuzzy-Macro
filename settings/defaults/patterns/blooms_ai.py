@@ -59,7 +59,7 @@ SPRINKLER_INPUT_WIDTH = 736
 SPRINKLER_INPUT_HEIGHT = 736
 SPRINKLER_CONFIDENCE_THRESHOLD = 0.6
 PETAL_CONFIDENCE_THRESHOLD = 0.50
-RUNTIME_VERSION = 28
+RUNTIME_VERSION = 30
 MIN_TOKEN_DISTANCE = 0.3
 MAX_SPRINKLER_DISTANCE = 10.0
 TARGET_SPRINKLER_LABEL = None
@@ -76,12 +76,9 @@ ANCHOR_REFRESH_INTERVAL = 0.35
 ANCHOR_MAX_PASSIVE_DISTANCE = 8.0
 LEASH_HARD_MARGIN = 2.5
 BLOOM_LABEL = "Bloom"
-BLOOM_PETAL_COLLECTION_MAX_WINDOW = 7.0
-BLOOM_PETAL_SPAWN_GRACE = 1.25
-BLOOM_PETAL_LOST_GRACE = 1.25
-BLOOM_PETAL_TRIGGER_DISTANCE = 4.5
-BLOOM_PETAL_CHASE_DISTANCE = 10.0
-PETAL_TARGET_HOLD_TIME = 0.75
+PETAL_ORBIT_RADIUS = 2.75
+PETAL_ORBIT_DURATION = 3.0
+PETAL_ORBIT_CORNERS = 4
 BLOOM_MAX_DISTANCE = 20.0
 BLOOM_SETTLE_DISTANCE = 0.25
 BLOOM_MIN_CONFIDENCE = 0.50
@@ -92,7 +89,6 @@ BLOOM_CONTACT_MAX_MOVE = 0.3
 BLOOM_CONTACT_MOVE_COOLDOWN = 0.25
 BLOOM_CONTACT_CONFIRMATIONS = 3
 BLOOM_CONTACT_MAX_TOTAL_MOVE = 1.2
-BLOOM_DISAPPEAR_TIMEOUT = 0.9
 IDLE_SPRINKLER_RADIUS = 0.40
 IDLE_RETURN_STEP = 1.25
 IDLE_SQUARE_STEP = 0.25
@@ -673,6 +669,9 @@ def _record_debug_frame(runtime, frame, detections, target):
         "bloom_mode": runtime.get("bloom_mode", "patrol"),
         "active_bloom": dict(runtime.get("active_bloom", {})) if isinstance(runtime.get("active_bloom"), dict) else None,
         "bloom_contact_distance": runtime.get("bloom_contact_distance", 0.0),
+        "petal_orbit_center": tuple(runtime["petal_orbit_center"]) if isinstance(runtime.get("petal_orbit_center"), (tuple, list)) else None,
+        "petal_orbit_deadline": runtime.get("petal_orbit_deadline", 0.0),
+        "petal_orbit_index": runtime.get("petal_orbit_index"),
         "sprinkler": dict(runtime.get("last_sprinkler_detection", {})),
         "anchor": dict(runtime.get("last_anchor", {})),
         "sprinkler_status": runtime.get("last_sprinkler_status", ""),
@@ -718,12 +717,9 @@ def _annotate_recording_frame(runtime, frame):
         top = max(0, min(frame_h - 1, int(round(y1))))
         right = max(0, min(frame_w - 1, int(round(x2))))
         bottom = max(0, min(frame_h - 1, int(round(y2))))
-        selected = bool(detection.get("selected"))
-        color = (255, 0, 255) if selected else (255, 120, 40)
-        cv2.rectangle(annotated, (left, top), (right, bottom), color, 3 if selected else 2)
-        label = f"Petal {detection.get('confidence', 0.0):.2f} d={detection.get('distance', 0.0):.2f}"
-        if selected:
-            label += " TARGET"
+        color = (255, 120, 40)
+        cv2.rectangle(annotated, (left, top), (right, bottom), color, 2)
+        label = f"Petal {detection.get('confidence', 0.0):.2f}"
         _draw_label(annotated, label, left, top - 4, color)
 
     sprinkler = overlay.get("sprinkler") or {}
@@ -759,6 +755,12 @@ def _annotate_recording_frame(runtime, frame):
     if active_bloom:
         status_lines.append(
             f"active_bloom=({active_bloom.get('tx', 0.0):.2f},{active_bloom.get('ty', 0.0):.2f}) contact={overlay.get('bloom_contact_distance', 0.0):.2f}/{BLOOM_CONTACT_MAX_TOTAL_MOVE:.2f}"
+        )
+    orbit_center = overlay.get("petal_orbit_center")
+    if isinstance(orbit_center, (tuple, list)) and len(orbit_center) == 2:
+        seconds_left = max(0.0, float(overlay.get("petal_orbit_deadline", 0.0)) - time.time())
+        status_lines.append(
+            f"petal_orbit=({orbit_center[0]:.2f},{orbit_center[1]:.2f}) next={int(overlay.get('petal_orbit_index') or 0) + 1}/{PETAL_ORBIT_CORNERS} left={seconds_left:.1f}s"
         )
     for index, line in enumerate(status_lines):
         _draw_label(annotated, line, 10, 24 + (index * 24), (255, 255, 255))
@@ -890,7 +892,7 @@ def _scan_tokens_once(runtime):
         output,
         transform,
         inference_elapsed * 1000.0,
-        allow_petal_plan=not scan_stale,
+        publish_petals=not scan_stale,
     )
     postprocess_elapsed = time.time() - postprocess_start
     _refresh_bloom_sprinkler_anchor(runtime)
@@ -935,7 +937,6 @@ def _scan_tokens_once(runtime):
     ):
         runtime["latest_bloom_candidates"] = []
         runtime["latest_petal_detections"] = []
-        runtime["latest_petal_hint"] = None
         runtime["latest_petal_detection_time"] = 0.0
         return runtime.get("latest_detections", []), runtime.get("latest_target")
 
@@ -1267,7 +1268,6 @@ def _execute_movement(tx, ty):
         with scan_lock:
             runtime["latest_target"] = None
             runtime["latest_bloom_candidates"] = []
-            runtime["latest_petal_hint"] = None
             runtime["latest_petal_detection_time"] = 0.0
             runtime["latest_scan_time"] = 0.0
             runtime["movement_requires_fresh_scan"] = True
@@ -1348,42 +1348,90 @@ def _start_bloom_work(runtime, target):
     runtime["bloom_contact_last_move_time"] = 0.0
     runtime["bloom_contact_distance"] = 0.0
     runtime["bloom_arrived_at"] = 0.0
-    runtime["latest_petal_hint"] = None
-    runtime["latest_petal_detection_time"] = 0.0
     _clear_locked_target(runtime)
 
 
-def _start_petal_collection(runtime):
+def _start_petal_orbit(runtime):
     now = time.time()
-    runtime["bloom_mode"] = "cleanup"
-    runtime["petal_collection_started_at"] = now
-    runtime["petal_collection_deadline"] = now + BLOOM_PETAL_COLLECTION_MAX_WINDOW
+    active_bloom = runtime.get("active_bloom")
+    if not isinstance(active_bloom, dict):
+        return False
+    runtime["bloom_mode"] = "orbit"
+    runtime["petal_orbit_center"] = (
+        float(active_bloom.get("future_x", runtime.get("current_x", 0.0))),
+        float(active_bloom.get("future_y", runtime.get("current_y", 0.0))),
+    )
+    runtime["petal_orbit_deadline"] = now + PETAL_ORBIT_DURATION
+    runtime["petal_orbit_index"] = None
     runtime["active_bloom"] = None
     _clear_locked_target(runtime)
+    return True
 
 
-def _finish_petal_collection(runtime):
+def _finish_petal_orbit(runtime):
     runtime["bloom_mode"] = "patrol"
     runtime["active_bloom"] = None
-    runtime["petal_collection_started_at"] = 0.0
-    runtime["petal_collection_deadline"] = 0.0
-    runtime["latest_petal_hint"] = None
+    runtime["petal_orbit_center"] = None
+    runtime["petal_orbit_deadline"] = 0.0
+    runtime["petal_orbit_index"] = None
     _clear_locked_target(runtime)
     # Correct dead-reckoned position without spending time walking back to the
     # sprinkler. Failure is harmless; screen-relative pursuit remains valid.
     _refresh_sprinkler_anchor(runtime, force=True)
 
 
+def _execute_petal_orbit(runtime):
+    if time.time() >= float(runtime.get("petal_orbit_deadline", 0.0)):
+        _finish_petal_orbit(runtime)
+        return True
+
+    center = runtime.get("petal_orbit_center")
+    if not isinstance(center, (tuple, list)) or len(center) != 2:
+        _finish_petal_orbit(runtime)
+        return True
+
+    corner_offset = PETAL_ORBIT_RADIUS / math.sqrt(2.0)
+    points = [
+        (float(center[0]) + corner_offset, float(center[1]) + corner_offset),
+        (float(center[0]) - corner_offset, float(center[1]) + corner_offset),
+        (float(center[0]) - corner_offset, float(center[1]) - corner_offset),
+        (float(center[0]) + corner_offset, float(center[1]) - corner_offset),
+    ]
+    orbit_index = runtime.get("petal_orbit_index")
+    if orbit_index is None:
+        current_x = float(runtime.get("current_x", 0.0))
+        current_y = float(runtime.get("current_y", 0.0))
+        orbit_index = min(
+            range(PETAL_ORBIT_CORNERS),
+            key=lambda index: math.hypot(points[index][0] - current_x, points[index][1] - current_y),
+        )
+    else:
+        orbit_index = int(orbit_index) % PETAL_ORBIT_CORNERS
+
+    # Run the whole square in this call. That keeps keys flowing from one side
+    # into the next instead of pausing for a scan between orbit waypoints.
+    while time.time() < float(runtime.get("petal_orbit_deadline", 0.0)):
+        target_x, target_y = points[orbit_index]
+        move_x = target_x - float(runtime.get("current_x", 0.0))
+        move_y = target_y - float(runtime.get("current_y", 0.0))
+        runtime["petal_orbit_index"] = (orbit_index + 1) % PETAL_ORBIT_CORNERS
+        _debug_log(
+            f"orbiting popped bloom corner={orbit_index + 1}/{PETAL_ORBIT_CORNERS} move=({move_x:.2f},{move_y:.2f})",
+            min_interval=0.25,
+            key="petal_orbit",
+        )
+        if not _execute_movement(move_x, move_y):
+            break
+        orbit_index = runtime["petal_orbit_index"]
+
+    _finish_petal_orbit(runtime)
+    return True
+
+
 def _execute_bloom_sequence(runtime):
     mode = runtime.get("bloom_mode", "patrol")
     now = time.time()
     if mode == "work":
-        # A nearby falling petal after reaching the bloom is the earliest
-        # reliable pop signal; waiting for the bloom box to vanish loses it.
-        if _cached_petal_model_hint(runtime):
-            _start_petal_collection(runtime)
-            return _execute_visible_petal_target(runtime)
-
         bloom = _active_bloom_detection(runtime)
         if bloom:
             runtime["bloom_last_visible_time"] = now
@@ -1434,25 +1482,11 @@ def _execute_bloom_sequence(runtime):
             runtime["bloom_contact_distance"] += move_distance
             return _execute_movement(filtered_tx * scale, filtered_ty * scale)
 
-        if now - runtime.get("bloom_last_visible_time", 0.0) < BLOOM_DISAPPEAR_TIMEOUT:
-            return True
-        _start_petal_collection(runtime)
-        mode = "cleanup"
+        _start_petal_orbit(runtime)
+        mode = "orbit"
 
-    if mode == "cleanup":
-        if _cached_petal_model_hint(runtime):
-            _execute_visible_petal_target(runtime)
-            return True
-
-        started_at = float(runtime.get("petal_collection_started_at", now))
-        last_seen = float(runtime.get("last_petal_seen_time", 0.0))
-        grace = BLOOM_PETAL_LOST_GRACE if last_seen >= started_at else BLOOM_PETAL_SPAWN_GRACE
-        reference = last_seen if last_seen >= started_at else started_at
-        if now < runtime.get("petal_collection_deadline", now) and now - reference < grace:
-            return True
-
-        _finish_petal_collection(runtime)
-        return True
+    if mode == "orbit":
+        return _execute_petal_orbit(runtime)
     return False
 
 
@@ -1561,37 +1595,9 @@ def _execute_planned_movement(runtime):
     return _execute_movement_to_target(remaining_x, remaining_y)
 
 
-def _active_bloom_visible_in_detections(runtime, detections, transform):
-    active_bloom = runtime.get("active_bloom")
-    if not isinstance(active_bloom, dict):
-        return False
-
-    scale = float(transform["scale"])
-    pad_x = float(transform["pad_x"])
-    pad_y = float(transform["pad_y"])
-    capture_width = float(runtime["capture"]["width"])
-    capture_height = float(runtime["capture"]["height"])
-    current_x = float(runtime.get("current_x", 0.0))
-    current_y = float(runtime.get("current_y", 0.0))
-    active_x = float(active_bloom.get("future_x", current_x))
-    active_y = float(active_bloom.get("future_y", current_y))
-
-    for (x1, y1, x2, y2), class_id, confidence in detections:
-        if class_id != 0 or confidence < BLOOM_MIN_CONFIDENCE:
-            continue
-        capture_x = max(0.0, min(capture_width, (((x1 + x2) / 2.0) - pad_x) / scale))
-        capture_y = max(0.0, min(capture_height, (((y1 + y2) / 2.0) - pad_y) / scale))
-        tx, ty = _relative_distance(capture_x, capture_y, runtime["homography"])
-        if math.hypot((current_x + tx) - active_x, (current_y + ty) - active_y) <= TARGET_LOCK_SWITCH_DISTANCE:
-            return True
-    return False
-
-
-def _process_combined_detections(runtime, output, transform, inference_ms, allow_petal_plan=True):
+def _process_combined_detections(runtime, output, transform, inference_ms, publish_petals=True):
     detections = _postprocess_tokens(output, min(BLOOM_MIN_CONFIDENCE, PETAL_CONFIDENCE_THRESHOLD))
-    active_bloom_visible = _active_bloom_visible_in_detections(runtime, detections, transform)
     bloom_detections = []
-    petal_candidates = []
     petal_overlays = []
     scale = float(transform["scale"])
     pad_x = float(transform["pad_x"])
@@ -1612,97 +1618,19 @@ def _process_combined_detections(runtime, output, transform, inference_ms, allow
         if class_id != 1 or confidence < PETAL_CONFIDENCE_THRESHOLD:
             continue
 
-        capture_x = (capture_box[0] + capture_box[2]) / 2.0
-        capture_y = (capture_box[1] + capture_box[3]) / 2.0
-        tx, ty = _relative_distance(capture_x, capture_y, runtime["homography"])
-        distance = math.hypot(tx, ty)
-        overlay_index = len(petal_overlays)
         petal_overlays.append({
             "box": capture_box,
             "confidence": float(confidence),
-            "distance": distance,
-            "selected": False,
         })
-        target_x = float(runtime.get("current_x", 0.0)) + tx
-        target_y = float(runtime.get("current_y", 0.0)) + ty
-        active_bloom = runtime.get("active_bloom")
-        is_near_active_bloom = (
-            runtime.get("bloom_mode") == "work"
-            and runtime.get("bloom_arrived_at", 0.0) > 0.0
-            and isinstance(active_bloom, dict)
-            and math.hypot(
-                target_x - float(active_bloom.get("future_x", target_x)),
-                target_y - float(active_bloom.get("future_y", target_y)),
-            ) <= BLOOM_PETAL_TRIGGER_DISTANCE
-            and distance <= BLOOM_PETAL_CHASE_DISTANCE
-        )
-        # Once the bloom disappears, chase nearby petals from the player's
-        # current screen position. Dead-reckoned field coordinates can drift,
-        # but this relative distance is refreshed every scan.
-        is_bloom_missing_nearby = (
-            runtime.get("bloom_mode") == "work"
-            and isinstance(active_bloom, dict)
-            and not active_bloom_visible
-            and distance <= BLOOM_PETAL_CHASE_DISTANCE
-        )
-        is_near_popped_bloom = (
-            runtime.get("bloom_mode") == "cleanup"
-            and distance <= BLOOM_PETAL_CHASE_DISTANCE
-        )
-        if (is_near_active_bloom or is_bloom_missing_nearby or is_near_popped_bloom) and distance > CONTINUOUS_MIN_REPLAN_DISTANCE:
-            score = float(confidence) / max(distance, 0.5)
-            petal_candidates.append((score, overlay_index, float(confidence), tx, ty, distance))
 
     now = time.time()
-    if not allow_petal_plan:
+    if not publish_petals:
         return bloom_detections
 
     runtime["latest_petal_detections"] = petal_overlays
     runtime["latest_petal_detection_time"] = now
     runtime["last_petal_detection_ms"] = inference_ms
-    if not petal_candidates:
-        hint = runtime.get("latest_petal_hint")
-        hint_age = now - float(hint.get("seen_at", 0.0)) if isinstance(hint, dict) else float("inf")
-        if runtime.get("bloom_mode") not in ("work", "cleanup") or hint_age > PETAL_TARGET_HOLD_TIME:
-            runtime["latest_petal_hint"] = None
-        return bloom_detections
-
-    petal_candidates.sort(reverse=True)
-    _score, selected_index, confidence, tx, ty, distance = petal_candidates[0]
-    petal_overlays[selected_index]["selected"] = True
-    runtime["last_petal_seen_time"] = now
-    runtime["latest_petal_hint"] = {
-        "tx": tx,
-        "ty": ty,
-        "distance": distance,
-        "count": len(petal_candidates),
-        "confidence": confidence,
-        "seen_at": now,
-    }
     return bloom_detections
-
-
-def _cached_petal_model_hint(runtime):
-    hint = runtime.get("latest_petal_hint")
-    age = time.time() - float(hint.get("seen_at", 0.0)) if isinstance(hint, dict) else float("inf")
-    return dict(hint) if isinstance(hint, dict) and age <= PETAL_TARGET_HOLD_TIME else None
-
-
-def _execute_visible_petal_target(runtime):
-    if runtime.get("movement_requires_fresh_scan"):
-        return False
-
-    hint = _cached_petal_model_hint(runtime)
-    if not hint:
-        return False
-    tx, ty = hint["tx"], hint["ty"]
-
-    _debug_log(
-        f"catching visible petal confidence={hint['confidence']:.2f} count={hint['count']} move=({tx:.2f},{ty:.2f})",
-        min_interval=0.25,
-        key="petal_target",
-    )
-    return _execute_movement(tx, ty)
 
 
 def _find_sprinkler(runtime):
@@ -1976,9 +1904,7 @@ def _initialise_runtime():
         "scan_lock": threading.Lock(),
         "scanner_stop_event": None,
         "scanner_thread": None,
-        "last_petal_seen_time": 0.0,
         "latest_petal_detections": [],
-        "latest_petal_hint": None,
         "latest_petal_detection_time": 0.0,
         "last_petal_detection_ms": None,
         "bloom_mode": "patrol",
@@ -1990,8 +1916,9 @@ def _initialise_runtime():
         "bloom_contact_last_move_time": 0.0,
         "bloom_contact_distance": 0.0,
         "bloom_arrived_at": 0.0,
-        "petal_collection_started_at": 0.0,
-        "petal_collection_deadline": 0.0,
+        "petal_orbit_center": None,
+        "petal_orbit_deadline": 0.0,
+        "petal_orbit_index": None,
     }
 
 
@@ -2029,10 +1956,7 @@ else:
 
         target = _locked_target(runtime) or _latest_target(runtime)
         bloom_mode = runtime.get("bloom_mode", "patrol")
-        petal_hint = _cached_petal_model_hint(runtime)
-        if bloom_mode == "cleanup" and petal_hint:
-            _execute_visible_petal_target(runtime)
-        elif bloom_mode in ("work", "cleanup"):
+        if bloom_mode in ("work", "orbit"):
             _execute_bloom_sequence(runtime)
         elif target:
             _debug_log(
