@@ -59,7 +59,7 @@ SPRINKLER_INPUT_WIDTH = 736
 SPRINKLER_INPUT_HEIGHT = 736
 SPRINKLER_CONFIDENCE_THRESHOLD = 0.6
 PETAL_CONFIDENCE_THRESHOLD = 0.50
-RUNTIME_VERSION = 30
+RUNTIME_VERSION = 31
 MIN_TOKEN_DISTANCE = 0.3
 MAX_SPRINKLER_DISTANCE = 10.0
 TARGET_SPRINKLER_LABEL = None
@@ -1347,7 +1347,6 @@ def _start_bloom_work(runtime, target):
     runtime["bloom_contact_last_seen_at"] = 0.0
     runtime["bloom_contact_last_move_time"] = 0.0
     runtime["bloom_contact_distance"] = 0.0
-    runtime["bloom_arrived_at"] = 0.0
     _clear_locked_target(runtime)
 
 
@@ -1408,9 +1407,11 @@ def _execute_petal_orbit(runtime):
     else:
         orbit_index = int(orbit_index) % PETAL_ORBIT_CORNERS
 
-    # Run the whole square in this call. That keeps keys flowing from one side
-    # into the next instead of pausing for a scan between orbit waypoints.
-    while time.time() < float(runtime.get("petal_orbit_deadline", 0.0)):
+    # Keep keys flowing through one full square without scanning between sides.
+    # The deadline remains a safety limit.
+    for _ in range(PETAL_ORBIT_CORNERS + 1):
+        if time.time() >= float(runtime.get("petal_orbit_deadline", 0.0)):
+            break
         target_x, target_y = points[orbit_index]
         move_x = target_x - float(runtime.get("current_x", 0.0))
         move_y = target_y - float(runtime.get("current_y", 0.0))
@@ -1444,11 +1445,10 @@ def _execute_bloom_sequence(runtime):
             runtime["bloom_contact_last_seen_at"] = seen_at
 
             if distance <= BLOOM_CONTACT_DEAD_ZONE:
-                if not runtime.get("bloom_arrived_at"):
-                    runtime["bloom_arrived_at"] = now
                 runtime["bloom_contact_vector"] = None
                 runtime["bloom_contact_confirmations"] = 0
-                return True
+                _start_petal_orbit(runtime)
+                return _execute_petal_orbit(runtime)
 
             previous = runtime.get("bloom_contact_vector")
             if isinstance(previous, (tuple, list)) and len(previous) == 2:
@@ -1915,7 +1915,6 @@ def _initialise_runtime():
         "bloom_contact_last_seen_at": 0.0,
         "bloom_contact_last_move_time": 0.0,
         "bloom_contact_distance": 0.0,
-        "bloom_arrived_at": 0.0,
         "petal_orbit_center": None,
         "petal_orbit_deadline": 0.0,
         "petal_orbit_index": None,
