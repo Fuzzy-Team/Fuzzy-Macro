@@ -59,7 +59,7 @@ SPRINKLER_INPUT_WIDTH = 736
 SPRINKLER_INPUT_HEIGHT = 736
 SPRINKLER_CONFIDENCE_THRESHOLD = 0.6
 PETAL_CONFIDENCE_THRESHOLD = 0.50
-RUNTIME_VERSION = 27
+RUNTIME_VERSION = 28
 MIN_TOKEN_DISTANCE = 0.3
 MAX_SPRINKLER_DISTANCE = 10.0
 TARGET_SPRINKLER_LABEL = None
@@ -79,7 +79,9 @@ BLOOM_LABEL = "Bloom"
 BLOOM_PETAL_COLLECTION_MAX_WINDOW = 7.0
 BLOOM_PETAL_SPAWN_GRACE = 1.25
 BLOOM_PETAL_LOST_GRACE = 1.25
-BLOOM_PETAL_MAX_DISTANCE = 3.0
+BLOOM_PETAL_TRIGGER_DISTANCE = 4.5
+BLOOM_PETAL_CHASE_DISTANCE = 10.0
+PETAL_TARGET_HOLD_TIME = 0.75
 BLOOM_MAX_DISTANCE = 20.0
 BLOOM_SETTLE_DISTANCE = 0.25
 BLOOM_MIN_CONFIDENCE = 0.50
@@ -1353,23 +1355,9 @@ def _start_bloom_work(runtime, target):
 
 def _start_petal_collection(runtime):
     now = time.time()
-    active_bloom = runtime.get("active_bloom")
-    if isinstance(active_bloom, dict):
-        # The player can be slightly off the bloom when it pops. Keep the
-        # bloom's measured field position as the cleanup reference.
-        origin = (
-            float(active_bloom.get("future_x", runtime.get("current_x", 0.0))),
-            float(active_bloom.get("future_y", runtime.get("current_y", 0.0))),
-        )
-    else:
-        origin = (
-            float(runtime.get("current_x", 0.0)),
-            float(runtime.get("current_y", 0.0)),
-        )
     runtime["bloom_mode"] = "cleanup"
     runtime["petal_collection_started_at"] = now
     runtime["petal_collection_deadline"] = now + BLOOM_PETAL_COLLECTION_MAX_WINDOW
-    runtime["petal_collection_origin"] = origin
     runtime["active_bloom"] = None
     _clear_locked_target(runtime)
 
@@ -1379,7 +1367,7 @@ def _finish_petal_collection(runtime):
     runtime["active_bloom"] = None
     runtime["petal_collection_started_at"] = 0.0
     runtime["petal_collection_deadline"] = 0.0
-    runtime["petal_collection_origin"] = None
+    runtime["latest_petal_hint"] = None
     _clear_locked_target(runtime)
     # Correct dead-reckoned position without spending time walking back to the
     # sprinkler. Failure is harmless; screen-relative pursuit remains valid.
@@ -1573,12 +1561,35 @@ def _execute_planned_movement(runtime):
     return _execute_movement_to_target(remaining_x, remaining_y)
 
 
+def _active_bloom_visible_in_detections(runtime, detections, transform):
+    active_bloom = runtime.get("active_bloom")
+    if not isinstance(active_bloom, dict):
+        return False
+
+    scale = float(transform["scale"])
+    pad_x = float(transform["pad_x"])
+    pad_y = float(transform["pad_y"])
+    capture_width = float(runtime["capture"]["width"])
+    capture_height = float(runtime["capture"]["height"])
+    current_x = float(runtime.get("current_x", 0.0))
+    current_y = float(runtime.get("current_y", 0.0))
+    active_x = float(active_bloom.get("future_x", current_x))
+    active_y = float(active_bloom.get("future_y", current_y))
+
+    for (x1, y1, x2, y2), class_id, confidence in detections:
+        if class_id != 0 or confidence < BLOOM_MIN_CONFIDENCE:
+            continue
+        capture_x = max(0.0, min(capture_width, (((x1 + x2) / 2.0) - pad_x) / scale))
+        capture_y = max(0.0, min(capture_height, (((y1 + y2) / 2.0) - pad_y) / scale))
+        tx, ty = _relative_distance(capture_x, capture_y, runtime["homography"])
+        if math.hypot((current_x + tx) - active_x, (current_y + ty) - active_y) <= TARGET_LOCK_SWITCH_DISTANCE:
+            return True
+    return False
+
+
 def _process_combined_detections(runtime, output, transform, inference_ms, allow_petal_plan=True):
     detections = _postprocess_tokens(output, min(BLOOM_MIN_CONFIDENCE, PETAL_CONFIDENCE_THRESHOLD))
-    active_bloom_visible = any(
-        class_id == 0 and confidence >= BLOOM_MIN_CONFIDENCE
-        for _box, class_id, confidence in detections
-    )
+    active_bloom_visible = _active_bloom_visible_in_detections(runtime, detections, transform)
     bloom_detections = []
     petal_candidates = []
     petal_overlays = []
@@ -1612,7 +1623,6 @@ def _process_combined_detections(runtime, output, transform, inference_ms, allow
             "distance": distance,
             "selected": False,
         })
-        origin = runtime.get("petal_collection_origin")
         target_x = float(runtime.get("current_x", 0.0)) + tx
         target_y = float(runtime.get("current_y", 0.0)) + ty
         active_bloom = runtime.get("active_bloom")
@@ -1623,24 +1633,21 @@ def _process_combined_detections(runtime, output, transform, inference_ms, allow
             and math.hypot(
                 target_x - float(active_bloom.get("future_x", target_x)),
                 target_y - float(active_bloom.get("future_y", target_y)),
-            ) <= BLOOM_PETAL_MAX_DISTANCE
+            ) <= BLOOM_PETAL_TRIGGER_DISTANCE
+            and distance <= BLOOM_PETAL_CHASE_DISTANCE
         )
-        # A bloom can disappear before contact confirmation completes. Compare
-        # against its last measured field position, not the player's position.
+        # Once the bloom disappears, chase nearby petals from the player's
+        # current screen position. Dead-reckoned field coordinates can drift,
+        # but this relative distance is refreshed every scan.
         is_bloom_missing_nearby = (
             runtime.get("bloom_mode") == "work"
             and isinstance(active_bloom, dict)
             and not active_bloom_visible
-            and math.hypot(
-                target_x - float(active_bloom.get("future_x", target_x)),
-                target_y - float(active_bloom.get("future_y", target_y)),
-            ) <= BLOOM_PETAL_MAX_DISTANCE
+            and distance <= BLOOM_PETAL_CHASE_DISTANCE
         )
         is_near_popped_bloom = (
             runtime.get("bloom_mode") == "cleanup"
-            and isinstance(origin, (tuple, list))
-            and len(origin) == 2
-            and math.hypot(target_x - float(origin[0]), target_y - float(origin[1])) <= BLOOM_PETAL_MAX_DISTANCE
+            and distance <= BLOOM_PETAL_CHASE_DISTANCE
         )
         if (is_near_active_bloom or is_bloom_missing_nearby or is_near_popped_bloom) and distance > CONTINUOUS_MIN_REPLAN_DISTANCE:
             score = float(confidence) / max(distance, 0.5)
@@ -1654,7 +1661,10 @@ def _process_combined_detections(runtime, output, transform, inference_ms, allow
     runtime["latest_petal_detection_time"] = now
     runtime["last_petal_detection_ms"] = inference_ms
     if not petal_candidates:
-        runtime["latest_petal_hint"] = None
+        hint = runtime.get("latest_petal_hint")
+        hint_age = now - float(hint.get("seen_at", 0.0)) if isinstance(hint, dict) else float("inf")
+        if runtime.get("bloom_mode") not in ("work", "cleanup") or hint_age > PETAL_TARGET_HOLD_TIME:
+            runtime["latest_petal_hint"] = None
         return bloom_detections
 
     petal_candidates.sort(reverse=True)
@@ -1667,16 +1677,15 @@ def _process_combined_detections(runtime, output, transform, inference_ms, allow
         "distance": distance,
         "count": len(petal_candidates),
         "confidence": confidence,
+        "seen_at": now,
     }
     return bloom_detections
 
 
 def _cached_petal_model_hint(runtime):
-    age = time.time() - float(runtime.get("latest_petal_detection_time", 0.0))
     hint = runtime.get("latest_petal_hint")
-    # The scanner and pattern loop are independent. Leave enough time to hand
-    # a fresh detection to movement; every move still invalidates it.
-    return dict(hint) if isinstance(hint, dict) and age <= 0.55 else None
+    age = time.time() - float(hint.get("seen_at", 0.0)) if isinstance(hint, dict) else float("inf")
+    return dict(hint) if isinstance(hint, dict) and age <= PETAL_TARGET_HOLD_TIME else None
 
 
 def _execute_visible_petal_target(runtime):
@@ -1983,7 +1992,6 @@ def _initialise_runtime():
         "bloom_arrived_at": 0.0,
         "petal_collection_started_at": 0.0,
         "petal_collection_deadline": 0.0,
-        "petal_collection_origin": None,
     }
 
 
