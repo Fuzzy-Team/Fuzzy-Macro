@@ -59,7 +59,7 @@ SPRINKLER_INPUT_WIDTH = 736
 SPRINKLER_INPUT_HEIGHT = 736
 SPRINKLER_CONFIDENCE_THRESHOLD = 0.6
 PETAL_CONFIDENCE_THRESHOLD = 0.55
-RUNTIME_VERSION = 20
+RUNTIME_VERSION = 21
 PETAL_DETECTION_MAX_AGE = 0.30
 MIN_TOKEN_DISTANCE = 0.3
 MAX_SPRINKLER_DISTANCE = 10.0
@@ -93,6 +93,9 @@ BLOOM_CONTACT_MOVE_COOLDOWN = 0.25
 BLOOM_CONTACT_CONFIRMATIONS = 3
 BLOOM_CONTACT_MAX_TOTAL_MOVE = 1.2
 BLOOM_DISAPPEAR_TIMEOUT = 0.9
+IDLE_SPRINKLER_RADIUS = 0.40
+IDLE_RETURN_STEP = 1.25
+IDLE_SQUARE_STEP = 0.25
 BLOOM_MODEL_VARIANTS = {
     "standard": ("Standard", "blooms-and-petals-standard.mlmodelc", 960, "var_1444"),
     "light": ("Light", "Blooms-and-petals-light.mlmodelc", 768, "var_1440"),
@@ -1271,6 +1274,43 @@ def _execute_movement_to_target(tx, ty):
     return _execute_movement(tx, ty)
 
 
+def _execute_sprinkler_patrol(runtime):
+    """Return to the sprinkler, then make a small square while waiting."""
+    if runtime.get("movement_requires_fresh_scan"):
+        return False
+
+    current_x = float(runtime.get("current_x", 0.0))
+    current_y = float(runtime.get("current_y", 0.0))
+    distance = math.hypot(current_x, current_y)
+    if distance > IDLE_SPRINKLER_RADIUS:
+        step = min(IDLE_RETURN_STEP, distance)
+        scale = step / distance
+        tx = -current_x * scale
+        ty = -current_y * scale
+        _debug_log(
+            f"returning to sprinkler move=({tx:.2f},{ty:.2f}) distance={distance:.2f}",
+            min_interval=0.25,
+            key="idle_return",
+        )
+        return _execute_movement(tx, ty)
+
+    square_index = int(runtime.get("idle_square_index", 0))
+    runtime["idle_square_index"] = square_index + 1
+    square = (
+        (IDLE_SQUARE_STEP, 0.0),
+        (0.0, IDLE_SQUARE_STEP),
+        (-IDLE_SQUARE_STEP, 0.0),
+        (0.0, -IDLE_SQUARE_STEP),
+    )
+    tx, ty = square[square_index % len(square)]
+    _debug_log(
+        f"sprinkler patrol square move=({tx:.2f},{ty:.2f})",
+        min_interval=0.25,
+        key="idle_square",
+    )
+    return _execute_movement(tx, ty)
+
+
 def _active_bloom_detection(runtime):
     # Bloom contact must use a detection made after the last keypress.
     # Otherwise it can bypass normal target invalidation and chase a bloom
@@ -1867,6 +1907,7 @@ def _initialise_runtime():
         "movement_active": False,
         "movement_revision": 0,
         "movement_requires_fresh_scan": False,
+        "idle_square_index": 0,
         "scan_lock": threading.Lock(),
         "scanner_stop_event": None,
         "scanner_thread": None,
@@ -1947,6 +1988,7 @@ else:
                 min_interval=0.5,
                 key="no_target",
             )
+            _execute_sprinkler_patrol(runtime)
     except Exception as exc:
         runtime["ready"] = False
         runtime["error"] = str(exc)
