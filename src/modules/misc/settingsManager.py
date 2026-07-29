@@ -710,8 +710,18 @@ def importFieldSettings(field_name, json_settings):
             token_model_onnx = getFuzzyAIModelPath("token_detection_standard.onnx")
             sprinkler_model = getFuzzyAIModelPath("sprinkler_detection_standard.mlmodelc")
             sprinkler_model_onnx = getFuzzyAIModelPath("sprinkler_detection_standard.onnx")
-            if not os.path.exists(token_model) and not os.path.exists(token_model_onnx):
+            if settings.get("shape") == "fuzzy_ai_gather" and not os.path.exists(token_model) and not os.path.exists(token_model_onnx):
                 warnings.append("Missing token model: src/data/models/token_detection_standard.mlmodelc or src/data/models/token_detection_standard.onnx")
+            if settings.get("shape") == "blooms_ai":
+                blooms_model_names = {
+                    "standard": "blooms-and-petals-standard.mlmodelc",
+                    "light": "Blooms-and-petals-light.mlmodelc",
+                    "mini": "Blooms-and-petals-mini.mlmodelc",
+                }
+                selected_blooms_model = str(settings.get("blooms_ai_model", "Standard")).strip().lower()
+                blooms_model_name = blooms_model_names.get(selected_blooms_model, blooms_model_names["standard"])
+                if not os.path.exists(getFuzzyAIModelPath(blooms_model_name)):
+                    warnings.append(f"Missing BloomsAI model: src/data/models/{blooms_model_name}")
             if not os.path.exists(sprinkler_model) and not os.path.exists(sprinkler_model_onnx):
                 warnings.append("Missing sprinkler model: src/data/models/sprinkler_detection_standard.mlmodelc or src/data/models/sprinkler_detection_standard.onnx")
 

@@ -312,6 +312,32 @@
         `
       );
 
+      const bloomsAIContainer = document.createElement("div");
+      bloomsAIContainer.id = "blooms-ai-section";
+      bloomsAIContainer.style.display = "none";
+      parentElement.appendChild(bloomsAIContainer);
+      buildStandardContainer(
+        bloomsAIContainer,
+        "BloomsAI",
+        "",
+        [
+          {
+            id: "blooms_ai_model",
+            title: "Detection Model",
+            desc: "Choose the bloom and petal detector. Standard is most accurate; Light and Mini trade accuracy for faster inference.",
+            type: {
+              name: "dropdown",
+              data: [
+                "Standard",
+                { label: "Light (Faster)", value: "Light" },
+                { label: "Mini (Fastest)", value: "Mini" },
+              ],
+              triggerFunction: triggerFunction,
+            },
+          },
+        ]
+      );
+
       // Add control buttons at the bottom
       const buttonContainer = document.createElement('div');
       buttonContainer.style.cssText = 'display: flex; justify-content: center; gap: 10px; margin-top: 20px; margin-bottom: 20px;';

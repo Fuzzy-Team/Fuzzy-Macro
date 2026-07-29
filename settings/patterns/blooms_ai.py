@@ -10,8 +10,7 @@ Requirements:
 - opencv-python
 - numpy
 - mss or Pillow
-- token_detection_standard.mlmodelc or token_detection_standard.onnx
-- petals-yolo26.mlmodelc
+- blooms-and-petals-standard.mlmodelc, Blooms-and-petals-light.mlmodelc, or Blooms-and-petals-mini.mlmodelc
 - sprinkler_detection_standard.mlmodelc or sprinkler_detection_standard.onnx
 
 - Version 1.6
@@ -58,43 +57,47 @@ INPUT_WIDTH = ROBLOX_VIEWPORT_WIDTH - AT_CROP[0] - AT_CROP[2]
 INPUT_HEIGHT = ROBLOX_VIEWPORT_HEIGHT - AT_CROP[1] - AT_CROP[3]
 SPRINKLER_INPUT_WIDTH = 736
 SPRINKLER_INPUT_HEIGHT = 736
-PETAL_INPUT_WIDTH = 640
-PETAL_INPUT_HEIGHT = 640
-CONFIDENCE_THRESHOLD = 0.3
 SPRINKLER_CONFIDENCE_THRESHOLD = 0.6
 PETAL_CONFIDENCE_THRESHOLD = 0.55
-RUNTIME_VERSION = 12
-PETAL_SCAN_INTERVAL = 0.45
-PETAL_DETECTION_MAX_AGE = 1.0
+RUNTIME_VERSION = 20
+PETAL_DETECTION_MAX_AGE = 0.30
 MIN_TOKEN_DISTANCE = 0.3
-SPRINKLER_ARRIVAL_THRESHOLD = 0.8
 MAX_SPRINKLER_DISTANCE = 10.0
-SPRINKLER_RESCAN_ATTEMPTS = 3
-SPRINKLER_RESCAN_DELAY = 0.3
 TARGET_SPRINKLER_LABEL = None
 DEBUG_MODE = False
-RECORD_VIDEO = False
+RECORD_VIDEO = True
 RECORD_VIDEO_FPS = 12.0
 CONTINUOUS_SCAN_INTERVAL = 0.08
 CONTINUOUS_MIN_REPLAN_DISTANCE = 0.08
 TARGET_LOCK_LOST_TIMEOUT = 0.9
 TARGET_LOCK_SWITCH_SCORE_MULTIPLIER = 2.25
 TARGET_LOCK_SWITCH_DISTANCE = 1.25
+TARGET_POSITION_SMOOTHING = 0.35
 ANCHOR_REFRESH_INTERVAL = 0.35
 ANCHOR_MAX_PASSIVE_DISTANCE = 8.0
 LEASH_HARD_MARGIN = 2.5
 BLOOM_LABEL = "Bloom"
-BLOOM_PETAL_SWEEP_COOLDOWN = 0.45
-BLOOM_PETAL_SWEEP_ACTIVE_WINDOW = 6.0
-BLOOM_PETAL_HINT_MAX_MOVE = 2.0
+BLOOM_PETAL_SWEEP_COOLDOWN = 0.12
+BLOOM_PETAL_COLLECTION_MAX_WINDOW = 7.0
+BLOOM_PETAL_SPAWN_GRACE = 1.25
+BLOOM_PETAL_LOST_GRACE = 1.25
+BLOOM_PETAL_HINT_MAX_MOVE = 0.9
 BLOOM_MAX_DISTANCE = 20.0
-BLOOM_SETTLE_DISTANCE = 0.55
+BLOOM_SETTLE_DISTANCE = 0.25
 BLOOM_MIN_CONFIDENCE = 0.10
 BLOOM_SPRINKLER_ANCHOR_INTERVAL = 0.35
 BLOOM_FORCE_ANCHOR_DISTANCE = 4.0
-BLOOM_MAX_MOVE_STEP = 2.4
-BLOOM_WORK_SQUARE_SIZE = 0.75
+BLOOM_CONTACT_DEAD_ZONE = 0.5
+BLOOM_CONTACT_MAX_MOVE = 0.3
+BLOOM_CONTACT_MOVE_COOLDOWN = 0.25
+BLOOM_CONTACT_CONFIRMATIONS = 3
+BLOOM_CONTACT_MAX_TOTAL_MOVE = 1.2
 BLOOM_DISAPPEAR_TIMEOUT = 0.9
+BLOOM_MODEL_VARIANTS = {
+    "standard": ("Standard", "blooms-and-petals-standard.mlmodelc", 960, "var_1444"),
+    "light": ("Light", "Blooms-and-petals-light.mlmodelc", 768, "var_1440"),
+    "mini": ("Mini", "Blooms-and-petals-mini.mlmodelc", 512, "var_1440"),
+}
 
 IGNORED_TOKENS = {}
 
@@ -162,13 +165,6 @@ def _coerce_float(value, default):
         return float(value)
     except Exception:
         return float(default)
-
-
-def _coerce_int(value, default):
-    try:
-        return int(float(value))
-    except Exception:
-        return int(default)
 
 
 def _coerce_text(value, default=""):
@@ -239,27 +235,14 @@ def _check_missing_models(model_names):
         return {"failures": {"model download": str(exc)}}
 
 
-CONFIDENCE_THRESHOLD = _coerce_float(globals().get("pattern_confidence_threshold"), CONFIDENCE_THRESHOLD)
 SPRINKLER_CONFIDENCE_THRESHOLD = _coerce_float(
     globals().get("pattern_sprinkler_confidence_threshold"),
     SPRINKLER_CONFIDENCE_THRESHOLD,
 )
 MIN_TOKEN_DISTANCE = _coerce_float(globals().get("pattern_min_token_distance"), MIN_TOKEN_DISTANCE)
-SPRINKLER_ARRIVAL_THRESHOLD = _coerce_float(
-    globals().get("pattern_sprinkler_arrival_threshold"),
-    SPRINKLER_ARRIVAL_THRESHOLD,
-)
 MAX_SPRINKLER_DISTANCE = _coerce_float(
     globals().get("pattern_max_sprinkler_distance"),
     MAX_SPRINKLER_DISTANCE,
-)
-SPRINKLER_RESCAN_ATTEMPTS = _coerce_int(
-    globals().get("pattern_sprinkler_rescan_attempts"),
-    SPRINKLER_RESCAN_ATTEMPTS,
-)
-SPRINKLER_RESCAN_DELAY = _coerce_float(
-    globals().get("pattern_sprinkler_rescan_delay"),
-    SPRINKLER_RESCAN_DELAY,
 )
 TARGET_SPRINKLER_LABEL = _coerce_text(
     globals().get("pattern_target_sprinkler_label"),
@@ -274,6 +257,12 @@ CAPTURE_BACKEND = _coerce_text(globals().get("pattern_capture_backend"), "auto")
 DEBUG_MODE = _coerce_bool(globals().get("pattern_debug_mode"), DEBUG_MODE)
 RECORD_VIDEO = _coerce_bool(globals().get("pattern_record_video"), RECORD_VIDEO)
 RECORD_VIDEO_FPS = _coerce_float(globals().get("pattern_record_video_fps"), RECORD_VIDEO_FPS)
+BLOOM_MODEL_SELECTION = _coerce_text(
+    globals().get("pattern_blooms_ai_model"),
+    "Standard",
+).strip().lower()
+if BLOOM_MODEL_SELECTION not in BLOOM_MODEL_VARIANTS:
+    BLOOM_MODEL_SELECTION = "standard"
 IGNORED_TOKENS = _ignored_token_names(globals().get("pattern_ignored_tokens"), IGNORED_TOKENS)
 # BloomsAI exists specifically to target blooms. Field token-ranking defaults may
 # ignore Bloom for normal gathering, but that setting must never apply here.
@@ -307,31 +296,6 @@ def _default_points(screen_w, screen_h):
     )
 
 
-def _preprocess_token_frame(frame, runtime):
-    if runtime.get("token_frame_is_crop"):
-        cropped = frame
-    else:
-        left, top, width_px, height_px = runtime["token_crop"]
-        cropped = frame[top:top + height_px, left:left + width_px]
-
-    if cropped.shape[1] != INPUT_WIDTH or cropped.shape[0] != INPUT_HEIGHT:
-        cropped = cv2.resize(cropped, (INPUT_WIDTH, INPUT_HEIGHT), interpolation=cv2.INTER_LINEAR)
-
-    if cropped.ndim == 3 and cropped.shape[2] == 4:
-        rgb = cv2.cvtColor(cropped, cv2.COLOR_BGRA2RGB)
-    else:
-        rgb = cv2.cvtColor(cropped, cv2.COLOR_BGR2RGB)
-
-    if runtime.get("token_model_kind") == "opencv_onnx":
-        normalized = rgb.astype(np.float32) / 255.0
-        chw = np.transpose(normalized, (2, 0, 1))
-        return np.expand_dims(chw, axis=0)
-
-    if Image is None:
-        raise RuntimeError("Pillow is required for CoreML token inference.")
-    return Image.fromarray(rgb)
-
-
 def _preprocess_coreml_image(frame, input_width, input_height):
     if frame.shape[1] != int(input_width) or frame.shape[0] != int(input_height):
         frame = cv2.resize(frame, (int(input_width), int(input_height)), interpolation=cv2.INTER_LINEAR)
@@ -346,7 +310,7 @@ def _preprocess_coreml_image(frame, input_width, input_height):
     return Image.fromarray(rgb)
 
 
-def _preprocess_petal_image(frame):
+def _preprocess_petal_image(frame, input_width, input_height):
     """Apply Ultralytics-style centered letterboxing and retain its inverse transform."""
     if frame.ndim == 3 and frame.shape[2] == 4:
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGB)
@@ -354,13 +318,13 @@ def _preprocess_petal_image(frame):
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
     frame_height, frame_width = rgb.shape[:2]
-    scale = min(PETAL_INPUT_WIDTH / float(frame_width), PETAL_INPUT_HEIGHT / float(frame_height))
+    scale = min(input_width / float(frame_width), input_height / float(frame_height))
     resized_width = max(1, int(round(frame_width * scale)))
     resized_height = max(1, int(round(frame_height * scale)))
     resized = cv2.resize(rgb, (resized_width, resized_height), interpolation=cv2.INTER_LINEAR)
-    pad_x = (PETAL_INPUT_WIDTH - resized_width) // 2
-    pad_y = (PETAL_INPUT_HEIGHT - resized_height) // 2
-    letterboxed = np.full((PETAL_INPUT_HEIGHT, PETAL_INPUT_WIDTH, 3), 114, dtype=np.uint8)
+    pad_x = (input_width - resized_width) // 2
+    pad_y = (input_height - resized_height) // 2
+    letterboxed = np.full((input_height, input_width, 3), 114, dtype=np.uint8)
     letterboxed[pad_y:pad_y + resized_height, pad_x:pad_x + resized_width] = resized
 
     if Image is None:
@@ -492,20 +456,6 @@ def _grab_frame(runtime):
     return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
 
 
-def _grab_token_frame(runtime):
-    capture = runtime["capture"]
-    token_monitor = runtime.get("token_monitor")
-    if capture["backend"] == "mss" and token_monitor:
-        return _mss_grab_to_array(capture["session"], token_monitor)
-
-    token_bbox = runtime.get("token_bbox")
-    if token_bbox:
-        image = ImageGrab.grab(bbox=token_bbox)
-        return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-
-    return _grab_frame(runtime)
-
-
 def _grab_upper_token_frame(runtime):
     monitor = runtime.get("upper_token_monitor")
     if runtime["capture"]["backend"] == "mss" and monitor:
@@ -515,28 +465,6 @@ def _grab_upper_token_frame(runtime):
         image = ImageGrab.grab(bbox=bbox)
         return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
     return None
-
-
-def _remap_upper_detections(runtime, detections):
-    base_left, base_top, base_w, base_h = runtime["token_crop"]
-    upper_left, upper_top, upper_w, upper_h = runtime["upper_token_crop"]
-    remapped = []
-    for (x1, y1, x2, y2), class_id, confidence in detections:
-        capture_x1 = upper_left + (x1 * upper_w / float(INPUT_WIDTH))
-        capture_y1 = upper_top + (y1 * upper_h / float(INPUT_HEIGHT))
-        capture_x2 = upper_left + (x2 * upper_w / float(INPUT_WIDTH))
-        capture_y2 = upper_top + (y2 * upper_h / float(INPUT_HEIGHT))
-        remapped.append((
-            (
-                (capture_x1 - base_left) * INPUT_WIDTH / base_w,
-                (capture_y1 - base_top) * INPUT_HEIGHT / base_h,
-                (capture_x2 - base_left) * INPUT_WIDTH / base_w,
-                (capture_y2 - base_top) * INPUT_HEIGHT / base_h,
-            ),
-            class_id,
-            confidence,
-        ))
-    return remapped
 
 
 def _mss_grab_to_array(session, monitor):
@@ -563,6 +491,17 @@ def _model_point_to_capture(runtime, x, y):
     return (
         left + (x * crop_w / float(INPUT_WIDTH)),
         top + (y * crop_h / float(INPUT_HEIGHT)),
+    )
+
+
+def _capture_box_to_model(runtime, box):
+    left, top, crop_w, crop_h = runtime["token_crop"]
+    x1, y1, x2, y2 = box
+    return (
+        (x1 - left) * INPUT_WIDTH / crop_w,
+        (y1 - top) * INPUT_HEIGHT / crop_h,
+        (x2 - left) * INPUT_WIDTH / crop_w,
+        (y2 - top) * INPUT_HEIGHT / crop_h,
     )
 
 
@@ -728,6 +667,9 @@ def _record_debug_frame(runtime, frame, detections, target):
         "last_detection_ms": runtime.get("last_detection_ms"),
         "last_timing_ms": dict(runtime.get("last_timing_ms", {})),
         "candidate_count": runtime.get("last_candidate_count", 0),
+        "bloom_mode": runtime.get("bloom_mode", "patrol"),
+        "active_bloom": dict(runtime.get("active_bloom", {})) if isinstance(runtime.get("active_bloom"), dict) else None,
+        "bloom_contact_distance": runtime.get("bloom_contact_distance", 0.0),
         "sprinkler": dict(runtime.get("last_sprinkler_detection", {})),
         "anchor": dict(runtime.get("last_anchor", {})),
         "sprinkler_status": runtime.get("last_sprinkler_status", ""),
@@ -801,7 +743,7 @@ def _annotate_recording_frame(runtime, frame):
 
     anchor = overlay.get("anchor") or {}
     status_lines = [
-        f"blooms={len(detections)} petals={len(petal_detections)} candidates={overlay.get('candidate_count', 0)} pos=({overlay.get('current_x', 0.0):.2f},{overlay.get('current_y', 0.0):.2f}) moves={overlay.get('movement_count', 0)}",
+        f"mode={overlay.get('bloom_mode', 'patrol')} blooms={len(detections)} petals={len(petal_detections)} candidates={overlay.get('candidate_count', 0)} pos=({overlay.get('current_x', 0.0):.2f},{overlay.get('current_y', 0.0):.2f}) moves={overlay.get('movement_count', 0)}",
         f"target={target['name']} score={target['score']:.2f} move=({target['tx']:.2f},{target['ty']:.2f})" if target else "target=None",
         f"sprinkler_status={overlay.get('sprinkler_status', '')} target={overlay.get('target_sprinkler_label', '') or 'any'} drift={overlay.get('field_drift_compensation')} model={overlay.get('use_sprinkler_model_for_drift_compensation')}",
     ]
@@ -809,6 +751,11 @@ def _annotate_recording_frame(runtime, frame):
         age = max(0.0, time.time() - float(anchor.get("time", time.time())))
         status_lines.append(
             f"anchor=({anchor.get('x', 0.0):.2f},{anchor.get('y', 0.0):.2f}) sprinkler=({anchor.get('sprinkler_tx', 0.0):.2f},{anchor.get('sprinkler_ty', 0.0):.2f}) age={age:.1f}s"
+        )
+    active_bloom = overlay.get("active_bloom") or {}
+    if active_bloom:
+        status_lines.append(
+            f"active_bloom=({active_bloom.get('tx', 0.0):.2f},{active_bloom.get('ty', 0.0):.2f}) contact={overlay.get('bloom_contact_distance', 0.0):.2f}/{BLOOM_CONTACT_MAX_TOTAL_MOVE:.2f}"
         )
     for index, line in enumerate(status_lines):
         _draw_label(annotated, line, 10, 24 + (index * 24), (255, 255, 255))
@@ -913,28 +860,26 @@ def _update_detection_fps(runtime, elapsed):
 
 
 def _scan_tokens_once(runtime):
+    movement_revision = int(runtime.get("movement_revision", 0))
     detection_start = time.time()
     screenshot_start = time.time()
     frame = _grab_upper_token_frame(runtime)
-    full_viewport_scan = frame is not None
     if frame is None:
-        frame = _grab_token_frame(runtime)
+        frame = _grab_frame(runtime)
     screenshot_elapsed = time.time() - screenshot_start
     preprocess_start = time.time()
-    preprocess_runtime = {**runtime, "token_frame_is_crop": True} if full_viewport_scan else runtime
-    image = _preprocess_token_frame(frame, preprocess_runtime)
+    image, transform = _preprocess_petal_image(
+        frame,
+        runtime["combined_input_width"],
+        runtime["combined_input_height"],
+    )
     preprocess_elapsed = time.time() - preprocess_start
     inference_start = time.time()
-    output = _run_model(runtime, "token", image)
+    output = _run_model(runtime, "combined", image)
     inference_elapsed = time.time() - inference_start
     postprocess_start = time.time()
-    scan_confidence = min(CONFIDENCE_THRESHOLD, BLOOM_MIN_CONFIDENCE) if full_viewport_scan else CONFIDENCE_THRESHOLD
-    detections = _postprocess_tokens(output, scan_confidence)
-    if full_viewport_scan:
-        detections = _remap_upper_detections(runtime, detections)
+    detections = _process_combined_detections(runtime, output, transform, inference_elapsed * 1000.0)
     postprocess_elapsed = time.time() - postprocess_start
-    if time.time() - float(runtime.get("latest_petal_detection_time", 0.0)) >= PETAL_SCAN_INTERVAL:
-        _find_petal_model_hint(runtime, frame=frame if full_viewport_scan else None)
     _refresh_bloom_sprinkler_anchor(runtime)
     scoring_start = time.time()
     target = _find_best_token(runtime, detections)
@@ -970,6 +915,18 @@ def _scan_tokens_once(runtime):
     _update_detection_fps(runtime, total_elapsed)
     _record_debug_frame(runtime, frame, detections, target)
 
+    # A movement that starts after capture makes these screen-relative
+    # detections stale, even if it finishes before inference does.
+    if (
+        runtime.get("movement_active")
+        or int(runtime.get("movement_revision", 0)) != movement_revision
+    ):
+        runtime["latest_bloom_candidates"] = []
+        runtime["latest_petal_detections"] = []
+        runtime["latest_petal_hint"] = None
+        runtime["latest_petal_detection_time"] = 0.0
+        return runtime.get("latest_detections", []), runtime.get("latest_target")
+
     now = time.time()
     scan_lock = runtime.get("scan_lock")
     if scan_lock is None:
@@ -979,6 +936,7 @@ def _scan_tokens_once(runtime):
         runtime["latest_detections"] = detections
         runtime["latest_target"] = target
         runtime["latest_scan_time"] = now
+        runtime["movement_requires_fresh_scan"] = False
 
     return detections, target
 
@@ -1000,6 +958,7 @@ def _same_token_candidate(a, b):
 def _scanner_loop(runtime):
     stop_event = runtime.get("scanner_stop_event")
     while stop_event is not None and not stop_event.is_set():
+        scan_started = time.time()
         try:
             if not runtime.get("ready"):
                 return
@@ -1010,7 +969,8 @@ def _scanner_loop(runtime):
             _release_video_writer(runtime)
             _debug_log(f"scanner error: {exc}", min_interval=1.0, key="scanner_error")
             return
-        time.sleep(max(CONTINUOUS_SCAN_INTERVAL, 0.01))
+        remaining = CONTINUOUS_SCAN_INTERVAL - (time.time() - scan_started)
+        time.sleep(max(remaining, 0.01))
 
 
 def _ensure_scanner_thread(runtime):
@@ -1135,11 +1095,13 @@ def _token_metrics():
 
 
 def _find_best_token(runtime, detections):
+    scan_time = time.time()
     metrics = _token_metrics()
     current_x = runtime["current_x"]
     current_y = runtime["current_y"]
     current_dist = math.hypot(current_x, current_y)
     candidates = []
+    visible_blooms = []
     rejected = []
     for box, class_id, confidence in detections:
         token_name = LABELS_TOKENS.get(class_id)
@@ -1157,6 +1119,19 @@ def _find_best_token(runtime, detections):
         center_x, center_y = _model_point_to_capture(runtime, (x1 + x2) / 2.0, (y1 + y2) / 2.0)
         tx, ty = _relative_distance(center_x, center_y, runtime["homography"])
         distance = math.hypot(tx, ty)
+        future_x = current_x + tx
+        future_y = current_y + ty
+        visible_blooms.append({
+            "name": token_name,
+            "box": box,
+            "tx": tx,
+            "ty": ty,
+            "future_x": future_x,
+            "future_y": future_y,
+            "score": 0.0,
+            "confidence": confidence,
+            "seen_at": scan_time,
+        })
 
         if distance < MIN_TOKEN_DISTANCE:
             rejected.append({"name": token_name, "reason": "too_close", "confidence": confidence, "distance": distance, "tx": tx, "ty": ty})
@@ -1165,8 +1140,6 @@ def _find_best_token(runtime, detections):
             rejected.append({"name": token_name, "reason": "too_far", "confidence": confidence, "distance": distance, "tx": tx, "ty": ty})
             continue
 
-        future_x = current_x + tx
-        future_y = current_y + ty
         future_dist = math.hypot(future_x, future_y)
         # Use the screen-relative distance gate above for bloom reachability;
         # accumulated sprinkler-relative position is only a scoring hint.
@@ -1187,17 +1160,21 @@ def _find_best_token(runtime, detections):
                 "future_y": future_y,
                 "score": score,
                 "confidence": confidence,
+                "seen_at": scan_time,
             }
         )
 
     if not candidates:
         runtime["last_candidate_count"] = 0
         runtime["last_rejected_tokens"] = rejected[:8]
+        runtime["latest_bloom_candidates"] = visible_blooms
         return None
 
+    candidates.sort(key=lambda item: item["score"], reverse=True)
     runtime["last_candidate_count"] = len(candidates)
     runtime["last_rejected_tokens"] = rejected[:8]
-    return max(candidates, key=lambda item: item["score"])
+    runtime["latest_bloom_candidates"] = visible_blooms
+    return candidates[0]
 
 
 def _movement_keys(tx, ty):
@@ -1254,6 +1231,7 @@ def _execute_movement(tx, ty):
 
     moved = False
     runtime = _runtime_state()
+    runtime["movement_revision"] = int(runtime.get("movement_revision", 0)) + 1
     runtime["movement_active"] = True
     try:
         for segment_type, keys, distance in _movement_segments(tx, ty):
@@ -1269,6 +1247,19 @@ def _execute_movement(tx, ty):
     finally:
         runtime["movement_active"] = False
 
+    if moved:
+        scan_lock = runtime.get("scan_lock")
+        if scan_lock is None:
+            scan_lock = threading.Lock()
+            runtime["scan_lock"] = scan_lock
+        with scan_lock:
+            runtime["latest_target"] = None
+            runtime["latest_bloom_candidates"] = []
+            runtime["latest_petal_hint"] = None
+            runtime["latest_petal_detection_time"] = 0.0
+            runtime["latest_scan_time"] = 0.0
+            runtime["movement_requires_fresh_scan"] = True
+
     return moved
 
 
@@ -1280,65 +1271,131 @@ def _execute_movement_to_target(tx, ty):
     return _execute_movement(tx, ty)
 
 
-def _bloom_is_visible(runtime):
-    target = _latest_target(runtime)
-    return isinstance(target, dict) and target.get("name") == BLOOM_LABEL
+def _active_bloom_detection(runtime):
+    # Bloom contact must use a detection made after the last keypress.
+    # Otherwise it can bypass normal target invalidation and chase a bloom
+    # from the player's old screen position.
+    if runtime.get("movement_requires_fresh_scan"):
+        return None
+
+    active = runtime.get("active_bloom")
+    if not isinstance(active, dict):
+        return None
+    candidates = runtime.get("latest_bloom_candidates", [])
+    for candidate in candidates if isinstance(candidates, list) else []:
+        if _same_token_candidate(active, candidate):
+            runtime["active_bloom"] = dict(candidate)
+            return dict(candidate)
+    return None
 
 
-def _start_bloom_work(runtime):
+def _start_bloom_work(runtime, target):
     runtime["bloom_mode"] = "work"
-    runtime["bloom_center"] = (runtime["current_x"], runtime["current_y"])
-    runtime["bloom_work_positioned"] = False
+    runtime["active_bloom"] = dict(target)
     runtime["bloom_last_visible_time"] = time.time()
+    runtime["bloom_contact_vector"] = None
+    runtime["bloom_contact_confirmations"] = 0
+    runtime["bloom_contact_last_seen_at"] = 0.0
+    runtime["bloom_contact_last_move_time"] = 0.0
+    runtime["bloom_contact_distance"] = 0.0
     _clear_locked_target(runtime)
+
+
+def _start_petal_collection(runtime):
+    now = time.time()
+    runtime["bloom_mode"] = "cleanup"
+    runtime["petal_collection_started_at"] = now
+    runtime["petal_collection_deadline"] = now + BLOOM_PETAL_COLLECTION_MAX_WINDOW
+    runtime["active_bloom"] = None
+    _clear_locked_target(runtime)
+
+
+def _finish_petal_collection(runtime):
+    runtime["bloom_mode"] = "patrol"
+    runtime["active_bloom"] = None
+    runtime["petal_collection_started_at"] = 0.0
+    runtime["petal_collection_deadline"] = 0.0
+    _clear_locked_target(runtime)
+    # Correct dead-reckoned position without spending time walking back to the
+    # sprinkler. Failure is harmless; screen-relative pursuit remains valid.
+    _refresh_sprinkler_anchor(runtime, force=True)
 
 
 def _execute_bloom_sequence(runtime):
     mode = runtime.get("bloom_mode", "patrol")
-    center = runtime.get("bloom_center")
-    if mode == "work" and center:
-        # Petals can spawn while the popped bloom object is still detected as
-        # a Bloom. Give live petal detections priority immediately.
-        if _execute_petal_sweep(runtime):
-            runtime["bloom_mode"] = "cleanup"
-            runtime["petal_sweep_until"] = time.time() + BLOOM_PETAL_SWEEP_ACTIVE_WINDOW
+    now = time.time()
+    if mode == "work":
+        # Petals may appear one scan before the popped bloom vanishes.
+        if _cached_petal_model_hint(runtime):
+            _start_petal_collection(runtime)
+            return _execute_petal_sweep(runtime)
+
+        bloom = _active_bloom_detection(runtime)
+        if bloom:
+            runtime["bloom_last_visible_time"] = now
+            tx = float(bloom.get("tx", 0.0))
+            ty = float(bloom.get("ty", 0.0))
+            distance = math.hypot(tx, ty)
+            seen_at = float(bloom.get("seen_at", now))
+            if seen_at <= runtime.get("bloom_contact_last_seen_at", 0.0):
+                return True
+            runtime["bloom_contact_last_seen_at"] = seen_at
+
+            if distance <= BLOOM_CONTACT_DEAD_ZONE:
+                runtime["bloom_contact_vector"] = None
+                runtime["bloom_contact_confirmations"] = 0
+                return True
+
+            previous = runtime.get("bloom_contact_vector")
+            if isinstance(previous, (tuple, list)) and len(previous) == 2:
+                same_direction = (previous[0] * tx) + (previous[1] * ty) > 0.0
+                filtered_tx = (previous[0] * 0.65) + (tx * 0.35)
+                filtered_ty = (previous[1] * 0.65) + (ty * 0.35)
+                confirmations = runtime.get("bloom_contact_confirmations", 0) + 1 if same_direction else 1
+            else:
+                filtered_tx, filtered_ty = tx, ty
+                confirmations = 1
+            runtime["bloom_contact_vector"] = (filtered_tx, filtered_ty)
+            runtime["bloom_contact_confirmations"] = confirmations
+
+            if confirmations < BLOOM_CONTACT_CONFIRMATIONS:
+                return True
+            if now - runtime.get("bloom_contact_last_move_time", 0.0) < BLOOM_CONTACT_MOVE_COOLDOWN:
+                return True
+
+            filtered_distance = math.hypot(filtered_tx, filtered_ty)
+            remaining_budget = BLOOM_CONTACT_MAX_TOTAL_MOVE - runtime.get("bloom_contact_distance", 0.0)
+            move_distance = min(
+                BLOOM_CONTACT_MAX_MOVE,
+                max(filtered_distance - BLOOM_CONTACT_DEAD_ZONE, 0.0),
+                remaining_budget,
+            )
+            if move_distance <= CONTINUOUS_MIN_REPLAN_DISTANCE:
+                return True
+            scale = move_distance / filtered_distance
+            runtime["bloom_contact_confirmations"] = 0
+            runtime["bloom_contact_last_move_time"] = now
+            runtime["bloom_contact_distance"] += move_distance
+            return _execute_movement(filtered_tx * scale, filtered_ty * scale)
+
+        if now - runtime.get("bloom_last_visible_time", 0.0) < BLOOM_DISAPPEAR_TIMEOUT:
             return True
-        if _bloom_is_visible(runtime):
-            runtime["bloom_last_visible_time"] = time.time()
-        elif time.time() - runtime.get("bloom_last_visible_time", 0.0) >= BLOOM_DISAPPEAR_TIMEOUT:
-            runtime["bloom_mode"] = "cleanup"
-            runtime["petal_sweep_until"] = time.time() + BLOOM_PETAL_SWEEP_ACTIVE_WINDOW
-            mode = "cleanup"
-        if mode == "work":
-            half = BLOOM_WORK_SQUARE_SIZE / 2.0
-            if not runtime.get("bloom_work_positioned", False):
-                _execute_movement(
-                    center[0] - half - runtime["current_x"],
-                    center[1] - half - runtime["current_y"],
-                )
-                runtime["bloom_work_positioned"] = True
-            for tx, ty in (
-                (BLOOM_WORK_SQUARE_SIZE, 0.0),
-                (0.0, BLOOM_WORK_SQUARE_SIZE),
-                (-BLOOM_WORK_SQUARE_SIZE, 0.0),
-                (0.0, -BLOOM_WORK_SQUARE_SIZE),
-            ):
-                if not _bloom_is_visible(runtime):
-                    break
-                _execute_movement(tx, ty)
-            return True
-    if mode == "cleanup" and center:
-        if time.time() <= runtime.get("petal_sweep_until", 0.0):
+        _start_petal_collection(runtime)
+        mode = "cleanup"
+
+    if mode == "cleanup":
+        if _cached_petal_model_hint(runtime):
             _execute_petal_sweep(runtime)
             return True
 
-        # Re-establish a real origin before resuming patrol. If the sprinkler
-        # cannot be found, retain the dead-reckoned position instead of lying
-        # about being back at (0, 0).
-        runtime["bloom_mode"] = "patrol"
-        runtime["bloom_center"] = None
-        _recalibrate(runtime)
-        _clear_locked_target(runtime)
+        started_at = float(runtime.get("petal_collection_started_at", now))
+        last_seen = float(runtime.get("last_petal_seen_time", 0.0))
+        grace = BLOOM_PETAL_LOST_GRACE if last_seen >= started_at else BLOOM_PETAL_SPAWN_GRACE
+        reference = last_seen if last_seen >= started_at else started_at
+        if now < runtime.get("petal_collection_deadline", now) and now - reference < grace:
+            return True
+
+        _finish_petal_collection(runtime)
         return True
     return False
 
@@ -1373,6 +1430,9 @@ def _clear_locked_target(runtime):
 
 
 def _select_movement_target(runtime):
+    if runtime.get("movement_requires_fresh_scan"):
+        return None
+
     latest = _latest_target(runtime)
     locked = _locked_target(runtime)
     now = time.time()
@@ -1387,7 +1447,13 @@ def _select_movement_target(runtime):
 
         last_seen = float(locked.get("last_seen", locked.get("locked_at", now)))
         if latest and _same_token_candidate(locked, latest):
+            old_future_x = float(locked.get("future_x", latest.get("future_x", 0.0)))
+            old_future_y = float(locked.get("future_y", latest.get("future_y", 0.0)))
+            new_future_x = float(latest.get("future_x", old_future_x))
+            new_future_y = float(latest.get("future_y", old_future_y))
             locked.update(latest)
+            locked["future_x"] = old_future_x + ((new_future_x - old_future_x) * TARGET_POSITION_SMOOTHING)
+            locked["future_y"] = old_future_y + ((new_future_y - old_future_y) * TARGET_POSITION_SMOOTHING)
             locked["last_seen"] = now
             _set_locked_target(runtime, locked)
             return locked
@@ -1431,11 +1497,6 @@ def _execute_planned_movement(runtime):
     if remaining_distance <= BLOOM_SETTLE_DISTANCE:
         _clear_locked_target(runtime)
         return False
-    if remaining_distance > BLOOM_MAX_MOVE_STEP:
-        scale = BLOOM_MAX_MOVE_STEP / remaining_distance
-        remaining_x *= scale
-        remaining_y *= scale
-
     _debug_log(
         f"moving toward planned target={target['name']} remaining=({remaining_x:.2f},{remaining_y:.2f}) score={target['score']:.2f}",
         min_interval=0.25,
@@ -1444,91 +1505,71 @@ def _execute_planned_movement(runtime):
     return _execute_movement_to_target(remaining_x, remaining_y)
 
 
-def _find_petal_model_hint(runtime, frame=None):
-    if runtime.get("petal_session") is None:
-        return None
+def _process_combined_detections(runtime, output, transform, inference_ms):
+    detections = _postprocess_tokens(output, min(BLOOM_MIN_CONFIDENCE, PETAL_CONFIDENCE_THRESHOLD))
+    bloom_detections = []
+    petal_candidates = []
+    petal_overlays = []
+    scale = float(transform["scale"])
+    pad_x = float(transform["pad_x"])
+    pad_y = float(transform["pad_y"])
+    capture_width = float(runtime["capture"]["width"])
+    capture_height = float(runtime["capture"]["height"])
 
-    try:
-        detection_start = time.time()
-        if frame is None:
-            frame = _grab_upper_token_frame(runtime)
-            if frame is None:
-                frame = _grab_frame(runtime)
-        if frame.size == 0:
-            return None
-        image, transform = _preprocess_petal_image(frame)
-        output = _run_model(runtime, "petal", image)
-        detections = _postprocess_tokens(output, PETAL_CONFIDENCE_THRESHOLD)
-        candidates = []
-        overlay_detections = []
-        scale = float(transform["scale"])
-        pad_x = float(transform["pad_x"])
-        pad_y = float(transform["pad_y"])
-        capture_width = float(runtime["capture"]["width"])
-        capture_height = float(runtime["capture"]["height"])
-        for (x1, y1, x2, y2), _class_id, confidence in detections:
-            capture_x1 = max(0.0, min(capture_width, (x1 - pad_x) / scale))
-            capture_y1 = max(0.0, min(capture_height, (y1 - pad_y) / scale))
-            capture_x2 = max(0.0, min(capture_width, (x2 - pad_x) / scale))
-            capture_y2 = max(0.0, min(capture_height, (y2 - pad_y) / scale))
-            capture_x = (capture_x1 + capture_x2) / 2.0
-            capture_y = (capture_y1 + capture_y2) / 2.0
-            tx, ty = _relative_distance(capture_x, capture_y, runtime["homography"])
-            distance = math.hypot(tx, ty)
-            overlay_index = len(overlay_detections)
-            overlay_detections.append({
-                "box": (capture_x1, capture_y1, capture_x2, capture_y2),
-                "confidence": float(confidence),
-                "distance": distance,
-                "selected": False,
-            })
-            if distance <= CONTINUOUS_MIN_REPLAN_DISTANCE:
-                continue
-            score = float(confidence) / max(distance, 0.5)
-            candidates.append((score, overlay_index, float(confidence), tx, ty, distance))
-
-        runtime["latest_petal_detections"] = overlay_detections
-        runtime["latest_petal_detection_time"] = time.time()
-        runtime["last_petal_detection_ms"] = (time.time() - detection_start) * 1000.0
-
-        if not candidates:
-            runtime["latest_petal_hint"] = None
-            _debug_log(
-                f"petal detections={len(overlay_detections)} actionable=0 infer={runtime['last_petal_detection_ms']:.1f}ms",
-                min_interval=0.5,
-                key="petal_detections",
-            )
-            return None
-
-        candidates.sort(reverse=True)
-        _score, selected_index, confidence, tx, ty, distance = candidates[0]
-        overlay_detections[selected_index]["selected"] = True
-        _debug_log(
-            f"petal detections={len(overlay_detections)} selected_confidence={confidence:.2f} distance={distance:.2f} infer={runtime['last_petal_detection_ms']:.1f}ms",
-            min_interval=0.25,
-            key="petal_detections",
+    for (x1, y1, x2, y2), class_id, confidence in detections:
+        capture_box = (
+            max(0.0, min(capture_width, (x1 - pad_x) / scale)),
+            max(0.0, min(capture_height, (y1 - pad_y) / scale)),
+            max(0.0, min(capture_width, (x2 - pad_x) / scale)),
+            max(0.0, min(capture_height, (y2 - pad_y) / scale)),
         )
-        max_move = BLOOM_PETAL_HINT_MAX_MOVE * max(size, 0.75)
-        if distance > max_move:
-            scale = max_move / distance
-            tx *= scale
-            ty *= scale
-            distance = max_move
-        hint = {
-            "tx": tx,
-            "ty": ty,
+        if class_id == 0 and confidence >= BLOOM_MIN_CONFIDENCE:
+            bloom_detections.append((_capture_box_to_model(runtime, capture_box), 5, confidence))
+            continue
+        if class_id != 1 or confidence < PETAL_CONFIDENCE_THRESHOLD:
+            continue
+
+        capture_x = (capture_box[0] + capture_box[2]) / 2.0
+        capture_y = (capture_box[1] + capture_box[3]) / 2.0
+        tx, ty = _relative_distance(capture_x, capture_y, runtime["homography"])
+        distance = math.hypot(tx, ty)
+        overlay_index = len(petal_overlays)
+        petal_overlays.append({
+            "box": capture_box,
+            "confidence": float(confidence),
             "distance": distance,
-            "count": len(candidates),
-            "confidence": confidence,
-        }
-        runtime["latest_petal_hint"] = hint
-        return hint
-    except Exception as exc:
-        runtime["latest_petal_detections"] = []
+            "selected": False,
+        })
+        if distance > CONTINUOUS_MIN_REPLAN_DISTANCE:
+            score = float(confidence) / max(distance, 0.5)
+            petal_candidates.append((score, overlay_index, float(confidence), tx, ty, distance))
+
+    now = time.time()
+    runtime["latest_petal_detections"] = petal_overlays
+    runtime["latest_petal_detection_time"] = now
+    runtime["last_petal_detection_ms"] = inference_ms
+    if not petal_candidates:
         runtime["latest_petal_hint"] = None
-        runtime["latest_petal_detection_time"] = time.time()
-        _debug_log(f"petal model inference failed: {exc}", min_interval=2.0, key="petal_model_failed")
-        return None
+        return bloom_detections
+
+    petal_candidates.sort(reverse=True)
+    _score, selected_index, confidence, tx, ty, distance = petal_candidates[0]
+    petal_overlays[selected_index]["selected"] = True
+    runtime["last_petal_seen_time"] = now
+    max_move = BLOOM_PETAL_HINT_MAX_MOVE * max(size, 0.75)
+    if distance > max_move:
+        move_scale = max_move / distance
+        tx *= move_scale
+        ty *= move_scale
+        distance = max_move
+    runtime["latest_petal_hint"] = {
+        "tx": tx,
+        "ty": ty,
+        "distance": distance,
+        "count": len(petal_candidates),
+        "confidence": confidence,
+    }
+    return bloom_detections
 
 
 def _cached_petal_model_hint(runtime):
@@ -1550,7 +1591,6 @@ def _execute_petal_sweep(runtime):
 
     tx = model_hint["tx"]
     ty = model_hint["ty"]
-    runtime["petal_sweep_until"] = max(runtime.get("petal_sweep_until", 0.0), now + 1.5)
 
     _debug_log(
         f"catching bloom petals model confidence={model_hint['confidence']:.2f} count={model_hint['count']} move=({tx:.2f},{ty:.2f})",
@@ -1626,37 +1666,6 @@ def _find_sprinkler(runtime):
     return best
 
 
-def _find_sprinkler_with_retry(runtime):
-    for attempt in range(SPRINKLER_RESCAN_ATTEMPTS):
-        result = _find_sprinkler(runtime)
-        if result:
-            _debug_log(
-                f"sprinkler found on attempt {attempt + 1}: label={result[3]} confidence={result[4]:.2f} distance={result[2]:.2f}",
-                min_interval=1.0,
-                key="sprinkler_found",
-            )
-            return result
-        _debug_log(
-            f"sprinkler scan attempt {attempt + 1}/{SPRINKLER_RESCAN_ATTEMPTS} found no match",
-            min_interval=1.0,
-            key="sprinkler_missing",
-        )
-        if attempt < SPRINKLER_RESCAN_ATTEMPTS - 1:
-            time.sleep(SPRINKLER_RESCAN_DELAY)
-    return None
-
-
-def _clear_targets(runtime):
-    scan_lock = runtime.get("scan_lock")
-    if scan_lock is None:
-        runtime["latest_target"] = None
-        runtime["locked_target"] = None
-    else:
-        with scan_lock:
-            runtime["latest_target"] = None
-            runtime["locked_target"] = None
-
-
 def _refresh_sprinkler_anchor(runtime, force=False):
     if not _sprinkler_anchor_enabled():
         runtime["last_sprinkler_status"] = (
@@ -1722,31 +1731,6 @@ def force_anchor_needed(runtime):
     return math.hypot(runtime.get("current_x", 0.0), runtime.get("current_y", 0.0)) >= BLOOM_FORCE_ANCHOR_DISTANCE
 
 
-def _recalibrate(runtime):
-    _debug_log(
-        f"recalibrating from pos=({runtime['current_x']:.2f},{runtime['current_y']:.2f}) moves={runtime['movement_count']}",
-        min_interval=1.0,
-        key="recalibrate_start",
-    )
-    result = _find_sprinkler_with_retry(runtime)
-    if not result:
-        _debug_log("recalibration failed: no sprinkler found", min_interval=1.0, key="recalibrate_failed")
-        return False
-
-    tx, ty, distance, _label, _confidence = result[:5]
-    if distance >= SPRINKLER_ARRIVAL_THRESHOLD:
-        _debug_log(f"returning to sprinkler: move=({tx:.2f},{ty:.2f}) distance={distance:.2f}")
-        _execute_movement(tx, ty)
-
-    runtime["current_x"] = 0.0
-    runtime["current_y"] = 0.0
-    runtime["movement_count"] = 0
-    runtime["last_anchor_time"] = time.time()
-    _clear_targets(runtime)
-    _debug_log("recalibration complete; position reset to sprinkler")
-    return True
-
-
 def _initialise_runtime():
     if cv2 is None or np is None:
         raise RuntimeError(
@@ -1755,27 +1739,15 @@ def _initialise_runtime():
 
     #_set_start_camera_angle()
 
-    token_path = MODEL_DIR / "token_detection_standard.mlmodelc"
-    token_model_kind = "coreml"
-    if not token_path.exists():
-        token_path = MODEL_DIR / "token_detection_standard.onnx"
-        token_model_kind = "opencv_onnx"
-    if not token_path.exists():
-        download_result = _check_missing_models(["token_detection_standard.mlmodelc", "token_detection_standard.onnx"])
-        token_path = MODEL_DIR / "token_detection_standard.mlmodelc"
-        token_model_kind = "coreml"
-        if not token_path.exists():
-            token_path = MODEL_DIR / "token_detection_standard.onnx"
-            token_model_kind = "opencv_onnx"
-    if not token_path.exists():
+    model_label, model_filename, model_size, model_output = BLOOM_MODEL_VARIANTS[BLOOM_MODEL_SELECTION]
+    combined_path = MODEL_DIR / model_filename
+    if not combined_path.exists():
+        download_result = _check_missing_models([model_filename])
+    if not combined_path.exists():
         failures = download_result.get("failures", {})
         detail = f" Download attempt failed: {'; '.join(failures.values())}" if failures else ""
-        raise FileNotFoundError(
-            f"No token AI model was found after attempting to download it: "
-            f"{MODEL_DIR / 'token_detection_standard.mlmodelc'} or "
-            f"{MODEL_DIR / 'token_detection_standard.onnx'}.{detail}"
-        )
-    if token_model_kind == "coreml" and ct is None:
+        raise FileNotFoundError(f"No combined bloom and petal AI model was found: {combined_path}.{detail}")
+    if ct is None:
         try:
             import subprocess
             import sys
@@ -1787,16 +1759,8 @@ def _initialise_runtime():
             raise RuntimeError(
                 "coremltools is required but automatic install failed: " + str(exc) + ". Please install coremltools before using BloomsAI, then restart the macro."
             )
-    if token_model_kind == "coreml" and Image is None:
+    if Image is None:
         raise RuntimeError("Pillow is required for CoreML BloomsAI, please run install dependencies before continuing.")
-
-    petal_path = MODEL_DIR / "petals-yolo26.mlmodelc"
-    if not petal_path.exists():
-        petal_download = _check_missing_models(["petals-yolo26.mlmodelc"])
-    if not petal_path.exists():
-        failures = petal_download.get("failures", {})
-        detail = f" Download attempt failed: {'; '.join(failures.values())}" if failures else ""
-        raise FileNotFoundError(f"No petal AI model was found: {petal_path}.{detail}")
 
     sprinkler_model_kind = None
     sprinkler_candidate = MODEL_DIR / "sprinkler_detection_standard.mlmodelc"
@@ -1810,21 +1774,12 @@ def _initialise_runtime():
 
     capture = _build_capture()
     token_crop_info = _token_crop_for_capture(capture)
-    token_left, token_top, token_width, token_height = token_crop_info["rect"]
-    token_monitor = None
-    token_bbox = None
     upper_token_monitor = None
     upper_token_bbox = None
     # Supplemental full-viewport inference catches blooms near every screen edge.
     upper_token_crop = (0, 0, int(capture["width"]), int(capture["height"]))
     if capture["backend"] == "mss":
         monitor = capture["monitor"]
-        token_monitor = {
-            "left": int(monitor["left"] + token_left),
-            "top": int(monitor["top"] + token_top),
-            "width": int(token_width),
-            "height": int(token_height),
-        }
         upper_token_monitor = {
             "left": int(monitor["left"]),
             "top": int(monitor["top"]),
@@ -1833,12 +1788,6 @@ def _initialise_runtime():
         }
     elif capture["backend"] == "pil":
         left, top, _right, _bottom = capture["bbox"]
-        token_bbox = (
-            int(left + token_left),
-            int(top + token_top),
-            int(left + token_left + token_width),
-            int(top + token_top + token_height),
-        )
         upper_token_bbox = (
             int(left),
             int(top),
@@ -1846,7 +1795,7 @@ def _initialise_runtime():
             int(top + capture["height"]),
         )
     _debug_log(
-        f"capture backend={capture['backend']} size={capture['width']}x{capture['height']} token_capture={token_monitor or token_bbox or token_crop_info['rect']} token_resize={token_crop_info['resize']} token_model={token_path} petal_model={petal_path} sprinkler_model={sprinkler_path or 'missing'}"
+        f"capture backend={capture['backend']} size={capture['width']}x{capture['height']} combined_model={combined_path} sprinkler_model={sprinkler_path or 'missing'}"
     )
     points = _default_points(capture["width"], capture["height"])
 
@@ -1858,18 +1807,9 @@ def _initialise_runtime():
     if homography is None:
         raise RuntimeError("Could not compute BloomsAI homography.")
 
-    if token_model_kind == "opencv_onnx":
-        token_session, token_input, token_output = _load_onnx_model(token_path)
-        _delete_model_path(MODEL_DIR / "token_detection_standard.mlmodelc")
-        _delete_model_path(MODEL_DIR / "best.mlpackage")
-    else:
-        token_session, token_input, token_output = _load_coreml_model(token_path)
-        _delete_model_path(MODEL_DIR / "token_detection_standard.onnx")
-        _delete_model_path(MODEL_DIR / "tokens.onnx")
-        _delete_model_path(MODEL_DIR / "best.mlpackage")
-    petal_session, petal_input, petal_output = _load_coreml_model(
-        petal_path,
-        compiled_output_name="var_1440",
+    combined_session, combined_input, combined_output = _load_coreml_model(
+        combined_path,
+        compiled_output_name=model_output,
     )
     sprinkler_session = None
     sprinkler_input = None
@@ -1889,21 +1829,17 @@ def _initialise_runtime():
         "runtime_version": RUNTIME_VERSION,
         "capture": capture,
         "token_crop": token_crop_info["rect"],
-        "token_monitor": token_monitor,
-        "token_bbox": token_bbox,
         "upper_token_monitor": upper_token_monitor,
         "upper_token_bbox": upper_token_bbox,
         "upper_token_crop": upper_token_crop,
-        "token_frame_is_crop": token_monitor is not None or token_bbox is not None,
-        "token_resize": token_crop_info["resize"],
-        "token_session": token_session,
-        "token_input": token_input,
-        "token_output": token_output,
-        "token_model_kind": token_model_kind,
-        "petal_session": petal_session,
-        "petal_input": petal_input,
-        "petal_output": petal_output,
-        "petal_model_kind": "coreml",
+        "combined_session": combined_session,
+        "combined_input": combined_input,
+        "combined_output": combined_output,
+        "combined_model_kind": "coreml",
+        "combined_model_selection": BLOOM_MODEL_SELECTION,
+        "combined_model_label": model_label,
+        "combined_input_width": model_size,
+        "combined_input_height": model_size,
         "sprinkler_session": sprinkler_session,
         "sprinkler_input": sprinkler_input,
         "sprinkler_output": sprinkler_output,
@@ -1921,6 +1857,7 @@ def _initialise_runtime():
         "last_timing_ms": {},
         "latest_detections": [],
         "latest_target": None,
+        "latest_bloom_candidates": [],
         "locked_target": None,
         "latest_scan_time": 0.0,
         "last_anchor_time": 0.0,
@@ -1928,25 +1865,35 @@ def _initialise_runtime():
         "last_sprinkler_detection": {},
         "last_sprinkler_status": "",
         "movement_active": False,
+        "movement_revision": 0,
+        "movement_requires_fresh_scan": False,
         "scan_lock": threading.Lock(),
         "scanner_stop_event": None,
         "scanner_thread": None,
-        "last_bloom_seen_time": 0.0,
         "last_petal_sweep_time": 0.0,
+        "last_petal_seen_time": 0.0,
         "latest_petal_detections": [],
         "latest_petal_hint": None,
         "latest_petal_detection_time": 0.0,
         "last_petal_detection_ms": None,
-        "petal_sweep_until": 0.0,
         "bloom_mode": "patrol",
-        "bloom_center": None,
+        "active_bloom": None,
         "bloom_last_visible_time": 0.0,
-        "bloom_work_positioned": False,
+        "bloom_contact_vector": None,
+        "bloom_contact_confirmations": 0,
+        "bloom_contact_last_seen_at": 0.0,
+        "bloom_contact_last_move_time": 0.0,
+        "bloom_contact_distance": 0.0,
+        "petal_collection_started_at": 0.0,
+        "petal_collection_deadline": 0.0,
     }
 
 
 runtime = _runtime_state()
-if runtime.get("runtime_version") != RUNTIME_VERSION:
+if (
+    runtime.get("runtime_version") != RUNTIME_VERSION
+    or runtime.get("combined_model_selection") != BLOOM_MODEL_SELECTION
+):
     _stop_scanner_thread(runtime)
     _release_video_writer(runtime)
     runtime.clear()
@@ -1957,7 +1904,7 @@ if not runtime.get("ready"):
         runtime["ready"] = True
         runtime["error"] = ""
         _debug_log(
-            f"runtime ready token_model={runtime['token_model_kind']} input={runtime['token_input']} output={runtime['token_output']} confidence={CONFIDENCE_THRESHOLD} ignored={sorted(IGNORED_TOKENS)} record={RECORD_VIDEO}"
+            f"runtime ready combined_model={runtime['combined_model_label']} input={runtime['combined_input']} output={runtime['combined_output']} bloom_confidence={BLOOM_MIN_CONFIDENCE} petal_confidence={PETAL_CONFIDENCE_THRESHOLD} record={RECORD_VIDEO}"
         )
     except Exception as exc:
         runtime["ready"] = False
@@ -1979,16 +1926,11 @@ else:
         petal_hint = _cached_petal_model_hint(runtime)
         if petal_hint:
             if bloom_mode != "cleanup":
-                runtime["bloom_mode"] = "cleanup"
-                runtime["bloom_center"] = (runtime["current_x"], runtime["current_y"])
-            runtime["petal_sweep_until"] = max(runtime.get("petal_sweep_until", 0.0), time.time() + 2.0)
-            _clear_locked_target(runtime)
+                _start_petal_collection(runtime)
             _execute_petal_sweep(runtime)
         elif bloom_mode in ("work", "cleanup"):
             _execute_bloom_sequence(runtime)
         elif target:
-            if target.get("name") == BLOOM_LABEL:
-                runtime["last_bloom_seen_time"] = time.time()
             _debug_log(
                 f"target={target['name']} confidence={target['confidence']:.2f} score={target['score']:.2f} planned=({target['future_x']:.2f},{target['future_y']:.2f})",
                 min_interval=0.25,
@@ -1996,7 +1938,7 @@ else:
             )
             if not _execute_planned_movement(runtime):
                 if target.get("name") == BLOOM_LABEL:
-                    _start_bloom_work(runtime)
+                    _start_bloom_work(runtime, target)
                     _execute_bloom_sequence(runtime)
         else:
             detections = runtime.get("latest_detections", [])
