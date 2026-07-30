@@ -13,7 +13,7 @@ Requirements:
 - blooms-and-petals-standard.mlmodelc, Blooms-and-petals-light.mlmodelc, or Blooms-and-petals-mini.mlmodelc
 - sprinkler_detection_standard.mlmodelc or sprinkler_detection_standard.onnx
 
-- Version 1.6
+- Version 2.0
 """
 
 import math
@@ -59,7 +59,7 @@ SPRINKLER_INPUT_WIDTH = 736
 SPRINKLER_INPUT_HEIGHT = 736
 SPRINKLER_CONFIDENCE_THRESHOLD = 0.6
 PETAL_CONFIDENCE_THRESHOLD = 0.50
-RUNTIME_VERSION = 32
+RUNTIME_VERSION = 33
 MIN_TOKEN_DISTANCE = 0.3
 MAX_SPRINKLER_DISTANCE = 10.0
 TARGET_SPRINKLER_LABEL = None
@@ -1389,12 +1389,11 @@ def _execute_petal_orbit(runtime):
         _finish_petal_orbit(runtime)
         return True
 
-    corner_offset = PETAL_ORBIT_RADIUS / math.sqrt(2.0)
     points = [
-        (float(center[0]) + corner_offset, float(center[1]) + corner_offset),
-        (float(center[0]) - corner_offset, float(center[1]) + corner_offset),
-        (float(center[0]) - corner_offset, float(center[1]) - corner_offset),
-        (float(center[0]) + corner_offset, float(center[1]) - corner_offset),
+        (float(center[0]) + PETAL_ORBIT_RADIUS, float(center[1])),
+        (float(center[0]), float(center[1]) + PETAL_ORBIT_RADIUS),
+        (float(center[0]) - PETAL_ORBIT_RADIUS, float(center[1])),
+        (float(center[0]), float(center[1]) - PETAL_ORBIT_RADIUS),
     ]
     orbit_index = runtime.get("petal_orbit_index")
     if orbit_index is None:
