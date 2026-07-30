@@ -622,6 +622,122 @@ select:focus {
   transform: scale(0.98);
 }
 
+.purple-button.disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.model-download-status {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  margin: -0.35rem 0 0.65rem;
+}
+
+.model-downloads {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 1rem;
+}
+
+.model-downloads summary {
+  align-items: center;
+  color: var(--text-main);
+  cursor: pointer;
+  display: flex;
+  font-size: 1.1rem;
+  font-weight: 600;
+  justify-content: space-between;
+  list-style: none;
+  padding: 1rem 1.5rem;
+}
+
+.model-downloads summary::-webkit-details-marker {
+  display: none;
+}
+
+.model-downloads summary::after {
+  color: var(--text-dim);
+  content: "⌄";
+  font-size: 1.4rem;
+  line-height: 1;
+  margin-left: 0.75rem;
+  transition: transform 0.2s ease;
+}
+
+.model-downloads[open] summary::after {
+  transform: rotate(180deg);
+}
+
+.model-download-summary {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  font-weight: 400;
+}
+
+.model-download-content {
+  border-top: 1px solid var(--border);
+  padding: 0.35rem 1.5rem 1.25rem;
+}
+
+.model-download-actions {
+  margin: 0.5rem 0;
+}
+
+.model-download-status.error {
+  color: #e06c75;
+}
+
+.model-download-list {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.model-download-group + .model-download-group {
+  margin-top: 1rem;
+}
+
+.model-download-group h3 {
+  color: var(--text-main);
+  font-size: 0.9rem;
+  margin: 0 0 0.4rem;
+}
+
+.model-download-row {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  padding: 0.65rem 0.8rem;
+}
+
+.model-download-row strong,
+.model-availability {
+  display: block;
+}
+
+.model-availability {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  margin-top: 0.15rem;
+}
+
+.model-availability.installed {
+  color: #77c66e;
+}
+
+.model-availability.missing {
+  color: #e0a85e;
+}
+
+.download-model-button {
+  margin: 0;
+  padding: 0.4rem 0.75rem;
+}
+
 .purple-button.active {
   background-color: #f04747;
   /* Stop button color */

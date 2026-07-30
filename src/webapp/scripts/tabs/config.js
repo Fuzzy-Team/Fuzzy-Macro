@@ -30,6 +30,7 @@ async function loadConfig() {
   const settings = await loadAllSettings();
   loadInputs(settings);
   updateDiscordUniversalRouteText();
+  await loadModelStatus();
 
   // Restore active subtab
   switchConfigTab(
@@ -44,6 +45,139 @@ async function loadConfig() {
 
   // Initialize quick action buttons
   initializeQuickActions();
+}
+
+function formatModelSize(sizeBytes) {
+  if (!sizeBytes) return "";
+  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const MODEL_PRESENTATION = {
+  "token_detection_standard.mlmodelc": { group: "Standard", label: "Token Detection" },
+  "blooms-and-petals-standard.mlmodelc": { group: "Standard", label: "Blooms & Petals" },
+  "sprinkler_detection_standard.mlmodelc": { group: "Standard", label: "Sprinkler Detection" },
+  "token_detection_small.mlmodelc": { group: "Small", label: "Token Detection" },
+  "loot_detection_small.mlmodelc": { group: "Small", label: "Loot Detection" },
+  "token_detection_mini.mlmodelc": { group: "Mini", label: "Token Detection" },
+  "loot_detection_mini.mlmodelc": { group: "Mini", label: "Loot Detection" },
+  "Blooms-and-petals-mini.mlmodelc": { group: "Mini", label: "Blooms & Petals" },
+  "Blooms-and-petals-light.mlmodelc": { group: "Small", label: "Blooms & Petals" },
+  "token_detection_standard.onnx": { group: "Standard", label: "Token Detection" },
+  "sprinkler_detection_standard.onnx": { group: "Standard", label: "Sprinkler Detection" },
+};
+const MODEL_GROUP_ORDER = ["Standard", "Small", "Mini"];
+
+function getModelPresentation(model) {
+  return MODEL_PRESENTATION[model.name] || { group: "Other", label: "AI Model" };
+}
+
+function setModelDownloadStatus(message, isError = false) {
+  const status = document.getElementById("model-download-status");
+  if (!status) return;
+  status.textContent = message;
+  status.classList.toggle("error", isError);
+}
+
+function setModelDownloadSummary(message) {
+  const summary = document.getElementById("model-download-summary");
+  if (summary) summary.textContent = message;
+}
+
+function setModelDownloadButtonsDisabled(disabled) {
+  document.querySelectorAll("#download-missing-models-button, .download-model-button").forEach((button) => {
+    button.classList.toggle("disabled", disabled);
+    button.style.pointerEvents = disabled ? "none" : "";
+    button.setAttribute("aria-disabled", String(disabled));
+  });
+}
+
+async function loadModelStatus() {
+  const list = document.getElementById("model-download-list");
+  if (!list || !window.eel || typeof eel.getModelStatus !== "function") return;
+
+  try {
+    const result = await eel.getModelStatus()();
+    const models = result?.models || [];
+    const missingCount = models.filter((model) => !model.installed).length;
+    const statusMessage = missingCount
+      ? `${missingCount} model${missingCount === 1 ? "" : "s"} missing.`
+      : "All supported models are installed.";
+    setModelDownloadStatus(statusMessage);
+    setModelDownloadSummary(missingCount ? `${missingCount} missing` : "All installed");
+    list.replaceChildren();
+    const modelsByGroup = models.reduce((groups, model) => {
+      const presentation = getModelPresentation(model);
+      groups[presentation.group] ||= [];
+      groups[presentation.group].push({ ...model, presentation });
+      return groups;
+    }, {});
+    const groups = [...MODEL_GROUP_ORDER, ...Object.keys(modelsByGroup).filter((group) => !MODEL_GROUP_ORDER.includes(group))];
+
+    groups.forEach((group) => {
+      const groupModels = modelsByGroup[group];
+      if (!groupModels?.length) return;
+      const section = document.createElement("section");
+      section.className = "model-download-group";
+      const heading = document.createElement("h3");
+      heading.textContent = `${group} Models`;
+      section.appendChild(heading);
+
+      groupModels.forEach((model) => {
+        const row = document.createElement("div");
+        row.className = "model-download-row";
+
+        const details = document.createElement("div");
+        const name = document.createElement("strong");
+        name.textContent = model.presentation.label;
+        const availability = document.createElement("span");
+        availability.className = `model-availability ${model.installed ? "installed" : "missing"}`;
+        availability.textContent = model.installed
+          ? `Installed${formatModelSize(model.size_bytes) ? ` · ${formatModelSize(model.size_bytes)}` : ""}`
+          : "Missing";
+        details.append(name, availability);
+        row.appendChild(details);
+
+        if (!model.installed) {
+          const button = document.createElement("button");
+          button.className = "purple-button download-model-button";
+          button.type = "button";
+          button.textContent = "Download";
+          button.addEventListener("click", () => downloadMissingModels([model.name]));
+          row.appendChild(button);
+        }
+        section.appendChild(row);
+      });
+      list.appendChild(section);
+    });
+  } catch (error) {
+    console.error("Could not load model status:", error);
+    setModelDownloadStatus("Could not check installed models.", true);
+    setModelDownloadSummary("Unavailable");
+  }
+}
+
+async function downloadMissingModels(modelNames = null) {
+  if (!window.eel || typeof eel.downloadMissingModels !== "function") return;
+  setModelDownloadButtonsDisabled(true);
+  setModelDownloadStatus("Downloading models… This can take a few minutes.");
+
+  try {
+    const result = await eel.downloadMissingModels(modelNames)();
+    if (!result?.ok) {
+      setModelDownloadStatus(
+        result?.failures ? "Some models could not be downloaded. Check your internet connection and try again." : (result?.message || "Could not download models."),
+        true
+      );
+      return;
+    }
+    setModelDownloadStatus(result.message || "Model download complete.");
+    await loadModelStatus();
+  } catch (error) {
+    console.error("Could not download models:", error);
+    setModelDownloadStatus(`Could not download models: ${error}`, true);
+  } finally {
+    setModelDownloadButtonsDisabled(false);
+  }
 }
 
 const FALLBACK_PRIVATE_SERVER_KEYS = [

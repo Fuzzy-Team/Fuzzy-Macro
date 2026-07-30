@@ -3,6 +3,7 @@ import webbrowser
 import modules.misc.settingsManager as settingsManager
 import os
 import modules.misc.update as updateModule
+import modules.misc.modelManager as modelManager
 import modules.controls.mouse as mouseControl
 import sys
 import ast
@@ -30,6 +31,7 @@ _tool_status = None
 _tool_presence = None
 _active_tool_presence_key = None
 _tool_session_id = None
+_model_download_lock = threading.Lock()
 
 
 def _refresh_tool_logger_settings():
@@ -947,6 +949,72 @@ def loadFuzzyAITokenRanking(field_name, model="standard"):
 @eel.expose
 def saveFuzzyAITokenRanking(field_name, ranking, model="standard"):
     return settingsManager.saveFuzzyAITokenRanking(field_name, ranking, model)
+
+
+@eel.expose
+def getModelStatus():
+    """Return the models this Mac can use, along with their local availability."""
+    models = []
+    for model_name in modelManager._supported_model_names():
+        model_path = os.path.join(modelManager.MODEL_DIR, model_name)
+        installed = os.path.exists(model_path)
+        size_bytes = 0
+        if installed:
+            try:
+                if os.path.isdir(model_path):
+                    size_bytes = sum(
+                        os.path.getsize(os.path.join(root, filename))
+                        for root, _, filenames in os.walk(model_path)
+                        for filename in filenames
+                    )
+                else:
+                    size_bytes = os.path.getsize(model_path)
+            except OSError:
+                pass
+        models.append({
+            "name": model_name,
+            "installed": installed,
+            "size_bytes": size_bytes,
+        })
+    return {"models": models, "model_dir": modelManager.MODEL_DIR}
+
+
+@eel.expose
+def downloadMissingModels(model_names=None):
+    """Download all missing supported models, or the named missing models."""
+    if not _model_download_lock.acquire(blocking=False):
+        return {"ok": False, "message": "A model download is already in progress."}
+
+    try:
+        if model_names is None:
+            result = modelManager.ensure_missing_supported_models()
+        else:
+            if not isinstance(model_names, (list, tuple)):
+                return {"ok": False, "message": "Invalid model download request."}
+            result = modelManager.ensure_missing_models(model_names)
+
+        failures = result.get("failures", {})
+        downloaded = result.get("downloaded", [])
+        skipped = result.get("skipped", [])
+        if failures:
+            return {
+                "ok": False,
+                "message": "Some models could not be downloaded.",
+                "downloaded": downloaded,
+                "skipped": skipped,
+                "failures": failures,
+            }
+        return {
+            "ok": True,
+            "message": "Downloaded missing models." if downloaded else "All supported models are already installed.",
+            "downloaded": downloaded,
+            "skipped": skipped,
+        }
+    except Exception as exc:
+        print(f"[models] Could not download missing models: {exc}")
+        return {"ok": False, "message": f"Could not download models: {exc}"}
+    finally:
+        _model_download_lock.release()
   
 @eel.expose
 def exportPlanterSettings():

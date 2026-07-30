@@ -734,6 +734,23 @@
           },
         },
       ]);
+
+      parentOther.insertAdjacentHTML("beforeend", `
+        <details class="model-downloads">
+          <summary>
+            <span>AI Models</span>
+            <span id="model-download-summary" class="model-download-summary">Checking…</span>
+          </summary>
+          <div class="model-download-content">
+            <p>Download only the AI models that are missing from this Mac.</p>
+            <div class="model-download-actions">
+              <button id="download-missing-models-button" class="purple-button" type="button" onclick="downloadMissingModels()">Download Missing Models</button>
+            </div>
+            <div id="model-download-status" class="model-download-status" aria-live="polite">Checking installed models…</div>
+            <div id="model-download-list" class="model-download-list"></div>
+          </div>
+        </details>
+      `);
     </script>
   </div>
   <div id="discord" class="standard-container sub-tab-panel" style="display: none">
