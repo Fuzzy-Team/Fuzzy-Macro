@@ -24,9 +24,9 @@
       const parentBSS = document.getElementById("bss");
       buildStandardContainer(parentBSS, "Basic", "", [
         {
-          id: "hive_number",
-          title: "Hive slot",
-          desc: "The hive slot claimed.<br>1 is the closest to cannon, 6 is the furthest.",
+          id: "preferred_hive_slot",
+          title: "Preferred Hive Slot",
+          desc: "The macro checks this hive first, then searches the remaining slots automatically. 1 is closest to cannon and 6 is furthest.",
           type: {
             name: "dropdown",
             data: [1, 2, 3, 4, 5, 6],
@@ -36,7 +36,7 @@
         {
           id: "hive_exclude_slot",
           title: "Exclude Hive Slot On Rejoin",
-          desc: "Skip these hive slots when the macro scans for an available hive after rejoining. Leave it empty to allow all slots.",
+          desc: "Skip these hive slots while searching for an available hive.",
           type: {
             name: "dropdown",
             multiple: true,
@@ -54,7 +54,7 @@
         {
           id: "claim_first_available_hive",
           title: "Claim First Available Hive",
-          desc: "When the selected hive is unavailable, claim the first open hive slot reached during the scan instead of checking every slot first.",
+          desc: "Claim the first eligible hive found. Disable this to scan all slots and choose the available hive closest to your preferred slot.",
           type: {
             name: "checkbox",
             triggerFunction: saveGeneralTriggerFunction,

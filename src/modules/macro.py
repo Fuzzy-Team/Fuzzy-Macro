@@ -3387,24 +3387,8 @@ class macro:
             # self.keyboard.walk("s",0.3,0)
             # self.keyboard.walk("d",5,0)
             # self.keyboard.walk("s",0.3,0)
-            hiveNumber = self.setdat["hive_number"]
-            excludedHiveSlotsRaw = self.setdat.get("hive_exclude_slot", [])
-            if not isinstance(excludedHiveSlotsRaw, (list, tuple, set)):
-                excludedHiveSlotsRaw = [] if excludedHiveSlotsRaw in (None, "", 0, "0") else [excludedHiveSlotsRaw]
-            excludedHiveSlots = set()
-            for slot in excludedHiveSlotsRaw:
-                try:
-                    slotNumber = int(slot)
-                except (TypeError, ValueError):
-                    continue
-                if 1 <= slotNumber <= 6:
-                    excludedHiveSlots.add(slotNumber)
             rejoinSuccess = False
-            claimFirstAvailableHive = self.setdat.get("claim_first_available_hive", True)
-            claimFirstAvailableHive = claimFirstAvailableHive is not False
-            availableSlots = [] #store hive slots that are claimable when not claiming the first available hive
             newHiveNumber = 0
-            hiveAlreadyClaimed = False
         
             # self.keyboard.keyDown("d", False)
             # self.keyboard.tileWait(4)
@@ -3416,108 +3400,94 @@ class macro:
             self.keyboard.keyDown("d", False)
             self.keyboard.timeWaitNoHasteCompensation(0.548)
             self.keyboard.keyDown("w", False)
-            self.keyboard.timeWaitNoHasteCompensation(2.9)
+            self.keyboard.timeWaitNoHasteCompensation(3.15)
             self.keyboard.keyUp("d", False)
             self.keyboard.keyUp("w", False)
-            for _ in range(3):
-                time.sleep(0.4)
-                if self.isBesideE(["claim", "hive", "send", "trad", "has"]):
-                    break
-                self.stepBackOntoHivePad()
+            preferredHiveSlot = self.setdat.get("preferred_hive_slot", 3)
+            try:
+                preferredHiveSlot = max(1, min(6, int(preferredHiveSlot)))
+            except (TypeError, ValueError):
+                preferredHiveSlot = 3
 
-            def isHiveAvailable():
-                return self.isBesideE(["claim", "hive"], ["send", "trade"], log=True)
+            excludedHiveSlotsRaw = self.setdat.get("hive_exclude_slot", [])
+            if not isinstance(excludedHiveSlotsRaw, (list, tuple, set)):
+                excludedHiveSlotsRaw = [] if excludedHiveSlotsRaw in (None, "", 0, "0") else [excludedHiveSlotsRaw]
+            excludedHiveSlots = set()
+            for slot in excludedHiveSlotsRaw:
+                try:
+                    slot = int(slot)
+                except (TypeError, ValueError):
+                    continue
+                if 1 <= slot <= 6:
+                    excludedHiveSlots.add(slot)
 
-            def isOtherHive():
+            claimFirstAvailableHive = self.setdat.get("claim_first_available_hive", True) is not False
+            availableHiveSlots = []
+
+            # Begin at the preferred slot, search toward hive 1, then reverse
+            # and search through hive 6. Movement between pads waits for the
+            # previous hive prompt to disappear before checking the next one.
+            def claimHivePromptVisible():
+                return self.isBesideEImage("claimhive")
+
+            def occupiedHivePromptVisible():
                 return self.isBesideE(["send", "trad", "trade"], ["claim"], log=True)
 
-            def isExcludedSlot(slot):
-                return slot in excludedHiveSlots
+            def anyHivePromptVisible():
+                return claimHivePromptVisible() or occupiedHivePromptVisible()
 
-            def settleOnHivePad():
-                if not (
-                    self.isMakeHoneyPrompt(log=True)
-                    or self.isBesideE(["claim", "hive", "send", "trad", "trade", "has"], log=True)
-                ):
-                    self.stepBackOntoHivePad()
+            def checkCurrentHive(slot):
+                if claimHivePromptVisible():
+                    self.keyboard.keyUp("a", False)
+                    self.keyboard.keyUp("d", False)
+                    if slot in excludedHiveSlots:
+                        return 0
+                    if claimFirstAvailableHive:
+                        self.keyboard.press("e")
+                        return slot
+                    if slot not in availableHiveSlots:
+                        availableHiveSlots.append(slot)
+                    return 0
+                return 0
 
-            def boundedHiveSlot(slot):
-                return max(1, min(6, int(slot)))
+            def moveToNextHive(slot, direction):
+                self.keyboard.keyDown(direction, False)
+                while anyHivePromptVisible():
+                    time.sleep(0.01)
 
-            currentHiveSlot = 1
+                while True:
+                    claimedSlot = checkCurrentHive(slot)
+                    if claimedSlot:
+                        return claimedSlot
+                    if claimHivePromptVisible() or occupiedHivePromptVisible():
+                        self.keyboard.keyUp(direction, False)
+                        return 0
+                    time.sleep(0.01)
 
-            def moveToHiveSlot(targetSlot):
-                nonlocal currentHiveSlot
-                targetSlot = boundedHiveSlot(targetSlot)
-                slotDelta = targetSlot - currentHiveSlot
-                if slotDelta > 0:
-                    self.walkHiveSlots("a", slotDelta)
-                elif slotDelta < 0:
-                    self.walkHiveSlots("d", abs(slotDelta))
-                currentHiveSlot = targetSlot
-                time.sleep(0.4)
-                settleOnHivePad()
+            # The spawn route reaches hive 1, so first move to the preferred
+            # starting position. The claimed slot is always saved automatically.
+            self.walkHiveSlots("a", preferredHiveSlot - 1)
+            newHiveNumber = checkCurrentHive(preferredHiveSlot)
 
-            hiveNumber = boundedHiveSlot(hiveNumber)
+            if not newHiveNumber:
+                scanSteps = (
+                    [(slot, "d") for slot in range(preferredHiveSlot - 1, 0, -1)]
+                    + [(slot, "a") for slot in range(2, 7)]
+                )
+                for checkingHive, direction in scanSteps:
+                    newHiveNumber = moveToNextHive(checkingHive, direction)
+                    if newHiveNumber:
+                        break
 
-            # Go directly to the selected hive first. If that fails, scan all hives as a fallback.
-            self.logger.webhook("", f'Claiming hive {hiveNumber}', "dark brown")
-            # Move directly to the selected hive (slot 1 is nearest cannon)
-            moveToHiveSlot(hiveNumber)
-            # Check selected hive first
-            if isExcludedSlot(hiveNumber):
-                self.logger.webhook("", f'Hive {hiveNumber} is excluded, scanning other hives', 'dark brown', "screen")
-            elif self.isMakeHoneyPrompt(log=True):
-                newHiveNumber = hiveNumber
-                rejoinSuccess = True
-                hiveAlreadyClaimed = True
-            elif isHiveAvailable():
-                newHiveNumber = hiveNumber
-                rejoinSuccess = True
-            else:
-                # Selected hive unavailable — fallback to scanning all hive slots.
-                if isOtherHive():
-                    self.logger.webhook("", f'Hive {hiveNumber} belongs to another player, scanning hives for your slot','dark brown', "screen")
+            if not newHiveNumber and availableHiveSlots:
+                newHiveNumber = min(availableHiveSlots, key=lambda slot: (abs(slot - preferredHiveSlot), slot))
+                self.walkHiveSlots("d", 6 - newHiveNumber)
+                if claimHivePromptVisible():
+                    self.keyboard.press("e")
                 else:
-                    self.logger.webhook("", f'Hive {hiveNumber} is already claimed, scanning all hives','dark brown', "screen")
-                # Scan once and optionally use the first claimable slot reached.
-                forwardScanSlots = list(range(hiveNumber + 1, 7))
-                wrapScanSlots = list(range(1, hiveNumber))
-                for j in forwardScanSlots:
-                    moveToHiveSlot(j)
-                    if self.isMakeHoneyPrompt(log=True):
-                        newHiveNumber = j
-                        rejoinSuccess = True
-                        hiveAlreadyClaimed = True
-                        break
-                    if not isExcludedSlot(j) and isHiveAvailable():
-                        if claimFirstAvailableHive:
-                            newHiveNumber = j
-                            rejoinSuccess = True
-                            break
-                        availableSlots.append(j)
+                    newHiveNumber = 0
 
-                for j in wrapScanSlots:
-                    if rejoinSuccess:
-                        break
-                    moveToHiveSlot(j)
-                    if self.isMakeHoneyPrompt(log=True):
-                        newHiveNumber = j
-                        rejoinSuccess = True
-                        hiveAlreadyClaimed = True
-                        break
-                    if not isExcludedSlot(j) and isHiveAvailable():
-                        if claimFirstAvailableHive:
-                            newHiveNumber = j
-                            rejoinSuccess = True
-                            break
-                        availableSlots.append(j)
-
-                # If immediate claiming is disabled, preserve the old nearest-open-slot behavior.
-                if not rejoinSuccess and availableSlots:
-                    newHiveNumber = min(availableSlots, key=lambda slot: abs(slot - currentHiveSlot))
-                    moveToHiveSlot(newHiveNumber)
-                    rejoinSuccess = True
+            rejoinSuccess = newHiveNumber != 0
 
             # #find the hive in hive number
             # self.logger.webhook("",f'Claiming hive {hiveNumber} (guessing hive location)', "dark brown")
@@ -3563,19 +3533,6 @@ class macro:
             #             break
             #claim hive and convert
             if rejoinSuccess:
-                claimedHive = False
-                if hiveAlreadyClaimed:
-                    claimedHive = True
-                elif isHiveAvailable():
-                    self.keyboard.press("e")
-                    for _ in range(6):
-                        time.sleep(0.5)
-                        if self.isMakeHoneyPrompt(log=True):
-                            claimedHive = True
-                            break
-                if not claimedHive:
-                    self.logger.webhook("",f'Claimed hive {newHiveNumber} prompt not detected; retrying rejoin','dark brown', "screen")
-                    continue
                 self.logger.webhook("",f'Claimed hive {newHiveNumber}', "bright green", "screen", ping_category="ping_critical_errors")
                 self.setdat["hive_number"] = newHiveNumber
                 settingsManager.saveGeneralSetting("hive_number", newHiveNumber)
