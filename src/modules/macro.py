@@ -2952,7 +2952,6 @@ class macro:
                 pass
             return None
 
-        # Honor the configured retry count before forcing a rejoin.
         try:
             max_attempts = int(self.setdat.get("max_cannon_attempts", 3))
         except (TypeError, ValueError):
@@ -2967,51 +2966,42 @@ class macro:
             hive_resync_attempts = max(0, max_attempts - 1)
         first_attempt_color = None
         for i in range(max_attempts):
-            #Move to canon:
-            fieldDist = 0.9
             if self.cannonFromHive:
-                self.keyboard.walk("w",0.8)
+                self.keyboard.walk("w", 0.8)
                 hiveNumber = self.setdat["hive_number"]
             else:
                 hiveNumber = 3
-            self.keyboard.walk("d",1.2*hiveNumber+i)
+            self.keyboard.walk("d", 1.2 * hiveNumber + i)
             if not self.cannonFromHive:
                 self.keyboard.walk("w", 0.2)
             self.keyboard.keyDown("d")
             time.sleep(0.5)
             self.keyboard.slowPress("space")
-            #os.system('osascript -e \'tell application "System Events" to key code 49\'')
             time.sleep(0.2)
             self.keyboard.keyDown("d")
-            self.keyboard.walk("w",0.2)
-            
+            self.keyboard.walk("w", 0.2)
+
             if fast:
-                self.keyboard.walk("d",0.95)
+                self.keyboard.walk("d", 0.95)
                 time.sleep(0.1)
                 return True
-            self.keyboard.walk("d",0.2)
-            self.keyboard.walk("s",0.07)
-            st = time.time()
+            self.keyboard.walk("d", 0.2)
+            self.keyboard.walk("s", 0.07)
+            startTime = time.time()
             self.keyboard.keyDown("d")
             foundCannon = False
-            while time.time()-st < 0.15*6:
+            while time.time() - startTime < 0.9:
                 if self.isBesideEImage("cannon"):
                     foundCannon = True
                     break
             self.keyboard.keyUp("d")
             if foundCannon:
-                #check if overrun cannon
                 for _ in range(3):
                     time.sleep(0.4)
                     if self.isBesideEImage("cannon"):
                         return True
-                    self.keyboard.walk("a",0.2)
-            self.logger.webhook(
-                "Notice",
-                f"Could not find cannon (attempt {i+1}/{max_attempts})",
-                "dark brown",
-                "screen",
-            )
+                    self.keyboard.walk("a", 0.2)
+            self.logger.webhook("Notice", f"Could not find cannon (attempt {i + 1}/{max_attempts})", "dark brown", "screen")
             detected_color = detect_rejoin_mode_color()
             if allowHiveResync and hive_resync_attempts and i + 1 >= hive_resync_attempts:
                 if self.resyncHiveSlotFromHive():
@@ -3021,41 +3011,29 @@ class macro:
                     return self.cannon(fast=fast, allowHiveResync=False, allowRejoin=False)
                 return False
 
-            # Reset between failed attempts until the configured limit is exhausted.
             if i < max_attempts - 1:
                 first_attempt_color = detected_color
                 if detected_color is not None:
                     retries_left = max_attempts - (i + 1)
                     retry_label = "time" if retries_left == 1 else "times"
-                    self.logger.webhook(
-                        "",
-                        f"Detected light/dark-mode screen while searching for cannon. Resetting and retrying cannon search ({retries_left} {retry_label} remaining).",
-                        "dark brown",
-                        "screen",
-                    )
+                    self.logger.webhook("", f"Detected light/dark-mode screen while searching for cannon. Resetting and retrying cannon search ({retries_left} {retry_label} remaining).", "dark brown", "screen")
                 self.reset(convert=False)
                 continue
 
-            # Final failure: rejoin. If the same color persists after reset, call it out.
             if detected_color is not None and first_attempt_color is not None and tuple(detected_color) == tuple(first_attempt_color):
                 self.logger.webhook("", "Detected the same light/dark-mode color again after reset while searching for cannon. Rejoining.", "dark brown", "screen")
             elif detected_color is not None:
                 self.logger.webhook("", "Detected light/dark-mode screen again while searching for cannon. Rejoining.", "dark brown", "screen")
             self.logger.webhook(
                 "Notice",
-                f"Failed to reach cannon after {max_attempts} attempts"
-                + ("; rejoining" if allowRejoin else "; aborting travel"),
+                f"Failed to reach cannon after {max_attempts} attempts" + ("; rejoining" if allowRejoin else "; aborting travel"),
                 "red",
                 ping_category="ping_critical_errors",
             )
             if allowRejoin and self.rejoin():
                 return self.cannon(fast=fast, allowHiveResync=False, allowRejoin=False)
             return False
-        else:
-            self.logger.webhook("Notice", f"Failed to reach cannon too many times", "red", ping_category="ping_critical_errors")
-            if allowRejoin and self.rejoin():
-                return self.cannon(fast=fast, allowHiveResync=False, allowRejoin=False)
-            return False
+        return False
 
     def travelViaCannon(self, context="Travel", resetIfAway=True, convertOnReset=False):
         if resetIfAway and self.location != "spawn":
@@ -3154,14 +3132,24 @@ class macro:
     def rejoin(self, rejoinMsg = "Rejoining", placeId = MAIN_GAME_PLACE_ID, claimHive = True, usePrivateServer = True):
         self.canDetectNight = False
         placeId = str(placeId or MAIN_GAME_PLACE_ID)
-        privateServerLinks = self._getRejoinServerLinks(usePrivateServer)
+        privateServerLink = str(self.setdat.get("private_server_link", "") or "").strip() if usePrivateServer else ""
         self.logger.webhook("",rejoinMsg, "dark brown")
         self.set_task_status("rejoining", activity="rejoining")
         mouse.mouseUp()
         keyboard.releaseMovement()
-        # Give each target two chances, then retain the previous three public
-        # retries. This mirrors Natro's staged failover without an unbounded loop.
-        attempts = [server for server in privateServerLinks for _ in range(2)] + [("public", "")] * 3
+        if appManager.isAppOpen("roblox"):
+            self.logger.webhook("", "Closing Roblox before rejoining", "dark brown")
+            appManager.closeApp("Roblox")
+            time.sleep(3)
+
+        # Retry the configured private server first, then use a public server.
+        # This keeps the retry order deterministic and avoids switching between
+        # different private-server links during one reconnect cycle.
+        attempts = (
+            [('private_server_link', privateServerLink)] * 5 + [("public", "")] * 5
+            if privateServerLink
+            else [("public", "")] * 10
+        )
         invalidServerLinks = set()
         launchedAttempts = 0
         for i, (serverKey, psLink) in enumerate(attempts):
@@ -3174,10 +3162,9 @@ class macro:
             if serverKey != "public":
                 serverName = "primary private server" if serverKey == "private_server_link" else serverKey.replace("_", " ")
                 self.logger.webhook("", f"Rejoin attempt {launchedAttempts}/{len(attempts)}: {serverName}", "dark brown")
-            elif privateServerLinks and i == len(privateServerLinks) * 2:
-                self.logger.webhook("", "All configured private servers failed; falling back to a public server", "red", "screen", ping_category="ping_disconnects")
+            elif privateServerLink and i == 5:
+                self.logger.webhook("", "Private-server reconnects failed; falling back to a public server", "red", "screen", ping_category="ping_disconnects")
             
-            time.sleep(8)
             #execute rejoin method
             if joinPS:
                 browserLink = psLink
@@ -3230,7 +3217,7 @@ class macro:
             robloxOpenTime = 0
             gameLoaded = False
             lastJoinErrorScan = 0
-            while time.time() - loadStartTime < 240:
+            while time.time() - loadStartTime < 36:
                 # Roblox can recreate its window during launch, so refresh bounds
                 # before every round of visual checks.
                 if appManager.isAppOpen("roblox"):
@@ -3339,7 +3326,7 @@ class macro:
             if not gameLoaded and rejoinSuccess:
                 self.logger.webhook(
                     "",
-                    f"Game load was not confirmed within four minutes; trying the next rejoin target ({launchedAttempts}/{len(attempts)}).",
+                    f"Game load was not confirmed within 36 seconds; trying the next rejoin target ({launchedAttempts}/{len(attempts)}).",
                     "red",
                     "screen",
                     ping_category="ping_disconnects",
@@ -3454,6 +3441,7 @@ class macro:
                 self.keyboard.keyDown(direction, False)
                 while anyHivePromptVisible():
                     time.sleep(0.01)
+                self.keyboard.keyUp(direction, False)
 
                 while True:
                     claimedSlot = checkCurrentHive(slot)
@@ -3462,10 +3450,25 @@ class macro:
                     if claimHivePromptVisible() or occupiedHivePromptVisible():
                         self.keyboard.keyUp(direction, False)
                         return 0
-                    time.sleep(0.01)
+                    # Move in small increments so OCR has time to see the next
+                    # hive prompt before the character passes its interaction range.
+                    self.keyboard.walk(direction, 0.08, applyHaste=False)
+                    time.sleep(0.12)
 
-            # The spawn route reaches hive 1, so first move to the preferred
-            # starting position. The claimed slot is always saved automatically.
+            # Do not begin the hive scan until the initial route has actually
+            # reached a hive prompt. This prevents a failed join from being
+            # treated as if it had started at hive 1.
+            for _ in range(8):
+                if anyHivePromptVisible():
+                    break
+                self.keyboard.walk("w", 0.1, applyHaste=False)
+                time.sleep(0.15)
+            else:
+                self.logger.webhook("", "Could not find a hive prompt after joining; retrying rejoin", "dark brown", "screen")
+                continue
+
+            # The initial route has been confirmed at hive 1; now move to the
+            # preferred starting position. The claimed slot is saved automatically.
             self.walkHiveSlots("a", preferredHiveSlot - 1)
             newHiveNumber = checkCurrentHive(preferredHiveSlot)
 
