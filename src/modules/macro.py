@@ -2967,13 +2967,11 @@ class macro:
         first_attempt_color = None
         for i in range(max_attempts):
             if self.cannonFromHive:
-                self.keyboard.walk("w", 0.8)
                 hiveNumber = self.setdat["hive_number"]
             else:
                 hiveNumber = 3
             self.keyboard.walk("d", 1.2 * hiveNumber + i)
-            if not self.cannonFromHive:
-                self.keyboard.walk("w", 0.2)
+            self.keyboard.walk("w", 0.8 if self.cannonFromHive else 0.2)
             self.keyboard.keyDown("d")
             time.sleep(0.5)
             self.keyboard.slowPress("space")
@@ -3131,6 +3129,8 @@ class macro:
 
     def rejoin(self, rejoinMsg = "Rejoining", placeId = MAIN_GAME_PLACE_ID, claimHive = True, usePrivateServer = True):
         self.canDetectNight = False
+        self.location = "spawn"
+        self.cannonFromHive = False
         placeId = str(placeId or MAIN_GAME_PLACE_ID)
         privateServerLink = str(self.setdat.get("private_server_link", "") or "").strip() if usePrivateServer else ""
         self.logger.webhook("",rejoinMsg, "dark brown")
@@ -3470,6 +3470,13 @@ class macro:
             # The initial route has been confirmed at hive 1; now move to the
             # preferred starting position. The claimed slot is saved automatically.
             self.walkHiveSlots("a", preferredHiveSlot - 1)
+            for _ in range(10):
+                if anyHivePromptVisible():
+                    break
+                time.sleep(0.15)
+            else:
+                self.logger.webhook("", f"Could not find a prompt for preferred hive {preferredHiveSlot}; retrying rejoin", "dark brown", "screen")
+                continue
             newHiveNumber = checkCurrentHive(preferredHiveSlot)
 
             if not newHiveNumber:
@@ -3544,7 +3551,7 @@ class macro:
                 self.moveMouseToDefault()
                 time.sleep(1)
                 self.convert(bypass=True)
-                #no need to reset
+                self.cannonFromHive = True
                 self.canDetectNight = True
                 self.clear_task_status()
                 return True
