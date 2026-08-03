@@ -3342,17 +3342,25 @@ class macro:
             # self.keyboard.keyUp("d", False)
             # self.keyboard.keyUp("w", False)
             self.setRobloxWindowInfo()
-            self.keyboard.keyDown("d", False)
-            self.keyboard.timeWaitNoHasteCompensation(0.548)
-            self.keyboard.keyDown("w", False)
-            self.keyboard.timeWaitNoHasteCompensation(3.15)
-            self.keyboard.keyUp("d", False)
-            self.keyboard.keyUp("w", False)
             preferredHiveSlot = self.setdat.get("preferred_hive_slot", 1)
             try:
                 preferredHiveSlot = max(1, min(6, int(preferredHiveSlot)))
             except (TypeError, ValueError):
                 preferredHiveSlot = 3
+
+            # Slots 3-6 approach from directly in front of slot 3. Slots 1-2
+            # retain the original diagonal approach to slot 1.
+            startingHiveSlot = 3 if preferredHiveSlot >= 3 else 1
+            # Every rejoin starts at spawn. Slot 3 is reached by a shorter
+            # straight path; the established diagonal slot-1 route stays put.
+            spawnToHiveTime = 2.5 if startingHiveSlot == 3 else 3.15
+            if startingHiveSlot == 1:
+                self.keyboard.keyDown("d", False)
+                self.keyboard.timeWaitNoHasteCompensation(0.548)
+            self.keyboard.keyDown("w", False)
+            self.keyboard.timeWaitNoHasteCompensation(spawnToHiveTime)
+            self.keyboard.keyUp("d", False)
+            self.keyboard.keyUp("w", False)
 
             excludedHiveSlotsRaw = self.setdat.get("hive_exclude_slot", [])
             if not isinstance(excludedHiveSlotsRaw, (list, tuple, set)):
@@ -3370,8 +3378,7 @@ class macro:
             availableHiveSlots = []
 
             # Begin at the preferred slot, search toward hive 1, then reverse
-            # and search through hive 6. Movement between pads waits for the
-            # previous hive prompt to disappear before checking the next one.
+            # and search through hive 6.
             def claimHivePromptVisible():
                 return self.isBesideEImage("claimhive")
 
@@ -3396,38 +3403,28 @@ class macro:
                 return 0
 
             def moveToNextHive(slot, direction):
-                self.keyboard.keyDown(direction, False)
-                while anyHivePromptVisible():
-                    time.sleep(0.01)
-                self.keyboard.keyUp(direction, False)
-
-                while True:
+                # Move directly between hive pads. Do not use short alignment
+                # walks here: each scan step corresponds to exactly one slot.
+                self.walkHiveSlots(direction, 1)
+                for _ in range(10):
                     claimedSlot = checkCurrentHive(slot)
                     if claimedSlot:
                         return claimedSlot
                     if claimHivePromptVisible() or occupiedHivePromptVisible():
-                        self.keyboard.keyUp(direction, False)
                         return 0
-                    # Move in small increments so OCR has time to see the next
-                    # hive prompt before the character passes its interaction range.
-                    self.keyboard.walk(direction, 0.08, applyHaste=False)
-                    time.sleep(0.12)
+                    time.sleep(0.15)
+                return 0
 
-            # Do not begin the hive scan until the initial route has actually
-            # reached a hive prompt. This prevents a failed join from being
-            # treated as if it had started at hive 1.
-            for _ in range(8):
-                if anyHivePromptVisible():
-                    break
-                self.keyboard.walk("w", 0.1, applyHaste=False)
-                time.sleep(0.15)
-            else:
+            # The entry route must finish directly on its intended hive pad.
+            # Do not try to correct it with short forward walks, because that
+            # can carry the player past the hive row and toward the wall.
+            if not anyHivePromptVisible():
                 self.logger.webhook("", "Could not find a hive prompt after joining; retrying rejoin", "dark brown", "screen")
                 continue
 
             # Check the preferred slot first. Only scan other pads after it is
             # occupied, excluded, or the configuration requests a full scan.
-            self.walkHiveSlots("a", preferredHiveSlot - 1)
+            self.walkHiveSlots("a", preferredHiveSlot - startingHiveSlot)
             for _ in range(10):
                 if anyHivePromptVisible():
                     break
