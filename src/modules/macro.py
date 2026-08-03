@@ -3362,17 +3362,22 @@ class macro:
             self.keyboard.keyUp("d", False)
             self.keyboard.keyUp("w", False)
 
-            excludedHiveSlotsRaw = self.setdat.get("hive_exclude_slot", [])
-            if not isinstance(excludedHiveSlotsRaw, (list, tuple, set)):
-                excludedHiveSlotsRaw = [] if excludedHiveSlotsRaw in (None, "", 0, "0") else [excludedHiveSlotsRaw]
             excludedHiveSlots = set()
-            for slot in excludedHiveSlotsRaw:
-                try:
-                    slot = int(slot)
-                except (TypeError, ValueError):
-                    continue
-                if 1 <= slot <= 6:
-                    excludedHiveSlots.add(slot)
+            if joinPS:
+                excludedHiveSlotsRaw = self.setdat.get("hive_exclude_slot", [])
+                if not isinstance(excludedHiveSlotsRaw, (list, tuple, set)):
+                    excludedHiveSlotsRaw = [] if excludedHiveSlotsRaw in (None, "", 0, "0") else [excludedHiveSlotsRaw]
+                for slot in excludedHiveSlotsRaw:
+                    try:
+                        slot = int(slot)
+                    except (TypeError, ValueError):
+                        continue
+                    if 1 <= slot <= 6:
+                        excludedHiveSlots.add(slot)
+
+                # The preferred slot always takes priority over private-server
+                # exclusions.
+                excludedHiveSlots.discard(preferredHiveSlot)
 
             # Begin at the preferred slot, search toward hive 1, then reverse
             # and search through hive 6.
