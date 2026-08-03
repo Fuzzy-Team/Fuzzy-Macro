@@ -415,6 +415,15 @@
       const parentOther = document.getElementById("other");
       buildStandardContainer(parentOther, "Rejoining", "", [
         {
+          id: "always_rejoin",
+          title: "Always Rejoin",
+          desc: "Rejoin Bee Swarm whenever the macro starts. Disable this to keep the current Roblox session when it is already open.",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
           id: "private_server_link",
           title: "Private Server Link (Optional)",
           desc: "The link of a private server for the macro to join.<br>If left blank, the macro will join a public server instead",
