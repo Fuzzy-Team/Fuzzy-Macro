@@ -3374,9 +3374,6 @@ class macro:
                 if 1 <= slot <= 6:
                     excludedHiveSlots.add(slot)
 
-            claimFirstAvailableHive = self.setdat.get("claim_first_available_hive", True) is not False
-            availableHiveSlots = []
-
             # Begin at the preferred slot, search toward hive 1, then reverse
             # and search through hive 6.
             def claimHivePromptVisible():
@@ -3394,12 +3391,8 @@ class macro:
                     self.keyboard.keyUp("d", False)
                     if slot in excludedHiveSlots:
                         return 0
-                    if claimFirstAvailableHive:
-                        self.keyboard.press("e")
-                        return slot
-                    if slot not in availableHiveSlots:
-                        availableHiveSlots.append(slot)
-                    return 0
+                    self.keyboard.press("e")
+                    return slot
                 return 0
 
             def moveToNextHive(slot, direction):
@@ -3439,7 +3432,6 @@ class macro:
             if not newHiveNumber and (
                 preferredHiveTaken
                 or preferredHiveSlot in excludedHiveSlots
-                or not claimFirstAvailableHive
             ):
                 scanSteps = (
                     [(slot, "d") for slot in range(preferredHiveSlot - 1, 0, -1)]
@@ -3449,14 +3441,6 @@ class macro:
                     newHiveNumber = moveToNextHive(checkingHive, direction)
                     if newHiveNumber:
                         break
-
-            if not newHiveNumber and availableHiveSlots:
-                newHiveNumber = min(availableHiveSlots, key=lambda slot: (abs(slot - preferredHiveSlot), slot))
-                self.walkHiveSlots("d", 6 - newHiveNumber)
-                if claimHivePromptVisible():
-                    self.keyboard.press("e")
-                else:
-                    newHiveNumber = 0
 
             rejoinSuccess = newHiveNumber != 0
 
