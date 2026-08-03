@@ -8592,8 +8592,9 @@ class macro:
             hourlyReportBackgroundThread = threading.Thread(target=self.hourlyReportBackground, daemon=True)
             hourlyReportBackgroundThread.start()
         
-        #if roblox is not open, rejoin
-        if not appManager.openApp("Roblox"):
+        # Rejoin at startup unless Roblox is already open and the user has
+        # explicitly disabled Always Rejoin.
+        if self.setdat.get("always_rejoin", True) or not appManager.openApp("Roblox"):
             self.rejoin()
         else:
             #toggle fullscreen
