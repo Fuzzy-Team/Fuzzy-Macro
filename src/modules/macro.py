@@ -3390,7 +3390,7 @@ class macro:
             self.keyboard.timeWaitNoHasteCompensation(3.15)
             self.keyboard.keyUp("d", False)
             self.keyboard.keyUp("w", False)
-            preferredHiveSlot = self.setdat.get("preferred_hive_slot", 3)
+            preferredHiveSlot = self.setdat.get("preferred_hive_slot", 1)
             try:
                 preferredHiveSlot = max(1, min(6, int(preferredHiveSlot)))
             except (TypeError, ValueError):
@@ -3467,8 +3467,8 @@ class macro:
                 self.logger.webhook("", "Could not find a hive prompt after joining; retrying rejoin", "dark brown", "screen")
                 continue
 
-            # The initial route has been confirmed at hive 1; now move to the
-            # preferred starting position. The claimed slot is saved automatically.
+            # Check the preferred slot first. Only scan other pads after it is
+            # occupied, excluded, or the configuration requests a full scan.
             self.walkHiveSlots("a", preferredHiveSlot - 1)
             for _ in range(10):
                 if anyHivePromptVisible():
@@ -3477,9 +3477,15 @@ class macro:
             else:
                 self.logger.webhook("", f"Could not find a prompt for preferred hive {preferredHiveSlot}; retrying rejoin", "dark brown", "screen")
                 continue
+
+            preferredHiveTaken = bool(occupiedHivePromptVisible())
             newHiveNumber = checkCurrentHive(preferredHiveSlot)
 
-            if not newHiveNumber:
+            if not newHiveNumber and (
+                preferredHiveTaken
+                or preferredHiveSlot in excludedHiveSlots
+                or not claimFirstAvailableHive
+            ):
                 scanSteps = (
                     [(slot, "d") for slot in range(preferredHiveSlot - 1, 0, -1)]
                     + [(slot, "a") for slot in range(2, 7)]
