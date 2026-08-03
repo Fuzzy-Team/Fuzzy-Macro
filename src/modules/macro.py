@@ -6952,6 +6952,27 @@ class macro:
                 # Natro. For OCR, remove status words before mapping the action.
                 return re.split(r'\bcomplete\b', textChunk, maxsplit=1, flags=re.IGNORECASE)[0].strip()
 
+            def brownObjectivesNamedInText(textChunk):
+                """Return title objectives explicitly identified by an OCR row.
+
+                Brown Bear quest titles encode the exact objectives in order. OCR
+                can miss an entire panel, so a shortened detection list must not
+                be used to shift later panels onto earlier title objectives.
+                """
+                import re
+
+                normalized = self.convertCyrillic(textChunk.lower())
+                words = set(re.sub(r"[^a-z]+", " ", normalized).split())
+                matches = []
+                for objective in titleObjectives:
+                    kind, target = objective.split("_", 1)
+                    if kind == "pollen":
+                        if target in words and "pollen" in words:
+                            matches.append(objective)
+                    elif kind == "gather" and all(word in words for word in target.replace("_", " ").split()):
+                        matches.append(objective)
+                return matches
+
             def getBrownPanelStatus(panel, textChunk):
                 if objectiveTextShowsIncompleteProgress(textChunk):
                     return "incomplete"
@@ -7028,12 +7049,19 @@ class macro:
                 if itemIndex >= len(titleObjectives) and isComplete and len(textChunk.split()) < 5:
                     continue
 
-                if itemIndex < len(titleObjectives):
+                # Identify the objective by the field/color named in its own
+                # panel.  Position is only a safe fallback when no panels were
+                # missed, otherwise a missing middle row shifts every later row.
+                mappedObjectives = brownObjectivesNamedInText(textChunk)
+                if not mappedObjectives and len(brownItems) == len(titleObjectives):
                     mappedObjectives = [titleObjectives[itemIndex]]
-                else:
+                elif not mappedObjectives and len(brownItems) != len(titleObjectives):
                     parseText = cleanBrownObjectiveText(textChunk)
                     parsedObjective = self.parseQuestObjective(parseText)
-                    mappedObjectives = self.mapObjectiveToMacroAction(parsedObjective, parseText)
+                    mappedObjectives = [
+                        objective for objective in self.mapObjectiveToMacroAction(parsedObjective, parseText)
+                        if objective in titleObjectives
+                    ]
 
                 if not isComplete:
                     for objective in mappedObjectives:
@@ -7049,7 +7077,10 @@ class macro:
                 cv2.rectangle(annotatedScreen, (x, y), (x+w, y+h), color, 2)
                 cv2.putText(annotatedScreen, label, (x, max(0, y-5)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
 
-            for objective in titleObjectives[len(brownItems):]:
+            # A title objective with no positively identified panel is treated as
+            # incomplete. This is conservative, but it prevents OCR loss from
+            # assigning another row's completion state to it.
+            for objective in titleObjectives:
                 if objective not in incompleteObjectives and objective not in completedObjectives:
                     incompleteObjectives.append(objective)
 
