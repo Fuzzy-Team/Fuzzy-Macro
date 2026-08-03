@@ -3857,30 +3857,30 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         success, message = update_setting(mob_key, enabled.lower() == "true")
         await interaction.response.send_message(message)
     
-    @bot.tree.command(name="hiveslot", description = "Change the hive slot number (1-6)")
+    @bot.tree.command(name="hiveslot", description = "Change the preferred hive slot (1-6)")
     @requires_discord_permission("configuration")
-    @app_commands.describe(slot="Hive slot number (1-6, where 1 is closest to cannon)")
+    @app_commands.describe(slot="Preferred hive slot (1-6, where 1 is closest to cannon)")
     async def hive_slot(interaction: discord.Interaction, slot: int):
-        """Change the hive slot number"""
+        """Change the preferred hive slot."""
         try:
             # Validate slot range
             if slot < 1 or slot > 6:
-                await interaction.response.send_message("❌ Hive slot must be between 1 and 6")
+                await interaction.response.send_message("❌ Preferred hive slot must be between 1 and 6")
                 return
             
-            # Update the setting
-            success, message = update_setting("hive_number", slot)
+            # Update the preferred slot; hive_number tracks the slot currently claimed.
+            success, message = update_setting("preferred_hive_slot", slot)
             
             if success:
                 # Trigger GUI update if updateGUI is available
                 if updateGUI is not None:
                     updateGUI.value = 1
-                await interaction.response.send_message(f"✅ Hive slot changed to {slot}")
+                await interaction.response.send_message(f"✅ Preferred hive slot changed to {slot}")
             else:
                 await interaction.response.send_message(f"❌ {message}")
                 
         except Exception as e:
-            await interaction.response.send_message(f"❌ Error changing hive slot: {str(e)}")
+            await interaction.response.send_message(f"❌ Error changing preferred hive slot: {str(e)}")
 
     @bot.tree.command(name="usehotbar", description="Use a hotbar slot (1-7)")
     @requires_discord_permission("task_interrupts")
