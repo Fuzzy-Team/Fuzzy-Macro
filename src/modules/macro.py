@@ -31,7 +31,6 @@ import numpy as np
 import threading
 from modules.submacros.backpack import bpc
 from modules.screen.imageSearch import *
-import webbrowser
 from pynput.keyboard import Controller
 import cv2
 from modules.screen.color_check import get_sample_colors, percent_pixels_similar_to_color
@@ -3157,43 +3156,23 @@ class macro:
             if joinPS and psLink in invalidServerLinks:
                 continue
             launchedAttempts += 1
-            rejoinMethod = str(self.setdat.get("rejoin_method", "deeplink")).strip().lower()
-            browserLink = f"https://www.roblox.com/games/{placeId}"
             if serverKey != "public":
                 serverName = "primary private server" if serverKey == "private_server_link" else serverKey.replace("_", " ")
                 self.logger.webhook("", f"Rejoin attempt {launchedAttempts}/{len(attempts)}: {serverName}", "dark brown")
             elif privateServerLink and i == 5:
                 self.logger.webhook("", "Private-server reconnects failed; falling back to a public server", "red", "screen", ping_category="ping_disconnects")
             
-            #execute rejoin method
+            # A Roblox deeplink can teleport an already-running client and
+            # launches the client itself when Roblox is not open. Keeping
+            # the process alive avoids a full restart on every rejoin.
+            deeplink = f"roblox://placeID={placeId}"
             if joinPS:
-                browserLink = psLink
-            if rejoinMethod == "deeplink":
-                # A Roblox deeplink can teleport an already-running client and
-                # launches the client itself when Roblox is not open. Keeping
-                # the process alive avoids a full restart on every rejoin.
-                deeplink = f"roblox://placeID={placeId}"
-                if joinPS:
-                    deeplink = self._privateServerDeeplink(placeId, psLink)
-                    if not deeplink:
-                        invalidServerLinks.add(psLink)
-                        self.logger.webhook("", f"Invalid {serverKey.replace('_', ' ')}; trying the next server.", "red", "screen", ping_category="ping_critical_errors")
-                        continue
-                appManager.openDeeplink(deeplink)
-            elif rejoinMethod == "new tab":
-                webbrowser.open(browserLink, new = 2)
-            elif rejoinMethod == "reload":
-                webbrowser.open(browserLink, new = 2)
-                time.sleep(2)
-                if sys.platform == "darwin":
-                    self.keyboard.keyDown("command")
-                else:
-                    self.keyboard.keyDown("ctrl")
-                self.keyboard.press("r")
-                if sys.platform == "darwin":
-                    self.keyboard.keyUp("command")
-                else:
-                    self.keyboard.keyUp("ctrl")
+                deeplink = self._privateServerDeeplink(placeId, psLink)
+                if not deeplink:
+                    invalidServerLinks.add(psLink)
+                    self.logger.webhook("", f"Invalid {serverKey.replace('_', ' ')}; trying the next server.", "red", "screen", ping_category="ping_critical_errors")
+                    continue
+            appManager.openDeeplink(deeplink)
             # The sprinkler prompt is Fuzzy's established indicator that the
             # joined Bee Swarm session is ready for macro inputs.
             sprinklerImg = self.adjustImage("./images/menu", "sprinkler")
@@ -3202,7 +3181,6 @@ class macro:
             # briefly while Roblox starts processing this new request.
             joinErrorScanAfter = loadStartTime + 5
             signUpImage = self.adjustImage("./images/menu", "signup")
-            robloxHomeImage = self.adjustImage("./images/menu", "robloxhome")
             disconnectImage = self.adjustImage("./images/menu", "disconnect")
             # prepare rejoin color-based detection
             try:
@@ -3277,22 +3255,20 @@ class macro:
                 ):
                     gameLoaded = True
                     break
-                if rejoinMethod == "deeplink":
-                    #check if the user is stuck on the sign up screen
-                    if robloxOpenTime and locateImageOnScreen(signUpImage, self.robloxWindow.mx+(self.robloxWindow.mw/4), self.robloxWindow.my+(self.robloxWindow.mh/3), self.robloxWindow.mw/2, self.robloxWindow.mh*2/3, 0.7):
-                        self.logger.webhook("","Not logged into the roblox app. Rejoining via the browser. For a smoother experience, please ensure you are logged into the Roblox app beforehand.","red","screen", ping_category="ping_disconnects")
-                        rejoinMethod = "new tab"
-                        continue
-                    #check if home page is opened instead of the app
-                    # if locateImageOnScreen(robloxHomeImage, self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw/10, self.robloxWindow.mh/6, 0.7) and time.time() - loadStartTime > 10:
-                    if robloxOpenTime and time.time() - robloxOpenTime > 5:
-                        robloxScreen = mssScreenshot(self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw/2, self.robloxWindow.mh/2.5)
-                        robloxScreenText = '\n'.join([x[1][0].lower() for x in ocr.ocrRead(robloxScreen)])
-                        if "connect" in robloxScreenText:
-                            print(robloxScreenText)
-                            self.logger.webhook("","Roblox Home Page is open","brown","screen")
-                            rejoinSuccess = False
-                            break
+                # Check if the user is stuck on the sign-up screen. Rejoining
+                # always uses the Roblox app deeplink, so prompt them to sign in.
+                if robloxOpenTime and locateImageOnScreen(signUpImage, self.robloxWindow.mx+(self.robloxWindow.mw/4), self.robloxWindow.my+(self.robloxWindow.mh/3), self.robloxWindow.mw/2, self.robloxWindow.mh*2/3, 0.7):
+                    self.logger.webhook("", "Not logged into the Roblox app. Please sign in to continue rejoining via deeplink.", "red", "screen", ping_category="ping_disconnects")
+                    rejoinSuccess = False
+                    break
+                if robloxOpenTime and time.time() - robloxOpenTime > 5:
+                    robloxScreen = mssScreenshot(self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw/2, self.robloxWindow.mh/2.5)
+                    robloxScreenText = '\n'.join([x[1][0].lower() for x in ocr.ocrRead(robloxScreen)])
+                    if "connect" in robloxScreenText:
+                        print(robloxScreenText)
+                        self.logger.webhook("","Roblox Home Page is open","brown","screen")
+                        rejoinSuccess = False
+                        break
 
                 if locateImageOnScreen(disconnectImage, self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw, self.robloxWindow.mh, 0.75):
                     self.logger.webhook("", "Roblox disconnected while loading; retrying rejoin", "dark brown", "screen")
@@ -3342,24 +3318,6 @@ class macro:
             #     self.logger.webhook("","Roblox is not in fullscreen, activating fullscreen", "dark brown")
             #     self.toggleFullScreen()
 
-            #if use browser to rejoin, close the browser
-            if rejoinMethod != "deeplink":
-                time.sleep(2)
-                webbrowser.open("https://docs.python.org/3/library/webbrowser.html", autoraise=True)
-                time.sleep(0.5)
-                for _ in range(2):
-                    if sys.platform == "darwin":
-                        self.keyboard.keyDown("command")
-                    else:
-                        self.keyboard.keyDown("ctrl")
-                    self.keyboard.press("w")
-                    if sys.platform == "darwin":
-                        self.keyboard.keyUp("command")
-                    else:
-                        self.keyboard.keyUp("ctrl")
-                    time.sleep(0.5)
-                appManager.openApp("Roblox")
-            
             self.startDetect()
             if not claimHive:
                 mouse.click()
