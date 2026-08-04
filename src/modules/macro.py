@@ -3642,12 +3642,10 @@ class macro:
                 if isSproutGather and pattern == "fuzzy_ai_gather":
                     self._fuzzy_ai_gather_state = {}
                 preloadedAIGatherNameSpace = {**locals(), **globals()}
-                self.logger.webhook(aiPatternLabels.get(pattern, "AI Gather"), "Initialization started before travel.", "light blue")
                 with open(f"../settings/patterns/{pattern}.py") as patternFile:
                     exec(patternFile.read(), preloadedAIGatherNameSpace)
-            except Exception as e:
+            except Exception:
                 print(traceback.format_exc())
-                self.logger.webhook(aiPatternLabels.get(pattern, "AI Gather"), f"Pre-travel initialization failed: {e}", "orange")
 
         landedInField = False
         if skipTravel:
@@ -3914,8 +3912,6 @@ class macro:
 
         self.isGathering = True
         firstPattern = True
-        fuzzyAIInitStartedLogged = False
-        fuzzyAIInitLogged = False
         fuzzyAILastError = ""
         fuzzyAIFallbackLogged = False
         lastGooTime = 0  # Track when goo was last used
@@ -4074,13 +4070,6 @@ class macro:
             #ensure that the pattern works
             try:
                 aiPatternLabel = aiPatternLabels.get(pattern, "AI Gather")
-                if pattern in aiPatternLabels and not fuzzyAIInitStartedLogged:
-                    self.logger.webhook(
-                        aiPatternLabel,
-                        "Initialization started.",
-                        "light blue",
-                    )
-                    fuzzyAIInitStartedLogged = True
                 exec(open(f"../settings/patterns/{pattern}.py").read(), gatherNameSpace)
                 if pattern in aiPatternLabels:
                     stateGlobalKey, stateAttributeKey = aiPatternStateKeys.get(
@@ -4091,15 +4080,8 @@ class macro:
                     if not isinstance(fuzzy_state, dict):
                         fuzzy_state = getattr(self, stateAttributeKey, {})
                     if isinstance(fuzzy_state, dict) and fuzzy_state.get("ready"):
-                        if not fuzzyAIInitLogged:
-                            self.logger.webhook(
-                                aiPatternLabel,
-                                "Initialization succeeded.",
-                                "bright green",
-                            )
-                            fuzzyAIInitLogged = True
-                            fuzzyAILastError = ""
-                            fuzzyAIFallbackLogged = False
+                        fuzzyAILastError = ""
+                        fuzzyAIFallbackLogged = False
                     else:
                         runtime_error = ""
                         if isinstance(fuzzy_state, dict):
