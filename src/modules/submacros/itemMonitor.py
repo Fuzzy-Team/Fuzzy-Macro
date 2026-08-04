@@ -409,7 +409,7 @@ class ItemReportDrawer:
 
         self._drawPanel(items_region, "Items Gained")
         self._drawPanel(this_hour_region, "This Hour" if report_type == "hourly" else "This Session")
-        self._drawPanel(info_region, f"ItemMonitor v{self.VERSION}")
+        self._drawPanel(info_region, f"ItemMonitor")
 
         self._drawItemCards(items_region, sorted_items)
         self._drawTimeline(items_region, timeline)
@@ -428,8 +428,6 @@ class ItemReportDrawer:
             f"Total Items Detected: {total_detected}",
             f"Queries Per Sec: {qps:.2f}",
             f"Uptime: {uptime_str}",
-            platform.system() + (" " + platform.release() if platform.release() else ""),
-            f"{W}x{H}",
         ]
         font = self.getFont("semibold", 36)
         y = iy + 80
@@ -441,7 +439,7 @@ class ItemReportDrawer:
 
         # Footer branding
         footer_font = self.getFont("semibold", 32)
-        version_text = f"Fuzzy v{getMacroVersion()}"
+        version_text = f"Fuzzy Macro v{getMacroVersion()}"
         bbox = self.draw.textbbox((0, 0), version_text, font=footer_font)
         self.draw.text(
             (ix + (iw - (bbox[2] - bbox[0])) / 2, iy + ih - 60),
