@@ -4063,6 +4063,24 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             else:
                 await interaction.followup.send(file=discord.File("hourlyReport.png"))
 
+            # Separate Item Monitor report when enabled
+            if setdat.get("item_monitor", True):
+                try:
+                    from modules.submacros.itemMonitor import generate_item_report
+                    snapshot = getattr(hr, "itemMonitorSnapshot", None)
+                    if snapshot and snapshot.get("collected_items"):
+                        path, item_fields = generate_item_report(snapshot, setdat, report_type="hourly")
+                        if path and os.path.exists(path):
+                            from discord import Embed
+                            embed = Embed(title="Item Monitor", color=0x9966FF)
+                            if item_fields:
+                                for f in item_fields:
+                                    embed.add_field(name=f["name"], value=f["value"], inline=f.get("inline", False))
+                            embed.set_image(url="attachment://itemReport.png")
+                            await interaction.followup.send(embed=embed, file=discord.File(path, filename="itemReport.png"))
+                except Exception as item_err:
+                    await interaction.followup.send(f"⚠️ Hourly report sent, but item report failed: {item_err}")
+
         except Exception as e:
             await interaction.followup.send(f"❌ Error generating hourly report: {str(e)}")
 
@@ -4089,6 +4107,18 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                     await interaction.followup.send(embed=embed, file=discord.File("finalReport.png"))
                 else:
                     await interaction.followup.send(file=discord.File("finalReport.png"))
+
+                # Separate Item Monitor report when enabled
+                item_path = getattr(finalReportObj, "lastItemReportPath", None)
+                if item_path and os.path.exists(item_path):
+                    from discord import Embed
+                    embed = Embed(title="Item Monitor", color=0x9966FF)
+                    item_fields = getattr(finalReportObj, "lastItemEmbedFields", None)
+                    if item_fields:
+                        for f in item_fields:
+                            embed.add_field(name=f["name"], value=f["value"], inline=f.get("inline", False))
+                    embed.set_image(url="attachment://itemReport.png")
+                    await interaction.followup.send(embed=embed, file=discord.File(item_path, filename="itemReport.png"))
             else:
                 await interaction.followup.send("❌ Failed to generate final session report - no data available.")
 
