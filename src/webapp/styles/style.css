@@ -1372,13 +1372,19 @@ select:focus {
   align-items: stretch;
 }
 
+.home-control-bar h2 {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
 .home-mode-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid var(--border);
+  padding-bottom: 0;
+  border-bottom: none;
 }
 
 .home-mode-header h2 {
