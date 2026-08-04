@@ -415,3 +415,6 @@ class log:
     
     def finalReport(self, title, desc, color, time_format=None, fields=None):
         self._deliver(title, desc, color, "finalReport.png", "ping_hourly_reports", "reports", time_format, allow_hourly_only_filter=False, fields=fields)
+
+    def itemReport(self, title, desc, color, time_format=None, fields=None, imagePath="itemReport.png"):
+        self._deliver(title, desc, color, imagePath, "ping_hourly_reports", "reports", time_format, allow_hourly_only_filter=False, fields=fields)

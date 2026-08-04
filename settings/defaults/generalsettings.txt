@@ -96,6 +96,7 @@ low_performance=False
 hourly_report_time_format=24
 hourly_report_uptime_buffs=['boost', 'haste', 'focus', 'bomb_combo', 'balloon_aura', 'inspire', 'melody', 'bear', 'baby_love']
 hourly_report_hourly_buffs=['tabby_love', 'polar_power', 'wealth_clock', 'blessing', 'bloat']
+item_monitor=False
 ngrok_auth=
 stream_quality=1920x1080
 start_keybind=F1

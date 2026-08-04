@@ -3599,6 +3599,17 @@ if __name__ == "__main__":
                     # Send final report webhook
                     logger.finalReport("Session Complete", description, "purple", fields=getattr(finalReportObj, "lastEmbedFields", None))
                     print("Final report sent successfully")
+
+                    item_path = getattr(finalReportObj, "lastItemReportPath", None)
+                    if item_path and os.path.exists(item_path):
+                        logger.itemReport(
+                            "Item Monitor",
+                            "",
+                            "purple",
+                            fields=getattr(finalReportObj, "lastItemEmbedFields", None),
+                            imagePath=item_path,
+                        )
+                        print("Item monitor report sent successfully")
                 else:
                     print("Failed to generate final report - no data available")
                     

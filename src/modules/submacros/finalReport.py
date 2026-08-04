@@ -114,6 +114,8 @@ class FinalReport:
         self.hourlyReport = hourlyReport if hourlyReport else HourlyReport()
         self.drawer = FinalReportDrawer()
         self.lastEmbedFields = None
+        self.lastItemReportPath = None
+        self.lastItemEmbedFields = None
 
     def _normalizeCumulativeHoneySeries(self, values, baseline=None):
         """Return a stable cumulative honey series while preserving sample count."""
@@ -509,9 +511,30 @@ class FinalReport:
                 self.lastEmbedFields = self.hourlyReport.generateEmbedFields(
                     hourlyReportStats, sessionTime, sessionHoney,
                     sessionHoney,  # honeyThisHour = total for session report
-                    onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData, reportType="session")
+                    onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData,
+                    reportType="session")
             else:
                 self.lastEmbedFields = None
+
+            # Standalone item monitor report (separate Discord message)
+            self.lastItemReportPath = None
+            self.lastItemEmbedFields = None
+            if isinstance(setdat, dict) and setdat.get("item_monitor", True):
+                snapshot = getattr(self.hourlyReport, "itemMonitorSnapshot", None) or {}
+                session_items = snapshot.get("session_collected_items") or snapshot.get("collected_items") or {}
+                if session_items:
+                    from modules.submacros.itemMonitor import generate_item_report
+                    item_snapshot = {
+                        "collected_items": dict(session_items),
+                        "session_collected_items": dict(session_items),
+                        "item_timeline": snapshot.get("item_timeline") or {},
+                        "total_items_detected": snapshot.get("total_items_detected", 0),
+                        "query_total": snapshot.get("query_total", 0),
+                        "start_time": snapshot.get("start_time"),
+                    }
+                    path, fields = generate_item_report(item_snapshot, setdat, report_type="session")
+                    self.lastItemReportPath = path
+                    self.lastItemEmbedFields = fields
 
             return sessionStats
         except Exception as e:
