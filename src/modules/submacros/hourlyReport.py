@@ -906,6 +906,7 @@ class HourlyReport():
         self.latestBuffKeys = []
         self.latestNectarQuantity = []
         self.lastEmbedFields = None
+        self.itemMonitorSnapshot = None
 
     def _defaultSessionReportStats(self):
         return {
@@ -990,7 +991,7 @@ class HourlyReport():
         
         return filtered_values
 
-    def generateEmbedFields(self, hourlyReportStats, sessionTime, sessionHoney, honeyThisHour, onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData, reportType="hourly"):
+    def generateEmbedFields(self, hourlyReportStats, sessionTime, sessionHoney, honeyThisHour, onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData, reportType="hourly", itemMonitorData=None):
         """Build old-style Discord embed text fields for hybrid embed+image output."""
         def fmt(n):
             return self.hourlyReportDrawer.millify(n).replace(" ", "")
@@ -1112,7 +1113,7 @@ class HourlyReport():
 
         return fields
 
-    def generateHourlyReport(self, setdat):
+    def generateHourlyReport(self, setdat, itemMonitorData=None):
         raw_hourly = setdat.get("hourly_report_hourly_buffs", "") if isinstance(setdat, dict) else ""
         hourly_buffs = normalizeHourlyBuffSelection(raw_hourly, self.configuredHourlyBuffs)
         self.configuredHourlyBuffs = hourly_buffs
@@ -1246,7 +1247,8 @@ class HourlyReport():
         if send_embed_text:
             self.lastEmbedFields = self.generateEmbedFields(
                 hourlyReportStats, sessionTime, sessionHoney, honeyThisHour,
-                    onlyValidHourlyHoney, displayBuffQuantity, nectarQuantity, planterData, reportType="hourly")
+                    onlyValidHourlyHoney, displayBuffQuantity, nectarQuantity, planterData,
+                    reportType="hourly")
         else:
             self.lastEmbedFields = None
 
@@ -1265,6 +1267,13 @@ class HourlyReport():
 
         self.uptimeBuffsValues = self._defaultHourlyUptimeBuffs()
         self.buffGatherIntervals = [0]*600
+        if self.itemMonitorSnapshot is not None:
+            self.itemMonitorSnapshot = {
+                **self.itemMonitorSnapshot,
+                "collected_items": {},
+                "item_timeline": {},
+                "session_collected_items": dict(self.itemMonitorSnapshot.get("session_collected_items") or {}),
+            }
 
         self.saveHourlyReportData()
     
@@ -1277,6 +1286,7 @@ class HourlyReport():
         self.latestBuffQuantity = []
         self.latestBuffKeys = []
         self.latestNectarQuantity = []
+        self.itemMonitorSnapshot = None
         self.resetHourlyStats()
     
     def addHourlyStat(self, stat, value):
@@ -1310,6 +1320,7 @@ class HourlyReport():
                 "latestBuffQuantity": self.latestBuffQuantity,
                 "latestBuffKeys": self.latestBuffKeys,
                 "latestNectarQuantity": self.latestNectarQuantity,
+                "itemMonitorSnapshot": self.itemMonitorSnapshot,
             }, f)
     
     def loadHourlyReportData(self):
@@ -1324,6 +1335,7 @@ class HourlyReport():
             self.latestBuffQuantity = data.get("latestBuffQuantity", [])
             self.latestBuffKeys = data.get("latestBuffKeys", [])
             self.latestNectarQuantity = data.get("latestNectarQuantity", [])
+            self.itemMonitorSnapshot = data.get("itemMonitorSnapshot")
 
 
 class HourlyReportDrawer:
@@ -1700,7 +1712,7 @@ class HourlyReportDrawer:
     def _drawStatMonitorReport(self, reportTitle, hourlyReportStats, sessionTime, honeyPerSec, sessionHoney,
                                honeyThisHour, onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData,
                                uptimeBuffsValues, buffGatherIntervals, configuredUptimeBuffs=None,
-                               configuredHourlyBuffs=None, sessionStats=None):
+                               configuredHourlyBuffs=None, sessionStats=None, itemMonitorData=None):
         self.canvasW = 6000
         self.canvasMaxH = 5800
         self.canvasSize = (6000, 5800)
