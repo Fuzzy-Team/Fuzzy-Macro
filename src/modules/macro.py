@@ -43,6 +43,7 @@ import math
 import re
 import ast
 from modules.submacros.hourlyReport import BUFF_RENDER_CONFIG, HourlyReport, BuffDetector
+from modules.submacros.itemMonitor import ItemMonitor
 from modules.submacros.liveGatherReport import LiveGatherReport, LiveQuestProgressReport
 from difflib import SequenceMatcher
 import fuzzywuzzy.process
@@ -717,6 +718,7 @@ class macro:
         self.logger = logModule.log(logQueue, logModule.delivery_uses_webhook(self.setdat), logModule.get_default_delivery_route(self.setdat), self.setdat.get("send_screenshot", True), blocking=self.setdat.get("low_performance", False), hourlyReportOnly=self.setdat.get("only_send_hourly_report", False), robloxWindow=self.robloxWindow, enableDiscordPing=True, discordUserID=self.setdat.get("discord_user_id", ""), pingSettings=pingSettings, webhookTimeFormat=self.setdat.get("webhook_time_format", 24), enableDiscordBot=logModule.delivery_uses_bot_messages(self.setdat), discordMessageQueue=discordMessageQueue, routeSettings=logModule.build_route_settings(self.setdat))
         self.buffDetector = BuffDetector(self.robloxWindow)
         self.hourlyReport = HourlyReport(self.buffDetector, self.setdat.get("hourly_report_time_format", 24))
+        self.itemMonitor = ItemMonitor(self.robloxWindow)
         self.memoryMatch = MemoryMatch(self.robloxWindow, debug=True)
 
         #setup an internal cooldown tracker. The cooldowns can be modified
@@ -6189,8 +6191,18 @@ class macro:
 
             #check if its time to send hourly report
             if currMin == 0 and time.time() - self.lastHourlyReport > 120:
+                itemSnapshot = self.itemMonitor.get_snapshot() if self.setdat.get("item_monitor", True) else None
                 hourlyReportData = self.hourlyReport.generateHourlyReport(self.setdat)
                 self.logger.hourlyReport("Hourly Report", "", "purple", fields=getattr(self.hourlyReport, "lastEmbedFields", None))
+
+                if itemSnapshot and itemSnapshot.get("collected_items"):
+                    try:
+                        from modules.submacros.itemMonitor import generate_item_report
+                        path, fields = generate_item_report(itemSnapshot, self.setdat, report_type="hourly")
+                        if path:
+                            self.logger.itemReport("Item Monitor", "", "purple", fields=fields, imagePath=path)
+                    except Exception:
+                        self.logger.webhook("Item Monitor Error", traceback.format_exc(), "red", ping_category="ping_critical_errors")
 
                 #add to history
                 with open("data/user/hourly_report_history.txt", "r") as f:
@@ -6214,6 +6226,7 @@ class macro:
                 self.lastHourlyReport = time.time()
                 #reset stats
                 self.hourlyReport.resetHourlyStats()
+                self.itemMonitor.reset_hourly()
 
             #Hourly report
             if self.status.value != "rejoining":
@@ -6226,6 +6239,19 @@ class macro:
 
                     self.hourlyReport.addHourlyStat("honey_per_min", honey)
                     self.hourlyReport.addHourlyStat("backpack_per_min", backpack)
+
+            # Item monitor: loot toast detection
+            if (
+                self.setdat.get("item_monitor", True)
+                and self.status.value != "rejoining"
+                and currSec != getattr(self, "prevItemMonitorSec", -1)
+            ):
+                self.prevItemMonitorSec = currSec
+                try:
+                    self.itemMonitor.detect_once()
+                    self.hourlyReport.itemMonitorSnapshot = self.itemMonitor.get_snapshot()
+                except Exception:
+                    pass
 
             if self.status.value != "rejoining" and not currSec%6 and currSec != self.prevSec:
                 i = (60*currMin + currSec)//6
@@ -8594,8 +8620,11 @@ class macro:
         #enable background threads
         self.nightDetectStreaks = 0
         self.hourlyReport.loadHourlyReportData()
+        if getattr(self.hourlyReport, "itemMonitorSnapshot", None):
+            self.itemMonitor.load_snapshot(self.hourlyReport.itemMonitorSnapshot)
         self.prevMin = -1  
         self.prevSec = -1
+        self.prevItemMonitorSec = -1
         self.multi = self.robloxWindow.multi
         self.lastHourlyReport = 0
 
