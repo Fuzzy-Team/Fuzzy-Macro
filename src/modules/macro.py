@@ -767,7 +767,7 @@ class macro:
         self.afb = False
         self.stop = False
 
-        self.hiveSlotTiles = 9.5 #distance between hive slots (in tiles)
+        self.hiveSlotTiles = 9.75 #distance between hive slots (in tiles)
 
 
         self.setRobloxWindowInfo(setYOffset=False)
@@ -3415,21 +3415,27 @@ class macro:
                     time.sleep(0.15)
                 return 0
 
-            # The entry route must finish directly on its intended hive pad.
-            # Do not try to correct it with short forward walks, because that
-            # can carry the player past the hive row and toward the wall.
-            if not anyHivePromptVisible():
-                self.logger.webhook("", "Could not find a hive prompt after joining; retrying rejoin", "dark brown", "screen")
-                continue
-
-            # Check the preferred slot first. Only scan other pads after it is
-            # occupied, excluded, or the configuration requests a full scan.
+            # Reach the preferred pad before deciding the join failed. A single
+            # prompt check right after the spawn walk can miss the E UI while it
+            # is still appearing, which caused an instant rejoin loop.
+            # Do not nudge forward with W here: that can carry past the hive row
+            # into the wall. If we overshot the pad, step back onto it instead.
             self.walkHiveSlots("a", preferredHiveSlot - startingHiveSlot)
-            for _ in range(10):
+            time.sleep(0.4)
+            promptFound = False
+            for _ in range(12):
                 if anyHivePromptVisible():
+                    promptFound = True
                     break
-                time.sleep(0.15)
-            else:
+                time.sleep(0.2)
+            if not promptFound:
+                for _ in range(3):
+                    self.stepBackOntoHivePad()
+                    time.sleep(0.35)
+                    if anyHivePromptVisible():
+                        promptFound = True
+                        break
+            if not promptFound:
                 self.logger.webhook("", f"Could not find a prompt for preferred hive {preferredHiveSlot}; retrying rejoin", "dark brown", "screen")
                 continue
 
