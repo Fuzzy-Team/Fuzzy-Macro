@@ -20,26 +20,17 @@
     </div>
   </div>
 
-  <!-- Bottom Row: Tasks/Planters and Logs -->
+  <!-- Bottom Row: Tasks and Logs/Planters -->
   <div class="flex-row gap-md flex-grow-1" style="min-height: 0;">
-    <!-- Left Column: Tasks and Planters -->
+    <!-- Left Column: Tasks -->
     <div class="flex-col flex-1 gap-md">
       <div class="poppins-medium standard-container flex-grow-1 overflow-y-auto" style="min-height: 15rem;">
         <h2>Tasks</h2>
         <div id="task-list" class="task-list-scroll w-100"></div>
       </div>
-      <div class="poppins-medium standard-container flex-col" id="planter-timers-container">
-        <div class="flex-row space-between">
-          <h2>Planter Timers</h2>
-          <button class="purple-button" id="clear-timers-btn">
-            Reset All Timers
-          </button>
-        </div>
-        <div class="planter-timers"></div>
-      </div>
     </div>
 
-    <!-- Right Column: Logs -->
+    <!-- Right Column: Logs and Planters -->
     <div class="flex-col flex-1 gap-md">
       <div class="poppins-regular standard-container flex-grow-1 overflow-y-auto flex-col gap-xs">
         <div class="flex-row space-between align-items-center mb-05 border-bottom">
@@ -54,6 +45,15 @@
         <div id="logs" class="flex-col gap-xs overflow-y-auto flex-grow-1">
           <!-- Logs will be appended here -->
         </div>
+      </div>
+      <div class="poppins-medium standard-container flex-col" id="planter-timers-container">
+        <div class="flex-row space-between">
+          <h2>Planter Timers</h2>
+          <button class="purple-button" id="clear-timers-btn">
+            Reset All Timers
+          </button>
+        </div>
+        <div class="planter-timers"></div>
       </div>
     </div>
   </div>
