@@ -767,7 +767,7 @@ class macro:
         self.afb = False
         self.stop = False
 
-        self.hiveSlotTiles = 9.2 #distance between hive slots (in tiles)
+        self.hiveSlotTiles = 9.5 #distance between hive slots (in tiles)
 
 
         self.setRobloxWindowInfo(setYOffset=False)
