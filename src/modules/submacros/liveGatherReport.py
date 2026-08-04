@@ -17,8 +17,8 @@ class LiveGatherReport:
     REFERENCE_CAPTURE = (650, 100)
     REFERENCE_CAPTURE_LEFT_OFFSET = -320
     REFERENCE_HUD_CARDS = (
-        (20, 0, 315, 36),
-        (320, 0, 615, 36),
+        (20, 0, 315, 40),
+        (320, 0, 615, 40),
     )
     REFERENCE_CARD_RADIUS = 7
 
@@ -183,21 +183,31 @@ class LiveGatherReport:
 
     def _capture_honey_pollen(self):
         x, y, window_width, _window_height = self._hud_capture_window()
-        scale = self._hud_pixel_scale()
-        capture_w = self._scale_length(self.REFERENCE_CAPTURE[0], scale)
-        capture_h = self._scale_length(self.REFERENCE_CAPTURE[1], scale)
+        capture_w, capture_h = self.REFERENCE_CAPTURE
 
-        # The Honey and Pollen cards are offset-sized Roblox UI elements. They
-        # retain their size at different window resolutions and move as a
-        # centered group.  mss uses physical pixels, so only apply the display
-        # backing scale (for example, 2x on Retina), never the window size.
+        # The Honey and Pollen cards retain their logical size and move as a
+        # centered group. On macOS, mss expects the same logical coordinate
+        # space returned by the window APIs. The returned bitmap can still use
+        # Retina pixels, so derive a separate scale for crops inside the image.
         capture_x = self._round_coord(
-            x + window_width / 2.0 + self.REFERENCE_CAPTURE_LEFT_OFFSET * scale
+            x + window_width / 2.0 + self.REFERENCE_CAPTURE_LEFT_OFFSET
         )
-        capture_y = self._round_coord(y + self.roblox_window.yOffset * scale)
+        capture_y = self._round_coord(y + self.roblox_window.yOffset)
         img = mssScreenshot(capture_x, capture_y, capture_w, capture_h).convert("RGBA")
-        honey = self._crop_hud_card(img, self._scale_box(self.REFERENCE_HUD_CARDS[0], scale, scale), scale, scale)
-        pollen = self._crop_hud_card(img, self._scale_box(self.REFERENCE_HUD_CARDS[1], scale, scale), scale, scale)
+        image_scale_x = img.width / float(capture_w)
+        image_scale_y = img.height / float(capture_h)
+        honey = self._crop_hud_card(
+            img,
+            self._scale_box(self.REFERENCE_HUD_CARDS[0], image_scale_x, image_scale_y),
+            image_scale_x,
+            image_scale_y,
+        )
+        pollen = self._crop_hud_card(
+            img,
+            self._scale_box(self.REFERENCE_HUD_CARDS[1], image_scale_x, image_scale_y),
+            image_scale_x,
+            image_scale_y,
+        )
         stacked = Image.new("RGBA", (max(honey.width, pollen.width), honey.height + pollen.height), (0, 0, 0, 0))
         stacked.paste(honey, (0, 0), honey)
         stacked.paste(pollen, (0, honey.height), pollen)
@@ -207,18 +217,14 @@ class LiveGatherReport:
         return out.getvalue()
 
     def _hud_capture_window(self):
-        """Return Roblox bounds in the physical-pixel space used by mss."""
+        """Return Roblox bounds in the logical coordinate space used by mss."""
         rw = self.roblox_window
-        pixel_ratio = max(1.0, float(getattr(rw, "multi", 1) or 1))
         return (
-            rw.mx * pixel_ratio,
-            rw.my * pixel_ratio,
-            rw.mw * pixel_ratio,
-            rw.mh * pixel_ratio,
+            rw.mx,
+            rw.my,
+            rw.mw,
+            rw.mh,
         )
-
-    def _hud_pixel_scale(self):
-        return max(1.0, float(getattr(self.roblox_window, "multi", 1) or 1))
 
     @staticmethod
     def _round_coord(value):
