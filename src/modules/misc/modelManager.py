@@ -26,6 +26,9 @@ COREML_MODELS = (
 ONNX_MODELS = (
     "token_detection_standard.onnx",
     "sprinkler_detection_standard.onnx",
+    "blooms-and-petals-standard.onnx",
+    "Blooms-and-petals-light.onnx",
+    "Blooms-and-petals-mini.onnx",
 )
 OBSOLETE_MODELS = (
     "best.mlpackage",

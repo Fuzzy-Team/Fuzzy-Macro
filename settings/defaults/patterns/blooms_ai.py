@@ -10,7 +10,7 @@ Requirements:
 - opencv-python
 - numpy
 - mss or Pillow
-- blooms-and-petals-standard.mlmodelc, Blooms-and-petals-light.mlmodelc, or Blooms-and-petals-mini.mlmodelc
+- blooms-and-petals-standard.mlmodelc/.onnx, Blooms-and-petals-light.mlmodelc/.onnx, or Blooms-and-petals-mini.mlmodelc/.onnx
 - sprinkler_detection_standard.mlmodelc or sprinkler_detection_standard.onnx
 
 - Version 2.0
@@ -59,7 +59,8 @@ SPRINKLER_INPUT_WIDTH = 736
 SPRINKLER_INPUT_HEIGHT = 736
 SPRINKLER_CONFIDENCE_THRESHOLD = 0.6
 PETAL_CONFIDENCE_THRESHOLD = 0.50
-RUNTIME_VERSION = 33
+NMS_THRESHOLD = 0.5
+RUNTIME_VERSION = 34
 MIN_TOKEN_DISTANCE = 0.3
 MAX_SPRINKLER_DISTANCE = 10.0
 TARGET_SPRINKLER_LABEL = None
@@ -93,9 +94,27 @@ IDLE_SPRINKLER_RADIUS = 0.40
 IDLE_RETURN_STEP = 1.25
 IDLE_SQUARE_STEP = 0.25
 BLOOM_MODEL_VARIANTS = {
-    "standard": ("Standard", "blooms-and-petals-standard.mlmodelc", 960, "var_1444"),
-    "light": ("Light", "Blooms-and-petals-light.mlmodelc", 768, "var_1440"),
-    "mini": ("Mini", "Blooms-and-petals-mini.mlmodelc", 512, "var_1440"),
+    "standard": (
+        "Standard",
+        "blooms-and-petals-standard.mlmodelc",
+        "blooms-and-petals-standard.onnx",
+        960,
+        "var_1444",
+    ),
+    "light": (
+        "Light",
+        "Blooms-and-petals-light.mlmodelc",
+        "Blooms-and-petals-light.onnx",
+        768,
+        "var_1440",
+    ),
+    "mini": (
+        "Mini",
+        "Blooms-and-petals-mini.mlmodelc",
+        "Blooms-and-petals-mini.onnx",
+        512,
+        "var_1440",
+    ),
 }
 
 IGNORED_TOKENS = {}
@@ -309,7 +328,7 @@ def _preprocess_coreml_image(frame, input_width, input_height):
     return Image.fromarray(rgb)
 
 
-def _preprocess_petal_image(frame, input_width, input_height):
+def _letterbox_rgb(frame, input_width, input_height):
     """Apply Ultralytics-style centered letterboxing and retain its inverse transform."""
     if frame.ndim == 3 and frame.shape[2] == 4:
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGB)
@@ -325,10 +344,21 @@ def _preprocess_petal_image(frame, input_width, input_height):
     pad_y = (input_height - resized_height) // 2
     letterboxed = np.full((input_height, input_width, 3), 114, dtype=np.uint8)
     letterboxed[pad_y:pad_y + resized_height, pad_x:pad_x + resized_width] = resized
+    return letterboxed, {"scale": scale, "pad_x": pad_x, "pad_y": pad_y}
 
+
+def _preprocess_petal_image(frame, input_width, input_height):
+    letterboxed, transform = _letterbox_rgb(frame, input_width, input_height)
     if Image is None:
         raise RuntimeError("Pillow is required for CoreML petal inference.")
-    return Image.fromarray(letterboxed), {"scale": scale, "pad_x": pad_x, "pad_y": pad_y}
+    return Image.fromarray(letterboxed), transform
+
+
+def _preprocess_petal_onnx_image(frame, input_width, input_height):
+    letterboxed, transform = _letterbox_rgb(frame, input_width, input_height)
+    normalized = letterboxed.astype(np.float32) / 255.0
+    chw = np.transpose(normalized, (2, 0, 1))
+    return np.expand_dims(chw, axis=0), transform
 
 
 def _preprocess_onnx_image(frame, input_width, input_height):
@@ -345,7 +375,43 @@ def _preprocess_onnx_image(frame, input_width, input_height):
     return np.expand_dims(chw, axis=0)
 
 
+def _postprocess(output, confidence_threshold):
+    """Decode classic YOLO ONNX output shaped [1, 4+nc, N]."""
+    outputs = np.squeeze(output[0])
+    if outputs.ndim != 2 or outputs.shape[0] < 5:
+        return []
+
+    class_probs = outputs[4:, :]
+    confidences = np.max(class_probs, axis=0)
+    mask = confidences > confidence_threshold
+    if not np.any(mask):
+        return []
+
+    filtered_confidences = confidences[mask]
+    class_ids = np.argmax(class_probs[:, mask], axis=0)
+    boxes_data = outputs[:4, mask]
+    cx, cy, box_w, box_h = boxes_data
+    x1 = cx - box_w / 2.0
+    y1 = cy - box_h / 2.0
+    boxes = np.stack((x1, y1, box_w, box_h), axis=1)
+
+    indices = cv2.dnn.NMSBoxes(
+        boxes.tolist(),
+        filtered_confidences.tolist(),
+        confidence_threshold,
+        NMS_THRESHOLD,
+    )
+
+    detections = []
+    if len(indices) > 0:
+        for index in np.array(indices).flatten():
+            bx, by, bw, bh = boxes[index]
+            detections.append(((bx, by, bx + bw, by + bh), int(class_ids[index]), float(filtered_confidences[index])))
+    return detections
+
+
 def _postprocess_tokens(output, confidence_threshold):
+    """Decode CoreML end2end output shaped [1, max_det, 6] as xyxy/conf/cls."""
     pred = output[0]
     if pred.ndim != 3 or pred.shape[0] < 1 or pred.shape[2] < 6:
         return []
@@ -366,6 +432,12 @@ def _postprocess_tokens(output, confidence_threshold):
 
         detections.append(((x1, y1, x2, y2), int(round(float(class_id))), confidence))
     return detections
+
+
+def _decode_detections(runtime, prefix, output, confidence_threshold):
+    if runtime.get(f"{prefix}_model_kind") == "opencv_onnx":
+        return _postprocess(output, confidence_threshold)
+    return _postprocess_tokens(output, confidence_threshold)
 
 
 def _debug_log(message, min_interval=0.0, key=None):
@@ -873,11 +945,18 @@ def _scan_tokens_once(runtime):
         frame = _grab_frame(runtime)
     screenshot_elapsed = time.time() - screenshot_start
     preprocess_start = time.time()
-    image, transform = _preprocess_petal_image(
-        frame,
-        runtime["combined_input_width"],
-        runtime["combined_input_height"],
-    )
+    if runtime.get("combined_model_kind") == "opencv_onnx":
+        image, transform = _preprocess_petal_onnx_image(
+            frame,
+            runtime["combined_input_width"],
+            runtime["combined_input_height"],
+        )
+    else:
+        image, transform = _preprocess_petal_image(
+            frame,
+            runtime["combined_input_width"],
+            runtime["combined_input_height"],
+        )
     preprocess_elapsed = time.time() - preprocess_start
     inference_start = time.time()
     output = _run_model(runtime, "combined", image)
@@ -1595,7 +1674,12 @@ def _execute_planned_movement(runtime):
 
 
 def _process_combined_detections(runtime, output, transform, inference_ms, publish_petals=True):
-    detections = _postprocess_tokens(output, min(BLOOM_MIN_CONFIDENCE, PETAL_CONFIDENCE_THRESHOLD))
+    detections = _decode_detections(
+        runtime,
+        "combined",
+        output,
+        min(BLOOM_MIN_CONFIDENCE, PETAL_CONFIDENCE_THRESHOLD),
+    )
     bloom_detections = []
     petal_overlays = []
     scale = float(transform["scale"])
@@ -1643,7 +1727,7 @@ def _find_sprinkler(runtime):
     else:
         image = _preprocess_coreml_image(frame, SPRINKLER_INPUT_WIDTH, SPRINKLER_INPUT_HEIGHT)
     output = _run_model(runtime, "sprinkler", image)
-    detections = _postprocess_tokens(output, SPRINKLER_CONFIDENCE_THRESHOLD)
+    detections = _decode_detections(runtime, "sprinkler", output, SPRINKLER_CONFIDENCE_THRESHOLD)
 
     scale_x = runtime["capture"]["width"] / float(SPRINKLER_INPUT_WIDTH)
     scale_y = runtime["capture"]["height"] / float(SPRINKLER_INPUT_HEIGHT)
@@ -1771,28 +1855,42 @@ def _initialise_runtime():
 
     #_set_start_camera_angle()
 
-    model_label, model_filename, model_size, model_output = BLOOM_MODEL_VARIANTS[BLOOM_MODEL_SELECTION]
-    combined_path = MODEL_DIR / model_filename
-    if not combined_path.exists():
-        download_result = _check_missing_models([model_filename])
-    if not combined_path.exists():
+    model_label, model_coreml, model_onnx, model_size, model_output = BLOOM_MODEL_VARIANTS[BLOOM_MODEL_SELECTION]
+    combined_candidates = [
+        (MODEL_DIR / model_coreml, "coreml"),
+        (MODEL_DIR / model_onnx, "opencv_onnx"),
+    ]
+    combined_candidates = [candidate for candidate in combined_candidates if candidate[0].exists()]
+    if not combined_candidates:
+        download_result = _check_missing_models([model_coreml, model_onnx])
+        combined_candidates = [
+            (MODEL_DIR / model_coreml, "coreml"),
+            (MODEL_DIR / model_onnx, "opencv_onnx"),
+        ]
+        combined_candidates = [candidate for candidate in combined_candidates if candidate[0].exists()]
+    if not combined_candidates:
         failures = download_result.get("failures", {})
         detail = f" Download attempt failed: {'; '.join(failures.values())}" if failures else ""
-        raise FileNotFoundError(f"No combined bloom and petal AI model was found: {combined_path}.{detail}")
-    if ct is None:
-        try:
-            import subprocess
-            import sys
-            import importlib
+        raise FileNotFoundError(
+            f"No combined bloom and petal AI model was found for {model_label} "
+            f"({model_coreml} or {model_onnx}).{detail}"
+        )
+    combined_path, combined_model_kind = combined_candidates[0]
+    if combined_model_kind == "coreml":
+        if ct is None:
+            try:
+                import subprocess
+                import sys
+                import importlib
 
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "coremltools"])
-            globals()["ct"] = importlib.import_module("coremltools")
-        except Exception as exc:
-            raise RuntimeError(
-                "coremltools is required but automatic install failed: " + str(exc) + ". Please install coremltools before using BloomsAI, then restart the macro."
-            )
-    if Image is None:
-        raise RuntimeError("Pillow is required for CoreML BloomsAI, please run install dependencies before continuing.")
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "coremltools"])
+                globals()["ct"] = importlib.import_module("coremltools")
+            except Exception as exc:
+                raise RuntimeError(
+                    "coremltools is required but automatic install failed: " + str(exc) + ". Please install coremltools before using BloomsAI, then restart the macro."
+                )
+        if Image is None:
+            raise RuntimeError("Pillow is required for CoreML BloomsAI, please run install dependencies before continuing.")
 
     sprinkler_model_kind = None
     sprinkler_candidate = MODEL_DIR / "sprinkler_detection_standard.mlmodelc"
@@ -1802,6 +1900,17 @@ def _initialise_runtime():
         sprinkler_candidate = MODEL_DIR / "sprinkler_detection_standard.onnx"
         if sprinkler_candidate.exists():
             sprinkler_model_kind = "opencv_onnx"
+        else:
+            download_result = _check_missing_models(
+                ["sprinkler_detection_standard.mlmodelc", "sprinkler_detection_standard.onnx"]
+            )
+            sprinkler_candidate = MODEL_DIR / "sprinkler_detection_standard.mlmodelc"
+            if sprinkler_candidate.exists():
+                sprinkler_model_kind = "coreml"
+            else:
+                sprinkler_candidate = MODEL_DIR / "sprinkler_detection_standard.onnx"
+                if sprinkler_candidate.exists():
+                    sprinkler_model_kind = "opencv_onnx"
     sprinkler_path = sprinkler_candidate if sprinkler_candidate.exists() else None
 
     capture = _build_capture()
@@ -1839,10 +1948,15 @@ def _initialise_runtime():
     if homography is None:
         raise RuntimeError("Could not compute BloomsAI homography.")
 
-    combined_session, combined_input, combined_output = _load_coreml_model(
-        combined_path,
-        compiled_output_name=model_output,
-    )
+    if combined_model_kind == "opencv_onnx":
+        combined_session, combined_input, combined_output = _load_onnx_model(combined_path)
+        _delete_model_path(MODEL_DIR / model_coreml)
+    else:
+        combined_session, combined_input, combined_output = _load_coreml_model(
+            combined_path,
+            compiled_output_name=model_output,
+        )
+        _delete_model_path(MODEL_DIR / model_onnx)
     sprinkler_session = None
     sprinkler_input = None
     sprinkler_output = None
@@ -1867,7 +1981,7 @@ def _initialise_runtime():
         "combined_session": combined_session,
         "combined_input": combined_input,
         "combined_output": combined_output,
-        "combined_model_kind": "coreml",
+        "combined_model_kind": combined_model_kind,
         "combined_model_selection": BLOOM_MODEL_SELECTION,
         "combined_model_label": model_label,
         "combined_input_width": model_size,
@@ -1935,7 +2049,7 @@ if not runtime.get("ready"):
         runtime["ready"] = True
         runtime["error"] = ""
         _debug_log(
-            f"runtime ready combined_model={runtime['combined_model_label']} input={runtime['combined_input']} output={runtime['combined_output']} bloom_confidence={BLOOM_MIN_CONFIDENCE} petal_confidence={PETAL_CONFIDENCE_THRESHOLD} record={RECORD_VIDEO}"
+            f"runtime ready combined_model={runtime['combined_model_label']} kind={runtime['combined_model_kind']} input={runtime['combined_input']} output={runtime['combined_output']} bloom_confidence={BLOOM_MIN_CONFIDENCE} petal_confidence={PETAL_CONFIDENCE_THRESHOLD} record={RECORD_VIDEO}"
         )
     except Exception as exc:
         runtime["ready"] = False

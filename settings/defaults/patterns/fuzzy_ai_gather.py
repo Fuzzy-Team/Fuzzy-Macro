@@ -964,7 +964,10 @@ def _scan_tokens_once(runtime):
     output = _run_model(runtime, "token", image)
     inference_elapsed = time.time() - inference_start
     postprocess_start = time.time()
-    detections = _postprocess_tokens(output, CONFIDENCE_THRESHOLD)
+    if runtime.get("token_model_kind") == "opencv_onnx":
+        detections = _postprocess(output, CONFIDENCE_THRESHOLD)
+    else:
+        detections = _postprocess_tokens(output, CONFIDENCE_THRESHOLD)
     input_width = float(runtime.get("token_input_width", INPUT_WIDTH))
     input_height = float(runtime.get("token_input_height", INPUT_HEIGHT))
     if input_width != INPUT_WIDTH or input_height != INPUT_HEIGHT:
@@ -1602,7 +1605,10 @@ def _find_sprinkler(runtime):
     else:
         image = _preprocess_coreml_image(frame, SPRINKLER_INPUT_WIDTH, SPRINKLER_INPUT_HEIGHT)
     output = _run_model(runtime, "sprinkler", image)
-    detections = _postprocess_tokens(output, SPRINKLER_CONFIDENCE_THRESHOLD)
+    if runtime.get("sprinkler_model_kind") == "opencv_onnx":
+        detections = _postprocess(output, SPRINKLER_CONFIDENCE_THRESHOLD)
+    else:
+        detections = _postprocess_tokens(output, SPRINKLER_CONFIDENCE_THRESHOLD)
 
     scale_x = runtime["capture"]["width"] / float(SPRINKLER_INPUT_WIDTH)
     scale_y = runtime["capture"]["height"] / float(SPRINKLER_INPUT_HEIGHT)
