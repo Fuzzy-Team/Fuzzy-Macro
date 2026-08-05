@@ -6733,10 +6733,22 @@ class macro:
                     "display_name": displayName,
                 }
                 if logDetection:
+                    badgeImgPath = "latest-badge.png"
+                    try:
+                        top = max(0, titleY - 10)
+                        bottom = min(screen.height, titleY + int(180 * self.robloxWindow.multi))
+                        screen.crop((0, top, screen.width, bottom)).convert("RGB").save(badgeImgPath)
+                    except Exception:
+                        try:
+                            screen.convert("RGB").save(badgeImgPath)
+                        except Exception:
+                            badgeImgPath = None
+                    statusLabel = result["status"] + (f" ({result['tier']})" if result.get("tier") else "")
                     self.logger.webhook(
                         "Badge",
-                        f"{displayName}: {result['status']}" + (f" ({result['tier']})" if result.get("tier") else ""),
+                        f"{displayName}: {statusLabel}",
                         "dark brown",
+                        imagePath=badgeImgPath,
                         route_category="badges",
                     )
                 break
@@ -6759,7 +6771,13 @@ class macro:
                 "display_name": displayName,
             }
             if logDetection:
-                self.logger.webhook("Badge", f"{displayName}: not found", "orange", route_category="badges")
+                self.logger.webhook(
+                    "Badge",
+                    f"{displayName}: not found",
+                    "orange",
+                    "screen",
+                    route_category="badges",
+                )
 
         if manageUi and not keepBadgeMenuOpen:
             self.toggleBadge()
