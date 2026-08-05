@@ -44,7 +44,7 @@ import re
 import ast
 from modules.submacros.hourlyReport import BUFF_RENDER_CONFIG, HourlyReport, BuffDetector
 from modules.submacros.itemMonitor import ItemMonitor
-from modules.submacros.liveGatherReport import LiveGatherReport, LiveQuestProgressReport
+from modules.submacros.liveGatherReport import LiveGatherReport, LiveQuestProgressReport, LiveBadgeProgressReport
 from difflib import SequenceMatcher
 import fuzzywuzzy.process
 import fuzzywuzzy
@@ -2556,6 +2556,20 @@ class macro:
             capture_quest_screen=self.captureQuestWatchScreen,
         )
 
+    def createLiveBadgeProgressReport(self):
+        return LiveBadgeProgressReport(
+            logModule.get_default_delivery_route(self.setdat),
+            self.robloxWindow,
+            self.setdat.get("live_gather_report_interval", 10),
+            self.setdat.get("webhook_time_format", 24),
+            logModule.build_route_settings(self.setdat),
+            self.setdat.get("discord_bot_token", ""),
+            None,
+            logModule.get_delivery_mode(self.setdat),
+            "badges",
+            capture_badge_screen=self.captureBadgeWatchScreen,
+        )
+
     def startQuestTaskWatch(self, taskKey):
         """Open and publish the quest tied to a non-gather quest task."""
         if not self.setdat.get("quest_progress_watch", False):
@@ -3962,6 +3976,16 @@ class macro:
                         self.toggleBadge()
                     except Exception:
                         pass
+                else:
+                    self.moveMouseToDefault()
+                    if self.liveGatherReportEnabled():
+                        self.logger.webhook(
+                            "Live Badge Progress",
+                            f"Watching {str(badgeWatchName).replace('_', ' ').title()}"
+                            + (f" ({badgeWatchStartTier})" if badgeWatchStartTier else ""),
+                            "light blue",
+                            route_category="badges",
+                        )
             except Exception:
                 badgeMenuKeptOpen = False
                 print(traceback.format_exc())
@@ -4112,7 +4136,7 @@ class macro:
             return now - st - pausedDuration
 
         liveGatherReport = None
-        if self.liveGatherReportEnabled() and not isSproutGather:
+        if self.liveGatherReportEnabled() and not isSproutGather and not badgeMenuKeptOpen:
             liveGatherReport = self.createLiveGatherReport()
             liveGatherReport.start(field, gatherTimeLimit, getGatherTime, isGatherPaused)
 
@@ -4126,6 +4150,17 @@ class macro:
                 isGatherPaused,
                 activity="Quest Progress",
             )
+
+        liveBadgeProgressReport = None
+        if badgeMenuKeptOpen and self.liveGatherReportEnabled():
+            liveBadgeProgressReport = self.createLiveBadgeProgressReport()
+            liveBadgeProgressReport.start(
+                badgeWatchName,
+                badgeWatchStartTier or "in progress",
+                getGatherTime,
+                isGatherPaused,
+                activity="Badge Progress",
+            )
         
         def stopGather():
             nonlocal gooTimerActive, gumdropTimerActive, inactiveHoneyTimerActive, questMenuKeptOpen, badgeMenuKeptOpen
@@ -4136,6 +4171,8 @@ class macro:
                 liveGatherReport.stop()
             if liveQuestProgressReport:
                 liveQuestProgressReport.stop()
+            if liveBadgeProgressReport:
+                liveBadgeProgressReport.stop()
             if fieldSetting["shift_lock"]: 
                 self.keyboard.press('shift')
             if questMenuKeptOpen:
