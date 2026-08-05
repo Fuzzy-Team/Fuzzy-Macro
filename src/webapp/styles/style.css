@@ -1426,6 +1426,11 @@ select:focus {
   background: #fee75c;
 }
 
+.drag-item[data-category="badge"] .category-badge {
+  background: #f0b232;
+  color: #121212;
+}
+
 .drag-item[data-category="special"] .category-badge {
   background: #eb459e;
   color: #fff;

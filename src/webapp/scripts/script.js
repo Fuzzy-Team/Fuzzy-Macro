@@ -745,6 +745,11 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
       return settings[questName + "_quest"] || false;
     }
 
+    if (taskId.startsWith("badge_")) {
+      const badgeName = taskId.replace("badge_", "");
+      return settings[`${badgeName}_badge`] || false;
+    }
+
     // Special tasks
     if (taskId === "mondo_buff") {
       return settings.mondo_buff || false;
@@ -775,6 +780,7 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
     if (taskId.startsWith("collect_")) return "collect";
     if (taskId.startsWith("kill_")) return "kill";
     if (taskId.startsWith("quest_")) return "quest";
+    if (taskId.startsWith("badge_")) return "badge";
     return "special";
   }
 
@@ -785,6 +791,7 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
       collect: "COLLECT",
       kill: "KILL",
       quest: "QUEST",
+      badge: "BADGE",
       special: "SPECIAL",
     };
     return badges[category] || "";
@@ -823,6 +830,11 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
     if (taskId.startsWith("quest_")) {
       const questName = taskId.replace("quest_", "").replace("_", "_");
       return settingsObj[questName + "_quest"] || false;
+    }
+
+    if (taskId.startsWith("badge_")) {
+      const badgeName = taskId.replace("badge_", "");
+      return settingsObj[`${badgeName}_badge`] || false;
     }
 
     if (taskId === "mondo_buff") return settingsObj.mondo_buff || false;
@@ -917,6 +929,26 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
       quest_honey_bee: "Quest: Honey Bee",
       quest_bucko_bee: "Quest: Bucko Bee",
       quest_riley_bee: "Quest: Riley Bee",
+      badge_sunflower: "Badge: Sunflower",
+      badge_dandelion: "Badge: Dandelion",
+      badge_mushroom: "Badge: Mushroom",
+      badge_blue_flower: "Badge: Blue Flower",
+      badge_clover: "Badge: Clover",
+      badge_spider: "Badge: Spider",
+      badge_strawberry: "Badge: Strawberry",
+      badge_bamboo: "Badge: Bamboo",
+      badge_pineapple: "Badge: Pineapple",
+      badge_pumpkin: "Badge: Pumpkin",
+      badge_cactus: "Badge: Cactus",
+      badge_rose: "Badge: Rose",
+      badge_pine_tree: "Badge: Pine Tree",
+      badge_stump: "Badge: Stump",
+      badge_coconut: "Badge: Coconut",
+      badge_pepper: "Badge: Pepper",
+      badge_hive_hub: "Badge: Hive Hub",
+      badge_mountain_top: "Badge: Mountain Top",
+      badge_goo: "Badge: Goo",
+      badge_honey: "Badge: Honey",
       blender: "Blender",
       planters: "Planters",
     };
