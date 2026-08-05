@@ -424,6 +424,17 @@ async function loadTasks() {
       };
     }
 
+    if (taskId.startsWith("badge_")) {
+      const badgeName = taskId.replace("badge_", "");
+      const badgeKey = `${badgeName}_badge`;
+      if (!setdat[badgeKey]) return { enabled: false };
+      return {
+        enabled: true,
+        title: "Badge",
+        desc: `🏅 ${toTitleCase(badgeName.replaceAll("_", " "))}`,
+      };
+    }
+
     // Special tasks
     if (taskId === "blender") {
       if (!setdat.blender_enable) return { enabled: false };

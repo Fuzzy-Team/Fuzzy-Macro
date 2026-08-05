@@ -15,6 +15,9 @@
     <div id="collect-blender" class="collect-tab-item">
       Blender
     </div>
+    <div id="collect-badges" class="collect-tab-item">
+      Badges
+    </div>
   </div>
 
   <div id="collect-dispensers-tab" class="standard-container sub-tab-panel active">
@@ -793,6 +796,147 @@
                 `;
         blenderParent.innerHTML += blenderItemHTML;
       }
+    </script>
+  </div>
+
+  <div id="collect-badges-tab" class="standard-container sub-tab-panel">
+    <script>
+      const parentCollectBadges = document.getElementById("collect-badges-tab");
+      const fieldBadgeOptions = [
+        ["sunflower_badge", "Sunflower Badge"],
+        ["dandelion_badge", "Dandelion Badge"],
+        ["mushroom_badge", "Mushroom Badge"],
+        ["blue_flower_badge", "Blue Flower Badge"],
+        ["clover_badge", "Clover Badge"],
+        ["spider_badge", "Spider Badge"],
+        ["strawberry_badge", "Strawberry Badge"],
+        ["bamboo_badge", "Bamboo Badge"],
+        ["pineapple_badge", "Pineapple Badge"],
+        ["pumpkin_badge", "Pumpkin Badge"],
+        ["cactus_badge", "Cactus Badge"],
+        ["rose_badge", "Rose Badge"],
+        ["pine_tree_badge", "Pine Tree Badge"],
+        ["stump_badge", "Stump Badge"],
+        ["coconut_badge", "Coconut Badge"],
+        ["pepper_badge", "Pepper Badge"],
+        ["hive_hub_badge", "Hive Hub Badge"],
+        ["mountain_top_badge", "Mountain Top Badge"],
+      ];
+
+      buildStandardContainer(
+        parentCollectBadges,
+        "Field Badges",
+        "Enable badges the macro should work on. Add them to Task Priority in Config.",
+        fieldBadgeOptions.map(([id, title]) => ({
+          id,
+          title,
+          desc: `Gather in ${title.replace(" Badge", "")} for this badge`,
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        }))
+      );
+
+      buildStandardContainer(parentCollectBadges, "Special Badges", "", [
+        {
+          id: "goo_badge",
+          title: "Goo Badge",
+          desc: "Gather with gumdrops for goo badge progress (uses gumdrop settings below)",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "honey_badge",
+          title: "Honey Badge",
+          desc: "Make honey in the field chosen by Hive Color",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "badge_honey_hive_color",
+          title: "Hive Color",
+          desc: "Blue/Mixed → Pine Tree, Red → Pepper, White → Pineapple",
+          type: {
+            name: "dropdown",
+            data: ["Blue", "Red", "White", "Mixed"],
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+      ]);
+
+      buildStandardContainer(parentCollectBadges, "Badge Gather Settings", "", [
+        {
+          id: "badge_gather_until",
+          title: "Gather Until",
+          desc: "Time: gather then convert and move on. Backpack: fill bag then convert and move on. Badge Level Complete: convert and re-gather until the badge tiers up.",
+          type: {
+            name: "dropdown",
+            data: [
+              { label: "Time", value: "time" },
+              { label: "Backpack", value: "backpack" },
+              { label: "Badge Level Complete", value: "badge_level" },
+            ],
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "badge_gather_mins",
+          title: "Gather Until Mins",
+          desc: "Used when Gather Until is Time. Set 0 to use the field's normal gather minutes.",
+          type: {
+            name: "textbox",
+            inputType: "float",
+            inputLimit: 4,
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "badge_gather_return",
+          title: "Return To Hive",
+          desc: "Override return behavior for badge gathers",
+          type: {
+            name: "dropdown",
+            data: ["No Override", "💀 Reset", "👟 Walk", "🔄 Rejoin", "🌱 Whirligig"],
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "badge_progress_watch",
+          title: "Keep Badge Menu Open",
+          desc: "Watch the badge menu while gathering and stop early when the tier completes",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+      ]);
+
+      buildStandardContainer(parentCollectBadges, "Goo / Gumdrops", "Same settings as Quests — mirrored here for goo badge farming", [
+        {
+          id: "quest_use_gumdrops",
+          title: "Use Gumdrops",
+          desc: "Use gumdrops when gathering for the goo badge",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "quest_gumdrop_slot",
+          title: "Gumdrop Slot",
+          desc: "Hotbar slot of the gumdrops to use",
+          type: {
+            name: "dropdown",
+            data: [1, 2, 3, 4, 5, 6, 7],
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+      ]);
     </script>
   </div>
 </div>

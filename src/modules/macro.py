@@ -682,6 +682,7 @@ PING_SETTING_KEYS = [
     "ping_planters",
     "ping_collectibles",
     "ping_quests",
+    "ping_badges",
     "ping_boosts",
     "ping_crafting",
     "ping_stream",
@@ -3378,17 +3379,13 @@ class macro:
             except (TypeError, ValueError):
                 preferredHiveSlot = 3
 
-            # Slots 3-6 approach from directly in front of slot 3. Slots 1-2
-            # retain the original diagonal approach to slot 1.
-            startingHiveSlot = 3 if preferredHiveSlot >= 3 else 1
-            # Every rejoin starts at spawn. Slot 3 is reached by a shorter
-            # straight path; the established diagonal slot-1 route stays put.
-            spawnToHiveTime = 2.5 if startingHiveSlot == 3 else 3.15
-            if startingHiveSlot == 1:
-                self.keyboard.keyDown("d", False)
-                self.keyboard.timeWaitNoHasteCompensation(0.548)
+            # Always approach via the diagonal-right route to hive slot 1
+            # (forward-only lands on slot 3). Then walk A to the preferred pad.
+            startingHiveSlot = 1
+            self.keyboard.keyDown("d", False)
+            self.keyboard.timeWaitNoHasteCompensation(0.548)
             self.keyboard.keyDown("w", False)
-            self.keyboard.timeWaitNoHasteCompensation(spawnToHiveTime)
+            self.keyboard.timeWaitNoHasteCompensation(3.15)
             self.keyboard.keyUp("d", False)
             self.keyboard.keyUp("w", False)
 
@@ -3943,7 +3940,32 @@ class macro:
         questWatchGiver = None
         questWatchObjective = None
         lastQuestProgressCheck = 0
-        if self.setdat.get("quest_progress_watch", False) and not isSproutGather:
+        badgeMenuKeptOpen = False
+        badgeWatchName = None
+        badgeWatchStartTier = None
+        lastBadgeProgressCheck = 0
+        if (
+            self.setdat.get("badge_progress_watch", False)
+            and not isSproutGather
+            and getattr(self, "badgeGatherWatch", None)
+        ):
+            badgeWatchName = self.badgeGatherWatch
+            try:
+                badgeMenuKeptOpen = True
+                badgeInfo = self.findBadge(badgeWatchName, keepBadgeMenuOpen=True, logDetection=False)
+                badgeWatchStartTier = badgeInfo.get("tier") if badgeInfo else None
+                if badgeInfo and badgeInfo.get("status") in ("claimable", "done"):
+                    keepGathering = False
+                elif not badgeInfo or badgeInfo.get("status") == "not_found":
+                    badgeMenuKeptOpen = False
+                    try:
+                        self.toggleBadge()
+                    except Exception:
+                        pass
+            except Exception:
+                badgeMenuKeptOpen = False
+                print(traceback.format_exc())
+        if self.setdat.get("quest_progress_watch", False) and not isSproutGather and not badgeMenuKeptOpen:
             questWatchers = getattr(self, "questGatherWatchers", {}) or {}
             watcherCandidates = list(questWatchers.get(normalized_field.lower(), []))
             if normalized_field.lower() in {"blue flower", "bamboo", "pine tree", "stump"}:
@@ -4106,7 +4128,7 @@ class macro:
             )
         
         def stopGather():
-            nonlocal gooTimerActive, gumdropTimerActive, inactiveHoneyTimerActive, questMenuKeptOpen
+            nonlocal gooTimerActive, gumdropTimerActive, inactiveHoneyTimerActive, questMenuKeptOpen, badgeMenuKeptOpen
             gooTimerActive = False  # Stop the goo timer thread
             gumdropTimerActive = False  # Stop the gumdrop timer thread
             inactiveHoneyTimerActive = False
@@ -4119,6 +4141,12 @@ class macro:
             if questMenuKeptOpen:
                 self.toggleQuest()
                 questMenuKeptOpen = False
+            if badgeMenuKeptOpen:
+                try:
+                    self.toggleBadge()
+                except Exception:
+                    pass
+                badgeMenuKeptOpen = False
             self.moveMouseToDefault()
             self.clear_task_status()
             self.isGathering = False
@@ -4213,6 +4241,42 @@ class macro:
             if not isSproutGather:
                 self.hourlyReport.addHourlyStat("gathering_time", time.time()-patternStartTime)
             gatherTime = self.convertSecsToMinsAndSecs(getGatherTime())
+
+            if badgeMenuKeptOpen and badgeWatchName and time.time() - lastBadgeProgressCheck >= 2:
+                lastBadgeProgressCheck = time.time()
+                try:
+                    badgeInfo = self.findBadge(
+                        badgeWatchName,
+                        badgeScreens=[self.captureBadgeWatchScreen()],
+                        logDetection=False,
+                    )
+                    if badgeInfo and badgeInfo.get("status") in ("claimable", "done"):
+                        self.logger.webhook(
+                            "Gathering: Ended",
+                            f"Badge tier ready: {badgeInfo.get('display_name', badgeWatchName)}",
+                            "light green",
+                            "screen",
+                            route_category="badges",
+                        )
+                        keepGathering = False
+                        continue
+                    if (
+                        badgeInfo
+                        and badgeWatchStartTier
+                        and badgeInfo.get("tier")
+                        and badgeInfo.get("tier") != badgeWatchStartTier
+                    ):
+                        self.logger.webhook(
+                            "Gathering: Ended",
+                            f"Badge tier advanced: {badgeInfo.get('display_name', badgeWatchName)}",
+                            "light green",
+                            "screen",
+                            route_category="badges",
+                        )
+                        keepGathering = False
+                        continue
+                except Exception:
+                    print(traceback.format_exc())
 
             if questMenuKeptOpen and time.time() - lastQuestProgressCheck >= 2:
                 lastQuestProgressCheck = time.time()
@@ -6469,6 +6533,276 @@ class macro:
         time.sleep(0.3)
         mouse.moveTo(self.robloxWindow.mx+(312), self.robloxWindow.my+(200))
         mouse.click()
+
+    def toggleBadge(self):
+        # Badge menu is the 4th top icon (inventory=1, quest=2, stickers=3, badges=4)
+        mouse.moveTo(self.robloxWindow.mx+(180), self.robloxWindow.my+(113))
+        time.sleep(0.1)
+        mouse.moveBy(0, 3)
+        time.sleep(0.1)
+        mouse.click()
+        time.sleep(0.3)
+        mouse.moveTo(self.robloxWindow.mx+(312), self.robloxWindow.my+(200))
+        mouse.click()
+
+    def _badgeMenuScreenshot(self, screenshotHeight=800, mode="RGBA"):
+        mode = mode.lower()
+        if mode == "rgba":
+            screenshotFunction = mssScreenshotPillowRGBA
+        else:
+            screenshotFunction = mssScreenshotNP
+        screen = screenshotFunction(
+            self.robloxWindow.mx,
+            self.robloxWindow.my + 150,
+            300,
+            min(screenshotHeight, self.robloxWindow.mh - (self.robloxWindow.my + 150)),
+        )
+        if mode == "gray":
+            screen = cv2.cvtColor(screen, cv2.COLOR_BGRA2GRAY)
+        return screen
+
+    def _badgeMenuHash(self, screenshotHeight=100):
+        """Hash a badge-menu strip. RGBA screenshots are already PIL images."""
+        screen = self._badgeMenuScreenshot(screenshotHeight, mode="RGBA")
+        if isinstance(screen, Image.Image):
+            return imagehash.average_hash(screen)
+        return imagehash.average_hash(Image.fromarray(screen))
+
+    def captureBadgeScreenshots(self, maxScreens=150):
+        """Scroll the badge list top→bottom and capture RGBA strips for reuse."""
+        self.toggleInventory("close")
+        self.toggleBadge()
+
+        prevHash = None
+        for _ in range(200):
+            mouse.scroll(100)
+            sleep(0.08)
+            currentHash = self._badgeMenuHash(100)
+            if prevHash is not None and prevHash == currentHash:
+                break
+            prevHash = currentHash
+
+        sleep(0.4)
+        screens = []
+        prevHash = None
+        for _ in range(maxScreens):
+            screens.append(self._badgeMenuScreenshot(800, mode="RGBA"))
+            mouse.scroll(-1, True)
+            time.sleep(0.06)
+            currentHash = self._badgeMenuHash(100)
+            if prevHash is not None and prevHash == currentHash:
+                break
+            prevHash = currentHash
+
+        self.toggleBadge()
+        self.moveMouseToDefault()
+        return screens
+
+    def captureBadgeWatchScreen(self):
+        screenshotHeight = max(1, min(800, self.robloxWindow.mh - 150))
+        return mssScreenshotPillowRGBA(
+            self.robloxWindow.mx,
+            self.robloxWindow.my + 150,
+            300,
+            screenshotHeight,
+        )
+
+    def _parseBadgeOcrStatus(self, text):
+        """Classify badge card OCR text into done / claimable / incomplete."""
+        import re
+        lowered = self.convertCyrillic((text or "").lower())
+        tier = None
+        for candidate in ("grandmaster", "hotshot", "master", "cadet", "ace"):
+            if candidate in lowered:
+                tier = candidate
+                break
+
+        # Any Complete! state is claimable until we click; after claim, Grandmaster
+        # stays Complete! and handleBadge treats a second Complete! as done.
+        if "complete" in lowered:
+            return "claimable", tier
+
+        progress = re.search(r"([\d,\.]+)\s*/\s*([\d,\.]+)", lowered.replace(" ", ""))
+        if progress:
+            return "incomplete", tier
+        if tier:
+            return "incomplete", tier
+        return "incomplete", tier
+
+    def findBadge(self, badgeName, badgeScreens=None, keepBadgeMenuOpen=False, logDetection=True):
+        """
+        Locate a badge row in the badges menu.
+        Returns dict: status (incomplete|claimable|done|not_found), tier, title, click_y
+        or None if the menu could not be scanned.
+        """
+        from modules.misc.badgeData import get_badge
+
+        entry = get_badge(badgeName)
+        displayName = entry["display_name"] if entry else str(badgeName).replace("_", " ").title()
+        searchNames = [
+            displayName.lower(),
+            str(badgeName).replace("_", " ").strip().lower(),
+        ]
+        # Prefer longer phrases first (e.g. "blue flower" before "blue")
+        searchNames = sorted(set(searchNames), key=len, reverse=True)
+
+        def ocrBadgeMatchFromScreen(screen):
+            best = None
+            cropHeight = min(screen.height, 800)
+            crop = screen.crop((0, 0, screen.width, cropHeight))
+            for bbox, (text, _conf) in ocr.ocrRead(crop):
+                line = self.convertCyrillic(text.lower().strip())
+                if "badge" not in line and not any(name in line for name in searchNames):
+                    continue
+                for name in searchNames:
+                    if name and name in line:
+                        score = 1.0 if "badge" in line else 0.75
+                        yPos = int(min(point[1] for point in bbox))
+                        if best is None or score > best[0] or (score == best[0] and yPos < best[2]):
+                            best = (score, line, yPos, bbox)
+                        break
+            return best
+
+        def sectionStatusNear(screen, titleY):
+            # OCR a vertical slice under the title for Complete! / progress / tier
+            top = max(0, titleY)
+            bottom = min(screen.height, titleY + int(160 * self.robloxWindow.multi))
+            section = screen.crop((0, top, screen.width, bottom))
+            lines = []
+            greenHits = []
+            for bbox, (text, _conf) in ocr.ocrRead(section):
+                line = self.convertCyrillic(text.lower().strip())
+                if line:
+                    lines.append(line)
+            combined = " ".join(lines)
+
+            # Find a green progress-bar region for claim clicks (BGR screenshot via numpy)
+            try:
+                sectionNp = np.array(section.convert("RGB"))[:, :, ::-1]
+                b, g, r = sectionNp[:, :, 0], sectionNp[:, :, 1], sectionNp[:, :, 2]
+                greenMask = (g > 140) & (g > r + 30) & (g > b + 30)
+                rows = np.where(np.any(greenMask, axis=1))[0]
+                cols = np.where(np.any(greenMask, axis=0))[0]
+                if len(rows) and len(cols) and greenMask.sum() > 80:
+                    cy = int(rows.mean())
+                    cx = int(cols.mean())
+                    greenHits.append((cx, top + cy))
+            except Exception:
+                pass
+
+            status, tier = self._parseBadgeOcrStatus(combined)
+            clickY = greenHits[0][1] if greenHits else titleY + int(90 * self.robloxWindow.multi)
+            clickX = greenHits[0][0] if greenHits else 150
+            return {
+                "status": status,
+                "tier": tier,
+                "title": combined[:120],
+                "click_x": clickX,
+                "click_y": clickY,
+            }
+
+        manageUi = badgeScreens is None
+        if manageUi:
+            self.toggleInventory("close")
+            self.toggleBadge()
+            prevHash = None
+            for _ in range(200):
+                mouse.scroll(100)
+                sleep(0.08)
+                currentHash = self._badgeMenuHash(100)
+                if prevHash is not None and prevHash == currentHash:
+                    break
+                prevHash = currentHash
+            sleep(0.4)
+
+        screenSource = badgeScreens if badgeScreens is not None else range(150)
+        result = None
+        prevHash = None
+        for screenEntry in screenSource:
+            screen = screenEntry if badgeScreens is not None else self._badgeMenuScreenshot(800, mode="RGBA")
+            match = ocrBadgeMatchFromScreen(screen)
+            if match:
+                _score, line, titleY, _bbox = match
+                statusInfo = sectionStatusNear(screen, titleY)
+                result = {
+                    "status": statusInfo["status"],
+                    "tier": statusInfo["tier"],
+                    "title": line,
+                    "click_x": statusInfo["click_x"],
+                    "click_y": statusInfo["click_y"],
+                    "display_name": displayName,
+                }
+                if logDetection:
+                    self.logger.webhook(
+                        "Badge",
+                        f"{displayName}: {result['status']}" + (f" ({result['tier']})" if result.get("tier") else ""),
+                        "dark brown",
+                        route_category="badges",
+                    )
+                break
+
+            if badgeScreens is None:
+                mouse.scroll(-1, True)
+                time.sleep(0.06)
+                currentHash = self._badgeMenuHash(100)
+                if prevHash is not None and prevHash == currentHash:
+                    break
+                prevHash = currentHash
+
+        if result is None:
+            result = {
+                "status": "not_found",
+                "tier": None,
+                "title": "",
+                "click_x": 150,
+                "click_y": 200,
+                "display_name": displayName,
+            }
+            if logDetection:
+                self.logger.webhook("Badge", f"{displayName}: not found", "orange", route_category="badges")
+
+        if manageUi and not keepBadgeMenuOpen:
+            self.toggleBadge()
+            self.moveMouseToDefault()
+        return result
+
+    def claimBadgeReward(self, badgeName, badgeInfo=None, keepBadgeMenuOpen=False):
+        """
+        Click the green complete bar for a claimable badge tier.
+        Returns updated findBadge result after claiming (or the original if not claimable).
+        """
+        info = badgeInfo
+        openedHere = False
+        if info is None or info.get("status") == "not_found":
+            info = self.findBadge(badgeName, keepBadgeMenuOpen=True, logDetection=False)
+            openedHere = True
+
+        if not info or info.get("status") != "claimable":
+            if openedHere and not keepBadgeMenuOpen:
+                self.toggleBadge()
+                self.moveMouseToDefault()
+            return info
+
+        # Click the green complete bar to claim tickets and advance tier.
+        clickX = self.robloxWindow.mx + int(info.get("click_x", 150))
+        clickY = self.robloxWindow.my + 150 + int(info.get("click_y", 200))
+        mouse.moveTo(clickX, clickY)
+        time.sleep(0.1)
+        mouse.click()
+        time.sleep(0.6)
+        self.logger.webhook(
+            "Badge Claim",
+            f"Claimed {info.get('display_name', badgeName)} reward",
+            "light green",
+            "screen",
+            route_category="badges",
+        )
+
+        updated = self.findBadge(badgeName, keepBadgeMenuOpen=True, logDetection=False)
+        if not keepBadgeMenuOpen:
+            self.toggleBadge()
+            self.moveMouseToDefault()
+        return updated
 
     def captureQuestScreenshots(self, maxScreens=150):
         """

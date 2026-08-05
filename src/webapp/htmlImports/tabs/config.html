@@ -235,6 +235,7 @@
         if (taskId.startsWith("collect_")) return "collect";
         if (taskId.startsWith("kill_")) return "kill";
         if (taskId.startsWith("quest_")) return "quest";
+        if (taskId.startsWith("badge_")) return "badge";
         return "special";
       }
 
@@ -245,6 +246,7 @@
           collect: "COLLECT",
           kill: "KILL",
           quest: "QUEST",
+          badge: "BADGE",
           special: "SPECIAL",
         };
         return badges[category] || "";
@@ -354,6 +356,26 @@
             <div class="drag-item" data-id="stinger_hunt" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Stinger Hunt</span></div>
             <div class="drag-item" data-id="auto_field_boost" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Auto Field Boost</span></div>
             <div class="drag-item" data-id="ant_challenge" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Ant Challenge</span></div>
+            <div class="drag-item" data-id="badge_sunflower" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Badge: Sunflower</span></div>
+            <div class="drag-item" data-id="badge_dandelion" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Badge: Dandelion</span></div>
+            <div class="drag-item" data-id="badge_mushroom" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Badge: Mushroom</span></div>
+            <div class="drag-item" data-id="badge_blue_flower" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Badge: Blue Flower</span></div>
+            <div class="drag-item" data-id="badge_clover" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Badge: Clover</span></div>
+            <div class="drag-item" data-id="badge_spider" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Badge: Spider</span></div>
+            <div class="drag-item" data-id="badge_strawberry" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Badge: Strawberry</span></div>
+            <div class="drag-item" data-id="badge_bamboo" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Badge: Bamboo</span></div>
+            <div class="drag-item" data-id="badge_pineapple" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Badge: Pineapple</span></div>
+            <div class="drag-item" data-id="badge_pumpkin" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Badge: Pumpkin</span></div>
+            <div class="drag-item" data-id="badge_cactus" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Badge: Cactus</span></div>
+            <div class="drag-item" data-id="badge_rose" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Badge: Rose</span></div>
+            <div class="drag-item" data-id="badge_pine_tree" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Badge: Pine Tree</span></div>
+            <div class="drag-item" data-id="badge_stump" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Badge: Stump</span></div>
+            <div class="drag-item" data-id="badge_coconut" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Badge: Coconut</span></div>
+            <div class="drag-item" data-id="badge_pepper" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Badge: Pepper</span></div>
+            <div class="drag-item" data-id="badge_hive_hub" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Badge: Hive Hub</span></div>
+            <div class="drag-item" data-id="badge_mountain_top" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Badge: Mountain Top</span></div>
+            <div class="drag-item" data-id="badge_goo" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Badge: Goo</span></div>
+            <div class="drag-item" data-id="badge_honey" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Badge: Honey</span></div>
             <div class="drag-item" data-id="blender" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Blender</span></div>
           </div>
         </div>
@@ -858,6 +880,7 @@
         ["route_gathering", "Gathering", "Gathering start/end and live gather report messages"],
         ["route_combat", "Combat", "Mobs, Vicious Bee, and character death messages"],
         ["route_activities", "Activities", "Boosts, crafting, stickers, ant challenge, planters, quests, collectibles, and conversion messages"],
+        ["route_badges", "Badges", "Badge scan, claim, and badge-task messages"],
         ["route_system", "System", "Critical errors, disconnects, stream messages, and other system-level notices"],
       ];
 

@@ -1284,6 +1284,26 @@ def loadSettings():
         settings["task_priority_order"] = taskPriorityOrder
         merged_new_keys = True
 
+    # Ensure badge priority tasks exist for profiles created before badge support
+    badgeTaskIds = [
+        "badge_sunflower", "badge_dandelion", "badge_mushroom", "badge_blue_flower", "badge_clover",
+        "badge_spider", "badge_strawberry", "badge_bamboo", "badge_pineapple", "badge_pumpkin",
+        "badge_cactus", "badge_rose", "badge_pine_tree", "badge_stump", "badge_coconut", "badge_pepper",
+        "badge_hive_hub", "badge_mountain_top", "badge_goo", "badge_honey",
+    ]
+    if isinstance(taskPriorityOrder, list):
+        missingBadges = [t for t in badgeTaskIds if t not in taskPriorityOrder]
+        if missingBadges:
+            insertIndex = 0
+            for i, taskId in enumerate(taskPriorityOrder):
+                if taskId.startswith("quest_"):
+                    insertIndex = i + 1
+            for taskId in missingBadges:
+                taskPriorityOrder.insert(insertIndex, taskId)
+                insertIndex += 1
+            settings["task_priority_order"] = taskPriorityOrder
+            merged_new_keys = True
+
     # Migrate legacy global quest gather override to per-quest keys on first load
     try:
         legacy_present = any(k in profile_raw for k in ("quest_gather_mins", "quest_gather_return"))

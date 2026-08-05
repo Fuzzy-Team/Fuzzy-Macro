@@ -475,6 +475,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
     macro.questTaskWatchers = {}
     macro.completedQuestWatchTasks = set()
     macro.completedQuestWatchObjectives = set()
+    macro.badgeGatherWatch = None
     
     macro.start()
     #macro.useItemInInventory("blueclayplanter")
@@ -990,6 +991,135 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         if returnToHive != "no override":
             overrides["return"] = returnToHive
         return overrides
+
+    def getBadgeGatherOverrides(gatherUntil="time"):
+        """Build gather settings overrides for a badge task cycle."""
+        overrides = {}
+        mins = macro.setdat.get("badge_gather_mins", 0)
+        returnToHive = str(macro.setdat.get("badge_gather_return", "no override") or "no override").lower()
+        until = str(gatherUntil or "time").strip().lower().replace(" ", "_")
+
+        if until in ("backpack", "badge_level", "badge_level_complete"):
+            overrides["mins"] = 999
+        elif mins:
+            overrides["mins"] = mins
+            overrides["backpack"] = 101
+
+        if returnToHive != "no override":
+            overrides["return"] = returnToHive
+        return overrides
+
+    def handleBadge(badgeId):
+        """
+        Run one badge priority task: claim if ready, gather per badge_gather_until, convert.
+        Mirrors quest task execution except claim = click green complete bar.
+        """
+        from modules.misc.badgeData import get_badge, resolve_gather_field
+
+        entry = get_badge(badgeId)
+        if not entry:
+            return False
+        if not macro.setdat.get(entry["setting_key"]):
+            return False
+
+        display = entry["display_name"]
+        hiveColor = macro.setdat.get("badge_honey_hive_color", "mixed")
+        field = resolve_gather_field(badgeId, hiveColor)
+        if not field:
+            macro.logger.webhook("Badge", f"No gather field for {display}", "orange", route_category="badges")
+            return False
+
+        gatherUntil = str(macro.setdat.get("badge_gather_until", "time") or "time").strip().lower()
+        useGumdrops = bool(entry["kind"] == "goo" and macro.setdat.get("quest_use_gumdrops", False))
+        progressWatch = bool(
+            macro.setdat.get("badge_progress_watch", False)
+            or gatherUntil in ("badge_level", "badge_level_complete")
+        )
+
+        def scanAndClaim():
+            info = macro.findBadge(badgeId, keepBadgeMenuOpen=True, logDetection=True)
+            if info and info.get("status") == "claimable":
+                beforeTier = info.get("tier")
+                info = macro.claimBadgeReward(badgeId, badgeInfo=info, keepBadgeMenuOpen=True)
+                # After claiming Grandmaster (or a stuck Complete!), treat remaining Complete! as done.
+                if info and info.get("status") == "claimable" and (
+                    info.get("tier") == "grandmaster" or beforeTier == "grandmaster"
+                ):
+                    info = dict(info)
+                    info["status"] = "done"
+            try:
+                macro.toggleBadge()
+            except Exception:
+                pass
+            macro.moveMouseToDefault()
+            return info
+
+        info = scanAndClaim()
+        if not info or info.get("status") == "not_found":
+            macro.logger.webhook("Badge", f"{display} not found in badge menu", "orange", route_category="badges")
+            return False
+        if info.get("status") == "done":
+            macro.logger.webhook(
+                "Badge",
+                f"{display} already complete",
+                "light green",
+                route_category="badges",
+            )
+            return True
+
+        startTier = info.get("tier")
+
+        def gatherOnce():
+            overrides = getBadgeGatherOverrides(gatherUntil)
+            if gatherUntil in ("badge_level", "badge_level_complete", "backpack"):
+                overrides["mins"] = 999
+                overrides.pop("backpack", None)
+            elif gatherUntil == "time":
+                if "mins" not in overrides:
+                    overrides["backpack"] = 101
+
+            # Hive Hub ignores backpack fill detection in gather(); use a timed cycle instead.
+            if field == "hive hub" and gatherUntil in ("badge_level", "badge_level_complete", "backpack"):
+                timedMins = macro.setdat.get("badge_gather_mins", 0) or 5
+                overrides["mins"] = timedMins
+                overrides.pop("backpack", None)
+
+            macro.badgeGatherWatch = badgeId if progressWatch else None
+            try:
+                if useGumdrops:
+                    runTask(macro.gather, args=(field, overrides, True), resetAfter=False)
+                else:
+                    runTask(macro.gather, args=(field, overrides), resetAfter=False)
+            finally:
+                macro.badgeGatherWatch = None
+
+        if gatherUntil in ("badge_level", "badge_level_complete"):
+            for _ in range(40):
+                gatherOnce()
+                info = scanAndClaim()
+                if not info or info.get("status") == "not_found":
+                    break
+                if info.get("status") in ("claimable", "done"):
+                    macro.logger.webhook(
+                        "Badge",
+                        f"{display} tier complete",
+                        "light green",
+                        route_category="badges",
+                    )
+                    return True
+                if info.get("tier") and startTier and info.get("tier") != startTier:
+                    macro.logger.webhook(
+                        "Badge",
+                        f"{display} advanced to {info.get('tier')}",
+                        "light green",
+                        route_category="badges",
+                    )
+                    return True
+            return True
+
+        gatherOnce()
+        scanAndClaim()
+        return True
     
     while True:
         # Check for pause - wait while paused
@@ -1538,6 +1668,19 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 
                 executedTasks.add(taskId)
                 executedQuests.add(questName)
+                return True
+
+            # Handle badge tasks
+            if taskId.startswith("badge_"):
+                from modules.misc.badgeData import badge_id_from_task, setting_key as badge_setting_key
+                badgeName = badge_id_from_task(taskId)
+                if not badgeName:
+                    return False
+                if not macro.setdat.get(badge_setting_key(badgeName)):
+                    return False
+                handleBadge(badgeName)
+                executedTasks.add(taskId)
+                taskCompleted = True
                 return True
             
             # Handle collect tasks
