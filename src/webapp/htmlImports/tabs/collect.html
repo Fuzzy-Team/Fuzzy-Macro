@@ -906,6 +906,15 @@
           },
         },
         {
+          id: "badge_use_ai_gather",
+          title: "Use AI Gathering",
+          desc: "Force Fuzzy AI Gather for all badge fields so you don't need a pattern configured per field. Uses the global AI Gather model from Config.",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
           id: "badge_progress_watch",
           title: "Keep Badge Menu Open",
           desc: "Watch the badge menu while gathering and stop early when the tier completes",

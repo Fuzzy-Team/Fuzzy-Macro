@@ -1007,6 +1007,15 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
 
         if returnToHive != "no override":
             overrides["return"] = returnToHive
+
+        if macro.setdat.get("badge_use_ai_gather", False):
+            overrides["shape"] = "fuzzy_ai_gather"
+            overrides["start_location"] = "center"
+            overrides["shift_lock"] = False
+            overrides["invert_lr"] = False
+            overrides["invert_fb"] = False
+            overrides["ai_gather_model"] = macro.setdat.get("ai_gather_model", "Standard")
+
         return overrides
 
     def handleBadge(badgeId):
@@ -1026,7 +1035,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         hiveColor = macro.setdat.get("badge_honey_hive_color", "mixed")
         field = resolve_gather_field(badgeId, hiveColor)
         if not field:
-            macro.logger.webhook("Badge", f"No gather field for {display}", "orange", route_category="badges")
+            macro.logger.webhook("Badge", f"No gather field for {display}", "orange", "screen", route_category="badges")
             return False
 
         gatherUntil = str(macro.setdat.get("badge_gather_until", "time") or "time").strip().lower()
@@ -1056,13 +1065,14 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
 
         info = scanAndClaim()
         if not info or info.get("status") == "not_found":
-            macro.logger.webhook("Badge", f"{display} not found in badge menu", "orange", route_category="badges")
+            macro.logger.webhook("Badge", f"{display} not found in badge menu", "orange", "screen", route_category="badges")
             return False
         if info.get("status") == "done":
             macro.logger.webhook(
                 "Badge",
                 f"{display} already complete",
                 "light green",
+                "screen",
                 route_category="badges",
             )
             return True
@@ -1104,6 +1114,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                         "Badge",
                         f"{display} tier complete",
                         "light green",
+                        "screen",
                         route_category="badges",
                     )
                     return True
@@ -1112,6 +1123,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                         "Badge",
                         f"{display} advanced to {info.get('tier')}",
                         "light green",
+                        "screen",
                         route_category="badges",
                     )
                     return True
