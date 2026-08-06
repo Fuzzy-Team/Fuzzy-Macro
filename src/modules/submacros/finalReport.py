@@ -503,7 +503,7 @@ class FinalReport:
 
             w, h = canvas.size
             canvas = canvas.resize((int(w*1.2), int(h*1.2)))
-            canvas.save("finalReport.png")
+            canvas.convert("RGB").save("finalReport.png")
             print("Final report saved successfully to finalReport.png")
 
             # generate embed fields for session report

@@ -328,7 +328,7 @@ def generate_item_report(snapshot, setdat=None, report_type="hourly", output_pat
     canvas = drawer.draw(snapshot, report_type=report_type)
     w, h = canvas.size
     canvas = canvas.resize((int(w * 1.2), int(h * 1.2)))
-    canvas.save(output_path)
+    canvas.convert("RGB").save(output_path)
 
     fields = []
     for item in ItemMonitor.sorted_items(collected)[:15]:
@@ -496,10 +496,10 @@ class ItemReportDrawer:
         graph = (x + 100, y + h - 210, w - 200, 120)
         gx, gy, gw, gh = graph
 
-        # Background + grid
+        # Opaque background — ImageDraw alpha would leave holes in the PNG.
         self.draw.rounded_rectangle(
             (gx - 20, gy - 10, gx + gw + 20, gy + gh + 10),
-            radius=12, fill=(*self.graphBgColor, 180), outline=self.graphGridColor, width=2,
+            radius=12, fill=self.graphBgColor, outline=self.graphGridColor, width=2,
         )
         for i in range(7):
             px = gx + gw * i / 6
