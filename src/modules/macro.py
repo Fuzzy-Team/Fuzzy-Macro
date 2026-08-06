@@ -1561,7 +1561,7 @@ class macro:
         timingAnchor = self.stickerSproutTimingAnchor()
         self.stickerSproutDetectedAt = 0
         self.stickerSproutInterruptRequested = False
-        settingsManager.saveSettingFile("sticker_sprout", timingAnchor, "./data/user/timings.txt")
+        settingsManager.saveSettingFile("sticker_sprout", timingAnchor, settingsManager.getUserDataPath("timings.txt"))
         self.collectCooldowns["sticker_sprout"] = 3 * 60 * 60
         self.logger.webhook(
             "Sticker Sprout",
@@ -1959,20 +1959,21 @@ class macro:
         return ("make" in text and "honey" in text) or self.isBesideEImage("makehoney")
 
     def getTiming(self,name = None):
+        timings_path = settingsManager.getUserDataPath("timings.txt")
         for _ in range(3):
-            data = settingsManager.readSettingsFile("./data/user/timings.txt")
+            data = settingsManager.readSettingsFile(timings_path)
             if data: break #most likely another process is writing to the file
             time.sleep(0.1)
         if name is not None:
             if not name in data:
                 print(f"could not find timing for {name}, setting a new one")
-                settingsManager.saveSettingFile(name, 0, "./data/user/timings.txt")
+                settingsManager.saveSettingFile(name, 0, timings_path)
                 return 0
             return data[name]
         return data
-    
+
     def saveTiming(self, name):
-        return settingsManager.saveSettingFile(name, time.time(), "./data/user/timings.txt")
+        return settingsManager.saveSettingFile(name, time.time(), settingsManager.getUserDataPath("timings.txt"))
     #returns true if the cooldown is up
     #note that cooldown is in seconds
     def hasRespawned(self, name, cooldown, applyMobRespawnBonus = False, timing = None):
@@ -5000,7 +5001,7 @@ class macro:
             if self.hasMobRespawned(m, field, timings[timingName]):
                 timings[timingName] = time.time()
                 self.hourlyReport.addHourlyStat("bugs", regularMobQuantitiesInFields[field][m])
-        settingsManager.saveDict("./data/user/timings.txt", timings)
+        settingsManager.saveDict(settingsManager.getUserDataPath("timings.txt"), timings)
 
     #background thread function to determine if player has defeated the mob
     #time limit of 20s
@@ -5901,7 +5902,7 @@ class macro:
             self.hourlyReport.addHourlyStat("misc_time", time.time()-st)
 
         def saveBlenderData():
-            with open("./data/user/blender.txt", "w") as f:
+            with open(settingsManager.ensureUserFile("blender.txt"), "w") as f:
                 f.write(str(blenderData))
             f.close()
             updateHourlyTime()
@@ -6162,7 +6163,7 @@ class macro:
             if stickerUsed: finalTime += 10
             self.logger.webhook("", f"Activated Sticker Stack, Buff Duration: {timedelta(seconds=finalTime)}", "bright green")
         else:
-            with open("./data/user/sticker_stack.txt", "r") as f: #get the cooldown from the prev detection
+            with open(settingsManager.ensureUserFile("sticker_stack.txt"), "r") as f: #get the cooldown from the prev detection
                 stickerStackCD = int(f.read())
             f.close()
             if stickerStackCD > 15*60: #make sure the time is valid
@@ -6171,13 +6172,13 @@ class macro:
                 finalTime = 60*60 #default to 1hr
             self.logger.webhook("", f"Activated Sticker Stack, Buff Duration: {timedelta(seconds=finalTime)} (Defaulted to 1hr)", "bright green")
         self.keyboard.press("e")
-        with open("./data/user/sticker_stack.txt", "w") as f:
+        with open(settingsManager.ensureUserFile("sticker_stack.txt"), "w") as f:
             f.write(str(finalTime))
         f.close()
         return True
-    
+
     def backgroundOnce(self):
-        with open("./data/user/hotbar_timings.txt", "r") as f:
+        with open(settingsManager.ensureUserFile("hotbar_timings.txt"), "r") as f:
             hotbarSlotTimings = ast.literal_eval(f.read())
         f.close()
 
@@ -6232,7 +6233,7 @@ class macro:
                 self.markSproutBeanUsed()
             #update the time pressed
             hotbarSlotTimings[i] = time.time()
-            with open("./data/user/hotbar_timings.txt", "w") as f:
+            with open(settingsManager.getUserDataPath("hotbar_timings.txt"), "w") as f:
                 f.write(str(hotbarSlotTimings))
             f.close()
     
@@ -8231,14 +8232,14 @@ class macro:
                 if submitQuest:
                     if questObjective is None:
                         self.saveTiming(timing_key)
-                        settingsManager.saveSettingFile(state_key, 1, "./data/user/timings.txt")
+                        settingsManager.saveSettingFile(state_key, 1, settingsManager.getUserDataPath("timings.txt"))
                     else:
                         # A new quest appeared immediately after submitting - remain in state 0
-                        settingsManager.saveSettingFile(state_key, 0, "./data/user/timings.txt")
+                        settingsManager.saveSettingFile(state_key, 0, settingsManager.getUserDataPath("timings.txt"))
                 else:
                     # When simply getting a new quest, ensure state is 0
                     if questObjective is not None:
-                        settingsManager.saveSettingFile(state_key, 0, "./data/user/timings.txt")
+                        settingsManager.saveSettingFile(state_key, 0, settingsManager.getUserDataPath("timings.txt"))
             except Exception:
                 pass
         return questObjective
@@ -8293,11 +8294,11 @@ class macro:
         self.moveMouseToDefault()
 
     def saveAFB(self, name):
-        return settingsManager.saveSettingFile(name, time.time(), "./data/user/AFB.txt")
+        return settingsManager.saveSettingFile(name, time.time(), settingsManager.getUserDataPath("AFB.txt"))
 
     def resetAFBSessionTimings(self):
         try:
-            data = settingsManager.readSettingsFile("./data/user/AFB.txt")
+            data = settingsManager.readSettingsFile(settingsManager.getUserDataPath("AFB.txt"))
         except Exception:
             data = {}
 
@@ -8311,11 +8312,11 @@ class macro:
         data["AFB_dice_cd"] = now - rebuffCooldown
         data["AFB_glitter_cd"] = now - rebuffCooldown
 
-        settingsManager.saveDict("./data/user/AFB.txt", data)
+        settingsManager.saveDict(settingsManager.getUserDataPath("AFB.txt"), data)
     
     def getAFBtiming(self,name = None):
         for _ in range(3):
-            data = settingsManager.readSettingsFile("./data/user/AFB.txt")
+            data = settingsManager.readSettingsFile(settingsManager.getUserDataPath("AFB.txt"))
             if data: break #most likely another process is writing to the file
             time.sleep(0.1)
         if name is not None:

@@ -413,7 +413,7 @@ def canClaimTimedBearQuest(name):
     timing_key = f"{name.replace(' ', '_')}_quest_cd"
     state_key = f"{name.replace(' ', '_')}_quest_state"
     try:
-        timings = settingsManager.readSettingsFile("./data/user/timings.txt") or {}
+        timings = settingsManager.readSettingsFile(settingsManager.getUserDataPath("timings.txt")) or {}
     except Exception:
         timings = {}
     # Ensure both bear quest state keys exist in the timings file with a default of 0
@@ -421,7 +421,7 @@ def canClaimTimedBearQuest(name):
         for required_state in ("brown_bear_quest_state", "black_bear_quest_state"):
             if required_state not in timings:
                 try:
-                    settingsManager.saveSettingFile(required_state, 0, "./data/user/timings.txt")
+                    settingsManager.saveSettingFile(required_state, 0, settingsManager.getUserDataPath("timings.txt"))
                 except Exception:
                     pass
                 timings[required_state] = 0
@@ -438,11 +438,11 @@ def canClaimTimedBearQuest(name):
     if state == 1:
         if not isinstance(timing, (float, int)):
             # Missing timestamp -> reset state to 0 to recover
-            settingsManager.saveSettingFile(state_key, 0, "./data/user/timings.txt")
+            settingsManager.saveSettingFile(state_key, 0, settingsManager.getUserDataPath("timings.txt"))
             return True
         # If timer expired, reset state and allow claiming
         if time.time() - timing >= 60 * 60:
-            settingsManager.saveSettingFile(state_key, 0, "./data/user/timings.txt")
+            settingsManager.saveSettingFile(state_key, 0, settingsManager.getUserDataPath("timings.txt"))
             return True
         return False
     # state == 0 -> allow claiming
@@ -498,7 +498,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             return
 
         if mode == 1:
-            with open("./data/user/manualplanters.txt", "r") as f:
+            with open(settingsManager.getUserDataPath("manualplanters.txt"), "r") as f:
                 raw = f.read().strip()
             planterData = ast.literal_eval(raw) if raw else {"planters": ["", "", ""], "fields": ["", "", ""], "gatherFields": ["", "", ""], "harvestTimes": [0, 0, 0], "cycles": [1, 1, 1]}
             for key, emptyValue in (("planters", ""), ("fields", ""), ("gatherFields", "")):
@@ -506,16 +506,16 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                     planterData[key][index] = emptyValue
             if "harvestTimes" in planterData and index < len(planterData["harvestTimes"]):
                 planterData["harvestTimes"][index] = 0
-            with open("./data/user/manualplanters.txt", "w") as f:
+            with open(settingsManager.getUserDataPath("manualplanters.txt"), "w") as f:
                 f.write(str(planterData))
         elif mode == 2:
-            with open("./data/user/auto_planters.json", "r") as f:
+            with open(settingsManager.getUserDataPath("auto_planters.json"), "r") as f:
                 autoData = json.load(f)
             planters = autoData.get("planters", [])
             if index < len(planters):
                 planters[index] = emptyAutoPlanterSlot()
             autoData["planters"] = planters
-            with open("./data/user/auto_planters.json", "w") as f:
+            with open(settingsManager.getUserDataPath("auto_planters.json"), "w") as f:
                 json.dump(autoData, f, indent=3)
 
     def processPlanterCommandQueue():
@@ -592,8 +592,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 macro.cAFBDice = True
                 macro.failed = False
                 rebuffCooldown = max(0, float(macro.setdat.get("AFB_rebuff", 0) or 0) * 60)
-                settingsManager.saveSettingFile("AFB_dice_cd", time.time() - rebuffCooldown, "./data/user/AFB.txt")
-                settingsManager.saveSettingFile("AFB_glitter_cd", time.time(), "./data/user/AFB.txt")
+                settingsManager.saveSettingFile("AFB_dice_cd", time.time() - rebuffCooldown, settingsManager.getUserDataPath("AFB.txt"))
+                settingsManager.saveSettingFile("AFB_glitter_cd", time.time(), settingsManager.getUserDataPath("AFB.txt"))
                 macro.AFB(gatherInterrupt=False)
                 macro.cAFBDice = False
                 return None
@@ -1468,7 +1468,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             nonlocal planterDataRaw
             normalized = normalizeManualPlanterData(planterData)
             planterDataRaw = str(normalized)
-            with open("./data/user/manualplanters.txt", "w") as f:
+            with open(settingsManager.getUserDataPath("manualplanters.txt"), "w") as f:
                 f.write(planterDataRaw)
             return normalized
         
@@ -1571,7 +1571,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 # Special case: sticker_stack
                 if collectName == "sticker_stack":
                     if macro.setdat["sticker_stack"]:
-                        with open("./data/user/sticker_stack.txt", "r") as f:
+                        with open(settingsManager.ensureUserFile("sticker_stack.txt"), "r") as f:
                             stickerStackCD = int(f.read())
                         f.close()
                         if macro.hasRespawned("sticker_stack", stickerStackCD):
@@ -1687,7 +1687,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             # Handle special tasks
             if taskId == "blender":
                 if macro.setdat["blender_enable"]:
-                    with open("./data/user/blender.txt", "r") as f:
+                    with open(settingsManager.ensureUserFile("blender.txt"), "r") as f:
                         blenderData = ast.literal_eval(f.read())
                     f.close()
                     if blenderData["collectTime"] > -1 and time.time() > blenderData["collectTime"]:
@@ -1703,7 +1703,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 # Manual planters
                 if macro.setdat["planters_mode"] == 1:
                     if planterDataRaw is None:
-                        with open("./data/user/manualplanters.txt", "r") as f:
+                        with open(settingsManager.getUserDataPath("manualplanters.txt"), "r") as f:
                             planterDataRaw = f.read()
                         f.close()
                     
@@ -1771,7 +1771,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 # Auto planters
                 elif macro.setdat["planters_mode"] == 2:
                     try:
-                        with open("./data/user/auto_planters.json", "r") as f:
+                        with open(settingsManager.getUserDataPath("auto_planters.json"), "r") as f:
                             data = json.load(f)
                     except Exception:
                         data = {}
@@ -1851,7 +1851,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                             "gather": gatherFlag,
                             "field_degradation": fieldDegradation
                         }
-                        with open("./data/user/auto_planters.json", "w") as f:
+                        with open(settingsManager.getUserDataPath("auto_planters.json"), "w") as f:
                             json.dump(data, f, indent=3)
                         f.close()
                         updateGUI.value = 1
@@ -2502,7 +2502,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 # Handle craft tasks
                 elif taskId == "craft":
                     # Execute blender crafting directly
-                    with open("./data/user/blender.txt", "r") as f:
+                    with open(settingsManager.ensureUserFile("blender.txt"), "r") as f:
                         blenderData = ast.literal_eval(f.read())
                     if blenderData["collectTime"] > -1 and time.time() > blenderData["collectTime"]:
                         macro.logger.webhook("Quest Task", "Executing craft (blender)", "light blue")
@@ -2588,7 +2588,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             
             #blender
             if macro.setdat["blender_enable"]:
-                with open("./data/user/blender.txt", "r") as f:
+                with open(settingsManager.ensureUserFile("blender.txt"), "r") as f:
                     blenderData = ast.literal_eval(f.read())
                 f.close()
                 if blenderData["collectTime"] > -1 and time.time() > blenderData["collectTime"]:
@@ -2674,7 +2674,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         try:
             # Only auto-gather when planters mode is auto and auto-harvest is enabled
             if macro.setdat.get("planters_mode") == 2:
-                with open("./data/user/auto_planters.json", "r") as f:
+                with open(settingsManager.getUserDataPath("auto_planters.json"), "r") as f:
                     auto_data = json.load(f)
                 auto_planters = auto_data.get("planters", [])
                 auto_gather = auto_data.get("gather", False)
@@ -3113,15 +3113,16 @@ if __name__ == "__main__":
 
     #update settings for current profile
     currentProfile = settingsManager.getCurrentProfile()
+    settingsManager.ensureRuntimeData()
     profileSettings = settingsManager.loadSettings()
-    profileSettingsReference = settingsManager.readSettingsFile(os.path.join(settingsManager.getDefaultSettingsPath(), "settings.txt"))
+    profileSettingsReference = settingsManager.getDefaultProfileSettings()
     settingsManager.saveDict(os.path.join(settingsManager.getProfilePath(currentProfile), "settings.txt"), {**profileSettingsReference, **profileSettings})
 
     #update general settings for current profile
     generalsettings_path = os.path.join(settingsManager.getProfilePath(currentProfile), "generalsettings.txt")
-    generalSettingsReference = settingsManager.readSettingsFile(os.path.join(settingsManager.getDefaultSettingsPath(), "generalsettings.txt"))
+    generalSettingsReference = settingsManager.getDefaultGeneralSettings()
     try:
-        generalSettings = settingsManager.readSettingsFile(generalsettings_path)
+        generalSettings = settingsManager.readSettingsFile(generalsettings_path, defaults=generalSettingsReference)
     except FileNotFoundError:
         # If generalsettings.txt doesn't exist, create it from defaults
         generalSettings = {}
@@ -3188,11 +3189,11 @@ if __name__ == "__main__":
             print(f"Error during shutdown cleanup: {e}")
         # Reset timed bear quest states on exit so macro resumes checking next run
         try:
-            settingsManager.saveSettingFile("brown_bear_quest_state", 0, "./data/user/timings.txt")
+            settingsManager.saveSettingFile("brown_bear_quest_state", 0, settingsManager.getUserDataPath("timings.txt"))
         except Exception:
             pass
         try:
-            settingsManager.saveSettingFile("black_bear_quest_state", 0, "./data/user/timings.txt")
+            settingsManager.saveSettingFile("black_bear_quest_state", 0, settingsManager.getUserDataPath("timings.txt"))
         except Exception:
             pass
         try:

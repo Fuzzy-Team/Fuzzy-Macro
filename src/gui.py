@@ -391,7 +391,9 @@ class HotbarBuffRunner:
         return timings
 
     def _save_timings(self, timings):
-        with open(self._timings_path(), "w") as f:
+        timings_path = self._timings_path()
+        os.makedirs(os.path.dirname(timings_path), exist_ok=True)
+        with open(timings_path, "w") as f:
             f.write(str(timings))
 
     def _slot_interval_seconds(self, settings, slot):
@@ -599,12 +601,11 @@ def importPatterns(patterns):
 
 @eel.expose
 def clearManualPlanters():
-    settingsManager.clearFile("./data/user/manualplanters.txt")
+    settingsManager.clearFile(settingsManager.getUserDataPath("manualplanters.txt"))
 
 @eel.expose
 def getManualPlanterData():
-    with open("./data/user/manualplanters.txt", "r") as f:
-        planterDataRaw = f.read()
+    planterDataRaw = settingsManager.loadUserText("manualplanters.txt")
     if planterDataRaw.strip():
         return ast.literal_eval(planterDataRaw)
     else: 
@@ -703,16 +704,14 @@ def normalizeAutoPlanterData(data):
 @eel.expose
 def getAutoPlanterData():
     try:
-        with open("./data/user/auto_planters.json", "r") as f:
-            return normalizeAutoPlanterData(json.load(f))
+        return normalizeAutoPlanterData(settingsManager.loadUserJson("auto_planters.json"))
     except Exception:
         return defaultAutoPlanterData()
 
 @eel.expose
 def clearAutoPlanters():
     data = defaultAutoPlanterData()
-    with open("./data/user/auto_planters.json", "w") as f:
-        json.dump(data, f, indent=3)
+    settingsManager.saveUserJson("auto_planters.json", data)
 
 
 @eel.expose
@@ -720,8 +719,7 @@ def setAutoPlanterGather(val):
     """Set the global 'gather' flag in data/user/auto_planters.json"""
     try:
         try:
-            with open("./data/user/auto_planters.json", "r") as f:
-                current = normalizeAutoPlanterData(json.load(f))
+            current = normalizeAutoPlanterData(settingsManager.loadUserJson("auto_planters.json"))
         except Exception:
             current = None
 
@@ -730,8 +728,7 @@ def setAutoPlanterGather(val):
 
         current["gather"] = bool(val)
 
-        with open("./data/user/auto_planters.json", "w") as f:
-            json.dump(current, f, indent=3)
+        settingsManager.saveUserJson("auto_planters.json", current)
         return True
     except Exception:
         return False
@@ -740,8 +737,7 @@ def setAutoPlanterGather(val):
 def resetManualPlanterTimer(index):
     """Reset a specific manual planter timer by index (0-2)"""
     try:
-        with open("./data/user/manualplanters.txt", "r") as f:
-            planterDataRaw = f.read()
+        planterDataRaw = settingsManager.loadUserText("manualplanters.txt")
         
         if not planterDataRaw.strip():
             return False
@@ -762,8 +758,7 @@ def resetManualPlanterTimer(index):
         if "harvestTimes" in planterData and len(planterData["harvestTimes"]) > index:
             planterData["harvestTimes"][index] = 0
         
-        with open("./data/user/manualplanters.txt", "w") as f:
-            f.write(str(planterData))
+        settingsManager.saveUserText("manualplanters.txt", str(planterData))
         
         return True
     except Exception as e:
@@ -774,8 +769,7 @@ def resetManualPlanterTimer(index):
 def resetAutoPlanterTimer(index):
     """Reset a specific auto planter timer by index (0-2)"""
     try:
-        with open("./data/user/auto_planters.json", "r") as f:
-            data = normalizeAutoPlanterData(json.load(f))
+        data = normalizeAutoPlanterData(settingsManager.loadUserJson("auto_planters.json"))
         
         # Check if index is valid
         if index < 0 or index >= len(data.get("planters", [])):
@@ -784,9 +778,8 @@ def resetAutoPlanterTimer(index):
         # Clear the specific planter
         data["planters"][index] = emptyAutoPlanterSlot()
         
-        with open("./data/user/auto_planters.json", "w") as f:
-            json.dump(data, f, indent=3)
-        
+        settingsManager.saveUserJson("auto_planters.json", data)
+
         return True
     except Exception as e:
         print(f"Error resetting auto planter {index}: {e}")
@@ -798,9 +791,7 @@ def clearBlender():
         "item": 1,
         "collectTime": 0
     }
-    with open("data/user/blender.txt", "w") as f:
-        f.write(str(blenderData))
-    f.close()
+    settingsManager.saveUserLiteral("blender.txt", blenderData)
 
 @eel.expose
 def clearAFB():
@@ -809,12 +800,7 @@ def clearAFB():
         "AFB_glitter_cd": 0,
         "AFB_limit": 0
     }
-
-    # convert to format like in timings.txt
-    data_str = "\n".join([f"{key}={value}" for key, value in AFBData.items()])
-
-    with open("data/user/AFB.txt", "w") as f:
-        f.write(data_str)
+    settingsManager.saveUserSettingsFile("AFB.txt", AFBData)
 
 @eel.expose
 def resetFieldToDefault(field_name):
@@ -839,8 +825,7 @@ def resetFieldToDefault(field_name):
 def resetTaskPrioritiesToDefault():
     """Reset task_priority_order to the default list from default settings"""
     try:
-        default_path = os.path.join(settingsManager.getDefaultSettingsPath(), "settings.txt")
-        defaults = settingsManager.readSettingsFile(default_path)
+        defaults = settingsManager.getDefaultProfileSettings()
         default_order = defaults.get("task_priority_order", []) or []
         if not isinstance(default_order, list) or not default_order:
             print("Warning: Default task_priority_order not found or empty")
@@ -1284,8 +1269,7 @@ def updateGUI():
 
     # Ensure any missing default settings are present in the profile.
     try:
-        default_path = os.path.join(settingsManager.getDefaultSettingsPath(), "settings.txt")
-        defaults = settingsManager.readSettingsFile(default_path)
+        defaults = settingsManager.getDefaultProfileSettings()
 
         # Add any top-level default keys missing from the loaded settings
         for k, v in defaults.items():
