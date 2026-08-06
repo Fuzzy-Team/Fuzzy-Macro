@@ -232,21 +232,30 @@ function initializeDragAndDrop() {
   const dragContainers = document.querySelectorAll(".drag-list-container");
 
   dragContainers.forEach((container) => {
+    if (container.dataset.dndInitialized === "true") return;
+    container.dataset.dndInitialized = "true";
+
     let draggedElement = null;
 
     container.addEventListener("dragstart", (e) => {
       draggedElement = e.target.closest(".drag-item");
-      if (draggedElement) {
-        draggedElement.classList.add("dragging");
-        e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("text/html", draggedElement.outerHTML);
+      if (!draggedElement || draggedElement.classList.contains("priority-locked")) {
+        e.preventDefault();
+        draggedElement = null;
+        return;
       }
+      draggedElement.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/html", draggedElement.outerHTML);
     });
 
     container.addEventListener("dragend", (e) => {
       if (draggedElement) {
         draggedElement.classList.remove("dragging");
         draggedElement = null;
+        if (typeof reapplyPriorityLockedPositions === "function") {
+          reapplyPriorityLockedPositions(container);
+        }
         saveDragOrder(container);
       }
     });
@@ -255,13 +264,17 @@ function initializeDragAndDrop() {
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
 
-      const afterElement = getDragAfterElement(container, e.clientY);
-      const draggable = document.querySelector(".dragging");
+      const draggable = container.querySelector(".drag-item.dragging");
+      if (!draggable) return;
 
+      const afterElement = getDragAfterElement(container, e.clientY);
       if (afterElement == null) {
         container.appendChild(draggable);
       } else {
         container.insertBefore(draggable, afterElement);
+      }
+      if (typeof reapplyPriorityLockedPositions === "function") {
+        reapplyPriorityLockedPositions(container);
       }
     });
 
@@ -277,7 +290,9 @@ function initializeDragAndDrop() {
 
 function getDragAfterElement(container, y) {
   const draggableElements = [
-    ...container.querySelectorAll(".drag-item:not(.dragging)"),
+    ...container.querySelectorAll(
+      ".drag-item:not(.dragging):not(.priority-locked)"
+    ),
   ];
 
   return draggableElements.reduce(
@@ -296,12 +311,25 @@ function getDragAfterElement(container, y) {
 }
 
 function saveDragOrder(container) {
-  const items = container.querySelectorAll(".drag-item:not(.hidden)");
-  const order = Array.from(items).map((item) => item.dataset.id);
+  const order =
+    typeof buildPriorityOrderFromContainer === "function"
+      ? buildPriorityOrderFromContainer(container)
+      : Array.from(container.querySelectorAll(".drag-item[data-id]")).map(
+          (item) => item.dataset.id
+        );
 
   // Save to settings
   const data = { task_priority_order: order };
   eel.saveDictProfileSettings(data);
+}
+
+function updatePriorityLockHeaderVisibility(container, searchTerm = "") {
+  if (!container) return;
+  const term = String(searchTerm || "").toLowerCase().trim();
+  container.querySelectorAll(".priority-lock-header").forEach((header) => {
+    const text = header.textContent.toLowerCase();
+    header.style.display = !term || text.includes(term) ? "" : "none";
+  });
 }
 
 function initializePrioritySearch() {
@@ -327,38 +355,98 @@ function initializePrioritySearch() {
           item.style.display = "none";
       }
     });
+    updatePriorityLockHeaderVisibility(container, searchTerm);
   });
 }
 
+let priorityQuickActionsInitialized = false;
+
 function initializeQuickActions() {
+  if (priorityQuickActionsInitialized) return;
+  priorityQuickActionsInitialized = true;
+
   // Handle move to top buttons
   document.addEventListener("click", (e) => {
     if (e.target.classList.contains("move-to-top")) {
       const item = e.target.closest(".drag-item");
       const container = item?.parentElement;
-      if (container && item) {
-        container.insertBefore(item, container.firstChild);
-        saveDragOrder(container);
+      if (!container || !item || item.classList.contains("priority-locked")) {
+        return;
       }
+      const unlocked = [
+        ...container.querySelectorAll(".drag-item:not(.priority-locked)"),
+      ];
+      const firstUnlocked = unlocked[0];
+      if (firstUnlocked) {
+        container.insertBefore(item, firstUnlocked);
+      }
+      if (typeof reapplyPriorityLockedPositions === "function") {
+        reapplyPriorityLockedPositions(container);
+      }
+      saveDragOrder(container);
     }
 
     // Handle move to bottom buttons
     if (e.target.classList.contains("move-to-bottom")) {
       const item = e.target.closest(".drag-item");
       const container = item?.parentElement;
-      if (container && item) {
-        container.appendChild(item);
-        saveDragOrder(container);
+      if (!container || !item || item.classList.contains("priority-locked")) {
+        return;
       }
+      const unlocked = [
+        ...container.querySelectorAll(".drag-item:not(.priority-locked)"),
+      ];
+      const lastUnlocked = unlocked[unlocked.length - 1];
+      if (lastUnlocked) {
+        if (lastUnlocked.nextSibling) {
+          container.insertBefore(item, lastUnlocked.nextSibling);
+        } else {
+          container.appendChild(item);
+        }
+      }
+      if (typeof reapplyPriorityLockedPositions === "function") {
+        reapplyPriorityLockedPositions(container);
+      }
+      saveDragOrder(container);
     }
   });
+}
+
+async function resetTaskPriorities() {
+  const confirmReset = confirm(
+    "Are you sure you want to reset task priorities to default values? This action cannot be undone."
+  );
+  if (!confirmReset) return;
+
+  try {
+    const success = await eel.resetTaskPrioritiesToDefault()();
+    if (!success) {
+      alert("Failed to reset task priorities. Default order may be missing.");
+      return;
+    }
+
+    const settings = await loadAllSettings();
+    loadInputs(settings);
+    if (typeof loadTasks === "function") {
+      await loadTasks();
+    }
+    initializePrioritySearch();
+    alert("Successfully reset task priorities to defaults.");
+  } catch (error) {
+    console.error("Error resetting task priorities:", error);
+    alert("An error occurred while resetting task priorities.");
+  }
 }
 
 $("#config-placeholder", loadConfig)
   .load("../htmlImports/tabs/config.html") //load config tab
   .on("click", ".config-tab-item", (event) =>
     switchConfigTab(event.currentTarget)
-  ); //navigate between fields
+  ) //navigate between fields
+  .on("click", "#reset-task-priorities-button", (event) => {
+    event.preventDefault();
+    resetTaskPriorities();
+  });
 
 /*
 =============================================

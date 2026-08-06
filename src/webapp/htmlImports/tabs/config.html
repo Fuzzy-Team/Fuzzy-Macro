@@ -251,7 +251,7 @@
       }
 
       // Create standard container using shared builder
-      buildStandardContainer(parentPriorities, "Task Priority Order", "Drag and drop tasks to set their priority order. Tasks at the top have higher priority (quests and planters ignore task priority). Use the search box to quickly find tasks. Grayed out tasks are not in task queue, but can still be rearranged.", []);
+      buildStandardContainer(parentPriorities, "Task Priority Order", "Drag and drop tasks to set their priority order. Tasks at the top run sooner. Quests and planters are handled automatically — their order doesn't matter. Use the search box to quickly find tasks. Grayed out tasks are not in the task queue, but can still be rearranged.", []);
 
       // Find the container we just created
       const priorityContainer = parentPriorities.querySelector('.standard-container');
@@ -259,8 +259,9 @@
       // Insert search input and drag list
       const dragListHTML = `
         <style>
-          .priority-search-wrapper { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+          .priority-search-wrapper { display:flex; align-items:center; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
           .priority-search {
+            flex:1 1 280px;
             width:100%;
             max-width:520px;
             padding:8px 12px;
@@ -283,6 +284,9 @@
         </style>
         <div class="priority-search-wrapper">
           <input type="text" id="priority-search-input" class="priority-search" placeholder="🔍 Search tasks... (e.g., 'pine', 'collect', 'kill')" autocomplete="off" />
+          <button id="reset-task-priorities-button" class="import-export-button" type="button">
+            Reset Task Priorities
+          </button>
         </div>
         <div id="task_priority_order" class="drag-list" data-onchange="saveSetting(this, 'profile')">
           <div class="drag-list-container" id="task_priority_order-container">
@@ -350,14 +354,7 @@
             <div class="drag-item" data-id="stinger_hunt" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Stinger Hunt</span></div>
             <div class="drag-item" data-id="auto_field_boost" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Auto Field Boost</span></div>
             <div class="drag-item" data-id="ant_challenge" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Ant Challenge</span></div>
-            <div class="drag-item" data-id="quest_polar_bear" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Quest: Polar Bear</span></div>
-            <div class="drag-item" data-id="quest_brown_bear" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Quest: Brown Bear</span></div>
-            <div class="drag-item" data-id="quest_black_bear" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Quest: Black Bear</span></div>
-            <div class="drag-item" data-id="quest_honey_bee" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Quest: Honey Bee</span></div>
-            <div class="drag-item" data-id="quest_bucko_bee" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Quest: Bucko Bee</span></div>
-            <div class="drag-item" data-id="quest_riley_bee" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Quest: Riley Bee</span></div>
             <div class="drag-item" data-id="blender" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Blender</span></div>
-            <div class="drag-item" data-id="planters" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Planters</span></div>
           </div>
         </div>
       `;
@@ -371,30 +368,30 @@
           const items = container.querySelectorAll(".drag-item");
           items.forEach((item) => {
             const taskId = item.getAttribute("data-id");
-            if (taskId && !item.getAttribute("data-category")) {
-              const category = getTaskCategory(taskId);
-              const badge = getCategoryBadge(category);
-              item.setAttribute("data-category", category);
+            if (!taskId || item.getAttribute("data-category")) return;
 
-              if (!item.querySelector(".category-badge")) {
-                const dragText = item.querySelector(".drag-text");
-                if (dragText) {
-                  const badgeEl = document.createElement("span");
-                  badgeEl.className = "category-badge";
-                  badgeEl.textContent = badge;
-                  dragText.parentNode.insertBefore(badgeEl, dragText);
-                }
+            const category = getTaskCategory(taskId);
+            const badge = getCategoryBadge(category);
+            item.setAttribute("data-category", category);
+
+            if (!item.querySelector(".category-badge")) {
+              const dragText = item.querySelector(".drag-text");
+              if (dragText) {
+                const badgeEl = document.createElement("span");
+                badgeEl.className = "category-badge";
+                badgeEl.textContent = badge;
+                dragText.parentNode.insertBefore(badgeEl, dragText);
               }
+            }
 
-              if (!item.querySelector(".drag-actions")) {
-                const actionsDiv = document.createElement("div");
-                actionsDiv.className = "drag-actions";
-                actionsDiv.innerHTML = `
+            if (!item.querySelector(".drag-actions")) {
+              const actionsDiv = document.createElement("div");
+              actionsDiv.className = "drag-actions";
+              actionsDiv.innerHTML = `
                   <button class="drag-action-btn move-to-top" title="Move to top">↑ Top</button>
                   <button class="drag-action-btn move-to-bottom" title="Move to bottom">↓ Bottom</button>
                 `;
-                item.appendChild(actionsDiv);
-              }
+              item.appendChild(actionsDiv);
             }
           });
         }

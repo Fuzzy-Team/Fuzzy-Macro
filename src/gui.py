@@ -836,6 +836,22 @@ def resetFieldToDefault(field_name):
         return False
 
 @eel.expose
+def resetTaskPrioritiesToDefault():
+    """Reset task_priority_order to the default list from default settings"""
+    try:
+        default_path = os.path.join(settingsManager.getDefaultSettingsPath(), "settings.txt")
+        defaults = settingsManager.readSettingsFile(default_path)
+        default_order = defaults.get("task_priority_order", []) or []
+        if not isinstance(default_order, list) or not default_order:
+            print("Warning: Default task_priority_order not found or empty")
+            return False
+        settingsManager.saveProfileSetting("task_priority_order", default_order)
+        return True
+    except Exception as e:
+        print(f"Error resetting task priorities to default: {e}")
+        return False
+
+@eel.expose
 def exportFieldSettings(field_name):
     """Export field settings as JSON string"""
     try:
