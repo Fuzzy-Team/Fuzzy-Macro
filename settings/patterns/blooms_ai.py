@@ -32,7 +32,7 @@ INPUT_HEIGHT = agc.INPUT_HEIGHT
 MODEL_DIR = agc.MODEL_DIR
 SPRINKLER_CONFIDENCE_THRESHOLD = 0.6
 PETAL_CONFIDENCE_THRESHOLD = 0.50
-RUNTIME_VERSION = 36
+RUNTIME_VERSION = 37
 MIN_TOKEN_DISTANCE = 0.3
 MAX_SPRINKLER_DISTANCE = 10.0
 TARGET_SPRINKLER_LABEL = None
@@ -189,7 +189,8 @@ def onGatherEnd():
 
 def _record_debug_frame(runtime, frame, detections, target):
     if runtime.get("video_writer") is None:
-        frame = agc.grab_frame(runtime)
+        mailbox_frame, _, _ = agc.get_latest_frame(runtime, copy=True)
+        frame = mailbox_frame if mailbox_frame is not None else agc.grab_frame(runtime)
 
     writer = agc.ensure_video_writer(
         runtime,
@@ -355,9 +356,18 @@ def _scan_tokens_once(runtime):
     movement_revision = int(runtime.get("movement_revision", 0))
     detection_start = time.time()
     screenshot_start = time.time()
-    frame = agc.grab_region_frame(runtime, "upper_token_monitor", "upper_token_bbox")
+    after_id = int(runtime.get("token_last_frame_id", 0))
+    frame, frame_id, _ = agc.wait_for_latest_frame(
+        runtime,
+        after_id=after_id,
+        timeout=max(CONTINUOUS_SCAN_INTERVAL, 0.02),
+        copy=True,
+    )
     if frame is None:
         frame = agc.grab_frame(runtime)
+        frame_id = after_id
+    else:
+        runtime["token_last_frame_id"] = frame_id
     screenshot_elapsed = time.time() - screenshot_start
     preprocess_start = time.time()
     if runtime.get("combined_model_kind") == "opencv_onnx":
@@ -1110,6 +1120,8 @@ if not runtime.get("ready"):
     print(f"[blooms_ai] {runtime.get('error', 'initialisation failed')}")
 else:
     try:
+        agc.ensure_capture_thread(runtime, interval=0.016, debug_log_fn=_debug_log)
+        agc.wait_for_capture_ready(runtime, timeout=1.0)
         if not runtime.get("latest_scan_time"):
             _scan_tokens_once(runtime)
         agc.ensure_scanner_thread(

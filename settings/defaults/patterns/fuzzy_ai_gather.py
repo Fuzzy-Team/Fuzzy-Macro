@@ -247,8 +247,8 @@ def onGatherEnd():
     agc.release_video_writer(runtime, debug_log_fn=_debug_log)
 
 
-def _preprocess_token_frame(frame, runtime):
-    if runtime.get("token_frame_is_crop"):
+def _preprocess_token_frame(frame, runtime, already_cropped=False):
+    if already_cropped or runtime.get("token_frame_is_crop"):
         cropped = frame
     else:
         left, top, width_px, height_px = runtime["token_crop"]
@@ -276,7 +276,8 @@ def _preprocess_token_frame(frame, runtime):
 
 def _record_debug_frame(runtime, frame, detections, target):
     if runtime.get("video_writer") is None:
-        frame = agc.grab_frame(runtime)
+        mailbox_frame, _, _ = agc.get_latest_frame(runtime, copy=True)
+        frame = mailbox_frame if mailbox_frame is not None else agc.grab_frame(runtime)
 
     writer = agc.ensure_video_writer(
         runtime,
@@ -413,12 +414,22 @@ def _annotate_recording_frame(runtime, frame):
 def _scan_tokens_once(runtime):
     detection_start = time.time()
     screenshot_start = time.time()
-    frame = agc.grab_region_frame(runtime, "token_monitor", "token_bbox")
-    if frame is None:
-        frame = agc.grab_frame(runtime)
+    after_id = int(runtime.get("token_last_frame_id", 0))
+    full_frame, frame_id, _ = agc.wait_for_latest_frame(
+        runtime,
+        after_id=after_id,
+        timeout=max(CONTINUOUS_SCAN_INTERVAL, 0.02),
+        copy=True,
+    )
+    if full_frame is None:
+        full_frame = agc.grab_frame(runtime)
+        frame_id = after_id
+    else:
+        runtime["token_last_frame_id"] = frame_id
+    token_frame = agc.crop_rect(full_frame, runtime["token_crop"])
     screenshot_elapsed = time.time() - screenshot_start
     preprocess_start = time.time()
-    image = _preprocess_token_frame(frame, runtime)
+    image = _preprocess_token_frame(token_frame, runtime, already_cropped=True)
     preprocess_elapsed = time.time() - preprocess_start
     inference_start = time.time()
     output = agc.run_model(runtime, "token", image)
@@ -467,7 +478,7 @@ def _scan_tokens_once(runtime):
         key="timing",
     )
     agc.update_detection_fps(runtime, total_elapsed)
-    _record_debug_frame(runtime, frame, detections, target)
+    _record_debug_frame(runtime, full_frame, detections, target)
 
     now = time.time()
     scan_lock = runtime.get("scan_lock")
@@ -1124,6 +1135,8 @@ elif warmup_only:
     _debug_log("warmup complete; movement skipped", min_interval=0.5, key="warmup")
 else:
     try:
+        agc.ensure_capture_thread(runtime, interval=0.016, debug_log_fn=_debug_log)
+        agc.wait_for_capture_ready(runtime, timeout=1.0)
         if not runtime.get("latest_scan_time"):
             _scan_tokens_once(runtime)
         agc.ensure_scanner_thread(
