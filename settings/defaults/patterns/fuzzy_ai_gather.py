@@ -13,51 +13,22 @@ Requirements:
 - token_detection_standard.mlmodelc or token_detection_standard.onnx
 - sprinkler_detection_standard.mlmodelc or sprinkler_detection_standard.onnx
 
-- Version 2.2
+- Version 2.3
 """
 
 import math
-import shutil
-import subprocess
 import threading
 import time
-from pathlib import Path
 
-try:
-    import cv2
-except Exception as _cv2_error:
-    cv2 = None
+from modules.misc import ai_gather_common as agc
 
-try:
-    import numpy as np
-except Exception as _numpy_error:
-    np = None
+cv2 = agc.cv2
+np = agc.np
+Image = agc.Image
 
-try:
-    import coremltools as ct
-except Exception as _coreml_error:
-    ct = None
-
-try:
-    import mss
-except Exception:
-    mss = None
-
-try:
-    from PIL import Image, ImageGrab
-except Exception:
-    Image = None
-    ImageGrab = None
-
-
-ROBLOX_VIEWPORT_WIDTH = 1364
-ROBLOX_VIEWPORT_HEIGHT = 732
-AT_CROP = (186, 128, 186, 124)  # left, top, right, bottom
-INPUT_WIDTH = ROBLOX_VIEWPORT_WIDTH - AT_CROP[0] - AT_CROP[2]
-INPUT_HEIGHT = ROBLOX_VIEWPORT_HEIGHT - AT_CROP[1] - AT_CROP[3]
-SPRINKLER_INPUT_WIDTH = 736
-SPRINKLER_INPUT_HEIGHT = 736
-NMS_THRESHOLD = 0.5
+INPUT_WIDTH = agc.INPUT_WIDTH
+INPUT_HEIGHT = agc.INPUT_HEIGHT
+MODEL_DIR = agc.MODEL_DIR
 CONFIDENCE_THRESHOLD = 0.3
 SPRINKLER_CONFIDENCE_THRESHOLD = 0.6
 MIN_TOKEN_DISTANCE = 0.3
@@ -86,14 +57,8 @@ LEASH_NEAR_TOKEN_ALLOWANCE = 2.25
 
 PREFERRED_TOKENS = {}
 PREFERRED_TOKEN_RANKS = {}
-IGNORED_TOKENS = {}
-
-NORMALIZED_CAL_RATIOS = [
-    (0.395314, 0.427995),
-    (0.597795, 0.430686),
-    (0.320584, 0.721513),
-    (0.670597, 0.722439),
-]
+IGNORED_TOKENS = set()
+_DEBUG_LOG_TIMES = {}
 
 LABELS_TOKENS = {
     0: "Activated Target", 1: "Baby Love", 2: "Beamstorm", 3: "Beesmas Cheer Token",
@@ -172,159 +137,59 @@ TOKEN_MODEL_OPTIONS = {
     "mini": ("Mini", "token_detection_mini.mlmodelc", LABELS_TOKENS_MINI, 768, 416),
 }
 
-LABELS_SPRINKLER = {
-    0: "Sprinkler",
-    1: "Supreme",
-}
 
-
-def _coerce_float(value, default):
-    try:
-        return float(value)
-    except Exception:
-        return float(default)
-
-
-def _coerce_int(value, default):
-    try:
-        return int(float(value))
-    except Exception:
-        return int(default)
-
-
-def _coerce_text(value, default=""):
-    if value is None:
-        return default
-    return str(value).strip()
-
-
-def _coerce_bool(value, default=False):
-    if isinstance(value, bool):
-        return value
-    if value is None:
-        return bool(default)
-    text = str(value).strip().lower()
-    if text in ("1", "true", "yes", "y", "on", "enabled", "enable"):
-        return True
-    if text in ("0", "false", "no", "n", "off", "disabled", "disable"):
-        return False
-    return bool(default)
-
-
-def _parse_token_names(value):
-    if value is None:
-        return []
-    if isinstance(value, (list, tuple, set)):
-        items = value
-    else:
-        items = str(value).replace("\n", ",").split(",")
-    out = []
-    seen = set()
-    for item in items:
-        name = str(item).strip()
-        if name and name not in seen:
-            out.append(name)
-            seen.add(name)
-    return out
-
-
-def _preferred_token_weights(value, default_weights):
-    names = _parse_token_names(value)
-    if not names:
-        return dict(default_weights)
-
-    max_weight = 100
-    step = 5
-    out = {}
-    for index, name in enumerate(names):
-        out[name] = max(max_weight - (index * step), 5)
-    return out
-
-
-def _ignored_token_names(value, default_names):
-    names = _parse_token_names(value)
-    if not names:
-        return set(default_names)
-    return set(names)
-
-
-def _project_root():
-    try:
-        return Path(__file__).resolve().parents[2]
-    except Exception:
-        return Path.cwd().resolve()
-
-
-MODEL_DIR = (_project_root() / "src" / "data" / "models").resolve()
-
-
-def _check_missing_models(model_names):
-    try:
-        from modules.misc.modelManager import ensure_missing_models
-
-        result = ensure_missing_models(model_names)
-        if result.get("downloaded"):
-            print(f"[fuzzy_ai_gather] Downloaded missing AI model(s): {', '.join(result['downloaded'])}")
-        elif result.get("missing_remote"):
-            print(f"[fuzzy_ai_gather] Missing AI model(s) were not found remotely: {', '.join(result['missing_remote'])}")
-        return result
-    except Exception as exc:
-        print(f"[fuzzy_ai_gather] Could not check missing AI models: {exc}")
-        return {"failures": {"model download": str(exc)}}
-
-
-CONFIDENCE_THRESHOLD = _coerce_float(globals().get("pattern_confidence_threshold"), CONFIDENCE_THRESHOLD)
-SPRINKLER_CONFIDENCE_THRESHOLD = _coerce_float(
+CONFIDENCE_THRESHOLD = agc.coerce_float(globals().get("pattern_confidence_threshold"), CONFIDENCE_THRESHOLD)
+SPRINKLER_CONFIDENCE_THRESHOLD = agc.coerce_float(
     globals().get("pattern_sprinkler_confidence_threshold"),
     SPRINKLER_CONFIDENCE_THRESHOLD,
 )
-MIN_TOKEN_DISTANCE = _coerce_float(globals().get("pattern_min_token_distance"), MIN_TOKEN_DISTANCE)
-IDLE_RETURN_INTERVAL = _coerce_float(globals().get("pattern_idle_return_interval"), IDLE_RETURN_INTERVAL)
-NO_TARGET_SWEEP_INTERVAL = _coerce_float(
+MIN_TOKEN_DISTANCE = agc.coerce_float(globals().get("pattern_min_token_distance"), MIN_TOKEN_DISTANCE)
+IDLE_RETURN_INTERVAL = agc.coerce_float(globals().get("pattern_idle_return_interval"), IDLE_RETURN_INTERVAL)
+NO_TARGET_SWEEP_INTERVAL = agc.coerce_float(
     globals().get("pattern_no_target_sweep_interval"),
     NO_TARGET_SWEEP_INTERVAL,
 )
-NO_TOKEN_RECALIBRATION_TIMEOUT = _coerce_float(
+NO_TOKEN_RECALIBRATION_TIMEOUT = agc.coerce_float(
     globals().get("pattern_no_token_recalibration_timeout"),
     NO_TOKEN_RECALIBRATION_TIMEOUT,
 )
-MOVEMENTS_BEFORE_RECALIBRATION = _coerce_int(
+MOVEMENTS_BEFORE_RECALIBRATION = agc.coerce_int(
     globals().get("pattern_movements_before_recalibration"),
     MOVEMENTS_BEFORE_RECALIBRATION,
 )
-SPRINKLER_ARRIVAL_THRESHOLD = _coerce_float(
+SPRINKLER_ARRIVAL_THRESHOLD = agc.coerce_float(
     globals().get("pattern_sprinkler_arrival_threshold"),
     SPRINKLER_ARRIVAL_THRESHOLD,
 )
-MAX_SPRINKLER_DISTANCE = _coerce_float(
+MAX_SPRINKLER_DISTANCE = agc.coerce_float(
     globals().get("pattern_max_sprinkler_distance"),
     MAX_SPRINKLER_DISTANCE,
 )
-SPRINKLER_RESCAN_ATTEMPTS = _coerce_int(
+SPRINKLER_RESCAN_ATTEMPTS = agc.coerce_int(
     globals().get("pattern_sprinkler_rescan_attempts"),
     SPRINKLER_RESCAN_ATTEMPTS,
 )
-SPRINKLER_RESCAN_DELAY = _coerce_float(
+SPRINKLER_RESCAN_DELAY = agc.coerce_float(
     globals().get("pattern_sprinkler_rescan_delay"),
     SPRINKLER_RESCAN_DELAY,
 )
-TARGET_SPRINKLER_LABEL = _coerce_text(
+TARGET_SPRINKLER_LABEL = agc.coerce_text(
     globals().get("pattern_target_sprinkler_label"),
     "",
 ) or None
-FIELD_DRIFT_COMPENSATION = _coerce_bool(globals().get("pattern_field_drift_compensation"), False)
-USE_SPRINKLER_MODEL_FOR_DRIFT_COMPENSATION = _coerce_bool(
+FIELD_DRIFT_COMPENSATION = agc.coerce_bool(globals().get("pattern_field_drift_compensation"), False)
+USE_SPRINKLER_MODEL_FOR_DRIFT_COMPENSATION = agc.coerce_bool(
     globals().get("pattern_use_sprinkler_model_for_drift_compensation"),
     False,
 )
-CAPTURE_BACKEND = _coerce_text(globals().get("pattern_capture_backend"), "auto").lower()
-DEBUG_MODE = _coerce_bool(globals().get("pattern_debug_mode"), DEBUG_MODE)
-RECORD_VIDEO = _coerce_bool(globals().get("pattern_record_video"), RECORD_VIDEO)
-RECORD_VIDEO_FPS = _coerce_float(globals().get("pattern_record_video_fps"), RECORD_VIDEO_FPS)
-PREFERRED_TOKENS = _preferred_token_weights(globals().get("pattern_preferred_tokens"), PREFERRED_TOKENS)
+CAPTURE_BACKEND = agc.coerce_text(globals().get("pattern_capture_backend"), "auto").lower()
+DEBUG_MODE = agc.coerce_bool(globals().get("pattern_debug_mode"), DEBUG_MODE)
+RECORD_VIDEO = agc.coerce_bool(globals().get("pattern_record_video"), RECORD_VIDEO)
+RECORD_VIDEO_FPS = agc.coerce_float(globals().get("pattern_record_video_fps"), RECORD_VIDEO_FPS)
+PREFERRED_TOKENS = agc.preferred_token_weights(globals().get("pattern_preferred_tokens"), PREFERRED_TOKENS)
 PREFERRED_TOKEN_RANKS = {name: index for index, name in enumerate(PREFERRED_TOKENS.keys())}
-IGNORED_TOKENS = _ignored_token_names(globals().get("pattern_ignored_tokens"), IGNORED_TOKENS)
-SPROUT_IDLE_SQUARE = _coerce_bool(globals().get("pattern_sprout_idle_square"), False)
+IGNORED_TOKENS = agc.ignored_token_names(globals().get("pattern_ignored_tokens"), IGNORED_TOKENS)
+SPROUT_IDLE_SQUARE = agc.coerce_bool(globals().get("pattern_sprout_idle_square"), False)
 
 
 try:
@@ -347,36 +212,39 @@ except Exception:
     width = 1
 
 
-def _default_points(screen_w, screen_h):
-    return np.array(
-        [[int(round(nx * screen_w)), int(round(ny * screen_h))] for nx, ny in NORMALIZED_CAL_RATIOS],
-        dtype=np.float32,
-    )
+def _debug_log(message, min_interval=0.0, key=None):
+    agc.debug_log("fuzzy_ai_gather", message, DEBUG_MODE, min_interval=min_interval, key=key, log_times=_DEBUG_LOG_TIMES)
 
 
-def _preprocess(frame, input_width, input_height, use_float16, crop=None, resize=True):
-    if crop:
-        left, top, width_px, height_px = crop
-        frame = frame[top:top + height_px, left:left + width_px]
+def _runtime_state():
+    return agc.get_runtime_state(self, "_fuzzy_ai_gather_state", "_FUZZY_AI_GATHER_STATE", globals())
 
-    if resize or frame.shape[1] != int(input_width) or frame.shape[0] != int(input_height):
-        if not resize:
-            _debug_log(
-                f"token crop was {frame.shape[1]}x{frame.shape[0]}, resizing to {input_width}x{input_height}",
-                min_interval=5.0,
-                key="token_crop_resize_fallback",
-            )
-        frame = cv2.resize(frame, (int(input_width), int(input_height)), interpolation=cv2.INTER_LINEAR)
 
-    if frame.ndim == 3 and frame.shape[2] == 4:
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGB)
-    else:
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+def _sprinkler_kwargs():
+    return {
+        "confidence_threshold": SPRINKLER_CONFIDENCE_THRESHOLD,
+        "max_distance": MAX_SPRINKLER_DISTANCE,
+        "target_label": TARGET_SPRINKLER_LABEL,
+    }
 
-    dtype = np.float16 if use_float16 else np.float32
-    normalized = rgb.astype(dtype) / 255.0
-    chw = np.transpose(normalized, (2, 0, 1))
-    return np.expand_dims(chw, axis=0)
+
+def _anchor_kwargs():
+    return {
+        "field_drift_compensation": FIELD_DRIFT_COMPENSATION,
+        "use_sprinkler_model": USE_SPRINKLER_MODEL_FOR_DRIFT_COMPENSATION,
+        "anchor_refresh_interval": ANCHOR_REFRESH_INTERVAL,
+        "max_passive_distance": ANCHOR_MAX_PASSIVE_DISTANCE,
+        "confidence_threshold": SPRINKLER_CONFIDENCE_THRESHOLD,
+        "max_distance": MAX_SPRINKLER_DISTANCE,
+        "target_label": TARGET_SPRINKLER_LABEL,
+        "debug_log_fn": _debug_log,
+    }
+
+
+def onGatherEnd():
+    runtime = _runtime_state()
+    agc.stop_scanner_thread(runtime)
+    agc.release_video_writer(runtime, debug_log_fn=_debug_log)
 
 
 def _preprocess_token_frame(frame, runtime):
@@ -406,356 +274,18 @@ def _preprocess_token_frame(frame, runtime):
     return Image.fromarray(rgb)
 
 
-def _preprocess_coreml_image(frame, input_width, input_height):
-    if frame.shape[1] != int(input_width) or frame.shape[0] != int(input_height):
-        frame = cv2.resize(frame, (int(input_width), int(input_height)), interpolation=cv2.INTER_LINEAR)
-
-    if frame.ndim == 3 and frame.shape[2] == 4:
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGB)
-    else:
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-    if Image is None:
-        raise RuntimeError("Pillow is required for CoreML inference.")
-    return Image.fromarray(rgb)
-
-
-def _preprocess_onnx_image(frame, input_width, input_height):
-    if frame.shape[1] != int(input_width) or frame.shape[0] != int(input_height):
-        frame = cv2.resize(frame, (int(input_width), int(input_height)), interpolation=cv2.INTER_LINEAR)
-
-    if frame.ndim == 3 and frame.shape[2] == 4:
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGB)
-    else:
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-    normalized = rgb.astype(np.float32) / 255.0
-    chw = np.transpose(normalized, (2, 0, 1))
-    return np.expand_dims(chw, axis=0)
-
-
-def _postprocess(output, confidence_threshold):
-    outputs = np.squeeze(output[0])
-    if outputs.ndim != 2 or outputs.shape[0] < 5:
-        return []
-
-    class_probs = outputs[4:, :]
-    confidences = np.max(class_probs, axis=0)
-    mask = confidences > confidence_threshold
-
-    if not np.any(mask):
-        return []
-
-    filtered_confidences = confidences[mask]
-    class_ids = np.argmax(class_probs[:, mask], axis=0)
-    boxes_data = outputs[:4, mask]
-    cx, cy, box_w, box_h = boxes_data
-    x1 = cx - box_w / 2.0
-    y1 = cy - box_h / 2.0
-    boxes = np.stack((x1, y1, box_w, box_h), axis=1)
-
-    indices = cv2.dnn.NMSBoxes(
-        boxes.tolist(),
-        filtered_confidences.tolist(),
-        confidence_threshold,
-        NMS_THRESHOLD,
-    )
-
-    detections = []
-    if len(indices) > 0:
-        for index in np.array(indices).flatten():
-            bx, by, bw, bh = boxes[index]
-            detections.append(((bx, by, bx + bw, by + bh), int(class_ids[index]), float(filtered_confidences[index])))
-    return detections
-
-
-def _postprocess_tokens(output, confidence_threshold):
-    pred = output[0]
-    if pred.ndim != 3 or pred.shape[0] < 1 or pred.shape[2] < 6:
-        return []
-
-    detections = []
-    for row in pred[0]:
-        x1, y1, x2, y2, confidence, class_id = row[:6]
-        confidence = float(confidence)
-        if confidence < confidence_threshold:
-            continue
-
-        x1 = float(x1)
-        y1 = float(y1)
-        x2 = float(x2)
-        y2 = float(y2)
-        if x2 <= x1 or y2 <= y1:
-            continue
-
-        detections.append(((x1, y1, x2, y2), int(round(float(class_id))), confidence))
-    return detections
-
-
-def _debug_log(message, min_interval=0.0, key=None):
-    if not DEBUG_MODE:
-        return
-
-    now = time.time()
-    log_state = globals().setdefault("_FUZZY_AI_DEBUG_LOG_TIMES", {})
-    log_key = key or message
-    last = log_state.get(log_key, 0.0)
-    if min_interval > 0 and now - last < min_interval:
-        return
-
-    log_state[log_key] = now
-    print(f"[fuzzy_ai_gather][debug] {message}", flush=True)
-
-
-def _runtime_state():
-    state = getattr(self, "_fuzzy_ai_gather_state", None)
-    if isinstance(state, dict):
-        return state
-
-    state = globals().get("_FUZZY_AI_GATHER_STATE")
-    if not isinstance(state, dict):
-        state = {}
-        globals()["_FUZZY_AI_GATHER_STATE"] = state
-
-    try:
-        setattr(self, "_fuzzy_ai_gather_state", state)
-    except Exception:
-        pass
-
-    return state
-
-
-def _build_capture():
-    viewport = getattr(self, "robloxWindow", None)
-    if viewport is not None:
-        left = int(getattr(viewport, "mx", 0))
-        top = int(getattr(viewport, "my", 0))
-        width_px = int(getattr(viewport, "mw", 0))
-        height_px = int(getattr(viewport, "mh", 0))
-    else:
-        left = 0
-        top = 0
-        width_px = 0
-        height_px = 0
-
-    if CAPTURE_BACKEND in ("auto", "mss") and mss is not None:
-        session = mss.mss()
-        if width_px <= 0 or height_px <= 0:
-            monitor = session.monitors[1]
-            left = int(monitor["left"])
-            top = int(monitor["top"])
-            width_px = int(monitor["width"])
-            height_px = int(monitor["height"])
-        monitor = {"left": left, "top": top, "width": width_px, "height": height_px}
-        return {
-            "backend": "mss",
-            "session": session,
-            "monitor": monitor,
-            "width": width_px,
-            "height": height_px,
-        }
-
-    if CAPTURE_BACKEND in ("auto", "pil", "pillow") and ImageGrab is not None:
-        if width_px <= 0 or height_px <= 0:
-            width_px, height_px = ImageGrab.grab().size
-            left = 0
-            top = 0
-        return {
-            "backend": "pil",
-            "bbox": (left, top, left + width_px, top + height_px),
-            "width": width_px,
-            "height": height_px,
-        }
-
-    raise RuntimeError(f"No supported capture backend found for '{CAPTURE_BACKEND}'. Install mss or Pillow.")
-
-
-def _grab_frame(runtime):
-    if runtime["capture"]["backend"] == "mss":
-        monitor = runtime["capture"]["monitor"]
-        return _mss_grab_to_array(runtime["capture"]["session"], monitor)
-
-    image = ImageGrab.grab(bbox=runtime["capture"].get("bbox"))
-    return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-
-
-def _grab_token_frame(runtime):
-    capture = runtime["capture"]
-    token_monitor = runtime.get("token_monitor")
-    if capture["backend"] == "mss" and token_monitor:
-        return _mss_grab_to_array(capture["session"], token_monitor)
-
-    token_bbox = runtime.get("token_bbox")
-    if token_bbox:
-        image = ImageGrab.grab(bbox=token_bbox)
-        return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-
-    return _grab_frame(runtime)
-
-
-def _mss_grab_to_array(session, monitor):
-    shot = session.grab(monitor)
-    return np.frombuffer(shot.raw, dtype=np.uint8).reshape((shot.height, shot.width, 4))
-
-
-def _token_crop_for_capture(capture):
-    capture_w = int(capture["width"])
-    capture_h = int(capture["height"])
-
-    left = int(round(capture_w * (AT_CROP[0] / ROBLOX_VIEWPORT_WIDTH)))
-    top = int(round(capture_h * (AT_CROP[1] / ROBLOX_VIEWPORT_HEIGHT)))
-    right = int(round(capture_w * (AT_CROP[2] / ROBLOX_VIEWPORT_WIDTH)))
-    bottom = int(round(capture_h * (AT_CROP[3] / ROBLOX_VIEWPORT_HEIGHT)))
-    crop_w = max(capture_w - left - right, 1)
-    crop_h = max(capture_h - top - bottom, 1)
-    resize = crop_w != INPUT_WIDTH or crop_h != INPUT_HEIGHT
-    return {"rect": (left, top, crop_w, crop_h), "resize": resize}
-
-
-def _model_point_to_capture(runtime, x, y):
-    left, top, crop_w, crop_h = runtime["token_crop"]
-    return (
-        left + (x * crop_w / float(INPUT_WIDTH)),
-        top + (y * crop_h / float(INPUT_HEIGHT)),
-    )
-
-
-def _bgr_frame(frame):
-    if frame.ndim == 3 and frame.shape[2] == 4:
-        return cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
-    return frame.copy()
-
-
-def _recording_dir():
-    path = _project_root() / "src" / "data" / "user" / "fuzzy_ai_recordings"
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
-def _ensure_video_writer(runtime, frame):
-    if not RECORD_VIDEO or cv2 is None:
-        return None
-
-    writer = runtime.get("video_writer")
-    if writer is not None:
-        return writer
-
-    bgr = _bgr_frame(frame)
-    height, width_px = bgr.shape[:2]
-    filename = f"fuzzy_ai_gather_{time.strftime('%Y%m%d_%H%M%S')}.mp4"
-    output_path = _recording_dir() / filename
-
-    ffmpeg_path = shutil.which("ffmpeg")
-    if ffmpeg_path:
-        command = [
-            ffmpeg_path,
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-y",
-            "-f",
-            "rawvideo",
-            "-pix_fmt",
-            "bgr24",
-            "-s",
-            f"{width_px}x{height}",
-            "-r",
-            str(max(RECORD_VIDEO_FPS, 1.0)),
-            "-i",
-            "-",
-            "-an",
-            "-c:v",
-            "libx264",
-            "-preset",
-            "ultrafast",
-            "-pix_fmt",
-            "yuv420p",
-            "-movflags",
-            "frag_keyframe+empty_moov+default_base_moof",
-            str(output_path),
-        ]
-        try:
-            process = subprocess.Popen(command, stdin=subprocess.PIPE)
-            writer = {"kind": "ffmpeg", "process": process, "path": str(output_path)}
-        except Exception as exc:
-            writer = None
-            _debug_log(f"ffmpeg recording failed to start: {exc}", min_interval=5.0, key="record_ffmpeg_failed")
-    else:
-        writer = None
-
-    if writer is None:
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        cv_writer = cv2.VideoWriter(str(output_path), fourcc, max(RECORD_VIDEO_FPS, 1.0), (width_px, height))
-        if not cv_writer.isOpened():
-            runtime["video_writer"] = None
-            _debug_log(f"video recording failed to open: {output_path}", min_interval=5.0, key="record_open_failed")
-            return None
-        writer = {"kind": "opencv", "writer": cv_writer, "path": str(output_path)}
-
-    runtime["video_writer"] = writer
-    runtime["video_path"] = str(output_path)
-    runtime["recording_stop_event"] = threading.Event()
-    runtime["recording_lock"] = threading.Lock()
-    runtime["recording_thread"] = threading.Thread(target=_recording_thread, args=(runtime,), daemon=True)
-    runtime["recording_thread"].start()
-    _debug_log(f"recording AI gather video to {output_path}")
-    return writer
-
-
-def _release_video_writer(runtime=None):
-    if runtime is None:
-        runtime = _runtime_state()
-    writer = runtime.get("video_writer") if isinstance(runtime, dict) else None
-    if writer is not None:
-        stop_event = runtime.get("recording_stop_event")
-        if stop_event is not None:
-            stop_event.set()
-        thread = runtime.get("recording_thread")
-        if thread is not None and thread.is_alive() and thread is not threading.current_thread():
-            try:
-                thread.join(timeout=2)
-            except Exception:
-                pass
-        try:
-            if isinstance(writer, dict) and writer.get("kind") == "ffmpeg":
-                process = writer.get("process")
-                if process and process.stdin:
-                    process.stdin.close()
-                if process:
-                    process.wait(timeout=5)
-            elif isinstance(writer, dict) and writer.get("kind") == "opencv":
-                writer["writer"].release()
-            else:
-                writer.release()
-        except Exception:
-            pass
-        runtime["video_writer"] = None
-        runtime["recording_thread"] = None
-        runtime["recording_stop_event"] = None
-        if runtime.get("video_path"):
-            _debug_log(f"saved AI gather recording: {runtime['video_path']}")
-
-
-def onGatherEnd():
-    _stop_scanner_thread()
-    _release_video_writer()
-
-
-def _draw_label(frame, text, x, y, color):
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = 0.45
-    thickness = 1
-    (text_w, text_h), baseline = cv2.getTextSize(text, font, font_scale, thickness)
-    y = max(y, text_h + 6)
-    cv2.rectangle(frame, (x, y - text_h - baseline - 4), (x + text_w + 4, y + 2), color, -1)
-    cv2.putText(frame, text, (x + 2, y - baseline - 1), font, font_scale, (0, 0, 0), thickness, cv2.LINE_AA)
-
-
 def _record_debug_frame(runtime, frame, detections, target):
     if runtime.get("video_writer") is None:
-        frame = _grab_frame(runtime)
+        frame = agc.grab_frame(runtime)
 
-    writer = _ensure_video_writer(runtime, frame)
+    writer = agc.ensure_video_writer(
+        runtime,
+        frame,
+        filename_prefix="fuzzy_ai_gather",
+        record_video=RECORD_VIDEO,
+        record_video_fps=RECORD_VIDEO_FPS,
+        debug_log_fn=_debug_log,
+    )
     if writer is None:
         return
 
@@ -785,7 +315,7 @@ def _record_debug_frame(runtime, frame, detections, target):
 
 
 def _annotate_recording_frame(runtime, frame):
-    annotated = _bgr_frame(frame)
+    annotated = agc.bgr_frame(frame)
     frame_h, frame_w = annotated.shape[:2]
 
     overlay = runtime.get("latest_recording_overlay", {})
@@ -797,8 +327,8 @@ def _annotate_recording_frame(runtime, frame):
     for box, class_id, confidence in detections:
         token_name = token_labels.get(class_id, f"class {class_id}")
         x1, y1, x2, y2 = box
-        left_f, top_f = _model_point_to_capture(runtime, x1, y1)
-        right_f, bottom_f = _model_point_to_capture(runtime, x2, y2)
+        left_f, top_f = agc.model_point_to_capture(runtime, x1, y1)
+        right_f, bottom_f = agc.model_point_to_capture(runtime, x2, y2)
         left = max(0, min(frame_w - 1, int(round(left_f))))
         top = max(0, min(frame_h - 1, int(round(top_f))))
         right = max(0, min(frame_w - 1, int(round(right_f))))
@@ -811,7 +341,7 @@ def _annotate_recording_frame(runtime, frame):
         else:
             color = (80, 220, 80)
         cv2.rectangle(annotated, (left, top), (right, bottom), color, 2 if is_target else 1)
-        _draw_label(annotated, f"{token_name} {confidence:.2f}", left, top - 4, color)
+        agc.draw_label(annotated, f"{token_name} {confidence:.2f}", left, top - 4, color)
 
     sprinkler = overlay.get("sprinkler") or {}
     sprinkler_box = sprinkler.get("box")
@@ -823,7 +353,7 @@ def _annotate_recording_frame(runtime, frame):
         bottom = max(0, min(frame_h - 1, int(round(y2))))
         cv2.rectangle(annotated, (left, top), (right, bottom), (255, 180, 0), 3)
         match_text = "match" if sprinkler.get("target_match") else "seen"
-        _draw_label(
+        agc.draw_label(
             annotated,
             f"sprinkler {match_text} {sprinkler.get('label', '?')} {sprinkler.get('confidence', 0.0):.2f} d={sprinkler.get('distance', 0.0):.2f}",
             left,
@@ -856,7 +386,7 @@ def _annotate_recording_frame(runtime, frame):
                 summary.append(f"{name}:{reason}")
         status_lines.append("skip " + ", ".join(summary))
     for index, line in enumerate(status_lines):
-        _draw_label(annotated, line, 10, 24 + (index * 24), (255, 255, 255))
+        agc.draw_label(annotated, line, 10, 24 + (index * 24), (255, 255, 255))
 
     detection_fps = overlay.get("detection_fps")
     detection_ms = overlay.get("last_detection_ms")
@@ -864,7 +394,7 @@ def _annotate_recording_frame(runtime, frame):
     if detection_ms is not None:
         fps_text += f" ({detection_ms:.0f}ms)"
     (text_w, _text_h), _baseline = cv2.getTextSize(fps_text, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
-    _draw_label(annotated, fps_text, max(10, frame_w - text_w - 18), 24, (255, 255, 255))
+    agc.draw_label(annotated, fps_text, max(10, frame_w - text_w - 18), 24, (255, 255, 255))
     timing = overlay.get("last_timing_ms") or {}
     if timing:
         timing_text = (
@@ -875,102 +405,38 @@ def _annotate_recording_frame(runtime, frame):
             f"score {timing.get('scoring', 0.0):.0f}ms"
         )
         (timing_w, _timing_h), _timing_baseline = cv2.getTextSize(timing_text, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
-        _draw_label(annotated, timing_text, max(10, frame_w - timing_w - 18), 48, (255, 255, 255))
+        agc.draw_label(annotated, timing_text, max(10, frame_w - timing_w - 18), 48, (255, 255, 255))
 
     return annotated
-
-
-def _recording_thread(runtime):
-    frame_interval = 1.0 / max(RECORD_VIDEO_FPS, 1.0)
-    next_frame_time = time.time()
-    stop_event = runtime.get("recording_stop_event")
-    recording_session = None
-    if runtime["capture"]["backend"] == "mss" and mss is not None:
-        recording_session = mss.mss()
-
-    try:
-        while stop_event is not None and not stop_event.is_set():
-            now = time.time()
-            if now < next_frame_time:
-                time.sleep(min(next_frame_time - now, 0.05))
-                continue
-
-            try:
-                if recording_session is not None:
-                    frame = _mss_grab_to_array(recording_session, runtime["capture"]["monitor"])
-                else:
-                    frame = _grab_frame(runtime)
-                annotated = _annotate_recording_frame(runtime, frame)
-                writer = runtime.get("video_writer")
-                if writer is None:
-                    return
-                _write_recording_frame(runtime, writer, annotated, frame_count=1)
-            except Exception as exc:
-                _debug_log(f"recording frame failed: {exc}", min_interval=5.0, key="record_frame_failed")
-
-            next_frame_time += frame_interval
-            if next_frame_time < time.time() - frame_interval:
-                next_frame_time = time.time() + frame_interval
-    finally:
-        if recording_session is not None:
-            try:
-                recording_session.close()
-            except Exception:
-                pass
-
-
-def _write_recording_frame(runtime, writer, annotated, frame_count=1):
-    try:
-        lock = runtime.get("recording_lock")
-        if lock is None:
-            lock = threading.Lock()
-            runtime["recording_lock"] = lock
-        with lock:
-            if isinstance(writer, dict) and writer.get("kind") == "ffmpeg":
-                process = writer.get("process")
-                if process and process.stdin and process.poll() is None:
-                    payload = annotated.tobytes()
-                    for _ in range(frame_count):
-                        process.stdin.write(payload)
-            elif isinstance(writer, dict) and writer.get("kind") == "opencv":
-                for _ in range(frame_count):
-                    writer["writer"].write(annotated)
-            else:
-                for _ in range(frame_count):
-                    writer.write(annotated)
-    except Exception as exc:
-        _debug_log(f"recording write failed: {exc}", min_interval=5.0, key="record_write_failed")
-        _release_video_writer(runtime)
-
-
-def _update_detection_fps(runtime, elapsed):
-    if elapsed <= 0:
-        return
-    fps = 1.0 / elapsed
-    previous = runtime.get("detection_fps")
-    runtime["detection_fps"] = fps if previous is None else ((previous * 0.8) + (fps * 0.2))
-    runtime["last_detection_ms"] = elapsed * 1000.0
 
 
 def _scan_tokens_once(runtime):
     detection_start = time.time()
     screenshot_start = time.time()
-    frame = _grab_token_frame(runtime)
-    sprinkler_pending = _sprinkler_anchor_should_run(runtime)
-    sprinkler_frame = _grab_frame(runtime) if sprinkler_pending else None
+    frame = agc.grab_region_frame(runtime, "token_monitor", "token_bbox")
+    if frame is None:
+        frame = agc.grab_frame(runtime)
+    sprinkler_pending = agc.sprinkler_anchor_should_run(
+        runtime,
+        field_drift_compensation=FIELD_DRIFT_COMPENSATION,
+        use_sprinkler_model=USE_SPRINKLER_MODEL_FOR_DRIFT_COMPENSATION,
+        anchor_refresh_interval=ANCHOR_REFRESH_INTERVAL,
+    )
+    sprinkler_frame = agc.grab_frame(runtime) if sprinkler_pending else None
     screenshot_elapsed = time.time() - screenshot_start
     preprocess_start = time.time()
     image = _preprocess_token_frame(frame, runtime)
     preprocess_elapsed = time.time() - preprocess_start
-    sprinkler_job = _start_sprinkler_find(runtime, frame=sprinkler_frame) if sprinkler_pending else None
+    sprinkler_job = (
+        agc.start_sprinkler_find(runtime, frame=sprinkler_frame, **_sprinkler_kwargs())
+        if sprinkler_pending
+        else None
+    )
     inference_start = time.time()
-    output = _run_model(runtime, "token", image)
+    output = agc.run_model(runtime, "token", image)
     inference_elapsed = time.time() - inference_start
     postprocess_start = time.time()
-    if runtime.get("token_model_kind") == "opencv_onnx":
-        detections = _postprocess(output, CONFIDENCE_THRESHOLD)
-    else:
-        detections = _postprocess_tokens(output, CONFIDENCE_THRESHOLD)
+    detections = agc.decode_detections(runtime, "token", output, CONFIDENCE_THRESHOLD)
     input_width = float(runtime.get("token_input_width", INPUT_WIDTH))
     input_height = float(runtime.get("token_input_height", INPUT_HEIGHT))
     if input_width != INPUT_WIDTH or input_height != INPUT_HEIGHT:
@@ -982,14 +448,19 @@ def _scan_tokens_once(runtime):
         ]
     postprocess_elapsed = time.time() - postprocess_start
     if sprinkler_job is not None:
-        _apply_sprinkler_anchor_result(runtime, _finish_sprinkler_find(*sprinkler_job))
+        agc.apply_sprinkler_anchor_result(
+            runtime,
+            agc.finish_sprinkler_find(*sprinkler_job),
+            max_passive_distance=ANCHOR_MAX_PASSIVE_DISTANCE,
+            debug_log_fn=_debug_log,
+        )
     scoring_start = time.time()
     target = _find_best_token(runtime, detections)
     if (
         target is None
         and not runtime.get("movement_active")
         and any(item.get("reason") in ("leash", "hard_leash") for item in runtime.get("last_rejected_tokens", []))
-        and _refresh_sprinkler_anchor(runtime, force=True)
+        and agc.refresh_sprinkler_anchor(runtime, force=True, **_anchor_kwargs())
     ):
         target = _find_best_token(runtime, detections)
     scoring_elapsed = time.time() - scoring_start
@@ -1014,7 +485,7 @@ def _scan_tokens_once(runtime):
         min_interval=1.0,
         key="timing",
     )
-    _update_detection_fps(runtime, total_elapsed)
+    agc.update_detection_fps(runtime, total_elapsed)
     _record_debug_frame(runtime, frame, detections, target)
 
     now = time.time()
@@ -1030,129 +501,6 @@ def _scan_tokens_once(runtime):
     return detections, target
 
 
-def _same_token_candidate(a, b):
-    if not isinstance(a, dict) or not isinstance(b, dict):
-        return False
-    if a.get("name") != b.get("name"):
-        return False
-    ax = a.get("future_x")
-    ay = a.get("future_y")
-    bx = b.get("future_x")
-    by = b.get("future_y")
-    if ax is None or ay is None or bx is None or by is None:
-        return False
-    return math.hypot(float(ax) - float(bx), float(ay) - float(by)) <= TARGET_LOCK_SWITCH_DISTANCE
-
-
-def _scanner_loop(runtime):
-    stop_event = runtime.get("scanner_stop_event")
-    while stop_event is not None and not stop_event.is_set():
-        try:
-            if not runtime.get("ready"):
-                return
-            _scan_tokens_once(runtime)
-        except Exception as exc:
-            runtime["ready"] = False
-            runtime["error"] = str(exc)
-            _release_video_writer(runtime)
-            _debug_log(f"scanner error: {exc}", min_interval=1.0, key="scanner_error")
-            return
-        time.sleep(max(CONTINUOUS_SCAN_INTERVAL, 0.01))
-
-
-def _ensure_scanner_thread(runtime):
-    thread = runtime.get("scanner_thread")
-    if thread is not None and thread.is_alive():
-        return
-
-    stop_event = runtime.get("scanner_stop_event")
-    if stop_event is None or stop_event.is_set():
-        stop_event = threading.Event()
-        runtime["scanner_stop_event"] = stop_event
-
-    thread = threading.Thread(target=_scanner_loop, args=(runtime,), daemon=True)
-    runtime["scanner_thread"] = thread
-    thread.start()
-    _debug_log("continuous token scanner started", min_interval=1.0, key="scanner_started")
-
-
-def _stop_scanner_thread(runtime=None):
-    if runtime is None:
-        runtime = _runtime_state()
-    if not isinstance(runtime, dict):
-        return
-
-    stop_event = runtime.get("scanner_stop_event")
-    if stop_event is not None:
-        stop_event.set()
-
-    thread = runtime.get("scanner_thread")
-    if thread is not None and thread.is_alive() and thread is not threading.current_thread():
-        try:
-            thread.join(timeout=1)
-        except Exception:
-            pass
-    runtime["scanner_thread"] = None
-
-
-def _load_coreml_model(model_path):
-    if ct is None:
-        raise RuntimeError("coremltools is required for AI token gathering. Install coremltools, then restart the macro.")
-
-    model_path = Path(model_path)
-    if model_path.suffix.lower() == ".mlmodelc":
-        compiled_model_class = getattr(ct.models, "CompiledMLModel", None)
-        if compiled_model_class is None:
-            raise RuntimeError("This coremltools version cannot load compiled .mlmodelc bundles. Upgrade coremltools, then restart the macro.")
-        model = compiled_model_class(str(model_path), compute_units=ct.ComputeUnit.ALL)
-        return model, "image", "var_1445"
-
-    model = ct.models.MLModel(str(model_path), compute_units=ct.ComputeUnit.ALL)
-    description = model.get_spec().description
-    input_name = description.input[0].name
-    output_name = description.output[0].name
-    return model, input_name, output_name
-
-
-def _load_onnx_model(model_path):
-    if cv2 is None:
-        raise RuntimeError("OpenCV is required for ONNX AI gathering.")
-
-    model = cv2.dnn.readNetFromONNX(str(model_path))
-    return model, None, None
-
-
-def _delete_model_path(model_path):
-    try:
-        path = Path(model_path)
-        if path.is_dir():
-            shutil.rmtree(path)
-        elif path.exists():
-            path.unlink()
-    except Exception as exc:
-        _debug_log(f"could not delete alternate model {model_path}: {exc}", min_interval=10.0, key=f"delete_model_{model_path}")
-
-
-def _run_model(runtime, prefix, image):
-    if runtime.get(f"{prefix}_model_kind") == "opencv_onnx":
-        session = runtime[f"{prefix}_session"]
-        session.setInput(image)
-        return [session.forward()]
-
-    return [
-        runtime[f"{prefix}_session"].predict(
-            {runtime[f"{prefix}_input"]: image}
-        )[runtime[f"{prefix}_output"]]
-    ]
-
-
-def _relative_distance(x, y, homography):
-    point = np.array([[[x, y + 15]]], dtype=np.float32)
-    transformed = cv2.perspectiveTransform(point, homography)
-    tx, ty = transformed[0][0]
-    return float(tx), float(-ty)
-
-
 def _get_importance(token_name):
     return PREFERRED_TOKENS.get(token_name, 1)
 
@@ -1165,10 +513,6 @@ def _candidate_priority_rank(candidate):
     if not isinstance(candidate, dict):
         return len(PREFERRED_TOKEN_RANKS) + 100
     return int(candidate.get("priority_rank", _get_priority_rank(candidate.get("name", ""))))
-
-
-def _sprinkler_anchor_enabled():
-    return FIELD_DRIFT_COMPENSATION and USE_SPRINKLER_MODEL_FOR_DRIFT_COMPENSATION
 
 
 def _token_metrics():
@@ -1206,8 +550,8 @@ def _find_best_token(runtime, detections):
             continue
 
         x1, y1, x2, y2 = box
-        center_x, center_y = _model_point_to_capture(runtime, (x1 + x2) / 2.0, (y1 + y2) / 2.0)
-        tx, ty = _relative_distance(center_x, center_y, runtime["homography"])
+        center_x, center_y = agc.model_point_to_capture(runtime, (x1 + x2) / 2.0, (y1 + y2) / 2.0)
+        tx, ty = agc.relative_distance(center_x, center_y, runtime["homography"])
         distance = math.hypot(tx, ty)
 
         if distance > metrics["max_consider"]:
@@ -1277,53 +621,6 @@ def _find_best_token(runtime, detections):
     return ranked_candidates[0]
 
 
-def _movement_keys(tx, ty):
-    fb_key = tcfbkey if ty >= 0 else afcfbkey
-    lr_key = afclrkey if tx >= 0 else tclrkey
-    return fb_key, lr_key
-
-
-def _movement_segments(tx, ty):
-    diagonal_component = min(abs(tx), abs(ty))
-    diagonal_distance = math.sqrt(2) * diagonal_component
-    axial_distance = abs(abs(tx) - abs(ty))
-    fb_key, lr_key = _movement_keys(tx, ty)
-
-    segments = []
-    if diagonal_distance >= 0.01:
-        segments.append(("diagonal", [fb_key, lr_key], diagonal_distance))
-
-    if axial_distance >= 0.01:
-        if abs(ty) >= abs(tx):
-            segments.append(("axial", [fb_key], axial_distance))
-        else:
-            segments.append(("axial", [lr_key], axial_distance))
-
-    return segments
-
-
-def _tile_walk(key, tiles):
-    if tiles <= 0:
-        return False
-
-    self.keyboard.keyDown(key, False)
-    self.keyboard.tileWait(tiles)
-    self.keyboard.keyUp(key, False)
-    return True
-
-
-def _tile_multi_walk(keys, tiles):
-    if tiles <= 0:
-        return False
-
-    for key in keys:
-        self.keyboard.keyDown(key, False)
-    self.keyboard.tileWait(tiles)
-    for key in reversed(keys):
-        self.keyboard.keyUp(key, False)
-    return True
-
-
 def _execute_movement(tx, ty, update_token_time=True):
     magnitude = math.hypot(tx, ty)
     if magnitude <= 0.001:
@@ -1333,11 +630,11 @@ def _execute_movement(tx, ty, update_token_time=True):
     runtime = _runtime_state()
     runtime["movement_active"] = True
     try:
-        for segment_type, keys, distance in _movement_segments(tx, ty):
+        for segment_type, keys, distance in agc.movement_segments(tx, ty, tcfbkey, afcfbkey, tclrkey, afclrkey):
             if segment_type == "diagonal":
-                _tile_multi_walk(keys, distance)
+                agc.tile_multi_walk(self.keyboard, keys, distance)
             else:
-                _tile_walk(keys[0], distance)
+                agc.tile_walk(self.keyboard, keys[0], distance)
             moved = True
         if moved:
             runtime["current_x"] += tx
@@ -1355,7 +652,6 @@ def _execute_movement_to_target(tx, ty):
     magnitude = math.hypot(tx, ty)
     if magnitude <= CONTINUOUS_MIN_REPLAN_DISTANCE:
         return False
-
     return _execute_movement(tx, ty)
 
 
@@ -1374,7 +670,6 @@ def _execute_active_sweep(runtime):
     sweep_index = int(runtime.get("sweep_index", 0))
     runtime["sweep_index"] = sweep_index + 1
 
-    # If we are near the leash edge, use the idle step to pull back toward the sprinkler.
     current_x = runtime["current_x"]
     current_y = runtime["current_y"]
     current_dist = math.hypot(current_x, current_y)
@@ -1436,15 +731,6 @@ def _execute_sprinkler_idle_square(runtime):
     return _execute_idle_movement(tx, ty)
 
 
-def _latest_target(runtime):
-    scan_lock = runtime.get("scan_lock")
-    if scan_lock is None:
-        return runtime.get("latest_target")
-    with scan_lock:
-        target = runtime.get("latest_target")
-        return dict(target) if isinstance(target, dict) else target
-
-
 def _latest_target_lineup(runtime):
     scan_lock = runtime.get("scan_lock")
     if scan_lock is None:
@@ -1457,26 +743,6 @@ def _latest_target_lineup(runtime):
     return [dict(target) for target in lineup if isinstance(target, dict)]
 
 
-def _locked_target(runtime):
-    lock = runtime.get("locked_target")
-    return dict(lock) if isinstance(lock, dict) else None
-
-
-def _set_locked_target(runtime, target):
-    if isinstance(target, dict):
-        target = dict(target)
-    scan_lock = runtime.get("scan_lock")
-    if scan_lock is None:
-        runtime["locked_target"] = target
-    else:
-        with scan_lock:
-            runtime["locked_target"] = target
-
-
-def _clear_locked_target(runtime):
-    _set_locked_target(runtime, None)
-
-
 def _pop_lineup_target(runtime, excluded=None):
     scan_lock = runtime.get("scan_lock")
     if scan_lock is None:
@@ -1484,7 +750,7 @@ def _pop_lineup_target(runtime, excluded=None):
         for index, target in enumerate(list(lineup)):
             if not isinstance(target, dict):
                 continue
-            if excluded and _same_token_candidate(excluded, target):
+            if excluded and agc.same_token_candidate(excluded, target, TARGET_LOCK_SWITCH_DISTANCE):
                 continue
             runtime["latest_targets"] = lineup[index + 1:]
             return dict(target)
@@ -1496,7 +762,7 @@ def _pop_lineup_target(runtime, excluded=None):
         for index, target in enumerate(list(lineup)):
             if not isinstance(target, dict):
                 continue
-            if excluded and _same_token_candidate(excluded, target):
+            if excluded and agc.same_token_candidate(excluded, target, TARGET_LOCK_SWITCH_DISTANCE):
                 continue
             runtime["latest_targets"] = lineup[index + 1:]
             return dict(target)
@@ -1506,8 +772,8 @@ def _pop_lineup_target(runtime, excluded=None):
 
 def _select_movement_target(runtime):
     latest_lineup = _latest_target_lineup(runtime)
-    latest = latest_lineup[0] if latest_lineup else _latest_target(runtime)
-    locked = _locked_target(runtime)
+    latest = latest_lineup[0] if latest_lineup else agc.latest_target(runtime)
+    locked = agc.locked_target(runtime)
     now = time.time()
 
     if locked:
@@ -1515,25 +781,25 @@ def _select_movement_target(runtime):
         remaining_y = float(locked.get("future_y", runtime["current_y"])) - runtime["current_y"]
         remaining = math.hypot(remaining_x, remaining_y)
         if remaining <= TARGET_LOCK_REACHED_DISTANCE:
-            _clear_locked_target(runtime)
+            agc.clear_locked_target(runtime)
             next_target = _pop_lineup_target(runtime, excluded=locked) or latest
             if next_target:
                 next_target["locked_at"] = now
                 next_target["last_seen"] = now
-                _set_locked_target(runtime, next_target)
+                agc.set_locked_target(runtime, next_target)
             return next_target
 
         last_seen = float(locked.get("last_seen", locked.get("locked_at", now)))
-        if latest and _same_token_candidate(locked, latest):
+        if latest and agc.same_token_candidate(locked, latest, TARGET_LOCK_SWITCH_DISTANCE):
             locked.update(latest)
             locked["last_seen"] = now
-            _set_locked_target(runtime, locked)
+            agc.set_locked_target(runtime, locked)
             return locked
 
         if latest and _candidate_priority_rank(latest) < _candidate_priority_rank(locked):
             latest["locked_at"] = now
             latest["last_seen"] = now
-            _set_locked_target(runtime, latest)
+            agc.set_locked_target(runtime, latest)
             return latest
 
         if now - last_seen <= TARGET_LOCK_LOST_TIMEOUT:
@@ -1542,21 +808,21 @@ def _select_movement_target(runtime):
         if latest and latest.get("score", 0.0) >= locked.get("score", 0.0) * TARGET_LOCK_SWITCH_SCORE_MULTIPLIER:
             latest["locked_at"] = now
             latest["last_seen"] = now
-            _set_locked_target(runtime, latest)
+            agc.set_locked_target(runtime, latest)
             return latest
 
-        _clear_locked_target(runtime)
+        agc.clear_locked_target(runtime)
         next_target = _pop_lineup_target(runtime, excluded=locked) or latest
         if next_target:
             next_target["locked_at"] = now
             next_target["last_seen"] = now
-            _set_locked_target(runtime, next_target)
+            agc.set_locked_target(runtime, next_target)
         return next_target
 
     if latest:
         latest["locked_at"] = now
         latest["last_seen"] = now
-        _set_locked_target(runtime, latest)
+        agc.set_locked_target(runtime, latest)
     return latest
 
 
@@ -1573,7 +839,7 @@ def _execute_planned_movement(runtime):
     remaining_x = float(target_x) - runtime["current_x"]
     remaining_y = float(target_y) - runtime["current_y"]
     if math.hypot(remaining_x, remaining_y) <= CONTINUOUS_MIN_REPLAN_DISTANCE:
-        _clear_locked_target(runtime)
+        agc.clear_locked_target(runtime)
         next_target = _pop_lineup_target(runtime, excluded=target)
         if not next_target:
             return False
@@ -1587,7 +853,7 @@ def _execute_planned_movement(runtime):
             return False
         next_target["locked_at"] = time.time()
         next_target["last_seen"] = next_target["locked_at"]
-        _set_locked_target(runtime, next_target)
+        agc.set_locked_target(runtime, next_target)
         target = next_target
 
     _debug_log(
@@ -1598,109 +864,9 @@ def _execute_planned_movement(runtime):
     return _execute_movement_to_target(remaining_x, remaining_y)
 
 
-def _sprinkler_infer_lock(runtime):
-    lock = runtime.get("sprinkler_infer_lock")
-    if lock is None:
-        lock = threading.Lock()
-        runtime["sprinkler_infer_lock"] = lock
-    return lock
-
-
-def _start_sprinkler_find(runtime, frame=None):
-    holder = {"result": None, "error": None}
-
-    def _worker():
-        try:
-            holder["result"] = _find_sprinkler(runtime, frame=frame)
-        except Exception as exc:
-            holder["error"] = exc
-
-    thread = threading.Thread(target=_worker, daemon=True)
-    thread.start()
-    return thread, holder
-
-
-def _finish_sprinkler_find(thread, holder):
-    thread.join()
-    if holder["error"] is not None:
-        raise holder["error"]
-    return holder["result"]
-
-
-def _find_sprinkler(runtime, frame=None):
-    if runtime.get("sprinkler_session") is None:
-        runtime["last_sprinkler_status"] = "model_missing"
-        return None
-
-    if frame is None:
-        frame = _grab_frame(runtime)
-    if runtime.get("sprinkler_model_kind") == "opencv_onnx":
-        image = _preprocess_onnx_image(frame, SPRINKLER_INPUT_WIDTH, SPRINKLER_INPUT_HEIGHT)
-    else:
-        image = _preprocess_coreml_image(frame, SPRINKLER_INPUT_WIDTH, SPRINKLER_INPUT_HEIGHT)
-    with _sprinkler_infer_lock(runtime):
-        output = _run_model(runtime, "sprinkler", image)
-    if runtime.get("sprinkler_model_kind") == "opencv_onnx":
-        detections = _postprocess(output, SPRINKLER_CONFIDENCE_THRESHOLD)
-    else:
-        detections = _postprocess_tokens(output, SPRINKLER_CONFIDENCE_THRESHOLD)
-
-    scale_x = runtime["capture"]["width"] / float(SPRINKLER_INPUT_WIDTH)
-    scale_y = runtime["capture"]["height"] / float(SPRINKLER_INPUT_HEIGHT)
-
-    best = None
-    best_distance = float("inf")
-    best_any = None
-    best_any_distance = float("inf")
-    status = "no_detection"
-    for box, class_id, confidence in detections:
-        label = LABELS_SPRINKLER.get(class_id)
-
-        x1, y1, x2, y2 = box
-        center_x = ((x1 + x2) / 2.0) * scale_x
-        center_y = ((y1 + y2) / 2.0) * scale_y
-        tx, ty = _relative_distance(center_x, center_y, runtime["homography"])
-        distance = math.hypot(tx, ty)
-        scaled_box = (x1 * scale_x, y1 * scale_y, x2 * scale_x, y2 * scale_y)
-
-        if distance > MAX_SPRINKLER_DISTANCE:
-            continue
-
-        if distance < best_any_distance:
-            best_any_distance = distance
-            best_any = (tx, ty, distance, label, confidence, scaled_box)
-
-        if TARGET_SPRINKLER_LABEL and label != TARGET_SPRINKLER_LABEL:
-            status = f"label_mismatch:{label or 'unknown'}"
-            continue
-
-        if distance < best_distance:
-            best_distance = distance
-            best = (tx, ty, distance, label, confidence, scaled_box)
-
-    overlay_detection = best or best_any
-    if overlay_detection:
-        tx, ty, distance, label, confidence, scaled_box = overlay_detection
-        runtime["last_sprinkler_detection"] = {
-            "tx": tx,
-            "ty": ty,
-            "distance": distance,
-            "label": label,
-            "confidence": confidence,
-            "box": scaled_box,
-            "target_match": bool(best),
-            "time": time.time(),
-        }
-        status = "target_match" if best else status
-    else:
-        runtime["last_sprinkler_detection"] = {}
-    runtime["last_sprinkler_status"] = status
-    return best
-
-
 def _find_sprinkler_with_retry(runtime):
     for attempt in range(SPRINKLER_RESCAN_ATTEMPTS):
-        result = _find_sprinkler(runtime)
+        result = agc.find_sprinkler(runtime, **_sprinkler_kwargs())
         if result:
             _debug_log(
                 f"sprinkler found on attempt {attempt + 1}: label={result[3]} confidence={result[4]:.2f} distance={result[2]:.2f}",
@@ -1729,61 +895,6 @@ def _clear_targets(runtime):
             runtime["latest_target"] = None
             runtime["latest_targets"] = []
             runtime["locked_target"] = None
-
-
-def _sprinkler_anchor_should_run(runtime, force=False):
-    if not _sprinkler_anchor_enabled():
-        runtime["last_sprinkler_status"] = (
-            "disabled:field_drift_compensation"
-            if not FIELD_DRIFT_COMPENSATION
-            else "disabled:use_sprinkler_model_for_drift_compensation"
-        )
-        return False
-    if runtime.get("sprinkler_session") is None:
-        runtime["last_sprinkler_status"] = "model_missing"
-        return False
-    if runtime.get("movement_active") and not force:
-        return False
-    if not force and time.time() - runtime.get("last_anchor_time", 0.0) < ANCHOR_REFRESH_INTERVAL:
-        return False
-    return True
-
-
-def _apply_sprinkler_anchor_result(runtime, result):
-    runtime["last_anchor_time"] = time.time()
-    if not result:
-        return False
-
-    tx, ty, distance, label, confidence = result[:5]
-    if distance > ANCHOR_MAX_PASSIVE_DISTANCE:
-        return False
-
-    old_x = runtime.get("current_x", 0.0)
-    old_y = runtime.get("current_y", 0.0)
-    runtime["current_x"] = -tx
-    runtime["current_y"] = -ty
-    runtime["last_anchor"] = {
-        "x": runtime["current_x"],
-        "y": runtime["current_y"],
-        "sprinkler_tx": tx,
-        "sprinkler_ty": ty,
-        "distance": distance,
-        "label": label,
-        "confidence": confidence,
-        "time": time.time(),
-    }
-    _debug_log(
-        f"anchor refreshed from sprinkler label={label} confidence={confidence:.2f} pos=({old_x:.2f},{old_y:.2f})->({runtime['current_x']:.2f},{runtime['current_y']:.2f})",
-        min_interval=1.0,
-        key="anchor_refresh",
-    )
-    return True
-
-
-def _refresh_sprinkler_anchor(runtime, force=False, frame=None):
-    if not _sprinkler_anchor_should_run(runtime, force=force):
-        return False
-    return _apply_sprinkler_anchor_result(runtime, _find_sprinkler(runtime, frame=frame))
 
 
 def _recalibrate(runtime):
@@ -1824,7 +935,6 @@ def _should_recalibrate(runtime):
 
 
 def _fallback_pattern():
-    # Tiny figure-eight around the current spot so the pattern still works if AI deps are missing.
     _debug_log("running fallback sweep pattern", min_interval=1.0, key="fallback")
     travel = 0.12 * max(size, 0.75)
     for _ in range(max(1, min(int(width), 2))):
@@ -1835,16 +945,13 @@ def _fallback_pattern():
 
 
 def _initialise_runtime():
-    if cv2 is None or np is None:
-        raise RuntimeError(
-            "Must install opencv-python and numpy before using AI Gathering, please run install dependencies before continuing."
-        )
+    agc.require_vision_deps()
 
-    requested_model = _coerce_text(globals().get("pattern_ai_gather_model"), "Standard").strip().lower()
+    requested_model = agc.coerce_text(globals().get("pattern_ai_gather_model"), "Standard").strip().lower()
     requested_label, requested_filename, requested_labels, requested_width, requested_height = TOKEN_MODEL_OPTIONS.get(
         requested_model, TOKEN_MODEL_OPTIONS["standard"]
     )
-    requested_filename_override = _coerce_text(globals().get("pattern_ai_gather_model_file"), "")
+    requested_filename_override = agc.coerce_text(globals().get("pattern_ai_gather_model_file"), "")
     if requested_filename_override:
         requested_filename = requested_filename_override
         if requested_filename_override == "loot_detection_small.mlmodelc":
@@ -1859,20 +966,19 @@ def _initialise_runtime():
     standard_candidates = [
         (MODEL_DIR / "token_detection_standard.mlmodelc", "coreml", LABELS_TOKENS, "Standard", INPUT_WIDTH, INPUT_HEIGHT),
         (MODEL_DIR / "token_detection_standard.onnx", "opencv_onnx", LABELS_TOKENS, "Standard", INPUT_WIDTH, INPUT_HEIGHT),
-        (MODEL_DIR / "best.mlpackage", "coreml", LABELS_TOKENS, "Legacy Standard", INPUT_WIDTH, INPUT_HEIGHT),
-        (MODEL_DIR / "tokens.onnx", "opencv_onnx", LABELS_TOKENS, "Legacy Standard", INPUT_WIDTH, INPUT_HEIGHT),
     ]
     token_candidates = []
     if requested_filename is not None:
         token_candidates.append((MODEL_DIR / requested_filename, "coreml", requested_labels, requested_label, requested_width, requested_height))
     token_candidates.extend(standard_candidates)
     token_candidates = [candidate for candidate in token_candidates if candidate[0].exists()]
+    download_result = {}
     if not token_candidates:
         missing_model_names = []
         if requested_filename is not None:
             missing_model_names.append(requested_filename)
         missing_model_names.extend(["token_detection_standard.mlmodelc", "token_detection_standard.onnx"])
-        download_result = _check_missing_models(missing_model_names)
+        download_result = agc.check_missing_models("fuzzy_ai_gather", missing_model_names)
         token_candidates = []
         if requested_filename is not None:
             token_candidates.append((MODEL_DIR / requested_filename, "coreml", requested_labels, requested_label, requested_width, requested_height))
@@ -1886,33 +992,13 @@ def _initialise_runtime():
             f"Checked selected {requested_label} model and Standard models in {MODEL_DIR}.{detail}"
         )
     token_path, token_model_kind, token_labels, token_model_label, token_input_width, token_input_height = token_candidates[0]
-    if token_model_kind == "coreml" and ct is None:
-        try:
-            import subprocess
-            import sys
-            import importlib
+    if token_model_kind == "coreml":
+        agc.require_coreml_or_raise()
 
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "coremltools"])
-            globals()["ct"] = importlib.import_module("coremltools")
-        except Exception as exc:
-            raise RuntimeError(
-                "coremltools is required but automatic install failed: " + str(exc) + ". Please install coremltools before using AI Gathering, then restart the macro."
-            )
-    if token_model_kind == "coreml" and Image is None:
-        raise RuntimeError("Pillow is required for CoreML AI Gathering, please run install dependencies before continuing.")
+    sprinkler_path, sprinkler_model_kind = agc.resolve_sprinkler_model(tag="fuzzy_ai_gather", download=False)
 
-    sprinkler_model_kind = None
-    sprinkler_candidate = MODEL_DIR / "sprinkler_detection_standard.mlmodelc"
-    if sprinkler_candidate.exists():
-        sprinkler_model_kind = "coreml"
-    else:
-        sprinkler_candidate = MODEL_DIR / "sprinkler_detection_standard.onnx"
-        if sprinkler_candidate.exists():
-            sprinkler_model_kind = "opencv_onnx"
-    sprinkler_path = sprinkler_candidate if sprinkler_candidate.exists() else None
-
-    capture = _build_capture()
-    token_crop_info = _token_crop_for_capture(capture)
+    capture = agc.build_capture(getattr(self, "robloxWindow", None), CAPTURE_BACKEND)
+    token_crop_info = agc.token_crop_for_capture(capture)
     token_left, token_top, token_width, token_height = token_crop_info["rect"]
     token_monitor = None
     token_bbox = None
@@ -1935,13 +1021,8 @@ def _initialise_runtime():
     _debug_log(
         f"capture backend={capture['backend']} size={capture['width']}x{capture['height']} token_capture={token_monitor or token_bbox or token_crop_info['rect']} token_resize={token_crop_info['resize']} token_model={token_path} sprinkler_model={sprinkler_path or 'missing'}"
     )
-    points = _default_points(capture["width"], capture["height"])
 
-    destination = np.array(
-        [[-5, -5], [5, -5], [-5, 5], [5, 5]],
-        dtype=np.float32,
-    )
-    homography, _ = cv2.findHomography(points, destination, cv2.RANSAC)
+    homography = agc.compute_homography(capture["width"], capture["height"])
     if homography is None:
         raise RuntimeError("Could not compute AI gather homography.")
 
@@ -1950,9 +1031,9 @@ def _initialise_runtime():
     for candidate_path, candidate_kind, candidate_labels, candidate_label, candidate_width, candidate_height in token_candidates:
         try:
             if candidate_kind == "opencv_onnx":
-                token_session, token_input, token_output = _load_onnx_model(candidate_path)
+                token_session, token_input, token_output = agc.load_onnx_model(candidate_path)
             else:
-                token_session, token_input, token_output = _load_coreml_model(candidate_path)
+                token_session, token_input, token_output = agc.load_coreml_model(candidate_path)
             if candidate_label != requested_label:
                 print(
                     f"[fuzzy_ai_gather] {requested_label} model failed or was unavailable; falling back to Standard ({candidate_path.name})"
@@ -1971,33 +1052,17 @@ def _initialise_runtime():
             print(f"[fuzzy_ai_gather] token model load failed: {error_message}")
     else:
         raise RuntimeError("Could not load any token AI model: " + "; ".join(token_load_errors))
+
     if token_path.name == "token_detection_standard.onnx":
-        _delete_model_path(MODEL_DIR / "token_detection_standard.mlmodelc")
-        _delete_model_path(MODEL_DIR / "best.mlpackage")
+        agc.delete_model_path(MODEL_DIR / "token_detection_standard.mlmodelc", _debug_log)
     elif token_path.name == "token_detection_standard.mlmodelc":
-        _delete_model_path(MODEL_DIR / "token_detection_standard.onnx")
-        _delete_model_path(MODEL_DIR / "tokens.onnx")
-        _delete_model_path(MODEL_DIR / "best.mlpackage")
-    elif token_path.name == "best.mlpackage":
-        _delete_model_path(MODEL_DIR / "token_detection_standard.mlmodelc")
-        _delete_model_path(MODEL_DIR / "token_detection_standard.onnx")
-        _delete_model_path(MODEL_DIR / "tokens.onnx")
-    elif token_path.name == "tokens.onnx":
-        _delete_model_path(MODEL_DIR / "token_detection_standard.mlmodelc")
-        _delete_model_path(MODEL_DIR / "best.mlpackage")
-    sprinkler_session = None
-    sprinkler_input = None
-    sprinkler_output = None
-    if sprinkler_path is not None:
-        if sprinkler_model_kind == "opencv_onnx":
-            sprinkler_session, sprinkler_input, sprinkler_output = _load_onnx_model(sprinkler_path)
-            _delete_model_path(MODEL_DIR / "sprinkler_detection_standard.mlmodelc")
-            _delete_model_path(MODEL_DIR / "sprinkler.mlpackage")
-        else:
-            sprinkler_session, sprinkler_input, sprinkler_output = _load_coreml_model(sprinkler_path)
-            _delete_model_path(MODEL_DIR / "sprinkler_detection_standard.onnx")
-            _delete_model_path(MODEL_DIR / "sprinkler.onnx")
-            _delete_model_path(MODEL_DIR / "sprinkler.mlpackage")
+        agc.delete_model_path(MODEL_DIR / "token_detection_standard.onnx", _debug_log)
+
+    sprinkler_session, sprinkler_input, sprinkler_output = agc.load_sprinkler_session(
+        sprinkler_path,
+        sprinkler_model_kind,
+        _debug_log,
+    )
 
     return {
         "capture": capture,
@@ -2027,10 +1092,10 @@ def _initialise_runtime():
         "last_idle_return_time": time.time(),
         "last_no_target_sweep_time": time.time(),
         "sweep_index": 0,
+        "idle_square_index": 0,
         "initialised_at": time.time(),
         "video_writer": None,
         "video_path": "",
-        "last_recording_frame_time": 0.0,
         "detection_fps": None,
         "last_detection_ms": None,
         "last_timing_ms": {},
@@ -2048,6 +1113,7 @@ def _initialise_runtime():
         "sprinkler_infer_lock": threading.Lock(),
         "scanner_stop_event": None,
         "scanner_thread": None,
+        "annotate_recording_frame": _annotate_recording_frame,
     }
 
 
@@ -2067,7 +1133,7 @@ if not runtime.get("ready"):
         _debug_log(f"initialisation failed: {exc}")
 
 
-warmup_only = _coerce_bool(globals().get("pattern_ai_warmup_only"), False)
+warmup_only = agc.coerce_bool(globals().get("pattern_ai_warmup_only"), False)
 
 if not runtime.get("ready"):
     print(f"[fuzzy_ai_gather] {runtime.get('error', 'initialisation failed')}")
@@ -2079,13 +1145,19 @@ else:
     try:
         if not runtime.get("latest_scan_time"):
             _scan_tokens_once(runtime)
-        _ensure_scanner_thread(runtime)
-        _refresh_sprinkler_anchor(runtime)
+        agc.ensure_scanner_thread(
+            runtime,
+            _scan_tokens_once,
+            CONTINUOUS_SCAN_INTERVAL,
+            debug_log_fn=_debug_log,
+            on_error=lambda _exc: agc.release_video_writer(runtime, debug_log_fn=_debug_log),
+        )
+        agc.refresh_sprinkler_anchor(runtime, **_anchor_kwargs())
 
         if _should_recalibrate(runtime):
             _recalibrate(runtime)
 
-        target = _locked_target(runtime) or _latest_target(runtime)
+        target = agc.locked_target(runtime) or agc.latest_target(runtime)
         if target:
             _debug_log(
                 f"target={target['name']} confidence={target['confidence']:.2f} score={target['score']:.2f} planned=({target['future_x']:.2f},{target['future_y']:.2f})",
@@ -2121,6 +1193,6 @@ else:
     except Exception as exc:
         runtime["ready"] = False
         runtime["error"] = str(exc)
-        _release_video_writer(runtime)
+        agc.release_video_writer(runtime, debug_log_fn=_debug_log)
         print(f"[fuzzy_ai_gather] runtime error: {exc}")
         _fallback_pattern()
