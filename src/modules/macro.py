@@ -2439,7 +2439,11 @@ class macro:
             if not self.setdat.get("disable_tool_at_hive", False):
                 mouse.click()
 
-            if self.night and self.setdat["stinger_hunt"]:
+            if (
+                self.setdat.get("macro_mode", "normal") != "quest"
+                and self.night
+                and self.setdat["stinger_hunt"]
+            ):
                 self.hourlyReport.addHourlyStat("converting_time", time.time()-st)
                 if liveGatherReport:
                     liveGatherReport.stop()
@@ -4198,13 +4202,22 @@ class macro:
                 stopGather()
                 return
             #check for gather interrupts
-            elif self.night and self.setdat["stinger_hunt"]:
+            elif (
+                self.setdat.get("macro_mode", "normal") != "quest"
+                and self.night
+                and self.setdat["stinger_hunt"]
+            ):
                 #rely on task function in main to execute the stinger hunt
                 stopGather()
                 self.logger.webhook("Gathering: interrupted","Stinger Hunt","dark brown")
                 self.reset(convert=False)
                 break
-            elif self.setdat["mondo_buff"] and self.hasMondoRespawned() and self.setdat["mondo_buff_interrupt_gathering"]:
+            elif (
+                self.setdat.get("macro_mode", "normal") != "quest"
+                and self.setdat["mondo_buff"]
+                and self.hasMondoRespawned()
+                and self.setdat["mondo_buff_interrupt_gathering"]
+            ):
                 stopGather()
                 self.logger.webhook("Gathering: interrupted","Mondo Buff","dark brown")
                 self.reset(convert=False)
