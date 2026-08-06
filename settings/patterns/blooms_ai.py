@@ -13,54 +13,26 @@ Requirements:
 - blooms-and-petals-standard.mlmodelc/.onnx, Blooms-and-petals-light.mlmodelc/.onnx, or Blooms-and-petals-mini.mlmodelc/.onnx
 - sprinkler_detection_standard.mlmodelc or sprinkler_detection_standard.onnx
 
-- Version 2.0
+- Version 2.1
 """
 
 import math
-import shutil
-import subprocess
 import threading
 import time
-from pathlib import Path
 
-try:
-    import cv2
-except Exception as _cv2_error:
-    cv2 = None
+from modules.misc import ai_gather_common as agc
 
-try:
-    import numpy as np
-except Exception as _numpy_error:
-    np = None
+cv2 = agc.cv2
+np = agc.np
+ct = agc.ct
+Image = agc.Image
 
-try:
-    import coremltools as ct
-except Exception as _coreml_error:
-    ct = None
-
-try:
-    import mss
-except Exception:
-    mss = None
-
-try:
-    from PIL import Image, ImageGrab
-except Exception:
-    Image = None
-    ImageGrab = None
-
-
-ROBLOX_VIEWPORT_WIDTH = 1364
-ROBLOX_VIEWPORT_HEIGHT = 732
-AT_CROP = (186, 128, 186, 124)  # left, top, right, bottom
-INPUT_WIDTH = ROBLOX_VIEWPORT_WIDTH - AT_CROP[0] - AT_CROP[2]
-INPUT_HEIGHT = ROBLOX_VIEWPORT_HEIGHT - AT_CROP[1] - AT_CROP[3]
-SPRINKLER_INPUT_WIDTH = 736
-SPRINKLER_INPUT_HEIGHT = 736
+INPUT_WIDTH = agc.INPUT_WIDTH
+INPUT_HEIGHT = agc.INPUT_HEIGHT
+MODEL_DIR = agc.MODEL_DIR
 SPRINKLER_CONFIDENCE_THRESHOLD = 0.6
 PETAL_CONFIDENCE_THRESHOLD = 0.50
-NMS_THRESHOLD = 0.5
-RUNTIME_VERSION = 34
+RUNTIME_VERSION = 35
 MIN_TOKEN_DISTANCE = 0.3
 MAX_SPRINKLER_DISTANCE = 10.0
 TARGET_SPRINKLER_LABEL = None
@@ -117,171 +89,44 @@ BLOOM_MODEL_VARIANTS = {
     ),
 }
 
-IGNORED_TOKENS = {}
-
-NORMALIZED_CAL_RATIOS = [
-    (0.395314, 0.427995),
-    (0.597795, 0.430686),
-    (0.320584, 0.721513),
-    (0.670597, 0.722439),
-]
-
-LABELS_TOKENS = {
-    0: "Activated Target", 1: "Baby Love", 2: "Beamstorm", 3: "Beesmas Cheer Token",
-    4: "Black Bear Morph", 5: "Bloom", 6: "Blue Bomb Sync", 7: "Blue Boost",
-    8: "Blueberry", 9: "Bomb", 10: "Brown Bear Morph", 11: "Coconut",
-    12: "ComboCoconut", 13: "Duped Baby Love", 14: "Duped Beamstorm",
-    15: "Duped Beesmas Cheer Token", 16: "Duped Black Bear Morph",
-    17: "Duped Blue Bomb Sync", 18: "Duped Blue Boost", 19: "Duped Blueberry",
-    20: "Duped Bomb", 21: "Duped Brown Bear Morph", 22: "Duped Festive Blessing Token",
-    23: "Duped Festive Gift Token", 24: "Duped Festive Mark Token", 25: "Duped Fetch",
-    26: "Duped Flame Fuel", 27: "Duped Focus", 28: "Duped Fuzz Bombs Token",
-    29: "Duped Glitch Token", 30: "Duped Glob", 31: "Duped Gumdrop Barrage",
-    32: "Duped Haste", 33: "Duped Honey Mark Token", 34: "Duped Honey Token",
-    35: "Duped Impale", 36: "Duped Inferno Token", 37: "Duped Inflate Balloons",
-    38: "Duped Inspire Token", 39: "Duped Jelly Bean", 40: "Duped Map Corruption",
-    41: "Duped Mark Surge Token", 42: "Duped Melody", 43: "Duped Mind Hack",
-    44: "Duped Mother Bear Morph", 45: "Duped Panda Bear Morph", 46: "Duped Pineapple",
-    47: "Duped Polar Bear Morph", 48: "Duped Pollen Haze", 49: "Duped Pollen Mark Token",
-    50: "Duped Pulse", 51: "Duped Puppy Love", 52: "Duped Rage Token",
-    53: "Duped Rain Cloud", 54: "Duped Red Bomb Sync", 55: "Duped Red Boost",
-    56: "Duped Science Bear Morph", 57: "Duped Scratch", 58: "Duped Snowflake",
-    59: "Duped Snowglobe Shake", 60: "Duped Strawberry", 61: "Duped Summon Frog Token",
-    62: "Duped Sunflower Seed", 63: "Duped Surprise Party", 64: "Duped Tabby Love",
-    65: "Duped Target Practice Token", 66: "Duped Token Link", 67: "Duped Tornado",
-    68: "Duped Treat", 69: "Duped Triangulate Token", 70: "Duped White Boost",
-    71: "Falling Star", 72: "Festive Blessing Token", 73: "Festive Gift Token",
-    74: "Festive Mark Station", 75: "Festive Mark Token", 76: "Fetch",
-    77: "Flame Fuel", 78: "Focus", 79: "Fully Collected Target",
-    80: "Fuzz Bombs Token", 81: "Glitch Token", 82: "Glob",
-    83: "Gumdrop Barrage", 84: "Haste", 85: "Honey Mark Station",
-    86: "Honey Mark Token", 87: "Honey Token", 88: "Impale",
-    89: "Inferno Token", 90: "Inflate Balloons", 91: "Inspire Token",
-    92: "Jelly Bean", 93: "Map Corruption", 94: "Mark Surge Token",
-    95: "Melody", 96: "Mind Hack", 97: "Mother Bear Morph",
-    98: "Panda Bear Morph", 99: "Pineapple", 100: "Polar Bear Morph",
-    101: "Pollen Haze", 102: "Pollen Mark Station", 103: "Pollen Mark Token",
-    104: "Precise Mark Station", 105: "Precise Mark Target", 106: "Pulse",
-    107: "Puppy Love", 108: "Rage Token", 109: "Rain Cloud",
-    110: "Red Bomb Sync", 111: "Red Boost", 112: "Science Bear Morph",
-    113: "Scratch", 114: "Smiley", 115: "Snowflake",
-    116: "Snowglobe Shake", 117: "Strawberry", 118: "Summon Frog Token",
-    119: "Sunflower Seed", 120: "Surprise Party", 121: "Tabby Love",
-    122: "Target Practice Token", 123: "TennisBall", 124: "Token Link",
-    125: "Tornado", 126: "Treat", 127: "Triangulate Token",
-    128: "Unactivated Target", 129: "White Boost",
+# Combined bloom/petal model class ids map to these display names for overlays.
+LABELS_BLOOMS = {
+    5: BLOOM_LABEL,
 }
 
-LABELS_SPRINKLER = {
-    0: "Sprinkler",
-    1: "Supreme",
-}
+IGNORED_TOKENS = set()
+_DEBUG_LOG_TIMES = {}
 
 
-def _coerce_float(value, default):
-    try:
-        return float(value)
-    except Exception:
-        return float(default)
-
-
-def _coerce_text(value, default=""):
-    if value is None:
-        return default
-    return str(value).strip()
-
-
-def _coerce_bool(value, default=False):
-    if isinstance(value, bool):
-        return value
-    if value is None:
-        return bool(default)
-    text = str(value).strip().lower()
-    if text in ("1", "true", "yes", "y", "on", "enabled", "enable"):
-        return True
-    if text in ("0", "false", "no", "n", "off", "disabled", "disable"):
-        return False
-    return bool(default)
-
-
-def _parse_token_names(value):
-    if value is None:
-        return []
-    if isinstance(value, (list, tuple, set)):
-        items = value
-    else:
-        items = str(value).replace("\n", ",").split(",")
-    out = []
-    seen = set()
-    for item in items:
-        name = str(item).strip()
-        if name and name not in seen:
-            out.append(name)
-            seen.add(name)
-    return out
-
-
-def _ignored_token_names(value, default_names):
-    names = _parse_token_names(value)
-    if not names:
-        return set(default_names)
-    return set(names)
-
-
-def _project_root():
-    try:
-        return Path(__file__).resolve().parents[2]
-    except Exception:
-        return Path.cwd().resolve()
-
-
-MODEL_DIR = (_project_root() / "src" / "data" / "models").resolve()
-
-
-def _check_missing_models(model_names):
-    try:
-        from modules.misc.modelManager import ensure_missing_models
-
-        result = ensure_missing_models(model_names)
-        if result.get("downloaded"):
-            print(f"[blooms_ai] Downloaded missing AI model(s): {', '.join(result['downloaded'])}")
-        elif result.get("missing_remote"):
-            print(f"[blooms_ai] Missing AI model(s) were not found remotely: {', '.join(result['missing_remote'])}")
-        return result
-    except Exception as exc:
-        print(f"[blooms_ai] Could not check missing AI models: {exc}")
-        return {"failures": {"model download": str(exc)}}
-
-
-SPRINKLER_CONFIDENCE_THRESHOLD = _coerce_float(
+SPRINKLER_CONFIDENCE_THRESHOLD = agc.coerce_float(
     globals().get("pattern_sprinkler_confidence_threshold"),
     SPRINKLER_CONFIDENCE_THRESHOLD,
 )
-MIN_TOKEN_DISTANCE = _coerce_float(globals().get("pattern_min_token_distance"), MIN_TOKEN_DISTANCE)
-MAX_SPRINKLER_DISTANCE = _coerce_float(
+MIN_TOKEN_DISTANCE = agc.coerce_float(globals().get("pattern_min_token_distance"), MIN_TOKEN_DISTANCE)
+MAX_SPRINKLER_DISTANCE = agc.coerce_float(
     globals().get("pattern_max_sprinkler_distance"),
     MAX_SPRINKLER_DISTANCE,
 )
-TARGET_SPRINKLER_LABEL = _coerce_text(
+TARGET_SPRINKLER_LABEL = agc.coerce_text(
     globals().get("pattern_target_sprinkler_label"),
     "",
 ) or None
-FIELD_DRIFT_COMPENSATION = _coerce_bool(globals().get("pattern_field_drift_compensation"), False)
-USE_SPRINKLER_MODEL_FOR_DRIFT_COMPENSATION = _coerce_bool(
+FIELD_DRIFT_COMPENSATION = agc.coerce_bool(globals().get("pattern_field_drift_compensation"), False)
+USE_SPRINKLER_MODEL_FOR_DRIFT_COMPENSATION = agc.coerce_bool(
     globals().get("pattern_use_sprinkler_model_for_drift_compensation"),
     False,
 )
-CAPTURE_BACKEND = _coerce_text(globals().get("pattern_capture_backend"), "auto").lower()
-DEBUG_MODE = _coerce_bool(globals().get("pattern_debug_mode"), DEBUG_MODE)
-RECORD_VIDEO = _coerce_bool(globals().get("pattern_record_video"), RECORD_VIDEO)
-RECORD_VIDEO_FPS = _coerce_float(globals().get("pattern_record_video_fps"), RECORD_VIDEO_FPS)
-BLOOM_MODEL_SELECTION = _coerce_text(
+CAPTURE_BACKEND = agc.coerce_text(globals().get("pattern_capture_backend"), "auto").lower()
+DEBUG_MODE = agc.coerce_bool(globals().get("pattern_debug_mode"), DEBUG_MODE)
+RECORD_VIDEO = agc.coerce_bool(globals().get("pattern_record_video"), RECORD_VIDEO)
+RECORD_VIDEO_FPS = agc.coerce_float(globals().get("pattern_record_video_fps"), RECORD_VIDEO_FPS)
+BLOOM_MODEL_SELECTION = agc.coerce_text(
     globals().get("pattern_blooms_ai_model"),
     "Standard",
 ).strip().lower()
 if BLOOM_MODEL_SELECTION not in BLOOM_MODEL_VARIANTS:
     BLOOM_MODEL_SELECTION = "standard"
-IGNORED_TOKENS = _ignored_token_names(globals().get("pattern_ignored_tokens"), IGNORED_TOKENS)
+IGNORED_TOKENS = agc.ignored_token_names(globals().get("pattern_ignored_tokens"), IGNORED_TOKENS)
 # BloomsAI exists specifically to target blooms. Field token-ranking defaults may
 # ignore Bloom for normal gathering, but that setting must never apply here.
 IGNORED_TOKENS.discard(BLOOM_LABEL)
@@ -307,418 +152,60 @@ except Exception:
     width = 1
 
 
-def _default_points(screen_w, screen_h):
-    return np.array(
-        [[int(round(nx * screen_w)), int(round(ny * screen_h))] for nx, ny in NORMALIZED_CAL_RATIOS],
-        dtype=np.float32,
-    )
-
-
-def _preprocess_coreml_image(frame, input_width, input_height):
-    if frame.shape[1] != int(input_width) or frame.shape[0] != int(input_height):
-        frame = cv2.resize(frame, (int(input_width), int(input_height)), interpolation=cv2.INTER_LINEAR)
-
-    if frame.ndim == 3 and frame.shape[2] == 4:
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGB)
-    else:
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-    if Image is None:
-        raise RuntimeError("Pillow is required for CoreML inference.")
-    return Image.fromarray(rgb)
-
-
-def _letterbox_rgb(frame, input_width, input_height):
-    """Apply Ultralytics-style centered letterboxing and retain its inverse transform."""
-    if frame.ndim == 3 and frame.shape[2] == 4:
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGB)
-    else:
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-    frame_height, frame_width = rgb.shape[:2]
-    scale = min(input_width / float(frame_width), input_height / float(frame_height))
-    resized_width = max(1, int(round(frame_width * scale)))
-    resized_height = max(1, int(round(frame_height * scale)))
-    resized = cv2.resize(rgb, (resized_width, resized_height), interpolation=cv2.INTER_LINEAR)
-    pad_x = (input_width - resized_width) // 2
-    pad_y = (input_height - resized_height) // 2
-    letterboxed = np.full((input_height, input_width, 3), 114, dtype=np.uint8)
-    letterboxed[pad_y:pad_y + resized_height, pad_x:pad_x + resized_width] = resized
-    return letterboxed, {"scale": scale, "pad_x": pad_x, "pad_y": pad_y}
-
-
-def _preprocess_petal_image(frame, input_width, input_height):
-    letterboxed, transform = _letterbox_rgb(frame, input_width, input_height)
-    if Image is None:
-        raise RuntimeError("Pillow is required for CoreML petal inference.")
-    return Image.fromarray(letterboxed), transform
-
-
-def _preprocess_petal_onnx_image(frame, input_width, input_height):
-    letterboxed, transform = _letterbox_rgb(frame, input_width, input_height)
-    normalized = letterboxed.astype(np.float32) / 255.0
-    chw = np.transpose(normalized, (2, 0, 1))
-    return np.expand_dims(chw, axis=0), transform
-
-
-def _preprocess_onnx_image(frame, input_width, input_height):
-    if frame.shape[1] != int(input_width) or frame.shape[0] != int(input_height):
-        frame = cv2.resize(frame, (int(input_width), int(input_height)), interpolation=cv2.INTER_LINEAR)
-
-    if frame.ndim == 3 and frame.shape[2] == 4:
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGB)
-    else:
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-    normalized = rgb.astype(np.float32) / 255.0
-    chw = np.transpose(normalized, (2, 0, 1))
-    return np.expand_dims(chw, axis=0)
-
-
-def _postprocess(output, confidence_threshold):
-    """Decode classic YOLO ONNX output shaped [1, 4+nc, N]."""
-    outputs = np.squeeze(output[0])
-    if outputs.ndim != 2 or outputs.shape[0] < 5:
-        return []
-
-    class_probs = outputs[4:, :]
-    confidences = np.max(class_probs, axis=0)
-    mask = confidences > confidence_threshold
-    if not np.any(mask):
-        return []
-
-    filtered_confidences = confidences[mask]
-    class_ids = np.argmax(class_probs[:, mask], axis=0)
-    boxes_data = outputs[:4, mask]
-    cx, cy, box_w, box_h = boxes_data
-    x1 = cx - box_w / 2.0
-    y1 = cy - box_h / 2.0
-    boxes = np.stack((x1, y1, box_w, box_h), axis=1)
-
-    indices = cv2.dnn.NMSBoxes(
-        boxes.tolist(),
-        filtered_confidences.tolist(),
-        confidence_threshold,
-        NMS_THRESHOLD,
-    )
-
-    detections = []
-    if len(indices) > 0:
-        for index in np.array(indices).flatten():
-            bx, by, bw, bh = boxes[index]
-            detections.append(((bx, by, bx + bw, by + bh), int(class_ids[index]), float(filtered_confidences[index])))
-    return detections
-
-
-def _postprocess_tokens(output, confidence_threshold):
-    """Decode CoreML end2end output shaped [1, max_det, 6] as xyxy/conf/cls."""
-    pred = output[0]
-    if pred.ndim != 3 or pred.shape[0] < 1 or pred.shape[2] < 6:
-        return []
-
-    detections = []
-    for row in pred[0]:
-        x1, y1, x2, y2, confidence, class_id = row[:6]
-        confidence = float(confidence)
-        if confidence < confidence_threshold:
-            continue
-
-        x1 = float(x1)
-        y1 = float(y1)
-        x2 = float(x2)
-        y2 = float(y2)
-        if x2 <= x1 or y2 <= y1:
-            continue
-
-        detections.append(((x1, y1, x2, y2), int(round(float(class_id))), confidence))
-    return detections
-
-
-def _decode_detections(runtime, prefix, output, confidence_threshold):
-    if runtime.get(f"{prefix}_model_kind") == "opencv_onnx":
-        return _postprocess(output, confidence_threshold)
-    return _postprocess_tokens(output, confidence_threshold)
-
-
 def _debug_log(message, min_interval=0.0, key=None):
-    if not DEBUG_MODE:
-        return
-
-    now = time.time()
-    log_state = globals().setdefault("_FUZZY_AI_DEBUG_LOG_TIMES", {})
-    log_key = key or message
-    last = log_state.get(log_key, 0.0)
-    if min_interval > 0 and now - last < min_interval:
-        return
-
-    log_state[log_key] = now
-    print(f"[blooms_ai][debug] {message}", flush=True)
+    agc.debug_log("blooms_ai", message, DEBUG_MODE, min_interval=min_interval, key=key, log_times=_DEBUG_LOG_TIMES)
 
 
 def _runtime_state():
-    state = getattr(self, "_blooms_ai_state", None)
-    if isinstance(state, dict):
-        return state
-
-    state = globals().get("_BLOOMS_AI_STATE")
-    if not isinstance(state, dict):
-        state = {}
-        globals()["_BLOOMS_AI_STATE"] = state
-
-    try:
-        setattr(self, "_blooms_ai_state", state)
-    except Exception:
-        pass
-
-    return state
+    return agc.get_runtime_state(self, "_blooms_ai_state", "_BLOOMS_AI_STATE", globals())
 
 
-def _build_capture():
-    viewport = getattr(self, "robloxWindow", None)
-    if viewport is not None:
-        left = int(getattr(viewport, "mx", 0))
-        top = int(getattr(viewport, "my", 0))
-        width_px = int(getattr(viewport, "mw", 0))
-        height_px = int(getattr(viewport, "mh", 0))
-    else:
-        left = 0
-        top = 0
-        width_px = 0
-        height_px = 0
-
-    if CAPTURE_BACKEND in ("auto", "mss") and mss is not None:
-        session = mss.mss()
-        if width_px <= 0 or height_px <= 0:
-            monitor = session.monitors[1]
-            left = int(monitor["left"])
-            top = int(monitor["top"])
-            width_px = int(monitor["width"])
-            height_px = int(monitor["height"])
-        monitor = {"left": left, "top": top, "width": width_px, "height": height_px}
-        return {
-            "backend": "mss",
-            "session": session,
-            "monitor": monitor,
-            "width": width_px,
-            "height": height_px,
-        }
-
-    if CAPTURE_BACKEND in ("auto", "pil", "pillow") and ImageGrab is not None:
-        if width_px <= 0 or height_px <= 0:
-            width_px, height_px = ImageGrab.grab().size
-            left = 0
-            top = 0
-        return {
-            "backend": "pil",
-            "bbox": (left, top, left + width_px, top + height_px),
-            "width": width_px,
-            "height": height_px,
-        }
-
-    raise RuntimeError(f"No supported capture backend found for '{CAPTURE_BACKEND}'. Install mss or Pillow.")
+def _sprinkler_kwargs():
+    return {
+        "confidence_threshold": SPRINKLER_CONFIDENCE_THRESHOLD,
+        "max_distance": MAX_SPRINKLER_DISTANCE,
+        "target_label": TARGET_SPRINKLER_LABEL,
+    }
 
 
-def _grab_frame(runtime):
-    if runtime["capture"]["backend"] == "mss":
-        monitor = runtime["capture"]["monitor"]
-        return _mss_grab_to_array(runtime["capture"]["session"], monitor)
-
-    image = ImageGrab.grab(bbox=runtime["capture"].get("bbox"))
-    return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-
-
-def _grab_upper_token_frame(runtime):
-    monitor = runtime.get("upper_token_monitor")
-    if runtime["capture"]["backend"] == "mss" and monitor:
-        return _mss_grab_to_array(runtime["capture"]["session"], monitor)
-    bbox = runtime.get("upper_token_bbox")
-    if bbox and ImageGrab is not None:
-        image = ImageGrab.grab(bbox=bbox)
-        return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-    return None
-
-
-def _mss_grab_to_array(session, monitor):
-    shot = session.grab(monitor)
-    return np.frombuffer(shot.raw, dtype=np.uint8).reshape((shot.height, shot.width, 4))
-
-
-def _token_crop_for_capture(capture):
-    capture_w = int(capture["width"])
-    capture_h = int(capture["height"])
-
-    left = int(round(capture_w * (AT_CROP[0] / ROBLOX_VIEWPORT_WIDTH)))
-    top = int(round(capture_h * (AT_CROP[1] / ROBLOX_VIEWPORT_HEIGHT)))
-    right = int(round(capture_w * (AT_CROP[2] / ROBLOX_VIEWPORT_WIDTH)))
-    bottom = int(round(capture_h * (AT_CROP[3] / ROBLOX_VIEWPORT_HEIGHT)))
-    crop_w = max(capture_w - left - right, 1)
-    crop_h = max(capture_h - top - bottom, 1)
-    resize = crop_w != INPUT_WIDTH or crop_h != INPUT_HEIGHT
-    return {"rect": (left, top, crop_w, crop_h), "resize": resize}
-
-
-def _model_point_to_capture(runtime, x, y):
-    left, top, crop_w, crop_h = runtime["token_crop"]
-    return (
-        left + (x * crop_w / float(INPUT_WIDTH)),
-        top + (y * crop_h / float(INPUT_HEIGHT)),
-    )
-
-
-def _capture_box_to_model(runtime, box):
-    left, top, crop_w, crop_h = runtime["token_crop"]
-    x1, y1, x2, y2 = box
-    return (
-        (x1 - left) * INPUT_WIDTH / crop_w,
-        (y1 - top) * INPUT_HEIGHT / crop_h,
-        (x2 - left) * INPUT_WIDTH / crop_w,
-        (y2 - top) * INPUT_HEIGHT / crop_h,
-    )
-
-
-def _bgr_frame(frame):
-    if frame.ndim == 3 and frame.shape[2] == 4:
-        return cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
-    return frame.copy()
-
-
-def _recording_dir():
-    path = _project_root() / "src" / "data" / "user" / "fuzzy_ai_recordings"
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
-def _ensure_video_writer(runtime, frame):
-    if not RECORD_VIDEO or cv2 is None:
-        return None
-
-    writer = runtime.get("video_writer")
-    if writer is not None:
-        return writer
-
-    bgr = _bgr_frame(frame)
-    height, width_px = bgr.shape[:2]
-    filename = f"blooms_ai_{time.strftime('%Y%m%d_%H%M%S')}.mp4"
-    output_path = _recording_dir() / filename
-
-    ffmpeg_path = shutil.which("ffmpeg")
-    if ffmpeg_path:
-        command = [
-            ffmpeg_path,
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-y",
-            "-f",
-            "rawvideo",
-            "-pix_fmt",
-            "bgr24",
-            "-s",
-            f"{width_px}x{height}",
-            "-r",
-            str(max(RECORD_VIDEO_FPS, 1.0)),
-            "-i",
-            "-",
-            "-an",
-            "-c:v",
-            "libx264",
-            "-preset",
-            "ultrafast",
-            "-pix_fmt",
-            "yuv420p",
-            "-movflags",
-            "frag_keyframe+empty_moov+default_base_moof",
-            str(output_path),
-        ]
-        try:
-            process = subprocess.Popen(command, stdin=subprocess.PIPE)
-            writer = {"kind": "ffmpeg", "process": process, "path": str(output_path)}
-        except Exception as exc:
-            writer = None
-            _debug_log(f"ffmpeg recording failed to start: {exc}", min_interval=5.0, key="record_ffmpeg_failed")
-    else:
-        writer = None
-
-    if writer is None:
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        cv_writer = cv2.VideoWriter(str(output_path), fourcc, max(RECORD_VIDEO_FPS, 1.0), (width_px, height))
-        if not cv_writer.isOpened():
-            runtime["video_writer"] = None
-            _debug_log(f"video recording failed to open: {output_path}", min_interval=5.0, key="record_open_failed")
-            return None
-        writer = {"kind": "opencv", "writer": cv_writer, "path": str(output_path)}
-
-    runtime["video_writer"] = writer
-    runtime["video_path"] = str(output_path)
-    runtime["recording_stop_event"] = threading.Event()
-    runtime["recording_lock"] = threading.Lock()
-    runtime["recording_thread"] = threading.Thread(target=_recording_thread, args=(runtime,), daemon=True)
-    runtime["recording_thread"].start()
-    _debug_log(f"recording BloomsAI video to {output_path}")
-    return writer
-
-
-def _release_video_writer(runtime=None):
-    if runtime is None:
-        runtime = _runtime_state()
-    writer = runtime.get("video_writer") if isinstance(runtime, dict) else None
-    if writer is not None:
-        stop_event = runtime.get("recording_stop_event")
-        if stop_event is not None:
-            stop_event.set()
-        thread = runtime.get("recording_thread")
-        if thread is not None and thread.is_alive() and thread is not threading.current_thread():
-            try:
-                thread.join(timeout=2)
-            except Exception:
-                pass
-        try:
-            if isinstance(writer, dict) and writer.get("kind") == "ffmpeg":
-                process = writer.get("process")
-                if process and process.stdin:
-                    process.stdin.close()
-                if process:
-                    process.wait(timeout=5)
-            elif isinstance(writer, dict) and writer.get("kind") == "opencv":
-                writer["writer"].release()
-            else:
-                writer.release()
-        except Exception:
-            pass
-        runtime["video_writer"] = None
-        runtime["recording_thread"] = None
-        runtime["recording_stop_event"] = None
-        if runtime.get("video_path"):
-            _debug_log(f"saved BloomsAI recording: {runtime['video_path']}")
+def _anchor_kwargs():
+    return {
+        "field_drift_compensation": FIELD_DRIFT_COMPENSATION,
+        "use_sprinkler_model": USE_SPRINKLER_MODEL_FOR_DRIFT_COMPENSATION,
+        "anchor_refresh_interval": ANCHOR_REFRESH_INTERVAL,
+        "max_passive_distance": ANCHOR_MAX_PASSIVE_DISTANCE,
+        "confidence_threshold": SPRINKLER_CONFIDENCE_THRESHOLD,
+        "max_distance": MAX_SPRINKLER_DISTANCE,
+        "target_label": TARGET_SPRINKLER_LABEL,
+        "debug_log_fn": _debug_log,
+    }
 
 
 def onGatherEnd():
-    _stop_scanner_thread()
-    _release_video_writer()
-
-
-def _draw_label(frame, text, x, y, color):
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = 0.45
-    thickness = 1
-    (text_w, text_h), baseline = cv2.getTextSize(text, font, font_scale, thickness)
-    y = max(y, text_h + 6)
-    cv2.rectangle(frame, (x, y - text_h - baseline - 4), (x + text_w + 4, y + 2), color, -1)
-    cv2.putText(frame, text, (x + 2, y - baseline - 1), font, font_scale, (0, 0, 0), thickness, cv2.LINE_AA)
+    runtime = _runtime_state()
+    agc.stop_scanner_thread(runtime)
+    agc.release_video_writer(runtime, debug_log_fn=_debug_log)
 
 
 def _record_debug_frame(runtime, frame, detections, target):
     if runtime.get("video_writer") is None:
-        frame = _grab_frame(runtime)
+        frame = agc.grab_frame(runtime)
 
-    writer = _ensure_video_writer(runtime, frame)
+    writer = agc.ensure_video_writer(
+        runtime,
+        frame,
+        filename_prefix="blooms_ai",
+        record_video=RECORD_VIDEO,
+        record_video_fps=RECORD_VIDEO_FPS,
+        debug_log_fn=_debug_log,
+    )
     if writer is None:
         return
 
     bloom_detections = [
         detection
         for detection in detections
-        if LABELS_TOKENS.get(detection[1]) == BLOOM_LABEL
+        if LABELS_BLOOMS.get(detection[1]) == BLOOM_LABEL
     ]
     now = time.time()
     petal_detection_age = now - float(runtime.get("latest_petal_detection_time", 0.0))
@@ -755,7 +242,7 @@ def _record_debug_frame(runtime, frame, detections, target):
 
 
 def _annotate_recording_frame(runtime, frame):
-    annotated = _bgr_frame(frame)
+    annotated = agc.bgr_frame(frame)
     frame_h, frame_w = annotated.shape[:2]
 
     overlay = runtime.get("latest_recording_overlay", {})
@@ -764,10 +251,10 @@ def _annotate_recording_frame(runtime, frame):
     target_box = target.get("box") if isinstance(target, dict) else None
 
     for box, class_id, confidence in detections:
-        token_name = LABELS_TOKENS.get(class_id, f"class {class_id}")
+        token_name = LABELS_BLOOMS.get(class_id, f"class {class_id}")
         x1, y1, x2, y2 = box
-        left_f, top_f = _model_point_to_capture(runtime, x1, y1)
-        right_f, bottom_f = _model_point_to_capture(runtime, x2, y2)
+        left_f, top_f = agc.model_point_to_capture(runtime, x1, y1)
+        right_f, bottom_f = agc.model_point_to_capture(runtime, x2, y2)
         left = max(0, min(frame_w - 1, int(round(left_f))))
         top = max(0, min(frame_h - 1, int(round(top_f))))
         right = max(0, min(frame_w - 1, int(round(right_f))))
@@ -780,7 +267,7 @@ def _annotate_recording_frame(runtime, frame):
         else:
             color = (80, 220, 80)
         cv2.rectangle(annotated, (left, top), (right, bottom), color, 2 if is_target else 1)
-        _draw_label(annotated, f"{token_name} {confidence:.2f}", left, top - 4, color)
+        agc.draw_label(annotated, f"{token_name} {confidence:.2f}", left, top - 4, color)
 
     petal_detections = overlay.get("petal_detections", [])
     for detection in petal_detections:
@@ -792,7 +279,7 @@ def _annotate_recording_frame(runtime, frame):
         color = (255, 120, 40)
         cv2.rectangle(annotated, (left, top), (right, bottom), color, 2)
         label = f"Petal {detection.get('confidence', 0.0):.2f}"
-        _draw_label(annotated, label, left, top - 4, color)
+        agc.draw_label(annotated, label, left, top - 4, color)
 
     sprinkler = overlay.get("sprinkler") or {}
     sprinkler_box = sprinkler.get("box")
@@ -804,7 +291,7 @@ def _annotate_recording_frame(runtime, frame):
         bottom = max(0, min(frame_h - 1, int(round(y2))))
         cv2.rectangle(annotated, (left, top), (right, bottom), (255, 180, 0), 3)
         match_text = "match" if sprinkler.get("target_match") else "seen"
-        _draw_label(
+        agc.draw_label(
             annotated,
             f"sprinkler {match_text} {sprinkler.get('label', '?')} {sprinkler.get('confidence', 0.0):.2f} d={sprinkler.get('distance', 0.0):.2f}",
             left,
@@ -835,7 +322,7 @@ def _annotate_recording_frame(runtime, frame):
             f"petal_orbit=({orbit_center[0]:.2f},{orbit_center[1]:.2f}) next={int(overlay.get('petal_orbit_index') or 0) + 1}/{PETAL_ORBIT_CORNERS} left={seconds_left:.1f}s"
         )
     for index, line in enumerate(status_lines):
-        _draw_label(annotated, line, 10, 24 + (index * 24), (255, 255, 255))
+        agc.draw_label(annotated, line, 10, 24 + (index * 24), (255, 255, 255))
 
     detection_fps = overlay.get("detection_fps")
     detection_ms = overlay.get("last_detection_ms")
@@ -843,7 +330,7 @@ def _annotate_recording_frame(runtime, frame):
     if detection_ms is not None:
         fps_text += f" ({detection_ms:.0f}ms)"
     (text_w, _text_h), _baseline = cv2.getTextSize(fps_text, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
-    _draw_label(annotated, fps_text, max(10, frame_w - text_w - 18), 24, (255, 255, 255))
+    agc.draw_label(annotated, fps_text, max(10, frame_w - text_w - 18), 24, (255, 255, 255))
     timing = overlay.get("last_timing_ms") or {}
     if timing:
         timing_text = (
@@ -854,115 +341,47 @@ def _annotate_recording_frame(runtime, frame):
             f"score {timing.get('scoring', 0.0):.0f}ms"
         )
         (timing_w, _timing_h), _timing_baseline = cv2.getTextSize(timing_text, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
-        _draw_label(annotated, timing_text, max(10, frame_w - timing_w - 18), 48, (255, 255, 255))
+        agc.draw_label(annotated, timing_text, max(10, frame_w - timing_w - 18), 48, (255, 255, 255))
     petal_detection_ms = overlay.get("petal_detection_ms")
     if petal_detection_ms is not None:
         petal_timing_text = f"petal infer {petal_detection_ms:.0f}ms"
         (petal_w, _petal_h), _petal_baseline = cv2.getTextSize(petal_timing_text, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
-        _draw_label(annotated, petal_timing_text, max(10, frame_w - petal_w - 18), 72, (255, 120, 40))
+        agc.draw_label(annotated, petal_timing_text, max(10, frame_w - petal_w - 18), 72, (255, 120, 40))
 
     return annotated
-
-
-def _recording_thread(runtime):
-    frame_interval = 1.0 / max(RECORD_VIDEO_FPS, 1.0)
-    next_frame_time = time.time()
-    stop_event = runtime.get("recording_stop_event")
-    recording_session = None
-    if runtime["capture"]["backend"] == "mss" and mss is not None:
-        recording_session = mss.mss()
-
-    try:
-        while stop_event is not None and not stop_event.is_set():
-            now = time.time()
-            if now < next_frame_time:
-                time.sleep(min(next_frame_time - now, 0.05))
-                continue
-
-            try:
-                if recording_session is not None:
-                    frame = _mss_grab_to_array(recording_session, runtime["capture"]["monitor"])
-                else:
-                    frame = _grab_frame(runtime)
-                annotated = _annotate_recording_frame(runtime, frame)
-                writer = runtime.get("video_writer")
-                if writer is None:
-                    return
-                _write_recording_frame(runtime, writer, annotated, frame_count=1)
-            except Exception as exc:
-                _debug_log(f"recording frame failed: {exc}", min_interval=5.0, key="record_frame_failed")
-
-            next_frame_time += frame_interval
-            if next_frame_time < time.time() - frame_interval:
-                next_frame_time = time.time() + frame_interval
-    finally:
-        if recording_session is not None:
-            try:
-                recording_session.close()
-            except Exception:
-                pass
-
-
-def _write_recording_frame(runtime, writer, annotated, frame_count=1):
-    try:
-        lock = runtime.get("recording_lock")
-        if lock is None:
-            lock = threading.Lock()
-            runtime["recording_lock"] = lock
-        with lock:
-            if isinstance(writer, dict) and writer.get("kind") == "ffmpeg":
-                process = writer.get("process")
-                if process and process.stdin and process.poll() is None:
-                    payload = annotated.tobytes()
-                    for _ in range(frame_count):
-                        process.stdin.write(payload)
-            elif isinstance(writer, dict) and writer.get("kind") == "opencv":
-                for _ in range(frame_count):
-                    writer["writer"].write(annotated)
-            else:
-                for _ in range(frame_count):
-                    writer.write(annotated)
-    except Exception as exc:
-        _debug_log(f"recording write failed: {exc}", min_interval=5.0, key="record_write_failed")
-        _release_video_writer(runtime)
-
-
-def _update_detection_fps(runtime, elapsed):
-    if elapsed <= 0:
-        return
-    fps = 1.0 / elapsed
-    previous = runtime.get("detection_fps")
-    runtime["detection_fps"] = fps if previous is None else ((previous * 0.8) + (fps * 0.2))
-    runtime["last_detection_ms"] = elapsed * 1000.0
 
 
 def _scan_tokens_once(runtime):
     movement_revision = int(runtime.get("movement_revision", 0))
     detection_start = time.time()
     screenshot_start = time.time()
-    frame = _grab_upper_token_frame(runtime)
+    frame = agc.grab_region_frame(runtime, "upper_token_monitor", "upper_token_bbox")
     if frame is None:
-        frame = _grab_frame(runtime)
+        frame = agc.grab_frame(runtime)
     sprinkler_pending = _bloom_sprinkler_anchor_should_run(runtime)
-    sprinkler_frame = _grab_frame(runtime) if sprinkler_pending else None
+    sprinkler_frame = agc.grab_frame(runtime) if sprinkler_pending else None
     screenshot_elapsed = time.time() - screenshot_start
     preprocess_start = time.time()
     if runtime.get("combined_model_kind") == "opencv_onnx":
-        image, transform = _preprocess_petal_onnx_image(
+        image, transform = agc.preprocess_petal_onnx_image(
             frame,
             runtime["combined_input_width"],
             runtime["combined_input_height"],
         )
     else:
-        image, transform = _preprocess_petal_image(
+        image, transform = agc.preprocess_petal_image(
             frame,
             runtime["combined_input_width"],
             runtime["combined_input_height"],
         )
     preprocess_elapsed = time.time() - preprocess_start
-    sprinkler_job = _start_sprinkler_find(runtime, frame=sprinkler_frame) if sprinkler_pending else None
+    sprinkler_job = (
+        agc.start_sprinkler_find(runtime, frame=sprinkler_frame, **_sprinkler_kwargs())
+        if sprinkler_pending
+        else None
+    )
     inference_start = time.time()
-    output = _run_model(runtime, "combined", image)
+    output = agc.run_model(runtime, "combined", image)
     inference_elapsed = time.time() - inference_start
     postprocess_start = time.time()
     scan_stale = (
@@ -978,14 +397,19 @@ def _scan_tokens_once(runtime):
     )
     postprocess_elapsed = time.time() - postprocess_start
     if sprinkler_job is not None:
-        _apply_sprinkler_anchor_result(runtime, _finish_sprinkler_find(*sprinkler_job))
+        agc.apply_sprinkler_anchor_result(
+            runtime,
+            agc.finish_sprinkler_find(*sprinkler_job),
+            max_passive_distance=ANCHOR_MAX_PASSIVE_DISTANCE,
+            debug_log_fn=_debug_log,
+        )
     scoring_start = time.time()
     target = _find_best_token(runtime, detections)
     if (
         target is None
         and not runtime.get("movement_active")
         and any(item.get("reason") in ("leash", "hard_leash") for item in runtime.get("last_rejected_tokens", []))
-        and _refresh_sprinkler_anchor(runtime, force=True)
+        and agc.refresh_sprinkler_anchor(runtime, force=True, **_anchor_kwargs())
     ):
         target = _find_best_token(runtime, detections)
     scoring_elapsed = time.time() - scoring_start
@@ -1010,14 +434,10 @@ def _scan_tokens_once(runtime):
         min_interval=1.0,
         key="timing",
     )
-    _update_detection_fps(runtime, total_elapsed)
+    agc.update_detection_fps(runtime, total_elapsed)
     _record_debug_frame(runtime, frame, detections, target)
 
-    # A movement that starts after capture makes these screen-relative
-    # detections stale, even if it finishes before inference does.
-    if (
-        scan_stale
-    ):
+    if scan_stale:
         runtime["latest_bloom_candidates"] = []
         runtime["latest_petal_detections"] = []
         runtime["latest_petal_detection_time"] = 0.0
@@ -1037,141 +457,6 @@ def _scan_tokens_once(runtime):
     return detections, target
 
 
-def _same_token_candidate(a, b):
-    if not isinstance(a, dict) or not isinstance(b, dict):
-        return False
-    if a.get("name") != b.get("name"):
-        return False
-    ax = a.get("future_x")
-    ay = a.get("future_y")
-    bx = b.get("future_x")
-    by = b.get("future_y")
-    if ax is None or ay is None or bx is None or by is None:
-        return False
-    return math.hypot(float(ax) - float(bx), float(ay) - float(by)) <= TARGET_LOCK_SWITCH_DISTANCE
-
-
-def _scanner_loop(runtime):
-    stop_event = runtime.get("scanner_stop_event")
-    while stop_event is not None and not stop_event.is_set():
-        scan_started = time.time()
-        try:
-            if not runtime.get("ready"):
-                return
-            _scan_tokens_once(runtime)
-        except Exception as exc:
-            runtime["ready"] = False
-            runtime["error"] = str(exc)
-            _release_video_writer(runtime)
-            _debug_log(f"scanner error: {exc}", min_interval=1.0, key="scanner_error")
-            return
-        remaining = CONTINUOUS_SCAN_INTERVAL - (time.time() - scan_started)
-        time.sleep(max(remaining, 0.01))
-
-
-def _ensure_scanner_thread(runtime):
-    thread = runtime.get("scanner_thread")
-    if thread is not None and thread.is_alive():
-        return
-
-    stop_event = runtime.get("scanner_stop_event")
-    if stop_event is None or stop_event.is_set():
-        stop_event = threading.Event()
-        runtime["scanner_stop_event"] = stop_event
-
-    thread = threading.Thread(target=_scanner_loop, args=(runtime,), daemon=True)
-    runtime["scanner_thread"] = thread
-    thread.start()
-    _debug_log("continuous token scanner started", min_interval=1.0, key="scanner_started")
-
-
-def _stop_scanner_thread(runtime=None):
-    if runtime is None:
-        runtime = _runtime_state()
-    if not isinstance(runtime, dict):
-        return
-
-    stop_event = runtime.get("scanner_stop_event")
-    if stop_event is not None:
-        stop_event.set()
-
-    thread = runtime.get("scanner_thread")
-    if thread is not None and thread.is_alive() and thread is not threading.current_thread():
-        try:
-            thread.join(timeout=1)
-        except Exception:
-            pass
-    runtime["scanner_thread"] = None
-
-
-#def _set_start_camera_angle():
-#    for _ in range(4):
-#        self.keyboard.press("pageup")
-#        time.sleep(0.04)
-
-
-def _load_coreml_model(model_path, compiled_output_name="var_1445"):
-    if ct is None:
-        raise RuntimeError("coremltools is required for BloomsAI gathering. Install coremltools, then restart the macro.")
-
-    model_path = Path(model_path)
-    if model_path.suffix.lower() == ".mlmodelc":
-        compiled_model_class = getattr(ct.models, "CompiledMLModel", None)
-        if compiled_model_class is None:
-            raise RuntimeError("This coremltools version cannot load compiled .mlmodelc bundles. Upgrade coremltools, then restart the macro.")
-        model = compiled_model_class(str(model_path), compute_units=ct.ComputeUnit.ALL)
-        return model, "image", compiled_output_name
-
-    model = ct.models.MLModel(str(model_path), compute_units=ct.ComputeUnit.ALL)
-    description = model.get_spec().description
-    input_name = description.input[0].name
-    output_name = description.output[0].name
-    return model, input_name, output_name
-
-
-def _load_onnx_model(model_path):
-    if cv2 is None:
-        raise RuntimeError("OpenCV is required for ONNX BloomsAI.")
-
-    model = cv2.dnn.readNetFromONNX(str(model_path))
-    return model, None, None
-
-
-def _delete_model_path(model_path):
-    try:
-        path = Path(model_path)
-        if path.is_dir():
-            shutil.rmtree(path)
-        elif path.exists():
-            path.unlink()
-    except Exception as exc:
-        _debug_log(f"could not delete alternate model {model_path}: {exc}", min_interval=10.0, key=f"delete_model_{model_path}")
-
-
-def _run_model(runtime, prefix, image):
-    if runtime.get(f"{prefix}_model_kind") == "opencv_onnx":
-        session = runtime[f"{prefix}_session"]
-        session.setInput(image)
-        return [session.forward()]
-
-    return [
-        runtime[f"{prefix}_session"].predict(
-            {runtime[f"{prefix}_input"]: image}
-        )[runtime[f"{prefix}_output"]]
-    ]
-
-
-def _relative_distance(x, y, homography):
-    point = np.array([[[x, y + 15]]], dtype=np.float32)
-    transformed = cv2.perspectiveTransform(point, homography)
-    tx, ty = transformed[0][0]
-    return float(tx), float(-ty)
-
-
-def _sprinkler_anchor_enabled():
-    return FIELD_DRIFT_COMPENSATION and USE_SPRINKLER_MODEL_FOR_DRIFT_COMPENSATION
-
-
 def _token_metrics():
     max_leash = 4.0 + (0.45 * max(width - 1, 0)) + (0.35 * size)
     max_bloom_distance = max(BLOOM_MAX_DISTANCE, max_leash + 1.0)
@@ -1180,11 +465,7 @@ def _token_metrics():
         "hard_leash": max_leash + LEASH_HARD_MARGIN,
         "soft_leash": max_leash * 0.625,
         "max_consider": max_bloom_distance,
-        "cluster_radius": 1.6 + (0.1 * width),
         "proximity_exp": 1.25,
-        "toward_home_bonus": 1.4,
-        "away_from_home_penalty": 0.8,
-        "cluster_bonus_per_token": 0.25,
         "leash_edge_penalty": 0.45,
         "outside_leash_penalty": 0.35,
     }
@@ -1200,20 +481,20 @@ def _find_best_token(runtime, detections):
     visible_blooms = []
     rejected = []
     for box, class_id, confidence in detections:
-        token_name = LABELS_TOKENS.get(class_id)
+        token_name = LABELS_BLOOMS.get(class_id)
         if not token_name:
             rejected.append({"class_id": class_id, "reason": "unknown", "confidence": confidence})
             continue
         if token_name != BLOOM_LABEL:
             rejected.append({"name": token_name, "reason": "not_bloom", "confidence": confidence})
             continue
-        if token_name == BLOOM_LABEL and confidence < BLOOM_MIN_CONFIDENCE:
+        if confidence < BLOOM_MIN_CONFIDENCE:
             rejected.append({"name": token_name, "reason": "low_confidence", "confidence": confidence})
             continue
 
         x1, y1, x2, y2 = box
-        center_x, center_y = _model_point_to_capture(runtime, (x1 + x2) / 2.0, (y1 + y2) / 2.0)
-        tx, ty = _relative_distance(center_x, center_y, runtime["homography"])
+        center_x, center_y = agc.model_point_to_capture(runtime, (x1 + x2) / 2.0, (y1 + y2) / 2.0)
+        tx, ty = agc.relative_distance(center_x, center_y, runtime["homography"])
         distance = math.hypot(tx, ty)
         future_x = current_x + tx
         future_y = current_y + ty
@@ -1237,8 +518,6 @@ def _find_best_token(runtime, detections):
             continue
 
         future_dist = math.hypot(future_x, future_y)
-        # Use the screen-relative distance gate above for bloom reachability;
-        # accumulated sprinkler-relative position is only a scoring hint.
         proximity = 1.0 / (0.3 + distance) ** metrics["proximity_exp"]
         home_bonus = 1.0 / (0.25 + future_dist) ** 0.2
         if current_dist > metrics["soft_leash"] and future_dist > current_dist:
@@ -1273,53 +552,6 @@ def _find_best_token(runtime, detections):
     return candidates[0]
 
 
-def _movement_keys(tx, ty):
-    fb_key = tcfbkey if ty >= 0 else afcfbkey
-    lr_key = afclrkey if tx >= 0 else tclrkey
-    return fb_key, lr_key
-
-
-def _movement_segments(tx, ty):
-    diagonal_component = min(abs(tx), abs(ty))
-    diagonal_distance = math.sqrt(2) * diagonal_component
-    axial_distance = abs(abs(tx) - abs(ty))
-    fb_key, lr_key = _movement_keys(tx, ty)
-
-    segments = []
-    if diagonal_distance >= 0.01:
-        segments.append(("diagonal", [fb_key, lr_key], diagonal_distance))
-
-    if axial_distance >= 0.01:
-        if abs(ty) >= abs(tx):
-            segments.append(("axial", [fb_key], axial_distance))
-        else:
-            segments.append(("axial", [lr_key], axial_distance))
-
-    return segments
-
-
-def _tile_walk(key, tiles):
-    if tiles <= 0:
-        return False
-
-    self.keyboard.keyDown(key, False)
-    self.keyboard.tileWait(tiles)
-    self.keyboard.keyUp(key, False)
-    return True
-
-
-def _tile_multi_walk(keys, tiles):
-    if tiles <= 0:
-        return False
-
-    for key in keys:
-        self.keyboard.keyDown(key, False)
-    self.keyboard.tileWait(tiles)
-    for key in reversed(keys):
-        self.keyboard.keyUp(key, False)
-    return True
-
-
 def _execute_movement(tx, ty):
     magnitude = math.hypot(tx, ty)
     if magnitude <= 0.001:
@@ -1330,11 +562,11 @@ def _execute_movement(tx, ty):
     runtime["movement_revision"] = int(runtime.get("movement_revision", 0)) + 1
     runtime["movement_active"] = True
     try:
-        for segment_type, keys, distance in _movement_segments(tx, ty):
+        for segment_type, keys, distance in agc.movement_segments(tx, ty, tcfbkey, afcfbkey, tclrkey, afclrkey):
             if segment_type == "diagonal":
-                _tile_multi_walk(keys, distance)
+                agc.tile_multi_walk(self.keyboard, keys, distance)
             else:
-                _tile_walk(keys[0], distance)
+                agc.tile_walk(self.keyboard, keys[0], distance)
             moved = True
         if moved:
             runtime["current_x"] += tx
@@ -1362,7 +594,6 @@ def _execute_movement_to_target(tx, ty):
     magnitude = math.hypot(tx, ty)
     if magnitude <= CONTINUOUS_MIN_REPLAN_DISTANCE:
         return False
-
     return _execute_movement(tx, ty)
 
 
@@ -1404,9 +635,6 @@ def _execute_sprinkler_patrol(runtime):
 
 
 def _active_bloom_detection(runtime):
-    # Bloom contact must use a detection made after the last keypress.
-    # Otherwise it can bypass normal target invalidation and chase a bloom
-    # from the player's old screen position.
     if runtime.get("movement_requires_fresh_scan"):
         return None
 
@@ -1415,7 +643,7 @@ def _active_bloom_detection(runtime):
         return None
     candidates = runtime.get("latest_bloom_candidates", [])
     for candidate in candidates if isinstance(candidates, list) else []:
-        if _same_token_candidate(active, candidate):
+        if agc.same_token_candidate(active, candidate, TARGET_LOCK_SWITCH_DISTANCE):
             runtime["active_bloom"] = dict(candidate)
             return dict(candidate)
     return None
@@ -1430,7 +658,7 @@ def _start_bloom_work(runtime, target):
     runtime["bloom_contact_last_seen_at"] = 0.0
     runtime["bloom_contact_last_move_time"] = 0.0
     runtime["bloom_contact_distance"] = 0.0
-    _clear_locked_target(runtime)
+    agc.clear_locked_target(runtime)
 
 
 def _start_petal_orbit(runtime):
@@ -1446,7 +674,7 @@ def _start_petal_orbit(runtime):
     runtime["petal_orbit_deadline"] = now + PETAL_ORBIT_DURATION
     runtime["petal_orbit_index"] = None
     runtime["active_bloom"] = None
-    _clear_locked_target(runtime)
+    agc.clear_locked_target(runtime)
     return True
 
 
@@ -1456,10 +684,8 @@ def _finish_petal_orbit(runtime):
     runtime["petal_orbit_center"] = None
     runtime["petal_orbit_deadline"] = 0.0
     runtime["petal_orbit_index"] = None
-    _clear_locked_target(runtime)
-    # Correct dead-reckoned position without spending time walking back to the
-    # sprinkler. Failure is harmless; screen-relative pursuit remains valid.
-    _refresh_sprinkler_anchor(runtime, force=True)
+    agc.clear_locked_target(runtime)
+    agc.refresh_sprinkler_anchor(runtime, force=True, **_anchor_kwargs())
 
 
 def _execute_petal_orbit(runtime):
@@ -1489,8 +715,6 @@ def _execute_petal_orbit(runtime):
     else:
         orbit_index = int(orbit_index) % PETAL_ORBIT_CORNERS
 
-    # Keep keys flowing through one full square without scanning between sides.
-    # The deadline remains a safety limit.
     for _ in range(PETAL_ORBIT_CORNERS + 1):
         if time.time() >= float(runtime.get("petal_orbit_deadline", 0.0)):
             break
@@ -1572,41 +796,12 @@ def _execute_bloom_sequence(runtime):
     return False
 
 
-def _latest_target(runtime):
-    scan_lock = runtime.get("scan_lock")
-    if scan_lock is None:
-        return runtime.get("latest_target")
-    with scan_lock:
-        target = runtime.get("latest_target")
-        return dict(target) if isinstance(target, dict) else target
-
-
-def _locked_target(runtime):
-    lock = runtime.get("locked_target")
-    return dict(lock) if isinstance(lock, dict) else None
-
-
-def _set_locked_target(runtime, target):
-    if isinstance(target, dict):
-        target = dict(target)
-    scan_lock = runtime.get("scan_lock")
-    if scan_lock is None:
-        runtime["locked_target"] = target
-    else:
-        with scan_lock:
-            runtime["locked_target"] = target
-
-
-def _clear_locked_target(runtime):
-    _set_locked_target(runtime, None)
-
-
 def _select_movement_target(runtime):
     if runtime.get("movement_requires_fresh_scan"):
         return None
 
-    latest = _latest_target(runtime)
-    locked = _locked_target(runtime)
+    latest = agc.latest_target(runtime)
+    locked = agc.locked_target(runtime)
     now = time.time()
 
     if locked:
@@ -1614,11 +809,11 @@ def _select_movement_target(runtime):
         remaining_y = float(locked.get("future_y", runtime["current_y"])) - runtime["current_y"]
         remaining = math.hypot(remaining_x, remaining_y)
         if remaining <= BLOOM_SETTLE_DISTANCE:
-            _clear_locked_target(runtime)
+            agc.clear_locked_target(runtime)
             return None
 
         last_seen = float(locked.get("last_seen", locked.get("locked_at", now)))
-        if latest and _same_token_candidate(locked, latest):
+        if latest and agc.same_token_candidate(locked, latest, TARGET_LOCK_SWITCH_DISTANCE):
             old_future_x = float(locked.get("future_x", latest.get("future_x", 0.0)))
             old_future_y = float(locked.get("future_y", latest.get("future_y", 0.0)))
             new_future_x = float(latest.get("future_x", old_future_x))
@@ -1627,7 +822,7 @@ def _select_movement_target(runtime):
             locked["future_x"] = old_future_x + ((new_future_x - old_future_x) * TARGET_POSITION_SMOOTHING)
             locked["future_y"] = old_future_y + ((new_future_y - old_future_y) * TARGET_POSITION_SMOOTHING)
             locked["last_seen"] = now
-            _set_locked_target(runtime, locked)
+            agc.set_locked_target(runtime, locked)
             return locked
 
         if now - last_seen <= TARGET_LOCK_LOST_TIMEOUT:
@@ -1636,20 +831,20 @@ def _select_movement_target(runtime):
         if latest and latest.get("score", 0.0) >= locked.get("score", 0.0) * TARGET_LOCK_SWITCH_SCORE_MULTIPLIER:
             latest["locked_at"] = now
             latest["last_seen"] = now
-            _set_locked_target(runtime, latest)
+            agc.set_locked_target(runtime, latest)
             return latest
 
-        _clear_locked_target(runtime)
+        agc.clear_locked_target(runtime)
         if latest:
             latest["locked_at"] = now
             latest["last_seen"] = now
-            _set_locked_target(runtime, latest)
+            agc.set_locked_target(runtime, latest)
         return latest
 
     if latest:
         latest["locked_at"] = now
         latest["last_seen"] = now
-        _set_locked_target(runtime, latest)
+        agc.set_locked_target(runtime, latest)
     return latest
 
 
@@ -1667,7 +862,7 @@ def _execute_planned_movement(runtime):
     remaining_y = float(target_y) - runtime["current_y"]
     remaining_distance = math.hypot(remaining_x, remaining_y)
     if remaining_distance <= BLOOM_SETTLE_DISTANCE:
-        _clear_locked_target(runtime)
+        agc.clear_locked_target(runtime)
         return False
     _debug_log(
         f"moving toward planned target={target['name']} remaining=({remaining_x:.2f},{remaining_y:.2f}) score={target['score']:.2f}",
@@ -1678,7 +873,7 @@ def _execute_planned_movement(runtime):
 
 
 def _process_combined_detections(runtime, output, transform, inference_ms, publish_petals=True):
-    detections = _decode_detections(
+    detections = agc.decode_detections(
         runtime,
         "combined",
         output,
@@ -1700,7 +895,7 @@ def _process_combined_detections(runtime, output, transform, inference_ms, publi
             max(0.0, min(capture_height, (y2 - pad_y) / scale)),
         )
         if class_id == 0 and confidence >= BLOOM_MIN_CONFIDENCE:
-            bloom_detections.append((_capture_box_to_model(runtime, capture_box), 5, confidence))
+            bloom_detections.append((agc.capture_box_to_model(runtime, capture_box), 5, confidence))
             continue
         if class_id != 1 or confidence < PETAL_CONFIDENCE_THRESHOLD:
             continue
@@ -1720,175 +915,30 @@ def _process_combined_detections(runtime, output, transform, inference_ms, publi
     return bloom_detections
 
 
-def _sprinkler_infer_lock(runtime):
-    lock = runtime.get("sprinkler_infer_lock")
-    if lock is None:
-        lock = threading.Lock()
-        runtime["sprinkler_infer_lock"] = lock
-    return lock
-
-
-def _start_sprinkler_find(runtime, frame=None):
-    holder = {"result": None, "error": None}
-
-    def _worker():
-        try:
-            holder["result"] = _find_sprinkler(runtime, frame=frame)
-        except Exception as exc:
-            holder["error"] = exc
-
-    thread = threading.Thread(target=_worker, daemon=True)
-    thread.start()
-    return thread, holder
-
-
-def _finish_sprinkler_find(thread, holder):
-    thread.join()
-    if holder["error"] is not None:
-        raise holder["error"]
-    return holder["result"]
-
-
-def _find_sprinkler(runtime, frame=None):
-    if runtime.get("sprinkler_session") is None:
-        runtime["last_sprinkler_status"] = "model_missing"
-        return None
-
-    if frame is None:
-        frame = _grab_frame(runtime)
-    if runtime.get("sprinkler_model_kind") == "opencv_onnx":
-        image = _preprocess_onnx_image(frame, SPRINKLER_INPUT_WIDTH, SPRINKLER_INPUT_HEIGHT)
-    else:
-        image = _preprocess_coreml_image(frame, SPRINKLER_INPUT_WIDTH, SPRINKLER_INPUT_HEIGHT)
-    with _sprinkler_infer_lock(runtime):
-        output = _run_model(runtime, "sprinkler", image)
-    detections = _decode_detections(runtime, "sprinkler", output, SPRINKLER_CONFIDENCE_THRESHOLD)
-
-    scale_x = runtime["capture"]["width"] / float(SPRINKLER_INPUT_WIDTH)
-    scale_y = runtime["capture"]["height"] / float(SPRINKLER_INPUT_HEIGHT)
-
-    best = None
-    best_distance = float("inf")
-    best_any = None
-    best_any_distance = float("inf")
-    status = "no_detection"
-    for box, class_id, confidence in detections:
-        label = LABELS_SPRINKLER.get(class_id)
-
-        x1, y1, x2, y2 = box
-        center_x = ((x1 + x2) / 2.0) * scale_x
-        center_y = ((y1 + y2) / 2.0) * scale_y
-        tx, ty = _relative_distance(center_x, center_y, runtime["homography"])
-        distance = math.hypot(tx, ty)
-        scaled_box = (x1 * scale_x, y1 * scale_y, x2 * scale_x, y2 * scale_y)
-
-        if distance > MAX_SPRINKLER_DISTANCE:
-            continue
-
-        if distance < best_any_distance:
-            best_any_distance = distance
-            best_any = (tx, ty, distance, label, confidence, scaled_box)
-
-        if TARGET_SPRINKLER_LABEL and label != TARGET_SPRINKLER_LABEL:
-            status = f"label_mismatch:{label or 'unknown'}"
-            continue
-
-        if distance < best_distance:
-            best_distance = distance
-            best = (tx, ty, distance, label, confidence, scaled_box)
-
-    overlay_detection = best or best_any
-    if overlay_detection:
-        tx, ty, distance, label, confidence, scaled_box = overlay_detection
-        runtime["last_sprinkler_detection"] = {
-            "tx": tx,
-            "ty": ty,
-            "distance": distance,
-            "label": label,
-            "confidence": confidence,
-            "box": scaled_box,
-            "target_match": bool(best),
-            "time": time.time(),
-        }
-        status = "target_match" if best else status
-    else:
-        runtime["last_sprinkler_detection"] = {}
-    runtime["last_sprinkler_status"] = status
-    return best
-
-
-def _sprinkler_anchor_should_run(runtime, force=False):
-    if not _sprinkler_anchor_enabled():
-        runtime["last_sprinkler_status"] = (
-            "disabled:field_drift_compensation"
-            if not FIELD_DRIFT_COMPENSATION
-            else "disabled:use_sprinkler_model_for_drift_compensation"
-        )
-        return False
-    if runtime.get("sprinkler_session") is None:
-        runtime["last_sprinkler_status"] = "model_missing"
-        return False
-    if runtime.get("movement_active") and not force:
-        return False
-    if not force and time.time() - runtime.get("last_anchor_time", 0.0) < ANCHOR_REFRESH_INTERVAL:
-        return False
-    return True
-
-
-def _apply_sprinkler_anchor_result(runtime, result):
-    runtime["last_anchor_time"] = time.time()
-    if not result:
-        return False
-
-    tx, ty, distance, label, confidence = result[:5]
-    if distance > ANCHOR_MAX_PASSIVE_DISTANCE:
-        return False
-
-    old_x = runtime.get("current_x", 0.0)
-    old_y = runtime.get("current_y", 0.0)
-    runtime["current_x"] = -tx
-    runtime["current_y"] = -ty
-    runtime["last_anchor"] = {
-        "x": runtime["current_x"],
-        "y": runtime["current_y"],
-        "sprinkler_tx": tx,
-        "sprinkler_ty": ty,
-        "distance": distance,
-        "label": label,
-        "confidence": confidence,
-        "time": time.time(),
-    }
-    _debug_log(
-        f"anchor refreshed from sprinkler label={label} confidence={confidence:.2f} pos=({old_x:.2f},{old_y:.2f})->({runtime['current_x']:.2f},{runtime['current_y']:.2f})",
-        min_interval=1.0,
-        key="anchor_refresh",
-    )
-    return True
-
-
-def _refresh_sprinkler_anchor(runtime, force=False, frame=None):
-    if not _sprinkler_anchor_should_run(runtime, force=force):
-        return False
-    return _apply_sprinkler_anchor_result(runtime, _find_sprinkler(runtime, frame=frame))
-
-
 def _bloom_sprinkler_anchor_should_run(runtime):
-    # A passive model hit can jump the coordinate origin several tiles and turn
-    # a deterministic square into an erratic path. Re-anchor only while idle at
-    # the origin; explicit recalibration remains available when needed.
     if runtime.get("movement_count", 0) > 0:
         return False
     now = time.time()
     force = force_anchor_needed(runtime)
     if not force and now - runtime.get("last_anchor_time", 0.0) < BLOOM_SPRINKLER_ANCHOR_INTERVAL:
         return False
-    return _sprinkler_anchor_should_run(runtime, force=force)
+    return agc.sprinkler_anchor_should_run(
+        runtime,
+        field_drift_compensation=FIELD_DRIFT_COMPENSATION,
+        use_sprinkler_model=USE_SPRINKLER_MODEL_FOR_DRIFT_COMPENSATION,
+        anchor_refresh_interval=ANCHOR_REFRESH_INTERVAL,
+        force=force,
+    )
 
 
 def _refresh_bloom_sprinkler_anchor(runtime):
     if not _bloom_sprinkler_anchor_should_run(runtime):
         return False
-    return _refresh_sprinkler_anchor(runtime, force=force_anchor_needed(runtime))
+    return agc.refresh_sprinkler_anchor(
+        runtime,
+        force=force_anchor_needed(runtime),
+        **_anchor_kwargs(),
+    )
 
 
 def force_anchor_needed(runtime):
@@ -1896,12 +946,7 @@ def force_anchor_needed(runtime):
 
 
 def _initialise_runtime():
-    if cv2 is None or np is None:
-        raise RuntimeError(
-            "Must install opencv-python and numpy before using BloomsAI, please run install dependencies before continuing."
-        )
-
-    #_set_start_camera_angle()
+    agc.require_vision_deps()
 
     model_label, model_coreml, model_onnx, model_size, model_output = BLOOM_MODEL_VARIANTS[BLOOM_MODEL_SELECTION]
     combined_candidates = [
@@ -1909,8 +954,9 @@ def _initialise_runtime():
         (MODEL_DIR / model_onnx, "opencv_onnx"),
     ]
     combined_candidates = [candidate for candidate in combined_candidates if candidate[0].exists()]
+    download_result = {}
     if not combined_candidates:
-        download_result = _check_missing_models([model_coreml, model_onnx])
+        download_result = agc.check_missing_models("blooms_ai", [model_coreml, model_onnx])
         combined_candidates = [
             (MODEL_DIR / model_coreml, "coreml"),
             (MODEL_DIR / model_onnx, "opencv_onnx"),
@@ -1925,48 +971,14 @@ def _initialise_runtime():
         )
     combined_path, combined_model_kind = combined_candidates[0]
     if combined_model_kind == "coreml":
-        if ct is None:
-            try:
-                import subprocess
-                import sys
-                import importlib
+        agc.require_coreml_or_raise()
 
-                subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "coremltools"])
-                globals()["ct"] = importlib.import_module("coremltools")
-            except Exception as exc:
-                raise RuntimeError(
-                    "coremltools is required but automatic install failed: " + str(exc) + ". Please install coremltools before using BloomsAI, then restart the macro."
-                )
-        if Image is None:
-            raise RuntimeError("Pillow is required for CoreML BloomsAI, please run install dependencies before continuing.")
+    sprinkler_path, sprinkler_model_kind = agc.resolve_sprinkler_model(tag="blooms_ai")
 
-    sprinkler_model_kind = None
-    sprinkler_candidate = MODEL_DIR / "sprinkler_detection_standard.mlmodelc"
-    if sprinkler_candidate.exists():
-        sprinkler_model_kind = "coreml"
-    else:
-        sprinkler_candidate = MODEL_DIR / "sprinkler_detection_standard.onnx"
-        if sprinkler_candidate.exists():
-            sprinkler_model_kind = "opencv_onnx"
-        else:
-            download_result = _check_missing_models(
-                ["sprinkler_detection_standard.mlmodelc", "sprinkler_detection_standard.onnx"]
-            )
-            sprinkler_candidate = MODEL_DIR / "sprinkler_detection_standard.mlmodelc"
-            if sprinkler_candidate.exists():
-                sprinkler_model_kind = "coreml"
-            else:
-                sprinkler_candidate = MODEL_DIR / "sprinkler_detection_standard.onnx"
-                if sprinkler_candidate.exists():
-                    sprinkler_model_kind = "opencv_onnx"
-    sprinkler_path = sprinkler_candidate if sprinkler_candidate.exists() else None
-
-    capture = _build_capture()
-    token_crop_info = _token_crop_for_capture(capture)
+    capture = agc.build_capture(getattr(self, "robloxWindow", None), CAPTURE_BACKEND)
+    token_crop_info = agc.token_crop_for_capture(capture)
     upper_token_monitor = None
     upper_token_bbox = None
-    # Supplemental full-viewport inference catches blooms near every screen edge.
-    upper_token_crop = (0, 0, int(capture["width"]), int(capture["height"]))
     if capture["backend"] == "mss":
         monitor = capture["monitor"]
         upper_token_monitor = {
@@ -1986,38 +998,26 @@ def _initialise_runtime():
     _debug_log(
         f"capture backend={capture['backend']} size={capture['width']}x{capture['height']} combined_model={combined_path} sprinkler_model={sprinkler_path or 'missing'}"
     )
-    points = _default_points(capture["width"], capture["height"])
 
-    destination = np.array(
-        [[-5, -5], [5, -5], [-5, 5], [5, 5]],
-        dtype=np.float32,
-    )
-    homography, _ = cv2.findHomography(points, destination, cv2.RANSAC)
+    homography = agc.compute_homography(capture["width"], capture["height"])
     if homography is None:
         raise RuntimeError("Could not compute BloomsAI homography.")
 
     if combined_model_kind == "opencv_onnx":
-        combined_session, combined_input, combined_output = _load_onnx_model(combined_path)
-        _delete_model_path(MODEL_DIR / model_coreml)
+        combined_session, combined_input, combined_output = agc.load_onnx_model(combined_path)
+        agc.delete_model_path(MODEL_DIR / model_coreml, _debug_log)
     else:
-        combined_session, combined_input, combined_output = _load_coreml_model(
+        combined_session, combined_input, combined_output = agc.load_coreml_model(
             combined_path,
             compiled_output_name=model_output,
         )
-        _delete_model_path(MODEL_DIR / model_onnx)
-    sprinkler_session = None
-    sprinkler_input = None
-    sprinkler_output = None
-    if sprinkler_path is not None:
-        if sprinkler_model_kind == "opencv_onnx":
-            sprinkler_session, sprinkler_input, sprinkler_output = _load_onnx_model(sprinkler_path)
-            _delete_model_path(MODEL_DIR / "sprinkler_detection_standard.mlmodelc")
-            _delete_model_path(MODEL_DIR / "sprinkler.mlpackage")
-        else:
-            sprinkler_session, sprinkler_input, sprinkler_output = _load_coreml_model(sprinkler_path)
-            _delete_model_path(MODEL_DIR / "sprinkler_detection_standard.onnx")
-            _delete_model_path(MODEL_DIR / "sprinkler.onnx")
-            _delete_model_path(MODEL_DIR / "sprinkler.mlpackage")
+        agc.delete_model_path(MODEL_DIR / model_onnx, _debug_log)
+
+    sprinkler_session, sprinkler_input, sprinkler_output = agc.load_sprinkler_session(
+        sprinkler_path,
+        sprinkler_model_kind,
+        _debug_log,
+    )
 
     return {
         "runtime_version": RUNTIME_VERSION,
@@ -2025,7 +1025,6 @@ def _initialise_runtime():
         "token_crop": token_crop_info["rect"],
         "upper_token_monitor": upper_token_monitor,
         "upper_token_bbox": upper_token_bbox,
-        "upper_token_crop": upper_token_crop,
         "combined_session": combined_session,
         "combined_input": combined_input,
         "combined_output": combined_output,
@@ -2045,7 +1044,6 @@ def _initialise_runtime():
         "initialised_at": time.time(),
         "video_writer": None,
         "video_path": "",
-        "last_recording_frame_time": 0.0,
         "detection_fps": None,
         "last_detection_ms": None,
         "last_timing_ms": {},
@@ -2080,6 +1078,7 @@ def _initialise_runtime():
         "petal_orbit_center": None,
         "petal_orbit_deadline": 0.0,
         "petal_orbit_index": None,
+        "annotate_recording_frame": _annotate_recording_frame,
     }
 
 
@@ -2088,8 +1087,8 @@ if (
     runtime.get("runtime_version") != RUNTIME_VERSION
     or runtime.get("combined_model_selection") != BLOOM_MODEL_SELECTION
 ):
-    _stop_scanner_thread(runtime)
-    _release_video_writer(runtime)
+    agc.stop_scanner_thread(runtime)
+    agc.release_video_writer(runtime, debug_log_fn=_debug_log)
     runtime.clear()
 if not runtime.get("ready"):
     try:
@@ -2112,10 +1111,16 @@ else:
     try:
         if not runtime.get("latest_scan_time"):
             _scan_tokens_once(runtime)
-        _ensure_scanner_thread(runtime)
+        agc.ensure_scanner_thread(
+            runtime,
+            _scan_tokens_once,
+            CONTINUOUS_SCAN_INTERVAL,
+            debug_log_fn=_debug_log,
+            on_error=lambda _exc: agc.release_video_writer(runtime, debug_log_fn=_debug_log),
+        )
         _refresh_bloom_sprinkler_anchor(runtime)
 
-        target = _locked_target(runtime) or _latest_target(runtime)
+        target = agc.locked_target(runtime) or agc.latest_target(runtime)
         bloom_mode = runtime.get("bloom_mode", "patrol")
         if bloom_mode in ("work", "orbit"):
             _execute_bloom_sequence(runtime)
@@ -2140,5 +1145,5 @@ else:
     except Exception as exc:
         runtime["ready"] = False
         runtime["error"] = str(exc)
-        _release_video_writer(runtime)
+        agc.release_video_writer(runtime, debug_log_fn=_debug_log)
         print(f"[blooms_ai] runtime error: {exc}")
