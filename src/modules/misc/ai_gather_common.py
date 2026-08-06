@@ -863,6 +863,14 @@ def sprinkler_anchor_enabled(field_drift_compensation, use_sprinkler_model):
     return bool(field_drift_compensation and use_sprinkler_model)
 
 
+def sprinkler_detect_should_run(runtime):
+    """Run sprinkler inference whenever the model is loaded (same cadence as tokens)."""
+    if runtime.get("sprinkler_session") is None:
+        runtime["last_sprinkler_status"] = "model_missing"
+        return False
+    return True
+
+
 def sprinkler_anchor_should_run(
     runtime,
     *,
@@ -871,15 +879,10 @@ def sprinkler_anchor_should_run(
     anchor_refresh_interval,
     force=False,
 ):
+    """Throttle only position anchoring — detection can still run every scan."""
     if not sprinkler_anchor_enabled(field_drift_compensation, use_sprinkler_model):
-        runtime["last_sprinkler_status"] = (
-            "disabled:field_drift_compensation"
-            if not field_drift_compensation
-            else "disabled:use_sprinkler_model_for_drift_compensation"
-        )
         return False
     if runtime.get("sprinkler_session") is None:
-        runtime["last_sprinkler_status"] = "model_missing"
         return False
     if runtime.get("movement_active") and not force:
         return False
@@ -919,6 +922,33 @@ def apply_sprinkler_anchor_result(runtime, result, *, max_passive_distance, debu
             key="anchor_refresh",
         )
     return True
+
+
+def maybe_apply_sprinkler_anchor(
+    runtime,
+    result,
+    *,
+    field_drift_compensation,
+    use_sprinkler_model,
+    anchor_refresh_interval,
+    max_passive_distance,
+    force=False,
+    debug_log_fn=None,
+):
+    if not sprinkler_anchor_should_run(
+        runtime,
+        field_drift_compensation=field_drift_compensation,
+        use_sprinkler_model=use_sprinkler_model,
+        anchor_refresh_interval=anchor_refresh_interval,
+        force=force,
+    ):
+        return False
+    return apply_sprinkler_anchor_result(
+        runtime,
+        result,
+        max_passive_distance=max_passive_distance,
+        debug_log_fn=debug_log_fn,
+    )
 
 
 def refresh_sprinkler_anchor(
@@ -1106,6 +1136,93 @@ def stop_scanner_thread(runtime=None):
         except Exception:
             pass
     runtime["scanner_thread"] = None
+
+
+def sprinkler_scanner_loop(
+    runtime,
+    interval,
+    find_kwargs,
+    anchor_kwargs,
+    debug_log_fn=None,
+    apply_fn=None,
+):
+    """Independent sprinkler loop so token scans never wait on sprinkler inference."""
+    stop_event = runtime.get("sprinkler_scanner_stop_event")
+    while stop_event is not None and not stop_event.is_set():
+        scan_started = time.time()
+        try:
+            if not runtime.get("ready"):
+                return
+            if not sprinkler_detect_should_run(runtime):
+                time.sleep(max(interval, 0.05))
+                continue
+
+            result = find_sprinkler(runtime, **find_kwargs)
+            if apply_fn is not None:
+                apply_fn(runtime, result)
+            else:
+                maybe_apply_sprinkler_anchor(runtime, result, **anchor_kwargs)
+        except Exception as exc:
+            if debug_log_fn:
+                debug_log_fn(f"sprinkler scanner error: {exc}", min_interval=1.0, key="sprinkler_scanner_error")
+            time.sleep(max(interval, 0.05))
+            continue
+
+        remaining = interval - (time.time() - scan_started)
+        time.sleep(max(remaining, 0.01))
+
+
+def ensure_sprinkler_scanner_thread(
+    runtime,
+    interval,
+    find_kwargs,
+    anchor_kwargs,
+    debug_log_fn=None,
+    apply_fn=None,
+):
+    thread = runtime.get("sprinkler_scanner_thread")
+    if thread is not None and thread.is_alive():
+        return
+    if runtime.get("sprinkler_session") is None:
+        return
+
+    stop_event = runtime.get("sprinkler_scanner_stop_event")
+    if stop_event is None or stop_event.is_set():
+        stop_event = threading.Event()
+        runtime["sprinkler_scanner_stop_event"] = stop_event
+
+    thread = threading.Thread(
+        target=sprinkler_scanner_loop,
+        args=(runtime, interval, find_kwargs, anchor_kwargs),
+        kwargs={"debug_log_fn": debug_log_fn, "apply_fn": apply_fn},
+        daemon=True,
+    )
+    runtime["sprinkler_scanner_thread"] = thread
+    thread.start()
+    if debug_log_fn:
+        debug_log_fn("continuous sprinkler scanner started", min_interval=1.0, key="sprinkler_scanner_started")
+
+
+def stop_sprinkler_scanner_thread(runtime=None):
+    if not isinstance(runtime, dict):
+        return
+
+    stop_event = runtime.get("sprinkler_scanner_stop_event")
+    if stop_event is not None:
+        stop_event.set()
+
+    thread = runtime.get("sprinkler_scanner_thread")
+    if thread is not None and thread.is_alive() and thread is not threading.current_thread():
+        try:
+            thread.join(timeout=1)
+        except Exception:
+            pass
+    runtime["sprinkler_scanner_thread"] = None
+
+
+def stop_all_scanner_threads(runtime=None):
+    stop_scanner_thread(runtime)
+    stop_sprinkler_scanner_thread(runtime)
 
 
 def require_vision_deps():

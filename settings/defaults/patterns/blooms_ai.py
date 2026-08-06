@@ -32,7 +32,7 @@ INPUT_HEIGHT = agc.INPUT_HEIGHT
 MODEL_DIR = agc.MODEL_DIR
 SPRINKLER_CONFIDENCE_THRESHOLD = 0.6
 PETAL_CONFIDENCE_THRESHOLD = 0.50
-RUNTIME_VERSION = 35
+RUNTIME_VERSION = 36
 MIN_TOKEN_DISTANCE = 0.3
 MAX_SPRINKLER_DISTANCE = 10.0
 TARGET_SPRINKLER_LABEL = None
@@ -183,7 +183,7 @@ def _anchor_kwargs():
 
 def onGatherEnd():
     runtime = _runtime_state()
-    agc.stop_scanner_thread(runtime)
+    agc.stop_all_scanner_threads(runtime)
     agc.release_video_writer(runtime, debug_log_fn=_debug_log)
 
 
@@ -358,8 +358,6 @@ def _scan_tokens_once(runtime):
     frame = agc.grab_region_frame(runtime, "upper_token_monitor", "upper_token_bbox")
     if frame is None:
         frame = agc.grab_frame(runtime)
-    sprinkler_pending = _bloom_sprinkler_anchor_should_run(runtime)
-    sprinkler_frame = agc.grab_frame(runtime) if sprinkler_pending else None
     screenshot_elapsed = time.time() - screenshot_start
     preprocess_start = time.time()
     if runtime.get("combined_model_kind") == "opencv_onnx":
@@ -375,11 +373,6 @@ def _scan_tokens_once(runtime):
             runtime["combined_input_height"],
         )
     preprocess_elapsed = time.time() - preprocess_start
-    sprinkler_job = (
-        agc.start_sprinkler_find(runtime, frame=sprinkler_frame, **_sprinkler_kwargs())
-        if sprinkler_pending
-        else None
-    )
     inference_start = time.time()
     output = agc.run_model(runtime, "combined", image)
     inference_elapsed = time.time() - inference_start
@@ -396,13 +389,6 @@ def _scan_tokens_once(runtime):
         publish_petals=not scan_stale,
     )
     postprocess_elapsed = time.time() - postprocess_start
-    if sprinkler_job is not None:
-        agc.apply_sprinkler_anchor_result(
-            runtime,
-            agc.finish_sprinkler_find(*sprinkler_job),
-            max_passive_distance=ANCHOR_MAX_PASSIVE_DISTANCE,
-            debug_log_fn=_debug_log,
-        )
     scoring_start = time.time()
     target = _find_best_token(runtime, detections)
     if (
@@ -915,6 +901,21 @@ def _process_combined_detections(runtime, output, transform, inference_ms, publi
     return bloom_detections
 
 
+def _apply_bloom_sprinkler_result(runtime, result):
+    if not _bloom_sprinkler_anchor_should_run(runtime):
+        return False
+    return agc.maybe_apply_sprinkler_anchor(
+        runtime,
+        result,
+        field_drift_compensation=FIELD_DRIFT_COMPENSATION,
+        use_sprinkler_model=USE_SPRINKLER_MODEL_FOR_DRIFT_COMPENSATION,
+        anchor_refresh_interval=ANCHOR_REFRESH_INTERVAL,
+        max_passive_distance=ANCHOR_MAX_PASSIVE_DISTANCE,
+        force=force_anchor_needed(runtime),
+        debug_log_fn=_debug_log,
+    )
+
+
 def _bloom_sprinkler_anchor_should_run(runtime):
     if runtime.get("movement_count", 0) > 0:
         return False
@@ -1087,7 +1088,7 @@ if (
     runtime.get("runtime_version") != RUNTIME_VERSION
     or runtime.get("combined_model_selection") != BLOOM_MODEL_SELECTION
 ):
-    agc.stop_scanner_thread(runtime)
+    agc.stop_all_scanner_threads(runtime)
     agc.release_video_writer(runtime, debug_log_fn=_debug_log)
     runtime.clear()
 if not runtime.get("ready"):
@@ -1117,6 +1118,14 @@ else:
             CONTINUOUS_SCAN_INTERVAL,
             debug_log_fn=_debug_log,
             on_error=lambda _exc: agc.release_video_writer(runtime, debug_log_fn=_debug_log),
+        )
+        agc.ensure_sprinkler_scanner_thread(
+            runtime,
+            CONTINUOUS_SCAN_INTERVAL,
+            _sprinkler_kwargs(),
+            _anchor_kwargs(),
+            debug_log_fn=_debug_log,
+            apply_fn=_apply_bloom_sprinkler_result,
         )
         _refresh_bloom_sprinkler_anchor(runtime)
 
