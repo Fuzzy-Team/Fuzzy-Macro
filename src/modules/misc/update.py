@@ -203,6 +203,68 @@ def _merge_overwrite(src, dst, protected_folders, protected_files):
             shutil.copy2(src_file, dest_file)
 
 
+def _resolve_update_pattern_source(extracted):
+    """Prefer shipped defaults/patterns; fall back to settings/patterns for older zips."""
+    defaults_patterns = os.path.join(extracted, "settings", "defaults", "patterns")
+    active_patterns = os.path.join(extracted, "settings", "patterns")
+    if os.path.isdir(defaults_patterns):
+        return defaults_patterns
+    if os.path.isdir(active_patterns):
+        return active_patterns
+    return None
+
+
+def _merge_patterns(src_patterns, dst_patterns, overwrite_exceptions=None):
+    """
+    Copy shipped patterns into the user's patterns folder.
+
+    - New pattern files are added.
+    - Existing user patterns are left alone (manual edits preserved).
+    - Files in overwrite_exceptions are always replaced (built-in AI patterns).
+    - Conflicting updates are written as name.newN.ext as a non-destructive fallback.
+    """
+    if not src_patterns or not os.path.isdir(src_patterns):
+        return
+
+    if overwrite_exceptions is None:
+        overwrite_exceptions = PATTERN_OVERWRITE_EXCEPTIONS
+
+    os.makedirs(dst_patterns, exist_ok=True)
+    for root, dirs, files in os.walk(src_patterns):
+        rel_root = os.path.relpath(root, src_patterns)
+        dest_root = os.path.join(dst_patterns, rel_root) if rel_root != "." else dst_patterns
+        os.makedirs(dest_root, exist_ok=True)
+        for f in files:
+            if f.endswith(".pyc") or f == "__pycache__":
+                continue
+            src_file = os.path.join(root, f)
+            dest_file = os.path.join(dest_root, f)
+            if f in overwrite_exceptions:
+                try:
+                    shutil.copy2(src_file, dest_file)
+                except Exception:
+                    pass
+            elif not os.path.exists(dest_file):
+                try:
+                    shutil.copy2(src_file, dest_file)
+                except Exception:
+                    pass
+            else:
+                # create a non-destructive alternative name
+                base, ext = os.path.splitext(f)
+                suffix = 1
+                while True:
+                    new_name = f"{base}.new{suffix}{ext}"
+                    new_path = os.path.join(dest_root, new_name)
+                    if not os.path.exists(new_path):
+                        try:
+                            shutil.copy2(src_file, new_path)
+                        except Exception:
+                            pass
+                        break
+                    suffix += 1
+
+
 # Create a zip backup of `destination`, excluding protected folders/files.
 def _create_backup(destination, backup_path, protected_folders, protected_files):
     if os.path.exists(backup_path):
@@ -492,47 +554,15 @@ def update(t="main", update_channel="stable", progress_callback=None):
     except Exception as e:
         print(f"[models] Could not check/download AI models: {e}")
 
-    # Merge patterns: combine files from extracted/settings/patterns with
-    # existing settings/patterns in destination. We protected patterns above
-    # so the generic merge didn't overwrite them. Here we perform a union
-    # copy: copy new files, and if a filename collides, keep the existing
-    # file and write the incoming file with a suffix to avoid data loss.
+    # Merge patterns from shipped defaults into the user's patterns folder.
+    # settings/patterns is protected above so user edits survive the generic
+    # overwrite; defaults/patterns is updated normally and is the catalog of
+    # official patterns to add (without replacing existing user copies).
     try:
         _report_update_progress(progress_callback, 86, "Merging patterns")
-        src_patterns = os.path.join(extracted, "settings", "patterns")
+        src_patterns = _resolve_update_pattern_source(extracted)
         dst_patterns = os.path.join(destination, "settings", "patterns")
-        if os.path.exists(src_patterns):
-            for root, dirs, files in os.walk(src_patterns):
-                rel_root = os.path.relpath(root, src_patterns)
-                dest_root = os.path.join(dst_patterns, rel_root) if rel_root != "." else dst_patterns
-                os.makedirs(dest_root, exist_ok=True)
-                for f in files:
-                    src_file = os.path.join(root, f)
-                    dest_file = os.path.join(dest_root, f)
-                    if f in pattern_overwrite_exceptions:
-                        try:
-                            shutil.copy2(src_file, dest_file)
-                        except Exception:
-                            pass
-                    elif not os.path.exists(dest_file):
-                        try:
-                            shutil.copy2(src_file, dest_file)
-                        except Exception:
-                            pass
-                    else:
-                        # create a non-destructive alternative name
-                        base, ext = os.path.splitext(f)
-                        suffix = 1
-                        while True:
-                            new_name = f"{base}.new{suffix}{ext}"
-                            new_path = os.path.join(dest_root, new_name)
-                            if not os.path.exists(new_path):
-                                try:
-                                    shutil.copy2(src_file, new_path)
-                                except Exception:
-                                    pass
-                                break
-                            suffix += 1
+        _merge_patterns(src_patterns, dst_patterns, pattern_overwrite_exceptions)
     except Exception:
         # non-fatal: don't interrupt whole update for pattern merge issues
         pass
@@ -697,39 +727,9 @@ def update_from_commit(commit_hash, progress_callback=None):
     # merge patterns similar to update()
     try:
         _report_update_progress(progress_callback, 86, "Merging patterns")
-        src_patterns = os.path.join(extracted, "settings", "patterns")
+        src_patterns = _resolve_update_pattern_source(extracted)
         dst_patterns = os.path.join(destination, "settings", "patterns")
-        if os.path.exists(src_patterns):
-            for root, dirs, files in os.walk(src_patterns):
-                rel_root = os.path.relpath(root, src_patterns)
-                dest_root = os.path.join(dst_patterns, rel_root) if rel_root != "." else dst_patterns
-                os.makedirs(dest_root, exist_ok=True)
-                for f in files:
-                    src_file = os.path.join(root, f)
-                    dest_file = os.path.join(dest_root, f)
-                    if f in pattern_overwrite_exceptions:
-                        try:
-                            shutil.copy2(src_file, dest_file)
-                        except Exception:
-                            pass
-                    elif not os.path.exists(dest_file):
-                        try:
-                            shutil.copy2(src_file, dest_file)
-                        except Exception:
-                            pass
-                    else:
-                        base, ext = os.path.splitext(f)
-                        suffix = 1
-                        while True:
-                            new_name = f"{base}.new{suffix}{ext}"
-                            new_path = os.path.join(dest_root, new_name)
-                            if not os.path.exists(new_path):
-                                try:
-                                    shutil.copy2(src_file, new_path)
-                                except Exception:
-                                    pass
-                                break
-                            suffix += 1
+        _merge_patterns(src_patterns, dst_patterns, pattern_overwrite_exceptions)
     except Exception:
         pass
 
