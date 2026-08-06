@@ -943,6 +943,8 @@ def _scan_tokens_once(runtime):
     frame = _grab_upper_token_frame(runtime)
     if frame is None:
         frame = _grab_frame(runtime)
+    sprinkler_pending = _bloom_sprinkler_anchor_should_run(runtime)
+    sprinkler_frame = _grab_frame(runtime) if sprinkler_pending else None
     screenshot_elapsed = time.time() - screenshot_start
     preprocess_start = time.time()
     if runtime.get("combined_model_kind") == "opencv_onnx":
@@ -958,6 +960,7 @@ def _scan_tokens_once(runtime):
             runtime["combined_input_height"],
         )
     preprocess_elapsed = time.time() - preprocess_start
+    sprinkler_job = _start_sprinkler_find(runtime, frame=sprinkler_frame) if sprinkler_pending else None
     inference_start = time.time()
     output = _run_model(runtime, "combined", image)
     inference_elapsed = time.time() - inference_start
@@ -974,7 +977,8 @@ def _scan_tokens_once(runtime):
         publish_petals=not scan_stale,
     )
     postprocess_elapsed = time.time() - postprocess_start
-    _refresh_bloom_sprinkler_anchor(runtime)
+    if sprinkler_job is not None:
+        _apply_sprinkler_anchor_result(runtime, _finish_sprinkler_find(*sprinkler_job))
     scoring_start = time.time()
     target = _find_best_token(runtime, detections)
     if (
@@ -1716,17 +1720,48 @@ def _process_combined_detections(runtime, output, transform, inference_ms, publi
     return bloom_detections
 
 
-def _find_sprinkler(runtime):
+def _sprinkler_infer_lock(runtime):
+    lock = runtime.get("sprinkler_infer_lock")
+    if lock is None:
+        lock = threading.Lock()
+        runtime["sprinkler_infer_lock"] = lock
+    return lock
+
+
+def _start_sprinkler_find(runtime, frame=None):
+    holder = {"result": None, "error": None}
+
+    def _worker():
+        try:
+            holder["result"] = _find_sprinkler(runtime, frame=frame)
+        except Exception as exc:
+            holder["error"] = exc
+
+    thread = threading.Thread(target=_worker, daemon=True)
+    thread.start()
+    return thread, holder
+
+
+def _finish_sprinkler_find(thread, holder):
+    thread.join()
+    if holder["error"] is not None:
+        raise holder["error"]
+    return holder["result"]
+
+
+def _find_sprinkler(runtime, frame=None):
     if runtime.get("sprinkler_session") is None:
         runtime["last_sprinkler_status"] = "model_missing"
         return None
 
-    frame = _grab_frame(runtime)
+    if frame is None:
+        frame = _grab_frame(runtime)
     if runtime.get("sprinkler_model_kind") == "opencv_onnx":
         image = _preprocess_onnx_image(frame, SPRINKLER_INPUT_WIDTH, SPRINKLER_INPUT_HEIGHT)
     else:
         image = _preprocess_coreml_image(frame, SPRINKLER_INPUT_WIDTH, SPRINKLER_INPUT_HEIGHT)
-    output = _run_model(runtime, "sprinkler", image)
+    with _sprinkler_infer_lock(runtime):
+        output = _run_model(runtime, "sprinkler", image)
     detections = _decode_detections(runtime, "sprinkler", output, SPRINKLER_CONFIDENCE_THRESHOLD)
 
     scale_x = runtime["capture"]["width"] / float(SPRINKLER_INPUT_WIDTH)
@@ -1782,7 +1817,7 @@ def _find_sprinkler(runtime):
     return best
 
 
-def _refresh_sprinkler_anchor(runtime, force=False):
+def _sprinkler_anchor_should_run(runtime, force=False):
     if not _sprinkler_anchor_enabled():
         runtime["last_sprinkler_status"] = (
             "disabled:field_drift_compensation"
@@ -1795,13 +1830,13 @@ def _refresh_sprinkler_anchor(runtime, force=False):
         return False
     if runtime.get("movement_active") and not force:
         return False
-
-    now = time.time()
-    if not force and now - runtime.get("last_anchor_time", 0.0) < ANCHOR_REFRESH_INTERVAL:
+    if not force and time.time() - runtime.get("last_anchor_time", 0.0) < ANCHOR_REFRESH_INTERVAL:
         return False
+    return True
 
-    result = _find_sprinkler(runtime)
-    runtime["last_anchor_time"] = now
+
+def _apply_sprinkler_anchor_result(runtime, result):
+    runtime["last_anchor_time"] = time.time()
     if not result:
         return False
 
@@ -1831,14 +1866,27 @@ def _refresh_sprinkler_anchor(runtime, force=False):
     return True
 
 
-def _refresh_bloom_sprinkler_anchor(runtime):
+def _refresh_sprinkler_anchor(runtime, force=False, frame=None):
+    if not _sprinkler_anchor_should_run(runtime, force=force):
+        return False
+    return _apply_sprinkler_anchor_result(runtime, _find_sprinkler(runtime, frame=frame))
+
+
+def _bloom_sprinkler_anchor_should_run(runtime):
     # A passive model hit can jump the coordinate origin several tiles and turn
     # a deterministic square into an erratic path. Re-anchor only while idle at
     # the origin; explicit recalibration remains available when needed.
     if runtime.get("movement_count", 0) > 0:
         return False
     now = time.time()
-    if not force_anchor_needed(runtime) and now - runtime.get("last_anchor_time", 0.0) < BLOOM_SPRINKLER_ANCHOR_INTERVAL:
+    force = force_anchor_needed(runtime)
+    if not force and now - runtime.get("last_anchor_time", 0.0) < BLOOM_SPRINKLER_ANCHOR_INTERVAL:
+        return False
+    return _sprinkler_anchor_should_run(runtime, force=force)
+
+
+def _refresh_bloom_sprinkler_anchor(runtime):
+    if not _bloom_sprinkler_anchor_should_run(runtime):
         return False
     return _refresh_sprinkler_anchor(runtime, force=force_anchor_needed(runtime))
 
@@ -2015,6 +2063,7 @@ def _initialise_runtime():
         "movement_requires_fresh_scan": False,
         "idle_square_index": 0,
         "scan_lock": threading.Lock(),
+        "sprinkler_infer_lock": threading.Lock(),
         "scanner_stop_event": None,
         "scanner_thread": None,
         "latest_petal_detections": [],

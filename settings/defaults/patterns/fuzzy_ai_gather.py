@@ -956,10 +956,13 @@ def _scan_tokens_once(runtime):
     detection_start = time.time()
     screenshot_start = time.time()
     frame = _grab_token_frame(runtime)
+    sprinkler_pending = _sprinkler_anchor_should_run(runtime)
+    sprinkler_frame = _grab_frame(runtime) if sprinkler_pending else None
     screenshot_elapsed = time.time() - screenshot_start
     preprocess_start = time.time()
     image = _preprocess_token_frame(frame, runtime)
     preprocess_elapsed = time.time() - preprocess_start
+    sprinkler_job = _start_sprinkler_find(runtime, frame=sprinkler_frame) if sprinkler_pending else None
     inference_start = time.time()
     output = _run_model(runtime, "token", image)
     inference_elapsed = time.time() - inference_start
@@ -978,7 +981,8 @@ def _scan_tokens_once(runtime):
             for box, class_id, confidence in detections
         ]
     postprocess_elapsed = time.time() - postprocess_start
-    _refresh_sprinkler_anchor(runtime)
+    if sprinkler_job is not None:
+        _apply_sprinkler_anchor_result(runtime, _finish_sprinkler_find(*sprinkler_job))
     scoring_start = time.time()
     target = _find_best_token(runtime, detections)
     if (
@@ -1594,17 +1598,48 @@ def _execute_planned_movement(runtime):
     return _execute_movement_to_target(remaining_x, remaining_y)
 
 
-def _find_sprinkler(runtime):
+def _sprinkler_infer_lock(runtime):
+    lock = runtime.get("sprinkler_infer_lock")
+    if lock is None:
+        lock = threading.Lock()
+        runtime["sprinkler_infer_lock"] = lock
+    return lock
+
+
+def _start_sprinkler_find(runtime, frame=None):
+    holder = {"result": None, "error": None}
+
+    def _worker():
+        try:
+            holder["result"] = _find_sprinkler(runtime, frame=frame)
+        except Exception as exc:
+            holder["error"] = exc
+
+    thread = threading.Thread(target=_worker, daemon=True)
+    thread.start()
+    return thread, holder
+
+
+def _finish_sprinkler_find(thread, holder):
+    thread.join()
+    if holder["error"] is not None:
+        raise holder["error"]
+    return holder["result"]
+
+
+def _find_sprinkler(runtime, frame=None):
     if runtime.get("sprinkler_session") is None:
         runtime["last_sprinkler_status"] = "model_missing"
         return None
 
-    frame = _grab_frame(runtime)
+    if frame is None:
+        frame = _grab_frame(runtime)
     if runtime.get("sprinkler_model_kind") == "opencv_onnx":
         image = _preprocess_onnx_image(frame, SPRINKLER_INPUT_WIDTH, SPRINKLER_INPUT_HEIGHT)
     else:
         image = _preprocess_coreml_image(frame, SPRINKLER_INPUT_WIDTH, SPRINKLER_INPUT_HEIGHT)
-    output = _run_model(runtime, "sprinkler", image)
+    with _sprinkler_infer_lock(runtime):
+        output = _run_model(runtime, "sprinkler", image)
     if runtime.get("sprinkler_model_kind") == "opencv_onnx":
         detections = _postprocess(output, SPRINKLER_CONFIDENCE_THRESHOLD)
     else:
@@ -1696,7 +1731,7 @@ def _clear_targets(runtime):
             runtime["locked_target"] = None
 
 
-def _refresh_sprinkler_anchor(runtime, force=False):
+def _sprinkler_anchor_should_run(runtime, force=False):
     if not _sprinkler_anchor_enabled():
         runtime["last_sprinkler_status"] = (
             "disabled:field_drift_compensation"
@@ -1709,13 +1744,13 @@ def _refresh_sprinkler_anchor(runtime, force=False):
         return False
     if runtime.get("movement_active") and not force:
         return False
-
-    now = time.time()
-    if not force and now - runtime.get("last_anchor_time", 0.0) < ANCHOR_REFRESH_INTERVAL:
+    if not force and time.time() - runtime.get("last_anchor_time", 0.0) < ANCHOR_REFRESH_INTERVAL:
         return False
+    return True
 
-    result = _find_sprinkler(runtime)
-    runtime["last_anchor_time"] = now
+
+def _apply_sprinkler_anchor_result(runtime, result):
+    runtime["last_anchor_time"] = time.time()
     if not result:
         return False
 
@@ -1743,6 +1778,12 @@ def _refresh_sprinkler_anchor(runtime, force=False):
         key="anchor_refresh",
     )
     return True
+
+
+def _refresh_sprinkler_anchor(runtime, force=False, frame=None):
+    if not _sprinkler_anchor_should_run(runtime, force=force):
+        return False
+    return _apply_sprinkler_anchor_result(runtime, _find_sprinkler(runtime, frame=frame))
 
 
 def _recalibrate(runtime):
@@ -2004,6 +2045,7 @@ def _initialise_runtime():
         "last_sprinkler_status": "",
         "movement_active": False,
         "scan_lock": threading.Lock(),
+        "sprinkler_infer_lock": threading.Lock(),
         "scanner_stop_event": None,
         "scanner_thread": None,
     }
