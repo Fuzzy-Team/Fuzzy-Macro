@@ -3551,6 +3551,54 @@ class macro:
         s = n % 60
         return f"{int(m)}m {int(s):02d}s"
     
+    def _shouldResumeQuestGatherUntilComplete(self, questGatherUntilComplete, gatherEndReason, questWatchGiver, questWatchObjective):
+        """True when bag-full convert should return to the same watched quest field."""
+        if not questGatherUntilComplete or gatherEndReason != "backpack":
+            return False
+        if getattr(self, "_questGatherUntilCompleteDepth", 0) >= 100:
+            self.logger.webhook(
+                "Quest Gather",
+                "Stopped resume loop after too many bag-full converts",
+                "orange",
+                route_category="quests",
+            )
+            return False
+        if not questWatchGiver or not questWatchObjective:
+            return False
+        if self.run is not None and self.run.value == 0:
+            return False
+        try:
+            visibleObjectives = self.findQuest(questWatchGiver, logDetection=False)
+            if visibleObjectives is None:
+                return False
+            if questWatchObjective not in visibleObjectives:
+                self.logger.webhook(
+                    "Quest Gather",
+                    f"{questWatchGiver.title()} objective already complete after convert: {questWatchObjective.replace('_', ' ').title()}",
+                    "light green",
+                    route_category="quests",
+                )
+                return False
+        except Exception:
+            print(traceback.format_exc())
+            # OCR failure should not abandon an unfinished quest gather.
+        return True
+
+    def _resumeQuestGatherUntilComplete(self, field, settingsOverride, questGumdrops):
+        """Travel back and keep gathering the same quest field after converting."""
+        depth = getattr(self, "_questGatherUntilCompleteDepth", 0) + 1
+        self._questGatherUntilCompleteDepth = depth
+        try:
+            self.logger.webhook(
+                "Quest Gather",
+                f"Returning to {str(field).replace('_', ' ').title()} until quest objective completes",
+                "light blue",
+                route_category="quests",
+            )
+            return self.gather(field, settingsOverride, questGumdrops)
+        finally:
+            self._questGatherUntilCompleteDepth = max(0, depth - 1)
+
     def gather(self, field, settingsOverride = {}, questGumdrops=False):
         # Normalize field name to handle both space and underscore formats
         # Convert underscores to spaces for fieldSettings lookup
@@ -3810,6 +3858,8 @@ class macro:
         maxGatherTime = fieldSetting["mins"]*60
         gatherTimeLimit = "Infinite" if infiniteGather else self.convertSecsToMinsAndSecs(maxGatherTime)
         returnType = "rejoin" if isHiveHubField else fieldSetting["return"]
+        questGatherUntilComplete = False
+        gatherEndReason = None
         fuzzyAIRuntimeDefaults = settingsManager.FUZZY_AI_RUNTIME_DEFAULTS
         pattern_blooms_ai_model = str(fieldSetting.get("blooms_ai_model", "Standard"))
         pattern_ai_gather_model = str(fieldSetting.get("ai_gather_model", self.setdat.get("ai_gather_model", "Standard")))
@@ -3897,6 +3947,9 @@ class macro:
                             f"Watching {questWatchGiver.title()}: {questWatchObjective.replace('_', ' ').title()}",
                             "light blue",
                         )
+                        if self.setdat.get("quest_gather_until_complete", False):
+                            questGatherUntilComplete = True
+                            gatherTimeLimit = "Until Quest Complete"
                     elif visibleObjectives is not None:
                         # The menu was deliberately left open by findQuest, but the
                         # objective is no longer incomplete, so do not watch it.
@@ -4151,6 +4204,7 @@ class macro:
                             "screen",
                             route_category="gathering",
                         )
+                        gatherEndReason = "objective_complete"
                         keepGathering = False
                         continue
                 except Exception:
@@ -4254,7 +4308,7 @@ class macro:
                 time.sleep(0.4)
                 self.reset()
                 break
-            elif not infiniteGather and getGatherTime() > maxGatherTime:
+            elif not infiniteGather and not questGatherUntilComplete and getGatherTime() > maxGatherTime:
                 if honeyWreathReturnEnabled and isHoneyWreathReady():
                     backpack = self.getBackpack()
                     if isHoneyWreathBackpackReady(backpack):
@@ -4265,6 +4319,7 @@ class macro:
                             "screen"
                         )
                         honeyWreathPending = True
+                        gatherEndReason = "backpack"
                         keepGathering = False
                     elif not honeyWreathWaitLogged:
                         self.logger.webhook(
@@ -4276,6 +4331,7 @@ class macro:
                         honeyWreathWaitLogged = True
                 else:
                     self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Time Limit - Return: {returnType.title()}", "light green", "screen", route_category="gathering")
+                    gatherEndReason = "time"
                     keepGathering = False
             #check backpack
             elif isHiveHubField or infiniteGather:
@@ -4292,6 +4348,7 @@ class macro:
                                 "screen"
                             )
                             honeyWreathPending = True
+                            gatherEndReason = "backpack"
                             keepGathering = False
                         elif not honeyWreathWaitLogged:
                             self.logger.webhook(
@@ -4302,7 +4359,9 @@ class macro:
                             )
                             honeyWreathWaitLogged = True
                     else:
-                        self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Backpack - Return: {returnType.title()}", "light green", "screen", route_category="gathering")
+                        resumeNote = " - Resuming after convert" if questGatherUntilComplete else ""
+                        self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Backpack - Return: {returnType.title()}{resumeNote}", "light green", "screen", route_category="gathering")
+                        gatherEndReason = "backpack"
                         keepGathering = False
 
         #gathering was interrupted
@@ -4386,6 +4445,10 @@ class macro:
                 self.collect("wreath")
                 self.reset(convert=True)
             gooTimerActive = False
+            if self._shouldResumeQuestGatherUntilComplete(
+                questGatherUntilComplete, gatherEndReason, questWatchGiver, questWatchObjective
+            ):
+                return self._resumeQuestGatherUntilComplete(field, settingsOverride, questGumdrops)
             return
 
         if returnType == "reset":
@@ -4401,6 +4464,11 @@ class macro:
             if not self.convert(forced_convert_balloon=(str(self.setdat.get("convert_balloon","")).lower().replace(" ","_")=="every_gather")):
                 self.logger.webhook("","Whirligigs failed, walking to hive", "dark brown", "screen")
                 walkToHive()
+                gooTimerActive = False
+                if self._shouldResumeQuestGatherUntilComplete(
+                    questGatherUntilComplete, gatherEndReason, questWatchGiver, questWatchObjective
+                ):
+                    return self._resumeQuestGatherUntilComplete(field, settingsOverride, questGumdrops)
                 return
             #whirligig sucessful
             #goo timer continues via background thread after whirligig success
@@ -4411,6 +4479,11 @@ class macro:
         
         # Stop the goo timer thread when gathering is completely finished
         gooTimerActive = False
+
+        if self._shouldResumeQuestGatherUntilComplete(
+            questGatherUntilComplete, gatherEndReason, questWatchGiver, questWatchObjective
+        ):
+            return self._resumeQuestGatherUntilComplete(field, settingsOverride, questGumdrops)
 
     #returns the coordinates of the keep old text
     def keepOldCheck(self):
