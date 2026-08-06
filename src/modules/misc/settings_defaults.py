@@ -1926,7 +1926,7 @@ DEFAULT_AUTO_PLANTERS = {'planters': [{'planter': '', 'nectar': '', 'field': '',
               {'planter': '', 'nectar': '', 'field': '', 'harvest_time': 0, 'nectar_est_percent': 0}],
  'nectar_last_field': {'comforting': '', 'refreshing': '', 'satisfying': '', 'motivating': '', 'invigorating': ''}}
 
-DEFAULT_CURRENT_PROFILE = 'a'
+DEFAULT_CURRENT_PROFILE = 'default'
 
 DEFAULT_HOURLY_REPORT_HISTORY = []
 
