@@ -402,6 +402,146 @@ def grab_region_frame(runtime, monitor_key, bbox_key):
     return None
 
 
+def crop_rect(frame, rect):
+    left, top, width_px, height_px = rect
+    return frame[top:top + height_px, left:left + width_px]
+
+
+def init_frame_mailbox(runtime):
+    if runtime.get("frame_lock") is None:
+        runtime["frame_lock"] = threading.Lock()
+    runtime.setdefault("latest_frame", None)
+    runtime.setdefault("latest_frame_time", 0.0)
+    runtime.setdefault("latest_frame_id", 0)
+    runtime.setdefault("token_last_frame_id", 0)
+    runtime.setdefault("sprinkler_last_frame_id", 0)
+
+
+def publish_frame(runtime, frame):
+    lock = runtime.get("frame_lock")
+    if lock is None:
+        init_frame_mailbox(runtime)
+        lock = runtime["frame_lock"]
+    with lock:
+        runtime["latest_frame"] = frame
+        runtime["latest_frame_time"] = time.time()
+        runtime["latest_frame_id"] = int(runtime.get("latest_frame_id", 0)) + 1
+        return runtime["latest_frame_id"]
+
+
+def get_latest_frame(runtime, *, copy=True, after_id=None):
+    lock = runtime.get("frame_lock")
+    if lock is None:
+        return None, 0, 0.0
+    with lock:
+        frame = runtime.get("latest_frame")
+        frame_id = int(runtime.get("latest_frame_id", 0))
+        frame_time = float(runtime.get("latest_frame_time", 0.0))
+        if frame is None:
+            return None, frame_id, frame_time
+        if after_id is not None and frame_id <= int(after_id):
+            return None, frame_id, frame_time
+        return (frame.copy() if copy else frame), frame_id, frame_time
+
+
+def wait_for_latest_frame(runtime, *, after_id=0, timeout=0.05, copy=True):
+    """Return the newest mailbox frame, waiting briefly for a newer id when possible."""
+    deadline = time.time() + max(timeout, 0.0)
+    last_id = int(after_id or 0)
+    while True:
+        frame, frame_id, frame_time = get_latest_frame(runtime, copy=copy, after_id=last_id)
+        if frame is not None:
+            return frame, frame_id, frame_time
+        if time.time() >= deadline:
+            # Fall back to whatever is currently published (may be the same id).
+            return get_latest_frame(runtime, copy=copy, after_id=None)
+        time.sleep(0.001)
+
+
+def capture_loop(runtime, interval, debug_log_fn=None):
+    """Dedicated capture owner: publishes latest full frames into the mailbox."""
+    stop_event = runtime.get("capture_stop_event")
+    capture = runtime.get("capture") or {}
+    session = None
+    try:
+        if capture.get("backend") == "mss" and mss is not None:
+            session = mss.mss()
+        while stop_event is not None and not stop_event.is_set():
+            started = time.time()
+            try:
+                if not runtime.get("ready"):
+                    return
+                if session is not None:
+                    frame = mss_grab_to_array(session, capture["monitor"])
+                elif capture.get("backend") == "pil" and ImageGrab is not None:
+                    image = ImageGrab.grab(bbox=capture.get("bbox"))
+                    frame = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+                else:
+                    frame = grab_frame(runtime)
+                publish_frame(runtime, frame)
+            except Exception as exc:
+                if debug_log_fn:
+                    debug_log_fn(f"capture error: {exc}", min_interval=1.0, key="capture_error")
+                time.sleep(max(interval, 0.02))
+                continue
+            remaining = interval - (time.time() - started)
+            time.sleep(max(remaining, 0.0))
+    finally:
+        if session is not None:
+            try:
+                session.close()
+            except Exception:
+                pass
+
+
+def ensure_capture_thread(runtime, interval=0.016, debug_log_fn=None):
+    init_frame_mailbox(runtime)
+    thread = runtime.get("capture_thread")
+    if thread is not None and thread.is_alive():
+        return
+
+    stop_event = runtime.get("capture_stop_event")
+    if stop_event is None or stop_event.is_set():
+        stop_event = threading.Event()
+        runtime["capture_stop_event"] = stop_event
+
+    thread = threading.Thread(
+        target=capture_loop,
+        args=(runtime, max(float(interval), 0.008)),
+        kwargs={"debug_log_fn": debug_log_fn},
+        daemon=True,
+    )
+    runtime["capture_thread"] = thread
+    thread.start()
+    if debug_log_fn:
+        debug_log_fn("continuous capture thread started", min_interval=1.0, key="capture_started")
+
+
+def stop_capture_thread(runtime=None):
+    if not isinstance(runtime, dict):
+        return
+    stop_event = runtime.get("capture_stop_event")
+    if stop_event is not None:
+        stop_event.set()
+    thread = runtime.get("capture_thread")
+    if thread is not None and thread.is_alive() and thread is not threading.current_thread():
+        try:
+            thread.join(timeout=1)
+        except Exception:
+            pass
+    runtime["capture_thread"] = None
+
+
+def wait_for_capture_ready(runtime, timeout=1.0):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        frame, frame_id, _ = get_latest_frame(runtime, copy=False)
+        if frame is not None and frame_id > 0:
+            return True
+        time.sleep(0.01)
+    return False
+
+
 def token_crop_for_capture(capture):
     capture_w = int(capture["width"])
     capture_h = int(capture["height"])
@@ -487,9 +627,7 @@ def recording_thread(runtime, debug_log_fn=None):
     frame_interval = 1.0 / fps
     next_frame_time = time.time()
     stop_event = runtime.get("recording_stop_event")
-    recording_session = None
-    if runtime["capture"]["backend"] == "mss" and mss is not None:
-        recording_session = mss.mss()
+    last_frame_id = 0
 
     try:
         while stop_event is not None and not stop_event.is_set():
@@ -499,10 +637,16 @@ def recording_thread(runtime, debug_log_fn=None):
                 continue
 
             try:
-                if recording_session is not None:
-                    frame = mss_grab_to_array(recording_session, runtime["capture"]["monitor"])
-                else:
+                frame, frame_id, _ = wait_for_latest_frame(
+                    runtime,
+                    after_id=last_frame_id,
+                    timeout=frame_interval,
+                    copy=True,
+                )
+                if frame is None:
                     frame = grab_frame(runtime)
+                else:
+                    last_frame_id = frame_id
                 annotate_fn = runtime.get("annotate_recording_frame")
                 annotated = annotate_fn(runtime, frame) if callable(annotate_fn) else bgr_frame(frame)
                 writer = runtime.get("video_writer")
@@ -517,11 +661,7 @@ def recording_thread(runtime, debug_log_fn=None):
             if next_frame_time < time.time() - frame_interval:
                 next_frame_time = time.time() + frame_interval
     finally:
-        if recording_session is not None:
-            try:
-                recording_session.close()
-            except Exception:
-                pass
+        pass
 
 
 def ensure_video_writer(runtime, frame, *, filename_prefix, record_video, record_video_fps, debug_log_fn=None):
@@ -776,7 +916,9 @@ def find_sprinkler(
         return None
 
     if frame is None:
-        frame = grab_frame(runtime)
+        frame, _, _ = get_latest_frame(runtime, copy=True)
+        if frame is None:
+            frame = grab_frame(runtime)
     if runtime.get("sprinkler_model_kind") == "opencv_onnx":
         image = preprocess_onnx_image(frame, SPRINKLER_INPUT_WIDTH, SPRINKLER_INPUT_HEIGHT)
     else:
@@ -1146,7 +1288,7 @@ def sprinkler_scanner_loop(
     debug_log_fn=None,
     apply_fn=None,
 ):
-    """Independent sprinkler loop so token scans never wait on sprinkler inference."""
+    """Independent sprinkler loop reading frames from the capture mailbox."""
     stop_event = runtime.get("sprinkler_scanner_stop_event")
     while stop_event is not None and not stop_event.is_set():
         scan_started = time.time()
@@ -1157,7 +1299,19 @@ def sprinkler_scanner_loop(
                 time.sleep(max(interval, 0.05))
                 continue
 
-            result = find_sprinkler(runtime, **find_kwargs)
+            after_id = int(runtime.get("sprinkler_last_frame_id", 0))
+            frame, frame_id, _ = wait_for_latest_frame(
+                runtime,
+                after_id=after_id,
+                timeout=max(interval, 0.02),
+                copy=True,
+            )
+            if frame is None:
+                time.sleep(0.01)
+                continue
+            runtime["sprinkler_last_frame_id"] = frame_id
+
+            result = find_sprinkler(runtime, frame=frame, **find_kwargs)
             if apply_fn is not None:
                 apply_fn(runtime, result)
             else:
@@ -1169,7 +1323,7 @@ def sprinkler_scanner_loop(
             continue
 
         remaining = interval - (time.time() - scan_started)
-        time.sleep(max(remaining, 0.01))
+        time.sleep(max(remaining, 0.0))
 
 
 def ensure_sprinkler_scanner_thread(
@@ -1223,6 +1377,7 @@ def stop_sprinkler_scanner_thread(runtime=None):
 def stop_all_scanner_threads(runtime=None):
     stop_scanner_thread(runtime)
     stop_sprinkler_scanner_thread(runtime)
+    stop_capture_thread(runtime)
 
 
 def require_vision_deps():
