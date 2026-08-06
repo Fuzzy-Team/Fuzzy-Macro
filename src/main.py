@@ -3490,17 +3490,20 @@ if __name__ == "__main__":
                 startStreamIfNeeded(setdat)
 
             print("starting macro proc")
-            #check if user enabled field drift compensation but sprinkler is not supreme saturator
+            #check if user enabled color-based field drift compensation but sprinkler is not supreme saturator
+            #skip when using AI sprinkler model (works with any sprinkler)
             fieldSettings = settingsManager.loadFields()
-            sprinkler = setdat["sprinkler_type"]
-            for field in setdat.get("fields", []):
-                fs = fieldSettings.get(field, {})
-                if fs.get("field_drift_compensation", False) and setdat.get("sprinkler_type") != "saturator":
-                    messageBox.msgBox(title="Field Drift Compensation", text=f"You have Field Drift Compensation enabled for {field} field, \
-                                    but you do not have Supreme Saturator as your sprinkler type in configs.\n\
-                                    Field Drift Compensation requires you to own the Supreme Saturator.\n\
-                                    Kindly disable field drift compensation if you do not have the Supreme Saturator")
-                    break
+            useAiDriftComp = setdat.get("use_sprinkler_model_for_drift_compensation", False)
+            if not useAiDriftComp:
+                for field in setdat.get("fields", []):
+                    fs = fieldSettings.get(field, {})
+                    if fs.get("field_drift_compensation", False) and setdat.get("sprinkler_type") != "saturator":
+                        messageBox.msgBox(title="Field Drift Compensation", text=f"You have Field Drift Compensation enabled for {field} field, \
+                                        but you do not have Supreme Saturator as your sprinkler type in configs.\n\
+                                        Color-based Field Drift Compensation requires the Supreme Saturator.\n\
+                                        Enable 'Use Sprinkler Model For Field Drift Compensation' in Config to use AI detection with any sprinkler, \
+                                        or disable field drift compensation if you do not have the Supreme Saturator.")
+                        break
             #check if blender is enabled but there are no items to craft
             validBlender = not setdat["blender_enable"] #valid blender set to false if blender is enabled, else its true since blender is disabled
             for i in range(1, macroModule.BLENDER_ITEM_SLOTS + 1):
