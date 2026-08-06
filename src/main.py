@@ -631,9 +631,18 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 macro.reset(convert=convertAfter)
             
             #do priority tasks
-            if macro.night and macro.setdat["stinger_hunt"]:
+            # Quest mode should stay on quests only — skip stinger hunt / mondo buff
+            if (
+                macro.setdat.get("macro_mode", "normal") != "quest"
+                and macro.night
+                and macro.setdat["stinger_hunt"]
+            ):
                 macro.stingerHunt()
-            if macro.setdat["mondo_buff"] and macro.hasMondoRespawned():
+            if (
+                macro.setdat.get("macro_mode", "normal") != "quest"
+                and macro.setdat["mondo_buff"]
+                and macro.hasMondoRespawned()
+            ):
                 macro.collectMondoBuff()
             if macro.hasScheduledRejoinArrived():
                 macro.rejoin("Rejoining (Scheduled)")
