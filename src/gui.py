@@ -1257,6 +1257,8 @@ def log(time = "", msg = "", color = ""):
 
 eel.expose(settingsManager.loadFields)
 eel.expose(settingsManager.saveField) 
+eel.expose(settingsManager.getDefaultFuzzyAIGatherPatternPreset)
+eel.expose(settingsManager.getDefaultBloomsAIPatternPreset)
 eel.expose(settingsManager.loadSettings)
 eel.expose(settingsManager.loadAllSettings)
 eel.expose(settingsManager.saveProfileSetting)

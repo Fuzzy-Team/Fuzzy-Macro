@@ -29,7 +29,32 @@ DEFAULT_FUZZY_AI_TOKEN_RANKING = {
     "preferred_tokens": "Token Link,Focus,Melody,Blue Boost,Honey Mark Station,Honey Mark Token,Pollen Mark Station,Pollen Mark Token,Haste",
     "ignored_tokens": "Honey Token,Blueberry,Bloom,Duped Baby Love,Duped Beamstorm,Duped Beesmas Cheer Token,Duped Black Bear Morph,Duped Blue Bomb Sync,Duped Blue Boost,Duped Blueberry,Duped Bomb,Duped Brown Bear Morph,Duped Festive Blessing Token,Duped Festive Gift Token,Duped Festive Mark Token,Duped Fetch,Duped Flame Fuel,Duped Focus,Duped Fuzz Bombs Token,Duped Glitch Token,Duped Glob,Duped Gumdrop Barrage,Duped Haste,Duped Honey Mark Token,Duped Honey Token,Duped Impale,Duped Inferno Token,Duped Inflate Balloons,Duped Inspire Token,Duped Jelly Bean,Duped Map Corruption,Duped Mark Surge Token,Duped Melody,Duped Mind Hack,Duped Mother Bear Morph,Duped Panda Bear Morph,Duped Pineapple,Duped Polar Bear Morph,Duped Pollen Haze,Duped Pollen Mark Token,Duped Pulse,Duped Puppy Love,Duped Rage Token,Duped Rain Cloud,Duped Red Bomb Sync,Duped Red Boost,Duped Science Bear Morph,Duped Scratch,Duped Snowflake,Duped Snowglobe Shake,Duped Strawberry,Duped Summon Frog Token,Duped Sunflower Seed,Duped Surprise Party,Duped Tabby Love,Duped Target Practice Token,Duped Token Link,Duped Tornado,Duped Treat,Duped Triangulate Token,Duped White Boost",
 }
+DEFAULT_AI_PATTERN_GATHER_SETTINGS = {
+    "start_location": "center",
+    "distance": 1,
+    "size": "m",
+    "width": 5,
+    "shift_lock": False,
+    "field_drift_compensation": True,
+    "invert_lr": False,
+    "invert_fb": False,
+    "turn": "none",
+}
+DEFAULT_FUZZY_AI_GATHER_PATTERN_PRESET = {
+    **DEFAULT_AI_PATTERN_GATHER_SETTINGS,
+    "shape": "fuzzy_ai_gather",
+}
+DEFAULT_BLOOMS_AI_PATTERN_PRESET = {
+    **DEFAULT_AI_PATTERN_GATHER_SETTINGS,
+    "shape": "blooms_ai",
+}
 FIELD_PATTERN_PRESETS_KEY = "pattern_presets"
+FUZZY_AI_GATHER_PATTERN = "fuzzy_ai_gather"
+BLOOMS_AI_PATTERN = "blooms_ai"
+DEFAULT_AI_PATTERN_PRESETS = {
+    FUZZY_AI_GATHER_PATTERN: DEFAULT_FUZZY_AI_GATHER_PATTERN_PRESET,
+    BLOOMS_AI_PATTERN: DEFAULT_BLOOMS_AI_PATTERN_PRESET,
+}
 
 #returns a dictionary containing the settings
 profileName = "a"
@@ -125,6 +150,30 @@ def _stripAIGatherFieldKeys(settings):
         return {}
     return {key: value for key, value in settings.items() if not str(key).startswith("fuzzy_ai_")}
 
+def _buildDefaultAIPatternPreset(pattern, settings=None):
+    """Build a starter AI pattern preset, keeping field-specific gather limits."""
+    defaults = DEFAULT_AI_PATTERN_PRESETS.get(pattern)
+    if not defaults:
+        return {}
+    base = _fieldSettingsWithoutPatternPresets(settings) if isinstance(settings, dict) else {}
+    return {**base, **defaults}
+
+def _ensureDefaultAIPatternPresets(settings):
+    """Insert default AI Gathering / BloomsAI pattern presets when a field is missing them."""
+    if not isinstance(settings, dict):
+        return {}
+
+    presets = _getFieldPatternPresets(settings)
+    missing = [pattern for pattern in DEFAULT_AI_PATTERN_PRESETS if pattern not in presets]
+    if not missing:
+        return settings
+
+    ensured = dict(settings)
+    for pattern in missing:
+        presets[pattern] = _buildDefaultAIPatternPreset(pattern, ensured)
+    ensured[FIELD_PATTERN_PRESETS_KEY] = presets
+    return ensured
+
 def normalizeFieldSettings(field_name, settings, default_fields=None):
     """Merge bundled defaults into a field settings object."""
     if default_fields is None:
@@ -134,12 +183,30 @@ def normalizeFieldSettings(field_name, settings, default_fields=None):
 
     default_field_settings = default_fields.get(field_name)
     if isinstance(default_field_settings, dict):
-        normalized.update(_stripAIGatherFieldKeys(default_field_settings))
+        normalized.update(
+            _stripAIGatherFieldKeys(_fieldSettingsWithoutPatternPresets(default_field_settings))
+        )
 
     if isinstance(settings, dict):
-        normalized.update(_stripAIGatherFieldKeys(settings))
+        normalized.update(
+            _stripAIGatherFieldKeys(_fieldSettingsWithoutPatternPresets(settings))
+        )
 
-    return normalized
+    # Merge pattern presets. Settings win. Do not inherit bundled AI pattern presets
+    # onto existing fields — ensure builds those from the field's current values.
+    default_presets = {
+        pattern: preset
+        for pattern, preset in _getFieldPatternPresets(
+            default_field_settings if isinstance(default_field_settings, dict) else {}
+        ).items()
+        if pattern not in DEFAULT_AI_PATTERN_PRESETS
+    }
+    settings_presets = _getFieldPatternPresets(settings if isinstance(settings, dict) else {})
+    merged_presets = {**default_presets, **settings_presets}
+    if merged_presets:
+        normalized[FIELD_PATTERN_PRESETS_KEY] = merged_presets
+
+    return _ensureDefaultAIPatternPresets(normalized)
 
 def _getFieldPatternPresets(settings):
     if not isinstance(settings, dict):
@@ -169,6 +236,14 @@ def _saveFieldPatternPreset(presets, pattern, settings):
     preset["shape"] = pattern
     presets[pattern] = preset
 
+def getDefaultFuzzyAIGatherPatternPreset():
+    """Return a copy of the default AI Gathering pattern preset for the UI."""
+    return dict(DEFAULT_FUZZY_AI_GATHER_PATTERN_PRESET)
+
+def getDefaultBloomsAIPatternPreset():
+    """Return a copy of the default BloomsAI pattern preset for the UI."""
+    return dict(DEFAULT_BLOOMS_AI_PATTERN_PRESET)
+
 def _applyFieldPatternPresets(existing_settings, incoming_settings):
     incoming_shape = incoming_settings.get("shape")
     existing_shape = (
@@ -177,6 +252,10 @@ def _applyFieldPatternPresets(existing_settings, incoming_settings):
 
     presets = _getFieldPatternPresets(existing_settings)
     presets.update(_getFieldPatternPresets(incoming_settings))
+    source_settings = incoming_settings if isinstance(incoming_settings, dict) else existing_settings
+    for pattern in DEFAULT_AI_PATTERN_PRESETS:
+        if pattern not in presets:
+            presets[pattern] = _buildDefaultAIPatternPreset(pattern, source_settings)
 
     if existing_shape and existing_shape != incoming_shape:
         _saveFieldPatternPreset(presets, existing_shape, existing_settings)
