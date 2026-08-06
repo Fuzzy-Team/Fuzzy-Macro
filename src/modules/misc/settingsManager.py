@@ -65,7 +65,7 @@ except ImportError:
     )
 
 #returns a dictionary containing the settings
-profileName = "a"
+profileName = DEFAULT_CURRENT_PROFILE
 # Track profile changes for running macro processes
 _profile_change_counter = 0
 _settings_key_file_cache = None
@@ -240,7 +240,6 @@ def ensureRuntimeData():
         "hotbar_timings.txt",
         "manualplanters.txt",
         "auto_planters.json",
-        "current_profile.txt",
         "hourly_report_history.txt",
         "hourly_report_main.txt",
         "hourly_report_bg.txt",
@@ -252,9 +251,11 @@ def ensureRuntimeData():
     if not profiles:
         # Fresh install: create the default profile only when none exist.
         ensureProfileFiles(DEFAULT_CURRENT_PROFILE)
+        if not os.path.exists(CURRENT_PROFILE_FILE):
+            _writeTextFile(CURRENT_PROFILE_FILE, DEFAULT_CURRENT_PROFILE)
     else:
         # Repair the active/persisted profile if its trio is incomplete.
-        # Never resurrect deleted profile "a" while another profile is in use.
+        # Never recreate a missing default profile while another profile exists.
         target = profileName if os.path.isdir(getProfilePath(profileName)) else None
         if target is None and os.path.exists(CURRENT_PROFILE_FILE):
             try:
@@ -265,8 +266,11 @@ def ensureRuntimeData():
             except Exception:
                 target = None
         if target is None:
-            target = profiles[0]
+            # Prefer an existing "default" profile when present, else first profile.
+            target = DEFAULT_CURRENT_PROFILE if DEFAULT_CURRENT_PROFILE in profiles else profiles[0]
         ensureProfileFiles(target)
+        if not os.path.exists(CURRENT_PROFILE_FILE):
+            _writeTextFile(CURRENT_PROFILE_FILE, target)
 
 def loadUserSettingsFile(filename):
     """Load a key=value user settings file, creating it from defaults if needed."""
