@@ -22,9 +22,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Tuple
 from modules.controls.sleep import INTERRUPT_SKIP, INTERRUPT_RESET, INTERRUPT_AFB_REROLL, INTERRUPT_COLLECT_PLANTER
 
-# Import settings manager functions
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'misc'))
-import settingsManager
+from modules.misc import settingsManager
 
 # Hourly report dependencies
 try:
