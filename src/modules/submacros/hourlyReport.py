@@ -3,6 +3,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter
 import base64
 import cv2
 import math
+import os
 import time
 import ast
 import numpy as np
@@ -19,6 +20,7 @@ from datetime import datetime
 from modules.screen.robloxWindow import RobloxWindowBounds
 import pickle
 import json
+from modules.misc import settingsManager
 from modules.misc.settingsManager import getCurrentProfile, loadFields, getMacroVersion
 
 ww, wh = pag.size()
@@ -1139,16 +1141,12 @@ class HourlyReport():
         planterData = ""
         #get planter data
         if setdat["planters_mode"] == 1:
-            with open("./data/user/manualplanters.txt", "r") as f:
-                planterData = f.read()
-            f.close()
+            planterData = settingsManager.loadUserText("manualplanters.txt")
 
             if planterData:
                 planterData = ast.literal_eval(planterData)
         elif setdat["planters_mode"] == 2:
-            with open("./data/user/auto_planters.json", "r") as f:
-                planterData = json.load(f)["planters"]
-            f.close()
+            planterData = settingsManager.loadUserJson("auto_planters.json")["planters"]
             planterData = {
                 "planters": [p["planter"] for p in planterData],
                 "harvestTimes": [p["harvest_time"] for p in planterData],
@@ -1159,10 +1157,10 @@ class HourlyReport():
 
 
         #get history
-        with open("data/user/hourly_report_history.txt", "r") as f:
-            historyData = ast.literal_eval(f.read())
-        f.close()
-        
+        historyData = settingsManager.loadUserLiteral("hourly_report_history.txt")
+        if not isinstance(historyData, list):
+            historyData = []
+
         if len(self.hourlyReportStats["honey_per_min"]) < 3:
             self.hourlyReportStats["honey_per_min"] = [0]*3 + self.hourlyReportStats["honey_per_min"]
         #filter out the honey/min
@@ -1310,7 +1308,9 @@ class HourlyReport():
         self.saveHourlyReportData()
     
     def saveHourlyReportData(self):
-        with open("data/user/hourly_report_stats.pkl", "wb") as f:
+        path = settingsManager.getUserDataPath("hourly_report_stats.pkl")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as f:
             pickle.dump({
                 "hourlyReportStats": self.hourlyReportStats,
                 "sessionReportStats": self.sessionReportStats,
@@ -1325,7 +1325,10 @@ class HourlyReport():
             }, f)
     
     def loadHourlyReportData(self):
-        with open("data/user/hourly_report_stats.pkl", "rb") as f:
+        path = settingsManager.getUserDataPath("hourly_report_stats.pkl")
+        if not os.path.exists(path):
+            return
+        with open(path, "rb") as f:
             data = pickle.load(f)
             self.hourlyReportStats = data["hourlyReportStats"]
             self.sessionReportStats = data.get("sessionReportStats", self._defaultSessionReportStats())
