@@ -62,6 +62,43 @@ function rememberGatherPatternPreset(fieldData, pattern) {
   return fieldData;
 }
 
+const DEFAULT_AI_PATTERN_GATHER_SETTINGS = {
+  start_location: "center",
+  distance: 1,
+  size: "m",
+  width: 5,
+  shift_lock: false,
+  field_drift_compensation: true,
+  invert_lr: false,
+  invert_fb: false,
+  turn: "none",
+};
+
+const DEFAULT_FUZZY_AI_GATHER_PATTERN_PRESET = {
+  ...DEFAULT_AI_PATTERN_GATHER_SETTINGS,
+  shape: "fuzzy_ai_gather",
+};
+
+const DEFAULT_BLOOMS_AI_PATTERN_PRESET = {
+  ...DEFAULT_AI_PATTERN_GATHER_SETTINGS,
+  shape: "blooms_ai",
+};
+
+const DEFAULT_AI_PATTERN_PRESETS = {
+  fuzzy_ai_gather: DEFAULT_FUZZY_AI_GATHER_PATTERN_PRESET,
+  blooms_ai: DEFAULT_BLOOMS_AI_PATTERN_PRESET,
+};
+
+function applyDefaultAIPatternPreset(fieldData, pattern) {
+  const defaults = DEFAULT_AI_PATTERN_PRESETS[pattern];
+  if (!defaults) return fieldData;
+  return {
+    ...fieldData,
+    ...defaults,
+    shape: pattern,
+  };
+}
+
 function setActiveGatherFieldData(fieldData) {
   activeGatherFieldData = normalizeGatherFieldData(fieldData);
   activeGatherPattern = activeGatherFieldData.shape || "";
@@ -453,6 +490,9 @@ function saveFieldPatternChange() {
       shape: selectedPattern,
       pattern_presets: presets,
     };
+  } else if (DEFAULT_AI_PATTERN_PRESETS[selectedPattern]) {
+    fieldData = applyDefaultAIPatternPreset(fieldData, selectedPattern);
+    fieldData.pattern_presets = presets;
   } else {
     fieldData.shape = selectedPattern;
   }
