@@ -1241,7 +1241,8 @@ class HourlyReport():
                                                           configuredHourlyBuffs=hourly_buffs)
         w, h = canvas.size
         canvas = canvas.resize((int(w*1.2), int(h*1.2)))
-        canvas.save("hourlyReport.png")
+        # Flatten to RGB so Discord/webhooks never composite leftover alpha.
+        canvas.convert("RGB").save("hourlyReport.png")
 
         # generate embed text fields (stored as attribute for caller to use)
         if send_embed_text:
@@ -1423,10 +1424,28 @@ class HourlyReportDrawer:
             bbox = self.draw.textbbox((0, 0), title, font=font)
             self.draw.text((x + (w - (bbox[2] - bbox[0])) / 2, y + 16), title, font=font, fill=self.bodyColor)
 
+    def _compositeRGBA(self, overlay, box):
+        """Alpha-composite an RGBA overlay onto the canvas at `box` (x0, y0, x1, y1).
+
+        Pillow's ImageDraw writes alpha into destination pixels instead of blending,
+        so translucent fills must be drawn on a temp layer and composited here.
+        Otherwise the saved PNG keeps partial alpha and Discord (etc.) blends the
+        report against its own background — the muddy grey chart look.
+        """
+        x0, y0, x1, y1 = box
+        if x1 <= x0 or y1 <= y0:
+            return
+        region = self.canvas.crop((x0, y0, x1, y1))
+        if region.mode != "RGBA":
+            region = region.convert("RGBA")
+        if overlay.mode != "RGBA":
+            overlay = overlay.convert("RGBA")
+        self.canvas.paste(Image.alpha_composite(region, overlay), (x0, y0))
+
     def _drawGraphGrid(self, graph, xTicks=6, yTicks=4, timelineTicks=True):
         x, y, w, h = graph
-        fill = (*self.graphBgColor, 128)
-        self.draw.rectangle((x - 60, y, x + w + 60, y + h), fill=fill)
+        # Opaque fill — ImageDraw alpha would punch holes through the panel.
+        self.draw.rectangle((x - 60, y, x + w + 60, y + h), fill=self.graphBgColor)
         for i in range(xTicks + 1):
             gx = x + w * i / xTicks
             self.draw.line((gx, y, gx, y + h), fill=self.graphGridColor, width=3)
@@ -1484,13 +1503,26 @@ class HourlyReportDrawer:
             val = max(minY, min(maxY, val))
             pts.append((x + i * interval, y + h - ((val - minY) / (maxY - minY)) * h))
         poly = [(x, y + h)] + pts + [(x + w, y + h)]
-        fill = (*color, alpha) if len(color) == 3 else color
-        self.draw.polygon(poly, fill=fill)
+        fill = (*color[:3], alpha) if len(color) >= 3 else color
+        # Composite translucent fill so gridlines show through without leaving
+        # partial-alpha holes in the exported PNG.
+        pad = max(2, int(width) + 2)
+        x0 = max(0, int(min(p[0] for p in poly)) - pad)
+        y0 = max(0, int(min(p[1] for p in poly)) - pad)
+        x1 = min(self.canvas.size[0], int(max(p[0] for p in poly)) + pad + 1)
+        y1 = min(self.canvas.size[1], int(max(p[1] for p in poly)) + pad + 1)
+        if x1 > x0 and y1 > y0:
+            overlay = Image.new("RGBA", (x1 - x0, y1 - y0), (0, 0, 0, 0))
+            ImageDraw.Draw(overlay).polygon(
+                [(px - x0, py - y0) for px, py in poly], fill=fill
+            )
+            self._compositeRGBA(overlay, (x0, y0, x1, y1))
         if len(pts) > 1:
+            line_color = color[:3]
             if smooth:
-                self.draw.line(pts, fill=color[:3], width=width, joint="curve")
+                self.draw.line(pts, fill=line_color, width=width, joint="curve")
             else:
-                self.draw.line(pts, fill=color[:3], width=width)
+                self.draw.line(pts, fill=line_color, width=width)
 
     def _drawYAxisLabels(self, graph, values, fontSize=40):
         x, y, _, h = graph
@@ -2075,8 +2107,13 @@ class HourlyReportDrawer:
     def drawProgressChart(self, x, y, size, percentage, color, holeRatio = 0.6,):
         chartArea = (x, y, x+size, y+size)
 
-        #draw the section
-        self.draw.pieslice(chartArea, -90, 360, fill=(*color, 140))
+        # Track background: blend color onto the card so the PNG stays opaque.
+        track_alpha = 140 / 255.0
+        track = tuple(
+            int(round(c * track_alpha + b * (1.0 - track_alpha)))
+            for c, b in zip(color[:3], self.sideBarBackground)
+        )
+        self.draw.pieslice(chartArea, -90, 360, fill=track)
         self.draw.pieslice(chartArea, -90, (int(percentage) / 100) * 360 - 90, fill=color)
 
         #draw the hole
