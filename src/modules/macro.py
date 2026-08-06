@@ -6280,9 +6280,9 @@ class macro:
                         self.logger.webhook("Item Monitor Error", traceback.format_exc(), "red", ping_category="ping_critical_errors")
 
                 #add to history
-                with open("data/user/hourly_report_history.txt", "r") as f:
-                    history = ast.literal_eval(f.read())
-                f.close()
+                history = settingsManager.loadUserLiteral("hourly_report_history.txt")
+                if not isinstance(history, list):
+                    history = []
 
                 historyObj = {
                     "endHour": datetime.now().hour,
@@ -6294,9 +6294,7 @@ class macro:
                     history.pop(-1)
                 history.insert(0,historyObj)
 
-                with open("data/user/hourly_report_history.txt", "w") as f:
-                    f.write(str(history))
-                f.close()
+                settingsManager.saveUserLiteral("hourly_report_history.txt", history)
 
                 self.lastHourlyReport = time.time()
                 #reset stats

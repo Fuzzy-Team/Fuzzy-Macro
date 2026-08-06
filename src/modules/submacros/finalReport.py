@@ -6,6 +6,7 @@ import ast
 import pickle
 import statistics
 from modules.submacros.hourlyReport import HourlyReport, HourlyReportDrawer, BuffDetector, resolveReportTheme
+from modules.misc import settingsManager
 from modules.misc.settingsManager import getCurrentProfile, getMacroVersion
 
 
@@ -370,16 +371,14 @@ class FinalReport:
             plantersMode = self._settingsInt(setdat, "planters_mode", 0)
             if plantersMode == 1:
                 try:
-                    with open("./data/user/manualplanters.txt", "r") as f:
-                        planterData = f.read()
+                    planterData = settingsManager.loadUserText("manualplanters.txt")
                     if planterData:
                         planterData = ast.literal_eval(planterData)
                 except (FileNotFoundError, SyntaxError, ValueError):
                     planterData = ""
             elif plantersMode == 2:
                 try:
-                    with open("./data/user/auto_planters.json", "r") as f:
-                        planterData = json.load(f)["planters"]
+                    planterData = settingsManager.loadUserJson("auto_planters.json")["planters"]
                     planterData = {
                         "planters": [p["planter"] for p in planterData],
                         "harvestTimes": [p["harvest_time"] for p in planterData],
