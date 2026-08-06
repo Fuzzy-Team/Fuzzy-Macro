@@ -248,10 +248,25 @@ def ensureRuntimeData():
     ):
         ensureUserFile(filename)
 
-    ensureProfileFiles(DEFAULT_CURRENT_PROFILE)
-    # Also seed the currently selected profile if it differs and already exists partially.
-    if profileName and profileName != DEFAULT_CURRENT_PROFILE:
-        ensureProfileFiles(profileName)
+    profiles = listProfiles()
+    if not profiles:
+        # Fresh install: create the default profile only when none exist.
+        ensureProfileFiles(DEFAULT_CURRENT_PROFILE)
+    else:
+        # Repair the active/persisted profile if its trio is incomplete.
+        # Never resurrect deleted profile "a" while another profile is in use.
+        target = profileName if os.path.isdir(getProfilePath(profileName)) else None
+        if target is None and os.path.exists(CURRENT_PROFILE_FILE):
+            try:
+                with open(CURRENT_PROFILE_FILE, "r") as f:
+                    saved = f.read().strip()
+                if saved and os.path.isdir(getProfilePath(saved)):
+                    target = saved
+            except Exception:
+                target = None
+        if target is None:
+            target = profiles[0]
+        ensureProfileFiles(target)
 
 def loadUserSettingsFile(filename):
     """Load a key=value user settings file, creating it from defaults if needed."""
@@ -648,6 +663,7 @@ def renameProfile(old_name, new_name):
         # If we renamed the current profile, update the reference
         if old_name == profileName:
             profileName = new_name
+            saveCurrentProfile()
         return True, f"Renamed profile from '{old_name}' to '{new_name}'"
     except Exception as e:
         return False, f"Failed to rename profile: {str(e)}"

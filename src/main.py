@@ -498,7 +498,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             return
 
         if mode == 1:
-            with open(settingsManager.getUserDataPath("manualplanters.txt"), "r") as f:
+            with open(settingsManager.ensureUserFile("manualplanters.txt"), "r") as f:
                 raw = f.read().strip()
             planterData = ast.literal_eval(raw) if raw else {"planters": ["", "", ""], "fields": ["", "", ""], "gatherFields": ["", "", ""], "harvestTimes": [0, 0, 0], "cycles": [1, 1, 1]}
             for key, emptyValue in (("planters", ""), ("fields", ""), ("gatherFields", "")):
@@ -506,16 +506,16 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                     planterData[key][index] = emptyValue
             if "harvestTimes" in planterData and index < len(planterData["harvestTimes"]):
                 planterData["harvestTimes"][index] = 0
-            with open(settingsManager.getUserDataPath("manualplanters.txt"), "w") as f:
+            with open(settingsManager.ensureUserFile("manualplanters.txt"), "w") as f:
                 f.write(str(planterData))
         elif mode == 2:
-            with open(settingsManager.getUserDataPath("auto_planters.json"), "r") as f:
+            with open(settingsManager.ensureUserFile("auto_planters.json"), "r") as f:
                 autoData = json.load(f)
             planters = autoData.get("planters", [])
             if index < len(planters):
                 planters[index] = emptyAutoPlanterSlot()
             autoData["planters"] = planters
-            with open(settingsManager.getUserDataPath("auto_planters.json"), "w") as f:
+            with open(settingsManager.ensureUserFile("auto_planters.json"), "w") as f:
                 json.dump(autoData, f, indent=3)
 
     def processPlanterCommandQueue():
@@ -1468,7 +1468,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             nonlocal planterDataRaw
             normalized = normalizeManualPlanterData(planterData)
             planterDataRaw = str(normalized)
-            with open(settingsManager.getUserDataPath("manualplanters.txt"), "w") as f:
+            with open(settingsManager.ensureUserFile("manualplanters.txt"), "w") as f:
                 f.write(planterDataRaw)
             return normalized
         
@@ -1703,7 +1703,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 # Manual planters
                 if macro.setdat["planters_mode"] == 1:
                     if planterDataRaw is None:
-                        with open(settingsManager.getUserDataPath("manualplanters.txt"), "r") as f:
+                        with open(settingsManager.ensureUserFile("manualplanters.txt"), "r") as f:
                             planterDataRaw = f.read()
                         f.close()
                     
@@ -1771,7 +1771,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 # Auto planters
                 elif macro.setdat["planters_mode"] == 2:
                     try:
-                        with open(settingsManager.getUserDataPath("auto_planters.json"), "r") as f:
+                        with open(settingsManager.ensureUserFile("auto_planters.json"), "r") as f:
                             data = json.load(f)
                     except Exception:
                         data = {}
@@ -1851,7 +1851,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                             "gather": gatherFlag,
                             "field_degradation": fieldDegradation
                         }
-                        with open(settingsManager.getUserDataPath("auto_planters.json"), "w") as f:
+                        with open(settingsManager.ensureUserFile("auto_planters.json"), "w") as f:
                             json.dump(data, f, indent=3)
                         f.close()
                         updateGUI.value = 1
@@ -2674,7 +2674,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         try:
             # Only auto-gather when planters mode is auto and auto-harvest is enabled
             if macro.setdat.get("planters_mode") == 2:
-                with open(settingsManager.getUserDataPath("auto_planters.json"), "r") as f:
+                with open(settingsManager.ensureUserFile("auto_planters.json"), "r") as f:
                     auto_data = json.load(f)
                 auto_planters = auto_data.get("planters", [])
                 auto_gather = auto_data.get("gather", False)
