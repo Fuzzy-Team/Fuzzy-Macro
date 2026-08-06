@@ -1,50 +1,82 @@
-if sizeword.lower() == "xs":
-    size = 0.5
-elif sizeword.lower() == "s":
-    size = 1
-elif sizeword.lower() == "l":
-    size = 2
-elif sizeword.lower() == "xl":
-    size = 2.5
-else:
-    size = 1.5
-    
-wm = 0.5*size
-sm = 0.25*size
-df = (((wm*2)**2)+((sm*4)**2))**0.5
-self.keyboard.walk(tclrkey,wm)
-self.keyboard.walk(tcfbkey,sm)
-self.keyboard.walk(afclrkey,wm*2)
-self.keyboard.walk(tcfbkey,sm)
-self.keyboard.walk(tclrkey,wm*2)
-self.keyboard.keyDown(afclrkey)
-self.keyboard.keyDown(afcfbkey)
-sleep(df)
-self.keyboard.keyUp(afcfbkey)
-self.keyboard.keyUp(afclrkey)
-self.keyboard.walk(tclrkey,wm*2)
-self.keyboard.walk(tcfbkey,sm)
-self.keyboard.walk(afclrkey,wm*2)
-self.keyboard.walk(tcfbkey,sm*8)
-self.keyboard.walk(afclrkey,0.6*width)
-self.keyboard.walk(tclrkey,0.4*width)
-self.keyboard.walk(afcfbkey,sm*4)
-self.keyboard.walk(tclrkey,wm*2)
-self.keyboard.walk(afcfbkey,sm)
-self.keyboard.walk(afclrkey,wm*2)
-self.keyboard.walk(afcfbkey,sm)
-self.keyboard.walk(tclrkey,wm*2)
-self.keyboard.walk(afcfbkey,sm)
-self.keyboard.walk(afclrkey,wm*2)
-self.keyboard.walk(afcfbkey,sm)
-self.keyboard.walk(tclrkey,wm*2)
-self.keyboard.keyDown(tcfbkey)
-self.keyboard.keyDown(afclrkey)
-sleep(df/2)
-self.keyboard.keyUp(afclrkey)
-self.keyboard.keyUp(tcfbkey)
+#Ahk code converted by Fuzzy Macro
 
 
-
-
-        
+self.keyboard.keyDown(tclrkey, False)
+self.keyboard.tileWait(4 * size)
+self.keyboard.keyUp(tclrkey, False)
+self.keyboard.keyDown(tcfbkey, False)
+self.keyboard.tileWait(2 * size)
+self.keyboard.keyUp(tcfbkey, False)
+self.keyboard.keyDown(afclrkey, False)
+self.keyboard.tileWait(8 * size)
+self.keyboard.keyUp(afclrkey, False)
+self.keyboard.keyDown(tcfbkey, False)
+self.keyboard.tileWait(2 * size)
+self.keyboard.keyUp(tcfbkey, False)
+self.keyboard.keyDown(tclrkey, False)
+self.keyboard.tileWait(8 * size)
+self.keyboard.keyUp(tclrkey, False)
+self.keyboard.keyDown(afclrkey, False)
+self.keyboard.keyDown(afcfbkey, False)
+self.keyboard.tileWait( math.sqrt( ( ( 8 * size ) ** 2 ) + ( ( 8 * size ) ** 2 ) ) )
+self.keyboard.keyUp(afclrkey, False)
+self.keyboard.keyUp(afcfbkey, False)
+self.keyboard.keyDown(tclrkey, False)
+self.keyboard.tileWait(8 * size)
+self.keyboard.keyUp(tclrkey, False)
+self.keyboard.keyDown(tcfbkey, False)
+self.keyboard.tileWait(2 * size)
+self.keyboard.keyUp(tcfbkey, False)
+self.keyboard.keyDown(afclrkey, False)
+self.keyboard.tileWait(8 * size)
+self.keyboard.keyUp(afclrkey, False)
+self.keyboard.keyDown(tcfbkey, False)
+self.keyboard.tileWait(7.5 * size + 10) # was 6.7 in cornerxsnake
+self.keyboard.keyUp(tcfbkey, False)
+self.keyboard.keyDown(afclrkey, False)
+self.keyboard.tileWait(10 + width) # was 6 in cornerxsnake
+self.keyboard.keyDown(tcfbkey, False)
+self.keyboard.tileWait(3)
+self.keyboard.keyUp(afclrkey, False)
+self.keyboard.keyUp(tcfbkey, False)
+self.keyboard.keyDown(tclrkey, False)
+self.keyboard.tileWait(6 + width) # was 2 in cornerxsnake
+self.keyboard.keyUp(tclrkey, False)
+self.keyboard.keyDown(afcfbkey, False)
+self.keyboard.tileWait(5)
+self.keyboard.keyUp(afcfbkey, False)
+self.keyboard.keyDown(tclrkey, False)
+self.keyboard.tileWait(8 * size)
+self.keyboard.keyUp(tclrkey, False)
+self.keyboard.keyDown(afcfbkey, False)
+self.keyboard.tileWait(2 * size)
+self.keyboard.keyUp(afcfbkey, False)
+self.keyboard.keyDown(afclrkey, False)
+self.keyboard.tileWait(8 * size)
+self.keyboard.keyUp(afclrkey, False)
+self.keyboard.keyDown(afcfbkey, False)
+self.keyboard.tileWait(2 * size)
+self.keyboard.keyUp(afcfbkey, False)
+self.keyboard.keyDown(tclrkey, False)
+self.keyboard.tileWait(8 * size)
+self.keyboard.keyUp(tclrkey, False)
+self.keyboard.keyDown(afcfbkey, False)
+self.keyboard.tileWait(2 * size)
+self.keyboard.keyUp(afcfbkey, False)
+self.keyboard.keyDown(afclrkey, False)
+self.keyboard.tileWait(8 * size)
+self.keyboard.keyUp(afclrkey, False)
+self.keyboard.keyDown(afcfbkey, False)
+self.keyboard.tileWait(3 * size)
+self.keyboard.keyUp(afcfbkey, False)
+self.keyboard.keyDown(tclrkey, False)
+self.keyboard.tileWait(8 * size)
+self.keyboard.keyUp(tclrkey, False)
+self.keyboard.keyDown(tcfbkey, False)
+self.keyboard.keyDown(afclrkey, False)
+self.keyboard.tileWait( math.sqrt( ( ( 4 * size ) ** 2 ) + ( ( 4 * size ) ** 2 ) ) )
+self.keyboard.keyUp(tcfbkey, False)
+self.keyboard.keyUp(afclrkey, False)
+# 231010 misc, based on cornerxsnake
+# orangecheekbird here, major credit to misc all i did was update it with permission for natro 1.x :yippee:
+# ty for all your work natro dev team!
