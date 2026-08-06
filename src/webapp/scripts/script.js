@@ -406,6 +406,247 @@ async function saveSetting(ele, type) {
   }
 }
 
+function isPriorityLockedTask(taskId) {
+  return !!taskId && (String(taskId).startsWith("quest_") || taskId === "planters");
+}
+
+function normalizePriorityOrderGrouping(orderArray) {
+  if (!Array.isArray(orderArray)) return [];
+  const order = orderArray.slice();
+  const quests = order.filter((id) => String(id).startsWith("quest_"));
+  if (!quests.length) return order;
+  const firstQuestIdx = order.findIndex((id) => String(id).startsWith("quest_"));
+  const insertAt = order
+    .slice(0, firstQuestIdx)
+    .filter((id) => !String(id).startsWith("quest_")).length;
+  const withoutQuests = order.filter((id) => !String(id).startsWith("quest_"));
+  withoutQuests.splice(insertAt, 0, ...quests);
+  return withoutQuests;
+}
+
+function getPriorityLockAnchors(orderArray) {
+  const order = normalizePriorityOrderGrouping(orderArray);
+  let unlockedCount = 0;
+  let questAnchor = null;
+  let planterAnchor = null;
+  let questBeforePlanter = true;
+  let seenQuest = false;
+  let seenPlanter = false;
+
+  for (const id of order) {
+    if (String(id).startsWith("quest_")) {
+      if (questAnchor === null) {
+        questAnchor = unlockedCount;
+        if (seenPlanter) questBeforePlanter = false;
+      }
+      seenQuest = true;
+      continue;
+    }
+    if (id === "planters") {
+      if (planterAnchor === null) {
+        planterAnchor = unlockedCount;
+        if (!seenQuest) questBeforePlanter = false;
+      }
+      seenPlanter = true;
+      continue;
+    }
+    unlockedCount += 1;
+  }
+
+  return { order, questAnchor, planterAnchor, questBeforePlanter };
+}
+
+function createPriorityLockHeader(group, title, detail) {
+  const header = document.createElement("div");
+  header.className = "priority-lock-header";
+  header.dataset.lockGroup = group;
+  header.innerHTML = `
+    <span class="priority-lock-badge">LOCKED</span>
+    <div class="priority-lock-copy">
+      <strong>${title}</strong>
+      <span>${detail}</span>
+    </div>
+  `;
+  return header;
+}
+
+function storePriorityLockAnchors(container, orderArray) {
+  if (!container) return getPriorityLockAnchors(orderArray);
+  const anchors = getPriorityLockAnchors(orderArray);
+  const questIds = anchors.order.filter((id) => String(id).startsWith("quest_"));
+  container.dataset.questAnchor =
+    anchors.questAnchor === null || anchors.questAnchor === undefined
+      ? ""
+      : String(anchors.questAnchor);
+  container.dataset.planterAnchor =
+    anchors.planterAnchor === null || anchors.planterAnchor === undefined
+      ? ""
+      : String(anchors.planterAnchor);
+  container.dataset.questBeforePlanter = anchors.questBeforePlanter ? "true" : "false";
+  container.dataset.lockedQuestIds = JSON.stringify(questIds);
+  container.dataset.hasPlanters = anchors.order.includes("planters") ? "true" : "false";
+  return anchors;
+}
+
+function getPriorityLockAnchorValues(container) {
+  const questAnchor =
+    container.dataset.questAnchor === "" || container.dataset.questAnchor == null
+      ? null
+      : Number(container.dataset.questAnchor);
+  const planterAnchor =
+    container.dataset.planterAnchor === "" || container.dataset.planterAnchor == null
+      ? null
+      : Number(container.dataset.planterAnchor);
+  const questBeforePlanter = container.dataset.questBeforePlanter !== "false";
+  let questIds = [];
+  try {
+    questIds = JSON.parse(container.dataset.lockedQuestIds || "[]");
+  } catch (e) {
+    questIds = [];
+  }
+  if (!Array.isArray(questIds)) questIds = [];
+  const hasPlanters = container.dataset.hasPlanters === "true";
+  return { questAnchor, planterAnchor, questBeforePlanter, questIds, hasPlanters };
+}
+
+function mergePriorityOrderWithLocks(unlockedIds, lockState) {
+  const {
+    questAnchor,
+    planterAnchor,
+    questBeforePlanter,
+    questIds,
+    hasPlanters,
+  } = lockState;
+  const order = [];
+  let unlockedIndex = 0;
+  let questsInserted = !questIds.length;
+  let planterInserted = !hasPlanters;
+
+  const insertQuests = () => {
+    order.push(...questIds);
+    questsInserted = true;
+  };
+  const insertPlanter = () => {
+    order.push("planters");
+    planterInserted = true;
+  };
+  const maybeInsertLocked = () => {
+    const atQuest =
+      !questsInserted && questAnchor !== null && unlockedIndex === questAnchor;
+    const atPlanter =
+      !planterInserted &&
+      planterAnchor !== null &&
+      unlockedIndex === planterAnchor;
+    if (atQuest && atPlanter) {
+      if (questBeforePlanter) {
+        insertQuests();
+        insertPlanter();
+      } else {
+        insertPlanter();
+        insertQuests();
+      }
+    } else if (atQuest) {
+      insertQuests();
+    } else if (atPlanter) {
+      insertPlanter();
+    }
+  };
+
+  while (unlockedIndex < unlockedIds.length) {
+    maybeInsertLocked();
+    order.push(unlockedIds[unlockedIndex]);
+    unlockedIndex += 1;
+  }
+  maybeInsertLocked();
+  if (!questsInserted) insertQuests();
+  if (!planterInserted) insertPlanter();
+  return order;
+}
+
+function reapplyPriorityLockedPositions(container) {
+  if (!container || container.id !== "task_priority_order-container") return;
+
+  const {
+    questAnchor,
+    planterAnchor,
+    questBeforePlanter,
+    questIds,
+    hasPlanters,
+  } = getPriorityLockAnchorValues(container);
+
+  const unlocked = [
+    ...container.querySelectorAll(".drag-item:not(.priority-locked)"),
+  ];
+  const questHeader = container.querySelector(
+    '.priority-lock-header[data-lock-group="quest"]'
+  );
+  const planterHeader = container.querySelector(
+    '.priority-lock-header[data-lock-group="planter"]'
+  );
+
+  const fragment = document.createDocumentFragment();
+  let questsInserted = !questIds.length || !questHeader;
+  let planterInserted = !hasPlanters || !planterHeader;
+  let unlockedIndex = 0;
+
+  const insertQuests = () => {
+    if (questHeader) fragment.appendChild(questHeader);
+    questsInserted = true;
+  };
+  const insertPlanter = () => {
+    if (planterHeader) fragment.appendChild(planterHeader);
+    planterInserted = true;
+  };
+  const maybeInsertLocked = () => {
+    const atQuest =
+      !questsInserted && questAnchor !== null && unlockedIndex === questAnchor;
+    const atPlanter =
+      !planterInserted &&
+      planterAnchor !== null &&
+      unlockedIndex === planterAnchor;
+    if (atQuest && atPlanter) {
+      if (questBeforePlanter) {
+        insertQuests();
+        insertPlanter();
+      } else {
+        insertPlanter();
+        insertQuests();
+      }
+    } else if (atQuest) {
+      insertQuests();
+    } else if (atPlanter) {
+      insertPlanter();
+    }
+  };
+
+  while (unlockedIndex < unlocked.length) {
+    maybeInsertLocked();
+    fragment.appendChild(unlocked[unlockedIndex]);
+    unlockedIndex += 1;
+  }
+  maybeInsertLocked();
+  if (!questsInserted) insertQuests();
+  if (!planterInserted) insertPlanter();
+
+  container.appendChild(fragment);
+}
+
+function buildPriorityOrderFromContainer(container) {
+  if (!container) return [];
+  if (typeof reapplyPriorityLockedPositions === "function") {
+    reapplyPriorityLockedPositions(container);
+  }
+  const unlockedIds = [
+    ...container.querySelectorAll(".drag-item:not(.priority-locked)"),
+  ]
+    .map((item) => item.dataset.id)
+    .filter(Boolean);
+  return mergePriorityOrderWithLocks(
+    unlockedIds,
+    getPriorityLockAnchorValues(container)
+  );
+}
+
 // Update enabled/disabled state for all drag items based on settings
 function refreshPriorityHighlights(settings) {
   if (!settings) return;
@@ -453,6 +694,12 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
 
   // Clear existing items
   container.innerHTML = "";
+
+  const isPriorityList = dragListElement.id === "task_priority_order";
+  const lockAnchors = isPriorityList
+    ? storePriorityLockAnchors(container, orderArray)
+    : { order: orderArray.slice() };
+  const renderOrder = lockAnchors.order;
 
   // Helper function to check if a task is enabled
   function isTaskEnabled(taskId, settings) {
@@ -512,10 +759,11 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
       return settings.ant_challenge || false;
     }
     if (taskId === "blender") {
-      return settings.blender || false;
+      return settings.blender_enable || settings.blender || false;
     }
     if (taskId === "planters") {
-      return settings.planters || false;
+      const mode = Number(settings.planters_mode);
+      return settings.planters || (Number.isFinite(mode) && mode > 0);
     }
 
     return false;
@@ -591,7 +839,10 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
   };
 
   // Create items in the specified order
-  orderArray.forEach((taskId) => {
+  let questHeaderInserted = false;
+  let planterHeaderInserted = false;
+
+  renderOrder.forEach((taskId) => {
     let taskName = taskId; // Default to taskId if not found in map
 
     // Convert task ID to display name
@@ -677,14 +928,41 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
     const category = getCategory(taskId);
     const badge = getCategoryBadge(category);
     const enabled = isTaskEnabled(taskId, settings);
+    const locked = isPriorityList && isPriorityLockedTask(taskId);
+
+    if (isPriorityList && taskId.startsWith("quest_") && !questHeaderInserted) {
+      container.appendChild(
+        createPriorityLockHeader(
+          "quest",
+          "Quests",
+          "Handled automatically — order doesn't matter."
+        )
+      );
+      questHeaderInserted = true;
+    }
+    if (isPriorityList && taskId === "planters" && !planterHeaderInserted) {
+      container.appendChild(
+        createPriorityLockHeader(
+          "planter",
+          "Planters",
+          "Handled automatically — order doesn't matter."
+        )
+      );
+      planterHeaderInserted = true;
+    }
+
+    // Quests/planters are represented only by the locked summary blocks above.
+    if (isPriorityList && locked) {
+      return;
+    }
 
     const itemElement = document.createElement("div");
-    itemElement.className = `drag-item ${enabled ? '' : 'disabled'}`;
+    itemElement.className = `drag-item${enabled ? "" : " disabled"}`;
     itemElement.setAttribute("data-id", taskId);
     itemElement.setAttribute("data-category", category);
     itemElement.setAttribute("draggable", "true");
     itemElement.innerHTML = `
-      <span class="drag-handle">⋮⋮</span>
+      <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
       <span class="category-badge">${badge}</span>
       <span class="drag-text">${taskName}</span>
       <div class="drag-actions">
