@@ -9,13 +9,16 @@ from modules.screen.screenshot import mssScreenshotPillowRGBA
 from modules import bitmap_matcher
 
 _IS_WINDOWS = platform.system() == "Windows"
+_IS_MACOS = platform.system() == "Darwin"
+_IS_LINUX = platform.system() == "Linux"
 
 
 def _toggle_roblox_fullscreen():
-    if _IS_WINDOWS:
-        pag.press("f11")
-    else:
+    if _IS_MACOS:
         pag.hotkey("ctrl", "command", "f")
+    else:
+        # Windows and Linux (Sober/X11) use F11
+        pag.press("f11")
 
 
 class RobloxWindowBounds:

@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 
-import os
 import platform
 
 _IS_WINDOWS = platform.system() == "Windows"
+_IS_MACOS = platform.system() == "Darwin"
 
-if _IS_WINDOWS:
+if _IS_WINDOWS or not _IS_MACOS:
     class DisplayColorProfile:
-        """Stub implementation for Windows - color profile management is not supported."""
+        """Stub implementation - color profile management is macOS-only."""
         def __init__(self):
             pass
 

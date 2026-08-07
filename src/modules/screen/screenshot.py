@@ -14,8 +14,9 @@ from modules.screen.screenData import getScreenData
 from modules.misc.appManager import getWindowSize
 
 _IS_WINDOWS = platform.system() == "Windows"
+_IS_MACOS = platform.system() == "Darwin"
 
-if not _IS_WINDOWS:
+if _IS_MACOS:
     import mss.darwin
     mss.darwin.IMAGE_OPTIONS = 0
 
@@ -27,15 +28,14 @@ This seems to affect any screenshots taken with quartz, but not those taken with
 '''
 usePillow = False
 
+def _mss_grab_pil(x, y, w, h):
+    with mss.mss() as sct:
+        monitor = {"left": int(x), "top": int(y), "width": int(w), "height": int(h)}
+        sct_img = sct.grab(monitor)
+        return Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
+
 def pillowGrab(x,y,w,h):
-    if _IS_WINDOWS:
-        # On Windows use mss for screenshots
-        with mss.mss() as sct:
-            monitor = {"left": int(x), "top": int(y), "width": int(w), "height": int(h)}
-            sct_img = sct.grab(monitor)
-            img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
-            return img
-    else:
+    if _IS_MACOS:
         fh, filepath = tempfile.mkstemp(".png")
         os.close(fh)
         args = ["screencapture"]
@@ -47,20 +47,10 @@ def pillowGrab(x,y,w,h):
         im_cropped = im.crop(bbox)
         im.close()
         return im_cropped
+    return _mss_grab_pil(x, y, w, h)
 
 def cgGrab(region=None):
-    if _IS_WINDOWS:
-        # Fallback to mss on Windows
-        with mss.mss() as sct:
-            if region:
-                left, top, width, height = region
-                monitor = {"left": int(left), "top": int(top), "width": int(width), "height": int(height)}
-            else:
-                monitor = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
-            sct_img = sct.grab(monitor)
-            img = np.array(sct_img)
-            return img
-    else:
+    if _IS_MACOS:
         import Quartz.CoreGraphics as CG
         # Set up the screen capture rectangle
         if region:
@@ -94,6 +84,15 @@ def cgGrab(region=None):
 
         # Convert to PIL Image (in BGRA format)
         return img
+
+    with mss.mss() as sct:
+        if region:
+            left, top, width, height = region
+            monitor = {"left": int(left), "top": int(top), "width": int(width), "height": int(height)}
+        else:
+            monitor = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
+        sct_img = sct.grab(monitor)
+        return np.array(sct_img)
  
 #returns an NP array, useful for cv2
 def mssScreenshotNP(x,y,w,h, save = False):

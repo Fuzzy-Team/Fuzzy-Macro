@@ -3,7 +3,8 @@ import platform
 import numpy as np
 
 _IS_WINDOWS = platform.system() == "Windows"
-if not _IS_WINDOWS:
+_IS_MACOS = platform.system() == "Darwin"
+if _IS_MACOS:
     import mss.darwin
     mss.darwin.IMAGE_OPTIONS = 0
 

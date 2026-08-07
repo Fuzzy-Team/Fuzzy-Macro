@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 import mss
 import platform as _platform
-if _platform.system() != "Windows":
+if _platform.system() == "Darwin":
     import mss.darwin
     mss.darwin.IMAGE_OPTIONS = 0
 import threading
@@ -194,6 +194,9 @@ class cloudflaredStream:
             "/opt/homebrew/bin/cloudflared",
             "/usr/local/Homebrew/bin/cloudflared",
             "/usr/local/bin/cloudflared",
+            "/usr/bin/cloudflared",
+            os.path.expanduser("~/.local/bin/cloudflared"),
+            os.path.expanduser("~/bin/cloudflared"),
         ])
         self.cloudflaredPath = None
         for path in paths:

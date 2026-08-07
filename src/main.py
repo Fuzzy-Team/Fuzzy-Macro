@@ -5,6 +5,26 @@ import subprocess
 import sys
 import ctypes
 _IS_WINDOWS = _platform.system() == "Windows"
+_IS_MACOS = _platform.system() == "Darwin"
+_IS_LINUX = _platform.system() == "Linux"
+
+def _install_script_name():
+    if _IS_WINDOWS:
+        return "install_dependencies.bat"
+    if _IS_MACOS:
+        return "install_dependencies.command"
+    return "install_dependencies.sh"
+
+def _launch_install_script():
+    script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", _install_script_name()))
+    if not os.path.exists(script):
+        return False
+    if _IS_WINDOWS:
+        subprocess.Popen(["cmd", "/c", script], shell=False)
+    else:
+        subprocess.Popen(["/bin/bash", script])
+    return True
+
 if _IS_WINDOWS:
     # Align screenshot/input coordinates under HiDPI scaling.
     try:
@@ -19,14 +39,7 @@ try:
     import requests
 except ModuleNotFoundError:
     try:
-        _script_name = "install_dependencies.bat" if _IS_WINDOWS else "install_dependencies.command"
-        script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", _script_name))
-        if os.path.exists(script):
-            if _IS_WINDOWS:
-                subprocess.Popen(["cmd", "/c", script], shell=False)
-            else:
-                subprocess.Popen(["/bin/bash", script])
-        else:
+        if not _launch_install_script():
             messageBox.msgBox(title="Dependencies not installed", text="Dependencies are not installed. Refer to Discord for help.")
     except Exception:
         pass
@@ -73,14 +86,7 @@ try:
 	from modules.misc.ColorProfile import DisplayColorProfile
 except ModuleNotFoundError:
     try:
-        _script_name = "install_dependencies.bat" if _IS_WINDOWS else "install_dependencies.command"
-        script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", _script_name))
-        if os.path.exists(script):
-            if _IS_WINDOWS:
-                subprocess.Popen(["cmd", "/c", script], shell=False)
-            else:
-                subprocess.Popen(["/bin/bash", script])
-        else:
+        if not _launch_install_script():
             messageBox.msgBox(title="Dependencies not installed", text="The new update requires new dependencies. Refer to Discord for help.")
     except Exception:
         pass
@@ -3342,10 +3348,11 @@ if __name__ == "__main__":
     autoStopDeadline = None
     autoStopHours = 0.0
 
-    # Windows permissions parity checks
+    # Windows / Linux permissions parity checks
     try:
         import platform
-        if platform.system() == "Windows":
+        system = platform.system()
+        if system == "Windows":
             try:
                 import ctypes
                 is_admin = False
@@ -3377,6 +3384,35 @@ if __name__ == "__main__":
                     messageBox.msgBox(title="Missing Dependency", text="pydirectinput is required for input control on Windows. Install with: pip install pydirectinput")
             except Exception:
                 pass
+        elif system == "Linux":
+            try:
+                import mss
+                with mss.mss() as sct:
+                    monitor = sct.monitors[0] if sct.monitors else None
+                    if monitor:
+                        sct.grab({"left": monitor.get('left', 0), "top": monitor.get('top', 0), "width": 1, "height": 1})
+            except Exception as e:
+                messageBox.msgBox(
+                    title="Screen Capture Warning",
+                    text="Unable to capture the screen. On Linux, use an X11 session (or XWayland). Wayland often blocks capture for automation tools. Error: {}".format(e),
+                )
+            try:
+                import shutil
+                if not (shutil.which("xdotool") or shutil.which("wmctrl")):
+                    messageBox.msgBox(
+                        title="Window Tools Recommended",
+                        text="Install xdotool and/or wmctrl so the macro can find and focus the Roblox/Sober window.\n\nDebian/Ubuntu: sudo apt install xdotool wmctrl\nFedora: sudo dnf install xdotool wmctrl",
+                    )
+            except Exception:
+                pass
+            try:
+                import pyautogui as _pag
+                _pag.position()
+            except Exception as e:
+                messageBox.msgBox(
+                    title="Input Control Warning",
+                    text="Unable to query/send input events. Prefer X11; on Wayland, synthetic input is often blocked. Error: {}".format(e),
+                )
     except Exception:
         pass
     

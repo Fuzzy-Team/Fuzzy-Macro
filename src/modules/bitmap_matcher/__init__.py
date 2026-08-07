@@ -164,7 +164,7 @@ def find_compatible_wheel_extension():
 
     return None
 
-def load_bitmap_matcher():
+def load_bitmap_matcher(allow_build=True):
     """Dynamically load the bitmap_matcher module."""
     # On Windows prefer extracting from a wheel first; never load .so on Windows.
     so_path = None
@@ -178,6 +178,25 @@ def load_bitmap_matcher():
         so_path = find_compatible_so()
         if so_path is None:
             so_path = find_compatible_wheel_extension()
+
+    # Build from bundled Bitmap-Searcher sources when no prebuilt binary exists.
+    if so_path is None and allow_build:
+        try:
+            from modules.bitmap_matcher.build_native import build_native_extension
+        except ImportError:
+            try:
+                from .build_native import build_native_extension
+            except ImportError:
+                build_native_extension = None
+
+        if build_native_extension is not None:
+            print(
+                f"No prebuilt bitmap_matcher found for Python {get_python_version()} "
+                f"on {get_architecture()}; building from source..."
+            )
+            built = build_native_extension(quiet=False)
+            if built is not None:
+                so_path = find_compatible_so() or built
     
     if so_path is None:
         raise ImportError(
@@ -187,7 +206,7 @@ def load_bitmap_matcher():
             "\n".join([f"  - {f.name}" for f in sorted(Path(__file__).parent.glob("*.so"))] +
                        [f"  - {f.name}" for f in sorted(Path(__file__).parent.glob("*.pyd"))] +
                        [f"  - {f.name}" for f in sorted(Path(__file__).parent.glob("*.whl"))]) +
-            f"\n\nTry building with: python{get_python_version()} build_universal.py"
+            f"\n\nTry building with: python{get_python_version()} -m modules.bitmap_matcher.build_native"
         )
     
     # On macOS, remove quarantine attributes; skip on other platforms.
@@ -209,28 +228,14 @@ def load_bitmap_matcher():
     return module
 
 #auto-load the module and expose its contents
-try:
-    _bitmap_matcher = load_bitmap_matcher()
-    
-    # Export all public attributes from the loaded module
-    __all__ = [name for name in dir(_bitmap_matcher) if not name.startswith('_')]
-    
-    # Make all functions/classes available at package level
-    for name in __all__:
-        globals()[name] = getattr(_bitmap_matcher, name)
-        
-except ImportError as e:
-    # Provide helpful error message
-    print(f"Warning: {e}")
-    print("bitmap_matcher extension not available.")
-    
-    # You could provide fallback implementations here if needed
-    def fallback_function():
-        raise RuntimeError("bitmap_matcher extension not loaded. Please build the extension first.")
-    
-    # Example fallback (adjust based on your actual functions)
-    __all__ = ['match_bitmap']  # Add your actual function names
-    match_bitmap = fallback_function
+_bitmap_matcher = load_bitmap_matcher()
+
+# Export all public attributes from the loaded module
+__all__ = [name for name in dir(_bitmap_matcher) if not name.startswith('_')]
+
+# Make all functions/classes available at package level
+for name in __all__:
+    globals()[name] = getattr(_bitmap_matcher, name)
 
 # bitmap_matcher_loader.py - Alternative standalone loader
 """

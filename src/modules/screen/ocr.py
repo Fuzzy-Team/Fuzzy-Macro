@@ -14,14 +14,15 @@ BASE_SCREEN_WIDTH = 2880
 BASE_SCREEN_HEIGHT = 1800
 
 _IS_WINDOWS = platform.system() == "Windows"
+_IS_MACOS = platform.system() == "Darwin"
 
-if not _IS_WINDOWS:
+if _IS_MACOS:
     import mss.darwin
     mss.darwin.IMAGE_OPTIONS = 0
 
 ocrLib = None
 useLangPref = True
-if not _IS_WINDOWS:
+if _IS_MACOS:
     try:
         from ocrmac import ocrmac #see if ocr mac is installed
         ocrLib = "ocrmac"

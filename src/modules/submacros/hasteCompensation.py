@@ -13,7 +13,7 @@ from modules import bitmap_matcher
 from modules.misc.appManager import getWindowSize
 import mss
 import platform as _platform
-if _platform.system() != "Windows":
+if _platform.system() == "Darwin":
     import mss.darwin
     mss.darwin.IMAGE_OPTIONS = 0
 from modules.screen.robloxWindow import RobloxWindowBounds

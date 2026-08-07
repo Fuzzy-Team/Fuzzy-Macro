@@ -24,6 +24,7 @@ from modules.controls.sleep import INTERRUPT_SKIP, INTERRUPT_RESET, INTERRUPT_AF
 
 _IS_WINDOWS = sys.platform.startswith("win")
 _IS_MACOS = sys.platform == "darwin"
+_IS_LINUX = sys.platform.startswith("linux")
 
 from modules.misc import settingsManager
 
@@ -3019,7 +3020,37 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 await interaction.response.send_message("Battery information not found.")
                 return
 
-            await interaction.response.send_message("Battery status command is currently supported on macOS and Windows only.")
+            if _IS_LINUX:
+                battery_path = None
+                for entry in sorted(os.listdir("/sys/class/power_supply")):
+                    supply = os.path.join("/sys/class/power_supply", entry)
+                    type_path = os.path.join(supply, "type")
+                    try:
+                        with open(type_path, "r", encoding="utf-8") as fh:
+                            if fh.read().strip().lower() == "battery":
+                                battery_path = supply
+                                break
+                    except Exception:
+                        continue
+                if not battery_path:
+                    await interaction.response.send_message("Battery information not found (desktop/no battery detected).")
+                    return
+                try:
+                    with open(os.path.join(battery_path, "capacity"), "r", encoding="utf-8") as fh:
+                        percent = fh.read().strip()
+                    status = "unknown"
+                    status_path = os.path.join(battery_path, "status")
+                    if os.path.exists(status_path):
+                        with open(status_path, "r", encoding="utf-8") as fh:
+                            status = fh.read().strip().lower()
+                    await interaction.response.send_message(
+                        f"Battery is at {percent}% and is currently {status}."
+                    )
+                except Exception:
+                    await interaction.response.send_message("Battery information is unavailable on this system.")
+                return
+
+            await interaction.response.send_message("Battery status command is currently supported on macOS, Windows, and Linux only.")
         except Exception as e:
             await interaction.response.send_message(f"An error occurred: {e}")
     
@@ -3093,6 +3124,13 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         if set_result != 0:
             raise OSError(f"waveOutSetVolume failed with code {set_result}")
 
+    def _set_linux_mute(muted: bool) -> None:
+        """Set Linux system audio mute via PulseAudio/PipeWire pactl."""
+        if not _IS_LINUX:
+            raise OSError("Not running on Linux")
+        state = "1" if muted else "0"
+        subprocess.check_call(["pactl", "set-sink-mute", "@DEFAULT_SINK@", state])
+
     @bot.tree.command(name = "mute", description = "Mute system audio")
     @requires_discord_permission("system_actions")
     async def mute_audio(interaction: discord.Interaction):
@@ -3101,8 +3139,10 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 _set_macos_mute(True)
             elif _IS_WINDOWS:
                 _set_windows_mute(True)
+            elif _IS_LINUX:
+                _set_linux_mute(True)
             else:
-                await interaction.response.send_message("❌ This command is currently supported on macOS and Windows only.")
+                await interaction.response.send_message("❌ This command is currently supported on macOS, Windows, and Linux only.")
                 return
             await interaction.response.send_message("🔇 System audio muted.")
         except Exception as e:
@@ -3116,8 +3156,10 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 _set_macos_mute(False)
             elif _IS_WINDOWS:
                 _set_windows_mute(False)
+            elif _IS_LINUX:
+                _set_linux_mute(False)
             else:
-                await interaction.response.send_message("❌ This command is currently supported on macOS and Windows only.")
+                await interaction.response.send_message("❌ This command is currently supported on macOS, Windows, and Linux only.")
                 return
             await interaction.response.send_message("🔊 System audio unmuted.")
         except Exception as e:

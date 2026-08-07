@@ -11,10 +11,25 @@ from io import BytesIO
 from modules.misc.messageBox import msgBox
 
 _IS_WINDOWS = platform.system() == "Windows"
+_IS_LINUX = platform.system() == "Linux"
+_IS_MACOS = platform.system() == "Darwin"
 
 _REPO_SLUG = "Fuzzy-Team/Fuzzy-Macro"
 _WINDOWS_UPDATE_BRANCH = "windows"
+_LINUX_UPDATE_BRANCH = "linux"
 _DEFAULT_UPDATE_BRANCH = "main"
+
+
+def _uses_branch_updates():
+    return _IS_WINDOWS or _IS_LINUX
+
+
+def _install_dependencies_script(destination):
+    if _IS_WINDOWS:
+        return os.path.join(destination, "install_dependencies.bat")
+    if _IS_LINUX:
+        return os.path.join(destination, "install_dependencies.sh")
+    return os.path.join(destination, "install_dependencies.command")
 
 
 # These are shipped patterns whose implementation must stay in sync with the
@@ -86,9 +101,11 @@ def _get_macro_root():
 
 
 def _update_source_branch():
-    """Branch used for Windows branch-based updates; macOS stays on releases."""
+    """Branch used for platform branch-based updates; macOS stays on releases."""
     if _IS_WINDOWS:
         return _WINDOWS_UPDATE_BRANCH
+    if _IS_LINUX:
+        return _LINUX_UPDATE_BRANCH
     return _DEFAULT_UPDATE_BRANCH
 
 
@@ -517,13 +534,13 @@ def update(t="main", update_channel="stable", progress_callback=None):
     zip_link = None
     try:
         _report_update_progress(progress_callback, 25, "Checking latest version")
-        if _IS_WINDOWS:
-            # Windows updates from the windows branch via version.txt (no releases).
+        if _uses_branch_updates():
+            # Windows/Linux updates from their platform branch via version.txt (no releases).
             branch = _update_source_branch()
             remote_version = _fetch_remote_version_from_txt(branch)
             zip_link = _branch_zip_url(branch)
         else:
-            # macOS/other: use GitHub releases API with channel filtering
+            # macOS: use GitHub releases API with channel filtering
             github_releases_api = f"https://api.github.com/repos/{_REPO_SLUG}/releases?per_page=100"
             headers = _nocache_headers(accept="application/vnd.github.v3+json")
             r = requests.get(github_releases_api, timeout=10, headers=headers)
@@ -662,13 +679,15 @@ def update(t="main", update_channel="stable", progress_callback=None):
         pass
 
     # ensure run scripts are executable/accessible if present
-    run_macroPath = os.path.join(destination, "run_macro.command")
-    if os.path.exists(run_macroPath):
-        try:
-            st = os.stat(run_macroPath)
-            os.chmod(run_macroPath, st.st_mode | stat.S_IEXEC)
-        except Exception:
-            pass
+    # ensure launcher scripts are executable if present
+    for launcher in ("run_macro.command", "run_macro.sh", "install_dependencies.sh", "install_dependencies.command"):
+        run_macroPath = os.path.join(destination, launcher)
+        if os.path.exists(run_macroPath):
+            try:
+                st = os.stat(run_macroPath)
+                os.chmod(run_macroPath, st.st_mode | stat.S_IEXEC)
+            except Exception:
+                pass
     # Remove any leftover commit marker since this was a normal update
     try:
         webapp_commit = os.path.join(destination, "src", "webapp", "updated_commit.txt")
@@ -679,10 +698,7 @@ def update(t="main", update_channel="stable", progress_callback=None):
     # Attempt to run install dependencies script (non-blocking). Fail silently.
     try:
         _report_update_progress(progress_callback, 96, "Finishing update")
-        if _IS_WINDOWS:
-            install_script = os.path.join(destination, "install_dependencies.bat")
-        else:
-            install_script = os.path.join(destination, "install_dependencies.command")
+        install_script = _install_dependencies_script(destination)
         if os.path.exists(install_script):
             if not _IS_WINDOWS:
                 try:
@@ -714,9 +730,26 @@ def update(t="main", update_channel="stable", progress_callback=None):
     # Cleanup: remove helper files for the opposite platform
     try:
         if _IS_WINDOWS:
-            to_remove = [os.path.join(destination, 'run_macro.command'), os.path.join(destination, 'install_dependencies.command')]
+            to_remove = [
+                os.path.join(destination, 'run_macro.command'),
+                os.path.join(destination, 'install_dependencies.command'),
+                os.path.join(destination, 'run_macro.sh'),
+                os.path.join(destination, 'install_dependencies.sh'),
+            ]
+        elif _IS_LINUX:
+            to_remove = [
+                os.path.join(destination, 'run_macro.bat'),
+                os.path.join(destination, 'install_dependencies.bat'),
+                os.path.join(destination, 'run_macro.command'),
+                os.path.join(destination, 'install_dependencies.command'),
+            ]
         else:
-            to_remove = [os.path.join(destination, 'run_macro.bat'), os.path.join(destination, 'install_dependencies.bat')]
+            to_remove = [
+                os.path.join(destination, 'run_macro.bat'),
+                os.path.join(destination, 'install_dependencies.bat'),
+                os.path.join(destination, 'run_macro.sh'),
+                os.path.join(destination, 'install_dependencies.sh'),
+            ]
         for p in to_remove:
             try:
                 if os.path.exists(p):
@@ -856,14 +889,15 @@ def update_from_commit(commit_hash, progress_callback=None):
     except Exception:
         pass
 
-    # ensure run_macro.command is executable if present
-    run_macroPath = os.path.join(destination, "run_macro.command")
-    if os.path.exists(run_macroPath):
-        try:
-            st = os.stat(run_macroPath)
-            os.chmod(run_macroPath, st.st_mode | stat.S_IEXEC)
-        except Exception:
-            pass
+    # ensure launcher scripts are executable if present
+    for launcher in ("run_macro.command", "run_macro.sh", "install_dependencies.sh", "install_dependencies.command"):
+        run_macroPath = os.path.join(destination, launcher)
+        if os.path.exists(run_macroPath):
+            try:
+                st = os.stat(run_macroPath)
+                os.chmod(run_macroPath, st.st_mode | stat.S_IEXEC)
+            except Exception:
+                pass
 
     # Write a marker file in webapp so the UI can show the commit hash next to version
     try:
@@ -875,10 +909,7 @@ def update_from_commit(commit_hash, progress_callback=None):
     # Attempt to run install dependencies script (non-blocking). Fail silently.
     try:
         _report_update_progress(progress_callback, 96, "Finishing update")
-        if _IS_WINDOWS:
-            install_script = os.path.join(destination, "install_dependencies.bat")
-        else:
-            install_script = os.path.join(destination, "install_dependencies.command")
+        install_script = _install_dependencies_script(destination)
         if os.path.exists(install_script):
             if not _IS_WINDOWS:
                 try:
@@ -909,9 +940,26 @@ def update_from_commit(commit_hash, progress_callback=None):
      # Cleanup: remove helper files for the opposite platform
     try:
         if _IS_WINDOWS:
-            to_remove = [os.path.join(destination, 'run_macro.command'), os.path.join(destination, 'install_dependencies.command')]
+            to_remove = [
+                os.path.join(destination, 'run_macro.command'),
+                os.path.join(destination, 'install_dependencies.command'),
+                os.path.join(destination, 'run_macro.sh'),
+                os.path.join(destination, 'install_dependencies.sh'),
+            ]
+        elif _IS_LINUX:
+            to_remove = [
+                os.path.join(destination, 'run_macro.bat'),
+                os.path.join(destination, 'install_dependencies.bat'),
+                os.path.join(destination, 'run_macro.command'),
+                os.path.join(destination, 'install_dependencies.command'),
+            ]
         else:
-            to_remove = [os.path.join(destination, 'run_macro.bat'), os.path.join(destination, 'install_dependencies.bat')]
+            to_remove = [
+                os.path.join(destination, 'run_macro.bat'),
+                os.path.join(destination, 'install_dependencies.bat'),
+                os.path.join(destination, 'run_macro.sh'),
+                os.path.join(destination, 'install_dependencies.sh'),
+            ]
         for p in to_remove:
             try:
                 if os.path.exists(p):
@@ -933,12 +981,12 @@ def check_for_updates_silent(update_channel="stable"):
     """
     Silently check if an update is available without downloading or showing popups.
 
-    On Windows, compares local version.txt against the windows branch version.txt.
+    On Windows/Linux, compares local version.txt against the platform branch version.txt.
     On other platforms, uses GitHub releases filtered by update_channel.
     
     Args:
         update_channel: "stable" (non-prerelease) or "beta" (includes prerelease).
-            Ignored on Windows.
+            Ignored on Windows/Linux.
     
     Returns a dict with 'available' (bool), 'current_version' (str), and 'latest_version' (str).
     Returns None on error.
@@ -948,7 +996,7 @@ def check_for_updates_silent(update_channel="stable"):
         local_version = _read_local_version(destination)
 
         remote_version = None
-        if _IS_WINDOWS:
+        if _uses_branch_updates():
             remote_version = _fetch_remote_version_from_txt(_update_source_branch())
         else:
             github_releases_api = f"https://api.github.com/repos/{_REPO_SLUG}/releases?per_page=100"

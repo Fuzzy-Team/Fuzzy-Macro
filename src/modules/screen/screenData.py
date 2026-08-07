@@ -6,6 +6,7 @@ import mss
 from ..misc import settingsManager
 
 _IS_WINDOWS = platform.system() == "Windows"
+_IS_MACOS = platform.system() == "Darwin"
 
 if _IS_WINDOWS:
     # Ensure screenshot and input APIs agree on pixel coordinates.
@@ -18,7 +19,7 @@ if _IS_WINDOWS:
             ctypes.windll.user32.SetProcessDPIAware()
         except Exception:
             pass
-else:
+elif _IS_MACOS:
     import mss.darwin
     mss.darwin.IMAGE_OPTIONS = 0
 
@@ -104,8 +105,8 @@ def setScreenData():
         "x_length_multiplier": 1
     }
 
-    if _IS_WINDOWS:
-        # On Windows, prefer physical resolution from mss and detect DPI scale.
+    if _IS_WINDOWS or not _IS_MACOS:
+        # Windows/Linux: prefer physical resolution from mss and detect DPI scale.
         try:
             sct = mss.mss()
             mon = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]

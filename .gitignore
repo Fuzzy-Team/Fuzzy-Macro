@@ -34,3 +34,8 @@ src/data/legacy_user_backups
 docs/
 tools/
 generate_theme_reports.py
+
+# bitmap_matcher local Cython build artifacts
+src/modules/bitmap_matcher/bitmap_matcher.c
+src/modules/bitmap_matcher/build_py*/
+src/modules/bitmap_matcher/build/

@@ -1761,6 +1761,13 @@ class macro:
         return cooldownSeconds
 
     def isFullScreen(self):
+        if platform.system() == "Linux":
+            try:
+                x, y, w, h = appManager.getWindowSize("roblox roblox")
+                screen_w, screen_h = pag.size()
+                return x <= 2 and y <= 2 and w >= screen_w - 4 and h >= screen_h - 4
+            except Exception:
+                return True
         windows = gw.getAllTitles()
         for win in windows:
             win_l = win.lower()
@@ -1772,10 +1779,7 @@ class macro:
 
     def toggleFullScreen(self):
         self.logger.webhook("", "Toggling fullscreen mode", "dark brown", "screen")
-        if platform.system() == "Windows":
-            # Roblox on Windows uses F11 for fullscreen (no Command key)
-            self.keyboard.press("f11", 0.1)
-        else:
+        if platform.system() == "Darwin":
             self.keyboard.keyDown("command")
             time.sleep(0.05)
             self.keyboard.keyDown("ctrl")
@@ -1785,6 +1789,9 @@ class macro:
             self.keyboard.keyUp("command")
             self.keyboard.keyUp("ctrl")
             self.keyboard.keyUp("f")
+        else:
+            # Windows and Linux use F11
+            self.keyboard.press("f11", 0.1)
         time.sleep(0.5)
         self.setRobloxWindowInfo(setYOffset=True)
 
@@ -8708,9 +8715,15 @@ class macro:
         time.sleep(0.15)
         newX = mouse.getPos()[0]
         if originalX == newX:
-            if platform.system() == "Windows":
+            system = platform.system()
+            if system == "Windows":
                 messageBox.msgBox(
                     text='It seems like the macro cannot control the mouse. Run it as Administrator (especially if Roblox is elevated), and make sure security software is not blocking input.\n\nNOTE: This popup might be incorrect. If the macro can move the mouse and interact with the game, you can dismiss this popup.',
+                    title='Input Permission'
+                )
+            elif system == "Linux":
+                messageBox.msgBox(
+                    text='It seems like the macro cannot control the mouse/keyboard.\n\nOn Linux, prefer an X11 session (or XWayland). Wayland often blocks synthetic input. Install xdotool/wmctrl for window control, and ensure the macro runs as the same user as Roblox/Sober.\n\nNOTE: This popup might be incorrect. If the macro can move the mouse and interact with the game, you can dismiss this popup.',
                     title='Input Permission'
                 )
             else:
