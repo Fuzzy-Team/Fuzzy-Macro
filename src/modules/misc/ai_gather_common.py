@@ -1177,6 +1177,95 @@ def tile_multi_walk(keyboard, keys, tiles):
     return True
 
 
+def interruptible_tile_walk(keyboard, keys, tiles, should_stop=None, chunk_tiles=0.1):
+    """Hold movement keys and walk in small chunks so a stop predicate can abort early.
+
+    Returns (tiles_walked, interrupted).
+    """
+    if tiles <= 0:
+        return 0.0, False
+
+    if isinstance(keys, str):
+        key_list = [keys]
+    else:
+        key_list = [key for key in keys if key]
+    if not key_list:
+        return 0.0, False
+
+    chunk = max(0.04, float(chunk_tiles))
+    walked = 0.0
+    interrupted = False
+    try:
+        for key in key_list:
+            keyboard.keyDown(key, False)
+        while walked < tiles - 1e-9:
+            if should_stop is not None and should_stop():
+                interrupted = True
+                break
+            step = min(chunk, tiles - walked)
+            keyboard.tileWait(step)
+            walked += step
+    finally:
+        for key in reversed(key_list):
+            keyboard.keyUp(key, False)
+    return walked, interrupted
+
+
+def interruptible_movement(
+    keyboard,
+    tx,
+    ty,
+    tcfbkey,
+    afcfbkey,
+    tclrkey,
+    afclrkey,
+    should_stop=None,
+    chunk_tiles=0.1,
+):
+    """Walk a relative (tx, ty) move in interruptible chunks.
+
+    Returns (moved_x, moved_y, interrupted).
+    """
+    magnitude = math.hypot(tx, ty)
+    if magnitude <= 0.001:
+        return 0.0, 0.0, False
+
+    moved_x = 0.0
+    moved_y = 0.0
+    for segment_type, keys, distance in movement_segments(tx, ty, tcfbkey, afcfbkey, tclrkey, afclrkey):
+        if should_stop is not None and should_stop():
+            return moved_x, moved_y, True
+        if distance <= 0:
+            continue
+
+        if segment_type == "diagonal":
+            component = min(abs(tx), abs(ty))
+            seg_tx = math.copysign(component, tx) if component else 0.0
+            seg_ty = math.copysign(component, ty) if component else 0.0
+        elif abs(ty) >= abs(tx):
+            seg_tx = 0.0
+            seg_ty = math.copysign(distance, ty)
+        else:
+            seg_tx = math.copysign(distance, tx)
+            seg_ty = 0.0
+
+        walked, interrupted = interruptible_tile_walk(
+            keyboard,
+            keys,
+            distance,
+            should_stop=should_stop,
+            chunk_tiles=chunk_tiles,
+        )
+        if distance > 1e-9:
+            frac = walked / distance
+            moved_x += seg_tx * frac
+            moved_y += seg_ty * frac
+        if interrupted:
+            return moved_x, moved_y, True
+
+    return moved_x, moved_y, False
+
+
 def same_token_candidate(a, b, switch_distance):
     if not isinstance(a, dict) or not isinstance(b, dict):
         return False
