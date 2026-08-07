@@ -2,11 +2,13 @@
 
 VENV_NAME="fuzzy-macro-env"
 VENV_PATH="$HOME/$VENV_NAME"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+MATCHER_DIR="$SCRIPT_DIR/src/modules/bitmap_matcher"
 
 create_virtual_env() {
     if [ ! -d "$VENV_PATH" ]; then
         printf "\033[1;35mCreating virtual environment at $VENV_PATH\033[0m\n"
-        python"${python_ver}" -m venv "$VENV_PATH"
+        "$PYTHON_BIN" -m venv "$VENV_PATH"
     else
         printf "\033[1;32mVirtual environment already exists at $VENV_PATH\033[0m\n"
     fi
@@ -30,24 +32,71 @@ install_pip_package() {
 		constraint_arg=""
 	fi
 
+	local status=0
 	if [ "$chip" = "arm64" ]; then
 		arch -arm64 pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 $extra_args $packages $constraint_arg
+		status=$?
 	else
 		#fallback for other architectures
 		pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 $extra_args $packages $constraint_arg
+		status=$?
 	fi
 
 	if [ -n "$tmp_constraint" ] && [ -f "$tmp_constraint" ]; then
 		rm -f "$tmp_constraint"
 	fi
+	return $status
 }
 
 upgrade_pip_tools() {
     if [ "$chip" = "arm64" ]; then
-        arch -arm64 python"${python_ver}" -m pip install --upgrade pip setuptools wheel
+        arch -arm64 "$PYTHON_BIN" -m pip install --upgrade pip setuptools wheel
     else
-        python"${python_ver}" -m pip install --upgrade pip setuptools wheel
+        "$PYTHON_BIN" -m pip install --upgrade pip setuptools wheel
     fi
+}
+
+matcher_arch_tag() {
+	if [ "$chip" = "arm64" ]; then
+		echo "arm64"
+	else
+		echo "x86_64"
+	fi
+}
+
+has_matcher_binary() {
+	local ver="$1"
+	local ver_nodot
+	ver_nodot=$(echo "$ver" | tr -d '.')
+	local arch_tag
+	arch_tag=$(matcher_arch_tag)
+	[ -f "$MATCHER_DIR/bitmap_matcher_py${ver_nodot}_${arch_tag}.so" ] \
+		|| [ -f "$MATCHER_DIR/bitmap_matcher_py${ver_nodot}.so" ]
+}
+
+# Resolve a usable interpreter for a major.minor version (PATH, then pyenv).
+resolve_python_bin() {
+	local ver="$1"
+	local candidate
+
+	if command -v "python${ver}" >/dev/null 2>&1; then
+		candidate=$(command -v "python${ver}")
+		if "$candidate" -c "import sys; raise SystemExit(0 if sys.version_info[:2] == tuple(map(int, '${ver}'.split('.'))) else 1)" 2>/dev/null; then
+			echo "$candidate"
+			return 0
+		fi
+	fi
+
+	# Prefer highest patch under pyenv for this minor version
+	if [ -d "$HOME/.pyenv/versions" ]; then
+		candidate=$(ls -1d "$HOME/.pyenv/versions/${ver}"*/bin/python 2>/dev/null | sort -V | tail -n 1)
+		if [ -n "$candidate" ] && [ -x "$candidate" ]; then
+			echo "$candidate"
+			return 0
+		fi
+	fi
+
+	return 1
 }
 
 #get system information
@@ -70,38 +119,66 @@ fi
 
 printf "\033[32;1mYour mac is compatible \033[0m\n\n\n"
 
-#Check if python ver is installed
-
+# Python version selection
+# - Old Intel macOS keeps forced 3.8 / 3.7 paths
+# - Otherwise prefer newest installed supported Python that has a matcher binary: 3.12 → 3.11 → 3.10 → 3.9
 python_ver="3.9"
 python_link="/www.python.org/ftp/python/3.9.8/python-3.9.8-macos11.pkg"
 constraints=$'numpy<2'
+PYTHON_BIN=""
+force_legacy_python=0
+
 if [ "$chip" = 'i386' ]; then
 	if echo -e "$os_ver \n10.15.0" | sort -V | tail -n1 | grep -Fq "10.15.0"; then
 		python_ver="3.8"
 		python_link="/www.python.org/ftp/python/3.8.0/python-3.8.0-macosx10.9.pkg"
 		constraints=$'numpy<2\npyobjc-core<11.0\npyobjc<11.0'
+		force_legacy_python=1
 	elif echo -e "$os_ver \n12.0.0" | sort -V | tail -n1 | grep -Fq "12.0.0"; then
 		python_ver="3.8"
 		python_link="/www.python.org/ftp/python/3.8.0/python-3.8.0-macosx10.9.pkg"
 		constraints=$'numpy<2\npyobjc-core<11.0\npyobjc<11.0'
+		force_legacy_python=1
 	else 
 		python_link="/www.python.org/ftp/python/3.9.5/python-3.9.5-macos11.pkg"
 		constraints=$'numpy<2\npyobjc-core<12.0\npyobjc<12.0'
 	fi
 fi
 
+if [ "$force_legacy_python" -eq 0 ]; then
+	for candidate_ver in 3.12 3.11 3.10 3.9; do
+		if ! has_matcher_binary "$candidate_ver"; then
+			continue
+		fi
+		if resolved=$(resolve_python_bin "$candidate_ver"); then
+			python_ver="$candidate_ver"
+			PYTHON_BIN="$resolved"
+			printf "\033[1;32mSelected Python %s (%s)\033[0m\n" "$python_ver" "$PYTHON_BIN"
+			break
+		fi
+	done
+fi
+
+if [ -z "$PYTHON_BIN" ]; then
+	if resolved=$(resolve_python_bin "$python_ver"); then
+		PYTHON_BIN="$resolved"
+	else
+		PYTHON_BIN="python${python_ver}"
+	fi
+fi
+
 filename=$(echo "${python_link}" | sed -e 's/\/.*\///g')
 
-if python"${python_ver}" --version; then
+if "$PYTHON_BIN" --version 2>/dev/null; then
 	printf "\033[1;32mPython is already installed\033[0m\n"
 		if [ "$chip" = "arm64" ]; then
 			# Resolve the real python executable (pyenv shims may point to a shim script)
-			python_exec=$(python"${python_ver}" -c 'import sys; print(sys.executable)' 2>/dev/null || true)
+			python_exec=$("$PYTHON_BIN" -c 'import sys; print(sys.executable)' 2>/dev/null || true)
 			if [ -n "$python_exec" ] && [ -x "$python_exec" ]; then
 				arch_output=$(file "$python_exec" 2>/dev/null || true)
-				py_platform=$(python"${python_ver}" -c 'import platform; print(platform.machine())' 2>/dev/null || true)
+				py_platform=$("$PYTHON_BIN" -c 'import platform; print(platform.machine())' 2>/dev/null || true)
 			else
-				python_exec=$(which python${python_ver} 2>/dev/null || true)
+				python_exec=$(which "$PYTHON_BIN" 2>/dev/null || true)
 				arch_output=$(file "$python_exec" 2>/dev/null || true)
 				py_platform=
 			fi
@@ -110,7 +187,7 @@ if python"${python_ver}" --version; then
 				echo -e "\033[1;32mPython $python_ver has an arm64 binary\033[0m"
 			else
 				echo -e "\033[1;31mThere are no arm64 binaries for Python $python_ver!\033[0m"
-				echo -e "\033[1;33mFix: reinstall Python 3.9 with arm64 binaries (brew, miniforge) or use a universal/arm64 build.\033[0m"
+				echo -e "\033[1;33mFix: reinstall Python $python_ver with arm64 binaries (brew, miniforge, pyenv) or use a universal/arm64 build.\033[0m"
 			fi
 		fi
 else
@@ -120,6 +197,7 @@ else
 	until python"${python_ver}" --version &> /dev/null; do
 	  sleep 5;
 	done
+	PYTHON_BIN=$(resolve_python_bin "$python_ver" || echo "python${python_ver}")
 	#printf "\033[1;35mPress enter to continue when python is installed\033[0m"
 	#read
 fi
@@ -138,8 +216,8 @@ fi
 #echo "Enter your password (the password used to log into the admin user). Note: the password is not visible"
 #sudo xcode-select --switch /Library/Developer/CommandLineTools
 printf "\033[1;35mMaking sure pip is installed\033[0m\n\n"
-python"${python_ver}" -m ensurepip
-python"${python_ver}" -m pip cache purge
+"$PYTHON_BIN" -m ensurepip
+"$PYTHON_BIN" -m pip cache purge
 upgrade_pip_tools
 
 printf "\033[1;35mInstalling SSL certificates for Python\033[0m\n"
@@ -151,6 +229,15 @@ if [ -f "$cert_command" ]; then
 	"$cert_command"
 else
 	printf "\033[1;31mDid not find certificate installer for Python ${python_ver}\033[0m\n"
+fi
+
+# Recreate venv if it was built with a different Python minor version
+if [ -d "$VENV_PATH" ] && [ -x "$VENV_PATH/bin/python" ]; then
+	venv_ver=$("$VENV_PATH/bin/python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || true)
+	if [ -n "$venv_ver" ] && [ "$venv_ver" != "$python_ver" ]; then
+		printf "\033[1;33mVirtual environment Python %s differs from selected %s; recreating...\033[0m\n" "$venv_ver" "$python_ver"
+		rm -rf "$VENV_PATH"
+	fi
 fi
 
 attempt=1
@@ -175,7 +262,18 @@ pip install --upgrade pip setuptools wheel
 install_pip_package "numpy<2"
 printf "\033[1;35mInstalling libraries\033[0m\n\n"
 
-if [ "$python_ver" = '3.9' ]; then
+if [ "$python_ver" = '3.12' ] || [ "$python_ver" = '3.11' ] || [ "$python_ver" = '3.10' ]; then
+	# Modern Python path — keep numpy<2; mirror 3.9 package set with looser opencv ceiling
+	install_pip_package "opencv-python-headless numpy<2" "--force-reinstall"
+	if ! install_pip_package "torch==2.7.0 torchvision==0.22.0" "--force-reinstall"; then
+		printf "\033[1;33mtorch==2.7.0 unavailable for Python %s; installing latest torch/torchvision\033[0m\n" "$python_ver"
+		install_pip_package "torch torchvision" "--force-reinstall"
+	fi
+	install_pip_package "ocrmac"
+	install_pip_package "pyobjc-framework-ColorSync"
+	install_pip_package "pyobjc-framework-ApplicationServices"
+
+elif [ "$python_ver" = '3.9' ]; then
 	# Use pip --force-reinstall to ensure a compatible opencv and numpy
 	# This installs the latest opencv-headless below 4.11 and enforces numpy<2
 	install_pip_package "opencv-python-headless<4.11 numpy<2" "--force-reinstall"
@@ -311,3 +409,4 @@ else:
     print("html2image package not found")
 EOF
 printf "\n\n\n\033[32;1mInstallation complete!\033[0m\n"
+printf "\033[1;32mUsing Python %s\033[0m\n" "$python_ver"
