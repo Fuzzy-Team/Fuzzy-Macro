@@ -49,7 +49,10 @@ from difflib import SequenceMatcher
 import fuzzywuzzy.process
 import fuzzywuzzy
 import traceback
-import pygetwindow as gw
+try:
+    import pygetwindow as gw
+except (ImportError, NotImplementedError):
+    gw = None
 from modules.submacros.hasteCompensation import HasteCompensationRevamped
 from modules import bitmap_matcher
 import json
@@ -1761,7 +1764,7 @@ class macro:
         return cooldownSeconds
 
     def isFullScreen(self):
-        if platform.system() == "Linux":
+        if platform.system() == "Linux" or gw is None:
             try:
                 x, y, w, h = appManager.getWindowSize("roblox roblox")
                 screen_w, screen_h = pag.size()

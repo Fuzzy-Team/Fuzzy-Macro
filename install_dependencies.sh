@@ -16,11 +16,11 @@ fi
 printf "\033[1;35mChecking Python installation...\033[0m\n"
 
 PYTHON_CMD=""
-for candidate in python3.9 python3.8 python3.7 python3; do
+for candidate in python3.12 python3.11 python3.10 python3.9 python3.8 python3.7 python3; do
     if command -v "$candidate" >/dev/null 2>&1; then
         ver="$("$candidate" -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")' 2>/dev/null || true)"
         case "$ver" in
-            3.9|3.8|3.7)
+            3.12|3.11|3.10|3.9|3.8|3.7)
                 PYTHON_CMD="$candidate"
                 break
                 ;;
@@ -29,8 +29,8 @@ for candidate in python3.9 python3.8 python3.7 python3; do
 done
 
 if [ -z "$PYTHON_CMD" ]; then
-    printf "\033[31mPython 3.7/3.8/3.9 not found on system.\033[0m\n"
-    printf "\033[33mInstall Python 3.9 (recommended), then rerun this script.\033[0m\n"
+    printf "\033[31mPython 3.7–3.12 not found on system.\033[0m\n"
+    printf "\033[33mInstall Python 3.9+ (3.12 is fine on modern Linux distros), then rerun this script.\033[0m\n"
     exit 1
 fi
 
@@ -76,7 +76,6 @@ python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pyp
 python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 ImageHash
 python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 httpx
 python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 flask
-python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 pygetwindow
 python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 requests
 python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 "aiohttp==3.10.5"
 python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 pynput

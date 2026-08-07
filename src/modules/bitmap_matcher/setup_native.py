@@ -43,5 +43,5 @@ setup(
     ),
     include_dirs=[numpy.get_include()],
     zip_safe=False,
-    python_requires=">=3.7,<3.10",
+    python_requires=">=3.7",
 )
