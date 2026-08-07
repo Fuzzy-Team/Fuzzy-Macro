@@ -1772,15 +1772,19 @@ class macro:
 
     def toggleFullScreen(self):
         self.logger.webhook("", "Toggling fullscreen mode", "dark brown", "screen")
-        self.keyboard.keyDown("command")
-        time.sleep(0.05)
-        self.keyboard.keyDown("ctrl")
-        time.sleep(0.05)
-        self.keyboard.keyDown("f")
-        time.sleep(0.1)
-        self.keyboard.keyUp("command")
-        self.keyboard.keyUp("ctrl")
-        self.keyboard.keyUp("f")
+        if platform.system() == "Windows":
+            # Roblox on Windows uses F11 for fullscreen (no Command key)
+            self.keyboard.press("f11", 0.1)
+        else:
+            self.keyboard.keyDown("command")
+            time.sleep(0.05)
+            self.keyboard.keyDown("ctrl")
+            time.sleep(0.05)
+            self.keyboard.keyDown("f")
+            time.sleep(0.1)
+            self.keyboard.keyUp("command")
+            self.keyboard.keyUp("ctrl")
+            self.keyboard.keyUp("f")
         time.sleep(0.5)
         self.setRobloxWindowInfo(setYOffset=True)
 
@@ -8658,13 +8662,14 @@ class macro:
         #disable game mode
         self.moveMouseToDefault()
         time.sleep(1)
-        #check roblox scaling
+        #check roblox scaling (macOS Retina only)
         #this is done by checking if all pixels at the top of the screen are black
-        topScreen = mssScreenshot(0, 0, self.robloxWindow.mw, 2)
-        extrema = topScreen.convert("L").getextrema()
-        #all are black
-        if extrema == (0, 0):
-            messageBox.msgBox(text='It seems like you have not enabled roblox scaling. The macro will not work properly.\n1. Close Roblox\n2. Go to finder -> applications -> right click roblox -> get info -> enable "scale to fit below built-in camera"', title='Roblox scaling')
+        if platform.system() == "Darwin":
+            topScreen = mssScreenshot(0, 0, self.robloxWindow.mw, 2)
+            extrema = topScreen.convert("L").getextrema()
+            #all are black
+            if extrema == (0, 0):
+                messageBox.msgBox(text='It seems like you have not enabled roblox scaling. The macro will not work properly.\n1. Close Roblox\n2. Go to finder -> applications -> right click roblox -> get info -> enable "scale to fit below built-in camera"', title='Roblox scaling')
         #make sure game mode is disabled (macOS 14.0 and above and apple chips)
         macVersion = 0.0
         if platform.system() == "Darwin":
@@ -8695,7 +8700,7 @@ class macro:
         ocr.newUI = True
         logModule.newUI = True
 
-        #check for accessibility
+        #check for accessibility / input permissions
         #this is done by taking 2 different screenshots
         #if they are both the same, we assume that the keypress didnt go through and hence accessibility is not enabled
         originalX = mouse.getPos()[0]
@@ -8703,7 +8708,13 @@ class macro:
         time.sleep(0.15)
         newX = mouse.getPos()[0]
         if originalX == newX:
-            messageBox.msgBox(text='It seems like terminal does not have the accessibility permission. The macro will not work properly.\n\nTo fix it, go to System Settings -> Privacy and Security -> Accessibility -> add and enable Terminal.\n\nVisit https://fuzzy-team.gitbook.io/fuzzy-macro/common-fixes/terminal-permissions for detailed instructions\n\n NOTE: This popup might be incorrect. If the macro is able to input keypresses and interact with the game, you can dismiss this popup', title='Accessibility Permission')
+            if platform.system() == "Windows":
+                messageBox.msgBox(
+                    text='It seems like the macro cannot control the mouse. Run it as Administrator (especially if Roblox is elevated), and make sure security software is not blocking input.\n\nNOTE: This popup might be incorrect. If the macro can move the mouse and interact with the game, you can dismiss this popup.',
+                    title='Input Permission'
+                )
+            else:
+                messageBox.msgBox(text='It seems like terminal does not have the accessibility permission. The macro will not work properly.\n\nTo fix it, go to System Settings -> Privacy and Security -> Accessibility -> add and enable Terminal.\n\nVisit https://fuzzy-team.gitbook.io/fuzzy-macro/common-fixes/terminal-permissions for detailed instructions\n\n NOTE: This popup might be incorrect. If the macro is able to input keypresses and interact with the game, you can dismiss this popup', title='Accessibility Permission')
         time.sleep(1)
         # img1 = pillowToHash(mssScreenshot())
         # self.keyboard.press("esc")

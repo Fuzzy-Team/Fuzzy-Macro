@@ -177,18 +177,35 @@ class cloudflaredStream:
         gc.set_threshold(700, 10, 5)
 
         #get the cloudflared path
-        paths = [
+        paths = []
+        try:
+            import shutil
+            which_path = shutil.which("cloudflared") or shutil.which("cloudflared.exe")
+            if which_path:
+                paths.append(which_path)
+        except Exception:
+            pass
+        paths.extend([
             "cloudflared",
+            "cloudflared.exe",
+            os.path.expandvars(r"%LOCALAPPDATA%\cloudflared\cloudflared.exe"),
+            os.path.expandvars(r"%ProgramFiles%\cloudflared\cloudflared.exe"),
+            os.path.expandvars(r"%ProgramFiles(x86)%\cloudflared\cloudflared.exe"),
             "/opt/homebrew/bin/cloudflared",
             "/usr/local/Homebrew/bin/cloudflared",
-            "/usr/local/bin/cloudflared"
-        ]
+            "/usr/local/bin/cloudflared",
+        ])
+        self.cloudflaredPath = None
         for path in paths:
+            if not path:
+                continue
             if os.path.isfile(path) and os.access(path, os.X_OK):
                 self.cloudflaredPath = path
                 break
-        else:
-            self.cloudflaredPath = None
+            # On Windows, X_OK is not always meaningful for .exe files
+            if _platform.system() == "Windows" and os.path.isfile(path):
+                self.cloudflaredPath = path
+                break
 
     def index(self):
         return render_template_string(self.HTML_PAGE, streaming=self.streaming)

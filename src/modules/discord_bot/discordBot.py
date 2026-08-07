@@ -2887,7 +2887,22 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                     # Build text overlay
                     draw = ImageDraw.Draw(img)
                     try:
-                        font = ImageFont.truetype("/Library/Fonts/Arial.ttf", 20)
+                        font_candidates = [
+                            "/Library/Fonts/Arial.ttf",
+                            os.path.expandvars(r"%WINDIR%\Fonts\arial.ttf"),
+                            os.path.expandvars(r"%WINDIR%\Fonts\Arial.ttf"),
+                            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                        ]
+                        font = None
+                        for font_path in font_candidates:
+                            if font_path and os.path.exists(font_path):
+                                try:
+                                    font = ImageFont.truetype(font_path, 20)
+                                    break
+                                except Exception:
+                                    continue
+                        if font is None:
+                            font = ImageFont.load_default()
                     except Exception:
                         font = ImageFont.load_default()
 

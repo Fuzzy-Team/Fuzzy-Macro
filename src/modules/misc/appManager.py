@@ -9,13 +9,100 @@ mw, mh = pag.size()
 
 
 if _IS_WINDOWS:
-    def isAppOpen(app="roblox"):
+    # Roblox Windows clients use RobloxPlayerBeta.exe, not "roblox.exe".
+    _ROBLOX_PROCESS_NAMES = (
+        "RobloxPlayerBeta.exe",
+        "RobloxPlayer.exe",
+        "Roblox.exe",
+    )
+
+    def _is_roblox_app(app):
+        name = (app or "").strip().lower().replace(".exe", "")
+        return name in ("roblox", "robloxplayerbeta", "robloxplayer")
+
+    def _process_names_for_app(app):
+        if _is_roblox_app(app):
+            return _ROBLOX_PROCESS_NAMES
+        raw = (app or "").strip()
+        if not raw:
+            return ()
+        if raw.lower().endswith(".exe"):
+            return (raw,)
+        return (f"{raw}.exe",)
+
+    def _tasklist_has_image(image_name):
         try:
             output = subprocess.check_output(
-                ["tasklist", "/FI", f"IMAGENAME eq {app}.exe"],
+                ["tasklist", "/FI", f"IMAGENAME eq {image_name}"],
                 stderr=subprocess.DEVNULL,
             ).decode("utf-8", errors="ignore")
-            return app.lower() in output.lower()
+            return image_name.lower() in output.lower()
+        except Exception:
+            return False
+
+    def _enum_windows_matching(app_or_title, callback):
+        """Call callback(hwnd, title) for visible windows matching app/title. Stop if callback returns False."""
+        import ctypes
+        import ctypes.wintypes
+
+        user32 = ctypes.windll.user32
+        needle = (app_or_title or "").strip().lower()
+        search_terms = [needle] if needle else []
+        if needle in ("roblox", "roblox roblox") or _is_roblox_app(app_or_title):
+            search_terms = ["roblox"]
+
+        def _enum_callback(hwnd, _):
+            if not user32.IsWindowVisible(hwnd):
+                return True
+            length = user32.GetWindowTextLengthW(hwnd)
+            if length == 0:
+                return True
+            buf = ctypes.create_unicode_buffer(length + 1)
+            user32.GetWindowTextW(hwnd, buf, length + 1)
+            title = buf.value
+            title_l = title.lower()
+            if any(term and term in title_l for term in search_terms):
+                if callback(hwnd, title) is False:
+                    return False
+            return True
+
+        enum_proc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.wintypes.HWND, ctypes.c_void_p)
+        user32.EnumWindows(enum_proc(_enum_callback), None)
+
+    def _focus_window_by_app(app="Roblox"):
+        try:
+            import ctypes
+
+            user32 = ctypes.windll.user32
+            focused = {"ok": False}
+
+            def _focus(hwnd, _title):
+                user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+                user32.SetForegroundWindow(hwnd)
+                focused["ok"] = True
+                return False
+
+            _enum_windows_matching(app, _focus)
+            return focused["ok"]
+        except Exception:
+            return False
+
+    def isAppOpen(app="roblox"):
+        try:
+            for image_name in _process_names_for_app(app):
+                if _tasklist_has_image(image_name):
+                    return True
+            # Fallback: Roblox may be present as a titled window even if process filter fails
+            if _is_roblox_app(app):
+                found = {"ok": False}
+
+                def _mark(hwnd, _title):
+                    found["ok"] = True
+                    return False
+
+                _enum_windows_matching("roblox", _mark)
+                return found["ok"]
+            return False
         except Exception:
             return False
 
@@ -31,17 +118,25 @@ if _IS_WINDOWS:
             buf = ctypes.create_unicode_buffer(length + 1)
             user32.GetWindowTextW(hwnd, buf, length + 1)
             title = buf.value.lower()
-            app_name = (app or "").lower()
+            app_name = (app or "").lower().replace(".exe", "")
+            if _is_roblox_app(app):
+                return "roblox" in title
             return app_name in title or title in app_name
         except Exception:
             return False
 
     def openApp(app="Roblox"):
+        # Match macOS semantics: only focus an already-running app.
+        # Returning False when Roblox is closed lets callers trigger rejoin.
         try:
-            import ctypes
+            if _is_roblox_app(app):
+                if not isAppOpen("roblox"):
+                    return False
+                return _focus_window_by_app("Roblox")
 
-            ctypes.windll.shell32.ShellExecuteW(None, "open", app, None, None, 1)
-            return True
+            if not isAppOpen(app):
+                return False
+            return _focus_window_by_app(app)
         except Exception:
             return False
 
@@ -52,24 +147,26 @@ if _IS_WINDOWS:
             os.startfile(link)
 
     def closeApp(app):
-        try:
-            subprocess.call(
-                ["taskkill", "/IM", f"{app}.exe"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-        except Exception:
-            pass
+        for image_name in _process_names_for_app(app):
+            try:
+                subprocess.call(
+                    ["taskkill", "/IM", image_name],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except Exception:
+                pass
 
     def forceQuitApp(app):
-        try:
-            subprocess.call(
-                ["taskkill", "/F", "/IM", f"{app}.exe"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-        except Exception:
-            pass
+        for image_name in _process_names_for_app(app):
+            try:
+                subprocess.call(
+                    ["taskkill", "/F", "/IM", image_name],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except Exception:
+                pass
 
     def getWindowSize(windowName):
         try:
@@ -77,36 +174,22 @@ if _IS_WINDOWS:
             import ctypes.wintypes
 
             user32 = ctypes.windll.user32
-            normalized_name = (windowName or "").strip().lower()
-            search_terms = [normalized_name] if normalized_name else []
-            if normalized_name == "roblox roblox":
-                search_terms.append("roblox")
+            results = []
 
-            def _enum_callback(hwnd, results):
-                if not user32.IsWindowVisible(hwnd):
-                    return True
-                length = user32.GetWindowTextLengthW(hwnd)
-                if length == 0:
-                    return True
-                buf = ctypes.create_unicode_buffer(length + 1)
-                user32.GetWindowTextW(hwnd, buf, length + 1)
-                title = buf.value
-                title_l = title.lower()
-                if any(term and term in title_l for term in search_terms):
-                    rect = ctypes.wintypes.RECT()
-                    user32.GetWindowRect(hwnd, ctypes.byref(rect))
-                    results.append((
-                        rect.left,
-                        rect.top,
-                        rect.right - rect.left,
-                        rect.bottom - rect.top,
-                    ))
+            def _collect(hwnd, _title):
+                rect = ctypes.wintypes.RECT()
+                user32.GetWindowRect(hwnd, ctypes.byref(rect))
+                width = rect.right - rect.left
+                height = rect.bottom - rect.top
+                # Prefer the main game window over tiny helper windows
+                if width >= 200 and height >= 200:
+                    results.append((rect.left, rect.top, width, height))
                 return True
 
-            callback = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.wintypes.HWND, ctypes.py_object)
-            results = []
-            user32.EnumWindows(callback(_enum_callback), results)
+            _enum_windows_matching(windowName, _collect)
             if results:
+                # Largest matching window is usually the Roblox client
+                results.sort(key=lambda r: r[2] * r[3], reverse=True)
                 return results[0]
         except Exception:
             pass
@@ -115,27 +198,15 @@ if _IS_WINDOWS:
     def maximiseAppWindow(app="Roblox"):
         try:
             import ctypes
-            import ctypes.wintypes
 
             sw_maximize = 3
             user32 = ctypes.windll.user32
 
-            def _enum_callback(hwnd, _):
-                if not user32.IsWindowVisible(hwnd):
-                    return True
-                length = user32.GetWindowTextLengthW(hwnd)
-                if length == 0:
-                    return True
-                buf = ctypes.create_unicode_buffer(length + 1)
-                user32.GetWindowTextW(hwnd, buf, length + 1)
-                title = buf.value
-                if app.lower() in title.lower():
-                    user32.ShowWindow(hwnd, sw_maximize)
-                    return False
-                return True
+            def _maximize(hwnd, _title):
+                user32.ShowWindow(hwnd, sw_maximize)
+                return False
 
-            callback = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.wintypes.HWND, ctypes.py_object)
-            user32.EnumWindows(callback(_enum_callback), None)
+            _enum_windows_matching(app, _maximize)
         except Exception:
             pass
 
