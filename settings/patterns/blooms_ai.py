@@ -32,7 +32,7 @@ INPUT_HEIGHT = agc.INPUT_HEIGHT
 MODEL_DIR = agc.MODEL_DIR
 SPRINKLER_CONFIDENCE_THRESHOLD = 0.6
 PETAL_CONFIDENCE_THRESHOLD = 0.50
-RUNTIME_VERSION = 37
+RUNTIME_VERSION = 39
 MIN_TOKEN_DISTANCE = 0.3
 MAX_SPRINKLER_DISTANCE = 10.0
 TARGET_SPRINKLER_LABEL = None
@@ -62,9 +62,9 @@ BLOOM_CONTACT_MAX_MOVE = 0.3
 BLOOM_CONTACT_MOVE_COOLDOWN = 0.25
 BLOOM_CONTACT_CONFIRMATIONS = 3
 BLOOM_CONTACT_MAX_TOTAL_MOVE = 1.2
-IDLE_SPRINKLER_RADIUS = 0.40
-IDLE_RETURN_STEP = 1.25
-IDLE_SQUARE_STEP = 0.25
+IDLE_SQUARE_SIDE = 1.2
+IDLE_WALK_CHUNK = 0.08
+IDLE_PATROL_MAX_SIDES = 4
 BLOOM_MODEL_VARIANTS = {
     "standard": (
         "Standard",
@@ -387,7 +387,10 @@ def _scan_tokens_once(runtime):
     output = agc.run_model(runtime, "combined", image)
     inference_elapsed = time.time() - inference_start
     postprocess_start = time.time()
-    scan_stale = (
+    # Idle sprinkler patrol keeps walking while watching for blooms, so allow
+    # bloom publishes during that movement so the square can abort instantly.
+    idle_patrol = bool(runtime.get("idle_patrol_active"))
+    scan_stale = (not idle_patrol) and (
         runtime.get("movement_active")
         or int(runtime.get("movement_revision", 0)) != movement_revision
     )
@@ -593,41 +596,121 @@ def _execute_movement_to_target(tx, ty):
     return _execute_movement(tx, ty)
 
 
+def _idle_square_side():
+    return max(0.7, min(2.0, IDLE_SQUARE_SIDE + (0.15 * max(size - 1.0, 0.0)) + (0.1 * max(width - 1, 0))))
+
+
+def _idle_square_sides(side):
+    """Relative axis-aligned sides. No inward correction — the loop itself keeps alignment."""
+    return (
+        (side, 0.0),
+        (0.0, side),
+        (-side, 0.0),
+        (0.0, -side),
+    )
+
+
+def _bloom_seen_for_patrol(runtime):
+    target = agc.latest_target(runtime)
+    if isinstance(target, dict) and target.get("name") == BLOOM_LABEL:
+        return True
+    candidates = runtime.get("latest_bloom_candidates", [])
+    if isinstance(candidates, list) and candidates:
+        return True
+    return False
+
+
+def _execute_interruptible_patrol_move(runtime, tx, ty):
+    magnitude = math.hypot(tx, ty)
+    if magnitude <= 0.001:
+        return False, False
+
+    runtime["movement_revision"] = int(runtime.get("movement_revision", 0)) + 1
+    runtime["movement_active"] = True
+    moved_x = 0.0
+    moved_y = 0.0
+    interrupted = False
+    try:
+        moved_x, moved_y, interrupted = agc.interruptible_movement(
+            self.keyboard,
+            tx,
+            ty,
+            tcfbkey,
+            afcfbkey,
+            tclrkey,
+            afclrkey,
+            should_stop=lambda: _bloom_seen_for_patrol(runtime),
+            chunk_tiles=IDLE_WALK_CHUNK,
+        )
+        if abs(moved_x) > 1e-9 or abs(moved_y) > 1e-9:
+            runtime["current_x"] += moved_x
+            runtime["current_y"] += moved_y
+            runtime["movement_count"] += 1
+    finally:
+        runtime["movement_active"] = False
+
+    if abs(moved_x) > 1e-9 or abs(moved_y) > 1e-9:
+        scan_lock = runtime.get("scan_lock")
+        if scan_lock is None:
+            scan_lock = threading.Lock()
+            runtime["scan_lock"] = scan_lock
+        with scan_lock:
+            if interrupted:
+                # Keep bloom detections so the next tick can chase immediately.
+                runtime["movement_requires_fresh_scan"] = False
+            else:
+                runtime["latest_target"] = None
+                runtime["latest_bloom_candidates"] = []
+                runtime["latest_petal_detection_time"] = 0.0
+                runtime["latest_scan_time"] = 0.0
+                runtime["movement_requires_fresh_scan"] = True
+
+    return (abs(moved_x) > 1e-9 or abs(moved_y) > 1e-9), interrupted
+
+
 def _execute_sprinkler_patrol(runtime):
-    """Return to the sprinkler, then make a small square while waiting."""
-    if runtime.get("movement_requires_fresh_scan"):
+    """Continuously walk a relative square around the sprinkler until a bloom appears.
+
+    Uses fixed axis-aligned sides (no snap-back toward the sprinkler). Repeating the
+    square is what keeps the player aligned near the sprinkler.
+    """
+    if runtime.get("movement_requires_fresh_scan") and not runtime.get("idle_patrol_active"):
         return False
 
-    current_x = float(runtime.get("current_x", 0.0))
-    current_y = float(runtime.get("current_y", 0.0))
-    distance = math.hypot(current_x, current_y)
-    if distance > IDLE_SPRINKLER_RADIUS:
-        step = min(IDLE_RETURN_STEP, distance)
-        scale = step / distance
-        tx = -current_x * scale
-        ty = -current_y * scale
-        _debug_log(
-            f"returning to sprinkler move=({tx:.2f},{ty:.2f}) distance={distance:.2f}",
-            min_interval=0.25,
-            key="idle_return",
-        )
-        return _execute_movement(tx, ty)
+    side = _idle_square_side()
+    sides = _idle_square_sides(side)
+    runtime["idle_patrol_active"] = True
+    moved_any = False
+    try:
+        if _bloom_seen_for_patrol(runtime):
+            return False
 
-    square_index = int(runtime.get("idle_square_index", 0))
-    runtime["idle_square_index"] = square_index + 1
-    square = (
-        (IDLE_SQUARE_STEP, 0.0),
-        (0.0, IDLE_SQUARE_STEP),
-        (-IDLE_SQUARE_STEP, 0.0),
-        (0.0, -IDLE_SQUARE_STEP),
-    )
-    tx, ty = square[square_index % len(square)]
-    _debug_log(
-        f"sprinkler patrol square move=({tx:.2f},{ty:.2f})",
-        min_interval=0.25,
-        key="idle_square",
-    )
-    return _execute_movement(tx, ty)
+        square_index = int(runtime.get("idle_square_index", 0)) % len(sides)
+        for _ in range(IDLE_PATROL_MAX_SIDES):
+            if _bloom_seen_for_patrol(runtime):
+                _debug_log("sprinkler patrol interrupted by bloom", min_interval=0.1, key="idle_interrupt")
+                return True
+
+            tx, ty = sides[square_index]
+            _debug_log(
+                f"sprinkler patrol square side={square_index + 1}/{len(sides)} "
+                f"move=({tx:.2f},{ty:.2f}) side={side:.2f}",
+                min_interval=0.25,
+                key="idle_square",
+            )
+            moved, interrupted = _execute_interruptible_patrol_move(runtime, tx, ty)
+            moved_any = moved_any or moved
+            if interrupted:
+                _debug_log("sprinkler patrol interrupted by bloom", min_interval=0.1, key="idle_interrupt")
+                runtime["idle_square_index"] = square_index
+                return True
+
+            square_index = (square_index + 1) % len(sides)
+            runtime["idle_square_index"] = square_index
+
+        return moved_any
+    finally:
+        runtime["idle_patrol_active"] = False
 
 
 def _active_bloom_detection(runtime):
@@ -1071,6 +1154,7 @@ def _initialise_runtime():
         "movement_revision": 0,
         "movement_requires_fresh_scan": False,
         "idle_square_index": 0,
+        "idle_patrol_active": False,
         "scan_lock": threading.Lock(),
         "sprinkler_infer_lock": threading.Lock(),
         "scanner_stop_event": None,

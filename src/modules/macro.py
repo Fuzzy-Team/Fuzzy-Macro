@@ -4180,8 +4180,10 @@ class macro:
                     pattern = "e_lol"
             firstPattern = False
 
-            #field drift compensation
-            if fieldSetting["field_drift_compensation"]:
+            #field drift compensation — AI patterns already manage sprinkler
+            # anchoring / idle patrol themselves, so skip the post-cycle nudge
+            # that would fight a continuous square walk around the sprinkler.
+            if fieldSetting["field_drift_compensation"] and pattern not in aiPatternLabels:
                 self.fieldDriftCompensation.run()
 
             #cycle ends
