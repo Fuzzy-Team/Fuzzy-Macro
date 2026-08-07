@@ -3181,6 +3181,12 @@ class macro:
                     invalidServerLinks.add(psLink)
                     self.logger.webhook("", f"Invalid {serverKey.replace('_', ' ')}; trying the next server.", "red", "screen", ping_category="ping_critical_errors")
                     continue
+            # If the client is already in Bee Swarm, the sprinkler UI can still
+            # be visible while the deeplink teleport finishes. Accepting that
+            # immediately starts the spawn→hive walk too early (inputs are
+            # ignored), so hive claiming falls through to pad alignment as if
+            # it were already on slot 1.
+            clientAlreadyOpen = appManager.isAppOpen("roblox")
             appManager.openDeeplink(deeplink)
             # The sprinkler prompt is Fuzzy's established indicator that the
             # joined Bee Swarm session is ready for macro inputs.
@@ -3204,6 +3210,10 @@ class macro:
             robloxOpenTime = 0
             gameLoaded = False
             lastJoinErrorScan = 0
+            # Cold starts have no prior sprinkler. In-game deeplink retries must
+            # see it disappear (loading) before the post-rejoin appearance counts.
+            sawSprinklerGap = not clientAlreadyOpen
+            softRejoinReadyAt = loadStartTime + (2 if clientAlreadyOpen else 0)
             while time.time() - loadStartTime < 36:
                 # Roblox can recreate its window during launch, so refresh bounds
                 # before every round of visual checks.
@@ -3254,13 +3264,21 @@ class macro:
                             time.sleep(30)
                         rejoinSuccess = False
                         break
-                if locateImageOnScreen(
+                sprinklerVisible = bool(locateImageOnScreen(
                     sprinklerImg,
                     self.robloxWindow.mx,
                     self.robloxWindow.my + (self.robloxWindow.mh * 3 / 4),
                     self.robloxWindow.mw,
                     self.robloxWindow.mh / 4,
                     0.75,
+                ))
+                if clientAlreadyOpen and not sprinklerVisible:
+                    sawSprinklerGap = True
+                if sprinklerVisible and (
+                    sawSprinklerGap
+                    # Soft rejoins sometimes keep the hotbar visible; once the
+                    # teleport has had time to finish, walk from spawn again.
+                    or time.time() >= softRejoinReadyAt
                 ):
                     gameLoaded = True
                     break
@@ -3333,8 +3351,11 @@ class macro:
                 self.canDetectNight = True
                 self.clear_task_status()
                 return True
-            #find hive
+            # Every successful join lands at spawn. Always walk the hive route
+            # from there — do not treat the player as already on a hive pad.
+            self.location = "spawn"
             mouse.click()
+            time.sleep(0.35)
             # self.keyboard.press("space")
             # time.sleep(0.5)
             # self.keyboard.walk("w",5+(i*0.5),0)
