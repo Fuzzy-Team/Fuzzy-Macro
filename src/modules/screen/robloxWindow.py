@@ -1,3 +1,4 @@
+import platform
 import pyautogui as pag
 import time
 from modules.screen import screenData
@@ -6,6 +7,16 @@ from modules.misc.appManager import getWindowSize
 from PIL import Image
 from modules.screen.screenshot import mssScreenshotPillowRGBA
 from modules import bitmap_matcher
+
+_IS_WINDOWS = platform.system() == "Windows"
+
+
+def _toggle_roblox_fullscreen():
+    if _IS_WINDOWS:
+        pag.press("f11")
+    else:
+        pag.hotkey("ctrl", "command", "f")
+
 
 class RobloxWindowBounds:
     '''
@@ -36,7 +47,7 @@ class RobloxWindowBounds:
             if res:
                 self.contentYOffset = max((res[1]//self.multi)-15-self.yOffset, 0)
                 if self.contentYOffset != 0:
-                    pag.hotkey("ctrl", "command", "f")
+                    _toggle_roblox_fullscreen()
                     time.sleep(0.5)
                     self.mx, self.my, self.mw, self.mh = getWindowSize("roblox roblox")
                     res = self._detectContentYOffset(honeyImg)

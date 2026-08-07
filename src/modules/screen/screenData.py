@@ -7,7 +7,18 @@ from ..misc import settingsManager
 
 _IS_WINDOWS = platform.system() == "Windows"
 
-if not _IS_WINDOWS:
+if _IS_WINDOWS:
+    # Ensure screenshot and input APIs agree on pixel coordinates.
+    try:
+        import ctypes
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+    except Exception:
+        try:
+            import ctypes
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
+else:
     import mss.darwin
     mss.darwin.IMAGE_OPTIONS = 0
 
@@ -94,9 +105,7 @@ def setScreenData():
     }
 
     if _IS_WINDOWS:
-        # On Windows, use the actual screen resolution reported by pyautogui.
-        # Default display_type is "built-in" (no retina/HiDPI scaling detection).
-        # Use mss to get physical resolution
+        # On Windows, prefer physical resolution from mss and detect DPI scale.
         try:
             sct = mss.mss()
             mon = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
@@ -106,7 +115,11 @@ def setScreenData():
 
         screenData["screen_width"] = physical_w
         screenData["screen_height"] = physical_h
-        screenData["display_type"] = "built-in"
+        # Treat 2x DPI scaling similarly to macOS retina for template selection.
+        if physical_w >= wwd * 1.5 or physical_h >= whd * 1.5:
+            screenData["display_type"] = "retina"
+        else:
+            screenData["display_type"] = "built-in"
     else:
         #for macs: check if its retina, set the screen width and height, set multipliers
         #get a screenshot. The size of the screenshot is the true screen size

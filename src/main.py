@@ -3,7 +3,17 @@ import os
 import platform as _platform
 import subprocess
 import sys
+import ctypes
 _IS_WINDOWS = _platform.system() == "Windows"
+if _IS_WINDOWS:
+    # Align screenshot/input coordinates under HiDPI scaling.
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)  # PROCESS_PER_MONITOR_DPI_AWARE
+    except Exception:
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
 #check if installing dependencies was ran
 try:
     import requests
@@ -23,7 +33,6 @@ except ModuleNotFoundError:
     sys.exit(0)
 from pynput import keyboard
 import multiprocessing
-import ctypes
 from threading import Thread
 import eel
 import time
@@ -2010,7 +2019,22 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                                     from PIL import ImageDraw, ImageFont
                                     draw = ImageDraw.Draw(img)
                                     try:
-                                        font = ImageFont.truetype("/Library/Fonts/Arial.ttf", 20)
+                                        font_candidates = [
+                                            "/Library/Fonts/Arial.ttf",
+                                            os.path.expandvars(r"%WINDIR%\Fonts\arial.ttf"),
+                                            os.path.expandvars(r"%WINDIR%\Fonts\Arial.ttf"),
+                                            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                                        ]
+                                        font = None
+                                        for font_path in font_candidates:
+                                            if font_path and os.path.exists(font_path):
+                                                try:
+                                                    font = ImageFont.truetype(font_path, 20)
+                                                    break
+                                                except Exception:
+                                                    continue
+                                        if font is None:
+                                            font = ImageFont.load_default()
                                     except Exception:
                                         font = ImageFont.load_default()
 

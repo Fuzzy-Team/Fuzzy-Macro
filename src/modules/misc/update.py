@@ -894,7 +894,7 @@ def check_for_updates_silent(update_channel="stable"):
     Returns None on error.
     """
     try:
-        destination = os.getcwd().replace("/src", "")
+        destination = _get_macro_root()
         
         # Read local version
         local_version = "0.0.0"
