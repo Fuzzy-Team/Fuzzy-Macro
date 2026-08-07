@@ -85,7 +85,7 @@ def load_bitmap_matcher():
             f"Python {get_python_version()} on {get_architecture()}.\n"
             f"Available files in current directory:\n" +
             "\n".join([f"  - {f.name}" for f in Path(__file__).parent.glob("*.so")]) +
-            f"\n\nTry building with: python{get_python_version()} build_universal.py"
+            "\n\nUse a supported Python version (3.7–3.12) that has a shipped matcher binary."
         )
     
     subprocess.run(["xattr", "-cr", so_path])
@@ -116,13 +116,17 @@ except ImportError as e:
     print(f"Warning: {e}")
     print("bitmap_matcher extension not available.")
     
-    # You could provide fallback implementations here if needed
-    def fallback_function():
-        raise RuntimeError("bitmap_matcher extension not loaded. Please build the extension first.")
-    
-    # Example fallback (adjust based on your actual functions)
-    __all__ = ['match_bitmap']  # Add your actual function names
+    def fallback_function(*_args, **_kwargs):
+        raise RuntimeError(
+            "bitmap_matcher extension not loaded. "
+            "Use a supported Python version (3.7–3.12) with a shipped matcher binary."
+        )
+
+    __all__ = ['match_bitmap', 'find_bitmap_cython', 'find_all_bitmap_cython', 'create_bitmap_from_base64']
     match_bitmap = fallback_function
+    find_bitmap_cython = fallback_function
+    find_all_bitmap_cython = fallback_function
+    create_bitmap_from_base64 = fallback_function
 
 # bitmap_matcher_loader.py - Alternative standalone loader
 """
@@ -217,7 +221,7 @@ class BitmapMatcherLoader:
                 f"Python {self.python_version} on {self.architecture}.\n"
                 f"Searched in: {[str(p) for p in self.search_paths]}\n"
                 f"Available extensions: {[f.name for f in available_files]}\n"
-                f"Run: python{self.python_version} build_universal.py"
+                "Use a supported Python version (3.7–3.12) that has a shipped matcher binary."
             )
         
         spec = importlib.util.spec_from_file_location("bitmap_matcher", so_path)
