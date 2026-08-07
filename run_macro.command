@@ -26,7 +26,7 @@ stop_fuzzy_macro() {
 stop_fuzzy_macro
 
 # force Python to use certifi for SSL (fixes Discord/aiohttp on macOS)
-for py_dir in python3.9 python3.8 python3.7 python3 python; do
+for py_dir in python3.12 python3.11 python3.10 python3.9 python3.8 python3.7 python3 python; do
     cert_path="$VENV_PATH/lib/$py_dir/site-packages/certifi/cacert.pem"
     if [ -f "$cert_path" ]; then
         export SSL_CERT_FILE="$cert_path"
@@ -62,12 +62,17 @@ runPython() {
 
 cd src
 if [ -d "$VENV_PATH" ]; then
-    source "$VENV_PATH/bin/activate"
+    # shellcheck disable=SC1091
+    . "$VENV_PATH/bin/activate"
     printf "activating virtual environment\n"
     "$VENV_PATH/bin/python" --version
     "$VENV_PATH/bin/python" main.py
 else
-    runPython python3.7
-    runPython python3.8
+    # Prefer newest supported interpreters when no venv exists
+    runPython python3.12
+    runPython python3.11
+    runPython python3.10
     runPython python3.9
+    runPython python3.8
+    runPython python3.7
 fi

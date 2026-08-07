@@ -5,6 +5,9 @@ macroLogs.log
 bin
 build/
 dist/
+src/modules/bitmap_matcher/build*/
+src/modules/bitmap_matcher/bitmap_matcher.c
+src/modules/bitmap_matcher/bitmap_matcher.cpython-*.so
 include
 lib
 share
