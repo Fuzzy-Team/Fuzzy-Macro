@@ -32,7 +32,7 @@ INPUT_HEIGHT = agc.INPUT_HEIGHT
 MODEL_DIR = agc.MODEL_DIR
 SPRINKLER_CONFIDENCE_THRESHOLD = 0.6
 PETAL_CONFIDENCE_THRESHOLD = 0.50
-RUNTIME_VERSION = 39
+RUNTIME_VERSION = 40
 MIN_TOKEN_DISTANCE = 0.3
 MAX_SPRINKLER_DISTANCE = 10.0
 TARGET_SPRINKLER_LABEL = None
@@ -63,8 +63,11 @@ BLOOM_CONTACT_MOVE_COOLDOWN = 0.25
 BLOOM_CONTACT_CONFIRMATIONS = 3
 BLOOM_CONTACT_MAX_TOTAL_MOVE = 1.2
 IDLE_SQUARE_SIDE = 1.2
+IDLE_SPRINKLER_NEAR = 0.85
+IDLE_RETURN_STEP = 1.35
 IDLE_WALK_CHUNK = 0.08
 IDLE_PATROL_MAX_SIDES = 4
+IDLE_SPRINKLER_MAX_AGE = 1.25
 BLOOM_MODEL_VARIANTS = {
     "standard": (
         "Standard",
@@ -620,6 +623,22 @@ def _bloom_seen_for_patrol(runtime):
     return False
 
 
+def _latest_sprinkler_offset(runtime):
+    """Return (tx, ty, distance) toward a recently seen sprinkler, or None."""
+    detection = runtime.get("last_sprinkler_detection")
+    if not isinstance(detection, dict) or not detection:
+        return None
+    age = time.time() - float(detection.get("time", 0.0))
+    if age > IDLE_SPRINKLER_MAX_AGE:
+        return None
+    tx = float(detection.get("tx", 0.0))
+    ty = float(detection.get("ty", 0.0))
+    distance = float(detection.get("distance", math.hypot(tx, ty)))
+    if distance <= 0.001:
+        return None
+    return tx, ty, distance
+
+
 def _execute_interruptible_patrol_move(runtime, tx, ty):
     magnitude = math.hypot(tx, ty)
     if magnitude <= 0.001:
@@ -668,12 +687,43 @@ def _execute_interruptible_patrol_move(runtime, tx, ty):
     return (abs(moved_x) > 1e-9 or abs(moved_y) > 1e-9), interrupted
 
 
-def _execute_sprinkler_patrol(runtime):
-    """Continuously walk a relative square around the sprinkler until a bloom appears.
+def _walk_toward_sprinkler_if_far(runtime, side):
+    """If the sprinkler is visible/known and far away, walk toward it. Returns (handled, interrupted)."""
+    sprinkler = _latest_sprinkler_offset(runtime)
+    if sprinkler is not None:
+        sx, sy, sdist = sprinkler
+        if sdist > IDLE_SPRINKLER_NEAR:
+            step = min(IDLE_RETURN_STEP, sdist)
+            scale = step / sdist
+            tx, ty = sx * scale, sy * scale
+            _debug_log(
+                f"patrol walking to sprinkler move=({tx:.2f},{ty:.2f}) distance={sdist:.2f}",
+                min_interval=0.25,
+                key="idle_return",
+            )
+            moved, interrupted = _execute_interruptible_patrol_move(runtime, tx, ty)
+            return True, interrupted or moved
 
-    Uses fixed axis-aligned sides (no snap-back toward the sprinkler). Repeating the
-    square is what keeps the player aligned near the sprinkler.
-    """
+    current_x = float(runtime.get("current_x", 0.0))
+    current_y = float(runtime.get("current_y", 0.0))
+    home_dist = math.hypot(current_x, current_y)
+    if home_dist > max(IDLE_SPRINKLER_NEAR, side * 0.75):
+        step = min(IDLE_RETURN_STEP, home_dist)
+        scale = step / home_dist
+        tx, ty = -current_x * scale, -current_y * scale
+        _debug_log(
+            f"patrol returning toward sprinkler origin move=({tx:.2f},{ty:.2f}) distance={home_dist:.2f}",
+            min_interval=0.25,
+            key="idle_return",
+        )
+        moved, interrupted = _execute_interruptible_patrol_move(runtime, tx, ty)
+        return True, interrupted or moved
+
+    return False, False
+
+
+def _execute_sprinkler_patrol(runtime):
+    """Walk to the sprinkler when far, then box-walk around it until a bloom appears."""
     if runtime.get("movement_requires_fresh_scan") and not runtime.get("idle_patrol_active"):
         return False
 
@@ -685,11 +735,23 @@ def _execute_sprinkler_patrol(runtime):
         if _bloom_seen_for_patrol(runtime):
             return False
 
+        handled, result = _walk_toward_sprinkler_if_far(runtime, side)
+        if handled:
+            return result
+
         square_index = int(runtime.get("idle_square_index", 0)) % len(sides)
         for _ in range(IDLE_PATROL_MAX_SIDES):
             if _bloom_seen_for_patrol(runtime):
                 _debug_log("sprinkler patrol interrupted by bloom", min_interval=0.1, key="idle_interrupt")
                 return True
+
+            # If we drift away mid-lap, walk back toward the sprinkler before continuing.
+            handled, result = _walk_toward_sprinkler_if_far(runtime, side)
+            if handled:
+                moved_any = moved_any or result
+                if _bloom_seen_for_patrol(runtime):
+                    return True
+                continue
 
             tx, ty = sides[square_index]
             _debug_log(
