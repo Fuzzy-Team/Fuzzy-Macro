@@ -668,6 +668,7 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
 DEFAULT_GENERAL_SETTINGS = {'hive_number': 1,
  'hive_exclude_slot': [],
  'preferred_hive_slot': 1,
+ 'hive_claim_method': 'detect',
  'disable_tool_at_hive': False,
  'sprinkler_slot': 1,
  'movespeed': 29,

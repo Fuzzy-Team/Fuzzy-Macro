@@ -26,10 +26,23 @@
         {
           id: "preferred_hive_slot",
           title: "Preferred Hive Slot",
-          desc: "The macro checks this hive first, then searches the remaining slots automatically. 1 is closest to cannon and 6 is furthest.",
+          desc: "The preferred hive to claim first. If taken, the macro takes the open slot closest to the red cannon (hive 1). 1 is closest to cannon and 6 is furthest.",
           type: {
             name: "dropdown",
             data: [1, 2, 3, 4, 5, 6],
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "hive_claim_method",
+          title: "Hive Claim Method",
+          desc: "Check walks from spawn to your preferred hive slot, then scans neighboring pads if it's taken. Detect zooms out, finds open hives from spawn, then walks to the chosen slot.",
+          type: {
+            name: "dropdown",
+            data: [
+              { label: "Detect", value: "detect" },
+              { label: "Check", value: "check" },
+            ],
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
