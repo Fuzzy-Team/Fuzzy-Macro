@@ -2078,6 +2078,56 @@ class macro:
     #click the yes popup
     #if detect is set to true, the macro will check if the yes button is there
     #if detectOnly is set to true, the macro will not click 
+    def _clickYesByColor(self, detectOnly=False, clickOnce=False):
+        """
+        Fallback for Yes/No dialogs: click the green Yes button by color.
+        Yes is always the left green button; No is red on the right.
+        """
+        x = self.robloxWindow.mx + self.robloxWindow.mw // 2 - 270
+        y = self.robloxWindow.my + self.robloxWindow.mh // 2 - 60
+        w, h = 580, 265
+        screen = mssScreenshotNP(x, y, w, h)
+        if screen is None:
+            return False
+        if screen.ndim == 3 and screen.shape[2] == 4:
+            screen = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
+        hsv = cv2.cvtColor(screen, cv2.COLOR_BGR2HSV)
+        # BSS Yes button greens (covers both bright and darker confirmation shades)
+        mask = cv2.inRange(hsv, (35, 60, 35), (95, 255, 255))
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        minArea = 800 * (self.robloxWindow.multi ** 2)
+        candidates = []
+        for contour in contours:
+            area = cv2.contourArea(contour)
+            if area < minArea:
+                continue
+            bx, by, bw, bh = cv2.boundingRect(contour)
+            # Button-like aspect: wider than tall
+            if bw < bh:
+                continue
+            candidates.append((bx, by, bw, bh, area))
+        if not candidates:
+            return False
+        # Prefer the leftmost green button (Yes), ignoring any larger background greens
+        candidates.sort(key=lambda c: (c[0], -c[4]))
+        bx, by, bw, bh, _ = candidates[0]
+        # Must sit on the left half of the captured dialog region (Yes is always left of No)
+        if (bx + bw // 2) > screen.shape[1] // 2:
+            return False
+        if detectOnly:
+            return True
+        clickX = x + (bx + bw // 2) // self.robloxWindow.multi
+        clickY = y + (by + bh // 2) // self.robloxWindow.multi
+        mouse.moveTo(clickX, clickY)
+        time.sleep(0.2)
+        mouse.moveBy(2, 2)
+        time.sleep(0.1)
+        for _ in range(1 if clickOnce else 2):
+            mouse.click()
+        return True
+
     def clickYes(self, detect = False, detectOnly = False, clickOnce=False):
         yesImg = self.adjustImage("./images/menu", "yes")
         x = self.robloxWindow.mx+self.robloxWindow.mw//2-270
@@ -2086,12 +2136,21 @@ class macro:
         threshold = 0
         if detect or detectOnly: threshold = 0.75
         res = locateImageOnScreen(yesImg, x, y, 580, 265, threshold)
-        if res is None: return False
+        # Template match can land on the No button under some Retina/scale mismatches.
+        # Yes is always left of center in this search region — reject right-side hits.
+        matchOk = False
+        bestX = bestY = None
+        if res is not None:
+            bestX, bestY = [v // self.robloxWindow.multi for v in res[1]]
+            if bestX <= 580 // 2:
+                matchOk = True
+        if not matchOk:
+            return self._clickYesByColor(detectOnly=detectOnly, clickOnce=clickOnce)
         if detectOnly: return True
-        bestX, bestY = [x//self.robloxWindow.multi for x in res[1]]
         mouse.moveTo(bestX+x, bestY+y)
         time.sleep(0.2)
-        mouse.moveBy(5, 5)
+        # Nudge into the Yes button body (template is only the "Y") without reaching No
+        mouse.moveBy(15, 5)
         time.sleep(0.1)
         for _ in range(1 if clickOnce else 2):
             mouse.click()
@@ -6628,15 +6687,14 @@ class macro:
                 mouse.moveBy(2,2)
                 mouse.click()
 
-        #click yes
+        #click yes (regular stickers have 2 confirms; cub/hive skins can have 4)
         yesPopup = False
-        #check if there are 4 yes/no popups
-        for _ in range(4): 
-            if not self.clickYes(detect=True, clickOnce=True): 
+        for _ in range(4):
+            if not self.clickYes(detect=True, clickOnce=True):
                 break
-            else:
-                yesPopup = True
-                time.sleep(0.4)
+            yesPopup = True
+            # Second confirm can take a beat to replace the first; wait before re-scanning
+            time.sleep(0.7)
         else: #4 yes/no popups, either cub/hive skin
             if not self.setdat["hive_skin"] and not self.setdat["cub_skin"]: #do not use cub and hive stickers
                 self.logger.webhook("", "A hive/cub sticker has been wrongly selected, aborting", "red", "screen", ping_category="ping_critical_errors")
