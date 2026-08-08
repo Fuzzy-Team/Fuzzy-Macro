@@ -6050,7 +6050,7 @@ class macro:
             slot = int(self.setdat.get(f"planter_hotbar_{settingName}_slot", 0) or 0)
         except Exception:
             return 0
-        if slot < 1 or slot > 5:
+        if slot < 1 or slot > 7:
             return 0
         return slot
             
