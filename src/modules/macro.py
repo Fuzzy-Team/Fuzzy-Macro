@@ -1941,13 +1941,13 @@ class macro:
         promptText = self.getTextBesideE() if promptText is None else promptText
         compactPrompt = self._compactPromptText(promptText)
         compactPlanter = self._compactPromptText(planter)
-        if not compactPrompt or not compactPlanter:
+        if not compactPrompt:
             return False
-        return (
-            "harvest" in compactPrompt
-            and "planter" in compactPrompt
-            and compactPlanter in compactPrompt
-        )
+        if "harvest" not in compactPrompt or "planter" not in compactPrompt:
+            return False
+        if not compactPlanter:
+            return True
+        return compactPlanter in compactPrompt
 
     def isBesideEImage(self, name):
         template = self.adjustImage("./images/menu",name)
@@ -6092,7 +6092,7 @@ class macro:
                 updateHourlyTime()
                 return False
             if hotbarSlot:
-                self.logger.webhook("", f"Using hotbar slot {hotbarSlot} for {planter.title()} planter", "dark brown")
+                self.logger.webhook("", f"Placing {planter.title()} (slot {hotbarSlot})", "dark brown")
                 self.keyboard.press(str(hotbarSlot))
             else:
                 #wait for thread to finish
@@ -6102,17 +6102,17 @@ class macro:
             if not hotbarSlot and self.planterCoords is None:
                 # If not found: retry only if we haven't exhausted attempts.
                 if attempt < max_attempts - 1:
-                    self.logger.webhook("", f"[Planter Placement] Could not find {planter.title()} in inventory (attempt {attempt+1}/{max_attempts}). Waiting {cooldown_seconds}s before retry.", "red", "screen", ping_category="ping_critical_errors")
+                    self.logger.webhook("", f"Couldn't find {planter.title()} in inventory, retrying", "red", "screen", ping_category="ping_critical_errors")
                     updateHourlyTime()
                     time.sleep(cooldown_seconds)
                     continue
                 else:
                     # Final attempt failed — give up immediately.
                     if recoverAlreadyPlacedPlanterState():
-                        self.logger.webhook("", f"[Planter Placement] Recovered planter state for {planter.title()} in {field.title()} after inventory desync.", "orange", "screen")
+                        self.logger.webhook("", f"{planter.title()} is already in {field.title()}", "orange", "screen")
                         updateHourlyTime()
                         return True
-                    self.logger.webhook("", f"[Planter Placement] Could not find {planter.title()} in inventory after {max_attempts} attempts. Giving up.", "red", "screen", ping_category="ping_critical_errors")
+                    self.logger.webhook("", f"Couldn't find {planter.title()} in inventory", "red", "screen", ping_category="ping_critical_errors")
                     # Do not auto-disable planter settings here.
                     # A temporary state desync (already placed / stale planter data)
                     # can also make the planter unavailable in inventory.
@@ -6120,60 +6120,56 @@ class macro:
                     updateHourlyTime()
                     return False
             #place planter
-            if not hotbarSlot:
+            if hotbarSlot:
+                # Same approach as sprinklers: press hotbar, then poll for up to 1s
+                # for the "You must be standing in a field..." blue text.
+                # No message within that window = success.
+                placedPlanter = True
+                placementError = None
+                deadline = time.time() + 2.5
+                while time.time() < deadline:
+                    if self.blueTextImageSearch("notinfield"):
+                        placedPlanter = False
+                        placementError = "notinfield"
+                        break
+                    if self.blueTextImageSearch("maxplanters"):
+                        placedPlanter = False
+                        placementError = "maxplanters"
+                        break
+                    time.sleep(0.05)
+            else:
                 self.useItemInInventory(x=self.planterCoords[0], y=self.planterCoords[1])
-            
-            #check if planter is placed
-            time.sleep(0.5)
-            placedPlanter = True
-            placementError = None
-            for _ in range(7):
-                if self.blueTextImageSearch("notinfield"):
-                    placementError = "notinfield"
-                    placedPlanter = False
-                    break
-                if self.blueTextImageSearch("maxplanters"):
-                    placementError = "maxplanters"
-                    placedPlanter = False
-                    break
-                time.sleep(0.3)
-            if hotbarSlot and placedPlanter and not recoverAlreadyPlacedPlanterState():
-                self.logger.webhook("", f"[Planter Placement] Hotbar slot {hotbarSlot} did not confirm {planter.title()} placement. Trying inventory fallback.", "orange", "screen")
-                self.planterCoords = None
-                self.findPlanterInInventory(name)
-                if self.planterCoords is None:
-                    placedPlanter = False
-                else:
-                    if not self.goToPlanter(planter, field, "place"):
-                        updateHourlyTime()
-                        return False
-                    self.useItemInInventory(x=self.planterCoords[0], y=self.planterCoords[1])
-                    time.sleep(0.5)
-                    placementError = None
-                    for _ in range(7):
-                        if self.blueTextImageSearch("notinfield"):
-                            placementError = "notinfield"
-                            placedPlanter = False
-                            break
-                        if self.blueTextImageSearch("maxplanters"):
-                            placementError = "maxplanters"
-                            placedPlanter = False
-                            break
-                        time.sleep(0.3)
-                    if placedPlanter:
-                        placedPlanter = recoverAlreadyPlacedPlanterState()
+                time.sleep(0.5)
+                placedPlanter = True
+                placementError = None
+                for _ in range(7):
+                    if self.blueTextImageSearch("notinfield"):
+                        placementError = "notinfield"
+                        placedPlanter = False
+                        break
+                    if self.blueTextImageSearch("maxplanters"):
+                        placementError = "maxplanters"
+                        placedPlanter = False
+                        break
+                    time.sleep(0.3)
             if placedPlanter: 
-                self.logger.webhook("",f"Placed Planter: {planter.title()}", "dark brown", "screen")          
+                self.logger.webhook("",f"Placed {planter.title()} Planter", "dark brown", "screen")          
                 #use glitter
                 if glitter: 
                     self.useItemInInventory("glitter")
                 updateHourlyTime()
                 return True
-            if placementError == "maxplanters" and recoverAlreadyPlacedPlanterState():
-                self.logger.webhook("", f"[Planter Placement] Recovered planter state for {planter.title()} in {field.title()} after max-planters desync.", "orange", "screen")
+            if recoverAlreadyPlacedPlanterState():
+                self.logger.webhook("", f"{planter.title()} is already in {field.title()}", "orange", "screen")
                 updateHourlyTime()
                 return True
-            self.logger.webhook("",f"Failed to Place Planter: {planter.title()}", "red", "screen", ping_category="ping_critical_errors")
+            if placementError == "notinfield":
+                failMsg = f"Not in a field, couldn't place {planter.title()}"
+            elif placementError == "maxplanters":
+                failMsg = f"Already at max planters, couldn't place {planter.title()}"
+            else:
+                failMsg = f"Failed to place {planter.title()}"
+            self.logger.webhook("", failMsg, "red", "screen", ping_category="ping_critical_errors")
             self.lastPlanterPlacementFailure = placementError or "placement_failed"
             self.reset()
             # If failed to place, wait before next attempt
