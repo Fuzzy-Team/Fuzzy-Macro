@@ -2886,6 +2886,611 @@ class macro:
         self.keyboard.tileWalk("s", 1.7)
         time.sleep(0.1)
 
+    # Hive path distances are in studs; 1 tile == 4 studs.
+    _STUDS_PER_TILE = 4.0
+    # Spawn → hive pad walks (overlap async+sync legs, then a short nudge).
+    # Values: (async_key, async_studs, sync_key, sync_studs, nudge_key, nudge_studs)
+    # hive_3 is a single Forward walk (async_key is None).
+    _HIVE_SPAWN_PATHS = {
+        1: ("w", 82, "d", 96, "d", 4),
+        2: ("d", 50, "w", 75, "w", 4),
+        3: (None, 0, "w", 58, "w", 4),
+        4: ("a", 50, "w", 75, "w", 4),
+        5: ("w", 82, "a", 100, "a", 4),
+        6: ("w", 82, "a", 132, "a", 4),
+    }
+
+    def walkStuds(self, key, studs):
+        studs = float(studs or 0)
+        if studs <= 0 or not key:
+            return
+        self.keyboard.tileWalk(key, studs / self._STUDS_PER_TILE)
+
+    def walkStudsAsyncThen(self, async_key, async_studs, sync_key, sync_studs):
+        """Walk two keys at once for the shorter leg, then finish the longer leg alone."""
+        async_studs = max(0.0, float(async_studs or 0))
+        sync_studs = max(0.0, float(sync_studs or 0))
+        if not async_key or async_studs <= 0:
+            self.walkStuds(sync_key, sync_studs)
+            return
+        if not sync_key or sync_studs <= 0:
+            self.walkStuds(async_key, async_studs)
+            return
+
+        overlap = min(async_studs, sync_studs)
+        self.keyboard.keyDown(async_key, False)
+        self.keyboard.keyDown(sync_key, False)
+        self.keyboard.tileWait(overlap / self._STUDS_PER_TILE)
+        if async_studs <= sync_studs:
+            self.keyboard.keyUp(async_key, False)
+            remaining = sync_studs - overlap
+            if remaining > 0:
+                self.keyboard.tileWait(remaining / self._STUDS_PER_TILE)
+            self.keyboard.keyUp(sync_key, False)
+        else:
+            self.keyboard.keyUp(sync_key, False)
+            remaining = async_studs - overlap
+            if remaining > 0:
+                self.keyboard.tileWait(remaining / self._STUDS_PER_TILE)
+            self.keyboard.keyUp(async_key, False)
+
+    def walkSpawnToHiveSlot(self, slot):
+        """Walk from spawn to the given hive pad using _HIVE_SPAWN_PATHS."""
+        path = self._HIVE_SPAWN_PATHS.get(int(slot))
+        if not path:
+            return False
+        async_key, async_studs, sync_key, sync_studs, _, _ = path
+        if async_key:
+            self.walkStudsAsyncThen(async_key, async_studs, sync_key, sync_studs)
+        else:
+            self.walkStuds(sync_key, sync_studs)
+        time.sleep(0.3)
+        return True
+
+    def nudgeHiveCheckpoint(self, slot):
+        path = self._HIVE_SPAWN_PATHS.get(int(slot))
+        if not path:
+            return
+        _, _, _, _, nudge_key, nudge_studs = path
+        self.walkStuds(nudge_key, nudge_studs)
+        time.sleep(0.25)
+
+    def claimHivePromptVisible(self):
+        try:
+            if self.isBesideEImage("claimhive"):
+                return True
+        except Exception:
+            pass
+        return bool(self.isBesideE(["claim"], ["send", "trad", "trade"], log=True))
+
+    def occupiedHivePromptVisible(self):
+        for name in ("sendtrade", "tradedisabled", "tradelocked"):
+            try:
+                if self.isBesideEImage(name):
+                    return True
+            except Exception:
+                pass
+        return bool(self.isBesideE(["send", "trad", "trade"], ["claim"], log=True))
+
+    def anyHivePromptVisible(self):
+        return self.claimHivePromptVisible() or self.occupiedHivePromptVisible()
+
+    def waitForHivePrompt(self, slot, max_attempts=3):
+        """Wait for a hive prompt; nudge toward the pad up to max_attempts times."""
+        time.sleep(0.2)
+        for attempt in range(max(1, int(max_attempts))):
+            if self.anyHivePromptVisible():
+                return True
+            if attempt + 1 >= max_attempts:
+                break
+            self.nudgeHiveCheckpoint(slot)
+        return self.anyHivePromptVisible()
+
+    def tryClaimHiveSlot(self, slot, excluded_slots=None):
+        excluded_slots = excluded_slots or set()
+        if not self.claimHivePromptVisible():
+            return 0
+        self.keyboard.keyUp("a", False)
+        self.keyboard.keyUp("d", False)
+        if slot in excluded_slots:
+            return 0
+        self.keyboard.press("e")
+        return slot
+
+    def moveToNextHiveSlot(self, slot, direction, excluded_slots=None):
+        """Leave the current pad and stop when the next hive prompt appears."""
+        excluded_slots = excluded_slots or set()
+        self.keyboard.keyDown(direction, False)
+        # Wait until the current pad's prompt disappears.
+        for _ in range(40):
+            if not self.anyHivePromptVisible():
+                break
+            time.sleep(0.01)
+        # Walk until the next pad's claim/occupied prompt appears.
+        claimed = 0
+        for _ in range(200):
+            if self.claimHivePromptVisible():
+                self.keyboard.keyUp("a", False)
+                self.keyboard.keyUp("d", False)
+                self.logger.webhook("", f"Hive {slot} detected as available", "dark brown")
+                claimed = self.tryClaimHiveSlot(slot, excluded_slots)
+                break
+            if self.occupiedHivePromptVisible():
+                self.logger.webhook("", f"Hive {slot} occupied", "dark brown")
+                break
+            time.sleep(0.01)
+        self.keyboard.keyUp("a", False)
+        self.keyboard.keyUp("d", False)
+        time.sleep(0.1)
+        return claimed
+
+    def scanHivesForClaim(self, start_slot, excluded_slots=None):
+        """
+        From start_slot, search toward hive 1 (red cannon), then reverse toward hive 6.
+        Prefers the open slot closest to the red cannon when the preferred pad is taken.
+        """
+        excluded_slots = excluded_slots or set()
+        start_slot = max(1, min(6, int(start_slot)))
+        # Direction -1 walks Right (d) and decrements slot; +1 walks Left (a) and increments.
+        check_direction = -1
+        checking_hive = start_slot
+        checked_hives = 1
+        check_skip = 0
+
+        while checked_hives < 6:
+            if checking_hive == 1 and check_direction == -1:
+                check_direction = 1
+                check_skip = checked_hives
+
+            if check_direction == 1:
+                direction = "a"
+                checking_hive += 1
+            else:
+                direction = "d"
+                checking_hive -= 1
+
+            if checking_hive < 1 or checking_hive > 6:
+                break
+
+            claimed = self.moveToNextHiveSlot(checking_hive, direction, excluded_slots)
+            if claimed:
+                return claimed
+
+            if check_skip == 0:
+                checked_hives += 1
+            else:
+                check_skip -= 1
+
+        return 0
+
+    def claimHiveByCheckMethod(self, preferred_slot, excluded_slots=None):
+        """Walk spawn → preferred hive, claim it, or scan neighboring pads if taken."""
+        excluded_slots = set(excluded_slots or set())
+        preferred_slot = max(1, min(6, int(preferred_slot)))
+        self.logger.webhook("", f"Walking spawn → hive {preferred_slot} (check)", "dark brown")
+        self.walkSpawnToHiveSlot(preferred_slot)
+        if not self.waitForHivePrompt(preferred_slot, max_attempts=3):
+            for _ in range(3):
+                self.stepBackOntoHivePad()
+                time.sleep(0.35)
+                if self.anyHivePromptVisible():
+                    break
+            else:
+                return 0
+
+        claimed = self.tryClaimHiveSlot(preferred_slot, excluded_slots)
+        if claimed:
+            self.logger.webhook("", f"Hive {claimed} detected as available", "dark brown")
+            self.walkStuds("s", 4)
+            return claimed
+
+        if self.occupiedHivePromptVisible():
+            self.logger.webhook("", f"Hive {preferred_slot} occupied", "dark brown")
+        # Preferred taken/excluded, or prompt was ambiguous — scan toward cannon first.
+        return self.scanHivesForClaim(preferred_slot, excluded_slots)
+
+    def setCameraPitch(self, target_pitch, current_pitch=0):
+        """
+        Adjust camera pitch with PageUp/PageDown.
+        Higher pitch = look up. Practical range: about -6..3.
+        """
+        try:
+            target_pitch = int(target_pitch)
+        except (TypeError, ValueError):
+            target_pitch = 0
+        target_pitch = max(-6, min(3, target_pitch))
+        try:
+            current_pitch = int(current_pitch)
+        except (TypeError, ValueError):
+            current_pitch = 0
+
+        delta = target_pitch - current_pitch
+        if delta == 0:
+            return target_pitch
+        key = "pageup" if delta > 0 else "pagedown"
+        for _ in range(abs(delta)):
+            self.keyboard.keyDown(key, False)
+            time.sleep(0.01)
+            self.keyboard.keyUp(key, False)
+            time.sleep(0.01)
+        return target_pitch
+
+    def setCameraZoom(self, target_zoom, current_zoom=0):
+        """
+        Adjust camera zoom with I/O. Higher zoom = more zoomed out (O).
+        Range 0..5.
+        """
+        try:
+            target_zoom = int(target_zoom)
+        except (TypeError, ValueError):
+            target_zoom = 0
+        target_zoom = max(0, min(5, target_zoom))
+        try:
+            current_zoom = int(current_zoom)
+        except (TypeError, ValueError):
+            current_zoom = 0
+
+        delta = target_zoom - current_zoom
+        if delta == 0:
+            return target_zoom
+        key = "o" if delta > 0 else "i"
+        for _ in range(abs(delta)):
+            self.keyboard.keyDown(key, False)
+            time.sleep(0.01)
+            self.keyboard.keyUp(key, False)
+            time.sleep(0.01)
+        return target_zoom
+
+    def detectOpenHiveSlotsFromSpawn(self):
+        """
+        From spawn (zoomed out + pitched up), find unclaimed hive slots.
+
+        Screen left→right is slots 6..1.
+
+        Signals (in priority order):
+        1) Red claim arrows floating above pads — used when ≥2 tips map cleanly.
+        2) White claim disks on the pad row, plus nearby empty faces (covers
+           disks hidden under annotation/occlusion).
+        3) Low bee-cell density on the hive face (ignores balloon/glare columns).
+
+        Pad columns come from the bright pad/nametag row when spacing is even;
+        otherwise an equal 6-way split of the yellow/white platform span.
+        """
+        x = int(self.robloxWindow.mx + self.robloxWindow.mw * 0.01)
+        y = int(self.robloxWindow.my + self.robloxWindow.mh * 0.12)
+        w = int(self.robloxWindow.mw * 0.98)
+        h = int(self.robloxWindow.mh * 0.32)
+        if w < 60 or h < 40:
+            return []
+
+        try:
+            screen = mssScreenshotNP(x, y, w, h)
+            bgr = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
+            hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+        except Exception:
+            return []
+
+        red_mask = cv2.bitwise_or(
+            cv2.inRange(hsv, np.array([0, 130, 130]), np.array([8, 255, 255])),
+            cv2.inRange(hsv, np.array([172, 130, 130]), np.array([179, 255, 255])),
+        )
+        # Strip ultra-wide red strokes (hand-drawn arrows / UI, not claim chevrons).
+        num_red, red_labels, red_stats, _ = cv2.connectedComponentsWithStats(red_mask, 8)
+        for i in range(1, num_red):
+            bw = int(red_stats[i, cv2.CC_STAT_WIDTH])
+            bh = int(red_stats[i, cv2.CC_STAT_HEIGHT])
+            area = int(red_stats[i, cv2.CC_STAT_AREA])
+            if area > 400 and (bw > w * 0.12 or bh > h * 0.35):
+                red_mask[red_labels == i] = 0
+
+        kernel = np.ones((3, 3), np.uint8)
+        red_mask = cv2.morphologyEx(red_mask, cv2.MORPH_OPEN, kernel, iterations=1)
+        red_mask = cv2.morphologyEx(red_mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+
+        band_h, band_w = red_mask.shape[:2]
+        min_area = max(140, int(200 * (band_w / 1024.0) ** 2))
+
+        # --- 6 pad column centers ---
+        pad_row = hsv[: max(1, int(band_h * 0.35))]
+        bright = (
+            (pad_row[:, :, 2] > 175) & (pad_row[:, :, 1] < 100)
+        ).astype(np.uint8) * 255
+        proj = bright.sum(axis=0).astype(np.float32)
+        if float(proj.max()) <= 0:
+            proj = np.ones(band_w, dtype=np.float32)
+        k = max(9, (band_w // 90) | 1)
+        proj_s = np.convolve(proj, np.ones(k, dtype=np.float32) / k, mode="same")
+        min_dist = max(40, band_w // 14)
+        height_thr = max(10.0, float(proj_s.max()) * 0.10)
+        peaks = []
+        for i in range(1, band_w - 1):
+            if proj_s[i] < height_thr:
+                continue
+            if proj_s[i] >= proj_s[i - 1] and proj_s[i] >= proj_s[i + 1]:
+                if band_w * 0.02 < i < band_w * 0.98:
+                    peaks.append((float(proj_s[i]), i))
+        peaks.sort(reverse=True)
+        kept_peaks = []
+        for _hgt, px in peaks:
+            if any(abs(px - kx) < min_dist for kx in kept_peaks):
+                continue
+            kept_peaks.append(px)
+            if len(kept_peaks) >= 6:
+                break
+        kept_peaks = sorted(kept_peaks)
+
+        use_peaks = False
+        if len(kept_peaks) == 6:
+            diffs = np.diff(kept_peaks)
+            spacing_ratio = float(np.max(diffs)) / max(float(np.min(diffs)), 1.0)
+            # Uneven peaks remap slots (e.g. 5,6 → wrong columns); fall back.
+            use_peaks = spacing_ratio < 2.2
+
+        if use_peaks:
+            centers = [float(p) for p in kept_peaks]
+        else:
+            white_mask = cv2.inRange(hsv, np.array([0, 0, 200]), np.array([179, 55, 255]))
+            yellow_mask = cv2.inRange(hsv, np.array([16, 100, 140]), np.array([40, 255, 255]))
+            plat = cv2.bitwise_or(white_mask, yellow_mask)
+            pproj = plat.sum(axis=0).astype(np.float32)
+            if float(pproj.max()) > 0:
+                thr = max(float(pproj.max()) * 0.18, 1.0)
+                xs = np.where(pproj >= thr)[0]
+                if xs.size >= 2:
+                    row_left, row_right = int(xs[0]), int(xs[-1])
+                else:
+                    row_left, row_right = int(band_w * 0.06), int(band_w * 0.94)
+            else:
+                row_left, row_right = int(band_w * 0.06), int(band_w * 0.94)
+            if (row_right - row_left) > band_w * 0.92 or (row_right - row_left) < band_w * 0.30:
+                row_left, row_right = int(band_w * 0.06), int(band_w * 0.94)
+            span = max(1, row_right - row_left)
+            centers = [row_left + (i + 0.5) * span / 6.0 for i in range(6)]
+
+        slot_w = float(np.median(np.diff(centers))) if len(centers) > 1 else band_w / 6.0
+
+        # --- Per-slot face / pad metrics ---
+        bees_map = {}
+        white_map = {}
+        bright_mid_map = {}
+        for i, slot in enumerate((6, 5, 4, 3, 2, 1)):
+            cx = centers[i]
+            half = max(18.0, slot_w * 0.36)
+            x0 = max(0, int(cx - half))
+            x1 = min(band_w, int(cx + half))
+            face = hsv[: max(1, int(band_h * 0.50)), x0:x1]
+            face_red = red_mask[: max(1, int(band_h * 0.50)), x0:x1]
+            if face.size == 0:
+                bees_map[slot] = 1.0
+                white_map[slot] = 0.0
+                bright_mid_map[slot] = 0.0
+                continue
+            fh, fs, fv = face[:, :, 0], face[:, :, 1], face[:, :, 2]
+            bee_px = (fs > 110) & (fv > 100) & ~((fh >= 35) & (fh <= 85)) & (face_red == 0)
+            bees_map[slot] = float(bee_px.mean())
+            pad = hsv[int(band_h * 0.40) :, x0:x1]
+            if pad.size:
+                white_map[slot] = float(
+                    ((pad[:, :, 2] > 200) & (pad[:, :, 1] < 70)).mean()
+                )
+            else:
+                white_map[slot] = 0.0
+            mid = hsv[int(band_h * 0.25) : int(band_h * 0.55), x0:x1]
+            if mid.size:
+                # Balloons / bright glare falsely look "empty" on bee density alone.
+                bright_mid_map[slot] = float(
+                    ((mid[:, :, 2] > 210) & (mid[:, :, 1] < 80)).mean()
+                )
+            else:
+                bright_mid_map[slot] = 0.0
+
+        pad_slots = {
+            slot
+            for slot, bees in bees_map.items()
+            if bees < 0.40 and bright_mid_map[slot] < 0.15
+        }
+        white_slots = {slot for slot, white in white_map.items() if white >= 0.08}
+
+        # --- Floating red claim arrows ---
+        num_labels, labels, stats, _centroids = cv2.connectedComponentsWithStats(
+            red_mask, connectivity=8
+        )
+        # Tips in the top of the band are usually drawings/UI on the pad row,
+        # not floating claim arrows.
+        pad_row_y = int(band_h * 0.28)
+        tips = []
+        for i in range(1, num_labels):
+            area = int(stats[i, cv2.CC_STAT_AREA])
+            if area < 80:
+                continue
+            bw = int(stats[i, cv2.CC_STAT_WIDTH])
+            bh = int(stats[i, cv2.CC_STAT_HEIGHT])
+            if bw > slot_w * 0.95 and bh < bw * 0.35:
+                continue
+            if bw > slot_w * 1.55:
+                continue
+            ys, xs = np.where(labels == i)
+            if ys.size == 0:
+                continue
+            ycut = float(np.quantile(ys, 0.80))
+            tip_xs = xs[ys >= ycut]
+            tip_ys = ys[ys >= ycut]
+            if tip_xs.size == 0:
+                continue
+            tip_x = float(tip_xs.mean())
+            tip_y = float(tip_ys.mean())
+            if tip_y < pad_row_y:
+                continue
+            tips.append((area, tip_x, tip_y))
+
+        tips.sort(key=lambda t: t[0], reverse=True)
+        kept = []
+        for area, tip_x, tip_y in tips:
+            if area < min_area:
+                continue
+            if any(abs(tip_x - kx) < slot_w * 0.85 for _, kx, _ in kept):
+                continue
+            kept.append((area, tip_x, tip_y))
+
+        tip_bias = 0.18 * slot_w
+        arrow_slots = set()
+        for area, tip_x, tip_y in kept:
+            eff_x = tip_x - tip_bias
+            dists = [abs(eff_x - c) for c in centers]
+            idx = int(np.argmin(dists))
+            if dists[idx] > slot_w * 0.55:
+                continue
+            arrow_slots.add(6 - idx)
+
+        # Prefer multiple floating arrows; else white disks (+ empty companions);
+        # else empty faces alone.
+        if len(arrow_slots) >= 2:
+            available = sorted(arrow_slots)
+        elif len(white_slots) >= 2:
+            companions = {slot for slot in pad_slots if bees_map[slot] < 0.32}
+            available = sorted(white_slots | companions)
+        elif pad_slots:
+            available = sorted(pad_slots)
+        else:
+            available = sorted(arrow_slots | white_slots)
+
+        return available
+
+    def chooseDetectedHiveSlot(self, available_slots, preferred_slot, excluded_slots=None):
+        excluded_slots = set(excluded_slots or set())
+        open_slots = sorted(
+            slot for slot in available_slots
+            if 1 <= int(slot) <= 6 and int(slot) not in excluded_slots
+        )
+        if not open_slots:
+            return 0
+        preferred_slot = max(1, min(6, int(preferred_slot)))
+        if preferred_slot in open_slots:
+            return preferred_slot
+        # Closest to red cannon = lowest hive number.
+        return min(open_slots)
+
+    def walkBetweenHiveSlotsForClaim(self, from_slot, to_slot, excluded_slots=None):
+        """Walk pad-to-pad from from_slot toward to_slot; claim if an open prompt appears."""
+        excluded_slots = set(excluded_slots or set())
+        from_slot = max(1, min(6, int(from_slot)))
+        to_slot = max(1, min(6, int(to_slot)))
+        if from_slot == to_slot:
+            return 0
+        step = 1 if to_slot > from_slot else -1
+        direction = "a" if step > 0 else "d"
+        slot = from_slot
+        while slot != to_slot:
+            slot += step
+            claimed = self.moveToNextHiveSlot(slot, direction, excluded_slots)
+            if claimed:
+                return claimed
+        return 0
+
+    def claimHiveByDetectMethod(self, preferred_slot=1, excluded_slots=None):
+        """
+        Detect claim method: zoom out + pitch up → find open hives from spawn →
+        walk to the chosen pad and claim. Falls back to a forward hive-3 scan
+        if nothing is detected from spawn.
+        """
+        excluded_slots = set(excluded_slots or set())
+        preferred_slot = max(1, min(6, int(preferred_slot)))
+        self.logger.webhook("", "Detecting Hive", "dark brown")
+
+        # Zoom out so all six pads (and their claim arrows) fit on screen.
+        zoom = self.setCameraZoom(5, 0)
+        pitch = self.setCameraPitch(2, 0)
+        time.sleep(0.35)
+
+        available = self.detectOpenHiveSlotsFromSpawn()
+        if available:
+            self.logger.webhook(
+                "",
+                f"Open hives from spawn: {', '.join(str(s) for s in available)}",
+                "dark brown",
+            )
+            for slot in available:
+                self.logger.webhook("", f"Hive {slot} detected as available", "dark brown")
+        else:
+            self.logger.webhook("", "no open hives were detected from spawn", "dark brown")
+
+        target = self.chooseDetectedHiveSlot(available, preferred_slot, excluded_slots)
+        if target:
+            self.logger.webhook("", f"Selecting hive {target} from spawn detection", "dark brown")
+            self.setCameraPitch(0, pitch)
+            self.setCameraZoom(0, zoom)
+            time.sleep(0.15)
+            self.walkSpawnToHiveSlot(target)
+            if not self.waitForHivePrompt(target, max_attempts=3):
+                for _ in range(3):
+                    self.stepBackOntoHivePad()
+                    time.sleep(0.35)
+                    if self.anyHivePromptVisible():
+                        break
+            claimed = self.tryClaimHiveSlot(target, excluded_slots)
+            if claimed:
+                self.walkStuds("s", 4)
+                return claimed
+
+            # First pick was wrong/occupied — try other spawn-detected pads before a full scan.
+            failed = {target}
+            if self.occupiedHivePromptVisible():
+                self.logger.webhook("", f"Hive {target} occupied after walk", "dark brown")
+            else:
+                self.logger.webhook("", f"Hive {target} prompt missing after walk", "dark brown")
+
+            current = target
+            while True:
+                nxt = self.chooseDetectedHiveSlot(
+                    available, preferred_slot, excluded_slots | failed
+                )
+                if not nxt:
+                    break
+                self.logger.webhook(
+                    "",
+                    f"Trying next detected hive {nxt} (from {current})",
+                    "dark brown",
+                )
+                claimed = self.walkBetweenHiveSlotsForClaim(current, nxt, excluded_slots | failed)
+                if claimed:
+                    self.walkStuds("s", 4)
+                    return claimed
+                failed.add(nxt)
+                current = nxt
+
+            self.logger.webhook("", "Scanning remaining hives", "dark brown")
+            return self.scanHivesForClaim(current, excluded_slots | failed)
+
+        self.logger.webhook("", "Falling back to hive 3 walk detect", "dark brown")
+        self.setCameraPitch(0, pitch)
+        self.setCameraZoom(0, zoom)
+        time.sleep(0.15)
+
+        self.keyboard.keyDown("w", False)
+        found = False
+        for _ in range(500):
+            if self.anyHivePromptVisible():
+                self.keyboard.keyUp("w", False)
+                self.walkStuds("s", 2)
+                found = True
+                break
+            time.sleep(0.01)
+        self.keyboard.keyUp("w", False)
+        if not found:
+            return 0
+
+        time.sleep(0.1)
+        if self.claimHivePromptVisible() and 3 not in excluded_slots:
+            self.logger.webhook("", "Hive 3 detected as available", "dark brown")
+            claimed = self.tryClaimHiveSlot(3, excluded_slots)
+            if claimed:
+                self.walkStuds("s", 4)
+                return claimed
+        elif self.occupiedHivePromptVisible():
+            self.logger.webhook("", "Hive 3 occupied", "dark brown")
+
+        return self.scanHivesForClaim(3, excluded_slots)
+
     def resyncHiveSlotFromHive(self):
         self.logger.webhook("", "Rechecking hive slot before rejoining", "dark brown", "screen")
         if not self.reset(convert=False):
@@ -3356,41 +3961,16 @@ class macro:
             self.location = "spawn"
             mouse.click()
             time.sleep(0.35)
-            # self.keyboard.press("space")
-            # time.sleep(0.5)
-            # self.keyboard.walk("w",5+(i*0.5),0)
-            # self.keyboard.walk("s",0.3,0)
-            # self.keyboard.walk("d",5,0)
-            # self.keyboard.walk("s",0.3,0)
-            rejoinSuccess = False
-            newHiveNumber = 0
-        
-            # self.keyboard.keyDown("d", False)
-            # self.keyboard.tileWait(4)
-            # self.keyboard.keyDown("w", False)
-            # self.keyboard.tileWait(20)
-            # self.keyboard.keyUp("d", False)
-            # self.keyboard.keyUp("w", False)
             self.setRobloxWindowInfo()
             preferredHiveSlot = self.setdat.get("preferred_hive_slot", 1)
             try:
                 preferredHiveSlot = max(1, min(6, int(preferredHiveSlot)))
             except (TypeError, ValueError):
-                preferredHiveSlot = 3
+                preferredHiveSlot = 1
 
-            # Slots 3-6 approach from directly in front of slot 3. Slots 1-2
-            # retain the original diagonal approach to slot 1.
-            startingHiveSlot = 3 if preferredHiveSlot >= 3 else 1
-            # Every rejoin starts at spawn. Slot 3 is reached by a shorter
-            # straight path; the established diagonal slot-1 route stays put.
-            spawnToHiveTime = 2.5 if startingHiveSlot == 3 else 3.15
-            if startingHiveSlot == 1:
-                self.keyboard.keyDown("d", False)
-                self.keyboard.timeWaitNoHasteCompensation(0.548)
-            self.keyboard.keyDown("w", False)
-            self.keyboard.timeWaitNoHasteCompensation(spawnToHiveTime)
-            self.keyboard.keyUp("d", False)
-            self.keyboard.keyUp("w", False)
+            hiveClaimMethod = str(self.setdat.get("hive_claim_method", "check") or "check").strip().lower()
+            if hiveClaimMethod not in ("check", "detect"):
+                hiveClaimMethod = "check"
 
             excludedHiveSlots = set()
             if joinPS:
@@ -3409,139 +3989,29 @@ class macro:
                 # exclusions.
                 excludedHiveSlots.discard(preferredHiveSlot)
 
-            # Begin at the preferred slot, search toward hive 1, then reverse
-            # and search through hive 6.
-            def claimHivePromptVisible():
-                return self.isBesideEImage("claimhive")
+            # check: walk spawn→preferred hive, then scan pads if taken.
+            # detect: pitch up / zoom out, read open pads from spawn, then walk there.
+            if hiveClaimMethod == "detect":
+                newHiveNumber = self.claimHiveByDetectMethod(preferredHiveSlot, excludedHiveSlots)
+            else:
+                newHiveNumber = self.claimHiveByCheckMethod(preferredHiveSlot, excludedHiveSlots)
 
-            def occupiedHivePromptVisible():
-                return self.isBesideE(["send", "trad", "trade"], ["claim"], log=True)
-
-            def anyHivePromptVisible():
-                return claimHivePromptVisible() or occupiedHivePromptVisible()
-
-            def checkCurrentHive(slot):
-                if claimHivePromptVisible():
-                    self.keyboard.keyUp("a", False)
-                    self.keyboard.keyUp("d", False)
-                    if slot in excludedHiveSlots:
-                        return 0
-                    self.keyboard.press("e")
-                    return slot
-                return 0
-
-            def moveToNextHive(slot, direction):
-                # Move directly between hive pads. Do not use short alignment
-                # walks here: each scan step corresponds to exactly one slot.
-                self.walkHiveSlots(direction, 1)
-                for _ in range(10):
-                    claimedSlot = checkCurrentHive(slot)
-                    if claimedSlot:
-                        return claimedSlot
-                    if claimHivePromptVisible() or occupiedHivePromptVisible():
-                        return 0
-                    time.sleep(0.15)
-                return 0
-
-            # Reach the preferred pad before deciding the join failed. A single
-            # prompt check right after the spawn walk can miss the E UI while it
-            # is still appearing, which caused an instant rejoin loop.
-            # Do not nudge forward with W here: that can carry past the hive row
-            # into the wall. If we overshot the pad, step back onto it instead.
-            self.walkHiveSlots("a", preferredHiveSlot - startingHiveSlot)
-            time.sleep(0.4)
-            promptFound = False
-            for _ in range(12):
-                if anyHivePromptVisible():
-                    promptFound = True
-                    break
-                time.sleep(0.2)
-            if not promptFound:
-                for _ in range(3):
-                    self.stepBackOntoHivePad()
-                    time.sleep(0.35)
-                    if anyHivePromptVisible():
-                        promptFound = True
-                        break
-            if not promptFound:
-                self.logger.webhook("", f"Could not find a prompt for preferred hive {preferredHiveSlot}; retrying rejoin", "dark brown", "screen")
+            if not newHiveNumber:
+                self.logger.webhook("", f"Failed to claim hive ({hiveClaimMethod}); retrying rejoin", "dark brown", "screen")
                 continue
 
-            preferredHiveTaken = bool(occupiedHivePromptVisible())
-            newHiveNumber = checkCurrentHive(preferredHiveSlot)
-
-            if not newHiveNumber and (
-                preferredHiveTaken
-                or preferredHiveSlot in excludedHiveSlots
-            ):
-                scanSteps = (
-                    [(slot, "d") for slot in range(preferredHiveSlot - 1, 0, -1)]
-                    + [(slot, "a") for slot in range(2, 7)]
-                )
-                for checkingHive, direction in scanSteps:
-                    newHiveNumber = moveToNextHive(checkingHive, direction)
-                    if newHiveNumber:
-                        break
-
-            rejoinSuccess = newHiveNumber != 0
-
-            # #find the hive in hive number
-            # self.logger.webhook("",f'Claiming hive {hiveNumber} (guessing hive location)', "dark brown")
-            # steps = round(hiveNumber*2.5) if hiveNumber != 1 else 0
-            # for _ in range(steps):
-            #     self.keyboard.walk("a",0.4, 0)
-
-            # def findHive():
-            #     self.keyboard.walk("a",0.4)
-            #     #$time.sleep(0.15)
-            #     if self.isBesideEImage("claimhive"):
-            #         #check for overrun
-            #         for _ in range(7):
-            #             time.sleep(0.4)
-            #             if self.isBesideEImage("claimhive"): break
-            #             self.keyboard.walk("d",0.2)
-            #         self.keyboard.press("e")
-            #         return True
-            #     return False
-            
-            # for _ in range(3):
-            #     if findHive():
-            #         self.logger.webhook("",f'Claimed hive {hiveNumber}', "bright green", "screen")
-            #         rejoinSuccess = True
-            #         break 
-            # #find a new hive
-            # else:
-            #     self.logger.webhook("",f'Hive {hiveNumber} is already claimed, finding new hive','dark brown', "screen")
-            #     #walk closer to the hives so the player wont walk up the ramp
-            #     self.keyboard.walk("w",0.3,0)
-            #     self.keyboard.walk("d",0.9*(hiveNumber)+2,0)
-            #     self.keyboard.walk("s",0.3,0)
-            #     for j in range(40):
-
-            #         if findHive():
-            #             guessedSlot = max(1,min(6, round(j//2.5)))
-            #             hiveClaim = guessedSlot
-            #             #if 3 < guessedSlot < 6:
-            #                 #hiveClaim += 1
-            #             self.logger.webhook("",f"Claimed hive {hiveClaim}", "bright green", "screen")
-            #             rejoinSuccess = True
-            #             self.setdat["hive_number"] = hiveClaim
-            #             break
-            #claim hive and convert
-            if rejoinSuccess:
-                self.logger.webhook("",f'Claimed hive {newHiveNumber}', "bright green", "screen", ping_category="ping_critical_errors")
-                self.setdat["hive_number"] = newHiveNumber
-                settingsManager.saveGeneralSetting("hive_number", newHiveNumber)
-                for _ in range(8):
-                    self.keyboard.press("o")
-                self.moveMouseToDefault()
-                time.sleep(1)
-                self.convert(bypass=True)
-                self.cannonFromHive = True
-                self.canDetectNight = True
-                self.clear_task_status()
-                return True
-            self.logger.webhook("",f'Rejoin unsuccessful, attempt {i+2}','dark brown', "screen")
+            self.logger.webhook("", f"Claimed hive {newHiveNumber}", "bright green", "screen", ping_category="ping_critical_errors")
+            self.setdat["hive_number"] = newHiveNumber
+            settingsManager.saveGeneralSetting("hive_number", newHiveNumber)
+            for _ in range(8):
+                self.keyboard.press("o")
+            self.moveMouseToDefault()
+            time.sleep(1)
+            self.convert(bypass=True)
+            self.cannonFromHive = True
+            self.canDetectNight = True
+            self.clear_task_status()
+            return True
         self.clear_task_status()
         return False
     
