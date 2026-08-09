@@ -67,6 +67,7 @@ except ModuleNotFoundError:
         pass
     quit()
 from modules.submacros.hourlyReport import HourlyReport
+from modules.submacros.tadAltSync import TadAltSync
 mw, mh = pag.size()
 
 # Quest titles that are primarily bloom-petal objectives and can be skipped by setting.
@@ -452,6 +453,13 @@ def canClaimTimedBearQuest(name):
 #controller for the macro
 def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMessageQueue=None, planterCommandQueue=None):
     macro = macroModule.macro(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue)
+    altHostAuthorized = (
+        macro.setdat.get("macro_mode", "normal") != "alt"
+        or bool(macro.setdat.get("alt_mode_field_pending", False))
+    )
+    if macro.setdat.get("macro_mode", "normal") == "alt" and altHostAuthorized:
+        settingsManager.saveProfileSetting("alt_mode_field_pending", False)
+        macro.setdat["alt_mode_field_pending"] = False
     #invert the regularMobsInFields dict
     #instead of storing mobs in field, store the fields associated with each mob
     regularMobData = {}
@@ -631,20 +639,20 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 macro.reset(convert=convertAfter)
             
             #do priority tasks
-            # Quest mode should stay on quests only — skip stinger hunt / mondo buff
+            # Quest and Alt modes stay isolated from priority tasks.
             if (
-                macro.setdat.get("macro_mode", "normal") != "quest"
+                macro.setdat.get("macro_mode", "normal") not in ("quest", "alt")
                 and macro.night
                 and macro.setdat["stinger_hunt"]
             ):
                 macro.stingerHunt()
             if (
-                macro.setdat.get("macro_mode", "normal") != "quest"
+                macro.setdat.get("macro_mode", "normal") not in ("quest", "alt")
                 and macro.setdat["mondo_buff"]
                 and macro.hasMondoRespawned()
             ):
                 macro.collectMondoBuff()
-            if macro.hasScheduledRejoinArrived():
+            if macro.setdat.get("macro_mode", "normal") != "alt" and macro.hasScheduledRejoinArrived():
                 macro.rejoin("Rejoining (Scheduled)")
                 macro.saveTiming("rejoin_every")
             
@@ -1014,6 +1022,24 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         macro.checkAndReloadSettings()
 
         # Migration from old boolean flags to macro_mode is now handled in settings loader
+
+        if macro.setdat.get("macro_mode", "normal") == "alt":
+            if not altHostAuthorized:
+                status.value = "alt_waiting_for_host"
+                updateGUI.value = 1
+                time.sleep(1)
+                continue
+            # Webhook field changes are stored separately from the normal task
+            # slots and only become active after a fresh host command.
+            altField = str(macro.setdat.get("alt_mode_field") or "").strip().lower()
+            if not altField:
+                status.value = "alt_waiting_for_host"
+                updateGUI.value = 1
+                time.sleep(1)
+                continue
+            updateGUI.value = 1
+            runTask(macro.gather, args=(altField,), resetAfter=False, allowAFB=False)
+            continue
 
         #run empty task
         #this is in case no other settings are selected
@@ -3519,7 +3545,26 @@ if __name__ == "__main__":
             macroProc.start()
 
             macro_version = settingsManager.getMacroVersion()
-            logger.webhook("Macro Started", f'Fuzzy Macro v{macro_version}\nDisplay: {screenInfo["display_type"]}, {screenInfo["screen_width"]}x{screenInfo["screen_height"]}', "purple", route_category="macro_status")
+            macro_mode = str(setdat.get("macro_mode", "normal") or "normal").strip().lower()
+            mode_names = {
+                "normal": "Normal Mode",
+                "alt": "Alt Mode",
+                "field": "Field Mode",
+                "quest": "Quest Mode",
+                "bug": "Bug Run Mode",
+            }
+            start_details = [
+                f"Fuzzy Macro v{macro_version}",
+                f"Mode: {mode_names.get(macro_mode, macro_mode.title())}",
+            ]
+            if macro_mode == "alt":
+                if setdat.get("alt_mode_field_pending", False):
+                    active_alt_field = str(setdat.get("alt_mode_field") or "").strip()
+                    start_details.append(f"Alt Field: {active_alt_field.title() or 'Waiting for Host'}")
+                else:
+                    start_details.append("Alt Field: Waiting for Host")
+            start_details.append(f'Display: {screenInfo["display_type"]}, {screenInfo["screen_width"]}x{screenInfo["screen_height"]}')
+            logger.webhook("Macro Started", "\n".join(start_details), "purple", route_category="macro_status")
             run.value = 2
             autoStopStartTime = time.time()
             autoStopHours = parseAutoStopHours(setdat)
@@ -3548,6 +3593,8 @@ if __name__ == "__main__":
 
             if had_macro_proc:
                 logger.webhook("Macro Stopped", "Fuzzy Macro", "red", route_category="macro_status")
+                if setdat.get("macro_mode", "normal") != "alt":
+                    TadAltSync(setdat, logger).initialize_alts()
             try:
                 gui.stopAllTools()
             except Exception:

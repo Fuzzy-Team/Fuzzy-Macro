@@ -560,6 +560,26 @@ def getPatterns():
 
 
 @eel.expose
+def getDefaultPatterns():
+    """Return installed patterns that are also shipped in defaults/patterns."""
+    defaults_dir = os.path.join(settingsManager.getProjectRoot(), "settings", "defaults", "patterns")
+    try:
+        default_patterns = {
+            (os.path.splitext(filename)[0].lower(), os.path.splitext(filename)[1].lstrip(".").lower())
+            for filename in os.listdir(defaults_dir)
+            if os.path.splitext(filename)[1].lower() in (".py", ".ahk")
+        }
+    except OSError:
+        return []
+
+    return [
+        pattern
+        for pattern in getPatterns()
+        if (pattern["name"].lower(), pattern["type"].lower()) in default_patterns
+    ]
+
+
+@eel.expose
 def importPatterns(patterns):
     """Import pattern files sent from the frontend.
     `patterns` should be a list of dicts: {"name": "filename.py", "content": "..."}

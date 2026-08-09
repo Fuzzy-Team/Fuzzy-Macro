@@ -44,6 +44,7 @@ import re
 import ast
 from modules.submacros.hourlyReport import BUFF_RENDER_CONFIG, HourlyReport, BuffDetector
 from modules.submacros.itemMonitor import ItemMonitor
+from modules.submacros.tadAltSync import TadAltSync
 from modules.submacros.liveGatherReport import LiveGatherReport, LiveQuestProgressReport
 from difflib import SequenceMatcher
 import fuzzywuzzy.process
@@ -716,6 +717,11 @@ class macro:
         pingSettings = {key: self.setdat.get(key, False) for key in PING_SETTING_KEYS}
         
         self.logger = logModule.log(logQueue, logModule.delivery_uses_webhook(self.setdat), logModule.get_default_delivery_route(self.setdat), self.setdat.get("send_screenshot", True), blocking=self.setdat.get("low_performance", False), hourlyReportOnly=self.setdat.get("only_send_hourly_report", False), robloxWindow=self.robloxWindow, enableDiscordPing=True, discordUserID=self.setdat.get("discord_user_id", ""), pingSettings=pingSettings, webhookTimeFormat=self.setdat.get("webhook_time_format", 24), enableDiscordBot=logModule.delivery_uses_bot_messages(self.setdat), discordMessageQueue=discordMessageQueue, routeSettings=logModule.build_route_settings(self.setdat))
+        self.tadAltSync = TadAltSync(
+            self.setdat,
+            self.logger,
+            use_glitter=lambda slot: self.keyboard.press(str(slot)),
+        )
         self.buffDetector = BuffDetector(self.robloxWindow)
         self.hourlyReport = HourlyReport(self.buffDetector, self.setdat.get("hourly_report_time_format", 24))
         self.itemMonitor = ItemMonitor(self.robloxWindow)
@@ -780,6 +786,7 @@ class macro:
             # Reload settings
             old_profile = settingsManager.getCurrentProfile()
             self.setdat = settingsManager.loadAllSettings()
+            self.tadAltSync.update_settings(self.setdat)
             self.fieldSettings = settingsManager.loadFields()
             # Update logger with new webhook settings
             pingSettings = {key: self.setdat.get(key, False) for key in PING_SETTING_KEYS}
@@ -1311,6 +1318,8 @@ class macro:
         return time.time()
 
     def detectStickerSproutAnnouncement(self):
+        if self.setdat.get("macro_mode", "normal") == "alt":
+            return
         if not self.setdat.get("sticker_sprout_watch", False):
             return
         if self.status.value == "rejoining":
@@ -2500,7 +2509,7 @@ class macro:
                 mouse.click()
 
             if (
-                self.setdat.get("macro_mode", "normal") != "quest"
+                self.setdat.get("macro_mode", "normal") not in ("quest", "alt")
                 and self.night
                 and self.setdat["stinger_hunt"]
             ):
@@ -4156,9 +4165,10 @@ class macro:
         # Normalize field name to handle both space and underscore formats
         # Convert underscores to spaces for fieldSettings lookup
         normalized_field = field.replace('_', ' ')
+        altMode = self.setdat.get("macro_mode", "normal") == "alt"
         isHiveHubField = normalized_field == "hive hub"
         fieldSetting = {**self.fieldSettings[normalized_field], **settingsOverride}
-        isSproutGather = bool(fieldSetting.get("plant_sprout", False))
+        isSproutGather = not altMode and bool(fieldSetting.get("plant_sprout", False))
         skipTravel = bool(fieldSetting.get("skip_travel", False)) and self.location == normalized_field and not isHiveHubField
         pattern = fieldSetting['shape']
         aiPatternLabels = {
@@ -4170,6 +4180,8 @@ class macro:
             "blooms_ai": ("_BLOOMS_AI_STATE", "_blooms_ai_state"),
         }
         def shouldUseHoneyWreathReturn():
+            if altMode:
+                return False
             if not self.setdat.get("wreath", False):
                 return False
 
@@ -4362,7 +4374,7 @@ class macro:
                 time.sleep(0.4)
             return "planted"
 
-        if fieldSetting.get("plant_sprout", False):
+        if not altMode and fieldSetting.get("plant_sprout", False):
             self.ensure_shift_lock_off("sprouts")
             if pattern in aiPatternLabels and not aiCameraConfigured:
                 configureAIGatherCamera()
@@ -4407,7 +4419,7 @@ class macro:
         sizeword = fieldSetting["size"]
         size = sizeData[sizeword]
         width = fieldSetting["width"]
-        infiniteGather = bool(fieldSetting.get("infinite_gather", False))
+        infiniteGather = altMode or bool(fieldSetting.get("infinite_gather", False))
         maxGatherTime = fieldSetting["mins"]*60
         gatherTimeLimit = "Infinite" if infiniteGather else self.convertSecsToMinsAndSecs(maxGatherTime)
         returnType = "rejoin" if isHiveHubField else fieldSetting["return"]
@@ -4773,7 +4785,7 @@ class macro:
                 self.logger.webhook("Gathering: interrupted", "Inactive Honey Reset (Beta)", "orange", "screen")
                 self.reset()
                 return
-            elif fieldSetting.get("plant_sprout", False):
+            elif not altMode and fieldSetting.get("plant_sprout", False):
                 sproutGatherLimitReached = sproutBeansUsedThisGather >= sproutGatherBeanLimit
                 sproutSessionLimitReached = self.sproutBeansUsed >= self._sproutBeanLimit()
                 if sproutFinalLootStart is None and not sproutGatherLimitReached and not sproutSessionLimitReached:
@@ -4807,12 +4819,12 @@ class macro:
                     self.logger.webhook("Sprouts", "Final sprout loot collection finished. Resetting to hive.", "light green", route_category="activities")
                     self.reset()
                     return
-            elif self.setdat["Auto_Field_Boost"] and not self.AFBLIMIT and self.AFB(gatherInterrupt=True, turnOffShiftLock = fieldSetting["shift_lock"]):
+            elif not altMode and self.setdat["Auto_Field_Boost"] and not self.AFBLIMIT and self.AFB(gatherInterrupt=True, turnOffShiftLock = fieldSetting["shift_lock"]):
                 stopGather()
                 return
             #check for gather interrupts
             elif (
-                self.setdat.get("macro_mode", "normal") != "quest"
+                self.setdat.get("macro_mode", "normal") not in ("quest", "alt")
                 and self.night
                 and self.setdat["stinger_hunt"]
             ):
@@ -4822,7 +4834,7 @@ class macro:
                 self.reset(convert=False)
                 break
             elif (
-                self.setdat.get("macro_mode", "normal") != "quest"
+                self.setdat.get("macro_mode", "normal") not in ("quest", "alt")
                 and self.setdat["mondo_buff"]
                 and self.hasMondoRespawned()
                 and self.setdat["mondo_buff_interrupt_gathering"]
@@ -4832,7 +4844,7 @@ class macro:
                 self.reset(convert=False)
                 self.collectMondoBuff()
                 break
-            else:
+            elif not altMode:
                 questMobsByGiver = getattr(self, "questGatherInterruptMobs", {})
                 questMobs = {
                     mob
@@ -5498,6 +5510,10 @@ class macro:
                 boostedField = detectedBoostedFields[-1] if detectedBoostedFields else ""
                 returnVal = boostedField
                 self.logger.webhook("", f"Collected: {displayName}, Boosted Field: {boostedField.title()}", "bright green", "screen")
+                if boostedField:
+                    self.tadAltSync.sync_to_boost(boostedField)
+                else:
+                    self.tadAltSync.initialize_alts()
                 self.saveTiming("last_booster")
             elif objective == "sticker_stack":
                 if "your" in reached or "activated" in reached:
@@ -9238,6 +9254,9 @@ class macro:
     def start(self):
         print("macro object started")
         self.resetAFBSessionTimings()
+
+        if self.setdat.get("macro_mode", "normal") != "alt":
+            self.tadAltSync.initialize_alts()
 
         #enable background threads
         self.nightDetectStreaks = 0
