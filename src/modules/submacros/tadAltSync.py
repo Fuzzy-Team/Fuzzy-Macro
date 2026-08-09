@@ -61,6 +61,19 @@ class TadAltSync:
         failures.extend(self._send_all(webhooks, "?start"))
         return sorted(set(failures))
 
+    def initialize_alts(self):
+        """Start enabled alts in the configured default field."""
+        webhooks = self._enabled_webhooks()
+        if not webhooks:
+            return False
+        default_field = str(self.settings.get("tad_alt_default_field", "pine tree") or "pine tree").strip()
+        failures = self._change_field(webhooks, default_field)
+        if failures:
+            self._log("TAD Alt Sync", f"Could not initialize TAD alt(s): {', '.join(map(str, failures))}", "red")
+        else:
+            self._log("TAD Alt Sync", f"TAD alt(s) started in {default_field.title()}", "bright green")
+        return not failures
+
     def sync_to_boost(self, field):
         webhooks = self._enabled_webhooks()
         field = str(field or "").strip().lower()

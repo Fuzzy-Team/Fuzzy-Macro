@@ -214,10 +214,8 @@ async function loadTasks() {
   }
 
   if (setdat.macro_mode === "alt") {
-    const altField = (setdat.fields && setdat.fields[0]) || "pine tree";
-    const emoji = fieldEmojis[altField.replaceAll(" ", "_")] || "🌾";
     out += taskHTML("Alt Mode", "Ignores the task list and automatic gather interrupts");
-    out += taskHTML("Default Alt Field", `${emoji} ${altField}`);
+    out += taskHTML("Host Controlled", "The host assigns the field before every Alt Mode run");
     document.getElementById("task-list").innerHTML = out;
     return;
   }
