@@ -187,6 +187,35 @@ def clear_settings_cache():
     _settings_cache = {}
     _cache_timestamp = 0
 
+
+TAD_ALT_SYNC_HELP_TEXT = (
+    "`?stop` - Stop the alt macro before changing fields.\n"
+    "`?set FieldName1 <field>` - Set the alt's first configured field slot.\n"
+    "`?start` - Start the alt macro after its field is updated.\n"
+    "`?help` - Show this TAD compatibility help.\n\n"
+    "These compatibility commands are accepted only from Discord webhook messages. "
+    "TAD Alt Sync normally sends them automatically in the order `?stop`, `?set`, then `?start`."
+)
+
+
+def parse_tad_alt_sync_command(content: str):
+    """Parse the webhook commands emitted by the Slymi/Eli TAD Alt Sync tool."""
+    command = str(content or "").strip()
+    lowered = command.lower()
+    if lowered == "?help":
+        return "help", None
+    if lowered == "?start":
+        return "start", None
+    if lowered == "?stop":
+        return "stop", None
+
+    prefix = "?set fieldname1 "
+    if lowered.startswith(prefix):
+        field = command[len(prefix):].strip().lower()
+        if field:
+            return "set_field_1", field
+    return None, None
+
 AUTO_PLANTER_OPTIONS = [
     ("paper", "auto_planter_paper", "Paper"),
     ("ticket", "auto_planter_ticket", "Ticket"),
@@ -859,6 +888,54 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             bot.loop.create_task(process_pin_requests())
         if _discord_message_queue is not None:
             bot.loop.create_task(process_discord_messages())
+
+    @bot.event
+    async def on_message(message):
+        action, value = parse_tad_alt_sync_command(message.content)
+
+        # Help is safe for normal users to request. The commands that mutate
+        # macro state remain restricted to Discord webhook messages.
+        if action == "help" and not message.author.bot:
+            embed = discord.Embed(
+                title="TAD Alt Sync Commands",
+                description=TAD_ALT_SYNC_HELP_TEXT,
+                color=0x0099ff,
+            )
+            await message.channel.send(embed=_apply_embed_footer(embed))
+            return
+
+        if message.webhook_id is not None:
+            if action == "help":
+                embed = discord.Embed(
+                    title="TAD Alt Sync Commands",
+                    description=TAD_ALT_SYNC_HELP_TEXT,
+                    color=0x0099ff,
+                )
+                await message.channel.send(embed=_apply_embed_footer(embed))
+                return
+            if action == "stop":
+                if run.value != 3:
+                    run.value = 0
+                return
+            if action == "start":
+                if run.value == 3:
+                    run.value = 1
+                return
+            if action == "set_field_1":
+                valid_fields = settingsManager.loadFields()
+                if value not in valid_fields:
+                    print(f"Ignored TAD Alt Sync field: {value}")
+                    return
+                settings = settingsManager.loadSettings()
+                fields = list(settings.get("fields", []))
+                while len(fields) < 5:
+                    fields.append("sunflower")
+                fields[0] = value
+                settingsManager.saveProfileSetting("fields", fields)
+                clear_settings_cache()
+                return
+
+        await bot.process_commands(message)
 
     async def process_discord_messages():
         """Process outbound logger messages routed through the bot."""
@@ -3988,6 +4065,12 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         embed.add_field(name="**Status & Monitoring**", value="`/status` - Get macro status and current task\n`/tasklist` - Show enabled task order, current task, and next task\n`/logs` - Show recent macro actions\n`/battery` - Check battery status\n`/stream <enable/disable/status>` - Control stream\n`/streamurl` - Get stream URL\n`/hourlyreport` - Generate and send the hourly report\n`/session` - Generate and send the final session report", inline=False)
         
         embed.add_field(name="**Advanced**", value="`/amulet <keep/replace>` - Choose amulet action\n`/close <both/roblox/macro>` - Close both, Roblox only, or macro only", inline=False)
+
+        embed.add_field(
+            name="**TAD Alt Sync Compatibility**",
+            value=TAD_ALT_SYNC_HELP_TEXT,
+            inline=False,
+        )
 
         permission_lines = [
             f"**{data['label']}**: `{data['setting']}`"
