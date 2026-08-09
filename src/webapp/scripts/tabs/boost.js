@@ -56,9 +56,13 @@ async function copyHostFieldSettingsToTadAlt(button) {
     button.classList.add("active");
     try {
         const settings = await loadAllSettings();
-        const fieldName = String(settings.tad_alt_default_field || "pine tree").trim().toLowerCase();
+        const fieldName = String(settings.tad_alt_default_field || "pine tree").trim();
+        const normalizedFieldName = fieldName.toLowerCase().replaceAll("_", " ").replace(/\s+/g, " ");
         const allFields = await eel.loadFields()();
-        const source = allFields[fieldName];
+        const sourceEntry = Object.entries(allFields).find(([key]) =>
+            String(key).trim().toLowerCase().replaceAll("_", " ").replace(/\s+/g, " ") === normalizedFieldName
+        );
+        const source = sourceEntry?.[1];
         if (!source) throw new Error(`No host settings found for ${fieldName}`);
 
         const copied = {

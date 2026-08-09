@@ -198,6 +198,7 @@ TAD_ALT_SYNC_HELP_TEXT = (
     "TAD Alt Sync sends them in the order `?stop`, `?set`, then `?start`; Fuzzy must receive the field authorization before starting. "
     "The host sends that sequence with its default field at startup and whenever the boost field changes. "
     "It also sends the default field when no boost is detected and when the host stops. "
+    "When Glitter Extending is enabled, the host uses Glitter five seconds before the boost expires and keeps the alt in the boost field for a second boost duration. "
     "On each alt, select **Alt Mode**; it remains idle until a fresh host field command arrives, then gathers that field indefinitely."
 )
 

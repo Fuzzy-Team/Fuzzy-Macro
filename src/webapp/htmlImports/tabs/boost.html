@@ -344,6 +344,8 @@
           desc: "Copy the host's current settings for the selected Default Alt Field into the Alt Gather preset.",
           type: { name: "button", text: "Copy Settings", triggerFunction: "copyHostFieldSettingsToTadAlt(this)" },
         },
+      ]);
+      buildStandardContainer(tadAltSyncParent, "Default Alt Gather Pattern", "Settings used while the alt gathers indefinitely in the Default Alt Field.", [
         {
           id: "tad_alt_gather_shape", title: "Default Field Pattern", desc: "Pattern used by alts in the Default Alt Field. Custom patterns must also exist on each alt.",
           type: { name: "dropdown", data: [], triggerFunction: saveProfileTriggerFunction },
@@ -396,6 +398,8 @@
           id: "tad_alt_gather_goo_interval", title: "Goo Interval", desc: "Seconds between goo uses.",
           type: { name: "textbox", inputType: "int", inputLimit: 3, triggerFunction: saveProfileTriggerFunction },
         },
+      ]);
+      buildStandardContainer(tadAltSyncParent, "Timing & Glitter Extending", "Control alt restarts, boost duration, and optional host-side Glitter use.", [
         {
           id: "tad_alt_restart_delay",
           title: "Restart Delay",
@@ -407,6 +411,18 @@
           title: "Boost Duration",
           desc: "Seconds before returning the alts to their default field (900 = 15 minutes).",
           type: { name: "textbox", inputType: "float", inputLimit: 5, triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_glitter_extend_enabled",
+          title: "Glitter Extending",
+          desc: "Have the host use Glitter five seconds before the boost expires, then return alts after a second boost duration (30 minutes total when Boost Duration is 900).",
+          type: { name: "checkbox", triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_glitter_slot",
+          title: "Glitter Hotbar Slot",
+          desc: "The host hotbar slot containing Glitter.",
+          type: { name: "dropdown", data: [1, 2, 3, 4, 5, 6, 7], triggerFunction: saveProfileTriggerFunction },
         },
       ]);
     </script>
