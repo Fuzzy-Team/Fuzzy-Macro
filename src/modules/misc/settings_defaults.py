@@ -296,7 +296,6 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'quest_use_gumdrops': False,
  'quest_gumdrop_slot': 2,
  'quest_progress_watch': False,
- 'quest_gather_until_complete': False,
  'Auto_Field_Boost': False,
  'AFB_field': 'sunflower',
  'AFB_rebuff': 0,

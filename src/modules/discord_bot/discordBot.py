@@ -1172,7 +1172,6 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         ("riley_bee_quest", "Riley Bee"),
         ("quest_use_gumdrops", "Use Gumdrops"),
         ("quest_progress_watch", "Keep Quest Menu Open"),
-        ("quest_gather_until_complete", "Gather Until Quest Complete"),
     ]
 
     COLLECTIBLE_SETTINGS = [
