@@ -717,7 +717,11 @@ class macro:
         pingSettings = {key: self.setdat.get(key, False) for key in PING_SETTING_KEYS}
         
         self.logger = logModule.log(logQueue, logModule.delivery_uses_webhook(self.setdat), logModule.get_default_delivery_route(self.setdat), self.setdat.get("send_screenshot", True), blocking=self.setdat.get("low_performance", False), hourlyReportOnly=self.setdat.get("only_send_hourly_report", False), robloxWindow=self.robloxWindow, enableDiscordPing=True, discordUserID=self.setdat.get("discord_user_id", ""), pingSettings=pingSettings, webhookTimeFormat=self.setdat.get("webhook_time_format", 24), enableDiscordBot=logModule.delivery_uses_bot_messages(self.setdat), discordMessageQueue=discordMessageQueue, routeSettings=logModule.build_route_settings(self.setdat))
-        self.tadAltSync = TadAltSync(self.setdat, self.logger)
+        self.tadAltSync = TadAltSync(
+            self.setdat,
+            self.logger,
+            use_glitter=lambda slot: self.keyboard.press(str(slot)),
+        )
         self.buffDetector = BuffDetector(self.robloxWindow)
         self.hourlyReport = HourlyReport(self.buffDetector, self.setdat.get("hourly_report_time_format", 24))
         self.itemMonitor = ItemMonitor(self.robloxWindow)

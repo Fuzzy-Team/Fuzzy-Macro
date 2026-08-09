@@ -183,6 +183,8 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'alt_mode_field_pending': False,
  'tad_alt_restart_delay': 10,
  'tad_alt_boost_duration': 900,
+ 'tad_alt_glitter_extend_enabled': False,
+ 'tad_alt_glitter_slot': 1,
  'sticker_stack': False,
  'sticker_stack_item': 'sticker',
  'hive_skin': False,

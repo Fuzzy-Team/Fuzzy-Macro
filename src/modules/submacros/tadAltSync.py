@@ -7,9 +7,10 @@ import urllib.request
 class TadAltSync:
     """Synchronize Discord-remote-controlled TAD alt macros with field boosts."""
 
-    def __init__(self, settings, logger=None):
+    def __init__(self, settings, logger=None, use_glitter=None):
         self.settings = settings
         self.logger = logger
+        self.use_glitter = use_glitter
         self._generation = 0
         self._lock = threading.Lock()
 
@@ -124,17 +125,37 @@ class TadAltSync:
             self._log("TAD Alt Sync", f"TAD alt(s) moved to {field.title()}", "bright green")
 
         duration = max(0, float(self.settings.get("tad_alt_boost_duration", 900) or 0))
+        extend_with_glitter = bool(self.settings.get("tad_alt_glitter_extend_enabled", False))
+        glitter_slot = min(7, max(1, int(self.settings.get("tad_alt_glitter_slot", 1) or 1)))
         thread = threading.Thread(
             target=self._restore_after_boost,
-            args=(generation, duration),
+            args=(generation, duration, extend_with_glitter, glitter_slot),
             name="tad-alt-sync-restore",
             daemon=True,
         )
         thread.start()
         return True
 
-    def _restore_after_boost(self, generation, duration):
-        time.sleep(duration)
+    def _restore_after_boost(self, generation, duration, extend_with_glitter=False, glitter_slot=1):
+        glitter_used = False
+        if extend_with_glitter and self.use_glitter is not None:
+            time.sleep(max(0, duration - 5))
+            with self._lock:
+                if generation != self._generation:
+                    return
+            try:
+                self.use_glitter(glitter_slot)
+                glitter_used = True
+                self._log(
+                    "TAD Alt Sync",
+                    f"Used Glitter from hotbar slot {glitter_slot}; extending the alt boost assignment",
+                    "bright green",
+                )
+            except Exception:
+                self._log("TAD Alt Sync", "Could not use Glitter; using the normal boost duration", "red")
+            time.sleep(duration + 5 if glitter_used else min(5, duration))
+        else:
+            time.sleep(duration)
         with self._lock:
             if generation != self._generation:
                 return
