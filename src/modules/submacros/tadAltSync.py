@@ -53,11 +53,31 @@ class TadAltSync:
         if self.logger is not None:
             self.logger.webhook(title, description, color, route_category="boosts")
 
-    def _change_field(self, webhooks, field):
+    def _default_gather_settings(self):
+        return {
+            "shape": str(self.settings.get("tad_alt_gather_shape", "e_lol") or "e_lol"),
+            "size": str(self.settings.get("tad_alt_gather_size", "m") or "m").lower(),
+            "width": int(self.settings.get("tad_alt_gather_width", 5) or 5),
+            "shift_lock": bool(self.settings.get("tad_alt_gather_shift_lock", False)),
+            "field_drift_compensation": bool(self.settings.get("tad_alt_gather_drift_compensation", False)),
+            "invert_lr": bool(self.settings.get("tad_alt_gather_invert_lr", False)),
+            "invert_fb": bool(self.settings.get("tad_alt_gather_invert_fb", False)),
+            "turn": str(self.settings.get("tad_alt_gather_turn", "none") or "none").lower(),
+            "turn_times": int(self.settings.get("tad_alt_gather_turn_times", 1) or 1),
+            "start_location": str(self.settings.get("tad_alt_gather_start_location", "center") or "center").lower(),
+            "distance": int(self.settings.get("tad_alt_gather_distance", 1) or 1),
+            "goo": bool(self.settings.get("tad_alt_gather_goo", False)),
+            "goo_interval": int(self.settings.get("tad_alt_gather_goo_interval", 3) or 3),
+        }
+
+    def _change_field(self, webhooks, field, apply_default_settings=False):
         field = " ".join(str(field or "").replace("_", " ").split())
         failures = self._send_all(webhooks, "?stop")
         time.sleep(max(0, float(self.settings.get("tad_alt_restart_delay", 10) or 0)))
         failures.extend(self._send_all(webhooks, f"?set FieldName1 {field.title()}"))
+        if apply_default_settings:
+            payload = json.dumps(self._default_gather_settings(), separators=(",", ":"))
+            failures.extend(self._send_all(webhooks, f"?set AltGatherSettings {payload}"))
         time.sleep(2)
         failures.extend(self._send_all(webhooks, "?start"))
         return sorted(set(failures))
@@ -79,7 +99,7 @@ class TadAltSync:
 
     def _initialize_alts(self, webhooks, default_field):
         try:
-            failures = self._change_field(webhooks, default_field)
+            failures = self._change_field(webhooks, default_field, apply_default_settings=True)
             if failures:
                 self._log("TAD Alt Sync", f"Could not initialize TAD alt(s): {', '.join(map(str, failures))}", "red")
             else:
@@ -123,7 +143,7 @@ class TadAltSync:
         if not webhooks:
             return
         default_field = str(self.settings.get("tad_alt_default_field", "pine tree") or "pine tree").strip()
-        failures = self._change_field(webhooks, default_field)
+        failures = self._change_field(webhooks, default_field, apply_default_settings=True)
         if failures:
             self._log("TAD Alt Sync", f"Could not restore TAD alt(s): {', '.join(map(str, failures))}", "red")
         else:
