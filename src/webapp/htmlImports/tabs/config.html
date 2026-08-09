@@ -435,6 +435,15 @@
           },
         },
         {
+          id: "hive_hub_private_server",
+          title: "Use Private Server for Hive Hub",
+          desc: "When travelling to Hive Hub, join through the configured private server link using the Hive Hub game ID. If disabled, Hive Hub uses a public server.",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
           id: "manage-fallback-private-servers-button",
           title: "Fallback Private Servers",
           desc: "Configure up to three backup servers. Fuzzy tries each one after the primary server fails, before trying public servers.",
