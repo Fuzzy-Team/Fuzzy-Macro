@@ -41,7 +41,7 @@ async function loadBoost(){
     switchBoostTab(document.getElementById(getActiveSubtab("activeBoostSubtab", "boost-hotbar")))
     switchBoostHotbarSlot(1)
     try {
-        const patterns = await eel.getPatterns()();
+        const patterns = await eel.getDefaultPatterns()();
         setDropdownData("tad_alt_gather_shape", patterns);
         const settings = await loadAllSettings();
         const patternDropdown = document.getElementById("tad_alt_gather_shape");
