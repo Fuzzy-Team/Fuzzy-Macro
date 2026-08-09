@@ -285,7 +285,7 @@ DISCORD_COMMAND_PERMISSION_CATEGORIES = {
     "macro_control": {
         "label": "Macro Control",
         "setting": "discord_permission_macro_control_ids",
-        "commands": ["pause", "rejoin", "resume", "start", "stop"],
+        "commands": ["pause", "rejoin", "resume", "skipserver", "start", "stop"],
     },
     "task_interrupts": {
         "label": "Task Interrupts",
@@ -815,7 +815,7 @@ def _build_logger_embed(data):
     return embed
 
 
-def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None, updateGUI=None, discord_message_queue=None, planter_command_queue=None, stream_control_queue=None):
+def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None, updateGUI=None, discord_message_queue=None, planter_command_queue=None, stream_control_queue=None, skipServer=None):
     import modules.macro
     _patch_discord_response_footers()
     bot = commands.Bot(command_prefix="fuzz!", intents=discord.Intents.all())
@@ -2785,6 +2785,18 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         run.value = 4
         await interaction.response.send_message("Macro is rejoining")
 
+    @bot.tree.command(name="skipserver", description="Skip the private server currently being joined")
+    @requires_discord_permission("macro_control")
+    async def skip_server(interaction: discord.Interaction):
+        if skipServer is None:
+            await interaction.response.send_message("Server skipping is unavailable.", ephemeral=True)
+            return
+        if str(status.value).lower() != "rejoining":
+            await interaction.response.send_message("The macro is not currently joining a server.")
+            return
+        skipServer.value = 1
+        await interaction.response.send_message("Skipping the current private server and falling back to a public server.")
+
     @bot.tree.command(name = "reset", description = "Reset the character and return to hive")
     @requires_discord_permission("task_interrupts")
     async def reset(interaction: discord.Interaction):
@@ -4113,7 +4125,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         """Show available commands"""
         embed = discord.Embed(title="BSS Macro Discord Bot", description="Available Commands:", color=0x0099ff)
 
-        embed.add_field(name="**Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/stop` - Stop the macro\n`/pause` - Pause the macro\n`/resume` - Resume the macro\n`/status` - Get macro status and current task\n`/reroll` - Reroll Auto Field Boost\n`/rejoin` - Make macro rejoin game\n`/screenshot` - Get screenshot\n`/settings` - Open settings panel\n`/hiveslot <1-6>` - Change hive slot number\n`/shiftlock <on/off/toggle>` - Control shift lock", inline=False)
+        embed.add_field(name="**Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/stop` - Stop the macro\n`/pause` - Pause the macro\n`/resume` - Resume the macro\n`/status` - Get macro status and current task\n`/reroll` - Reroll Auto Field Boost\n`/rejoin` - Make macro rejoin game\n`/skipserver` - Skip the current private-server join\n`/screenshot` - Get screenshot\n`/settings` - Open settings panel\n`/hiveslot <1-6>` - Change hive slot number\n`/shiftlock <on/off/toggle>` - Control shift lock", inline=False)
 
         embed.add_field(name="**Field Management**", value="`/fields` - View field configuration\n`/field <field> <true/false>` - Enable or disable a field\n`/swapfield <current> <new>` - Swap one field for another (new can be any field)", inline=False)
 
