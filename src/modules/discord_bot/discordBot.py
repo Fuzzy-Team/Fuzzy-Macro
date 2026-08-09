@@ -194,7 +194,8 @@ TAD_ALT_SYNC_HELP_TEXT = (
     "`?start` - Start the alt macro after its field is updated.\n"
     "`?help` - Show this TAD compatibility help.\n\n"
     "These compatibility commands are accepted only from Discord webhook messages. "
-    "TAD Alt Sync normally sends them automatically in the order `?stop`, `?set`, then `?start`."
+    "TAD Alt Sync normally sends them automatically in the order `?stop`, `?set`, then `?start`. "
+    "On each alt, select **Alt Mode** so it gathers only FieldName1 and ignores its task list and automatic gather interrupts."
 )
 
 
@@ -1166,6 +1167,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
     MACRO_MODE_OPTIONS = [
         ("normal", "Normal"),
+        ("alt", "Alt"),
         ("quest", "Quests"),
         ("field", "Field"),
         ("bug", "Bug Runs"),
@@ -1685,6 +1687,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     def _is_task_enabled(task_id: str, settings: Dict) -> bool:
         macro_mode = settings.get("macro_mode", "normal")
 
+        if macro_mode == "alt":
+            return False
         if macro_mode == "field" and not task_id.startswith("gather_"):
             return False
         if macro_mode == "quest" and not task_id.startswith("quest_"):
@@ -1735,6 +1739,11 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         enabled_tasks = [task_id for task_id in task_list_order if _is_task_enabled(task_id, settings)]
 
         macro_mode = settings.get("macro_mode", "normal")
+
+        if macro_mode == "alt":
+            fields = settings.get("fields", [])
+            alt_field = str(fields[0] if fields else "pine tree").replace(" ", "_")
+            return [f"gather_{alt_field}"]
 
         if macro_mode == "field" and not enabled_tasks:
             fields = settings.get("fields", [])
@@ -2872,6 +2881,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
             mode_label = {
                 "normal": "Normal",
+                "alt": "Alt",
                 "quest": "Quests",
                 "field": "Field",
             }.get(settings.get("macro_mode", "normal"), settings.get("macro_mode", "normal"))
@@ -4010,11 +4020,12 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         except Exception as e:
             await interaction.followup.send(f"❌ Error controlling shift lock: {str(e)}")
 
-    @bot.tree.command(name="macromode", description="Set macro mode (normal, quests, or field)")
+    @bot.tree.command(name="macromode", description="Set macro mode")
     @requires_discord_permission("configuration")
     @app_commands.describe(mode="Macro mode to set")
     @app_commands.choices(mode=[
         app_commands.Choice(name="normal", value="normal"),
+        app_commands.Choice(name="alt", value="alt"),
         app_commands.Choice(name="quests", value="quest"),
         app_commands.Choice(name="field", value="field"),
     ])
@@ -4032,6 +4043,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
             mode_names = {
                 "normal": "Normal",
+                "alt": "Alt",
                 "quest": "Quest",
                 "field": "Field"
             }
@@ -4052,7 +4064,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         embed.add_field(name="**Quest Management**", value="`/quests` - View quest configuration\n`/quest <quest> <true/false>` - Enable or disable a quest", inline=False)
 
-        embed.add_field(name="**Macro Mode**", value="`/macromode <normal/quests/field>` - Set macro mode (normal = all tasks, quests = quests only, field = fields only)", inline=False)
+        embed.add_field(name="**Macro Mode**", value="`/macromode <normal/alt/quests/field>` - Set macro mode. Alt mode only gathers slot 1 and ignores the task list and automatic gather interrupts.", inline=False)
 
         embed.add_field(name="**Collectibles**", value="`/collectibles` - View collectibles\n`/collectible <item> <true/false>` - Enable or disable collectible", inline=False)
 
