@@ -690,12 +690,13 @@ PING_SETTING_KEYS = [
 
 
 class macro:
-    def __init__(self, status, logQueue, updateGUI, run=None, skipTask=None, presence=None, discordMessageQueue=None):
+    def __init__(self, status, logQueue, updateGUI, run=None, skipTask=None, presence=None, discordMessageQueue=None, skipServer=None):
         self.status = status
         self.presence = presence
         self.updateGUI = updateGUI
         self.run = run
         self.skipTask = skipTask
+        self.skipServer = skipServer
         
         # Set the run state for pause-aware sleep functions
         if run is not None:
@@ -3837,6 +3838,11 @@ class macro:
             joinPS = bool(psLink)
             if joinPS and psLink in invalidServerLinks:
                 continue
+            if joinPS and self.skipServer is not None and self.skipServer.value:
+                self.skipServer.value = 0
+                invalidServerLinks.add(psLink)
+                self.logger.webhook("", "Private-server join skipped by Discord command; falling back to a public server", "orange")
+                continue
             launchedAttempts += 1
             if serverKey != "public":
                 serverName = "primary private server" if serverKey == "private_server_link" else serverKey.replace("_", " ")
@@ -3888,6 +3894,12 @@ class macro:
             sawSprinklerGap = not clientAlreadyOpen
             softRejoinReadyAt = loadStartTime + (2 if clientAlreadyOpen else 0)
             while time.time() - loadStartTime < 36:
+                if joinPS and self.skipServer is not None and self.skipServer.value:
+                    self.skipServer.value = 0
+                    invalidServerLinks.add(psLink)
+                    self.logger.webhook("", "Private-server join skipped by Discord command; falling back to a public server", "orange")
+                    rejoinSuccess = False
+                    break
                 # Roblox can recreate its window during launch, so refresh bounds
                 # before every round of visual checks.
                 if appManager.isAppOpen("roblox"):
@@ -4375,7 +4387,6 @@ class macro:
         maxGatherTime = fieldSetting["mins"]*60
         gatherTimeLimit = "Infinite" if infiniteGather else self.convertSecsToMinsAndSecs(maxGatherTime)
         returnType = "rejoin" if isHiveHubField else fieldSetting["return"]
-        gatherEndReason = None
         fuzzyAIRuntimeDefaults = settingsManager.FUZZY_AI_RUNTIME_DEFAULTS
         pattern_blooms_ai_model = str(fieldSetting.get("blooms_ai_model", "Standard"))
         pattern_ai_gather_model = str(fieldSetting.get("ai_gather_model", self.setdat.get("ai_gather_model", "Standard")))
@@ -4719,7 +4730,6 @@ class macro:
                             "screen",
                             route_category="gathering",
                         )
-                        gatherEndReason = "objective_complete"
                         keepGathering = False
                         continue
                 except Exception:
@@ -4834,7 +4844,6 @@ class macro:
                             "screen"
                         )
                         honeyWreathPending = True
-                        gatherEndReason = "backpack"
                         keepGathering = False
                     elif not honeyWreathWaitLogged:
                         self.logger.webhook(
@@ -4846,7 +4855,6 @@ class macro:
                         honeyWreathWaitLogged = True
                 else:
                     self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Time Limit - Return: {returnType.title()}", "light green", "screen", route_category="gathering")
-                    gatherEndReason = "time"
                     keepGathering = False
             #check backpack
             elif isHiveHubField or infiniteGather:
@@ -4863,7 +4871,6 @@ class macro:
                                 "screen"
                             )
                             honeyWreathPending = True
-                            gatherEndReason = "backpack"
                             keepGathering = False
                         elif not honeyWreathWaitLogged:
                             self.logger.webhook(
@@ -4875,7 +4882,6 @@ class macro:
                             honeyWreathWaitLogged = True
                     else:
                         self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Backpack - Return: {returnType.title()}", "light green", "screen", route_category="gathering")
-                        gatherEndReason = "backpack"
                         keepGathering = False
 
         #gathering was interrupted

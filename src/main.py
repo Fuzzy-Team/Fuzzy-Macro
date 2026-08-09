@@ -451,8 +451,8 @@ def canClaimTimedBearQuest(name):
     
 # (set_enabled moved into RichPresenceManager class)
 #controller for the macro
-def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMessageQueue=None, planterCommandQueue=None):
-    macro = macroModule.macro(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue)
+def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMessageQueue=None, planterCommandQueue=None, skipServer=None):
+    macro = macroModule.macro(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, skipServer)
     altHostAuthorized = (
         macro.setdat.get("macro_mode", "normal") != "alt"
         or bool(macro.setdat.get("alt_mode_field_pending", False))
@@ -933,6 +933,33 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                         killedInAnyField = True
                 if killedInAnyField:
                     taskCompleted = True
+
+    def runReadyQuestInterruptMobs():
+        """Kill ready quest mobs before the normal task queue starts gathering."""
+        readyMobs = []
+        seenMobFields = set()
+        for questGiver, mobs in macro.questGatherInterruptMobs.items():
+            interruptKey = f"{questGiver.replace(' ', '_')}_quest_gather_interrupt"
+            if not macro.setdat.get(interruptKey, False):
+                continue
+            for mob in mobs:
+                for field in regularMobData.get(mob, []):
+                    mobField = (mob, field)
+                    if mobField in seenMobFields or not macro.hasMobRespawned(mob, field):
+                        continue
+                    seenMobFields.add(mobField)
+                    readyMobs.append(mobField)
+
+        if not readyMobs:
+            return False
+
+        mobNames = ", ".join(sorted({mob.replace("_", " ").title() for mob, _ in readyMobs}))
+        macro.logger.webhook("Quest mobs ready", f"Running before quest gathering: {mobNames}", "dark brown")
+        for mob, field in readyMobs:
+            # Recheck because an earlier field run can update shared mob timings.
+            if macro.hasMobRespawned(mob, field):
+                runTask(macro.killMob, args=(mob, field), convertAfter=False)
+        return True
 
     def bloomsAIQuestOverride(baseOverride=None):
         override = dict(baseOverride or {})
@@ -1431,6 +1458,11 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         
                     
         taskCompleted = False
+
+        # A quest-mob gather interrupt discovered above must run before any quest
+        # or gather task begins. Otherwise gathering starts only to be interrupted
+        # on its first cycle by a mob that was already known to be ready.
+        runReadyQuestInterruptMobs()
 
         # Quest completer feature removed. Quest-giver handling and brown bear logic remain.
 
@@ -3124,6 +3156,7 @@ if __name__ == "__main__":
     gui.setRecentLogs(recentLogs)
     updateGUI = manager.Value('i', 0)
     skipTask = manager.Value('i', INTERRUPT_NONE)  # interrupt action for the running task
+    skipServer = manager.Value('i', 0)  # one-shot request to abandon the active private-server join
     status = manager.Value(ctypes.c_wchar_p, "none")
     presence = manager.Value(ctypes.c_wchar_p, "")
     logQueue = manager.Queue()
@@ -3442,7 +3475,7 @@ if __name__ == "__main__":
                 print("Detected change in discord bot token, killing previous bot process")
                 discordBotProc.terminate()
                 discordBotProc.join()
-            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI, discordMessageQueue, planterCommandQueue, streamControlQueue), daemon=True)
+            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI, discordMessageQueue, planterCommandQueue, streamControlQueue, skipServer), daemon=True)
             prevDiscordBotToken = currentDiscordBotToken
             discordBotProc.start()
         elif not shouldRunDiscordBot and discordBotProc is not None and discordBotProc.is_alive():
@@ -3541,7 +3574,7 @@ if __name__ == "__main__":
                                     but there are no more items left to craft.\n\
 				                    Check the 'repeat' setting on your blender items and reset blender data.")
             #macro proc
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer), daemon=True)
             macroProc.start()
 
             macro_version = settingsManager.getMacroVersion()
@@ -3685,7 +3718,7 @@ if __name__ == "__main__":
             appManager.closeApp("Roblox")
             keyboardModule.releaseMovement()
             mouse.mouseUp()
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state
@@ -3718,7 +3751,7 @@ if __name__ == "__main__":
             keyboardModule.releaseMovement()
             mouse.mouseUp()
             # restart macro process
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state
