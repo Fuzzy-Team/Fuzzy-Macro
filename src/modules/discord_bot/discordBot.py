@@ -194,9 +194,10 @@ TAD_ALT_SYNC_HELP_TEXT = (
     "`?start` - Start the alt macro after its field is updated.\n"
     "`?help` - Show this TAD compatibility help.\n\n"
     "These compatibility commands are accepted only from Discord webhook messages. "
-    "TAD Alt Sync normally sends them automatically in the order `?stop`, `?set`, then `?start`. "
+    "TAD Alt Sync sends them in the order `?stop`, `?set`, then `?start`; Fuzzy must receive the field authorization before starting. "
     "The host sends that sequence with its default field at startup and whenever the boost field changes. "
-    "On each alt, select **Alt Mode**; it remains idle until a fresh host field command arrives, then gathers only that field."
+    "It also sends the default field when no boost is detected and when the host stops. "
+    "On each alt, select **Alt Mode**; it remains idle until a fresh host field command arrives, then gathers that field indefinitely."
 )
 
 

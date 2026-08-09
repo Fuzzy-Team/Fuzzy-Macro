@@ -1744,6 +1744,42 @@ select:focus {
   /* Prevents overflow issues in flex containers */
 }
 
+.log-search-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.log-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  outline: none;
+  background: var(--textbox-bg);
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 0.8rem;
+}
+
+.log-search-input::placeholder {
+  color: var(--text-dim);
+}
+
+.log-search-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.12);
+}
+
+.log-search-status {
+  flex: 0 0 auto;
+  min-width: 3.5rem;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  text-align: right;
+}
+
 /* Drag Action Buttons */
 .drag-actions {
   margin-left: auto;
