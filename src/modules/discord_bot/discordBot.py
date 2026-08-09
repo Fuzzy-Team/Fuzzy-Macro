@@ -195,7 +195,8 @@ TAD_ALT_SYNC_HELP_TEXT = (
     "`?help` - Show this TAD compatibility help.\n\n"
     "These compatibility commands are accepted only from Discord webhook messages. "
     "TAD Alt Sync normally sends them automatically in the order `?stop`, `?set`, then `?start`. "
-    "On each alt, select **Alt Mode** so it gathers only FieldName1 and ignores its task list and automatic gather interrupts."
+    "The host sends that sequence with its default field at startup and whenever the boost field changes. "
+    "On each alt, select **Alt Mode**; it remains idle until a fresh host field command arrives, then gathers only that field."
 )
 
 
@@ -933,6 +934,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                     fields.append("sunflower")
                 fields[0] = value
                 settingsManager.saveProfileSetting("fields", fields)
+                settingsManager.saveProfileSetting("alt_mode_field", value)
+                settingsManager.saveProfileSetting("alt_mode_field_pending", True)
                 clear_settings_cache()
                 return
 
@@ -1741,8 +1744,10 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         macro_mode = settings.get("macro_mode", "normal")
 
         if macro_mode == "alt":
-            fields = settings.get("fields", [])
-            alt_field = str(fields[0] if fields else "pine tree").replace(" ", "_")
+            alt_field = str(
+                settings.get("alt_mode_field")
+                or settings.get("tad_alt_default_field", "pine tree")
+            ).replace(" ", "_")
             return [f"gather_{alt_field}"]
 
         if macro_mode == "field" and not enabled_tasks:

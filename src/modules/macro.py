@@ -9248,6 +9248,9 @@ class macro:
         print("macro object started")
         self.resetAFBSessionTimings()
 
+        if self.setdat.get("macro_mode", "normal") != "alt":
+            self.tadAltSync.initialize_alts()
+
         #enable background threads
         self.nightDetectStreaks = 0
         self.hourlyReport.loadHourlyReportData()

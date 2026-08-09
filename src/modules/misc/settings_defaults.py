@@ -166,6 +166,8 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'tad_alt_2_enabled': False,
  'tad_alt_2_webhook': '',
  'tad_alt_default_field': 'pine tree',
+ 'alt_mode_field': '',
+ 'alt_mode_field_pending': False,
  'tad_alt_restart_delay': 10,
  'tad_alt_boost_duration': 900,
  'sticker_stack': False,
