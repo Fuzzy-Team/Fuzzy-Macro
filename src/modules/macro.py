@@ -1869,7 +1869,7 @@ class macro:
                 rejoinMsg="Travelling: Hive Hub",
                 placeId=HIVE_HUB_PLACE_ID,
                 claimHive=False,
-                usePrivateServer=False,
+                usePrivateServer=bool(self.setdat.get("hive_hub_private_server", False)),
             )
             #HIVE HUB PATH
             self.keyboard.press("shift")
