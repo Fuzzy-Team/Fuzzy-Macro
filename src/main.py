@@ -631,20 +631,20 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 macro.reset(convert=convertAfter)
             
             #do priority tasks
-            # Quest mode should stay on quests only — skip stinger hunt / mondo buff
+            # Quest and Alt modes stay isolated from priority tasks.
             if (
-                macro.setdat.get("macro_mode", "normal") != "quest"
+                macro.setdat.get("macro_mode", "normal") not in ("quest", "alt")
                 and macro.night
                 and macro.setdat["stinger_hunt"]
             ):
                 macro.stingerHunt()
             if (
-                macro.setdat.get("macro_mode", "normal") != "quest"
+                macro.setdat.get("macro_mode", "normal") not in ("quest", "alt")
                 and macro.setdat["mondo_buff"]
                 and macro.hasMondoRespawned()
             ):
                 macro.collectMondoBuff()
-            if macro.hasScheduledRejoinArrived():
+            if macro.setdat.get("macro_mode", "normal") != "alt" and macro.hasScheduledRejoinArrived():
                 macro.rejoin("Rejoining (Scheduled)")
                 macro.saveTiming("rejoin_every")
             
@@ -1014,6 +1014,14 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         macro.checkAndReloadSettings()
 
         # Migration from old boolean flags to macro_mode is now handled in settings loader
+
+        if macro.setdat.get("macro_mode", "normal") == "alt":
+            # TAD's FieldName1 command maps to Fuzzy's first gather slot.
+            fields = list(macro.setdat.get("fields", []))
+            altField = str(fields[0] if fields else "pine tree").strip().lower() or "pine tree"
+            updateGUI.value = 1
+            runTask(macro.gather, args=(altField,), resetAfter=False, allowAFB=False)
+            continue
 
         #run empty task
         #this is in case no other settings are selected

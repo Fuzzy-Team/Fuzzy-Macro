@@ -1314,6 +1314,8 @@ class macro:
         return time.time()
 
     def detectStickerSproutAnnouncement(self):
+        if self.setdat.get("macro_mode", "normal") == "alt":
+            return
         if not self.setdat.get("sticker_sprout_watch", False):
             return
         if self.status.value == "rejoining":
@@ -2503,7 +2505,7 @@ class macro:
                 mouse.click()
 
             if (
-                self.setdat.get("macro_mode", "normal") != "quest"
+                self.setdat.get("macro_mode", "normal") not in ("quest", "alt")
                 and self.night
                 and self.setdat["stinger_hunt"]
             ):
@@ -4159,9 +4161,10 @@ class macro:
         # Normalize field name to handle both space and underscore formats
         # Convert underscores to spaces for fieldSettings lookup
         normalized_field = field.replace('_', ' ')
+        altMode = self.setdat.get("macro_mode", "normal") == "alt"
         isHiveHubField = normalized_field == "hive hub"
         fieldSetting = {**self.fieldSettings[normalized_field], **settingsOverride}
-        isSproutGather = bool(fieldSetting.get("plant_sprout", False))
+        isSproutGather = not altMode and bool(fieldSetting.get("plant_sprout", False))
         skipTravel = bool(fieldSetting.get("skip_travel", False)) and self.location == normalized_field and not isHiveHubField
         pattern = fieldSetting['shape']
         aiPatternLabels = {
@@ -4173,6 +4176,8 @@ class macro:
             "blooms_ai": ("_BLOOMS_AI_STATE", "_blooms_ai_state"),
         }
         def shouldUseHoneyWreathReturn():
+            if altMode:
+                return False
             if not self.setdat.get("wreath", False):
                 return False
 
@@ -4365,7 +4370,7 @@ class macro:
                 time.sleep(0.4)
             return "planted"
 
-        if fieldSetting.get("plant_sprout", False):
+        if not altMode and fieldSetting.get("plant_sprout", False):
             self.ensure_shift_lock_off("sprouts")
             if pattern in aiPatternLabels and not aiCameraConfigured:
                 configureAIGatherCamera()
@@ -4776,7 +4781,7 @@ class macro:
                 self.logger.webhook("Gathering: interrupted", "Inactive Honey Reset (Beta)", "orange", "screen")
                 self.reset()
                 return
-            elif fieldSetting.get("plant_sprout", False):
+            elif not altMode and fieldSetting.get("plant_sprout", False):
                 sproutGatherLimitReached = sproutBeansUsedThisGather >= sproutGatherBeanLimit
                 sproutSessionLimitReached = self.sproutBeansUsed >= self._sproutBeanLimit()
                 if sproutFinalLootStart is None and not sproutGatherLimitReached and not sproutSessionLimitReached:
@@ -4810,12 +4815,12 @@ class macro:
                     self.logger.webhook("Sprouts", "Final sprout loot collection finished. Resetting to hive.", "light green", route_category="activities")
                     self.reset()
                     return
-            elif self.setdat["Auto_Field_Boost"] and not self.AFBLIMIT and self.AFB(gatherInterrupt=True, turnOffShiftLock = fieldSetting["shift_lock"]):
+            elif not altMode and self.setdat["Auto_Field_Boost"] and not self.AFBLIMIT and self.AFB(gatherInterrupt=True, turnOffShiftLock = fieldSetting["shift_lock"]):
                 stopGather()
                 return
             #check for gather interrupts
             elif (
-                self.setdat.get("macro_mode", "normal") != "quest"
+                self.setdat.get("macro_mode", "normal") not in ("quest", "alt")
                 and self.night
                 and self.setdat["stinger_hunt"]
             ):
@@ -4825,7 +4830,7 @@ class macro:
                 self.reset(convert=False)
                 break
             elif (
-                self.setdat.get("macro_mode", "normal") != "quest"
+                self.setdat.get("macro_mode", "normal") not in ("quest", "alt")
                 and self.setdat["mondo_buff"]
                 and self.hasMondoRespawned()
                 and self.setdat["mondo_buff_interrupt_gathering"]
@@ -4835,7 +4840,7 @@ class macro:
                 self.reset(convert=False)
                 self.collectMondoBuff()
                 break
-            else:
+            elif not altMode:
                 questMobsByGiver = getattr(self, "questGatherInterruptMobs", {})
                 questMobs = {
                     mob
