@@ -339,6 +339,64 @@
           type: { name: "dropdown", data: fields, length: 13, triggerFunction: saveProfileTriggerFunction },
         },
         {
+          id: "tad_alt_copy_field_settings",
+          title: "Use My Field Settings For This Field",
+          desc: "Copy the host's current settings for the selected Default Alt Field into the Alt Gather preset.",
+          type: { name: "button", text: "Copy Settings", triggerFunction: "copyHostFieldSettingsToTadAlt(this)" },
+        },
+        {
+          id: "tad_alt_gather_shape", title: "Default Field Pattern", desc: "Pattern used by alts in the Default Alt Field. Custom patterns must also exist on each alt.",
+          type: { name: "dropdown", data: [], triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_gather_size", title: "Pattern Size", desc: "Area covered by the alt pattern.",
+          type: { name: "dropdown", data: ["XS", "S", "M", "L", "XL"], triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_gather_width", title: "Pattern Width", desc: "Number of pattern repetitions.",
+          type: { name: "dropdown", data: [1, 2, 3, 4, 5, 6, 7, 8], triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_gather_shift_lock", title: "Use Shift Lock", desc: "Enable shift lock while the alt gathers.",
+          type: { name: "checkbox", triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_gather_drift_compensation", title: "Drift Compensation", desc: "Re-align the alt between pattern cycles.",
+          type: { name: "checkbox", triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_gather_invert_lr", title: "Invert Left/Right", desc: "Invert horizontal pattern movement.",
+          type: { name: "checkbox", triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_gather_invert_fb", title: "Invert Forward/Back", desc: "Invert vertical pattern movement.",
+          type: { name: "checkbox", triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_gather_turn", title: "Camera Turn", desc: "Turn the camera before gathering.",
+          type: { name: "dropdown", data: ["None", "Left", "Right"], triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_gather_turn_times", title: "Camera Turn Count", desc: "Number of camera turns.",
+          type: { name: "dropdown", data: [1, 2, 3, 4], triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_gather_start_location", title: "Start Location", desc: "Part of the default field where the alt starts gathering.",
+          type: { name: "dropdown", data: ["Center", "Upper Right", "Right", "Lower Right", "Bottom", "Lower Left", "Left", "Upper Left", "Top"], triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_gather_distance", title: "Start Distance", desc: "Distance travelled toward the selected start location.",
+          type: { name: "dropdown", data: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_gather_goo", title: "Use Goo", desc: "Use goo while the alt gathers.",
+          type: { name: "checkbox", triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_gather_goo_interval", title: "Goo Interval", desc: "Seconds between goo uses.",
+          type: { name: "textbox", inputType: "int", inputLimit: 3, triggerFunction: saveProfileTriggerFunction },
+        },
+        {
           id: "tad_alt_restart_delay",
           title: "Restart Delay",
           desc: "Seconds to wait after stopping the alt macro before changing its field.",

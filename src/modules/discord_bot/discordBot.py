@@ -191,6 +191,7 @@ def clear_settings_cache():
 TAD_ALT_SYNC_HELP_TEXT = (
     "`?stop` - Stop the alt macro before changing fields.\n"
     "`?set FieldName1 <field>` - Set the alt's first configured field slot.\n"
+    "`?set AltGatherSettings <json>` - Apply the host's Default Alt Field gather preset.\n"
     "`?start` - Start the alt macro after its field is updated.\n"
     "`?help` - Show this TAD compatibility help.\n\n"
     "These compatibility commands are accepted only from Discord webhook messages. "
@@ -217,7 +218,40 @@ def parse_tad_alt_sync_command(content: str):
         field = " ".join(command[len(prefix):].strip().lower().replace("_", " ").split())
         if field:
             return "set_field_1", field
+    settings_prefix = "?set altgathersettings "
+    if lowered.startswith(settings_prefix):
+        payload = command[len(settings_prefix):].strip()
+        if payload:
+            return "set_alt_gather_settings", payload
     return None, None
+
+
+def normalize_tad_alt_gather_settings(payload):
+    if not isinstance(payload, dict):
+        return {}
+    out = {}
+    bool_keys = ("shift_lock", "field_drift_compensation", "invert_lr", "invert_fb", "goo")
+    for key in bool_keys:
+        if isinstance(payload.get(key), bool):
+            out[key] = payload[key]
+    enums = {
+        "size": {"xs", "s", "m", "l", "xl"},
+        "turn": {"none", "left", "right"},
+        "start_location": {"center", "upper right", "right", "lower right", "bottom", "lower left", "left", "upper left", "top"},
+    }
+    for key, allowed in enums.items():
+        value = str(payload.get(key, "")).strip().lower()
+        if value in allowed:
+            out[key] = value
+    ranges = {"width": (1, 8), "turn_times": (1, 4), "distance": (1, 10), "goo_interval": (3, 300)}
+    for key, (minimum, maximum) in ranges.items():
+        value = payload.get(key)
+        if isinstance(value, int) and not isinstance(value, bool):
+            out[key] = max(minimum, min(maximum, value))
+    shape = str(payload.get("shape", "")).strip()
+    if shape and len(shape) <= 64:
+        out["shape"] = shape
+    return out
 
 AUTO_PLANTER_OPTIONS = [
     ("paper", "auto_planter_paper", "Paper"),
@@ -938,6 +972,21 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 settingsManager.saveProfileSetting("alt_mode_field", value)
                 settingsManager.saveProfileSetting("alt_mode_field_pending", True)
                 clear_settings_cache()
+                return
+            if action == "set_alt_gather_settings":
+                try:
+                    payload = json.loads(value)
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    return
+                gather_settings = normalize_tad_alt_gather_settings(payload)
+                field = str(settingsManager.loadSettings().get("alt_mode_field", "") or "").strip()
+                valid_fields = settingsManager.loadFields()
+                if field not in valid_fields or not gather_settings:
+                    return
+                field_settings = dict(valid_fields[field])
+                field_settings.update(gather_settings)
+                field_settings["infinite_gather"] = True
+                settingsManager.saveField(field, field_settings)
                 return
 
         await bot.process_commands(message)
