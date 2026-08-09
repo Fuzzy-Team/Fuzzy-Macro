@@ -134,15 +134,48 @@ async function toggleStartStop() {
 
 eel.expose(log);
 function log(time = "", msg = "", color = "") {
-  document.getElementById("log");
   let timeText = "";
   if (time) timeText = `[${time}]`;
-  const html = `
-    <div class = "log-msg"><span style="background-color: #${color}; align-self: start"></span>${timeText} ${msg}</div>
-    `;
   const logs = document.getElementById("logs");
-  logs.innerHTML += html;
-  logs.scrollTop = logs.scrollHeight;
+  if (!logs) return;
+
+  const logEntry = document.createElement("div");
+  logEntry.className = "log-msg";
+  logEntry.innerHTML = `<span style="background-color: #${color}; align-self: start"></span>${timeText} ${msg}`;
+  logs.appendChild(logEntry);
+
+  filterLogs();
+  if (!logEntry.hidden) logs.scrollTop = logs.scrollHeight;
+}
+
+function getLogSearchTerms() {
+  const input = document.getElementById("log-search-input");
+  return (input?.value || "")
+    .toLocaleLowerCase()
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function filterLogs() {
+  const logs = document.getElementById("logs");
+  if (!logs) return;
+
+  const terms = getLogSearchTerms();
+  const entries = Array.from(logs.querySelectorAll(".log-msg"));
+  let matchCount = 0;
+
+  entries.forEach((entry) => {
+    const text = entry.textContent.toLocaleLowerCase();
+    const matches = terms.every((term) => text.includes(term));
+    entry.hidden = !matches;
+    if (matches) matchCount += 1;
+  });
+
+  const status = document.getElementById("log-search-status");
+  if (status) {
+    status.textContent = terms.length ? `${matchCount} of ${entries.length}` : "";
+  }
 }
 
 //returns a html string for the task
@@ -211,6 +244,13 @@ async function loadTasks() {
     if (macroModeDropdown.value !== currentValue) {
       macroModeDropdown.value = currentValue;
     }
+  }
+
+  if (setdat.macro_mode === "alt") {
+    out += taskHTML("Alt Mode", "Gathers the host-assigned field indefinitely");
+    out += taskHTML("Host Controlled", "The host assigns the field before every Alt Mode run");
+    document.getElementById("task-list").innerHTML = out;
+    return;
   }
 
   // Check if field-only mode is enabled
@@ -765,6 +805,9 @@ $("#home-placeholder")
       console.error("Error loading recent logs:", error);
     }
 
+    const logSearchInput = document.getElementById("log-search-input");
+    if (logSearchInput) logSearchInput.addEventListener("input", filterLogs);
+
     // Initialize macro mode dropdown
     const settings = await loadAllSettings();
     const macroModeDropdown = document.getElementById("macro_mode");
@@ -924,6 +967,7 @@ $("#home-placeholder")
       await eel.clearRecentLogs()();
       const logs = document.getElementById("logs");
       if (logs) logs.innerHTML = "";
+      filterLogs();
     }
   })
   .on("click", "#export-logs-btn", async (event) => {

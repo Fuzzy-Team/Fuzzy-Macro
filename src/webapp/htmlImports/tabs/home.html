@@ -12,6 +12,7 @@
         <h2>Macro Mode</h2>
         <select id="macro_mode" aria-label="Macro Mode">
           <option value="normal">Normal Mode</option>
+          <option value="alt">Alt Mode</option>
           <option value="field">Field Mode</option>
           <option value="quest">Quest Mode</option>
           <option value="bug">Bug Run Mode</option>
@@ -41,6 +42,12 @@
             <button class="purple-button" id="clear-logs-btn"
               style="margin-top: 0; padding: 0.3rem 0.6rem; font-size: 0.8rem;">Clear</button>
           </div>
+        </div>
+        <div class="log-search-row">
+          <input type="search" id="log-search-input" class="log-search-input"
+            placeholder="Search logs (e.g. claimed Hive)" autocomplete="off"
+            aria-label="Search logs" aria-describedby="log-search-status">
+          <span id="log-search-status" class="log-search-status" aria-live="polite"></span>
         </div>
         <div id="logs" class="flex-col gap-xs overflow-y-auto flex-grow-1">
           <!-- Logs will be appended here -->
