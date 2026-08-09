@@ -3810,11 +3810,13 @@ class macro:
         return self._joinErrorFromText(text)
 
     def rejoin(self, rejoinMsg = "Rejoining", placeId = MAIN_GAME_PLACE_ID, claimHive = True, usePrivateServer = True):
+        if self.skipServer is not None:
+            self.skipServer.value = 0
         self.canDetectNight = False
         self.location = "spawn"
         self.cannonFromHive = False
         placeId = str(placeId or MAIN_GAME_PLACE_ID)
-        privateServerLink = str(self.setdat.get("private_server_link", "") or "").strip() if usePrivateServer else ""
+        privateServerLinks = self._getRejoinServerLinks(usePrivateServer)
         self.logger.webhook("",rejoinMsg, "dark brown")
         self.set_task_status("rejoining", activity="rejoining")
         mouse.mouseUp()
@@ -3824,30 +3826,27 @@ class macro:
             appManager.closeApp("Roblox")
             time.sleep(3)
 
-        # Retry the configured private server first, then use a public server.
-        # This keeps the retry order deterministic and avoids switching between
-        # different private-server links during one reconnect cycle.
-        attempts = (
-            [('private_server_link', privateServerLink)] * 5 + [("public", "")] * 5
-            if privateServerLink
-            else [("public", "")] * 10
-        )
+        # Retry each configured private server in failover order, then use a
+        # public server. Skipping one link invalidates only that link, allowing
+        # the next configured backup to begin immediately.
+        attempts = [server for server in privateServerLinks for _ in range(5)]
+        attempts.extend([("public", "")] * (5 if privateServerLinks else 10))
+        firstPublicAttempt = len(privateServerLinks) * 5
         invalidServerLinks = set()
         launchedAttempts = 0
         for i, (serverKey, psLink) in enumerate(attempts):
             joinPS = bool(psLink)
             if joinPS and psLink in invalidServerLinks:
                 continue
-            if joinPS and self.skipServer is not None and self.skipServer.value:
-                self.skipServer.value = 0
-                invalidServerLinks.add(psLink)
-                self.logger.webhook("", "Private-server join skipped by Discord command; falling back to a public server", "orange")
-                continue
+            if self.skipServer is not None:
+                # -1 advertises that /skipserver can currently be used; 1 is
+                # the one-shot request written by the Discord bot process.
+                self.skipServer.value = -1 if joinPS else 0
             launchedAttempts += 1
             if serverKey != "public":
                 serverName = "primary private server" if serverKey == "private_server_link" else serverKey.replace("_", " ")
                 self.logger.webhook("", f"Rejoin attempt {launchedAttempts}/{len(attempts)}: {serverName}", "dark brown")
-            elif privateServerLink and i == 5:
+            elif privateServerLinks and i == firstPublicAttempt:
                 self.logger.webhook("", "Private-server reconnects failed; falling back to a public server", "red", "screen", ping_category="ping_disconnects")
             
             # A Roblox deeplink can teleport an already-running client and
@@ -3857,6 +3856,8 @@ class macro:
             if joinPS:
                 deeplink = self._privateServerDeeplink(placeId, psLink)
                 if not deeplink:
+                    if self.skipServer is not None:
+                        self.skipServer.value = 0
                     invalidServerLinks.add(psLink)
                     self.logger.webhook("", f"Invalid {serverKey.replace('_', ' ')}; trying the next server.", "red", "screen", ping_category="ping_critical_errors")
                     continue
@@ -3894,10 +3895,10 @@ class macro:
             sawSprinklerGap = not clientAlreadyOpen
             softRejoinReadyAt = loadStartTime + (2 if clientAlreadyOpen else 0)
             while time.time() - loadStartTime < 36:
-                if joinPS and self.skipServer is not None and self.skipServer.value:
+                if joinPS and self.skipServer is not None and self.skipServer.value == 1:
                     self.skipServer.value = 0
                     invalidServerLinks.add(psLink)
-                    self.logger.webhook("", "Private-server join skipped by Discord command; falling back to a public server", "orange")
+                    self.logger.webhook("", "Private-server join skipped by Discord command; trying the next configured server", "orange")
                     rejoinSuccess = False
                     break
                 # Roblox can recreate its window during launch, so refresh bounds
@@ -3943,6 +3944,8 @@ class macro:
                         mouse.mouseUp()
                         keyboard.releaseMovement()
                         if action == "abort":
+                            if self.skipServer is not None:
+                                self.skipServer.value = 0
                             self.clear_task_status()
                             return False
                         if action == "cooldown":
@@ -4010,6 +4013,9 @@ class macro:
                 except Exception:
                     sustained_start = 0
                 time.sleep(1)
+
+            if self.skipServer is not None:
+                self.skipServer.value = 0
 
             if not gameLoaded and rejoinSuccess:
                 self.logger.webhook(

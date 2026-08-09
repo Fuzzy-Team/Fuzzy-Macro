@@ -2791,11 +2791,11 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         if skipServer is None:
             await interaction.response.send_message("Server skipping is unavailable.", ephemeral=True)
             return
-        if str(status.value).lower() != "rejoining":
-            await interaction.response.send_message("The macro is not currently joining a server.")
+        if skipServer.value != -1:
+            await interaction.response.send_message("The macro is not currently attempting to join a private server.")
             return
         skipServer.value = 1
-        await interaction.response.send_message("Skipping the current private server and falling back to a public server.")
+        await interaction.response.send_message("Skipping the current private server. The macro will try the next backup, or a public server if none is configured.")
 
     @bot.tree.command(name = "reset", description = "Reset the character and return to hive")
     @requires_discord_permission("task_interrupts")
