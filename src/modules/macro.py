@@ -44,6 +44,7 @@ import re
 import ast
 from modules.submacros.hourlyReport import BUFF_RENDER_CONFIG, HourlyReport, BuffDetector
 from modules.submacros.itemMonitor import ItemMonitor
+from modules.submacros.tadAltSync import TadAltSync
 from modules.submacros.liveGatherReport import LiveGatherReport, LiveQuestProgressReport
 from difflib import SequenceMatcher
 import fuzzywuzzy.process
@@ -716,6 +717,7 @@ class macro:
         pingSettings = {key: self.setdat.get(key, False) for key in PING_SETTING_KEYS}
         
         self.logger = logModule.log(logQueue, logModule.delivery_uses_webhook(self.setdat), logModule.get_default_delivery_route(self.setdat), self.setdat.get("send_screenshot", True), blocking=self.setdat.get("low_performance", False), hourlyReportOnly=self.setdat.get("only_send_hourly_report", False), robloxWindow=self.robloxWindow, enableDiscordPing=True, discordUserID=self.setdat.get("discord_user_id", ""), pingSettings=pingSettings, webhookTimeFormat=self.setdat.get("webhook_time_format", 24), enableDiscordBot=logModule.delivery_uses_bot_messages(self.setdat), discordMessageQueue=discordMessageQueue, routeSettings=logModule.build_route_settings(self.setdat))
+        self.tadAltSync = TadAltSync(self.setdat, self.logger)
         self.buffDetector = BuffDetector(self.robloxWindow)
         self.hourlyReport = HourlyReport(self.buffDetector, self.setdat.get("hourly_report_time_format", 24))
         self.itemMonitor = ItemMonitor(self.robloxWindow)
@@ -780,6 +782,7 @@ class macro:
             # Reload settings
             old_profile = settingsManager.getCurrentProfile()
             self.setdat = settingsManager.loadAllSettings()
+            self.tadAltSync.update_settings(self.setdat)
             self.fieldSettings = settingsManager.loadFields()
             # Update logger with new webhook settings
             pingSettings = {key: self.setdat.get(key, False) for key in PING_SETTING_KEYS}
@@ -5498,6 +5501,7 @@ class macro:
                 boostedField = detectedBoostedFields[-1] if detectedBoostedFields else ""
                 returnVal = boostedField
                 self.logger.webhook("", f"Collected: {displayName}, Boosted Field: {boostedField.title()}", "bright green", "screen")
+                self.tadAltSync.sync_to_boost(boostedField)
                 self.saveTiming("last_booster")
             elif objective == "sticker_stack":
                 if "your" in reached or "activated" in reached:

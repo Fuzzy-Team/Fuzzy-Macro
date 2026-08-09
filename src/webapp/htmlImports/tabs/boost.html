@@ -2,6 +2,7 @@
   <div id="boost-nav" class="sub-nav-bar">
     <div id="boost-hotbar" class="boost-tab-item">Hotbar</div>
     <div id="boost-buffs" class="boost-tab-item">Buffs</div>
+    <div id="boost-tad-alt-sync" class="boost-tab-item">TAD Alt Sync</div>
   </div>
   <div id="boost-hotbar-tab" class="standard-container sub-tab-panel active">
     <script>
@@ -293,6 +294,61 @@
             name: "checkbox",
             triggerFunction: saveProfileTriggerFunction,
           },
+        },
+      ]);
+    </script>
+  </div>
+  <div id="boost-tad-alt-sync-tab" class="standard-container sub-tab-panel">
+    <script>
+      const tadAltSyncParent = document.getElementById("boost-tad-alt-sync-tab");
+      buildStandardContainer(tadAltSyncParent, "TAD Alt Sync", "Sync up to two Discord remote-controlled Fuzzy Macro alts with detected field boosts.", [
+        {
+          id: "tad_alt_sync_enabled",
+          title: "Enable TAD Alt Sync",
+          desc: "Move enabled TAD alts to the field detected after collecting a booster.",
+          type: { name: "checkbox", triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_1_enabled",
+          title: "TAD Alt 1",
+          desc: "Enable the first alt.",
+          type: { name: "checkbox", triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_1_webhook",
+          title: "Alt 1 Remote-Control Webhook",
+          desc: "A webhook in a channel visible to the first alt's Fuzzy Discord bot.",
+          type: { name: "textbox", inputType: "string", length: 24, triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_2_enabled",
+          title: "TAD Alt 2",
+          desc: "Enable the second alt.",
+          type: { name: "checkbox", triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_2_webhook",
+          title: "Alt 2 Remote-Control Webhook",
+          desc: "A webhook in a channel visible to the second alt's Fuzzy Discord bot.",
+          type: { name: "textbox", inputType: "string", length: 24, triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_default_field",
+          title: "Default Alt Field",
+          desc: "Field restored after the boost expires.",
+          type: { name: "dropdown", data: fields, length: 13, triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_restart_delay",
+          title: "Restart Delay",
+          desc: "Seconds to wait after stopping the alt macro before changing its field.",
+          type: { name: "textbox", inputType: "float", inputLimit: 4, triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_boost_duration",
+          title: "Boost Duration",
+          desc: "Seconds before returning the alts to their default field (900 = 15 minutes).",
+          type: { name: "textbox", inputType: "float", inputLimit: 5, triggerFunction: saveProfileTriggerFunction },
         },
       ]);
     </script>
