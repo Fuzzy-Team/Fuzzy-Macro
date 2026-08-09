@@ -214,7 +214,7 @@ def parse_tad_alt_sync_command(content: str):
 
     prefix = "?set fieldname1 "
     if lowered.startswith(prefix):
-        field = command[len(prefix):].strip().lower()
+        field = " ".join(command[len(prefix):].strip().lower().replace("_", " ").split())
         if field:
             return "set_field_1", field
     return None, None

@@ -54,6 +54,7 @@ class TadAltSync:
             self.logger.webhook(title, description, color, route_category="boosts")
 
     def _change_field(self, webhooks, field):
+        field = " ".join(str(field or "").replace("_", " ").split())
         failures = self._send_all(webhooks, "?stop")
         time.sleep(max(0, float(self.settings.get("tad_alt_restart_delay", 10) or 0)))
         failures.extend(self._send_all(webhooks, f"?set FieldName1 {field.title()}"))
