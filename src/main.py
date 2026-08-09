@@ -67,6 +67,7 @@ except ModuleNotFoundError:
         pass
     quit()
 from modules.submacros.hourlyReport import HourlyReport
+from modules.submacros.tadAltSync import TadAltSync
 mw, mh = pag.size()
 
 # Quest titles that are primarily bloom-petal objectives and can be skipped by setting.
@@ -3592,6 +3593,8 @@ if __name__ == "__main__":
 
             if had_macro_proc:
                 logger.webhook("Macro Stopped", "Fuzzy Macro", "red", route_category="macro_status")
+                if setdat.get("macro_mode", "normal") != "alt":
+                    TadAltSync(setdat, logger).initialize_alts()
             try:
                 gui.stopAllTools()
             except Exception:

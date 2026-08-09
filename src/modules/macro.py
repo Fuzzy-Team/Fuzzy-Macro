@@ -4415,7 +4415,7 @@ class macro:
         sizeword = fieldSetting["size"]
         size = sizeData[sizeword]
         width = fieldSetting["width"]
-        infiniteGather = bool(fieldSetting.get("infinite_gather", False))
+        infiniteGather = altMode or bool(fieldSetting.get("infinite_gather", False))
         maxGatherTime = fieldSetting["mins"]*60
         gatherTimeLimit = "Infinite" if infiniteGather else self.convertSecsToMinsAndSecs(maxGatherTime)
         returnType = "rejoin" if isHiveHubField else fieldSetting["return"]
@@ -5506,7 +5506,10 @@ class macro:
                 boostedField = detectedBoostedFields[-1] if detectedBoostedFields else ""
                 returnVal = boostedField
                 self.logger.webhook("", f"Collected: {displayName}, Boosted Field: {boostedField.title()}", "bright green", "screen")
-                self.tadAltSync.sync_to_boost(boostedField)
+                if boostedField:
+                    self.tadAltSync.sync_to_boost(boostedField)
+                else:
+                    self.tadAltSync.initialize_alts()
                 self.saveTiming("last_booster")
             elif objective == "sticker_stack":
                 if "your" in reached or "activated" in reached:
