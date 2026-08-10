@@ -275,6 +275,15 @@ def _create_backup(destination, backup_path, protected_folders, protected_files)
                 os.unlink(backup_path)
             except Exception:
                 pass
+    # Recordings are generated artifacts and can be many gigabytes. Including
+    # them makes the updater appear stuck at 30% while it compresses videos.
+    excluded_folders = set(protected_folders)
+    excluded_folders.update({
+        ".git",
+        os.path.join("src", "data", "user", "fuzzy_ai_recordings"),
+    })
+    backup_abs = os.path.abspath(backup_path)
+
     with zipfile.ZipFile(backup_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for root, dirs, files in os.walk(destination):
             # skip the backup file itself and src extraction folders
@@ -283,20 +292,21 @@ def _create_backup(destination, backup_path, protected_folders, protected_files)
                 rl = ""
             else:
                 rl = rel_root
-            # skip protected folders
-            skip_root = False
-            for p in protected_folders:
-                if rl == p or rl.startswith(p + os.sep):
-                    skip_root = True
-                    break
-            if skip_root:
-                continue
+            # Prune excluded trees before os.walk descends into them.
+            dirs[:] = [
+                d for d in dirs
+                if not any(
+                    (os.path.join(rl, d) if rl else d) == p
+                    or (os.path.join(rl, d) if rl else d).startswith(p + os.sep)
+                    for p in excluded_folders
+                )
+            ]
             for f in files:
                 if f in protected_files:
                     continue
                 absf = os.path.join(root, f)
                 arcname = os.path.join(rl, f) if rl else f
-                if arcname == os.path.basename(backup_path):
+                if os.path.abspath(absf) == backup_abs:
                     continue
                 try:
                     zf.write(absf, arcname)
