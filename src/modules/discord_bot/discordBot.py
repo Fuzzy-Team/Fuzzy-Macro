@@ -1181,6 +1181,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         ("coconut_dispenser", "Coconut Dispenser"),
         ("royal_jelly_dispenser", "Royal Jelly Dispenser"),
         ("ant_pass_dispenser", "Ant Pass Dispenser"),
+        ("buy_ant_pass", "Buy Ant Pass"),
         ("treat_dispenser", "Treat Dispenser"),
         ("glue_dispenser", "Glue Dispenser"),
         ("memory_match", "Memory Match"),
@@ -3527,7 +3528,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         """Auto-complete function for collectible names"""
         collectibles = [
             "wealth_clock", "blueberry", "strawberry", "coconut", "royal_jelly", "ant_pass",
-            "treat", "glue", "honeystorm"
+            "buy_ant_pass", "treat", "glue", "honeystorm"
         ]
         choices = []
 
@@ -3741,6 +3742,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 "🥥 **Coconut Dispenser**": settings.get("coconut_dispenser", False),
                 "👑 **Royal Jelly Dispenser**": settings.get("royal_jelly_dispenser", False),
                 "🎫 **Ant Pass Dispenser**": settings.get("ant_pass_dispenser", False),
+                "🎟️ **Buy Ant Pass**": settings.get("buy_ant_pass", False),
                 "🍬 **Treat Dispenser**": settings.get("treat_dispenser", False),
                 "🧪 **Glue Dispenser**": settings.get("glue_dispenser", False),
                 "🟧 **Honey Storm**": settings.get("honeystorm", False)
@@ -3780,6 +3782,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             "coconut": "coconut_dispenser",
             "royal_jelly": "royal_jelly_dispenser",
             "ant_pass": "ant_pass_dispenser",
+            "buy_ant_pass": "buy_ant_pass",
             "treat": "treat_dispenser",
             "glue": "glue_dispenser",
             "honeystorm": "honeystorm"

@@ -110,6 +110,8 @@ collectData = {
     "royal_jelly_dispenser": [["claim", "royal"], "a",22*60*60], #22hr
     "treat_dispenser": [["use", "treat"], "w", 1*60*60], #1hr
     "ant_pass_dispenser": [["use", "free"], "w", 2*60*60], #2hr
+    # "Spend 10 Tickets to Use the Ant Pass Dispenser" — same inventory cap as free
+    "buy_ant_pass": [["spend", "ticket"], "w", 0],
     "robo_pass_dispenser": [["use", "free", "robo", "pass", "passes"], None, 22*60*60], #22hr
     "glue_dispenser": [["use", "glue"], None, 22*60*60], #22hr
     "stockings": [["check", "inside", "stocking"], "a", 1*60*60], #1hr
@@ -626,6 +628,8 @@ questCompleterCollectNames = {
     "treat dispenser": "treat_dispenser",
     "ant_pass_dispenser": "ant_pass_dispenser",
     "ant pass dispenser": "ant_pass_dispenser",
+    "buy_ant_pass": "buy_ant_pass",
+    "buy ant pass": "buy_ant_pass",
     "glue_dispenser": "glue_dispenser",
     "glue dispenser": "glue_dispenser",
     "wealth_clock": "wealth_clock",
@@ -5016,26 +5020,9 @@ class macro:
 
     def antChallenge(self):
         self.logger.webhook("","Travelling: Ant Challenge","dark brown")
-        left = 15 / self.setdat["hive_number"]
-        self.keyboard.walk("w", 1, False)
-        self.keyboard.walk("a", left, False)
-        self.keyboard.keyDown("w")
-        time.sleep(2)
-        self.keyboard.press("space")
-        time.sleep(3.5)
-        self.keyboard.keyUp("w")
-        self.keyboard.walk("a", 0.45, False)
-        self.keyboard.keyDown("w")
-        self.keyboard.press("space")
-        time.sleep(1.5)
-        self.keyboard.press("space")
-        time.sleep(3)
-        self.keyboard.keyUp("w")
-        self.keyboard.walk("a", 2.5, False)
-        self.keyboard.keyDown("w")
-        time.sleep(6)
-        self.keyboard.keyUp("w")
-        self.keyboard.walk("s", 0.4)
+        if not self.travelViaCannon("Ant Challenge"):
+            return False
+        self.runPath("boss/ant_challenge")
         time.sleep(0.5)
 
         # If the red box (where E would be) says 'need', fetch a free ant pass
@@ -5045,7 +5032,6 @@ class macro:
             try:
                 self.reset(convert=False)
                 self.collect("ant_pass_dispenser")
-                self.reset(convert=False)
             except Exception:
                 self.logger.webhook("", "Failed to collect ant pass","red", "screen", ping_category="ping_critical_errors")
             time.sleep(1)
@@ -5383,7 +5369,7 @@ class macro:
                     if reached: break
             if reached: break
             self.logger.webhook("", f"Failed to reach {displayName}", "dark brown", "screen")
-            if objective == "ant_pass_dispenser":
+            if objective in ("ant_pass_dispenser", "buy_ant_pass"):
                 self.logger.webhook("", "Maybe you have maxed out ant passes?", "dark brown")
             if i != 2: self.reset(convert=False)
         
@@ -8371,6 +8357,7 @@ class macro:
                 'royal_jelly_dispenser': 'royal_jelly_dispenser',
                 'treat_dispenser': 'treat_dispenser',
                 'ant_pass_dispenser': 'ant_pass_dispenser',
+                'buy_ant_pass': 'buy_ant_pass',
                 'glue_dispenser': 'glue_dispenser',
                 'wealth_clock': 'wealth_clock',
                 'stockings': 'stockings',

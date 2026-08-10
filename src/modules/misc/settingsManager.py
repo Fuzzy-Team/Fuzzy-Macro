@@ -717,9 +717,17 @@ def readSettingsFile(path, defaults=None):
 
     data = [[x.strip() for x in y.split("=", 1)] for y in raw.split("\n") if y]
     #convert to a dict
+    resolved_defaults = defaults if defaults is not None else _defaultsForSettingsPath(path)
     out = {}
-    for k,v in data:
-        out[k] = _parseSettingValue(v)
+    for k, v in data:
+        parsed = _parseSettingValue(v)
+        # Keep string-typed settings as strings (tokens, snowflake IDs, URLs, etc.)
+        # even when the raw value looks numeric.
+        if resolved_defaults is not None:
+            default_val = resolved_defaults.get(k)
+            if isinstance(default_val, str) and not isinstance(parsed, str):
+                parsed = "" if parsed is None else str(parsed)
+        out[k] = parsed
     return out
 
 def _parseSettingValue(value):
