@@ -3339,7 +3339,15 @@ class macro:
                 bright_mid_map[slot] = 0.0
                 continue
             fh, fs, fv = face[:, :, 0], face[:, :, 1], face[:, :, 2]
-            bee_px = (fs > 110) & (fv > 100) & ~((fh >= 35) & (fh <= 85)) & (face_red == 0)
+            colored_px = (fs > 110) & (fv > 100) & ~((fh >= 35) & (fh <= 85))
+            # A claim arrow can overlap the lower face region, so red used to be
+            # discarded here entirely.  That also discarded red/Festive hive
+            # cells and made occupied hives (most noticeably slot 3) look empty.
+            # Red in the upper hive-cell region is occupancy; keep excluding it
+            # below that region where floating claim arrows appear.
+            face_rows = np.arange(face.shape[0])[:, None]
+            upper_hive = face_rows < int(band_h * 0.25)
+            bee_px = colored_px & ((face_red == 0) | upper_hive)
             bees_map[slot] = float(bee_px.mean())
             pad = hsv[int(band_h * 0.40) :, x0:x1]
             if pad.size:
