@@ -872,6 +872,7 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
       collect_royal_jelly_dispenser: "Collect: Royal Jelly Dispenser",
       collect_treat_dispenser: "Collect: Treat Dispenser",
       collect_ant_pass_dispenser: "Collect: Ant Pass Dispenser",
+      collect_buy_ant_pass: "Collect: Buy Ant Pass",
       collect_glue_dispenser: "Collect: Glue Dispenser",
       collect_stockings: "Collect: Stockings",
       collect_wreath: "Collect: Wreath",
