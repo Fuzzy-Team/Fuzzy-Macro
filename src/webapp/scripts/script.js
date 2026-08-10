@@ -1279,17 +1279,12 @@ window.addEventListener("keydown", (event) => {
   }
 });
 
-// Settings text fields save on change.  Do not let Enter submit a surrounding
-// form (or trigger the embedded browser's default action), which can reload the
-// UI while settings are being written.  Blurring commits the current field via
-// its existing onchange handler.
+// Ignore Enter in settings textboxes so it can't submit/reload a surrounding form.
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Enter" || event.isComposing) return;
-
   const target = event.target;
   if (!(target instanceof HTMLInputElement) || target.type !== "text") return;
   if (!target.classList.contains("textbox")) return;
-
   event.preventDefault();
   target.blur();
 });

@@ -792,11 +792,24 @@ def saveDict(path, data):
     # Ensure file ends with a newline to avoid accidental concatenation
     if not out.endswith("\n"):
         out = out + "\n"
-    directory = os.path.dirname(os.path.abspath(path))
+    abs_path = os.path.abspath(path)
+    directory = os.path.dirname(abs_path)
     if directory:
         os.makedirs(directory, exist_ok=True)
-    with open(path, "w") as f:
-        f.write(out)
+    # Write to a temp file then replace, so a concurrent reader never sees a
+    # truncated/empty settings file mid-save.
+    fd, tmp_path = tempfile.mkstemp(prefix=".settings_", suffix=".tmp", dir=directory or None)
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(out)
+        os.replace(tmp_path, abs_path)
+    except Exception:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
 
 #update one property of a setting
 def saveSettingFile(setting,value, path):

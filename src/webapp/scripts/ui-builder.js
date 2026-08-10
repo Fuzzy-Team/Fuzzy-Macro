@@ -295,7 +295,7 @@ function buildStandardContainer(parentElement, title, desc, settings) {
     const elementTag = isMultiCheck ? "div" : "form";
     out += `
       <${elementTag} style="display: flex; flex-direction:${formDirection}; align-items:${alignItems}; justify-content: space-between; padding-right: ${formPaddingRight
-      }; ${i ? "margin-top:1rem" : ""};">
+      }; ${i ? "margin-top:1rem" : ""};" ${elementTag === "form" ? 'onsubmit="return false"' : ""}>
         <div style="width: ${leftWidth}; ${leftDivStyle}">
           <label>${e.title}</label>
           <p>${e.desc}</p>
