@@ -3468,8 +3468,9 @@ if __name__ == "__main__":
             run.value = 0
 
         #discord bot. Look for changes in the bot token
-        currentDiscordBotToken = setdat.get("discord_bot_token", "")
-        shouldRunDiscordBot = logModule.delivery_uses_bot_commands(setdat) and currentDiscordBotToken and currentDiscordBotToken.strip()
+        # Coerce to str: settings parser may turn digit-only values into ints
+        currentDiscordBotToken = str(setdat.get("discord_bot_token") or "").strip()
+        shouldRunDiscordBot = logModule.delivery_uses_bot_commands(setdat) and bool(currentDiscordBotToken)
         if shouldRunDiscordBot and currentDiscordBotToken != prevDiscordBotToken:
             if discordBotProc is not None and discordBotProc.is_alive():
                 print("Detected change in discord bot token, killing previous bot process")
