@@ -3247,6 +3247,9 @@ class macro:
             cv2.inRange(hsv, np.array([0, 130, 130]), np.array([8, 255, 255])),
             cv2.inRange(hsv, np.array([172, 130, 130]), np.array([179, 255, 255])),
         )
+        # Keep the unfiltered mask for identifying red/Festive hive faces. The
+        # component cleanup below intentionally removes their large red panels.
+        raw_red_mask = red_mask.copy()
         # Strip ultra-wide red strokes (hand-drawn arrows / UI, not claim chevrons).
         num_red, red_labels, red_stats, _ = cv2.connectedComponentsWithStats(red_mask, 8)
         for i in range(1, num_red):
@@ -3326,6 +3329,7 @@ class macro:
         bees_map = {}
         white_map = {}
         bright_mid_map = {}
+        red_hive_map = {}
         for i, slot in enumerate((6, 5, 4, 3, 2, 1)):
             cx = centers[i]
             half = max(18.0, slot_w * 0.36)
@@ -3337,6 +3341,7 @@ class macro:
                 bees_map[slot] = 1.0
                 white_map[slot] = 0.0
                 bright_mid_map[slot] = 0.0
+                red_hive_map[slot] = 0.0
                 continue
             fh, fs, fv = face[:, :, 0], face[:, :, 1], face[:, :, 2]
             colored_px = (fs > 110) & (fv > 100) & ~((fh >= 35) & (fh <= 85))
@@ -3349,6 +3354,8 @@ class macro:
             upper_hive = face_rows < int(band_h * 0.25)
             bee_px = colored_px & ((face_red == 0) | upper_hive)
             bees_map[slot] = float(bee_px.mean())
+            upper_red = raw_red_mask[: max(1, int(band_h * 0.25)), x0:x1]
+            red_hive_map[slot] = float((upper_red > 0).mean())
             pad = hsv[int(band_h * 0.40) :, x0:x1]
             if pad.size:
                 white_map[slot] = float(
@@ -3421,7 +3428,13 @@ class macro:
             idx = int(np.argmin(dists))
             if dists[idx] > slot_w * 0.55:
                 continue
-            arrow_slots.add(6 - idx)
+            slot = 6 - idx
+            # A red/Festive hive panel can leave arrow-sized red components in
+            # the lower face. Do not accept those as claim arrows when the same
+            # slot has substantial red coverage across its upper hive face.
+            if red_hive_map.get(slot, 0.0) >= 0.08:
+                continue
+            arrow_slots.add(slot)
 
         # Prefer multiple floating arrows; else white disks (+ empty companions);
         # else empty faces alone.
