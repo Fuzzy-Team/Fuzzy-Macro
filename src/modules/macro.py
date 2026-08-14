@@ -4833,6 +4833,17 @@ class macro:
                 self.reset(convert=False)
                 self.collectMondoBuff()
                 break
+            elif (
+                self.setdat.get("macro_mode", "normal") not in ("quest", "alt")
+                and self.setdat["sticker_stack"]
+                and self.setdat.get("sticker_stack_interrupt_gathering", False)
+                and self.hasStickerStackRespawned()
+            ):
+                stopGather()
+                self.logger.webhook("Gathering: interrupted", "Sticker Stack", "dark brown")
+                self.reset(convert=False)
+                self.collect("sticker_stack")
+                break
             elif not altMode:
                 questMobsByGiver = getattr(self, "questGatherInterruptMobs", {})
                 questMobs = {
@@ -5116,6 +5127,11 @@ class macro:
         #set respawn time to 20mins
         #mostly just to prevent the macro from going to mondo over and over again for the 10mins
         return minute <= 10 and self.hasRespawned("mondo", 20*60)
+
+    def hasStickerStackRespawned(self):
+        with open(settingsManager.ensureUserFile("sticker_stack.txt"), "r") as f:
+            stickerStackCD = int(f.read())
+        return self.hasRespawned("sticker_stack", stickerStackCD)
 
     def collectMondoBuff(self, gatherInterrupt = False):
         self.set_task_status("mondo_buff", activity="mondo")
