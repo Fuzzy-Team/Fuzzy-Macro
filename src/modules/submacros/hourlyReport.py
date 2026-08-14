@@ -783,7 +783,16 @@ class BuffDetector():
         #get the buff level
         fullBuffImg = cv2.cvtColor(fullBuffImg, cv2.COLOR_RGBA2BGR)
         mask = cv2.cvtColor(fullBuffImg, cv2.COLOR_BGR2HLS)
-        mask = cv2.inRange(mask, col[0], col[1])
+        # Roblox's UI renderer shifts the fill's lightness/saturation with display
+        # scaling. The old ranges were only 4-7 values wide, so valid nectar at
+        # 1280x800 and 1440x900 frequently produced an empty mask and reset to 0.
+        lower = col[0].astype(np.int16)
+        upper = col[1].astype(np.int16)
+        lower[1:] -= 20
+        upper[1:] += 20
+        lower = np.clip(lower, 0, 255).astype(np.uint8)
+        upper = np.clip(upper, 0, 255).astype(np.uint8)
+        mask = cv2.inRange(mask, lower, upper)
         #cv2.imshow("mask", mask)
         #cv2.waitKey(0)
         #mask = cv2.erode(mask, self.nectarKernel)
