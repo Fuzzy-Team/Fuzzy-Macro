@@ -1628,14 +1628,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 
                 # Special case: sticker_stack
                 if collectName == "sticker_stack":
-                    if macro.setdat["sticker_stack"]:
-                        with open(settingsManager.ensureUserFile("sticker_stack.txt"), "r") as f:
-                            stickerStackCD = int(f.read())
-                        f.close()
-                        if macro.hasRespawned("sticker_stack", stickerStackCD):
-                            runTask(macro.collect, args=("sticker_stack",))
-                            executedTasks.add(taskId)
-                            return True
+                    if macro.setdat["sticker_stack"] and macro.hasStickerStackRespawned():
+                        runTask(macro.collect, args=("sticker_stack",))
+                        executedTasks.add(taskId)
+                        return True
                     return False
                 
                 # Field boosters (handled separately due to gather logic)

@@ -188,6 +188,7 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'tad_alt_glitter_slot': 1,
  'sticker_stack': False,
  'sticker_stack_item': 'sticker',
+ 'sticker_stack_interrupt_gathering': False,
  'hive_skin': False,
  'cub_skin': False,
  'hotbar1_use_when': 'never',
