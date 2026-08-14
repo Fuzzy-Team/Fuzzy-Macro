@@ -6066,11 +6066,16 @@ class macro:
             res = self.findItemInInventory(f"{name}planter")
             if res:
                 self.planterCoords = res
-                return
+                return res
             else:
+                # findItemInInventory leaves the inventory open so a found item can
+                # be clicked.  Close it on misses or the next navigation attempt is
+                # performed underneath the inventory overlay.
+                self.toggleInventory("close")
                 self.logger.webhook("", f"Could not find {name}planter in inventory (attempt {attempt+1}) - retrying", "red")
                 self.planterCoords = None
                 time.sleep(1)
+        return None
 
     def getPlanterHotbarSlot(self, planter):
         settingName = planter.lower().replace(" ", "_")
@@ -6181,7 +6186,16 @@ class macro:
                         break
                     time.sleep(0.3)
             if placedPlanter: 
-                self.logger.webhook("",f"Placed {planter.title()} Planter", "dark brown", "screen")          
+                # Blue error text is not a positive placement signal. It can be
+                # missed at some resolutions, which previously made the macro save
+                # a timer for a planter that was never placed.
+                time.sleep(0.5)
+                if not recoverAlreadyPlacedPlanterState():
+                    placedPlanter = False
+                    placementError = "unconfirmed"
+
+            if placedPlanter:
+                self.logger.webhook("",f"Placed {planter.title()} Planter", "dark brown", "screen")
                 #use glitter
                 if glitter: 
                     self.useItemInInventory("glitter")
@@ -6330,6 +6344,7 @@ class macro:
                 self.planterCoords = None
                 self.findPlanterInInventory(name)
                 if self.planterCoords is not None:
+                    self.toggleInventory("close")
                     self.logger.webhook("", f"{planter.title()} not found in field, but found in inventory. Marking as collected.", "orange", "screen")
                     return finishCollected()
                 self.logger.webhook("", f"Unable to find Planter: {planter.title()}", "dark brown", "screen")
@@ -6361,6 +6376,7 @@ class macro:
             self.findPlanterInInventory(name)
             if self.planterCoords is not None:
                 # found the planter in inventory — success
+                self.toggleInventory("close")
                 self.logger.webhook("", f"Found {planter.title()} in inventory after collect", "bright green", "screen", ping_category="ping_conversion_events")
                 return finishCollected()
 
