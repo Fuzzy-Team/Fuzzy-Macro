@@ -6126,25 +6126,26 @@ class macro:
         max_attempts = 2
         cooldown_seconds = 3  # Wait 3 seconds before retrying if planter is missing
         for attempt in range(max_attempts):
-            findPlanterInventoryThread = None
-            if hotbarSlot:
-                self.planterCoords = None
-            else:
-                # Invalidate cached planter coordinates before each attempt
-                self.planterCoords = None
-                findPlanterInventoryThread = threading.Thread(target=self.findPlanterInInventory, args=(name,))
-                findPlanterInventoryThread.daemon = True
-                findPlanterInventoryThread.start()
-
+            self.planterCoords = None
             if not self.goToPlanter(planter, field, "place"):
                 updateHourlyTime()
                 return False
+
+            # Inventory used to be searched in a background thread while the
+            # character traveled here. That allowed the inventory overlay and
+            # movement keys to fight each other, and needlessly searched for a
+            # planter that was visibly already in this field.
+            promptText = self.getTextBesideE()
+            if self.isSpecificPlanterPrompt(planter, promptText):
+                self.logger.webhook("", f"{planter.title()} is already in {field.title()}", "orange", "screen")
+                updateHourlyTime()
+                return True
+
             if hotbarSlot:
                 self.logger.webhook("", f"Placing {planter.title()} (slot {hotbarSlot})", "dark brown")
                 self.keyboard.press(str(hotbarSlot))
             else:
-                #wait for thread to finish
-                findPlanterInventoryThread.join()
+                self.findPlanterInInventory(name)
 
             #Couldn't find planter
             if not hotbarSlot and self.planterCoords is None:
