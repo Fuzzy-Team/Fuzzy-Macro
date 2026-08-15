@@ -3466,6 +3466,7 @@ if __name__ == "__main__":
                     stream.stop()
 
     def processStandbyCommands():
+        global richPresenceManager
         while not standbyCommandQueue.empty():
             try:
                 command = standbyCommandQueue.get_nowait()
@@ -3500,9 +3501,26 @@ if __name__ == "__main__":
             standbyState.active = True
             standbyState.deadline = current_time + duration_seconds if duration_seconds else 0.0
             status.value = "standby"
-            appManager.closeApp("Roblox")
+            try:
+                if richPresenceManager is not None:
+                    richPresenceManager.stop()
+                    richPresenceManager = None
+            except NameError:
+                pass
+
+            # Standby owns the shutdown instead of leaving run == 0 for the
+            # normal supervisor path. That lets the main loop become a small
+            # command/timer loop rather than continuing GUI and macro work.
+            try:
+                gui.stopAllTools()
+            except Exception:
+                pass
             if run.value != 3:
                 run.value = 0
+                stopApp()
+                run.value = 3
+                gui.setRunState(3)
+            appManager.closeApp("Roblox")
             duration_text = "until disabled" if duration_seconds is None else f"for {duration_seconds / 60:g} minute(s)"
             logger.webhook(
                 "Macro Standby Enabled",
@@ -3512,10 +3530,38 @@ if __name__ == "__main__":
             )
 
     while True:
-        eel.sleep(0.5)
-        
-        # Get cached settings
+        # In Standby, do not drive Eel, refresh settings, update rich
+        # presence, or inspect macro state. The remaining work is only the
+        # Discord command queue and optional expiry timer.
+        if standbyState.active:
+            time.sleep(1)
+        else:
+            eel.sleep(0.5)
+
         current_time = time.time()
+        processStandbyCommands()
+
+        if standbyState.active and standbyState.deadline and current_time >= standbyState.deadline:
+            stopStandbyKeepAwake()
+            standbyState.active = False
+            standbyState.deadline = 0.0
+            status.value = "idle_main_menu"
+            logger.webhook("Macro Standby Ended", "The requested standby duration has ended. The macro remains stopped.", "orange", route_category="macro_status")
+
+        # /start and the configured start hotkey both set run to 1. Let them
+        # wake the normal supervisor without requiring a separate standby
+        # toggle first.
+        if standbyState.active and run.value == 1:
+            stopStandbyKeepAwake()
+            standbyState.active = False
+            standbyState.deadline = 0.0
+            status.value = "idle_main_menu"
+            logger.webhook("Macro Standby Disabled", "Starting the macro.", "orange", route_category="macro_status")
+
+        if standbyState.active:
+            continue
+
+        # Get cached settings
         if current_time - last_gui_settings_load > gui_settings_cache_duration:
             gui_settings_cache = settingsManager.loadAllSettings()
             last_gui_settings_load = current_time
@@ -3532,15 +3578,6 @@ if __name__ == "__main__":
             key: value for key, value in setdat.items() if str(key).startswith("ping_")
         }
         processStreamControlCommands(setdat)
-        processStandbyCommands()
-
-        if standbyState.active and standbyState.deadline and current_time >= standbyState.deadline:
-            stopStandbyKeepAwake()
-            standbyState.active = False
-            standbyState.deadline = 0.0
-            if run.value in (0, 3):
-                status.value = "idle_main_menu"
-            logger.webhook("Macro Standby Ended", "The requested standby duration has ended. The macro remains stopped.", "orange", route_category="macro_status")
 
         if autoStopStartTime is not None and run.value in (2, 4, 6):
             latestAutoStopHours = parseAutoStopHours(setdat)
