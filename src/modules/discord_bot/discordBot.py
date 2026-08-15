@@ -12,6 +12,7 @@ from modules.controls.keyboard import keyboard
 import subprocess
 import sys
 import os
+import re
 import signal
 import json
 import ast
@@ -41,6 +42,41 @@ _settings_cache = {}
 _cache_timestamp = 0
 _cache_duration = 5  # seconds
 _shift_lock_template_cache = None
+
+
+def parse_standby_duration(value: Optional[str]):
+    """Return a standby duration in seconds, or a human-readable error.
+
+    ``None`` means an indefinite standby. Accepted examples are ``30m``,
+    ``2h``, and ``1h 30m``. Keeping this parser independent of Discord makes
+    the command straightforward to test.
+    """
+    if value is None or not str(value).strip():
+        return None, None
+
+    text = str(value).strip().lower()
+    matches = re.findall(r"(\d+)\s*([smhd])", text)
+    if not matches or re.sub(r"[\d\s smhd]", "", text):
+        return None, "Use a duration such as `30m`, `2h`, or `1h 30m`."
+
+    unit_seconds = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+    seconds = sum(int(amount) * unit_seconds[unit] for amount, unit in matches)
+    if seconds <= 0:
+        return None, "Standby duration must be greater than zero."
+    if seconds > 7 * 86400:
+        return None, "Standby duration cannot exceed 7 days."
+    return seconds, None
+
+
+def format_standby_duration(seconds):
+    if seconds is None:
+        return "until you disable it"
+    parts = []
+    for label, size in (("day", 86400), ("hour", 3600), ("minute", 60), ("second", 1)):
+        amount, seconds = divmod(int(seconds), size)
+        if amount:
+            parts.append(f"{amount} {label}{'s' if amount != 1 else ''}")
+    return " ".join(parts) or "0 seconds"
 
 
 def response_footer():
@@ -815,7 +851,7 @@ def _build_logger_embed(data):
     return embed
 
 
-def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None, updateGUI=None, discord_message_queue=None, planter_command_queue=None, stream_control_queue=None, skipServer=None):
+def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None, updateGUI=None, discord_message_queue=None, planter_command_queue=None, stream_control_queue=None, skipServer=None, standby_command_queue=None, standby_state=None):
     import modules.macro
     _patch_discord_response_footers()
     bot = commands.Bot(command_prefix="fuzz!", intents=discord.Intents.all())
@@ -2754,6 +2790,30 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             run.value = 0
             await interaction.response.send_message(f"Stopping Macro. Error: {str(e)}")
 
+    @bot.tree.command(name="standby", description="Stop the macro, quit Roblox, and keep the Mac awake")
+    @app_commands.describe(duration="Optional: 30m, 2h, 1h 30m; omit to run until disabled")
+    @requires_discord_permission("macro_control")
+    async def standby(interaction: discord.Interaction, duration: Optional[str] = None):
+        if standby_command_queue is None or standby_state is None:
+            await interaction.response.send_message("Standby is unavailable in this version of the macro.", ephemeral=True)
+            return
+
+        if bool(getattr(standby_state, "active", False)):
+            standby_command_queue.put({"action": "disable"})
+            await interaction.response.send_message("Disabling Macro Standby. The macro will remain stopped.")
+            return
+
+        seconds, error = parse_standby_duration(duration)
+        if error:
+            await interaction.response.send_message(error, ephemeral=True)
+            return
+
+        standby_command_queue.put({"action": "enable", "duration_seconds": seconds})
+        await interaction.response.send_message(
+            f"Entering Macro Standby for {format_standby_duration(seconds)}. "
+            "The macro will stop, Roblox will quit, and this Mac will stay awake."
+        )
+
     @bot.tree.command(name = "pause", description = "Pause the macro")
     @requires_discord_permission("macro_control")
     async def pause(interaction: discord.Interaction):
@@ -2911,20 +2971,30 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             6: "⏸️ Paused"
         }
 
-        macro_status = status_messages.get(run.value, "❓ Unknown")
+        is_standby = bool(getattr(standby_state, "active", False)) if standby_state is not None else False
+        macro_status = "🌙 Standby" if is_standby else status_messages.get(run.value, "❓ Unknown")
         current_task = status.value if hasattr(status, 'value') and status.value else "None"
 
         # Color: green for running, orange for paused, red for stopped/other
-        if run.value == 2:
+        if is_standby:
+            embed_color = 0x5865f2
+            deadline = float(getattr(standby_state, "deadline", 0) or 0)
+            until = "Until disabled" if not deadline else f"Until <t:{int(deadline)}:R>"
+        elif run.value == 2:
             embed_color = 0x00ff00  # Green
+            until = None
         elif run.value == 6:
             embed_color = 0xffa500  # Orange for paused
+            until = None
         else:
             embed_color = 0xff0000  # Red
+            until = None
 
         embed = discord.Embed(title="📊 Macro Status", color=embed_color)
         embed.add_field(name="State", value=macro_status, inline=True)
         embed.add_field(name="Current Task", value=current_task.replace('_', ' ').title(), inline=True)
+        if until:
+            embed.add_field(name="Standby", value=until, inline=True)
         
         await interaction.response.send_message(embed=embed)
 

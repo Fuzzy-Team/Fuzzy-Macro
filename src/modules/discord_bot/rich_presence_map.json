@@ -150,6 +150,14 @@
       "small_image": null,
       "small_text": null
     },
+    "standby": {
+      "state": "Standby",
+      "details": "Keeping this Mac awake",
+      "large_image": "fuzzy_macro",
+      "large_text": "Fuzzy Macro",
+      "small_image": null,
+      "small_text": null
+    },
     "converting": {
       "state": "Converting honey",
       "details": "At the hive",
