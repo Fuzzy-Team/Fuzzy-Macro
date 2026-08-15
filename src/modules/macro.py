@@ -6081,16 +6081,11 @@ class macro:
             res = self.findItemInInventory(f"{name}planter")
             if res:
                 self.planterCoords = res
-                return res
+                return
             else:
-                # findItemInInventory leaves the inventory open so a found item can
-                # be clicked.  Close it on misses or the next navigation attempt is
-                # performed underneath the inventory overlay.
-                self.toggleInventory("close")
                 self.logger.webhook("", f"Could not find {name}planter in inventory (attempt {attempt+1}) - retrying", "red")
                 self.planterCoords = None
                 time.sleep(1)
-        return None
 
     def getPlanterHotbarSlot(self, planter):
         settingName = planter.lower().replace(" ", "_")
@@ -6126,26 +6121,25 @@ class macro:
         max_attempts = 2
         cooldown_seconds = 3  # Wait 3 seconds before retrying if planter is missing
         for attempt in range(max_attempts):
-            self.planterCoords = None
+            findPlanterInventoryThread = None
+            if hotbarSlot:
+                self.planterCoords = None
+            else:
+                # Invalidate cached planter coordinates before each attempt
+                self.planterCoords = None
+                findPlanterInventoryThread = threading.Thread(target=self.findPlanterInInventory, args=(name,))
+                findPlanterInventoryThread.daemon = True
+                findPlanterInventoryThread.start()
+
             if not self.goToPlanter(planter, field, "place"):
                 updateHourlyTime()
                 return False
-
-            # Inventory used to be searched in a background thread while the
-            # character traveled here. That allowed the inventory overlay and
-            # movement keys to fight each other, and needlessly searched for a
-            # planter that was visibly already in this field.
-            promptText = self.getTextBesideE()
-            if self.isSpecificPlanterPrompt(planter, promptText):
-                self.logger.webhook("", f"{planter.title()} is already in {field.title()}", "orange", "screen")
-                updateHourlyTime()
-                return True
-
             if hotbarSlot:
                 self.logger.webhook("", f"Placing {planter.title()} (slot {hotbarSlot})", "dark brown")
                 self.keyboard.press(str(hotbarSlot))
             else:
-                self.findPlanterInInventory(name)
+                #wait for thread to finish
+                findPlanterInventoryThread.join()
 
             #Couldn't find planter
             if not hotbarSlot and self.planterCoords is None:
@@ -6202,15 +6196,6 @@ class macro:
                         break
                     time.sleep(0.3)
             if placedPlanter: 
-                # Blue error text is not a positive placement signal. It can be
-                # missed at some resolutions, which previously made the macro save
-                # a timer for a planter that was never placed.
-                time.sleep(0.5)
-                if not recoverAlreadyPlacedPlanterState():
-                    placedPlanter = False
-                    placementError = "unconfirmed"
-
-            if placedPlanter:
                 self.logger.webhook("",f"Placed {planter.title()} Planter", "dark brown", "screen")
                 #use glitter
                 if glitter: 
@@ -6360,7 +6345,6 @@ class macro:
                 self.planterCoords = None
                 self.findPlanterInInventory(name)
                 if self.planterCoords is not None:
-                    self.toggleInventory("close")
                     self.logger.webhook("", f"{planter.title()} not found in field, but found in inventory. Marking as collected.", "orange", "screen")
                     return finishCollected()
                 self.logger.webhook("", f"Unable to find Planter: {planter.title()}", "dark brown", "screen")
@@ -6392,7 +6376,6 @@ class macro:
             self.findPlanterInInventory(name)
             if self.planterCoords is not None:
                 # found the planter in inventory — success
-                self.toggleInventory("close")
                 self.logger.webhook("", f"Found {planter.title()} in inventory after collect", "bright green", "screen", ping_category="ping_conversion_events")
                 return finishCollected()
 
