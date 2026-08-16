@@ -114,6 +114,25 @@
           },
         },
         {
+          id: "field_booster_glitter_extend_enabled",
+          title: "Glitter Extending",
+          desc: "Use Glitter at 14:55 to extend each detected field booster.",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "field_booster_glitter_slot",
+          title: "Glitter Hotbar Slot",
+          desc: "Shared with all Glitter settings. Set to 0 to find Glitter in the inventory.",
+          type: {
+            name: "dropdown",
+            data: [0, 1, 2, 3, 4, 5, 6, 7],
+            triggerFunction: "syncGlitterHotbarSlot(this)",
+          },
+        },
+        {
           id: "blue_booster",
           title: "Blue Booster",
           desc: "Collect the blue field booster in the blue HQ",
@@ -242,7 +261,7 @@
           type: {
             name: "dropdown",
             data: [0, 1, 2, 3, 4, 5, 6, 7],
-            triggerFunction: saveProfileTriggerFunction,
+            triggerFunction: "syncGlitterHotbarSlot(this)",
           },
         },
         {
@@ -424,14 +443,14 @@
         {
           id: "tad_alt_glitter_extend_enabled",
           title: "Glitter Extending",
-          desc: "Have the host use Glitter five seconds before the boost expires, then return alts after a second boost duration (30 minutes total when Boost Duration is 900).",
+          desc: "Have the host use Glitter five seconds before the TAD alt boost expires, then return alts after a second boost duration (30 minutes total when Boost Duration is 900).",
           type: { name: "checkbox", triggerFunction: saveProfileTriggerFunction },
         },
         {
           id: "tad_alt_glitter_slot",
           title: "Glitter Hotbar Slot",
-          desc: "The host hotbar slot containing Glitter.",
-          type: { name: "dropdown", data: [1, 2, 3, 4, 5, 6, 7], triggerFunction: saveProfileTriggerFunction },
+          desc: "Shared with all Glitter settings. Set to 0 to find Glitter in the inventory.",
+          type: { name: "dropdown", data: [0, 1, 2, 3, 4, 5, 6, 7], triggerFunction: "syncGlitterHotbarSlot(this)" },
         },
       ]);
     </script>

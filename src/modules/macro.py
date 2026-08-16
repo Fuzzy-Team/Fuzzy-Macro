@@ -725,8 +725,10 @@ class macro:
         self.tadAltSync = TadAltSync(
             self.setdat,
             self.logger,
-            use_glitter=lambda slot: self.keyboard.press(str(slot)),
+            use_glitter=self.useGlitterFromSlot,
         )
+        self._fieldBoosterGlitterGeneration = 0
+        self._fieldBoosterGlitterLock = threading.Lock()
         self.buffDetector = BuffDetector(self.robloxWindow)
         self.hourlyReport = HourlyReport(self.buffDetector, self.setdat.get("hourly_report_time_format", 24))
         self.itemMonitor = ItemMonitor(self.robloxWindow)
@@ -1988,6 +1990,39 @@ class macro:
 
     def saveTiming(self, name):
         return settingsManager.saveSettingFile(name, time.time(), settingsManager.getUserDataPath("timings.txt"))
+
+    def scheduleFieldBoosterGlitterExtension(self):
+        """Use Glitter at 14:55 of a detected field booster."""
+        if not self.setdat.get("field_booster_glitter_extend_enabled", False):
+            return
+
+        glitterSlot = min(7, max(0, int(self.setdat.get("field_booster_glitter_slot", 1) or 0)))
+        with self._fieldBoosterGlitterLock:
+            self._fieldBoosterGlitterGeneration += 1
+            generation = self._fieldBoosterGlitterGeneration
+
+        def useGlitter():
+            # Field boosters last 15 minutes; Glitter needs to be used at 14:55.
+            time.sleep(14 * 60 + 55)
+            with self._fieldBoosterGlitterLock:
+                if generation != self._fieldBoosterGlitterGeneration:
+                    return
+            self.useGlitterFromSlot(glitterSlot)
+            self.logger.webhook("", f"Used Glitter from hotbar slot {glitterSlot}; extending field booster", "bright green")
+
+        threading.Thread(
+            target=useGlitter,
+            name="field-booster-glitter-extension",
+            daemon=True,
+        ).start()
+
+    def useGlitterFromSlot(self, slot):
+        """Use a Glitter hotbar slot, or locate Glitter in the inventory for slot 0."""
+        if int(slot) == 0:
+            self.useItemInInventory("glitter")
+        else:
+            self.keyboard.press(str(slot))
+
     #returns true if the cooldown is up
     #note that cooldown is in seconds
     def hasRespawned(self, name, cooldown, applyMobRespawnBonus = False, timing = None):
@@ -5479,7 +5514,14 @@ class macro:
                 returnVal = boostedField
                 self.logger.webhook("", f"Collected: {displayName}, Boosted Field: {boostedField.title()}", "bright green", "screen")
                 if boostedField:
-                    self.tadAltSync.sync_to_boost(boostedField)
+                    extendFieldBooster = self.setdat.get("field_booster_glitter_extend_enabled", False)
+                    self.tadAltSync.sync_to_boost(
+                        boostedField,
+                        extend_with_glitter=False if extendFieldBooster else None,
+                        extension_duration=15 * 60 if extendFieldBooster else 0,
+                    )
+                    if extendFieldBooster:
+                        self.scheduleFieldBoosterGlitterExtension()
                 else:
                     self.tadAltSync.initialize_alts()
                 self.saveTiming("last_booster")
