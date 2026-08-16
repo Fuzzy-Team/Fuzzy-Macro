@@ -154,6 +154,13 @@
   --primary-rgb: 144, 240, 224;
 }
 
+/* Spicy Bee Theme (main color: #cf2013, highlight: #eb1909) */
+.theme-spicy-bee {
+  --primary: #cf2013;
+  --primary-hover: #eb1909;
+  --primary-rgb: 207, 32, 19;
+}
+
 body {
   margin: 0;
   padding: 0;
