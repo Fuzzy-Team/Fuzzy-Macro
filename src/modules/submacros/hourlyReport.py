@@ -126,6 +126,7 @@ MACRO_THEME_ACCENTS = {
     "gummy":       (255, 0,   255),  # Gummy        #ff00ff
     "tadpole":     (32,  189, 150),  # Tadpole      #20bd96
     "gifted_tad":  (144, 240, 224),  # Gifted Tad   #90f0e0
+    "spicy_bee":   (207, 32,  19),    # Spicy Bee    #cf2013
 }
 
 def _mixColor(base, accent, ratio):
