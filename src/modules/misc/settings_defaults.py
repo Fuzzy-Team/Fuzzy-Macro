@@ -161,6 +161,8 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'mountain_booster': False,
  'gather_boosted': False,
  'boost_seperate': 20,
+ 'field_booster_glitter_extend_enabled': False,
+ 'field_booster_glitter_slot': 1,
  'tad_alt_sync_enabled': False,
  'tad_alt_1_enabled': False,
  'tad_alt_1_webhook': '',
