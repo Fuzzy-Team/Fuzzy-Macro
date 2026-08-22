@@ -1238,8 +1238,14 @@ function isConfiguredKeybind(event) {
   const hotbarBuffStartKeybind = normalizeKeybindString(
     document.getElementById("hotbar_buff_start_keybind")?.dataset.keybind
   );
+  const autoClickerKeybind = normalizeKeybindString(
+    document.getElementById("autoclicker_keybind")?.dataset.keybind
+  );
+  const autoGiftedBasicBeeStartKeybind = normalizeKeybindString(
+    document.getElementById("auto_gifted_basic_bee_start_keybind")?.dataset.keybind
+  );
 
-  if (!startKeybind && !pauseKeybind && !stopKeybind && !hotbarBuffStartKeybind) return false;
+  if (!startKeybind && !pauseKeybind && !stopKeybind && !hotbarBuffStartKeybind && !autoClickerKeybind && !autoGiftedBasicBeeStartKeybind) return false;
 
   const currentComboString = keybindFromEvent(event);
 
@@ -1248,7 +1254,9 @@ function isConfiguredKeybind(event) {
     currentComboString === startKeybind ||
     currentComboString === pauseKeybind ||
     currentComboString === stopKeybind ||
-    currentComboString === hotbarBuffStartKeybind
+    currentComboString === hotbarBuffStartKeybind ||
+    currentComboString === autoClickerKeybind ||
+    currentComboString === autoGiftedBasicBeeStartKeybind
   );
 }
 
@@ -1577,6 +1585,8 @@ async function updateKeybindDisplay() {
     const pauseKey = settings.pause_keybind || "F2";
     const stopKey = settings.stop_keybind || "F3";
     const hotbarBuffStartKey = settings.hotbar_buff_start_keybind || "F4";
+    const autoClickerKey = settings.autoclicker_keybind || "Not set";
+    const autoGiftedBasicBeeStartKey = settings.auto_gifted_basic_bee_start_keybind || "Not set";
 
     const startButton = document.getElementById("start-btn");
     if (startButton) {
@@ -1588,6 +1598,8 @@ async function updateKeybindDisplay() {
     const pauseKeybindElement = document.getElementById("pause_keybind");
     const stopKeybindElement = document.getElementById("stop_keybind");
     const hotbarBuffStartKeybindElement = document.getElementById("hotbar_buff_start_keybind");
+    const autoClickerKeybindElement = document.getElementById("autoclicker_keybind");
+    const autoGiftedBasicBeeStartKeybindElement = document.getElementById("auto_gifted_basic_bee_start_keybind");
 
     if (
       startKeybindElement &&
@@ -1619,6 +1631,16 @@ async function updateKeybindDisplay() {
     ) {
       hotbarBuffStartKeybindElement.querySelector(".keybind-display").textContent =
         keybindDisplayText(hotbarBuffStartKey);
+    }
+
+    if (autoClickerKeybindElement && autoClickerKeybindElement.querySelector(".keybind-display")) {
+      autoClickerKeybindElement.querySelector(".keybind-display").textContent =
+        keybindDisplayText(autoClickerKey);
+    }
+
+    if (autoGiftedBasicBeeStartKeybindElement && autoGiftedBasicBeeStartKeybindElement.querySelector(".keybind-display")) {
+      autoGiftedBasicBeeStartKeybindElement.querySelector(".keybind-display").textContent =
+        keybindDisplayText(autoGiftedBasicBeeStartKey);
     }
   } catch (error) {
     // Silently handle errors

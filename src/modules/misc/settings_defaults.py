@@ -814,7 +814,8 @@ DEFAULT_GENERAL_SETTINGS = {'hive_number': 1,
  'stop_keybind': 'F3',
  'pause_keybind': 'F2',
  'hotbar_buff_start_keybind': 'F4',
- 'autoclicker_keybind': 'F3',
+ 'autoclicker_keybind': '',
+ 'auto_gifted_basic_bee_start_keybind': '',
  'macro_mode': 'normal',
  'ignore_petal_quests': False}
 

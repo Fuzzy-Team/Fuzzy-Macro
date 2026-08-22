@@ -283,6 +283,15 @@ function buildStandardContainer(parentElement, title, desc, settings) {
 
   //add each setting
   settings.forEach((e, i) => {
+    if (e.type && e.type.name === "separator") {
+      out += `
+        <div class="seperator" style="margin-top: 1.5rem;"></div>
+        <p style="font-weight:600; font-size:1rem; margin: 1rem 0 0.5rem;">${e.title}</p>
+        ${e.desc ? `<p style="font-size:0.9rem; opacity:0.8; margin:0;">${e.desc}</p>` : ""}
+      `;
+      return;
+    }
+
     //note: if i > 0, set a margin-top
     //if the control is a standalone button, vertically center the left text block
     const isSingleButton = e.type && e.type.name === 'button';
