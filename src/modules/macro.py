@@ -3081,26 +3081,41 @@ class macro:
         return bool(self.isBesideE(["send", "trad", "trade"], ["claim"], log=True))
 
     def anyHivePromptVisible(self):
-        return self.claimHivePromptVisible() or self.occupiedHivePromptVisible()
+        return bool(self.hivePromptKind())
+
+    def hivePromptKind(self):
+        """Return the currently observed hive-prompt type, if any."""
+        if self.claimHivePromptVisible():
+            return "claim"
+        if self.occupiedHivePromptVisible():
+            return "occupied"
+        return None
 
     def waitForHivePrompt(self, slot, max_attempts=3):
-        """Wait for a hive prompt; nudge toward the pad up to max_attempts times."""
+        """Wait for a hive prompt and return its type; nudge as needed."""
         time.sleep(0.2)
         for attempt in range(max(1, int(max_attempts))):
-            if self.anyHivePromptVisible():
-                return True
+            prompt = self.hivePromptKind()
+            if prompt:
+                return prompt
             if attempt + 1 >= max_attempts:
                 break
             self.nudgeHiveCheckpoint(slot)
-        return self.anyHivePromptVisible()
+        return self.hivePromptKind()
 
-    def tryClaimHiveSlot(self, slot, excluded_slots=None):
+    def tryClaimHiveSlot(self, slot, excluded_slots=None, prompt_confirmed=False):
+        """Claim ``slot`` when its Claim prompt has just been observed.
+
+        Prompt recognition can flicker while the player is crossing a hive pad.
+        Callers that have already seen the Claim prompt pass ``prompt_confirmed``
+        so a missed second screenshot cannot make us walk away from an open hive.
+        """
         excluded_slots = excluded_slots or set()
-        if not self.claimHivePromptVisible():
-            return 0
         self.keyboard.keyUp("a", False)
         self.keyboard.keyUp("d", False)
         if slot in excluded_slots:
+            return 0
+        if not prompt_confirmed and not self.claimHivePromptVisible():
             return 0
         self.keyboard.press("e")
         return slot
@@ -3121,7 +3136,9 @@ class macro:
                 self.keyboard.keyUp("a", False)
                 self.keyboard.keyUp("d", False)
                 self.logger.webhook("", f"Hive {slot} detected as available", "dark brown")
-                claimed = self.tryClaimHiveSlot(slot, excluded_slots)
+                claimed = self.tryClaimHiveSlot(
+                    slot, excluded_slots, prompt_confirmed=True
+                )
                 break
             if self.occupiedHivePromptVisible():
                 self.logger.webhook("", f"Hive {slot} occupied", "dark brown")
@@ -3177,16 +3194,20 @@ class macro:
         preferred_slot = max(1, min(6, int(preferred_slot)))
         self.logger.webhook("", f"Walking spawn → hive {preferred_slot} (check)", "dark brown")
         self.walkSpawnToHiveSlot(preferred_slot)
-        if not self.waitForHivePrompt(preferred_slot, max_attempts=3):
+        prompt = self.waitForHivePrompt(preferred_slot, max_attempts=3)
+        if not prompt:
             for _ in range(3):
                 self.stepBackOntoHivePad()
                 time.sleep(0.35)
-                if self.anyHivePromptVisible():
+                prompt = self.hivePromptKind()
+                if prompt:
                     break
             else:
                 return 0
 
-        claimed = self.tryClaimHiveSlot(preferred_slot, excluded_slots)
+        claimed = self.tryClaimHiveSlot(
+            preferred_slot, excluded_slots, prompt_confirmed=(prompt == "claim")
+        )
         if claimed:
             self.logger.webhook("", f"Hive {claimed} detected as available", "dark brown")
             self.walkStuds("s", 4)
@@ -3550,13 +3571,17 @@ class macro:
             self.setCameraZoom(0, zoom)
             time.sleep(0.15)
             self.walkSpawnToHiveSlot(target)
-            if not self.waitForHivePrompt(target, max_attempts=3):
+            prompt = self.waitForHivePrompt(target, max_attempts=3)
+            if not prompt:
                 for _ in range(3):
                     self.stepBackOntoHivePad()
                     time.sleep(0.35)
-                    if self.anyHivePromptVisible():
+                    prompt = self.hivePromptKind()
+                    if prompt:
                         break
-            claimed = self.tryClaimHiveSlot(target, excluded_slots)
+            claimed = self.tryClaimHiveSlot(
+                target, excluded_slots, prompt_confirmed=(prompt == "claim")
+            )
             if claimed:
                 self.walkStuds("s", 4)
                 return claimed
@@ -3611,7 +3636,7 @@ class macro:
         time.sleep(0.1)
         if self.claimHivePromptVisible() and 3 not in excluded_slots:
             self.logger.webhook("", "Hive 3 detected as available", "dark brown")
-            claimed = self.tryClaimHiveSlot(3, excluded_slots)
+            claimed = self.tryClaimHiveSlot(3, excluded_slots, prompt_confirmed=True)
             if claimed:
                 self.walkStuds("s", 4)
                 return claimed
