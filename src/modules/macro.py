@@ -4113,12 +4113,10 @@ class macro:
             if not rejoinSuccess:
                 continue
             appManager.openApp("Roblox")
-            #run fullscreen check
-            # if self.isFullScreen(): #check if roblox can be found in menu bar
-            #     self.logger.webhook("","Roblox is already in fullscreen, not activating fullscreen", "dark brown")
-            # else:
-            #     self.logger.webhook("","Roblox is not in fullscreen, activating fullscreen", "dark brown")
-            #     self.toggleFullScreen()
+            # Match the normal-join path: detect the content offset after the
+            # client has loaded, then only toggle fullscreen when that offset
+            # shows Roblox is not already fullscreen.
+            self.setRobloxWindowInfo(setYOffset=True)
 
             self.startDetect()
             if not claimHive:
