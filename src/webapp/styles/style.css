@@ -629,6 +629,11 @@ select:focus {
   transform: scale(0.98);
 }
 
+.keybind-clear-button {
+  margin-top: 0;
+  padding: 0.5rem 0.8rem;
+}
+
 .purple-button.disabled {
   cursor: wait;
   opacity: 0.6;
