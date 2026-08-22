@@ -711,9 +711,34 @@
           },
         },
         {
+          title: "Tool Keybinds",
+          desc: "Optional hotkeys for starting tools while the macro is stopped.",
+          type: {
+            name: "separator",
+          },
+        },
+        {
           id: "hotbar_buff_start_keybind",
           title: "Start Hotbar Buff Keybind",
           desc: "Click to record a new keybind for starting the Hotbar Buff tool",
+          type: {
+            name: "keybind",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "autoclicker_keybind",
+          title: "Start Auto Clicker Keybind",
+          desc: "Click to record a new keybind for starting the Auto Clicker tool",
+          type: {
+            name: "keybind",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "auto_gifted_basic_bee_start_keybind",
+          title: "Start Auto Gifted Basic Bee Keybind",
+          desc: "Click to record a new keybind for starting the Auto Gifted Basic Bee tool",
           type: {
             name: "keybind",
             triggerFunction: saveGeneralTriggerFunction,

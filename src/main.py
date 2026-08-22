@@ -2751,7 +2751,7 @@ def watch_for_hotkeys(run):
     pressed_keys = set()
     
     # Add debouncing to prevent duplicate triggers
-    last_trigger_time = {"start": 0.0, "stop": 0.0, "pause": 0.0, "hotbar_buff_start": 0.0}
+    last_trigger_time = {"start": 0.0, "stop": 0.0, "pause": 0.0, "hotbar_buff_start": 0.0, "autoclicker_start": 0.0, "auto_gifted_basic_bee_start": 0.0}
     debounce_duration = 0.3  # 300ms debounce
     
     # Add threading lock for synchronization
@@ -2773,7 +2773,7 @@ def watch_for_hotkeys(run):
     settings_cache_duration = 1.0  # Reload settings every 1 second max
     
     # Cache Eel recording state to avoid repeated calls
-    recording_cache = {"start": False, "pause": False, "stop": False, "hotbar_buff_start": False}
+    recording_cache = {"start": False, "pause": False, "stop": False, "hotbar_buff_start": False, "autoclicker": False, "auto_gifted_basic_bee_start": False}
     last_recording_check = 0
     recording_cache_duration = 0.5  # Check recording state every 0.5 seconds max
 
@@ -2835,10 +2835,12 @@ def watch_for_hotkeys(run):
                 recording_cache["pause"] = eel.getElementProperty("pause_keybind", "dataset.recording")() == "true"
                 recording_cache["stop"] = eel.getElementProperty("stop_keybind", "dataset.recording")() == "true"
                 recording_cache["hotbar_buff_start"] = eel.getElementProperty("hotbar_buff_start_keybind", "dataset.recording")() == "true"
+                recording_cache["autoclicker"] = eel.getElementProperty("autoclicker_keybind", "dataset.recording")() == "true"
+                recording_cache["auto_gifted_basic_bee_start"] = eel.getElementProperty("auto_gifted_basic_bee_start_keybind", "dataset.recording")() == "true"
                 last_recording_check = current_time
             except:
-                recording_cache = {"start": False, "pause": False, "stop": False, "hotbar_buff_start": False}
-            return recording_cache["start"] or recording_cache["pause"] or recording_cache["stop"] or recording_cache["hotbar_buff_start"]
+                recording_cache = {"start": False, "pause": False, "stop": False, "hotbar_buff_start": False, "autoclicker": False, "auto_gifted_basic_bee_start": False}
+            return any(recording_cache.values())
     
     def normalize_key_name(key_name):
         key_name = str(key_name or "").strip()
@@ -2931,6 +2933,8 @@ def watch_for_hotkeys(run):
                 stop_keybind = settings.get("stop_keybind", "F3")
                 pause_keybind = settings.get("pause_keybind", "F2")
                 hotbar_buff_start_keybind = settings.get("hotbar_buff_start_keybind", "F4")
+                autoclicker_keybind = settings.get("autoclicker_keybind", "")
+                auto_gifted_basic_bee_start_keybind = settings.get("auto_gifted_basic_bee_start_keybind", "")
                 
                 # Convert key to string for comparison
                 key_str = convert_key_to_string(key)
@@ -3031,6 +3035,32 @@ def watch_for_hotkeys(run):
                         result = gui.startHotbarBuffTool()
                         if not result.get("ok") and not gui.isAnyToolRunning():
                             messageBox.msgBox(title="Hotbar Buff", text=result.get("message", "Could not start Hotbar Buff."))
+                    except Exception:
+                        pass
+                elif keys_match_keybind(autoclicker_keybind):
+                    if run.value != 3:
+                        return
+                    if current_time - last_trigger_time["autoclicker_start"] < debounce_duration:
+                        return
+                    last_trigger_time["autoclicker_start"] = current_time
+                    try:
+                        import gui
+                        result = gui.startAutoClickerTool()
+                        if not result.get("ok") and not gui.isAnyToolRunning():
+                            messageBox.msgBox(title="Auto Clicker", text=result.get("message", "Could not start Auto Clicker."))
+                    except Exception:
+                        pass
+                elif keys_match_keybind(auto_gifted_basic_bee_start_keybind):
+                    if run.value != 3:
+                        return
+                    if current_time - last_trigger_time["auto_gifted_basic_bee_start"] < debounce_duration:
+                        return
+                    last_trigger_time["auto_gifted_basic_bee_start"] = current_time
+                    try:
+                        import gui
+                        result = gui.startAutoGiftedBasicBeeTool()
+                        if not result.get("ok") and not gui.isAnyToolRunning():
+                            messageBox.msgBox(title="Auto Gifted Basic Bee", text=result.get("message", "Could not start Auto Gifted Basic Bee."))
                     except Exception:
                         pass
                 elif keys_match_keybind(pause_keybind):
