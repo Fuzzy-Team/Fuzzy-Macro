@@ -680,6 +680,7 @@ PING_SETTING_KEYS = [
     "ping_hourly_reports",
     "ping_guiding_star",
     "ping_unusual_sprouts",
+    "ping_windy_bee",
     "ping_macro_status",
     "ping_gathering",
     "ping_live_gather_report",
@@ -758,6 +759,8 @@ class macro:
         self.guidingStarLastAnnounced = {}
         self.lastUnusualSproutScan = 0
         self.unusualSproutLastAnnounced = {}
+        self.lastWindyBeeScan = 0
+        self.windyBeeLastAnnounced = {}
         self.lastStickerSproutScan = 0
         self.stickerSproutDetectedAt = 0
         self.stickerSproutLastAnnounced = 0
@@ -1291,6 +1294,36 @@ class macro:
             "light blue",
             "screen",
             ping_category="ping_unusual_sprouts",
+            route_category="activities",
+        )
+
+    def detectWindyBeeAnnouncement(self):
+        if not self.setdat.get("ping_windy_bee", False):
+            return
+        if self.status.value == "rejoining":
+            return
+        now = time.time()
+        if now - self.lastWindyBeeScan < 5:
+            return
+        self.lastWindyBeeScan = now
+
+        text = self.readBlueText()
+        match = re.search(r"\bfound\s+windy\s+bee\s+in\s+the\s+(.+?)\s+field\b", text)
+        if not match:
+            return
+
+        field = match.group(1).strip()
+        if field not in startLocationDimensions:
+            return
+        if now - self.windyBeeLastAnnounced.get(field, 0) < 10 * 60:
+            return
+        self.windyBeeLastAnnounced[field] = now
+        self.logger.webhook(
+            "Windy Bee",
+            f"Spawn detected in {field.title()} Field",
+            "light blue",
+            "screen",
+            ping_category="ping_windy_bee",
             route_category="activities",
         )
 
@@ -6795,6 +6828,7 @@ class macro:
             self.detectNight()
         self.detectGuidingStarAnnouncement()
         self.detectUnusualSproutAnnouncement()
+        self.detectWindyBeeAnnouncement()
         self.detectStickerSproutAnnouncement()
 
         #hotbar
