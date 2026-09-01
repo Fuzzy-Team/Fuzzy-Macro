@@ -4403,6 +4403,31 @@ class macro:
         elif fieldSetting["turn"] == "right":
             for _ in range(fieldSetting["turn_times"]):
                 self.keyboard.press(".")
+        try:
+            startingPatternYaw = int(fieldSetting.get("turn_times", 0) or 0)
+        except (TypeError, ValueError):
+            startingPatternYaw = 0
+        if fieldSetting.get("turn") == "left":
+            startingPatternYaw *= -1
+        elif fieldSetting.get("turn") != "right":
+            startingPatternYaw = 0
+        patternYawApplied = False
+
+        def setPatternYaw(targetYaw):
+            """Set a pattern's yaw once, relative to this gather's start."""
+            nonlocal patternYawApplied
+            if patternYawApplied:
+                return
+            try:
+                targetYaw = int(targetYaw)
+            except (TypeError, ValueError):
+                return
+            targetYaw = max(-8, min(8, targetYaw))
+            delta = targetYaw - startingPatternYaw
+            rotationKey = "." if delta > 0 else ","
+            for _ in range(abs(delta)):
+                self.keyboard.press(rotationKey)
+            patternYawApplied = True
         def configureAIGatherCamera():
             for _ in range(11):
                 self.keyboard.keyDown("pageup", False)
@@ -4555,9 +4580,11 @@ class macro:
         #time to gather
         if preloadedAIGatherNameSpace is not None:
             preloadedAIGatherNameSpace.update({**locals(), **globals(), "pattern_ai_warmup_only": False})
+            preloadedAIGatherNameSpace["setPatternYaw"] = setPatternYaw
             gatherNameSpace = preloadedAIGatherNameSpace
         else:
             gatherNameSpace = {**locals(), **globals()}
+            gatherNameSpace["setPatternYaw"] = setPatternYaw
         if isSproutGather:
             self.set_task_status("collect_sprouts", task="collect", field=field, activity="sprouts")
         else:
