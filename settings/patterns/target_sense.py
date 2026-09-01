@@ -1,5 +1,12 @@
 import math
 
+field_yaws = {
+    "pepper": 2,
+    "rose": 0,
+    "strawberry": 2,
+}
+setPatternYaw(field_yaws.get(str(field).replace("_", " ").lower(), 0))
+
 window = getattr(self, "robloxWindow", None)
 if window is None:
     self.keyboard.walk(tcfbkey, 0.5)
