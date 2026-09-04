@@ -54,14 +54,11 @@ function formatModelSize(sizeBytes) {
 
 const MODEL_PRESENTATION = {
   "token_detection_standard.mlmodelc": { group: "Standard", label: "Token Detection" },
-  "blooms-and-petals-standard.mlmodelc": { group: "Standard", label: "Blooms & Petals" },
   "sprinkler_detection_standard.mlmodelc": { group: "Standard", label: "Sprinkler Detection" },
   "token_detection_small.mlmodelc": { group: "Small", label: "Token Detection" },
   "loot_detection_small.mlmodelc": { group: "Small", label: "Loot Detection" },
   "token_detection_mini.mlmodelc": { group: "Mini", label: "Token Detection" },
   "loot_detection_mini.mlmodelc": { group: "Mini", label: "Loot Detection" },
-  "Blooms-and-petals-mini.mlmodelc": { group: "Mini", label: "Blooms & Petals" },
-  "Blooms-and-petals-light.mlmodelc": { group: "Small", label: "Blooms & Petals" },
   "bloom_detection_standard.mlmodelc": { group: "Standard", label: "Bloom Detection" },
   "bloom_detection_light.mlmodelc": { group: "Small", label: "Bloom Detection" },
   "bloom_detection_mini.mlmodelc": { group: "Mini", label: "Bloom Detection" },

@@ -13,7 +13,7 @@ Requirements:
 - bloom_detection_standard.mlmodelc/.onnx, bloom_detection_light.mlmodelc/.onnx, or bloom_detection_mini.mlmodelc/.onnx
 - sprinkler_detection_standard.mlmodelc or sprinkler_detection_standard.onnx
 
-- Version 2.2
+- Version 2.3
 """
 
 import math
@@ -32,7 +32,7 @@ INPUT_HEIGHT = agc.INPUT_HEIGHT
 MODEL_DIR = agc.MODEL_DIR
 SPRINKLER_CONFIDENCE_THRESHOLD = 0.6
 PETAL_CONFIDENCE_THRESHOLD = 0.50
-RUNTIME_VERSION = 41
+RUNTIME_VERSION = 42
 MIN_TOKEN_DISTANCE = 0.3
 MAX_SPRINKLER_DISTANCE = 10.0
 TARGET_SPRINKLER_LABEL = None
@@ -92,9 +92,9 @@ BLOOM_MODEL_VARIANTS = {
     ),
 }
 
-# The Bloom-only model emits class 0; the movement overlay uses legacy id 5.
+# The Bloom-only model emits class 0.
 LABELS_BLOOMS = {
-    5: BLOOM_LABEL,
+    0: BLOOM_LABEL,
 }
 
 IGNORED_TOKENS = set()
@@ -1036,7 +1036,7 @@ def _process_combined_detections(runtime, output, transform, inference_ms, publi
             max(0.0, min(capture_height, (y2 - pad_y) / scale)),
         )
         if class_id == 0 and confidence >= BLOOM_MIN_CONFIDENCE:
-            bloom_detections.append((agc.capture_box_to_model(runtime, capture_box), 5, confidence))
+            bloom_detections.append((agc.capture_box_to_model(runtime, capture_box), 0, confidence))
             continue
         if class_id != 1 or confidence < PETAL_CONFIDENCE_THRESHOLD:
             continue
