@@ -14,9 +14,9 @@ MODELS_ZIP_URL = "https://github.com/Fuzzy-Team/fuzzymacroaimodels/archive/refs/
 MODEL_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", "models"))
 COREML_MODELS = (
     "token_detection_standard.mlmodelc",
-    "blooms-and-petals-standard.mlmodelc",
-    "Blooms-and-petals-light.mlmodelc",
-    "Blooms-and-petals-mini.mlmodelc",
+    "bloom_detection_standard.mlmodelc",
+    "bloom_detection_light.mlmodelc",
+    "bloom_detection_mini.mlmodelc",
     "sprinkler_detection_standard.mlmodelc",
     "token_detection_small.mlmodelc",
     "token_detection_mini.mlmodelc",
@@ -26,9 +26,9 @@ COREML_MODELS = (
 ONNX_MODELS = (
     "token_detection_standard.onnx",
     "sprinkler_detection_standard.onnx",
-    "blooms-and-petals-standard.onnx",
-    "Blooms-and-petals-light.onnx",
-    "Blooms-and-petals-mini.onnx",
+    "bloom_detection_standard.onnx",
+    "bloom_detection_light.onnx",
+    "bloom_detection_mini.onnx",
 )
 OBSOLETE_MODELS = (
     "best.mlpackage",
