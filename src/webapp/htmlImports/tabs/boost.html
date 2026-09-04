@@ -2,6 +2,7 @@
   <div id="boost-nav" class="sub-nav-bar">
     <div id="boost-hotbar" class="boost-tab-item">Hotbar</div>
     <div id="boost-buffs" class="boost-tab-item">Buffs</div>
+    <div id="boost-tad-alt-sync" class="boost-tab-item">TAD Alt Sync</div>
   </div>
   <div id="boost-hotbar-tab" class="standard-container sub-tab-panel active">
     <script>
@@ -110,6 +111,25 @@
             inputType: "int",
             inputLimit: 4,
             triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "field_booster_glitter_extend_enabled",
+          title: "Glitter Extending",
+          desc: "Use Glitter at 14:55 to extend each detected field booster.",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "field_booster_glitter_slot",
+          title: "Glitter Hotbar Slot",
+          desc: "Shared with all Glitter settings. Set to 0 to find Glitter in the inventory.",
+          type: {
+            name: "dropdown",
+            data: [0, 1, 2, 3, 4, 5, 6, 7],
+            triggerFunction: "syncGlitterHotbarSlot(this)",
           },
         },
         {
@@ -241,7 +261,7 @@
           type: {
             name: "dropdown",
             data: [0, 1, 2, 3, 4, 5, 6, 7],
-            triggerFunction: saveProfileTriggerFunction,
+            triggerFunction: "syncGlitterHotbarSlot(this)",
           },
         },
         {
@@ -293,6 +313,144 @@
             name: "checkbox",
             triggerFunction: saveProfileTriggerFunction,
           },
+        },
+        {
+          id: "sticker_stack_interrupt_gathering",
+          title: "Sticker Stack Interrupts gathering",
+          desc: "If sticker stack is ready while gathering, stop and activate it",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+      ]);
+    </script>
+  </div>
+  <div id="boost-tad-alt-sync-tab" class="standard-container sub-tab-panel">
+    <script>
+      const tadAltSyncParent = document.getElementById("boost-tad-alt-sync-tab");
+      buildStandardContainer(tadAltSyncParent, "TAD Alt Sync", "Start up to two Alt Mode accounts in the default field, then move them with detected field boosts.", [
+        {
+          id: "tad_alt_sync_enabled",
+          title: "Enable TAD Alt Sync",
+          desc: "Move enabled TAD alts to the field detected after collecting a booster.",
+          type: { name: "checkbox", triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_1_enabled",
+          title: "TAD Alt 1",
+          desc: "Enable the first alt.",
+          type: { name: "checkbox", triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_1_webhook",
+          title: "Alt 1 Remote-Control Webhook",
+          desc: "A webhook in a channel visible to the first alt's Fuzzy Discord bot.",
+          type: { name: "textbox", inputType: "string", length: 24, triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_2_enabled",
+          title: "TAD Alt 2",
+          desc: "Enable the second alt.",
+          type: { name: "checkbox", triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_2_webhook",
+          title: "Alt 2 Remote-Control Webhook",
+          desc: "A webhook in a channel visible to the second alt's Fuzzy Discord bot.",
+          type: { name: "textbox", inputType: "string", length: 24, triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_default_field",
+          title: "Default Alt Field",
+          desc: "Field restored after the boost expires.",
+          type: { name: "dropdown", data: fields, length: 13, triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_copy_field_settings",
+          title: "Use My Field Settings For This Field",
+          desc: "Copy the host's current settings for the selected Default Alt Field into the Alt Gather preset.",
+          type: { name: "button", text: "Copy Settings", triggerFunction: "copyHostFieldSettingsToTadAlt(this)" },
+        },
+      ]);
+      buildStandardContainer(tadAltSyncParent, "Default Alt Gather Pattern", "Settings used while the alt gathers indefinitely in the Default Alt Field.", [
+        {
+          id: "tad_alt_gather_shape", title: "Default Field Pattern", desc: "Pattern used by alts in the Default Alt Field. Custom patterns must also exist on each alt.",
+          type: { name: "dropdown", data: [], triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_gather_size", title: "Pattern Size", desc: "Area covered by the alt pattern.",
+          type: { name: "dropdown", data: ["XS", "S", "M", "L", "XL"], triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_gather_width", title: "Pattern Width", desc: "Number of pattern repetitions.",
+          type: { name: "dropdown", data: [1, 2, 3, 4, 5, 6, 7, 8], triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_gather_shift_lock", title: "Use Shift Lock", desc: "Enable shift lock while the alt gathers.",
+          type: { name: "checkbox", triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_gather_drift_compensation", title: "Drift Compensation", desc: "Re-align the alt between pattern cycles.",
+          type: { name: "checkbox", triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_gather_invert_lr", title: "Invert Left/Right", desc: "Invert horizontal pattern movement.",
+          type: { name: "checkbox", triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_gather_invert_fb", title: "Invert Forward/Back", desc: "Invert vertical pattern movement.",
+          type: { name: "checkbox", triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_gather_turn", title: "Camera Turn", desc: "Turn the camera before gathering.",
+          type: { name: "dropdown", data: ["None", "Left", "Right"], triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_gather_turn_times", title: "Camera Turn Count", desc: "Number of camera turns.",
+          type: { name: "dropdown", data: [1, 2, 3, 4], triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_gather_start_location", title: "Start Location", desc: "Part of the default field where the alt starts gathering.",
+          type: { name: "dropdown", data: ["Center", "Upper Right", "Right", "Lower Right", "Bottom", "Lower Left", "Left", "Upper Left", "Top"], triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_gather_distance", title: "Start Distance", desc: "Distance travelled toward the selected start location.",
+          type: { name: "dropdown", data: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_gather_goo", title: "Use Goo", desc: "Use goo while the alt gathers.",
+          type: { name: "checkbox", triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_gather_goo_interval", title: "Goo Interval", desc: "Seconds between goo uses.",
+          type: { name: "textbox", inputType: "int", inputLimit: 3, triggerFunction: saveProfileTriggerFunction },
+        },
+      ]);
+      buildStandardContainer(tadAltSyncParent, "Timing & Glitter Extending", "Control alt restarts, boost duration, and optional host-side Glitter use.", [
+        {
+          id: "tad_alt_restart_delay",
+          title: "Restart Delay",
+          desc: "Seconds to wait after stopping the alt macro before changing its field.",
+          type: { name: "textbox", inputType: "float", inputLimit: 4, triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_boost_duration",
+          title: "Boost Duration",
+          desc: "Seconds before returning the alts to their default field (900 = 15 minutes).",
+          type: { name: "textbox", inputType: "float", inputLimit: 5, triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_glitter_extend_enabled",
+          title: "Glitter Extending",
+          desc: "Have the host use Glitter five seconds before the TAD alt boost expires, then return alts after a second boost duration (30 minutes total when Boost Duration is 900).",
+          type: { name: "checkbox", triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "tad_alt_glitter_slot",
+          title: "Glitter Hotbar Slot",
+          desc: "Shared with all Glitter settings. Set to 0 to find Glitter in the inventory.",
+          type: { name: "dropdown", data: [0, 1, 2, 3, 4, 5, 6, 7], triggerFunction: "syncGlitterHotbarSlot(this)" },
         },
       ]);
     </script>

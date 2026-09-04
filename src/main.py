@@ -86,6 +86,7 @@ except ModuleNotFoundError:
         pass
     quit()
 from modules.submacros.hourlyReport import HourlyReport
+from modules.submacros.tadAltSync import TadAltSync
 mw, mh = pag.size()
 
 # Quest titles that are primarily bloom-petal objectives and can be skipped by setting.
@@ -469,8 +470,15 @@ def canClaimTimedBearQuest(name):
     
 # (set_enabled moved into RichPresenceManager class)
 #controller for the macro
-def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMessageQueue=None, planterCommandQueue=None):
-    macro = macroModule.macro(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue)
+def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMessageQueue=None, planterCommandQueue=None, skipServer=None):
+    macro = macroModule.macro(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, skipServer)
+    altHostAuthorized = (
+        macro.setdat.get("macro_mode", "normal") != "alt"
+        or bool(macro.setdat.get("alt_mode_field_pending", False))
+    )
+    if macro.setdat.get("macro_mode", "normal") == "alt" and altHostAuthorized:
+        settingsManager.saveProfileSetting("alt_mode_field_pending", False)
+        macro.setdat["alt_mode_field_pending"] = False
     #invert the regularMobsInFields dict
     #instead of storing mobs in field, store the fields associated with each mob
     regularMobData = {}
@@ -650,20 +658,20 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 macro.reset(convert=convertAfter)
             
             #do priority tasks
-            # Quest mode should stay on quests only — skip stinger hunt / mondo buff
+            # Quest and Alt modes stay isolated from priority tasks.
             if (
-                macro.setdat.get("macro_mode", "normal") != "quest"
+                macro.setdat.get("macro_mode", "normal") not in ("quest", "alt")
                 and macro.night
                 and macro.setdat["stinger_hunt"]
             ):
                 macro.stingerHunt()
             if (
-                macro.setdat.get("macro_mode", "normal") != "quest"
+                macro.setdat.get("macro_mode", "normal") not in ("quest", "alt")
                 and macro.setdat["mondo_buff"]
                 and macro.hasMondoRespawned()
             ):
                 macro.collectMondoBuff()
-            if macro.hasScheduledRejoinArrived():
+            if macro.setdat.get("macro_mode", "normal") != "alt" and macro.hasScheduledRejoinArrived():
                 macro.rejoin("Rejoining (Scheduled)")
                 macro.saveTiming("rejoin_every")
             
@@ -945,6 +953,33 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 if killedInAnyField:
                     taskCompleted = True
 
+    def runReadyQuestInterruptMobs():
+        """Kill ready quest mobs before the normal task queue starts gathering."""
+        readyMobs = []
+        seenMobFields = set()
+        for questGiver, mobs in macro.questGatherInterruptMobs.items():
+            interruptKey = f"{questGiver.replace(' ', '_')}_quest_gather_interrupt"
+            if not macro.setdat.get(interruptKey, False):
+                continue
+            for mob in mobs:
+                for field in regularMobData.get(mob, []):
+                    mobField = (mob, field)
+                    if mobField in seenMobFields or not macro.hasMobRespawned(mob, field):
+                        continue
+                    seenMobFields.add(mobField)
+                    readyMobs.append(mobField)
+
+        if not readyMobs:
+            return False
+
+        mobNames = ", ".join(sorted({mob.replace("_", " ").title() for mob, _ in readyMobs}))
+        macro.logger.webhook("Quest mobs ready", f"Running before quest gathering: {mobNames}", "dark brown")
+        for mob, field in readyMobs:
+            # Recheck because an earlier field run can update shared mob timings.
+            if macro.hasMobRespawned(mob, field):
+                runTask(macro.killMob, args=(mob, field), convertAfter=False)
+        return True
+
     def bloomsAIQuestOverride(baseOverride=None):
         override = dict(baseOverride or {})
         override["shape"] = "blooms_ai"
@@ -1033,6 +1068,24 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         macro.checkAndReloadSettings()
 
         # Migration from old boolean flags to macro_mode is now handled in settings loader
+
+        if macro.setdat.get("macro_mode", "normal") == "alt":
+            if not altHostAuthorized:
+                status.value = "alt_waiting_for_host"
+                updateGUI.value = 1
+                time.sleep(1)
+                continue
+            # Webhook field changes are stored separately from the normal task
+            # slots and only become active after a fresh host command.
+            altField = str(macro.setdat.get("alt_mode_field") or "").strip().lower()
+            if not altField:
+                status.value = "alt_waiting_for_host"
+                updateGUI.value = 1
+                time.sleep(1)
+                continue
+            updateGUI.value = 1
+            runTask(macro.gather, args=(altField,), resetAfter=False, allowAFB=False)
+            continue
 
         #run empty task
         #this is in case no other settings are selected
@@ -1425,6 +1478,11 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                     
         taskCompleted = False
 
+        # A quest-mob gather interrupt discovered above must run before any quest
+        # or gather task begins. Otherwise gathering starts only to be interrupted
+        # on its first cycle by a mob that was already known to be ready.
+        runReadyQuestInterruptMobs()
+
         # Quest completer feature removed. Quest-giver handling and brown bear logic remain.
 
         # Helper function for manual planters
@@ -1589,14 +1647,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 
                 # Special case: sticker_stack
                 if collectName == "sticker_stack":
-                    if macro.setdat["sticker_stack"]:
-                        with open(settingsManager.ensureUserFile("sticker_stack.txt"), "r") as f:
-                            stickerStackCD = int(f.read())
-                        f.close()
-                        if macro.hasRespawned("sticker_stack", stickerStackCD):
-                            runTask(macro.collect, args=("sticker_stack",))
-                            executedTasks.add(taskId)
-                            return True
+                    if macro.setdat["sticker_stack"] and macro.hasStickerStackRespawned():
+                        runTask(macro.collect, args=("sticker_stack",))
+                        executedTasks.add(taskId)
+                        return True
                     return False
                 
                 # Field boosters (handled separately due to gather logic)
@@ -2731,7 +2785,7 @@ def watch_for_hotkeys(run):
     pressed_keys = set()
     
     # Add debouncing to prevent duplicate triggers
-    last_trigger_time = {"start": 0.0, "stop": 0.0, "pause": 0.0, "hotbar_buff_start": 0.0}
+    last_trigger_time = {"start": 0.0, "stop": 0.0, "pause": 0.0, "hotbar_buff_start": 0.0, "autoclicker_start": 0.0, "auto_gifted_basic_bee_start": 0.0}
     debounce_duration = 0.3  # 300ms debounce
     
     # Add threading lock for synchronization
@@ -2753,7 +2807,7 @@ def watch_for_hotkeys(run):
     settings_cache_duration = 1.0  # Reload settings every 1 second max
     
     # Cache Eel recording state to avoid repeated calls
-    recording_cache = {"start": False, "pause": False, "stop": False, "hotbar_buff_start": False}
+    recording_cache = {"start": False, "pause": False, "stop": False, "hotbar_buff_start": False, "autoclicker": False, "auto_gifted_basic_bee_start": False}
     last_recording_check = 0
     recording_cache_duration = 0.5  # Check recording state every 0.5 seconds max
 
@@ -2815,10 +2869,12 @@ def watch_for_hotkeys(run):
                 recording_cache["pause"] = eel.getElementProperty("pause_keybind", "dataset.recording")() == "true"
                 recording_cache["stop"] = eel.getElementProperty("stop_keybind", "dataset.recording")() == "true"
                 recording_cache["hotbar_buff_start"] = eel.getElementProperty("hotbar_buff_start_keybind", "dataset.recording")() == "true"
+                recording_cache["autoclicker"] = eel.getElementProperty("autoclicker_keybind", "dataset.recording")() == "true"
+                recording_cache["auto_gifted_basic_bee_start"] = eel.getElementProperty("auto_gifted_basic_bee_start_keybind", "dataset.recording")() == "true"
                 last_recording_check = current_time
             except:
-                recording_cache = {"start": False, "pause": False, "stop": False, "hotbar_buff_start": False}
-            return recording_cache["start"] or recording_cache["pause"] or recording_cache["stop"] or recording_cache["hotbar_buff_start"]
+                recording_cache = {"start": False, "pause": False, "stop": False, "hotbar_buff_start": False, "autoclicker": False, "auto_gifted_basic_bee_start": False}
+            return any(recording_cache.values())
     
     def normalize_key_name(key_name):
         key_name = str(key_name or "").strip()
@@ -2911,6 +2967,8 @@ def watch_for_hotkeys(run):
                 stop_keybind = settings.get("stop_keybind", "F3")
                 pause_keybind = settings.get("pause_keybind", "F2")
                 hotbar_buff_start_keybind = settings.get("hotbar_buff_start_keybind", "F4")
+                autoclicker_keybind = settings.get("autoclicker_keybind", "")
+                auto_gifted_basic_bee_start_keybind = settings.get("auto_gifted_basic_bee_start_keybind", "")
                 
                 # Convert key to string for comparison
                 key_str = convert_key_to_string(key)
@@ -3011,6 +3069,32 @@ def watch_for_hotkeys(run):
                         result = gui.startHotbarBuffTool()
                         if not result.get("ok") and not gui.isAnyToolRunning():
                             messageBox.msgBox(title="Hotbar Buff", text=result.get("message", "Could not start Hotbar Buff."))
+                    except Exception:
+                        pass
+                elif keys_match_keybind(autoclicker_keybind):
+                    if run.value != 3:
+                        return
+                    if current_time - last_trigger_time["autoclicker_start"] < debounce_duration:
+                        return
+                    last_trigger_time["autoclicker_start"] = current_time
+                    try:
+                        import gui
+                        result = gui.startAutoClickerTool()
+                        if not result.get("ok") and not gui.isAnyToolRunning():
+                            messageBox.msgBox(title="Auto Clicker", text=result.get("message", "Could not start Auto Clicker."))
+                    except Exception:
+                        pass
+                elif keys_match_keybind(auto_gifted_basic_bee_start_keybind):
+                    if run.value != 3:
+                        return
+                    if current_time - last_trigger_time["auto_gifted_basic_bee_start"] < debounce_duration:
+                        return
+                    last_trigger_time["auto_gifted_basic_bee_start"] = current_time
+                    try:
+                        import gui
+                        result = gui.startAutoGiftedBasicBeeTool()
+                        if not result.get("ok") and not gui.isAnyToolRunning():
+                            messageBox.msgBox(title="Auto Gifted Basic Bee", text=result.get("message", "Could not start Auto Gifted Basic Bee."))
                     except Exception:
                         pass
                 elif keys_match_keybind(pause_keybind):
@@ -3132,6 +3216,7 @@ if __name__ == "__main__":
     gui.setRecentLogs(recentLogs)
     updateGUI = manager.Value('i', 0)
     skipTask = manager.Value('i', INTERRUPT_NONE)  # interrupt action for the running task
+    skipServer = manager.Value('i', 0)  # one-shot request to abandon the active private-server join
     status = manager.Value(ctypes.c_wchar_p, "none")
     presence = manager.Value(ctypes.c_wchar_p, "")
     logQueue = manager.Queue()
@@ -3487,14 +3572,15 @@ if __name__ == "__main__":
             run.value = 0
 
         #discord bot. Look for changes in the bot token
-        currentDiscordBotToken = setdat.get("discord_bot_token", "")
-        shouldRunDiscordBot = logModule.delivery_uses_bot_commands(setdat) and currentDiscordBotToken and currentDiscordBotToken.strip()
+        # Coerce to str: settings parser may turn digit-only values into ints
+        currentDiscordBotToken = str(setdat.get("discord_bot_token") or "").strip()
+        shouldRunDiscordBot = logModule.delivery_uses_bot_commands(setdat) and bool(currentDiscordBotToken)
         if shouldRunDiscordBot and currentDiscordBotToken != prevDiscordBotToken:
             if discordBotProc is not None and discordBotProc.is_alive():
                 print("Detected change in discord bot token, killing previous bot process")
                 discordBotProc.terminate()
                 discordBotProc.join()
-            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI, discordMessageQueue, planterCommandQueue, streamControlQueue), daemon=True)
+            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI, discordMessageQueue, planterCommandQueue, streamControlQueue, skipServer), daemon=True)
             prevDiscordBotToken = currentDiscordBotToken
             discordBotProc.start()
         elif not shouldRunDiscordBot and discordBotProc is not None and discordBotProc.is_alive():
@@ -3593,11 +3679,30 @@ if __name__ == "__main__":
                                     but there are no more items left to craft.\n\
 				                    Check the 'repeat' setting on your blender items and reset blender data.")
             #macro proc
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer), daemon=True)
             macroProc.start()
 
             macro_version = settingsManager.getMacroVersion()
-            logger.webhook("Macro Started", f'Fuzzy Macro v{macro_version}\nDisplay: {screenInfo["display_type"]}, {screenInfo["screen_width"]}x{screenInfo["screen_height"]}', "purple", route_category="macro_status")
+            macro_mode = str(setdat.get("macro_mode", "normal") or "normal").strip().lower()
+            mode_names = {
+                "normal": "Normal Mode",
+                "alt": "Alt Mode",
+                "field": "Field Mode",
+                "quest": "Quest Mode",
+                "bug": "Bug Run Mode",
+            }
+            start_details = [
+                f"Fuzzy Macro v{macro_version}",
+                f"Mode: {mode_names.get(macro_mode, macro_mode.title())}",
+            ]
+            if macro_mode == "alt":
+                if setdat.get("alt_mode_field_pending", False):
+                    active_alt_field = str(setdat.get("alt_mode_field") or "").strip()
+                    start_details.append(f"Alt Field: {active_alt_field.title() or 'Waiting for Host'}")
+                else:
+                    start_details.append("Alt Field: Waiting for Host")
+            start_details.append(f'Display: {screenInfo["display_type"]}, {screenInfo["screen_width"]}x{screenInfo["screen_height"]}')
+            logger.webhook("Macro Started", "\n".join(start_details), "purple", route_category="macro_status")
             run.value = 2
             autoStopStartTime = time.time()
             autoStopHours = parseAutoStopHours(setdat)
@@ -3626,6 +3731,8 @@ if __name__ == "__main__":
 
             if had_macro_proc:
                 logger.webhook("Macro Stopped", "Fuzzy Macro", "red", route_category="macro_status")
+                if setdat.get("macro_mode", "normal") != "alt":
+                    TadAltSync(setdat, logger).initialize_alts()
             try:
                 gui.stopAllTools()
             except Exception:
@@ -3716,7 +3823,7 @@ if __name__ == "__main__":
             appManager.closeApp("Roblox")
             keyboardModule.releaseMovement()
             mouse.mouseUp()
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state
@@ -3749,7 +3856,7 @@ if __name__ == "__main__":
             keyboardModule.releaseMovement()
             mouse.mouseUp()
             # restart macro process
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state

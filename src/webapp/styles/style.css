@@ -154,6 +154,13 @@
   --primary-rgb: 144, 240, 224;
 }
 
+/* Spicy Bee Theme (main color: #cf2013, highlight: #eb1909) */
+.theme-spicy-bee {
+  --primary: #cf2013;
+  --primary-hover: #eb1909;
+  --primary-rgb: 207, 32, 19;
+}
+
 body {
   margin: 0;
   padding: 0;
@@ -620,6 +627,11 @@ select:focus {
 
 .purple-button:active {
   transform: scale(0.98);
+}
+
+.keybind-clear-button {
+  margin-top: 0;
+  padding: 0.5rem 0.8rem;
 }
 
 .purple-button.disabled {
@@ -1742,6 +1754,42 @@ select:focus {
   flex: 1 1 0%;
   min-height: 0;
   /* Prevents overflow issues in flex containers */
+}
+
+.log-search-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.log-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  outline: none;
+  background: var(--textbox-bg);
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 0.8rem;
+}
+
+.log-search-input::placeholder {
+  color: var(--text-dim);
+}
+
+.log-search-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.12);
+}
+
+.log-search-status {
+  flex: 0 0 auto;
+  min-width: 3.5rem;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  text-align: right;
 }
 
 /* Drag Action Buttons */
