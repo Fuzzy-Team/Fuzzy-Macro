@@ -1,5 +1,5 @@
-# Port of Revolution routes 113 (cannon.20gate) + 019 (20gate.ant-pass)
-# Walk studs → Fuzzy walk(studs / 28); Sleep/Parachute ms → seconds
+# Port of Revolution routes 113 + 019 + 033
+# cannon.20gate → 20gate.ant-pass → ant-pass.ant-shop (buy ant pass)
 
 # --- cannon.20gate ---
 time.sleep(0.3)
@@ -17,7 +17,7 @@ time.sleep(2.15)
 self.keyboard.keyUp("w")
 time.sleep(1.2)  # SleepAlign — land without closing chute
 
-self.keyboard.walk("d", 50 / 28)  # WalkAlign Right
+self.keyboard.walk("d", 50 / 28)  # WalkAlign(Right, 50)
 self.keyboard.walk("w", 35 / 28)  # WalkAlign(Forward, 35)
 
 # --- 20gate.ant-pass ---
@@ -26,6 +26,5 @@ self.keyboard.multiWalk(["s", "a"], 20 / 28)
 self.keyboard.walk("w", 60 / 28)
 self.keyboard.walk("a", 56 / 28)
 self.keyboard.walk("w", 64 / 28)
-self.keyboard.walk("a", 60 / 28)
-self.keyboard.walk("s", 60 / 28)
-self.keyboard.walk("w", 10 / 28)
+self.keyboard.walk("a", 80 / 28)
+

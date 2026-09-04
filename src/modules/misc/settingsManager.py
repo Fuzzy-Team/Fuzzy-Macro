@@ -718,9 +718,17 @@ def readSettingsFile(path, defaults=None):
 
     data = [[x.strip() for x in y.split("=", 1)] for y in raw.split("\n") if y]
     #convert to a dict
+    resolved_defaults = defaults if defaults is not None else _defaultsForSettingsPath(path)
     out = {}
-    for k,v in data:
-        out[k] = _parseSettingValue(v)
+    for k, v in data:
+        parsed = _parseSettingValue(v)
+        # Keep string-typed settings as strings (tokens, snowflake IDs, URLs, etc.)
+        # even when the raw value looks numeric.
+        if resolved_defaults is not None:
+            default_val = resolved_defaults.get(k)
+            if isinstance(default_val, str) and not isinstance(parsed, str):
+                parsed = "" if parsed is None else str(parsed)
+        out[k] = parsed
     return out
 
 def _parseSettingValue(value):
@@ -785,11 +793,24 @@ def saveDict(path, data):
     # Ensure file ends with a newline to avoid accidental concatenation
     if not out.endswith("\n"):
         out = out + "\n"
-    directory = os.path.dirname(os.path.abspath(path))
+    abs_path = os.path.abspath(path)
+    directory = os.path.dirname(abs_path)
     if directory:
         os.makedirs(directory, exist_ok=True)
-    with open(path, "w") as f:
-        f.write(out)
+    # Write to a temp file then replace, so a concurrent reader never sees a
+    # truncated/empty settings file mid-save.
+    fd, tmp_path = tempfile.mkstemp(prefix=".settings_", suffix=".tmp", dir=directory or None)
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(out)
+        os.replace(tmp_path, abs_path)
+    except Exception:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
 
 #update one property of a setting
 def saveSettingFile(setting,value, path):
@@ -955,16 +976,16 @@ def importFieldSettings(field_name, json_settings):
             if settings.get("shape") == "blooms_ai":
                 blooms_model_names = {
                     "standard": (
-                        "blooms-and-petals-standard.mlmodelc",
-                        "blooms-and-petals-standard.onnx",
+                        "bloom_detection_standard.mlmodelc",
+                        "bloom_detection_standard.onnx",
                     ),
                     "light": (
-                        "Blooms-and-petals-light.mlmodelc",
-                        "Blooms-and-petals-light.onnx",
+                        "bloom_detection_light.mlmodelc",
+                        "bloom_detection_light.onnx",
                     ),
                     "mini": (
-                        "Blooms-and-petals-mini.mlmodelc",
-                        "Blooms-and-petals-mini.onnx",
+                        "bloom_detection_mini.mlmodelc",
+                        "bloom_detection_mini.onnx",
                     ),
                 }
                 selected_blooms_model = str(settings.get("blooms_ai_model", "Standard")).strip().lower()

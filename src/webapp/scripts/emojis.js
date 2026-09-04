@@ -58,6 +58,7 @@ const collectEmojis = {
     royal_jelly_dispenser: "💎",
     treat_dispenser: "🦴",
     ant_pass_dispenser: "🎫",
+    buy_ant_pass: "🎟️",
     robo_pass_dispenser: "🤖",
     glue_dispenser: "🧴",
     stockings: "🧦",

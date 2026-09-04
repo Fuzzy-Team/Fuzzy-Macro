@@ -26,10 +26,23 @@
         {
           id: "preferred_hive_slot",
           title: "Preferred Hive Slot",
-          desc: "The macro checks this hive first, then searches the remaining slots automatically. 1 is closest to cannon and 6 is furthest.",
+          desc: "The preferred hive to claim first. If taken, the macro takes the open slot closest to the red cannon (hive 1). 1 is closest to cannon and 6 is furthest.",
           type: {
             name: "dropdown",
             data: [1, 2, 3, 4, 5, 6],
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "hive_claim_method",
+          title: "Hive Claim Method",
+          desc: "Check walks from spawn to your preferred hive slot, then scans neighboring pads if it's taken. Detect zooms out, finds open hives from spawn, then walks to the chosen slot.",
+          type: {
+            name: "dropdown",
+            data: [
+              { label: "Detect", value: "detect" },
+              { label: "Check", value: "check" },
+            ],
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
@@ -318,6 +331,7 @@
             <div class="drag-item" data-id="collect_royal_jelly_dispenser" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Royal Jelly Dispenser</span></div>
             <div class="drag-item" data-id="collect_treat_dispenser" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Treat Dispenser</span></div>
             <div class="drag-item" data-id="collect_ant_pass_dispenser" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Ant Pass Dispenser</span></div>
+            <div class="drag-item" data-id="collect_buy_ant_pass" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Buy Ant Pass</span></div>
             <div class="drag-item" data-id="collect_robo_pass_dispenser" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Robo Pass Dispenser</span></div>
             <div class="drag-item" data-id="collect_glue_dispenser" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Glue Dispenser</span></div>
             <div class="drag-item" data-id="collect_stockings" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Stockings</span></div>
@@ -422,6 +436,15 @@
           },
         },
         {
+          id: "hive_hub_private_server",
+          title: "Use Private Server for Hive Hub",
+          desc: "When travelling to Hive Hub, join through the configured private server link using the Hive Hub game ID. If disabled, Hive Hub uses a public server.",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
           id: "manage-fallback-private-servers-button",
           title: "Fallback Private Servers",
           desc: "Configure up to three backup servers. Fuzzy tries each one after the primary server fails, before trying public servers.",
@@ -516,8 +539,8 @@
             <label for="fallback_private_server_link_3">Backup server 3</label>
             <input id="fallback_private_server_link_3" class="poppins-regular textbox" type="text" style="width:100%; box-sizing:border-box; margin:0.4rem 0;" data-input-type="string">
             <div class="modal-actions">
-              <button id="cancel-fallback-private-servers-button" class="btn-cancel">Cancel</button>
-              <button id="save-fallback-private-servers-button" class="btn-confirm">Save Servers</button>
+              <button type="button" id="cancel-fallback-private-servers-button" class="btn-cancel">Cancel</button>
+              <button type="button" id="save-fallback-private-servers-button" class="btn-confirm">Save Servers</button>
             </div>
           </div>
         </div>
@@ -579,6 +602,7 @@
               { label: "Gummy Theme", value: "Gummy" },
               { label: "Tadpole Theme", value: "Tadpole" },
               { label: "Gifted Tad Theme", value: "Gifted Tad" },
+              { label: "Spicy Bee Theme", value: "Spicy Bee" },
             ],
             triggerFunction: saveGeneralTriggerFunction,
           },
@@ -662,7 +686,7 @@
         {
           id: "start_keybind",
           title: "Start Macro Keybind",
-          desc: "Click to record a new keybind for starting the macro",
+          desc: "Click to record. Clear removes the keybind; Backspace/Delete clears while recording.",
           type: {
             name: "keybind",
             triggerFunction: saveGeneralTriggerFunction,
@@ -671,7 +695,7 @@
         {
           id: "pause_keybind",
           title: "Pause/Resume Macro Keybind",
-          desc: "Click to record a new keybind for pausing and resuming the macro",
+          desc: "Click to record. Clear removes the keybind; Backspace/Delete clears while recording.",
           type: {
             name: "keybind",
             triggerFunction: saveGeneralTriggerFunction,
@@ -680,16 +704,41 @@
         {
           id: "stop_keybind",
           title: "Stop Macro Keybind",
-          desc: "Click to record a new keybind for stopping the macro",
+          desc: "Click to record. Clear removes the keybind; Backspace/Delete clears while recording.",
           type: {
             name: "keybind",
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
         {
+          title: "Tool Keybinds",
+          desc: "Optional hotkeys for starting tools while the macro is stopped.",
+          type: {
+            name: "separator",
+          },
+        },
+        {
           id: "hotbar_buff_start_keybind",
           title: "Start Hotbar Buff Keybind",
-          desc: "Click to record a new keybind for starting the Hotbar Buff tool",
+          desc: "Click to record. Clear removes the keybind; Backspace/Delete clears while recording.",
+          type: {
+            name: "keybind",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "autoclicker_keybind",
+          title: "Start Auto Clicker Keybind",
+          desc: "Click to record. Clear removes the keybind; Backspace/Delete clears while recording.",
+          type: {
+            name: "keybind",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "auto_gifted_basic_bee_start_keybind",
+          title: "Start Auto Gifted Basic Bee Keybind",
+          desc: "Click to record. Clear removes the keybind; Backspace/Delete clears while recording.",
           type: {
             name: "keybind",
             triggerFunction: saveGeneralTriggerFunction,
@@ -935,6 +984,15 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
+        {
+          id: "ping_windy_bee",
+          title: "Windy Bee Spawn",
+          desc: "Ping when a Windy Bee spawn announcement is detected",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
       ]);
 
       const discordPermissionCategories = [
@@ -951,7 +1009,7 @@
         [
           "discord_permission_macro_control_ids",
           "Macro Control",
-          "Commands: /start, /stop, /pause, /resume, /rejoin.",
+          "Commands: /start, /stop, /pause, /resume, /rejoin, /skipserver.",
         ],
         [
           "discord_permission_task_interrupt_ids",

@@ -379,6 +379,13 @@ async function refreshToolStopHotkey() {
   try {
     const settings = await loadAllSettings();
     const stopKey = settings.stop_keybind || "F3";
+    const autoClickerStartKey = settings.autoclicker_keybind || "Not set";
+    const autoGiftedBasicBeeStartKey = settings.auto_gifted_basic_bee_start_keybind || "Not set";
+
+    const autoClickerStartHotkey = document.getElementById("autoclicker_start_hotkey");
+    if (autoClickerStartHotkey) {
+      autoClickerStartHotkey.textContent = autoClickerStartKey;
+    }
 
     const autoClickerStopHotkey = document.getElementById("autoclicker_stop_hotkey");
     if (autoClickerStopHotkey) {
@@ -388,6 +395,11 @@ async function refreshToolStopHotkey() {
     const autoGiftedBasicBeeStopHotkey = document.getElementById("auto-gifted-basic-bee-stop-hotkey");
     if (autoGiftedBasicBeeStopHotkey) {
       autoGiftedBasicBeeStopHotkey.textContent = stopKey;
+    }
+
+    const autoGiftedBasicBeeStartHotkey = document.getElementById("auto-gifted-basic-bee-start-hotkey");
+    if (autoGiftedBasicBeeStartHotkey) {
+      autoGiftedBasicBeeStartHotkey.textContent = autoGiftedBasicBeeStartKey;
     }
 
     const hotbarBuffStartHotkey = document.getElementById("hotbar-buff-start-hotkey");

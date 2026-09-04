@@ -190,6 +190,73 @@ def clear_settings_cache():
     _settings_cache = {}
     _cache_timestamp = 0
 
+
+TAD_ALT_SYNC_HELP_TEXT = (
+    "`?stop` - Stop the alt macro before changing fields.\n"
+    "`?set FieldName1 <field>` - Set the alt's first configured field slot.\n"
+    "`?set AltGatherSettings <json>` - Apply the host's Default Alt Field gather preset.\n"
+    "`?start` - Start the alt macro after its field is updated.\n"
+    "`?help` - Show this TAD compatibility help.\n\n"
+    "These compatibility commands are accepted only from Discord webhook messages. "
+    "TAD Alt Sync sends them in the order `?stop`, `?set`, then `?start`; Fuzzy must receive the field authorization before starting. "
+    "The host sends that sequence with its default field at startup and whenever the boost field changes. "
+    "It also sends the default field when no boost is detected and when the host stops. "
+    "When Glitter Extending is enabled, the host uses Glitter five seconds before the boost expires and keeps the alt in the boost field for a second boost duration. "
+    "On each alt, select **Alt Mode**; it remains idle until a fresh host field command arrives, then gathers that field indefinitely."
+)
+
+
+def parse_tad_alt_sync_command(content: str):
+    """Parse the webhook commands emitted by the Slymi/Eli TAD Alt Sync tool."""
+    command = str(content or "").strip()
+    lowered = command.lower()
+    if lowered == "?help":
+        return "help", None
+    if lowered == "?start":
+        return "start", None
+    if lowered == "?stop":
+        return "stop", None
+
+    prefix = "?set fieldname1 "
+    if lowered.startswith(prefix):
+        field = " ".join(command[len(prefix):].strip().lower().replace("_", " ").split())
+        if field:
+            return "set_field_1", field
+    settings_prefix = "?set altgathersettings "
+    if lowered.startswith(settings_prefix):
+        payload = command[len(settings_prefix):].strip()
+        if payload:
+            return "set_alt_gather_settings", payload
+    return None, None
+
+
+def normalize_tad_alt_gather_settings(payload):
+    if not isinstance(payload, dict):
+        return {}
+    out = {}
+    bool_keys = ("shift_lock", "field_drift_compensation", "invert_lr", "invert_fb", "goo")
+    for key in bool_keys:
+        if isinstance(payload.get(key), bool):
+            out[key] = payload[key]
+    enums = {
+        "size": {"xs", "s", "m", "l", "xl"},
+        "turn": {"none", "left", "right"},
+        "start_location": {"center", "upper right", "right", "lower right", "bottom", "lower left", "left", "upper left", "top"},
+    }
+    for key, allowed in enums.items():
+        value = str(payload.get(key, "")).strip().lower()
+        if value in allowed:
+            out[key] = value
+    ranges = {"width": (1, 8), "turn_times": (1, 4), "distance": (1, 10), "goo_interval": (3, 300)}
+    for key, (minimum, maximum) in ranges.items():
+        value = payload.get(key)
+        if isinstance(value, int) and not isinstance(value, bool):
+            out[key] = max(minimum, min(maximum, value))
+    shape = str(payload.get("shape", "")).strip()
+    if shape and len(shape) <= 64:
+        out["shape"] = shape
+    return out
+
 AUTO_PLANTER_OPTIONS = [
     ("paper", "auto_planter_paper", "Paper"),
     ("ticket", "auto_planter_ticket", "Ticket"),
@@ -221,7 +288,7 @@ DISCORD_COMMAND_PERMISSION_CATEGORIES = {
     "macro_control": {
         "label": "Macro Control",
         "setting": "discord_permission_macro_control_ids",
-        "commands": ["pause", "rejoin", "resume", "start", "stop"],
+        "commands": ["pause", "rejoin", "resume", "skipserver", "start", "stop"],
     },
     "task_interrupts": {
         "label": "Task Interrupts",
@@ -751,7 +818,7 @@ def _build_logger_embed(data):
     return embed
 
 
-def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None, updateGUI=None, discord_message_queue=None, planter_command_queue=None, stream_control_queue=None):
+def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None, updateGUI=None, discord_message_queue=None, planter_command_queue=None, stream_control_queue=None, skipServer=None):
     import modules.macro
     _patch_discord_response_footers()
     bot = commands.Bot(command_prefix="fuzz!", intents=discord.Intents.all())
@@ -862,6 +929,71 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             bot.loop.create_task(process_pin_requests())
         if _discord_message_queue is not None:
             bot.loop.create_task(process_discord_messages())
+
+    @bot.event
+    async def on_message(message):
+        action, value = parse_tad_alt_sync_command(message.content)
+
+        # Help is safe for normal users to request. The commands that mutate
+        # macro state remain restricted to Discord webhook messages.
+        if action == "help" and not message.author.bot:
+            embed = discord.Embed(
+                title="TAD Alt Sync Commands",
+                description=TAD_ALT_SYNC_HELP_TEXT,
+                color=0x0099ff,
+            )
+            await message.channel.send(embed=_apply_embed_footer(embed))
+            return
+
+        if message.webhook_id is not None:
+            if action == "help":
+                embed = discord.Embed(
+                    title="TAD Alt Sync Commands",
+                    description=TAD_ALT_SYNC_HELP_TEXT,
+                    color=0x0099ff,
+                )
+                await message.channel.send(embed=_apply_embed_footer(embed))
+                return
+            if action == "stop":
+                if run.value != 3:
+                    run.value = 0
+                return
+            if action == "start":
+                if run.value == 3:
+                    run.value = 1
+                return
+            if action == "set_field_1":
+                valid_fields = settingsManager.loadFields()
+                if value not in valid_fields:
+                    print(f"Ignored TAD Alt Sync field: {value}")
+                    return
+                settings = settingsManager.loadSettings()
+                fields = list(settings.get("fields", []))
+                while len(fields) < 5:
+                    fields.append("sunflower")
+                fields[0] = value
+                settingsManager.saveProfileSetting("fields", fields)
+                settingsManager.saveProfileSetting("alt_mode_field", value)
+                settingsManager.saveProfileSetting("alt_mode_field_pending", True)
+                clear_settings_cache()
+                return
+            if action == "set_alt_gather_settings":
+                try:
+                    payload = json.loads(value)
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    return
+                gather_settings = normalize_tad_alt_gather_settings(payload)
+                field = str(settingsManager.loadSettings().get("alt_mode_field", "") or "").strip()
+                valid_fields = settingsManager.loadFields()
+                if field not in valid_fields or not gather_settings:
+                    return
+                field_settings = dict(valid_fields[field])
+                field_settings.update(gather_settings)
+                field_settings["infinite_gather"] = True
+                settingsManager.saveField(field, field_settings)
+                return
+
+        await bot.process_commands(message)
 
     async def process_discord_messages():
         """Process outbound logger messages routed through the bot."""
@@ -1043,7 +1175,6 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         ("riley_bee_quest", "Riley Bee"),
         ("quest_use_gumdrops", "Use Gumdrops"),
         ("quest_progress_watch", "Keep Quest Menu Open"),
-        ("quest_gather_until_complete", "Gather Until Quest Complete"),
     ]
 
     COLLECTIBLE_SETTINGS = [
@@ -1053,6 +1184,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         ("coconut_dispenser", "Coconut Dispenser"),
         ("royal_jelly_dispenser", "Royal Jelly Dispenser"),
         ("ant_pass_dispenser", "Ant Pass Dispenser"),
+        ("buy_ant_pass", "Buy Ant Pass"),
         ("treat_dispenser", "Treat Dispenser"),
         ("glue_dispenser", "Glue Dispenser"),
         ("memory_match", "Memory Match"),
@@ -1092,6 +1224,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
     MACRO_MODE_OPTIONS = [
         ("normal", "Normal"),
+        ("alt", "Alt"),
         ("quest", "Quests"),
         ("field", "Field"),
         ("bug", "Bug Runs"),
@@ -1611,6 +1744,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     def _is_task_enabled(task_id: str, settings: Dict) -> bool:
         macro_mode = settings.get("macro_mode", "normal")
 
+        if macro_mode == "alt":
+            return False
         if macro_mode == "field" and not task_id.startswith("gather_"):
             return False
         if macro_mode == "quest" and not task_id.startswith("quest_"):
@@ -1661,6 +1796,13 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         enabled_tasks = [task_id for task_id in task_list_order if _is_task_enabled(task_id, settings)]
 
         macro_mode = settings.get("macro_mode", "normal")
+
+        if macro_mode == "alt":
+            alt_field = str(
+                settings.get("alt_mode_field")
+                or settings.get("tad_alt_default_field", "pine tree")
+            ).replace(" ", "_")
+            return [f"gather_{alt_field}"]
 
         if macro_mode == "field" and not enabled_tasks:
             fields = settings.get("fields", [])
@@ -2647,6 +2789,18 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         run.value = 4
         await interaction.response.send_message("Macro is rejoining")
 
+    @bot.tree.command(name="skipserver", description="Skip the private server currently being joined")
+    @requires_discord_permission("macro_control")
+    async def skip_server(interaction: discord.Interaction):
+        if skipServer is None:
+            await interaction.response.send_message("Server skipping is unavailable.", ephemeral=True)
+            return
+        if skipServer.value != -1:
+            await interaction.response.send_message("The macro is not currently attempting to join a private server.")
+            return
+        skipServer.value = 1
+        await interaction.response.send_message("Skipping the current private server. The macro will try the next backup, or a public server if none is configured.")
+
     @bot.tree.command(name = "reset", description = "Reset the character and return to hive")
     @requires_discord_permission("task_interrupts")
     async def reset(interaction: discord.Interaction):
@@ -2798,6 +2952,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
             mode_label = {
                 "normal": "Normal",
+                "alt": "Alt",
                 "quest": "Quests",
                 "field": "Field",
             }.get(settings.get("macro_mode", "normal"), settings.get("macro_mode", "normal"))
@@ -3460,7 +3615,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         """Auto-complete function for collectible names"""
         collectibles = [
             "wealth_clock", "blueberry", "strawberry", "coconut", "royal_jelly", "ant_pass",
-            "treat", "glue", "honeystorm"
+            "buy_ant_pass", "treat", "glue", "honeystorm"
         ]
         choices = []
 
@@ -3674,6 +3829,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 "🥥 **Coconut Dispenser**": settings.get("coconut_dispenser", False),
                 "👑 **Royal Jelly Dispenser**": settings.get("royal_jelly_dispenser", False),
                 "🎫 **Ant Pass Dispenser**": settings.get("ant_pass_dispenser", False),
+                "🎟️ **Buy Ant Pass**": settings.get("buy_ant_pass", False),
                 "🍬 **Treat Dispenser**": settings.get("treat_dispenser", False),
                 "🧪 **Glue Dispenser**": settings.get("glue_dispenser", False),
                 "🟧 **Honey Storm**": settings.get("honeystorm", False)
@@ -3713,6 +3869,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             "coconut": "coconut_dispenser",
             "royal_jelly": "royal_jelly_dispenser",
             "ant_pass": "ant_pass_dispenser",
+            "buy_ant_pass": "buy_ant_pass",
             "treat": "treat_dispenser",
             "glue": "glue_dispenser",
             "honeystorm": "honeystorm"
@@ -4020,11 +4177,12 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         except Exception as e:
             await interaction.followup.send(f"❌ Error controlling shift lock: {str(e)}")
 
-    @bot.tree.command(name="macromode", description="Set macro mode (normal, quests, or field)")
+    @bot.tree.command(name="macromode", description="Set macro mode")
     @requires_discord_permission("configuration")
     @app_commands.describe(mode="Macro mode to set")
     @app_commands.choices(mode=[
         app_commands.Choice(name="normal", value="normal"),
+        app_commands.Choice(name="alt", value="alt"),
         app_commands.Choice(name="quests", value="quest"),
         app_commands.Choice(name="field", value="field"),
     ])
@@ -4042,6 +4200,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
             mode_names = {
                 "normal": "Normal",
+                "alt": "Alt",
                 "quest": "Quest",
                 "field": "Field"
             }
@@ -4056,13 +4215,13 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         """Show available commands"""
         embed = discord.Embed(title="BSS Macro Discord Bot", description="Available Commands:", color=0x0099ff)
 
-        embed.add_field(name="**Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/stop` - Stop the macro\n`/pause` - Pause the macro\n`/resume` - Resume the macro\n`/status` - Get macro status and current task\n`/reroll` - Reroll Auto Field Boost\n`/rejoin` - Make macro rejoin game\n`/screenshot` - Get screenshot\n`/settings` - Open settings panel\n`/hiveslot <1-6>` - Change hive slot number\n`/shiftlock <on/off/toggle>` - Control shift lock", inline=False)
+        embed.add_field(name="**Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/stop` - Stop the macro\n`/pause` - Pause the macro\n`/resume` - Resume the macro\n`/status` - Get macro status and current task\n`/reroll` - Reroll Auto Field Boost\n`/rejoin` - Make macro rejoin game\n`/skipserver` - Skip the current private-server join\n`/screenshot` - Get screenshot\n`/settings` - Open settings panel\n`/hiveslot <1-6>` - Change hive slot number\n`/shiftlock <on/off/toggle>` - Control shift lock", inline=False)
 
         embed.add_field(name="**Field Management**", value="`/fields` - View field configuration\n`/field <field> <true/false>` - Enable or disable a field\n`/swapfield <current> <new>` - Swap one field for another (new can be any field)", inline=False)
 
         embed.add_field(name="**Quest Management**", value="`/quests` - View quest configuration\n`/quest <quest> <true/false>` - Enable or disable a quest", inline=False)
 
-        embed.add_field(name="**Macro Mode**", value="`/macromode <normal/quests/field>` - Set macro mode (normal = all tasks, quests = quests only, field = fields only)", inline=False)
+        embed.add_field(name="**Macro Mode**", value="`/macromode <normal/alt/quests/field>` - Set macro mode. Alt mode only gathers slot 1 and ignores the task list and automatic gather interrupts.", inline=False)
 
         embed.add_field(name="**Collectibles**", value="`/collectibles` - View collectibles\n`/collectible <item> <true/false>` - Enable or disable collectible", inline=False)
 
@@ -4075,6 +4234,12 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         embed.add_field(name="**Status & Monitoring**", value="`/status` - Get macro status and current task\n`/tasklist` - Show enabled task order, current task, and next task\n`/logs` - Show recent macro actions\n`/battery` - Check battery status\n`/stream <enable/disable/status>` - Control stream\n`/streamurl` - Get stream URL\n`/hourlyreport` - Generate and send the hourly report\n`/session` - Generate and send the final session report", inline=False)
         
         embed.add_field(name="**Advanced**", value="`/amulet <keep/replace>` - Choose amulet action\n`/close <both/roblox/macro>` - Close both, Roblox only, or macro only", inline=False)
+
+        embed.add_field(
+            name="**TAD Alt Sync Compatibility**",
+            value=TAD_ALT_SYNC_HELP_TEXT,
+            inline=False,
+        )
 
         permission_lines = [
             f"**{data['label']}**: `{data['setting']}`"
