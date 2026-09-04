@@ -62,8 +62,14 @@ const MODEL_PRESENTATION = {
   "loot_detection_mini.mlmodelc": { group: "Mini", label: "Loot Detection" },
   "Blooms-and-petals-mini.mlmodelc": { group: "Mini", label: "Blooms & Petals" },
   "Blooms-and-petals-light.mlmodelc": { group: "Small", label: "Blooms & Petals" },
+  "bloom_detection_standard.mlmodelc": { group: "Standard", label: "Bloom Detection" },
+  "bloom_detection_light.mlmodelc": { group: "Small", label: "Bloom Detection" },
+  "bloom_detection_mini.mlmodelc": { group: "Mini", label: "Bloom Detection" },
   "token_detection_standard.onnx": { group: "Standard", label: "Token Detection" },
   "sprinkler_detection_standard.onnx": { group: "Standard", label: "Sprinkler Detection" },
+  "bloom_detection_standard.onnx": { group: "Standard", label: "Bloom Detection" },
+  "bloom_detection_light.onnx": { group: "Small", label: "Bloom Detection" },
+  "bloom_detection_mini.onnx": { group: "Mini", label: "Bloom Detection" },
 };
 const MODEL_GROUP_ORDER = ["Standard", "Small", "Mini"];
 

@@ -10,10 +10,10 @@ Requirements:
 - opencv-python
 - numpy
 - mss or Pillow
-- blooms-and-petals-standard.mlmodelc/.onnx, Blooms-and-petals-light.mlmodelc/.onnx, or Blooms-and-petals-mini.mlmodelc/.onnx
+- bloom_detection_standard.mlmodelc/.onnx, bloom_detection_light.mlmodelc/.onnx, or bloom_detection_mini.mlmodelc/.onnx
 - sprinkler_detection_standard.mlmodelc or sprinkler_detection_standard.onnx
 
-- Version 2.1
+- Version 2.2
 """
 
 import math
@@ -32,7 +32,7 @@ INPUT_HEIGHT = agc.INPUT_HEIGHT
 MODEL_DIR = agc.MODEL_DIR
 SPRINKLER_CONFIDENCE_THRESHOLD = 0.6
 PETAL_CONFIDENCE_THRESHOLD = 0.50
-RUNTIME_VERSION = 40
+RUNTIME_VERSION = 41
 MIN_TOKEN_DISTANCE = 0.3
 MAX_SPRINKLER_DISTANCE = 10.0
 TARGET_SPRINKLER_LABEL = None
@@ -71,28 +71,28 @@ IDLE_SPRINKLER_MAX_AGE = 1.25
 BLOOM_MODEL_VARIANTS = {
     "standard": (
         "Standard",
-        "blooms-and-petals-standard.mlmodelc",
-        "blooms-and-petals-standard.onnx",
+        "bloom_detection_standard.mlmodelc",
+        "bloom_detection_standard.onnx",
         960,
-        "var_1444",
+        "var_1555",
     ),
     "light": (
         "Light",
-        "Blooms-and-petals-light.mlmodelc",
-        "Blooms-and-petals-light.onnx",
+        "bloom_detection_light.mlmodelc",
+        "bloom_detection_light.onnx",
         768,
-        "var_1440",
+        "var_1444",
     ),
     "mini": (
         "Mini",
-        "Blooms-and-petals-mini.mlmodelc",
-        "Blooms-and-petals-mini.onnx",
+        "bloom_detection_mini.mlmodelc",
+        "bloom_detection_mini.onnx",
         512,
         "var_1440",
     ),
 }
 
-# Combined bloom/petal model class ids map to these display names for overlays.
+# The Bloom-only model emits class 0; the movement overlay uses legacy id 5.
 LABELS_BLOOMS = {
     5: BLOOM_LABEL,
 }
@@ -1122,7 +1122,7 @@ def _initialise_runtime():
         failures = download_result.get("failures", {})
         detail = f" Download attempt failed: {'; '.join(failures.values())}" if failures else ""
         raise FileNotFoundError(
-            f"No combined bloom and petal AI model was found for {model_label} "
+            f"No Bloom-only AI model was found for {model_label} "
             f"({model_coreml} or {model_onnx}).{detail}"
         )
     combined_path, combined_model_kind = combined_candidates[0]
