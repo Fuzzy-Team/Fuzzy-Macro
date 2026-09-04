@@ -1,14 +1,29 @@
 #!/bin/sh
 
-# kill all python processes
-pkill -9 Python
-pkill -9 Python3
-pkill -9 Python3.9
-pkill -9 Python3.8
-pkill -9 Python3.7
-
 VENV_NAME="fuzzy-macro-env"
 VENV_PATH="$HOME/$VENV_NAME"
+
+# Stop only an existing Fuzzy Macro launched from this virtual environment.
+# The old implementation killed every Python process on the machine.
+stop_fuzzy_macro() {
+    fuzzy_pids=$(pgrep -f "$VENV_PATH/bin/python.*main\.py" 2>/dev/null || true)
+    if [ -z "$fuzzy_pids" ]; then
+        return
+    fi
+
+    printf "Stopping existing Fuzzy Macro process(es): %s\n" "$fuzzy_pids"
+    kill $fuzzy_pids 2>/dev/null || true
+    sleep 1
+
+    # Fall back to SIGKILL only if a stale process did not exit cleanly.
+    for pid in $fuzzy_pids; do
+        if kill -0 "$pid" 2>/dev/null; then
+            kill -9 "$pid" 2>/dev/null || true
+        fi
+    done
+}
+
+stop_fuzzy_macro
 
 # force Python to use certifi for SSL (fixes Discord/aiohttp on macOS)
 for py_dir in python3.9 python3.8 python3.7 python3 python; do
