@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import math
 import shutil
 import subprocess
@@ -270,10 +269,6 @@ def preprocess_onnx_image(frame, input_width, input_height):
 
 def postprocess(output, confidence_threshold):
     """Decode classic YOLO ONNX output shaped [1, 4+nc, N]."""
-    raw_output = np.asarray(output[0])
-    if raw_output.ndim == 3 and raw_output.shape[-1] == 6:
-        return postprocess_tokens(output, confidence_threshold)
-
     outputs = np.squeeze(output[0])
     if outputs.ndim != 2 or outputs.shape[0] < 5:
         return []
@@ -793,31 +788,6 @@ def update_detection_fps(runtime, elapsed):
     runtime["last_detection_ms"] = elapsed * 1000.0
 
 
-def _compiled_coreml_feature_name(model_path, schema_name, fallback):
-    model_path = Path(model_path)
-    manifest_path = model_path / "fuzzy_macro_model.json"
-    manifest_key = "input_name" if schema_name == "inputSchema" else "output_name"
-    try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        feature_name = manifest.get(manifest_key)
-        if feature_name:
-            return str(feature_name)
-    except Exception:
-        pass
-
-    metadata_path = model_path / "metadata.json"
-    try:
-        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-        if isinstance(metadata, list):
-            metadata = metadata[0] if metadata else {}
-        schema = metadata.get(schema_name, []) if isinstance(metadata, dict) else []
-        if schema and isinstance(schema[0], dict) and schema[0].get("name"):
-            return str(schema[0]["name"])
-    except Exception:
-        pass
-    return fallback
-
-
 def load_coreml_model(model_path, compiled_output_name="var_1445"):
     if ct is None:
         raise RuntimeError("coremltools is required. Install coremltools, then restart the macro.")
@@ -830,9 +800,7 @@ def load_coreml_model(model_path, compiled_output_name="var_1445"):
                 "This coremltools version cannot load compiled .mlmodelc bundles. Upgrade coremltools, then restart the macro."
             )
         model = compiled_model_class(str(model_path), compute_units=ct.ComputeUnit.ALL)
-        input_name = _compiled_coreml_feature_name(model_path, "inputSchema", "image")
-        output_name = _compiled_coreml_feature_name(model_path, "outputSchema", compiled_output_name)
-        return model, input_name, output_name
+        return model, "image", compiled_output_name
 
     model = ct.models.MLModel(str(model_path), compute_units=ct.ComputeUnit.ALL)
     description = model.get_spec().description
