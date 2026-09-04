@@ -9,11 +9,6 @@ if errorlevel 1 (
     exit /b
 )
 
-:: Kill any running Python processes related to the macro
-taskkill /F /IM python.exe >nul 2>&1
-taskkill /F /IM python3.exe >nul 2>&1
-taskkill /F /IM python3.9.exe >nul 2>&1
-
 set "VENV_NAME=fuzzy-macro-env"
 set "PROJECT_ROOT=%~dp0"
 set "PROJECT_VENV_PATH=%PROJECT_ROOT%%VENV_NAME%"
@@ -25,6 +20,10 @@ if exist "%PROJECT_VENV_PATH%\Scripts\activate.bat" (
 ) else if exist "%LEGACY_VENV_PATH%\Scripts\activate.bat" (
     set "VENV_PATH=%LEGACY_VENV_PATH%"
 )
+
+:: Stop only Fuzzy Macro's Python process, identified by its venv and main.py.
+:: Do not terminate unrelated Python applications.
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$pythonPath = [IO.Path]::GetFullPath('%VENV_PATH%\Scripts\python.exe'); Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath -ieq $pythonPath -and $_.CommandLine -match '(^|\s)main\.py(\s|$)' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>&1
 
 :: Set SSL certificate file for aiohttp/discord compatibility
 if exist "%VENV_PATH%\Lib\site-packages\certifi\cacert.pem" (
