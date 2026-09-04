@@ -21,7 +21,7 @@ self.keyboard.walk("w", 1.7)
 #         if res[1]/2+100 >= targetY:
 #             self.logger.webhook("","Aligned with gummy bee","dark brown", "screen")
 #             foundGummyBee = True
-#             break 
+#             break
 # else:
 #     self.logger.webhook("Notice","Could not detect gummy bee's location","red", "screen")
 #     foundGummyBee = False
@@ -63,4 +63,3 @@ if True:
             self.keyboard.walk("w",2.5)
             time.sleep(0.5)
             self.canDetectNight = True
-

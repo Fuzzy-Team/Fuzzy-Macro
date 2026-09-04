@@ -2094,8 +2094,14 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
 
                                     lines = [f"{name.title()}: {round(percent,1)}%" for name, percent in nectarPercentages]
                                     padding = 8
-                                    line_h = font.getsize("Tg")[1] + 4
-                                    box_w = max(font.getsize(line)[0] for line in lines) + padding * 2
+                                    def text_size(text):
+                                        if hasattr(font, "getbbox"):
+                                            left, top, right, bottom = font.getbbox(text)
+                                            return right - left, bottom - top
+                                        return font.getsize(text)
+
+                                    line_h = text_size("Tg")[1] + 4
+                                    box_w = max(text_size(line)[0] for line in lines) + padding * 2
                                     box_h = line_h * len(lines) + padding * 2
                                     draw.rectangle([(10, 10), (10 + box_w, 10 + box_h)], fill=(0, 0, 0, 180))
                                     for idx, line in enumerate(lines):

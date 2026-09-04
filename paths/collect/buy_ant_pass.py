@@ -27,4 +27,3 @@ self.keyboard.walk("w", 60 / 28)
 self.keyboard.walk("a", 56 / 28)
 self.keyboard.walk("w", 64 / 28)
 self.keyboard.walk("a", 80 / 28)
-
