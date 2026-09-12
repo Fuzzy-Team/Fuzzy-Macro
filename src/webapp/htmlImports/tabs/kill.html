@@ -198,6 +198,17 @@
             length: 12,
           },
         },
+        {
+          id: "stump_snail_balloon_interval",
+          title: "Regain Balloons Every (Minutes)",
+          desc: "Return to the Pine Field to regain balloons after this many minutes of attacking. Set to 0 to disable periodic balloon recovery.",
+          type: {
+            name: "textbox",
+            inputType: "int",
+            inputLimit: 3,
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
       ]);
 
       buildStandardContainer(bossMobsParent, "Coconut Crab", "", [
