@@ -5932,28 +5932,73 @@ class macro:
         self.reset()
 
     def stumpSnail(self):
-        for _ in range(3):
-            if not self.travelViaCannon("Stump Snail"):
-                return
-            self.logger.webhook("","Travelling: Stump Snail", "dark brown")
-            self.goToField("stump")
-            if self.placeSprinkler():
-                break
-            self.logger.webhook("", "Failed to land in stump field", "red", "screen", ping_category="ping_critical_errors")
-            self.reset()
+        sideTaskIntervalMinutes = self.setdat.get("stump_snail_balloon_interval", 0)
+        try:
+            sideTaskInterval = max(0, int(sideTaskIntervalMinutes)) * 60
+        except (TypeError, ValueError):
+            sideTaskInterval = 0
+        patternDuration = 120
+
+        def goToStump():
+            for _ in range(3):
+                self.cannon()
+                self.logger.webhook("", "Travelling: Stump Snail", "dark brown")
+                self.goToField("stump")
+                if self.placeSprinkler():
+                    return True
+                self.logger.webhook("", "Failed to land in stump field", "red", "screen", ping_category="ping_critical_errors")
+                self.reset()
+            return False
+
+        def runGatherPattern(patternName, duration):
+            st = time.time()
+            mouse.moveBy(10, 5)
+            self.keyboard.releaseMovement()
+            nameSpace = {**locals(), **globals()}
+            while time.time() - st < duration:
+                if self.checkPauseAndWait():
+                    break
+                mouse.mouseDown()
+                try:
+                    exec(open(f"../settings/patterns/{patternName}.py").read(), nameSpace)
+                except Exception:
+                    print(traceback.format_exc())
+                    break
+                mouse.mouseUp()
+            mouse.mouseUp()
+
+        def runSideTask():
+            self.logger.webhook("", "Stump Snail: Running periodic side task", "dark brown")
+            self.reset(convert=False)
+            self.runPath("cannon_to_field/pine")
+            runGatherPattern("skillet", patternDuration)
+            self.reset(convert=True)
+            goToStump()
+
+        goToStump()
+
         # Set status to attacking for hotbar logic
         self.set_task_status("attacking", activity="stump_snail")
         try:
-            while True:
-                # Check if paused and wait
+            keepOldData = None
+            while keepOldData is None:
+                cycleStart = time.time()
                 if self.checkPauseAndWait():
-                    # Stop was requested while paused
                     return
-                mouse.click()
-                keepOldData = self.keepOldCheck()
-                if keepOldData is not None:
-                    mouse.mouseUp()
-                    break
+                while True:
+                    if self.checkPauseAndWait():
+                        return
+                    mouse.click()
+                    keepOldData = self.keepOldCheck()
+                    if keepOldData is not None:
+                        mouse.mouseUp()
+                        break
+                    if sideTaskInterval <= 0 or time.time() - cycleStart >= sideTaskInterval:
+                        mouse.mouseUp()
+                        break
+
+                if keepOldData is None and sideTaskInterval > 0:
+                    runSideTask()
         finally:
             self.set_task_status(None, update_presence=False)  # Reset status after attack
         #handle the other stump snail
