@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import threading
 import time
+import platform
 from pathlib import Path
 
 try:
@@ -19,9 +20,21 @@ try:
 except Exception:
     np = None
 
+_macos_parts = platform.mac_ver()[0].split(".")
 try:
-    import coremltools as ct
-except Exception:
+    _macos_version = tuple(int(part) for part in _macos_parts[:2])
+except ValueError:
+    _macos_version = ()
+
+# CoreML is not the AI Gather backend on pre-Monterey systems.  Avoid even
+# importing a stale coremltools installation there; its native extension can
+# emit dyld errors before Python gets a chance to use the ONNX fallback.
+if len(_macos_version) >= 2 and _macos_version >= (12, 0):
+    try:
+        import coremltools as ct
+    except Exception:
+        ct = None
+else:
     ct = None
 
 try:
@@ -67,6 +80,11 @@ def src_root():
 
 
 MODEL_DIR = (src_root() / "data" / "models").resolve()
+
+
+def coreml_available():
+    """Return whether coremltools loaded successfully in this environment."""
+    return ct is not None
 
 
 def coerce_float(value, default):
@@ -857,19 +875,19 @@ def resolve_sprinkler_model(model_dir=None, tag="ai_gather", download=True):
     model_dir = Path(model_dir or MODEL_DIR)
     sprinkler_model_kind = None
     sprinkler_candidate = model_dir / "sprinkler_detection_standard.mlmodelc"
-    if sprinkler_candidate.exists():
+    if coreml_available() and sprinkler_candidate.exists():
         sprinkler_model_kind = "coreml"
     else:
         sprinkler_candidate = model_dir / "sprinkler_detection_standard.onnx"
         if sprinkler_candidate.exists():
             sprinkler_model_kind = "opencv_onnx"
         elif download:
-            check_missing_models(
-                tag,
-                ["sprinkler_detection_standard.mlmodelc", "sprinkler_detection_standard.onnx"],
-            )
-            sprinkler_candidate = model_dir / "sprinkler_detection_standard.mlmodelc"
-            if sprinkler_candidate.exists():
+            requested = ["sprinkler_detection_standard.onnx"]
+            if coreml_available():
+                requested.insert(0, "sprinkler_detection_standard.mlmodelc")
+            check_missing_models(tag, requested)
+            if coreml_available() and (model_dir / "sprinkler_detection_standard.mlmodelc").exists():
+                sprinkler_candidate = model_dir / "sprinkler_detection_standard.mlmodelc"
                 sprinkler_model_kind = "coreml"
             else:
                 sprinkler_candidate = model_dir / "sprinkler_detection_standard.onnx"
