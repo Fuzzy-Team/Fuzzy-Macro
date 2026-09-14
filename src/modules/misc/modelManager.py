@@ -301,10 +301,8 @@ def ensure_missing_models(model_names):
     missing_remote = []
     failures = {}
     for model_name in model_names:
-        if model_name not in _supported_model_names():
-            # Continue so callers requesting multiple formats can still
-            # download a supported fallback (for example ONNX on older macOS).
-            failures[model_name] = "this model format is not supported on this platform"
+        if model_name not in set(COREML_MODELS).union(ONNX_MODELS):
+            failures[model_name] = "unknown model name"
             continue
         local_path = os.path.join(MODEL_DIR, model_name)
         if os.path.exists(local_path):

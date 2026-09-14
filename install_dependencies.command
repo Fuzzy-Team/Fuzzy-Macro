@@ -54,15 +54,22 @@ upgrade_pip_tools() {
 chip=$(arch)
 os_ver=$(sw_vers -productVersion)
 
+# BSD sort on macOS supports version sorting.  The old checks compared the
+# result to an exact version (for example, 10.15.0), which misclassified every
+# later patch release such as Catalina 10.15.7 and Monterey 12.3.3.
+version_at_least() {
+	[ "$(printf '%s\n' "$1" "$2" | sort -V | head -n1)" = "$2" ]
+}
+
 #check mac compatibility
 
 if [ "$chip" = 'arm64' ]; then
-	if echo -e "$os_ver \n12.99.99" | sort -V | tail -n1 | grep -Fq "12.99.99"; then
+	if ! version_at_least "$os_ver" "13.0.0"; then
 		printf "\033[31;1mYour mac is not compatible. It has to be Ventura or later. Consider updating it. \033[0m\n"
 		exit 1
 	fi
 else 
-	if echo -e "$os_ver \n10.12.0" | sort -V | tail -n1 | grep -Fq "10.12.0"; then
+	if ! version_at_least "$os_ver" "10.12.0"; then
 		printf "\033[31;1mYour mac is not compatible. It has to be 10.12 or later. Consider updating it. \033[0m\n"
 		exit 1
 	fi
@@ -76,17 +83,18 @@ python_ver="3.9"
 python_link="/www.python.org/ftp/python/3.9.8/python-3.9.8-macos11.pkg"
 constraints=$'numpy<2'
 if [ "$chip" = 'i386' ]; then
-	if echo -e "$os_ver \n10.15.0" | sort -V | tail -n1 | grep -Fq "10.15.0"; then
+	if version_at_least "$os_ver" "12.0.0"; then
 		python_ver="3.8"
 		python_link="/www.python.org/ftp/python/3.8.0/python-3.8.0-macosx10.9.pkg"
 		constraints=$'numpy<2\npyobjc-core<11.0\npyobjc<11.0'
-	elif echo -e "$os_ver \n12.0.0" | sort -V | tail -n1 | grep -Fq "12.0.0"; then
+	elif version_at_least "$os_ver" "10.15.0"; then
 		python_ver="3.8"
 		python_link="/www.python.org/ftp/python/3.8.0/python-3.8.0-macosx10.9.pkg"
 		constraints=$'numpy<2\npyobjc-core<11.0\npyobjc<11.0'
 	else 
-		python_link="/www.python.org/ftp/python/3.9.5/python-3.9.5-macos11.pkg"
-		constraints=$'numpy<2\npyobjc-core<12.0\npyobjc<12.0'
+		python_ver="3.7"
+		python_link="/www.python.org/ftp/python/3.7.9/python-3.7.9-macosx10.9.pkg"
+		constraints=$'numpy<2\npyobjc-core<10.0\npyobjc<10.0'
 	fi
 fi
 
@@ -175,7 +183,7 @@ pip install --upgrade pip setuptools wheel
 install_pip_package "numpy<2"
 printf "\033[1;35mInstalling libraries\033[0m\n\n"
 
-if [ "$python_ver" = '3.9' ]; then
+if [ "$python_ver" = '3.9' ] || { [ "$python_ver" = '3.8' ] && version_at_least "$os_ver" "12.0.0"; }; then
 	# Use pip --force-reinstall to ensure a compatible opencv and numpy
 	# This installs the latest opencv-headless below 4.11 and enforces numpy<2
 	install_pip_package "opencv-python-headless<4.11 numpy<2" "--force-reinstall"
@@ -186,7 +194,7 @@ if [ "$python_ver" = '3.9' ]; then
 	install_pip_package "pyobjc-framework-ColorSync<12.0"
 	install_pip_package "pyobjc-framework-ApplicationServices"
 
-elif echo -e "$os_ver \n10.15.0" | sort -V | tail -n1 | grep -Fq "10.15.0"; then
+elif version_at_least "$os_ver" "10.15.0"; then
 	printf "\033[1;35mInstalling rust\n\n\033[0m"
 	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 	source "$HOME/.cargo/env"
