@@ -9,6 +9,7 @@ import time
 import pyautogui as pag
 from modules.screen.robloxWindow import RobloxWindowBounds
 import os
+import platform
 import shutil
 try:
     from PIL import Image
@@ -16,8 +17,19 @@ except Exception:
     Image = None
 
 try:
-    import coremltools as ct
-except Exception:
+    macos_version = tuple(int(part) for part in platform.mac_ver()[0].split(".")[:2])
+except (TypeError, ValueError):
+    macos_version = ()
+
+# Pre-Monterey systems use the ONNX sprinkler model. Importing a stale
+# coremltools wheel on those systems emits dyld errors before Python can fall
+# back, even though the Core ML backend is never usable there.
+if len(macos_version) >= 2 and macos_version >= (12, 0):
+    try:
+        import coremltools as ct
+    except Exception:
+        ct = None
+else:
     ct = None
 
 mw, mh = pag.size()
