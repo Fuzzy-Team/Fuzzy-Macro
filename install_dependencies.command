@@ -199,7 +199,11 @@ elif version_at_least "$os_ver" "10.15.0"; then
 	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 	source "$HOME/.cargo/env"
 
-	install_pip_package "opencv-python==4.4.0.46 opencv-contrib-python==4.4.0.46 numpy==1.19.1 Polygon3"
+	# OpenCV 4.4 cannot load the current AI Gather ONNX models. 4.6 is the
+	# newest release with a prebuilt macOS 10.15 Intel wheel. Keep exactly one
+	# OpenCV package installed because all variants share the cv2 namespace.
+	pip uninstall -y opencv-python opencv-contrib-python opencv-python-headless opencv-contrib-python-headless
+	install_pip_package "opencv-python==4.6.0.66 numpy==1.19.1 Polygon3" "--force-reinstall"
 	install_pip_package "easyocr" "--no-deps"
 	install_pip_package "torch"
 	install_pip_package "torchvision>=0.5"
