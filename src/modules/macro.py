@@ -54,6 +54,7 @@ import pygetwindow as gw
 from modules.submacros.hasteCompensation import HasteCompensationRevamped
 from modules import bitmap_matcher
 from modules.hive_acquisition import HiveAcquisition, confirm_claim
+from modules.gather_session import GatherPatternRunner, GatherSession
 import json
 
 _shift_lock_template_cache = None
@@ -4253,13 +4254,22 @@ class macro:
         isSproutGather = not altMode and bool(fieldSetting.get("plant_sprout", False))
         skipTravel = bool(fieldSetting.get("skip_travel", False)) and self.location == normalized_field and not isHiveHubField
         pattern = fieldSetting['shape']
+        patternRunner = GatherPatternRunner(
+            settingsManager.getProjectRoot(),
+            pattern,
+            alert=lambda failed_pattern, error: self.logger.webhook(
+                "Gather Pattern Failed",
+                f"{failed_pattern}: {error}. Using e_lol for the rest of this gather.",
+                "red",
+                "screen",
+                ping_category="ping_critical_errors",
+                route_category="gathering",
+            ),
+            fatal_exceptions=(InterruptRequested,),
+        )
         aiPatternLabels = {
             "fuzzy_ai_gather": "Fuzzy AI Gather",
             "blooms_ai": "BloomsAI",
-        }
-        aiPatternStateKeys = {
-            "fuzzy_ai_gather": ("_FUZZY_AI_GATHER_STATE", "_fuzzy_ai_gather_state"),
-            "blooms_ai": ("_BLOOMS_AI_STATE", "_blooms_ai_state"),
         }
         def shouldUseHoneyWreathReturn():
             if altMode:
@@ -4341,10 +4351,12 @@ class macro:
                 if isSproutGather and pattern == "fuzzy_ai_gather":
                     self._fuzzy_ai_gather_state = {}
                 preloadedAIGatherNameSpace = {**locals(), **globals()}
-                with open(f"../settings/patterns/{pattern}.py") as patternFile:
-                    exec(patternFile.read(), preloadedAIGatherNameSpace)
-            except Exception:
+                warmupResult = patternRunner.warmup(preloadedAIGatherNameSpace)
+                pattern = warmupResult.pattern
+            except Exception as error:
                 print(traceback.format_exc())
+                patternRunner.mark_failed(error)
+                pattern = patternRunner.active_pattern
 
         landedInField = False
         if skipTravel:
@@ -4572,6 +4584,8 @@ class macro:
         pattern_ignored_tokens = fieldSetting.get("fuzzy_ai_ignored_tokens", fuzzyAITokenRanking.get("ignored_tokens", ""))
         pattern_sprout_idle_square = isSproutGather
         st = time.time()
+        gatherSession = GatherSession(patternRunner, time.time)
+        gatherSession.start(st)
         keepGathering = True
         self.died = False
         #time to gather
@@ -4637,9 +4651,6 @@ class macro:
                     questMenuKeptOpen = False
 
         self.isGathering = True
-        firstPattern = True
-        fuzzyAILastError = ""
-        fuzzyAIFallbackLogged = False
         lastGooTime = 0  # Track when goo was last used
         lastGumdropTime = 0  # Track when gumdrop was last used
         gooTimerActive = True  # Flag to control goo timer thread
@@ -4716,28 +4727,17 @@ class macro:
         mouse.moveBy(10,5)
         self.keyboard.releaseMovement()
 
-        pauseStarted = None
-        pausedDuration = 0
-
         def isGatherPaused():
             return self.run is not None and self.run.value == 6
 
         def getGatherTime():
-            nonlocal pauseStarted, pausedDuration
-            now = time.time()
-            if isGatherPaused():
-                if pauseStarted is None:
-                    pauseStarted = now
-                return pauseStarted - st - pausedDuration
-            if pauseStarted is not None:
-                pausedDuration += now - pauseStarted
-                pauseStarted = None
-            return now - st - pausedDuration
+            return gatherSession.elapsed(isGatherPaused())
 
         liveGatherReport = None
         if self.liveGatherReportEnabled() and not isSproutGather:
             liveGatherReport = self.createLiveGatherReport()
             liveGatherReport.start(field, gatherTimeLimit, getGatherTime, isGatherPaused)
+            gatherSession.add_cleanup(liveGatherReport.stop)
 
         liveQuestProgressReport = None
         if questMenuKeptOpen:
@@ -4749,16 +4749,13 @@ class macro:
                 isGatherPaused,
                 activity="Quest Progress",
             )
+            gatherSession.add_cleanup(liveQuestProgressReport.stop)
         
-        def stopGather():
+        def stopGather(reason="completed"):
             nonlocal gooTimerActive, gumdropTimerActive, inactiveHoneyTimerActive, questMenuKeptOpen
             gooTimerActive = False  # Stop the goo timer thread
             gumdropTimerActive = False  # Stop the gumdrop timer thread
             inactiveHoneyTimerActive = False
-            if liveGatherReport:
-                liveGatherReport.stop()
-            if liveQuestProgressReport:
-                liveQuestProgressReport.stop()
             if fieldSetting["shift_lock"]: 
                 self.keyboard.press('shift')
             if questMenuKeptOpen:
@@ -4767,8 +4764,7 @@ class macro:
             self.moveMouseToDefault()
             self.clear_task_status()
             self.isGathering = False
-            if "onGatherEnd" in gatherNameSpace and callable(gatherNameSpace["onGatherEnd"]):
-                gatherNameSpace["onGatherEnd"]()
+            gatherSession.finish(gatherNameSpace, reason)
 
         if fieldSetting["shift_lock"]: 
             self.keyboard.press('shift')
@@ -4777,13 +4773,13 @@ class macro:
             # Check if paused and wait
             if self.checkPauseAndWait():
                 # Stop was requested while paused
-                stopGather()
+                stopGather("stopped")
                 return
             
             try:
                 self.raiseIfInterrupted()
             except InterruptRequested:
-                stopGather()
+                stopGather("interrupted")
                 raise
             
             # goo and gumdrop timers are now handled by background threads
@@ -4793,58 +4789,8 @@ class macro:
 
             # (No need to press quest gumdrops here, handled by timer)
 
-            #ensure that the pattern works
-            try:
-                aiPatternLabel = aiPatternLabels.get(pattern, "AI Gather")
-                exec(open(f"../settings/patterns/{pattern}.py").read(), gatherNameSpace)
-                if pattern in aiPatternLabels:
-                    stateGlobalKey, stateAttributeKey = aiPatternStateKeys.get(
-                        pattern,
-                        ("_FUZZY_AI_GATHER_STATE", "_fuzzy_ai_gather_state"),
-                    )
-                    fuzzy_state = gatherNameSpace.get(stateGlobalKey)
-                    if not isinstance(fuzzy_state, dict):
-                        fuzzy_state = getattr(self, stateAttributeKey, {})
-                    if isinstance(fuzzy_state, dict) and fuzzy_state.get("ready"):
-                        fuzzyAILastError = ""
-                        fuzzyAIFallbackLogged = False
-                    else:
-                        runtime_error = ""
-                        if isinstance(fuzzy_state, dict):
-                            runtime_error = str(fuzzy_state.get("error", "") or "")
-                        if runtime_error and runtime_error != fuzzyAILastError:
-                            self.logger.webhook(
-                                aiPatternLabel,
-                                f"Runtime failed: {runtime_error}",
-                                "red",
-                            )
-                            fuzzyAILastError = runtime_error
-                        if runtime_error and not fuzzyAIFallbackLogged:
-                            self.logger.webhook(
-                                aiPatternLabel,
-                                "Fallback behavior engaged.",
-                                "orange",
-                            )
-                            fuzzyAIFallbackLogged = True
-            except Exception as e:
-                print(traceback.format_exc())
-                if pattern in aiPatternLabels:
-                    aiPatternLabel = aiPatternLabels.get(pattern, "AI Gather")
-                    self.logger.webhook(
-                        aiPatternLabel,
-                        f"Runtime failed: {e}",
-                        "red",
-                    )
-                    self.logger.webhook(
-                        aiPatternLabel,
-                        "Fallback behavior engaged.",
-                        "orange",
-                    )
-                if firstPattern:
-                    self.logger.webhook("Incompatible pattern", f"The pattern {pattern} is incompatible with the macro. Defaulting to e_lol instead.\
-                                        Avoid using this pattern in the future. If you are the creator of this pattern, the error can be found in terminal", "red")
-                    pattern = "e_lol"
-            firstPattern = False
+            cycleResult = gatherSession.run_cycle(gatherNameSpace, owner=self)
+            pattern = cycleResult.pattern
 
             #field drift compensation — AI patterns already manage sprinkler
             # anchoring / idle patrol themselves, so skip the post-cycle nudge
