@@ -710,10 +710,11 @@ class macro:
         if skipTask is not None:
             set_interrupt_action(skipTask)
         
-        self.setdat = settingsManager.loadAllSettings()
-        self.fieldSettings = settingsManager.loadFields()
-        # Track profile changes to reload settings when profile is switched
-        self._last_profile_change_counter = settingsManager.getProfileChangeCounter()
+        profileSnapshot = settingsManager.getMacroProfileSnapshot()
+        self.setdat = profileSnapshot["settings"]
+        self.fieldSettings = profileSnapshot["fields"]
+        # Track the published snapshot, including changes made by other adapters.
+        self._last_profile_change_counter = profileSnapshot["version"]
 
         self.robloxWindow = RobloxWindowBounds()
         
@@ -790,14 +791,15 @@ class macro:
 
     def checkAndReloadSettings(self):
         """Check if profile has changed and reload settings if needed"""
-        current_counter = settingsManager.getProfileChangeCounter()
+        profileSnapshot = settingsManager.getMacroProfileSnapshot()
+        current_counter = profileSnapshot["version"]
         if current_counter != self._last_profile_change_counter:
             self._last_profile_change_counter = current_counter
             # Reload settings
             old_profile = settingsManager.getCurrentProfile()
-            self.setdat = settingsManager.loadAllSettings()
+            self.setdat = profileSnapshot["settings"]
             self.tadAltSync.update_settings(self.setdat)
-            self.fieldSettings = settingsManager.loadFields()
+            self.fieldSettings = profileSnapshot["fields"]
             # Update logger with new webhook settings
             pingSettings = {key: self.setdat.get(key, False) for key in PING_SETTING_KEYS}
             self.logger.enableWebhook = logModule.delivery_uses_webhook(self.setdat)
