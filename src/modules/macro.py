@@ -53,6 +53,7 @@ import traceback
 import pygetwindow as gw
 from modules.submacros.hasteCompensation import HasteCompensationRevamped
 from modules import bitmap_matcher
+from modules.hive_acquisition import HiveAcquisition, confirm_claim
 import json
 
 _shift_lock_template_cache = None
@@ -785,6 +786,12 @@ class macro:
         self.stop = False
 
         self.hiveSlotTiles = 9.75 #distance between hive slots (in tiles)
+        self.hiveAcquisition = HiveAcquisition(
+            detect=self.claimHiveByDetectMethod,
+            check=self.claimHiveByCheckMethod,
+            control_status=self._hiveAcquisitionControlStatus,
+            fatal_exceptions=(InterruptRequested,),
+        )
 
 
         self.setRobloxWindowInfo(setYOffset=False)
@@ -3025,6 +3032,9 @@ class macro:
             self.keyboard.tileWalk(direction, self.hiveSlotTiles)
             time.sleep(0.25)
 
+    def _hiveAcquisitionControlStatus(self):
+        return "stopped" if self.checkPauseAndWait() else "running"
+
     def stepBackOntoHivePad(self):
         self.keyboard.tileWalk("s", 1.7)
         time.sleep(0.1)
@@ -3130,6 +3140,8 @@ class macro:
         """Wait for a hive prompt and return its type; nudge as needed."""
         time.sleep(0.2)
         for attempt in range(max(1, int(max_attempts))):
+            if self._hiveAcquisitionControlStatus() == "stopped":
+                return None
             prompt = self.hivePromptKind()
             if prompt:
                 return prompt
@@ -3152,8 +3164,13 @@ class macro:
             return 0
         if not prompt_confirmed and not self.claimHivePromptVisible():
             return 0
-        self.keyboard.press("e")
-        return slot
+        accepted = confirm_claim(
+            press_claim=lambda: self.keyboard.press("e"),
+            claim_prompt_visible=self.claimHivePromptVisible,
+            control_status=self._hiveAcquisitionControlStatus,
+            wait=time.sleep,
+        )
+        return slot if accepted else 0
 
     def moveToNextHiveSlot(self, slot, direction, excluded_slots=None):
         """Leave the current pad and stop when the next hive prompt appears."""
@@ -3161,12 +3178,17 @@ class macro:
         self.keyboard.keyDown(direction, False)
         # Wait until the current pad's prompt disappears.
         for _ in range(40):
+            if self._hiveAcquisitionControlStatus() == "stopped":
+                self.keyboard.keyUp(direction, False)
+                return 0
             if not self.anyHivePromptVisible():
                 break
             time.sleep(0.01)
         # Walk until the next pad's claim/occupied prompt appears.
         claimed = 0
         for _ in range(200):
+            if self._hiveAcquisitionControlStatus() == "stopped":
+                break
             if self.claimHivePromptVisible():
                 self.keyboard.keyUp("a", False)
                 self.keyboard.keyUp("d", False)
@@ -3198,6 +3220,8 @@ class macro:
         check_skip = 0
 
         while checked_hives < 6:
+            if self._hiveAcquisitionControlStatus() == "stopped":
+                return 0
             if checking_hive == 1 and check_direction == -1:
                 check_direction = 1
                 check_skip = checked_hives
@@ -3574,9 +3598,8 @@ class macro:
 
     def claimHiveByDetectMethod(self, preferred_slot=1, excluded_slots=None):
         """
-        Detect claim method: zoom out + pitch up → find open hives from spawn →
-        walk to the chosen pad and claim. Falls back to a forward hive-3 scan
-        if nothing is detected from spawn.
+        Zoom out and pitch up, find open hives from spawn, then walk to a
+        detected pad and claim it. Hive Acquisition owns the check fallback.
         """
         excluded_slots = set(excluded_slots or set())
         preferred_slot = max(1, min(6, int(preferred_slot)))
@@ -3647,38 +3670,12 @@ class macro:
                 failed.add(nxt)
                 current = nxt
 
-            self.logger.webhook("", "Scanning remaining hives", "dark brown")
-            return self.scanHivesForClaim(current, excluded_slots | failed)
-
-        self.logger.webhook("", "Falling back to hive 3 walk detect", "dark brown")
-        self.setCameraPitch(0, pitch)
-        self.setCameraZoom(0, zoom)
-        time.sleep(0.15)
-
-        self.keyboard.keyDown("w", False)
-        found = False
-        for _ in range(500):
-            if self.anyHivePromptVisible():
-                self.keyboard.keyUp("w", False)
-                self.walkStuds("s", 2)
-                found = True
-                break
-            time.sleep(0.01)
-        self.keyboard.keyUp("w", False)
-        if not found:
             return 0
 
-        time.sleep(0.1)
-        if self.claimHivePromptVisible() and 3 not in excluded_slots:
-            self.logger.webhook("", "Hive 3 detected as available", "dark brown")
-            claimed = self.tryClaimHiveSlot(3, excluded_slots, prompt_confirmed=True)
-            if claimed:
-                self.walkStuds("s", 4)
-                return claimed
-        elif self.occupiedHivePromptVisible():
-            self.logger.webhook("", "Hive 3 occupied", "dark brown")
-
-        return self.scanHivesForClaim(3, excluded_slots)
+        self.logger.webhook("", "Spawn detection found no claimable hive", "dark brown")
+        self.setCameraPitch(0, pitch)
+        self.setCameraZoom(0, zoom)
+        return 0
 
     def resyncHiveSlotFromHive(self):
         self.logger.webhook("", "Rechecking hive slot before rejoining", "dark brown", "screen")
@@ -4171,10 +4168,6 @@ class macro:
             except (TypeError, ValueError):
                 preferredHiveSlot = 1
 
-            hiveClaimMethod = str(self.setdat.get("hive_claim_method", "check") or "check").strip().lower()
-            if hiveClaimMethod not in ("check", "detect"):
-                hiveClaimMethod = "check"
-
             excludedHiveSlots = set()
             if joinPS:
                 excludedHiveSlotsRaw = self.setdat.get("hive_exclude_slot", [])
@@ -4192,15 +4185,17 @@ class macro:
                 # exclusions.
                 excludedHiveSlots.discard(preferredHiveSlot)
 
-            # check: walk spawn→preferred hive, then scan pads if taken.
-            # detect: pitch up / zoom out, read open pads from spawn, then walk there.
-            if hiveClaimMethod == "detect":
-                newHiveNumber = self.claimHiveByDetectMethod(preferredHiveSlot, excludedHiveSlots)
-            else:
-                newHiveNumber = self.claimHiveByCheckMethod(preferredHiveSlot, excludedHiveSlots)
+            acquisition = self.hiveAcquisition.acquire(preferredHiveSlot, excludedHiveSlots)
+            newHiveNumber = acquisition.slot
 
-            if not newHiveNumber:
-                self.logger.webhook("", f"Failed to claim hive ({hiveClaimMethod}); retrying rejoin", "dark brown", "screen")
+            if not acquisition.claimed:
+                if acquisition.reason == "stopped":
+                    self.clear_task_status()
+                    return False
+                details = acquisition.reason
+                if acquisition.detection_error:
+                    details += f"; detection: {acquisition.detection_error}"
+                self.logger.webhook("", f"Failed to claim hive ({details}); retrying rejoin", "dark brown", "screen")
                 continue
 
             self.logger.webhook("", f"Claimed hive {newHiveNumber}", "bright green", "screen", ping_category="ping_critical_errors")

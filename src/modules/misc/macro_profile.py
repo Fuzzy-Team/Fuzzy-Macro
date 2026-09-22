@@ -252,6 +252,10 @@ class MacroProfileStore:
     def _normalize_settings(self, profile_data, general_data):
         original_profile = copy.deepcopy(profile_data)
         original_general = copy.deepcopy(general_data)
+        # Hive Acquisition always detects first now. Removing the obsolete
+        # choice migrates both "check" and "detect" profiles to that behavior.
+        profile_data.pop("hive_claim_method", None)
+        general_data.pop("hive_claim_method", None)
         profile_keys = set(self._profile_defaults)
         general_keys = set(self._general_defaults)
 
