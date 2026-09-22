@@ -717,6 +717,7 @@ class macro:
         self.fieldSettings = profileSnapshot["fields"]
         # Track the published snapshot, including changes made by other adapters.
         self._last_profile_change_counter = profileSnapshot["version"]
+        self._last_profile_name = profileSnapshot["profile"]
 
         self.robloxWindow = RobloxWindowBounds()
         
@@ -800,11 +801,15 @@ class macro:
     def checkAndReloadSettings(self):
         """Check if profile has changed and reload settings if needed"""
         profileSnapshot = settingsManager.getMacroProfileSnapshot()
-        current_counter = profileSnapshot["version"]
-        if current_counter != self._last_profile_change_counter:
-            self._last_profile_change_counter = current_counter
+        profileChanged = profileSnapshot["profile"] != self._last_profile_name
+        settingsChanged = (
+            profileChanged
+            or profileSnapshot["version"] != self._last_profile_change_counter
+        )
+        if settingsChanged:
+            self._last_profile_change_counter = profileSnapshot["version"]
+            self._last_profile_name = profileSnapshot["profile"]
             # Reload settings
-            old_profile = settingsManager.getCurrentProfile()
             self.setdat = profileSnapshot["settings"]
             self.tadAltSync.update_settings(self.setdat)
             self.fieldSettings = profileSnapshot["fields"]
@@ -820,12 +825,12 @@ class macro:
             self.logger.pingSettings = pingSettings
             self.logger.webhookTimeFormat = self.setdat.get("webhook_time_format", 24)
             self.logger.hourlyReportOnly = self.setdat["only_send_hourly_report"]
-            # Update keyboard movespeed
-            self.keyboard.movespeed = self.setdat["movespeed"]
-            # Update haste compensation
+            # Update movement settings while keeping the boolean enable flag
+            # separate from the compensation object used by keyboard.getMoveSpeed().
             self.hasteCompensation = HasteCompensationRevamped(self.robloxWindow, self.setdat["movespeed"])
-            self.keyboard.hasteCompensation = self.setdat["haste_compensation"]
-            self.keyboard.hasteCompensationObj = self.hasteCompensation
+            self.keyboard.ws = self.setdat["movespeed"]
+            self.keyboard.enableHasteCompensation = bool(self.setdat["haste_compensation"])
+            self.keyboard.hasteCompensation = self.hasteCompensation
             # Update hourly report time format
             self.hourlyReport.timeFormat = self.setdat.get("hourly_report_time_format", 24)
             # Update collect cooldowns
@@ -836,8 +841,12 @@ class macro:
             # Update vic fields
             self.vicFields = ["pepper", "mountain top", "rose", "cactus", "spider", "clover"]
             self.vicFields = [x for x in self.vicFields if self.setdat["stinger_{}".format(x.replace(" ","_"))]]
-            # Log the profile change
-            self.logger.webhook("Profile Changed", f"Switched to profile: {old_profile}", "blue")
+            if profileChanged:
+                self.logger.webhook(
+                    "Profile Changed",
+                    f"Switched to profile: {profileSnapshot['profile']}",
+                    "blue",
+                )
 
     #get the size of the roblox window and update the relevant variables
     def setRobloxWindowInfo(self, setYOffset=True):
