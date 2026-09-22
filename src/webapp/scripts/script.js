@@ -197,6 +197,8 @@ function getInputValueFromElement(ele) {
     )
       return 0;
     if (!value) return "";
+    if (ele.dataset.inputType == "int") return parseInt(value, 10);
+    if (ele.dataset.inputType == "float") return parseFloat(value);
     return value;
   } else if (ele.tagName == "DIV" && ele.className.includes("custom-select")) {
     const value = getDropdownValue(ele);
@@ -207,7 +209,7 @@ function getInputValueFromElement(ele) {
   } else if (ele.tagName == "DIV" && ele.className.includes("multi-checklist")) {
     return Array.from(ele.querySelectorAll("input[type='checkbox']:checked")).map((x) => x.value);
   } else if (ele.tagName == "INPUT" && ele.type == "range") {
-    return ele.value;
+    return ele.dataset.inputType == "float" ? parseFloat(ele.value) : parseInt(ele.value, 10);
   } else if (ele.tagName == "DIV" && ele.className.includes("keybind-input")) {
     return ele.dataset.keybind || "";
   }
@@ -379,7 +381,11 @@ async function saveSetting(ele, type) {
   }
 
   if (type == "profile") {
-    try { await eel.saveProfileSetting(id, valueToSave)(); } catch (e) { /* ignore */ }
+    const result = await eel.applyMacroProfileChange("profile", id, valueToSave)();
+    if (!result.ok) {
+      console.error(`Could not save ${id}: ${result.error.reason}`);
+      return false;
+    }
     // Refresh priority/drag-list highlights after profile setting changes
     try {
       loadAllSettings().then((settings) => {
@@ -391,7 +397,11 @@ async function saveSetting(ele, type) {
       // ignore
     }
   } else if (type == "general") {
-    try { await eel.saveGeneralSetting(id, valueToSave)(); } catch (e) { /* ignore */ }
+    const result = await eel.applyMacroProfileChange("general", id, valueToSave)();
+    if (!result.ok) {
+      console.error(`Could not save ${id}: ${result.error.reason}`);
+      return false;
+    }
   }
 
   if (ele.dataset && ele.dataset.settingId) {
@@ -404,6 +414,7 @@ async function saveSetting(ele, type) {
       }
     });
   }
+  return true;
 }
 
 function isPriorityLockedTask(taskId) {

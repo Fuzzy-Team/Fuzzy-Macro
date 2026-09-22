@@ -8,6 +8,11 @@ from datetime import datetime
 import re
 
 try:
+    from .macro_profile import MacroProfileError, MacroProfileStore, MacroProfileValidationError
+except ImportError:
+    from macro_profile import MacroProfileError, MacroProfileStore, MacroProfileValidationError
+
+try:
     from .settings_defaults import (
         BLOOMS_AI_PATTERN,
         DEFAULT_AFB,
@@ -69,6 +74,7 @@ profileName = DEFAULT_CURRENT_PROFILE
 # Track profile changes for running macro processes
 _profile_change_counter = 0
 _settings_key_file_cache = None
+_macro_profile_store = None
 
 # File to store current profile persistence (defined after getProjectRoot)
 CURRENT_PROFILE_FILE = None
@@ -108,6 +114,48 @@ FUZZY_AI_TOKEN_RANKINGS_FILE = os.path.join(getProjectRoot(), "src", "data", "us
 def getProfilesDir():
     """Get the profiles directory path"""
     return os.path.join(getProjectRoot(), "settings", "profiles")
+
+def _getMacroProfileStore():
+    global _macro_profile_store
+    if _macro_profile_store is None:
+        _macro_profile_store = MacroProfileStore(
+            getProfilesDir(),
+            getDefaultProfileSettings(),
+            getDefaultGeneralSettings(),
+            loadDefaultFields(),
+            field_normalizer=normalizeFieldSettings,
+        )
+    return _macro_profile_store
+
+def initializeMacroProfile(profile_name=None):
+    """Run explicit repair and migration for a Macro Profile."""
+    return _getMacroProfileStore().initialize(profile_name or profileName).as_dict()
+
+def getMacroProfileSnapshot(profile_name=None):
+    """Return a versioned, side-effect-free Macro Profile snapshot."""
+    if profile_name is None:
+        loadCurrentProfile()
+    return _getMacroProfileStore().snapshot(profile_name or profileName).as_dict()
+
+def applyMacroProfileChange(scope, setting, value):
+    """Apply one validated change and return a structured result for adapters."""
+    try:
+        snapshot = _getMacroProfileStore().apply_change(profileName, scope, setting, value)
+        return {"ok": True, "snapshot": snapshot.as_dict()}
+    except MacroProfileValidationError as exc:
+        return {"ok": False, "error": exc.as_dict()}
+    except MacroProfileError as exc:
+        return {"ok": False, "error": {"setting": setting, "reason": str(exc)}}
+
+def importMacroProfileChanges(scope, changes):
+    """Apply a validated transactional batch for import adapters."""
+    try:
+        snapshot = _getMacroProfileStore().apply_changes(profileName, scope, changes)
+        return {"ok": True, "snapshot": snapshot.as_dict()}
+    except MacroProfileValidationError as exc:
+        return {"ok": False, "error": exc.as_dict()}
+    except MacroProfileError as exc:
+        return {"ok": False, "error": {"setting": "changes", "reason": str(exc)}}
 
 def getProfilePath(profile_name=None):
     """Get the path to a specific profile directory"""
@@ -588,8 +636,8 @@ def switchProfile(name):
     global _profile_change_counter
     _profile_change_counter += 1
 
-    # Sync the new profile's field settings to general settings
-    initializeFieldSync()
+    # Switching is the explicit repair/migration point for the selected profile.
+    _getMacroProfileStore().initialize(name)
 
     return True, f"Switched to profile: {name}"
 
@@ -879,6 +927,9 @@ def _loadFieldsFile(fields_path, repair=True):
     return fields_data
 
 def loadFields():
+    return getMacroProfileSnapshot(profileName)["fields"]
+
+    # Legacy implementation retained temporarily for compatibility archaeology.
     ensureProfileFiles()
     fields_path = os.path.join(getProfilePath(), "fields.txt")
     out = _loadFieldsFile(fields_path)
@@ -897,6 +948,14 @@ def loadFields():
     return out
 
 def saveField(field, settings):
+    snapshot = getMacroProfileSnapshot(profileName)
+    existingSettings = snapshot["fields"].get(field, {})
+    normalizedSettings = normalizeFieldSettings(field, settings)
+    mergedSettings = _applyFieldPatternPresets(existingSettings, normalizedSettings)
+    _getMacroProfileStore().save_field(profileName, field, mergedSettings)
+    return
+
+    # Legacy implementation retained temporarily for compatibility archaeology.
     fieldsData = loadFields()
     existingSettings = fieldsData.get(field, {})
     normalizedSettings = normalizeFieldSettings(field, settings)
@@ -1174,6 +1233,13 @@ def syncFieldSettingsToProfile(setting, value):
         print(f"Warning: Could not sync field settings to profile settings: {e}")
 
 def saveProfileSetting(setting, value):
+    result = applyMacroProfileChange("profile", setting, value)
+    if not result["ok"]:
+        error = result["error"]
+        raise MacroProfileValidationError(error["setting"], error["reason"])
+    return result["snapshot"]
+
+    # Legacy compatibility path below is intentionally unreachable for one cycle.
     if _resolveSettingsFileType(setting, "profile") == "general":
         saveGeneralSetting(setting, value)
         return
@@ -1185,11 +1251,23 @@ def saveProfileSetting(setting, value):
         syncFieldSettings(setting, value)
 
 def saveDictProfileSettings(dict):
+    result = importMacroProfileChanges("profile", dict)
+    if not result["ok"]:
+        error = result["error"]
+        raise MacroProfileValidationError(error["setting"], error["reason"])
+    return result["snapshot"]
+
     settings_path = os.path.join(getProfilePath(), "settings.txt")
     saveDict(settings_path, {**readSettingsFile(settings_path), **dict})
 
 #increment a setting, and return the dictionary for the setting
 def incrementProfileSetting(setting, incrValue):
+    current = loadSettings()
+    if setting not in current:
+        raise MacroProfileValidationError(setting, "unknown setting")
+    saveProfileSetting(setting, current[setting] + incrValue)
+    return loadSettings()
+
     #get the dictionary
     settings_path = os.path.join(getProfilePath(), "settings.txt")
     data = readSettingsFile(settings_path)
@@ -1200,6 +1278,13 @@ def incrementProfileSetting(setting, incrValue):
     return data
 
 def saveGeneralSetting(setting, value):
+    result = applyMacroProfileChange("general", setting, value)
+    if not result["ok"]:
+        error = result["error"]
+        raise MacroProfileValidationError(error["setting"], error["reason"])
+    return result["snapshot"]
+
+    # Legacy compatibility path below is intentionally unreachable for one cycle.
     if _resolveSettingsFileType(setting, "general") == "profile":
         saveProfileSetting(setting, value)
         return
@@ -1271,6 +1356,11 @@ def _moveMisplacedSettings(settings_path, generalsettings_path):
         saveDict(generalsettings_path, general_data)
 
 def loadSettings():
+    snapshot = getMacroProfileSnapshot(profileName)["settings"]
+    general_keys = set(getDefaultGeneralSettings()) - set(getDefaultProfileSettings())
+    return {key: value for key, value in snapshot.items() if key not in general_keys}
+
+    # Legacy implementation retained temporarily for compatibility archaeology.
     ensureProfileFiles()
     settings_path = os.path.join(getProfilePath(), "settings.txt")
     generalsettings_path = os.path.join(getProfilePath(), "generalsettings.txt")
@@ -1370,6 +1460,11 @@ def loadSettings():
 
 #return a dict containing all settings except field (general, profile, planters)
 def loadAllSettings():
+    # Reload the selected profile name so a switch made by another process is seen.
+    loadCurrentProfile()
+    return getMacroProfileSnapshot()["settings"]
+
+    # Legacy implementation retained temporarily for compatibility archaeology.
     # Ensure current profile is reloaded from persistent storage so other processes
     # (like the Discord bot) can change the active profile and have the main
     # GUI process pick it up immediately.
@@ -1605,8 +1700,11 @@ def _importProfileData(import_data, new_profile_name=None):
 # Seed runtime/profile files, then load the current profile when the module is imported
 ensureRuntimeData()
 loadCurrentProfile()
-# Re-ensure after profile load in case the selected profile still needs files.
-ensureProfileFiles()
+# Repair and migrate the selected Macro Profile at the explicit initialization point.
+try:
+    initializeMacroProfile()
+except Exception as exc:
+    print(f"Warning: Could not initialize Macro Profile '{profileName}': {exc}")
 
 #clear a file
 def clearFile(filePath):
