@@ -31,6 +31,9 @@ class HiveAcquisition:
     """Owns strategy order and the observable result of Hive Acquisition."""
 
     def __init__(self, detect, check, control_status=lambda: "running", fatal_exceptions=()):
+        """`detect` returns the claimed slot, 0 if it walked the hive row without a claim,
+        or None if it found nothing from spawn. `check` walks from spawn, so it only runs
+        while the player is still there (None) or detection raised."""
         self._detect = detect
         self._check = check
         self._control_status = control_status
@@ -45,10 +48,12 @@ class HiveAcquisition:
             return HiveAcquisitionResult(False, reason="stopped")
 
         detection_error = ""
+        detected = None
         try:
-            slot = int(self._detect(preferred_slot, excluded_slots) or 0)
+            detected = self._detect(preferred_slot, excluded_slots)
             attempted.append(preferred_slot)
-            if slot:
+            if detected:
+                slot = int(detected)
                 return HiveAcquisitionResult(True, slot, "claimed", tuple(dict.fromkeys(attempted + [slot])))
         except self._fatal_exceptions:
             raise
@@ -62,6 +67,10 @@ class HiveAcquisition:
                 attempted_slots=tuple(dict.fromkeys(attempted)),
                 detection_error=detection_error,
             )
+
+        if detected is not None and not detection_error:
+            # Detection already walked to its pads and checked the rest of the row.
+            return HiveAcquisitionResult(False, reason="no_claimable_hive", attempted_slots=tuple(dict.fromkeys(attempted)))
 
         try:
             slot = int(self._check(preferred_slot, excluded_slots) or 0)
