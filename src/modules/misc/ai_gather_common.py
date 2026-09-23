@@ -7,8 +7,9 @@ import shutil
 import subprocess
 import threading
 import time
-import platform
 from pathlib import Path
+
+from modules.misc.modelManager import import_coremltools
 
 try:
     import cv2
@@ -20,22 +21,8 @@ try:
 except Exception:
     np = None
 
-_macos_parts = platform.mac_ver()[0].split(".")
-try:
-    _macos_version = tuple(int(part) for part in _macos_parts[:2])
-except ValueError:
-    _macos_version = ()
-
-# CoreML is not the AI Gather backend on pre-Monterey systems.  Avoid even
-# importing a stale coremltools installation there; its native extension can
-# emit dyld errors before Python gets a chance to use the ONNX fallback.
-if len(_macos_version) >= 2 and _macos_version >= (12, 0):
-    try:
-        import coremltools as ct
-    except Exception:
-        ct = None
-else:
-    ct = None
+# None before macOS 12, where AI Gather uses the ONNX models instead
+ct = import_coremltools()
 
 try:
     import mss
