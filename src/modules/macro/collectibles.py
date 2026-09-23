@@ -146,7 +146,7 @@ class CollectiblesMixin:
         time.sleep(0.5)
 
         try:
-            itemImg = self.adjustImage("./images/inventory/old", item)
+            itemImg = self.adjustImage("./images/inventory", item)
         except Exception:
             itemImg = None
 

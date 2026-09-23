@@ -15,7 +15,6 @@ import modules.controls.mouse as mouse
 import modules.misc.appManager as appManager
 from modules.misc import messageBox
 import modules.screen.ocr as ocr
-from modules.misc.imageManipulation import adjustImage
 from modules.screen.imageSearch import templateMatch
 from modules.screen.robloxWindow import RobloxWindowBounds
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP

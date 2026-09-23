@@ -1,5 +1,4 @@
 import os
-import sys
 import subprocess
 
 def msgBox(title, text):

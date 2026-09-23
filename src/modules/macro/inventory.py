@@ -72,7 +72,7 @@ class InventoryMixin:
                     prevHash = hash
         #for retina, just a regular image search
         #for built-in, a transparency search
-        itemImg = self.adjustImage("./images/inventory/old", itemName)
+        itemImg = self.adjustImage("./images/inventory", itemName)
         #itemImg = cv2.cvtColor(itemImg, cv2.COLOR_RGB2GRAY)
 
         itemOCRName = itemName.lower().replace("planter", "") #the name of the item used to check with the ocr to verify its correct

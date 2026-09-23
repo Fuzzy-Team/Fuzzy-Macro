@@ -409,16 +409,6 @@ def grab_frame(runtime):
     return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
 
 
-def grab_region_frame(runtime, monitor_key, bbox_key):
-    monitor = runtime.get(monitor_key)
-    if runtime["capture"]["backend"] == "mss" and monitor:
-        return mss_grab_to_array(runtime["capture"]["session"], monitor)
-    bbox = runtime.get(bbox_key)
-    if bbox and ImageGrab is not None:
-        image = ImageGrab.grab(bbox=bbox)
-        return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-    return None
-
 
 def crop_rect(frame, rect):
     left, top, width_px, height_px = rect
@@ -998,25 +988,6 @@ def find_sprinkler(
     return best
 
 
-def start_sprinkler_find(runtime, frame=None, **kwargs):
-    holder = {"result": None, "error": None}
-
-    def _worker():
-        try:
-            holder["result"] = find_sprinkler(runtime, frame=frame, **kwargs)
-        except Exception as exc:
-            holder["error"] = exc
-
-    thread = threading.Thread(target=_worker, daemon=True)
-    thread.start()
-    return thread, holder
-
-
-def finish_sprinkler_find(thread, holder):
-    thread.join()
-    if holder["error"] is not None:
-        raise holder["error"]
-    return holder["result"]
 
 
 def sprinkler_anchor_enabled(field_drift_compensation, use_sprinkler_model):
