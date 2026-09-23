@@ -173,7 +173,7 @@ class macro(
             self._last_profile_name = profileSnapshot["profile"]
             # Reload settings
             self.setdat = profileSnapshot["settings"]
-            if not self.setdat.get("field_booster_glitter_extend_enabled", False):
+            if profileChanged or not self.setdat.get("field_booster_glitter_extend_enabled", False):
                 with self._fieldBoosterGlitterLock:
                     self._fieldBoosterGlitterGeneration += 1
                     self._fieldBoosterGlitterPending = None

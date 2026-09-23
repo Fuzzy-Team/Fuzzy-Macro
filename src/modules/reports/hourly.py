@@ -4,6 +4,8 @@ import copy
 import numpy as np
 import os
 import pickle
+import tempfile
+import threading
 import time
 from modules.misc import settingsManager
 from modules.misc.settingsManager import loadFields
@@ -120,6 +122,7 @@ class HourlyReport():
         self.latestNectarQuantity = []
         self.lastEmbedFields = None
         self.itemMonitorSnapshot = None
+        self._saveLock = threading.RLock()
 
     def _defaultSessionReportStats(self):
         return {
@@ -520,9 +523,8 @@ class HourlyReport():
     def saveHourlyReportData(self):
         path = settingsManager.getUserDataPath("hourly_report_stats.pkl")
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        tmpPath = f"{path}.tmp"
-        with open(tmpPath, "wb") as f:
-            pickle.dump({
+        with self._saveLock:
+            data = copy.deepcopy({
                 "hourlyReportStats": self.hourlyReportStats,
                 "sessionReportStats": self.sessionReportStats,
                 "uptimeBuffsValues": self.uptimeBuffsValues,
@@ -533,10 +535,18 @@ class HourlyReport():
                 "latestBuffKeys": self.latestBuffKeys,
                 "latestNectarQuantity": self.latestNectarQuantity,
                 "itemMonitorSnapshot": self.itemMonitorSnapshot,
-            }, f)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmpPath, path)
+            })
+            tmpPath = None
+            try:
+                with tempfile.NamedTemporaryFile("wb", dir=os.path.dirname(path), prefix="hourly-report-", suffix=".tmp", delete=False) as f:
+                    tmpPath = f.name
+                    pickle.dump(data, f)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmpPath, path)
+            finally:
+                if tmpPath and os.path.exists(tmpPath):
+                    os.unlink(tmpPath)
     
     def loadHourlyReportData(self):
         path = settingsManager.getUserDataPath("hourly_report_stats.pkl")
