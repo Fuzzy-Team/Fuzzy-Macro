@@ -54,6 +54,13 @@ class MacroProfileSnapshot:
         }
 
 
+def _as_int(value, default):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _freeze(value):
     if isinstance(value, dict):
         return MappingProxyType({key: _freeze(item) for key, item in value.items()})
@@ -117,6 +124,12 @@ class MacroProfileStore:
                 if current["settings"] == combined and current["fields"] == fields_data and current["migration_errors"] == list(errors.values()):
                     return self._snapshot
             return self._publish(profile, profile_data, general_data, fields_data, errors)
+
+    def profile_settings(self, profile):
+        """Return the settings stored in the profile's own settings file, without changing files."""
+        with self._lock:
+            profile_data, _, _, _, _ = self._read_and_normalize(profile)
+            return copy.deepcopy(profile_data)
 
     def apply_change(self, profile, scope, setting, value):
         """Validate and atomically persist a setting-level change."""
@@ -265,6 +278,18 @@ class MacroProfileStore:
         for key in list(profile_data):
             if key in general_keys and key not in profile_keys:
                 general_data.setdefault(key, profile_data.pop(key))
+        # The old global quest gather override becomes per-quest settings, but only
+        # when the user changed it; a default value must not overwrite per-quest ones.
+        legacy = {key: profile_data[key] for key in ("quest_gather_mins", "quest_gather_return") if key in profile_data}
+        if any(value != self._profile_defaults.get(key) for key, value in legacy.items()):
+            for quest in ("polar_bear", "brown_bear", "black_bear", "honey_bee", "bucko_bee", "riley_bee"):
+                if "quest_gather_mins" in legacy:
+                    profile_data[f"{quest}_quest_gather_mins"] = legacy["quest_gather_mins"]
+                if "quest_gather_return" in legacy:
+                    profile_data[f"{quest}_quest_gather_return"] = legacy["quest_gather_return"]
+            for key in legacy:
+                profile_data.pop(key)
+
         for key, value in self._profile_defaults.items():
             profile_data.setdefault(key, copy.deepcopy(value))
         for key, value in self._general_defaults.items():
@@ -276,15 +301,6 @@ class MacroProfileStore:
                 if item not in order:
                     index = order.index(after) + 1 if after in order else len(order)
                     order.insert(index, item)
-
-        if "quest_gather_mins" in profile_data or "quest_gather_return" in profile_data:
-            mins = profile_data.pop("quest_gather_mins", None)
-            return_type = profile_data.pop("quest_gather_return", None)
-            for quest in ("polar_bear", "brown_bear", "black_bear", "honey_bee", "bucko_bee", "riley_bee"):
-                if mins is not None:
-                    profile_data[f"{quest}_quest_gather_mins"] = mins
-                if return_type is not None:
-                    profile_data[f"{quest}_quest_gather_return"] = return_type
 
         if "field_only_mode" in general_data or "quest_only_mode" in general_data:
             field_only = bool(general_data.pop("field_only_mode", False))
@@ -325,31 +341,20 @@ class MacroProfileStore:
             return "profile"
         if setting in self._general_defaults and setting not in self._profile_defaults:
             return "general"
-        if setting not in self._profile_defaults and setting not in self._general_defaults:
-            raise MacroProfileValidationError(setting, "unknown setting")
         if requested_scope not in ("profile", "general"):
             raise MacroProfileValidationError(setting, "scope must be profile or general")
         return requested_scope
 
     def _validate(self, setting, value, defaults, combined):
-        if setting not in defaults:
-            raise MacroProfileValidationError(setting, "unknown setting")
-        expected = defaults[setting]
-        if isinstance(expected, bool):
-            valid = isinstance(value, bool)
-        elif isinstance(expected, int):
-            valid = isinstance(value, int) and not isinstance(value, bool)
-        elif isinstance(expected, float):
-            valid = isinstance(value, (int, float)) and not isinstance(value, bool)
-        else:
-            valid = isinstance(value, type(expected))
-        if not valid:
-            raise MacroProfileValidationError(setting, f"expected {type(expected).__name__}")
+        """Reject values that break a constraint. Types are not enforced: readers accept
+        the formats the GUI saves (numeric strings, comma-separated lists, ...)."""
         if setting in ("max_cannon_attempts", "cannon_hive_resync_attempts"):
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise MacroProfileValidationError(setting, "expected int")
             if not 0 <= value <= 25:
                 raise MacroProfileValidationError(setting, "must be between 0 and 25")
-            max_attempts = value if setting == "max_cannon_attempts" else combined.get("max_cannon_attempts", 1)
-            resync_attempts = value if setting == "cannon_hive_resync_attempts" else combined.get("cannon_hive_resync_attempts", 0)
+            max_attempts = value if setting == "max_cannon_attempts" else _as_int(combined.get("max_cannon_attempts"), 1)
+            resync_attempts = value if setting == "cannon_hive_resync_attempts" else _as_int(combined.get("cannon_hive_resync_attempts"), 0)
             if max_attempts < 1:
                 raise MacroProfileValidationError(setting, "max cannon attempts must be at least 1")
             if resync_attempts >= max_attempts:

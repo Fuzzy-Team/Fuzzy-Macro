@@ -88,17 +88,41 @@ class MacroProfileStoreTests(unittest.TestCase):
 
     def test_invalid_change_does_not_advance_snapshot_or_file(self):
         first = self.store.initialize("main")
-        path = self.path("main", "settings.txt")
+        path = self.path("main", "generalsettings.txt")
         before = self.read(path)
         with self.assertRaises(MacroProfileValidationError):
-            self.store.apply_change("main", "profile", "count", "three")
+            self.store.apply_change("main", "general", "max_cannon_attempts", 30)
         self.assertEqual(self.read(path), before)
         self.assertEqual(self.store.snapshot("main").version, first.version)
 
-    def test_unknown_setting_is_rejected(self):
+    def test_values_are_saved_in_the_format_the_gui_sends(self):
         self.store.initialize("main")
-        with self.assertRaises(MacroProfileValidationError):
-            self.store.apply_change("main", "profile", "not_registered", 1)
+        self.store.apply_change("main", "profile", "count", "12")
+        self.store.apply_change("main", "profile", "fields", "pine tree,sunflower")
+        settings = self.store.snapshot("main").as_dict()["settings"]
+        self.assertEqual(settings["count"], 12)
+        self.assertEqual(settings["fields"], "pine tree,sunflower")
+
+    def test_settings_without_defaults_save_to_the_requested_file(self):
+        # GUI-only settings such as gui_theme have no default entry
+        self.store.initialize("main")
+        self.store.apply_change("main", "general", "gui_theme", "Midnight")
+        self.assertIn("gui_theme=Midnight", self.read(self.path("main", "generalsettings.txt")))
+        self.assertEqual(self.store.snapshot("main").as_dict()["settings"]["gui_theme"], "Midnight")
+
+    def test_default_legacy_quest_gather_keeps_per_quest_settings(self):
+        self.write("main", "settings.txt", "quest_gather_mins=0\npolar_bear_quest_gather_mins=5\n")
+        store = MacroProfileStore(self.profiles_dir, {**PROFILE_DEFAULTS, "quest_gather_mins": 0, "polar_bear_quest_gather_mins": 2}, GENERAL_DEFAULTS, FIELD_DEFAULTS)
+        settings = store.initialize("main").as_dict()["settings"]
+        self.assertEqual(settings["polar_bear_quest_gather_mins"], 5)
+        self.assertEqual(store.snapshot("main").as_dict()["settings"]["polar_bear_quest_gather_mins"], 5)
+
+    def test_configured_legacy_quest_gather_migrates_once(self):
+        self.write("main", "settings.txt", "quest_gather_mins=7\npolar_bear_quest_gather_mins=5\n")
+        store = MacroProfileStore(self.profiles_dir, {**PROFILE_DEFAULTS, "quest_gather_mins": 0, "polar_bear_quest_gather_mins": 2}, GENERAL_DEFAULTS, FIELD_DEFAULTS)
+        self.assertEqual(store.initialize("main").as_dict()["settings"]["polar_bear_quest_gather_mins"], 7)
+        store.apply_change("main", "profile", "polar_bear_quest_gather_mins", 3)
+        self.assertEqual(store.snapshot("main").as_dict()["settings"]["polar_bear_quest_gather_mins"], 3)
 
     def test_failed_atomic_replace_keeps_file_and_snapshot(self):
         first = self.store.initialize("main")
@@ -160,10 +184,10 @@ class MacroProfileStoreTests(unittest.TestCase):
 
     def test_transactional_import_validates_before_writing(self):
         self.store.initialize("main")
-        path = self.path("main", "settings.txt")
+        path = self.path("main", "generalsettings.txt")
         before = self.read(path)
         with self.assertRaises(MacroProfileValidationError):
-            self.store.apply_changes("main", "profile", {"count": 8, "enabled": "yes"})
+            self.store.apply_changes("main", "general", {"macro_mode": "quest", "max_cannon_attempts": 0})
         self.assertEqual(self.read(path), before)
 
     def test_compatibility_save_adapter_delegates_to_deep_module(self):
