@@ -1,6 +1,4 @@
-from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter
-import base64
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 import cv2
 import math
 import os
@@ -8,18 +6,16 @@ import time
 import ast
 import numpy as np
 import platform
-from modules.misc.messageBox import msgBox
-from modules.screen.imageSearch import locateTransparentImageOnScreen, locateTransparentImage
-from modules.screen.screenshot import mssScreenshotNP, mssScreenshot
+from modules.screen.imageSearch import locateTransparentImage
+from modules.screen.screenshot import mssScreenshotNP
 from modules.misc.imageManipulation import adjustImage
 import time
 import pyautogui as pag
-from modules.screen.ocr import ocrRead, imToString
+from modules.screen.ocr import ocrRead
 import copy
 from datetime import datetime
 from modules.screen.robloxWindow import RobloxWindowBounds
 import pickle
-import json
 from modules.misc import settingsManager
 from modules.misc.settingsManager import getCurrentProfile, loadFields, getMacroVersion
 
@@ -386,7 +382,6 @@ class BuffDetector():
         mask = Image.fromarray(mask)
         if transform:
             mask = ImageOps.invert(mask)
-            pass
         
         mask = mask.resize((mask.width * 3, mask.height * 3), Image.LANCZOS)
 
@@ -644,41 +639,6 @@ class BuffDetector():
 
         return buffQuantity
 
-    def getBuffWithColor(self, buffs):
-        buffQuantity = []
-        buffs = buffs.items()
-
-        screen = self.screenshotBuffArea()
-        hsv = cv2.cvtColor(screen, cv2.COLOR_BGR2HSV)
-
-        for buff,v in buffs:
-            colorRange, transform, stackable = v
-            lower, upper = colorRange
-
-            #find the buff
-            mask = cv2.inRange(hsv, lower, upper)
-            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            for cnt in contours:
-                rect = cv2.boundingRect(cnt)
-                x, y, w, h = rect
-
-                #filter area to avoid noise
-                if self.buffSize-5 < w < self.buffSize+5:
-                     #buff is either present or not, non stackable (0 or 1)
-                    if not stackable:
-                        buffQuantity.append("1")
-                        break
-
-                    #crop out
-                    y = min(0, y+self.buffSize-h)
-                    buffImgBGR = screen[y:y+self.buffSize, x:x+self.buffSize]
-                    out = self.getBuffQuantityFromImg(buffImgBGR, True)
-                    buffQuantity.append(out)
-                    break
-                else:
-                    buffQuantity.append("0")
-        return buffQuantity
-    
     def detectBuffColorInImage(self, screen, hex, minSize, x1=0, y1=0, x2=None, y2=None, variation=0, show=False, searchDirection=1, instances=1):
         
         #convert hex to bgr and setup the color range
@@ -2164,66 +2124,6 @@ class HourlyReportDrawer:
 
         self.draw.text((leftPadding, y+370), str(statValue), font=self.getFont("semibold", 80), fill=fontColor if fontColor else self.bodyColor)
         self.draw.text((leftPadding, y+545), statTitle, font=self.getFont("medium", 52), fill=self.subtleColor)
-
-    def drawBuffUptimeGraphStackableBuff(self, y, datasets, imageName, maxY=10, xData=None, xLabelFunc=None):
-        #draw the graph
-        graphHeight = 450
-        graphXStart = self.leftPadding+450
-        if xData is None:
-            maxLen = max((len(dataset.get("data", [])) for dataset in datasets), default=0)
-            xData = list(range(maxLen if maxLen else 1))
-        self.drawGraph(graphXStart, y, self.availableSpace-570, graphHeight, xData, datasets, maxY=maxY, showXAxisLabels=bool(xLabelFunc), showYAxisLabels=False, ticks=3, xLabelFunc=xLabelFunc)
-
-        #load the icon
-        imageDimension = 170
-        imageX = graphXStart - 200 - imageDimension
-        imageY = y - graphHeight//2 - imageDimension//2 + len(datasets)*10
-        try:
-            img = Image.open(f"{self.assetPath}/{imageName}.png").convert("RGBA")
-            img = img.resize((imageDimension, imageDimension))
-            self.canvas.paste(img, (imageX, imageY), img)
-        except FileNotFoundError:
-            pass
-
-        self.draw.text((imageX, imageY + imageDimension), f"x0-{maxY}", font=self.getFont("semibold", 65), fill=self.bodyColor)
-
-        for i, dataset in enumerate(datasets):
-            if dataset.get("average"):
-                self.draw.text((imageX, imageY - (90+60*i)), dataset["average"], font=self.getFont("semibold", 60), fill=dataset["lineColor"])
-
-    def drawBuffUptimeGraphUnstackableBuff(self, y, datasets, imageName, renderTime = False, xData=None, xLabelFunc=None):
-
-        def transformXLabel(i, val):
-            if i%100:
-                return
-            val //= 10
-            hour = self.hour
-            if val == 60:
-                hour += 1
-                if hour == 24:
-                    hour = 0
-                val = 0
-            return f"{str(hour).zfill(2)}:{str(val).zfill(2)}"
-
-        #draw the graph
-        graphHeight = 250
-        graphXStart = self.leftPadding+450
-        if xData is None:
-            maxLen = max((len(dataset.get("data", [])) for dataset in datasets), default=0)
-            xData = list(range(maxLen if maxLen else 1))
-        labelFunc = xLabelFunc if xLabelFunc else transformXLabel
-        self.drawGraph(graphXStart, y, self.availableSpace-570, graphHeight, xData, datasets, maxY=1, showXAxisLabels=renderTime or bool(xLabelFunc), showYAxisLabels=False, ticks=2, xLabelFunc=labelFunc)
-
-        #load the icon
-        imageDimension = 170
-        imageX = graphXStart - 200 - imageDimension
-        imageY = y - graphHeight//2 - imageDimension//2 + len(datasets)*10
-        try:
-            img = Image.open(f"{self.assetPath}/{imageName}.png").convert("RGBA")
-            img = img.resize((imageDimension, imageDimension))
-            self.canvas.paste(img, (imageX, imageY), img)
-        except FileNotFoundError:
-            pass
 
     def drawSessionStat(self, y, imageName, label, value, valueColor):
         imgContainerDimension = 180

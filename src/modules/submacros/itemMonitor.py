@@ -113,13 +113,6 @@ class ItemMonitor:
         self.last_detection_time = {}
         self.last_detected_value = {}
 
-    def reset_all(self):
-        self.reset_hourly()
-        self.session_collected_items = {}
-        self.start_time = time.time()
-        self.query_total = 0
-        self.total_items_detected = 0
-
     def get_snapshot(self, session=False):
         collected = self.session_collected_items if session else self.collected_items
         return {
@@ -317,7 +310,7 @@ def generate_item_report(snapshot, setdat=None, report_type="hourly", output_pat
     if not collected:
         return None, None
 
-    from modules.submacros.hourlyReport import HourlyReportDrawer, resolveReportTheme
+    from modules.submacros.hourlyReport import resolveReportTheme
 
     gui_theme = setdat.get("gui_theme", "Brown")
     theme = resolveReportTheme(gui_theme)
@@ -392,7 +385,6 @@ class ItemReportDrawer:
 
     def draw(self, snapshot, report_type="hourly"):
         from modules.misc.settingsManager import getMacroVersion
-        import platform
 
         collected = (snapshot or {}).get("collected_items") or {}
         timeline = (snapshot or {}).get("item_timeline") or {}
