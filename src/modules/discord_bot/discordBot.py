@@ -27,8 +27,9 @@ from modules.screen.shiftLock import detect_shift_lock, detect_shift_lock_with_r
 
 # Hourly report dependencies
 try:
-    from modules.submacros.hourlyReport import HourlyReport, BuffDetector
-    from modules.submacros.finalReport import FinalReport
+    from modules.reports.hourly import HourlyReport
+    from modules.reports.buffs import BuffDetector
+    from modules.reports.final import FinalReport
     from modules.screen.robloxWindow import RobloxWindowBounds
 except Exception:
     # Defensive: if these imports fail, the hourly report command will handle it at runtime
@@ -2815,7 +2816,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         try:
             # Create a buff detector to read nectar values from screen
             from modules.screen.robloxWindow import RobloxWindowBounds
-            from modules.submacros.hourlyReport import BuffDetector
+            from modules.reports.buffs import BuffDetector
 
             robloxWindow = RobloxWindowBounds()
             try:
@@ -2861,7 +2862,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
                     # collect nectar values (use BuffDetector logic)
                     from modules.screen.robloxWindow import RobloxWindowBounds
-                    from modules.submacros.hourlyReport import BuffDetector
+                    from modules.reports.buffs import BuffDetector
                     robloxWindow = RobloxWindowBounds()
                     try:
                         robloxWindow.setRobloxWindowBounds()
@@ -4042,7 +4043,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             # Separate Item Monitor report when enabled
             if setdat.get("item_monitor", True):
                 try:
-                    from modules.submacros.itemMonitor import generate_item_report
+                    from modules.reports.item_monitor import generate_item_report
                     snapshot = getattr(hr, "itemMonitorSnapshot", None)
                     if snapshot and snapshot.get("collected_items"):
                         path, item_fields = generate_item_report(snapshot, setdat, report_type="hourly")

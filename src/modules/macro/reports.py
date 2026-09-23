@@ -6,8 +6,8 @@ import modules.misc.settingsManager as settingsManager
 import modules.screen.ocr as ocr
 from modules.controls.sleep import pause_aware_time as time
 from modules.screen.screenshot import mssScreenshot
-from modules.submacros.hourlyReport import BUFF_RENDER_CONFIG
-from modules.submacros.liveGatherReport import LiveGatherReport, LiveQuestProgressReport
+from modules.reports.buffs import BUFF_RENDER_CONFIG
+from modules.reports.live_gather import LiveGatherReport, LiveQuestProgressReport
 
 
 class ReportMixin:
@@ -75,7 +75,7 @@ class ReportMixin:
 
                 if itemSnapshot and itemSnapshot.get("collected_items"):
                     try:
-                        from modules.submacros.itemMonitor import generate_item_report
+                        from modules.reports.item_monitor import generate_item_report
                         path, fields = generate_item_report(itemSnapshot, self.setdat, report_type="hourly")
                         if path:
                             self.logger.itemReport("Item Monitor", "", "purple", fields=fields, imagePath=path)
