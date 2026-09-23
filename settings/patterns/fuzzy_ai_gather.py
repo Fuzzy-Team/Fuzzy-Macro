@@ -178,6 +178,7 @@ TARGET_SPRINKLER_LABEL = agc.coerce_text(
     "",
 ) or None
 FIELD_DRIFT_COMPENSATION = agc.coerce_bool(globals().get("pattern_field_drift_compensation"), False)
+FIELD_DIMENSIONS = globals().get("pattern_field_dimensions")
 USE_SPRINKLER_MODEL_FOR_DRIFT_COMPENSATION = agc.coerce_bool(
     globals().get("pattern_use_sprinkler_model_for_drift_compensation"),
     False,
@@ -508,10 +509,14 @@ def _candidate_priority_rank(candidate):
 
 
 def _token_metrics():
-    max_leash = 4.0 + (0.45 * max(width - 1, 0)) + (0.35 * size)
+    configured_leash = 4.0 + (0.45 * max(width - 1, 0)) + (0.35 * size)
+    field_radius = agc.field_safe_radius(FIELD_DIMENSIONS) if FIELD_DRIFT_COMPENSATION else None
+    max_leash = min(configured_leash, field_radius) if field_radius is not None else configured_leash
+    hard_leash = min(configured_leash + LEASH_HARD_MARGIN, field_radius) if field_radius is not None else configured_leash + LEASH_HARD_MARGIN
     return {
         "max_leash": max_leash,
-        "hard_leash": max_leash + LEASH_HARD_MARGIN,
+        "hard_leash": hard_leash,
+        "field_bounded": field_radius is not None,
         "soft_leash": max_leash * 0.625,
         "max_consider": max_leash + 1.0 + (0.15 * width),
         "cluster_radius": 1.6 + (0.1 * width),
@@ -553,7 +558,9 @@ def _find_best_token(runtime, detections):
         future_x = current_x + tx
         future_y = current_y + ty
         future_dist = math.hypot(future_x, future_y)
-        if future_dist > metrics["hard_leash"] and distance > LEASH_NEAR_TOKEN_ALLOWANCE:
+        if future_dist > metrics["hard_leash"] and (
+            metrics["field_bounded"] or distance > LEASH_NEAR_TOKEN_ALLOWANCE
+        ):
             rejected.append({"name": token_name, "reason": "hard_leash", "confidence": confidence, "distance": distance, "future_dist": future_dist, "tx": tx, "ty": ty})
             continue
 
