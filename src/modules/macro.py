@@ -4311,6 +4311,7 @@ class macro:
                 pattern_record_video_fps = fuzzyAIRuntimeDefaults["fuzzy_ai_record_video_fps"]
                 pattern_ai_gather_model_file = str(fieldSetting.get("ai_gather_model_file", ""))
                 pattern_field_drift_compensation = bool(fieldSetting.get("field_drift_compensation", False))
+                pattern_field_dimensions = startLocationDimensions.get(normalized_field)
                 pattern_use_sprinkler_model_for_drift_compensation = bool(
                     self.setdat.get("use_sprinkler_model_for_drift_compensation", False)
                 )
@@ -4553,6 +4554,7 @@ class macro:
         pattern_record_video_fps = fuzzyAIRuntimeDefaults["fuzzy_ai_record_video_fps"]
         pattern_ai_gather_model_file = str(fieldSetting.get("ai_gather_model_file", ""))
         pattern_field_drift_compensation = bool(fieldSetting.get("field_drift_compensation", False))
+        pattern_field_dimensions = startLocationDimensions.get(normalized_field)
         pattern_use_sprinkler_model_for_drift_compensation = bool(
             self.setdat.get("use_sprinkler_model_for_drift_compensation", False)
         )
