@@ -7,6 +7,13 @@ import tempfile
 from datetime import datetime
 import re
 
+# TODO: remove the leftover Macro Profile compatibility code now that the
+# refactor is done (~240 lines):
+# - unreachable "legacy" blocks after the early returns in loadFields, saveField,
+#   saveProfileSetting, saveGeneralSetting, loadSettings, and loadAllSettings
+# - unused functions: getDefaultSettingsPath, resolveProjectPath,
+#   loadUserSettingsFile, getProfileChangeCounter, removeGeneralSetting
+
 try:
     from .macro_profile import MacroProfileError, MacroProfileStore, MacroProfileValidationError
 except ImportError:
@@ -275,10 +282,25 @@ def ensureUserFile(filename):
     writer()
     return path
 
+def ensureDefaultPatterns():
+    """Copy shipped patterns missing from settings/patterns. Existing user files are never replaced."""
+    defaults_dir = os.path.join(getSettingsDir(), "defaults", "patterns")
+    patterns_dir = getPatternsDir()
+    if not os.path.isdir(defaults_dir):
+        return
+    os.makedirs(patterns_dir, exist_ok=True)
+    for filename in os.listdir(defaults_dir):
+        if os.path.splitext(filename)[1].lower() not in (".py", ".ahk"):
+            continue
+        target = os.path.join(patterns_dir, filename)
+        if not os.path.exists(target):
+            shutil.copy2(os.path.join(defaults_dir, filename), target)
+
 def ensureRuntimeData():
     """Create user/profile runtime directories and missing seed files."""
     os.makedirs(getUserDataDir(), exist_ok=True)
     os.makedirs(getProfilesDir(), exist_ok=True)
+    ensureDefaultPatterns()
 
     for filename in (
         "timings.txt",
