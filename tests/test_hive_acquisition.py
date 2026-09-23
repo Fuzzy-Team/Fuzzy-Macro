@@ -98,7 +98,7 @@ class HiveAcquisitionTests(unittest.TestCase):
             acquisition.acquire(1)
 
     def test_prompt_disappearing_confirms_claim(self):
-        prompts = iter((True, False))
+        prompts = iter((True, False, False, False))
         presses = []
         accepted = confirm_claim(
             press_claim=lambda: presses.append("e"),
@@ -108,6 +108,18 @@ class HiveAcquisitionTests(unittest.TestCase):
         )
         self.assertTrue(accepted)
         self.assertEqual(presses, ["e"])
+
+    def test_prompt_flicker_does_not_confirm_claim(self):
+        prompts = iter((True, False, True, False, True, True))
+        accepted = confirm_claim(
+            press_claim=lambda: None,
+            claim_prompt_visible=lambda: next(prompts),
+            control_status=lambda: "running",
+            wait=lambda _seconds: None,
+            attempts=1,
+            checks_per_attempt=6,
+        )
+        self.assertFalse(accepted)
 
     def test_claim_retries_once_when_prompt_stays_visible(self):
         presses = []
