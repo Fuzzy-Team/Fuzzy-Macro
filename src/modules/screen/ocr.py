@@ -15,10 +15,11 @@ BASE_SCREEN_HEIGHT = 1800
 ocrLib = None
 useLangPref = True
 mac_version = tuple(int(part) for part in platform.mac_ver()[0].split(".")[:2] if part.isdigit())
-# Apple Vision OCR is used on Monterey and newer.  In particular, do not load
-# ocrmac on Catalina: recent transitive Core ML wheels can be compiled for a
-# newer macOS and emit noisy dyld errors before the fallback OCR is selected.
-if len(mac_version) >= 2 and mac_version >= (12, 0):
+# Apple Vision OCR is used on Big Sur and newer (Big Sur lacks the language
+# preference API, which is detected and disabled below).  Do not load ocrmac on
+# Catalina: recent transitive Core ML wheels can be compiled for a newer macOS
+# and emit noisy dyld errors before the fallback OCR is selected.
+if len(mac_version) >= 2 and mac_version >= (11, 0):
     try:
         from ocrmac import ocrmac #see if ocr mac is installed
         ocrLib = "ocrmac"
