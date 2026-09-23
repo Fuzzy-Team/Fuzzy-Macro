@@ -583,6 +583,7 @@ class GatherMixin:
                 stopGather("interrupted")
                 raise
 
+            self.consumeFieldBoosterGlitterExtension()
             patternStartTime = time.time()
             mouse.mouseDown()
 
