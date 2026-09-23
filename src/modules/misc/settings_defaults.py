@@ -826,7 +826,6 @@ DEFAULT_GENERAL_SETTINGS = {'hive_number': 1,
  'auto_update_check_disabled': False,
  'webhook_time_format': 24,
  'discord_rich_presence': False,
- 'hourly_report_accent': 'green',
  'hourly_report_embed_text': True}
 
 DEFAULT_FIELDS = {'sunflower': {'shift_lock': False,

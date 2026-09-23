@@ -14,7 +14,7 @@ from modules.reports.buffs import (
     normalizeHourlyBuffSelection,
 )
 from modules.reports.theme import (
-    ACCENT_COLORS,
+    LEGACY_THEME_ACCENT,
     MACRO_BASE_BG_MIX,
     MACRO_TINT_SATURATION,
     mixColor,
@@ -24,7 +24,7 @@ from modules.reports.theme import (
 
 
 class HourlyReportDrawer:
-    def __init__(self, time_format=24, theme="dark", accent="green"):
+    def __init__(self, time_format=24, theme="dark"):
         t = THEMES.get(theme, THEMES["dark"])
         self.backgroundColor = t["bg"]
         self.sideBarBackground = t["sidebar_bg"]
@@ -36,9 +36,8 @@ class HourlyReportDrawer:
         self.convertColor = t["convert"]
         self.otherColor = t["other"]
         self.honeyColor = t["honey"]
-        # Macro themes bake in their own accent (the webapp --primary); fall back
-        # to the configurable accent palette for the legacy dark/midnight/oled themes.
-        self.accentColor = t.get("accent", ACCENT_COLORS.get(accent, ACCENT_COLORS["green"]))
+        # Macro themes bake in their own accent (the webapp --primary), so reports match the GUI theme.
+        self.accentColor = t.get("accent", LEGACY_THEME_ACCENT)
         self.accentColorDim = tuple(max(0, int(c * 0.35)) for c in self.accentColor)
 
         # Panel / graph chrome. For macro themes this is tinted toward the accent
