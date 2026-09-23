@@ -1023,6 +1023,21 @@ def sprinkler_anchor_enabled(field_drift_compensation, use_sprinkler_model):
     return bool(field_drift_compensation and use_sprinkler_model)
 
 
+def field_safe_radius(field_dimensions, fallback=None):
+    """Convert the narrow field axis to a conservative center-to-edge tile radius."""
+    try:
+        narrow_axis = min(float(value) for value in field_dimensions if float(value) > 0)
+    except (TypeError, ValueError):
+        return fallback
+    if narrow_axis <= 0:
+        return fallback
+
+    # Field dimensions are reference-speed milliseconds. At 18 studs/second
+    # and roughly four studs per flower tile, 800 ms is about 3.6 tiles. Keep
+    # twenty percent in reserve for imperfect movement and field geometry.
+    return round(narrow_axis * 18.0 / 4000.0 * 0.8, 3)
+
+
 def sprinkler_detect_should_run(runtime):
     """Run sprinkler inference whenever the model is loaded (same cadence as tokens)."""
     if runtime.get("sprinkler_session") is None:
