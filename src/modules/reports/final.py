@@ -13,8 +13,8 @@ from modules.misc import settingsManager
 class FinalReportDrawer(HourlyReportDrawer):
     """Drawer for final session reports, inherits from HourlyReportDrawer"""
 
-    def __init__(self, time_format=24, theme="dark", accent="green"):
-        super().__init__(time_format=time_format, theme=theme, accent=accent)
+    def __init__(self, time_format=24, theme="dark"):
+        super().__init__(time_format=time_format, theme=theme)
 
     def drawFinalReport(self, hourlyReportStats, sessionStats, honeyPerSec, sessionHoney, onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData, uptimeBuffsValues, buffGatherIntervals, configuredUptimeBuffs=None, configuredHourlyBuffs=None, enabled_fields=None, field_patterns=None):
         """Draw comprehensive final report with session statistics and trends"""
@@ -385,10 +385,9 @@ class FinalReport:
                 600
             )
 
-        # apply theme/accent from settings — the report theme follows the macro's GUI theme
+        # the report theme (colors and accent) follows the macro's GUI theme
         gui_theme = setdat.get("gui_theme", "Brown") if isinstance(setdat, dict) else "Brown"
         theme  = resolveReportTheme(gui_theme)
-        accent = setdat.get("hourly_report_accent",  "green") if isinstance(setdat, dict) else "green"
         send_embed_text = setdat.get("hourly_report_embed_text", True) if isinstance(setdat, dict) else True
 
         # determine enabled gather fields and their patterns (shown beneath planters)
@@ -411,7 +410,7 @@ class FinalReport:
             except Exception:
                 continue
 
-        self.drawer = FinalReportDrawer(theme=theme, accent=accent)
+        self.drawer = FinalReportDrawer(theme=theme)
 
         # Draw the comprehensive final report
         try:
