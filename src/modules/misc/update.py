@@ -3,6 +3,7 @@ import os
 import re
 import hashlib
 import json
+import fnmatch
 import importlib
 import sys
 import requests
@@ -17,7 +18,6 @@ from modules.misc.messageBox import msgBox
 # replace them during an update instead of preserving an obsolete copy.
 PATTERN_OVERWRITE_EXCEPTIONS = {"blooms_ai.py", "fuzzy_ai_gather.py"}
 INSTALLED_FILES_MANIFEST = os.path.join("src", "data", "user", "installed_files.json")
-PENDING_CLEANUP = os.path.join("src", "data", "user", "pending_cleanup.json")
 
 # Preserve this flag across importlib.reload().  It prevents the freshly
 # loaded updater from handing off to itself a second time.
@@ -136,15 +136,21 @@ def _is_protected_path(relative_path, protected_folders):
     return False
 
 
-def _build_installed_files_manifest(extracted, protected_folders):
-    """Map regular files in an extracted release to their Git blob hashes."""
+def _build_installed_files_manifest(root_path, protected_folders, excluded_root=None):
+    """Hash regular, unprotected files without following directory symlinks."""
     manifest = {}
-    for root, dirs, files in os.walk(extracted, followlinks=False):
-        rel_root = os.path.relpath(root, extracted)
+    excluded_root = os.path.abspath(excluded_root) if excluded_root else None
+
+    def raise_walk_error(exc):
+        raise exc
+
+    for root, dirs, files in os.walk(root_path, followlinks=False, onerror=raise_walk_error):
+        rel_root = os.path.relpath(root, root_path)
         rel_root = "" if rel_root == "." else rel_root.replace(os.sep, "/")
         dirs[:] = [
             directory for directory in dirs
             if not os.path.islink(os.path.join(root, directory))
+            and os.path.abspath(os.path.join(root, directory)) != excluded_root
             and not _is_protected_path(
                 "/".join(filter(None, (rel_root, directory))), protected_folders
             )
@@ -162,18 +168,6 @@ def _build_installed_files_manifest(extracted, protected_folders):
     return manifest
 
 
-def _load_json_hashes(path):
-    """Load string path-to-hash entries from a JSON object."""
-    with open(path, "r", encoding="utf-8") as fh:
-        value = json.load(fh)
-    if not isinstance(value, dict):
-        raise ValueError("expected a JSON object")
-    return {
-        key: hash_value for key, hash_value in value.items()
-        if isinstance(key, str) and isinstance(hash_value, str)
-    }
-
-
 def _metadata_path(destination, relative_path):
     """Reject metadata paths whose parent directory leaves the install root."""
     current = destination
@@ -188,85 +182,6 @@ def _metadata_path(destination, relative_path):
     if os.path.islink(path):
         raise ValueError(f"Metadata file is a symlink: {path}")
     return path
-
-
-def _installed_release_ref(destination):
-    """Read the installed tag or commit before the copy replaces its marker."""
-    for relative_path, pattern in (
-        (os.path.join("src", "webapp", "updated_commit.txt"), r"[0-9a-fA-F]{7,40}"),
-        (os.path.join("src", "webapp", "version.txt"), r"\d+\.\d+\.\d+[A-Za-z]?"),
-        ("version.txt", r"\d+\.\d+\.\d+[A-Za-z]?"),
-    ):
-        path = os.path.join(destination, relative_path)
-        if not os.path.isfile(path) or os.path.islink(path):
-            continue
-        try:
-            with open(path, "r", encoding="utf-8") as fh:
-                ref = fh.read().strip()
-        except OSError:
-            continue
-        if re.fullmatch(pattern, ref):
-            return ref
-    return None
-
-
-def _download_installed_manifest(ref):
-    """Fetch shipped paths and Git blob hashes from the installed release tree."""
-    if not re.fullmatch(r"(?:[0-9a-fA-F]{7,40}|\d+\.\d+\.\d+[A-Za-z]?)", ref):
-        raise ValueError("Invalid installed-release reference")
-    response = requests.get(
-        f"https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/git/trees/{ref}?recursive=1",
-        timeout=20,
-        headers={
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0",
-        },
-    )
-    response.raise_for_status()
-    value = response.json()
-    if (
-        not isinstance(value, dict)
-        or value.get("truncated") is not False
-        or not isinstance(value.get("tree"), list)
-    ):
-        raise ValueError("incomplete installed-release tree")
-    return {
-        entry["path"]: entry["sha"] for entry in value["tree"]
-        if isinstance(entry, dict) and entry.get("type") == "blob"
-        and isinstance(entry.get("path"), str) and isinstance(entry.get("sha"), str)
-    }
-
-
-def _download_historical_hashes(ref):
-    """Collect file hashes shipped by the installed commit and release tags."""
-    commits = {ref}
-    page = 1
-    while True:
-        response = requests.get(
-            f"https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/tags?per_page=100&page={page}",
-            timeout=20,
-        )
-        response.raise_for_status()
-        tags = response.json()
-        if not isinstance(tags, list):
-            raise ValueError("Invalid release tag list")
-        for tag in tags:
-            if not isinstance(tag, dict) or not isinstance(tag.get("commit"), dict):
-                raise ValueError("Invalid release tag")
-            sha = tag["commit"].get("sha")
-            if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-fA-F]{40}", sha):
-                raise ValueError("Invalid release tag commit")
-            commits.add(sha)
-        if len(tags) < 100:
-            break
-        page += 1
-
-    hashes = {}
-    for commit in sorted(commits):
-        for path, sha in _download_installed_manifest(commit).items():
-            hashes.setdefault(path, set()).add(sha)
-    return hashes
 
 
 def _safe_regular_file(destination, relative_path, protected_folders):
@@ -309,39 +224,53 @@ def _remove_empty_directories(start, destination, protected_folders):
         current = os.path.dirname(current)
 
 
-def _remove_compiled_files(source_path, destination, protected_folders, new_manifest):
-    """Remove unshipped bytecode associated with a deleted Python source file."""
-    if not source_path.endswith(".py"):
-        return
-    cache_dir = os.path.join(os.path.dirname(source_path), "__pycache__")
-    source_name = os.path.splitext(os.path.basename(source_path))[0]
-    try:
-        cache_entries = os.listdir(cache_dir)
-    except OSError:
-        return
-    for filename in cache_entries:
-        if not (filename.startswith(source_name + ".cpython-") and filename.endswith(".pyc")):
+def _read_ignore_rules(extracted):
+    """Use both current origin rules and the release's own ignore rules."""
+    ignore_path = os.path.join(extracted, ".gitignore")
+    if os.path.islink(ignore_path):
+        raise ValueError("release .gitignore is a symlink")
+    with open(ignore_path, "r", encoding="utf-8") as fh:
+        release_rules = [line.strip() for line in fh if line.strip() and not line.startswith("#")]
+    response = requests.get(
+        "https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/.gitignore",
+        timeout=20,
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+    )
+    response.raise_for_status()
+    origin_rules = [line.strip() for line in response.text.splitlines()
+                    if line.strip() and not line.startswith("#")]
+    return release_rules, origin_rules
+
+
+def _is_gitignored(relative_path, rules):
+    """Match root .gitignore file and directory patterns in order."""
+    parts = relative_path.split("/")
+    ignored = False
+    for raw_rule in rules:
+        negated = raw_rule.startswith("!")
+        rule = raw_rule[1:] if negated else raw_rule
+        directory_only = rule.endswith("/")
+        rule = rule.strip("/")
+        if not rule:
             continue
-        relative_path = os.path.relpath(
-            os.path.join(cache_dir, filename), destination
-        ).replace(os.sep, "/")
-        if relative_path in new_manifest:
-            continue
-        compiled_path = _safe_regular_file(destination, relative_path, protected_folders)
-        if compiled_path is None:
-            continue
-        try:
-            os.remove(compiled_path)
-            print(f"[updater] Removed compiled file {relative_path}")
-        except OSError as exc:
-            print(f"[updater] Could not remove compiled file {relative_path}: {exc}")
-    _remove_empty_directories(os.path.join(cache_dir, "placeholder"), destination, protected_folders)
+        candidates = ["/".join(parts[:i]) for i in range(1, len(parts) + 1)]
+        if directory_only:
+            candidates = candidates[:-1]
+        if "/" not in rule:
+            matched = any(fnmatch.fnmatchcase(candidate.rsplit("/", 1)[-1], rule)
+                          for candidate in candidates)
+        else:
+            matched = any(fnmatch.fnmatchcase(candidate, rule) for candidate in candidates)
+        if matched:
+            ignored = not negated
+    return ignored
 
 
 def _remove_obsolete_files(
-    extracted, destination, protected_folders, progress_callback=None, previous_ref=None
+    extracted, destination, protected_folders, old_manifest, new_manifest,
+    progress_callback=None,
 ):
-    """Remove unchanged stale files and return records to retry on the next update."""
+    """Remove installed regular files that the incoming release does not ship."""
     required = (
         os.path.join(extracted, "src", "main.py"),
         os.path.join(extracted, "src", "modules", "misc", "update.py"),
@@ -351,111 +280,38 @@ def _remove_obsolete_files(
         return None
     if os.path.lexists(os.path.join(destination, ".git")):
         print("[updater] Skipping obsolete-file cleanup in a git checkout")
-        return None
+        return
 
-    new_manifest = _build_installed_files_manifest(extracted, protected_folders)
-    manifest_path = _metadata_path(destination, INSTALLED_FILES_MANIFEST)
-    pending_path = _metadata_path(destination, PENDING_CLEANUP)
-    pending = {"bootstrap_ref": None, "files": {}}
-    if os.path.lexists(pending_path):
-        with open(pending_path, "r", encoding="utf-8") as fh:
-            pending = json.load(fh)
-        if (
-            not isinstance(pending, dict)
-            or (pending.get("bootstrap_ref") is not None
-                and not isinstance(pending.get("bootstrap_ref"), str))
-            or not isinstance(pending.get("files"), dict)
-        ):
-            raise ValueError("Invalid pending-cleanup record")
-        pending.setdefault("bootstrap_ref", None)
-        pending["files"] = {
-            path: sha for path, sha in pending["files"].items()
-            if isinstance(path, str) and isinstance(sha, str)
-        }
+    try:
+        ignore_rule_sets = _read_ignore_rules(extracted)
+    except Exception as exc:
+        print(f"[updater] Skipping obsolete-file cleanup: could not read .gitignore rules: {exc}")
+        return
 
-    if os.path.isfile(manifest_path) and not os.path.islink(manifest_path):
-        try:
-            previous_manifest = _load_json_hashes(manifest_path)
-        except Exception as exc:
-            print(f"[updater] Could not read installed-files manifest; skipping cleanup: {exc}")
-            return None
-    else:
-        previous_manifest = {}
-        pending["bootstrap_ref"] = pending["bootstrap_ref"] or previous_ref
-
-    if pending["bootstrap_ref"]:
-        try:
-            _report_update_progress(progress_callback, 79, "Checking shipped file history")
-            historical_hashes = _download_historical_hashes(pending["bootstrap_ref"])
-            for path, hashes in historical_hashes.items():
-                if path in new_manifest or path in previous_manifest:
-                    continue
-                current_path = _safe_regular_file(destination, path, protected_folders)
-                if current_path is None:
-                    continue
-                current_hash = _git_blob_sha(current_path)
-                if current_hash in hashes:
-                    previous_manifest[path] = current_hash
-                else:
-                    print(f"[updater] Kept edited or unrecognized obsolete file {path}")
-            pending["bootstrap_ref"] = None
-        except Exception as exc:
-            print(f"[updater] Could not fetch installed-release tree; skipping bootstrap cleanup: {exc}")
-            for path, sha in previous_manifest.items():
-                if path not in new_manifest:
-                    pending["files"].setdefault(path, sha)
-            return pending
-    elif not os.path.isfile(manifest_path) and previous_ref is None:
-        print("[updater] Could not identify the installed release; skipping bootstrap cleanup")
-
-    stale = {
-        path: hash_value for path, hash_value in {
-            **previous_manifest, **pending["files"]
-        }.items()
-        if path not in new_manifest
-    }
-    pending["files"] = {}
-    removals = []
-    for relative_path, expected_hash in sorted(stale.items()):
+    _report_update_progress(progress_callback, 81, "Removing obsolete files")
+    stale = sorted(old_manifest.keys() - new_manifest.keys())
+    for index, relative_path in enumerate(stale, start=1):
+        if any(_is_gitignored(relative_path, rules) for rules in ignore_rule_sets):
+            print(f"[updater] Kept gitignored file {relative_path}")
+            continue
         current_path = _safe_regular_file(destination, relative_path, protected_folders)
         if current_path is None:
             continue
-        pending["files"][relative_path] = expected_hash
         try:
-            current_hash = _git_blob_sha(current_path)
-        except OSError as exc:
-            print(f"[updater] Could not check obsolete file {relative_path}: {exc}")
-            continue
-        if current_hash == expected_hash:
-            removals.append((relative_path, current_path))
-        else:
-            print(f"[updater] Kept edited obsolete file {relative_path}")
-
-    if len(removals) * 5 > len(new_manifest):
-        print(
-            f"[updater] Skipping obsolete-file cleanup: {len(removals)} files "
-            f"exceed 20% of the {len(new_manifest)} shipped files"
-        )
-        return pending
-
-    _report_update_progress(progress_callback, 81, "Removing obsolete files")
-    for index, (relative_path, current_path) in enumerate(removals, start=1):
-        try:
+            # A file may have changed since the pre-copy scan. Leave it alone.
+            if _git_blob_sha(current_path) != old_manifest[relative_path]:
+                print(f"[updater] Kept file changed during update {relative_path}")
+                continue
             os.remove(current_path)
-            pending["files"].pop(relative_path, None)
             print(f"[updater] Removed obsolete file {relative_path}")
-            _remove_compiled_files(
-                current_path, destination, protected_folders, new_manifest
-            )
             _remove_empty_directories(current_path, destination, protected_folders)
             _report_update_progress(
                 progress_callback,
-                81 + int(2 * index / len(removals)),
-                f"Removed obsolete file {index} of {len(removals)}",
+                81 + int(2 * index / len(stale)),
+                f"Removed obsolete file {index} of {len(stale)}",
             )
         except OSError as exc:
             print(f"[updater] Could not remove obsolete file {relative_path}: {exc}")
-    return pending
 
 
 def _write_json_atomically(path, value):
@@ -475,31 +331,26 @@ def _write_json_atomically(path, value):
             print(f"[updater] Could not remove temporary file {tmp_path}: {exc}")
 
 
-def _write_installed_files_manifest(extracted, destination, protected_folders):
+def _write_installed_files_manifest(destination, manifest):
     """Atomically record the files shipped by the extracted release."""
-    manifest = _build_installed_files_manifest(extracted, protected_folders)
     manifest_path = _metadata_path(destination, INSTALLED_FILES_MANIFEST)
     _write_json_atomically(manifest_path, manifest)
 
 
 def _finish_file_update(
-    extracted, destination, protected_folders, progress_callback=None, previous_ref=None
+    extracted, destination, protected_folders, old_manifest, new_manifest,
+    progress_callback=None,
 ):
-    """Run best-effort stale-file cleanup and persist updater metadata."""
+    """Run best-effort cleanup and record the installed release."""
     try:
-        pending = _remove_obsolete_files(
-            extracted, destination, protected_folders, progress_callback, previous_ref
+        _remove_obsolete_files(
+            extracted, destination, protected_folders, old_manifest, new_manifest,
+            progress_callback,
         )
-        if pending is None:
-            return
-        pending_path = _metadata_path(destination, PENDING_CLEANUP)
-        if pending["bootstrap_ref"] or pending["files"] or os.path.lexists(pending_path):
-            _write_json_atomically(pending_path, pending)
     except Exception as exc:
         print(f"[updater] Obsolete-file cleanup failed; continuing update: {exc}")
-        return
     try:
-        _write_installed_files_manifest(extracted, destination, protected_folders)
+        _write_installed_files_manifest(destination, new_manifest)
     except Exception as exc:
         print(f"[updater] Could not write installed-files manifest: {exc}")
 
@@ -507,11 +358,21 @@ def _finish_file_update(
 def _apply_update_files(
     extracted, destination, protected_folders, protected_files, progress_callback=None
 ):
-    """Merge an extracted release and finish its cleanup bookkeeping."""
-    previous_ref = _installed_release_ref(destination)
-    _merge_overwrite(extracted, destination, protected_folders, protected_files)
+    """Compare installed and incoming files, then synchronize the install."""
+    _report_update_progress(progress_callback, 78, "Hashing installed files")
+    old_manifest = _build_installed_files_manifest(
+        destination, protected_folders, excluded_root=extracted
+    )
+    _report_update_progress(progress_callback, 79, "Hashing update files")
+    new_manifest = _build_installed_files_manifest(extracted, protected_folders)
+    _report_update_progress(progress_callback, 80, "Copying changed files")
+    _merge_overwrite(
+        extracted, destination, protected_folders, protected_files,
+        old_manifest, new_manifest,
+    )
     _finish_file_update(
-        extracted, destination, protected_folders, progress_callback, previous_ref
+        extracted, destination, protected_folders, old_manifest, new_manifest,
+        progress_callback,
     )
 
 
@@ -591,30 +452,39 @@ def _run_refreshed_updater(destination, entry_point, *args, **kwargs):
         _UPDATER_HANDOFF_ACTIVE = False
 
 
-# Recursively copy from src to dst, overwriting files. Skip protected names.
-def _merge_overwrite(src, dst, protected_folders, protected_files):
-    for root, dirs, files in os.walk(src):
-        rel_root = os.path.relpath(root, src)
-        # compute destination root
-        dest_root = os.path.join(dst, rel_root) if rel_root != "." else dst
-        if not os.path.exists(dest_root):
-            os.makedirs(dest_root, exist_ok=True)
-        # filter dirs in-place to avoid descending into protected dirs
-        # compare using relative paths so nested protected paths like
-        # 'src/data' or 'data/user' are honored
-        norm_protected = [os.path.normpath(p) for p in protected_folders]
-        filtered = []
-        for d in dirs:
-            candidate = os.path.normpath(os.path.join(rel_root, d)) if rel_root != "." else os.path.normpath(d)
-            if candidate not in norm_protected:
-                filtered.append(d)
-        dirs[:] = filtered
-        for f in files:
-            if f in protected_files:
+def _merge_overwrite(src, dst, protected_folders, protected_files,
+                     old_manifest=None, new_manifest=None):
+    """Copy only changed shipped files, never through a destination symlink."""
+    if old_manifest is None:
+        old_manifest = _build_installed_files_manifest(dst, protected_folders, src)
+    if new_manifest is None:
+        new_manifest = _build_installed_files_manifest(src, protected_folders)
+    for relative_path, shipped_hash in new_manifest.items():
+        if os.path.basename(relative_path) in protected_files:
+            continue
+        parts = relative_path.split("/")
+        src_file = os.path.join(src, *parts)
+        dest_file = os.path.join(dst, *parts)
+        source_parent = src
+        current = dst
+        for part in parts[:-1]:
+            source_parent = os.path.join(source_parent, part)
+            current = os.path.join(current, part)
+            if os.path.islink(source_parent):
+                raise OSError(f"Refusing to copy through symlink {source_parent}")
+            if os.path.islink(current):
+                raise OSError(f"Refusing to copy through symlink {current}")
+        if os.path.islink(dest_file):
+            raise OSError(f"Refusing to replace symlink {dest_file}")
+        if os.path.isdir(dest_file):
+            raise OSError(f"Refusing to replace directory {dest_file}")
+        if not stat.S_ISREG(os.lstat(src_file).st_mode):
+            raise OSError(f"Shipped file changed during update: {relative_path}")
+        if os.path.isfile(dest_file) and old_manifest.get(relative_path) == shipped_hash:
+            if _git_blob_sha(dest_file) == shipped_hash:
                 continue
-            src_file = os.path.join(root, f)
-            dest_file = os.path.join(dest_root, f)
-            shutil.copy2(src_file, dest_file)
+        os.makedirs(os.path.dirname(dest_file), exist_ok=True)
+        shutil.copy2(src_file, dest_file)
 
 
 def _resolve_update_pattern_source(extracted):
