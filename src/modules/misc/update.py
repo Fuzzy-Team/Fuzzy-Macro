@@ -181,7 +181,10 @@ def _metadata_path(destination, relative_path):
     root = os.path.realpath(destination)
     if os.path.commonpath((root, os.path.realpath(current))) != root:
         raise ValueError(f"Metadata parent is outside the install root: {current}")
-    return os.path.join(destination, relative_path)
+    path = os.path.join(destination, relative_path)
+    if os.path.islink(path):
+        raise ValueError(f"Metadata file is a symlink: {path}")
+    return path
 
 
 def _download_obsolete_files():

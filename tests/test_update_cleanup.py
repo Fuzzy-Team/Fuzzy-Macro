@@ -277,6 +277,20 @@ class UpdateCleanupTests(TestCase):
 
         self.assertEqual(list(outside.iterdir()), [])
 
+    def test_manifest_symlink_cannot_read_outside_install(self):
+        outside = self._write(self.root, "outside.json", "outside")
+        manifest = self.install / update.INSTALLED_FILES_MANIFEST
+        manifest.parent.mkdir(parents=True)
+        try:
+            manifest.symlink_to(outside)
+        except OSError:
+            self.skipTest("file symlinks are unavailable")
+
+        update._finish_file_update(str(self.extracted), str(self.install), PROTECTED)
+
+        self.assertEqual(outside.read_text(), "outside")
+        self.assertTrue(manifest.is_symlink())
+
 
 if __name__ == "__main__":
     main()
