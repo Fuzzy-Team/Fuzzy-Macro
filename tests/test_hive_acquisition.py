@@ -15,10 +15,10 @@ class HiveAcquisitionTests(unittest.TestCase):
         self.assertEqual(result.slot, 2)
         self.assertEqual(calls, [("detect", 2, {5})])
 
-    def test_check_runs_when_detection_fails(self):
+    def test_check_runs_when_nothing_is_detected_from_spawn(self):
         calls = []
         acquisition = HiveAcquisition(
-            detect=lambda preferred, excluded: calls.append("detect") or 0,
+            detect=lambda preferred, excluded: calls.append("detect"),
             check=lambda preferred, excluded: calls.append("check") or 4,
         )
         result = acquisition.acquire(1)
@@ -61,10 +61,21 @@ class HiveAcquisitionTests(unittest.TestCase):
         self.assertEqual(result.reason, "stopped")
         self.assertEqual(calls, ["detect"])
 
+    def test_check_does_not_run_after_detection_walked_the_hive_row(self):
+        calls = []
+        acquisition = HiveAcquisition(
+            detect=lambda preferred, excluded: calls.append("detect") or 0,
+            check=lambda preferred, excluded: calls.append("check") or 4,
+        )
+        result = acquisition.acquire(1)
+        self.assertFalse(result.claimed)
+        self.assertEqual(result.reason, "no_claimable_hive")
+        self.assertEqual(calls, ["detect"])
+
     def test_exclusions_reach_both_strategies(self):
         seen = []
         acquisition = HiveAcquisition(
-            detect=lambda preferred, excluded: seen.append(set(excluded)) or 0,
+            detect=lambda preferred, excluded: seen.append(set(excluded)),
             check=lambda preferred, excluded: seen.append(set(excluded)) or 0,
         )
         result = acquisition.acquire(3, {1, 6})
