@@ -16,7 +16,6 @@ from modules.misc.messageBox import msgBox
 # bundled model manager.  They are not user-authored patterns, so always
 # replace them during an update instead of preserving an obsolete copy.
 PATTERN_OVERWRITE_EXCEPTIONS = {"blooms_ai.py", "fuzzy_ai_gather.py"}
-OBSOLETE_FILES_URL = "https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/obsolete_files.json"
 INSTALLED_FILES_MANIFEST = os.path.join("src", "data", "user", "installed_files.json")
 PENDING_CLEANUP = os.path.join("src", "data", "user", "pending_cleanup.json")
 
@@ -191,20 +190,51 @@ def _metadata_path(destination, relative_path):
     return path
 
 
-def _download_obsolete_files():
-    """Download and validate the bootstrap inventory of obsolete files."""
-    response = requests.get(OBSOLETE_FILES_URL, timeout=20, headers={
-        "Cache-Control": "no-cache, no-store, must-revalidate",
-        "Pragma": "no-cache",
-        "Expires": "0",
-    })
+def _installed_release_ref(destination):
+    """Read the installed tag or commit before the copy replaces its marker."""
+    for relative_path, pattern in (
+        (os.path.join("src", "webapp", "updated_commit.txt"), r"[0-9a-fA-F]{7,40}"),
+        (os.path.join("src", "webapp", "version.txt"), r"\d+\.\d+\.\d+[A-Za-z]?"),
+        ("version.txt", r"\d+\.\d+\.\d+[A-Za-z]?"),
+    ):
+        path = os.path.join(destination, relative_path)
+        if not os.path.isfile(path) or os.path.islink(path):
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                ref = fh.read().strip()
+        except OSError:
+            continue
+        if re.fullmatch(pattern, ref):
+            return ref
+    return None
+
+
+def _download_installed_manifest(ref):
+    """Fetch shipped paths and Git blob hashes from the installed release tree."""
+    if not re.fullmatch(r"(?:[0-9a-fA-F]{7,40}|\d+\.\d+\.\d+[A-Za-z]?)", ref):
+        raise ValueError("Invalid installed-release reference")
+    response = requests.get(
+        f"https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/git/trees/{ref}?recursive=1",
+        timeout=20,
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
     response.raise_for_status()
     value = response.json()
-    if not isinstance(value, dict):
-        raise ValueError("expected a JSON object")
+    if (
+        not isinstance(value, dict)
+        or value.get("truncated") is not False
+        or not isinstance(value.get("tree"), list)
+    ):
+        raise ValueError("incomplete installed-release tree")
     return {
-        key: hash_value for key, hash_value in value.items()
-        if isinstance(key, str) and isinstance(hash_value, str)
+        entry["path"]: entry["sha"] for entry in value["tree"]
+        if isinstance(entry, dict) and entry.get("type") == "blob"
+        and isinstance(entry.get("path"), str) and isinstance(entry.get("sha"), str)
     }
 
 
@@ -277,7 +307,9 @@ def _remove_compiled_files(source_path, destination, protected_folders, new_mani
     _remove_empty_directories(os.path.join(cache_dir, "placeholder"), destination, protected_folders)
 
 
-def _remove_obsolete_files(extracted, destination, protected_folders, progress_callback=None):
+def _remove_obsolete_files(
+    extracted, destination, protected_folders, progress_callback=None, previous_ref=None
+):
     """Remove unchanged stale files and return records to retry on the next update."""
     required = (
         os.path.join(extracted, "src", "main.py"),
@@ -293,13 +325,14 @@ def _remove_obsolete_files(extracted, destination, protected_folders, progress_c
     new_manifest = _build_installed_files_manifest(extracted, protected_folders)
     manifest_path = _metadata_path(destination, INSTALLED_FILES_MANIFEST)
     pending_path = _metadata_path(destination, PENDING_CLEANUP)
-    pending = {"bootstrap_pending": False, "files": {}}
+    pending = {"bootstrap_ref": None, "files": {}}
     if os.path.lexists(pending_path):
         with open(pending_path, "r", encoding="utf-8") as fh:
             pending = json.load(fh)
         if (
             not isinstance(pending, dict)
-            or not isinstance(pending.get("bootstrap_pending"), bool)
+            or (pending.get("bootstrap_ref") is not None
+                and not isinstance(pending.get("bootstrap_ref"), str))
             or not isinstance(pending.get("files"), dict)
         ):
             raise ValueError("Invalid pending-cleanup record")
@@ -316,15 +349,20 @@ def _remove_obsolete_files(extracted, destination, protected_folders, progress_c
             return None
     else:
         previous_manifest = {}
-        pending["bootstrap_pending"] = True
+        pending["bootstrap_ref"] = pending["bootstrap_ref"] or previous_ref
 
-    if pending["bootstrap_pending"]:
+    if pending["bootstrap_ref"]:
         try:
-            previous_manifest.update(_download_obsolete_files())
-            pending["bootstrap_pending"] = False
+            previous_manifest.update(_download_installed_manifest(pending["bootstrap_ref"]))
+            pending["bootstrap_ref"] = None
         except Exception as exc:
-            print(f"[updater] Could not download obsolete-files list; skipping bootstrap cleanup: {exc}")
+            print(f"[updater] Could not fetch installed-release tree; skipping bootstrap cleanup: {exc}")
+            for path, sha in previous_manifest.items():
+                if path not in new_manifest:
+                    pending["files"].setdefault(path, sha)
             return pending
+    elif not os.path.isfile(manifest_path) and previous_ref is None:
+        print("[updater] Could not identify the installed release; skipping bootstrap cleanup")
 
     stale = {
         path: hash_value for path, hash_value in {
@@ -400,16 +438,18 @@ def _write_installed_files_manifest(extracted, destination, protected_folders):
     _write_json_atomically(manifest_path, manifest)
 
 
-def _finish_file_update(extracted, destination, protected_folders, progress_callback=None):
+def _finish_file_update(
+    extracted, destination, protected_folders, progress_callback=None, previous_ref=None
+):
     """Run best-effort stale-file cleanup and persist updater metadata."""
     try:
         pending = _remove_obsolete_files(
-            extracted, destination, protected_folders, progress_callback
+            extracted, destination, protected_folders, progress_callback, previous_ref
         )
         if pending is None:
             return
         pending_path = _metadata_path(destination, PENDING_CLEANUP)
-        if pending["bootstrap_pending"] or pending["files"] or os.path.lexists(pending_path):
+        if pending["bootstrap_ref"] or pending["files"] or os.path.lexists(pending_path):
             _write_json_atomically(pending_path, pending)
     except Exception as exc:
         print(f"[updater] Obsolete-file cleanup failed; continuing update: {exc}")
@@ -424,8 +464,11 @@ def _apply_update_files(
     extracted, destination, protected_folders, protected_files, progress_callback=None
 ):
     """Merge an extracted release and finish its cleanup bookkeeping."""
+    previous_ref = _installed_release_ref(destination)
     _merge_overwrite(extracted, destination, protected_folders, protected_files)
-    _finish_file_update(extracted, destination, protected_folders, progress_callback)
+    _finish_file_update(
+        extracted, destination, protected_folders, progress_callback, previous_ref
+    )
 
 
 def _refresh_updater(destination, progress_callback=None):

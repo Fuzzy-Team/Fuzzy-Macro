@@ -142,17 +142,19 @@ class UpdateCleanupTests(TestCase):
         self.assertTrue(pyc.exists())
 
     def test_bootstrap_is_used_only_without_manifest(self):
-        """Download bootstrap hashes only when no installed manifest exists."""
+        """Fetch the installed release tree only when no manifest exists."""
         stale = self._write(self.install, "old.txt", "old")
         obsolete = {"old.txt": self._hash(stale)}
-        with mock.patch.object(update, "_download_obsolete_files", return_value=obsolete) as download:
-            update._remove_obsolete_files(str(self.extracted), str(self.install), PROTECTED)
+        with mock.patch.object(update, "_download_installed_manifest", return_value=obsolete) as download:
+            update._remove_obsolete_files(
+                str(self.extracted), str(self.install), PROTECTED, previous_ref="1.3.3"
+            )
         self.assertFalse(stale.exists())
-        download.assert_called_once_with()
+        download.assert_called_once_with("1.3.3")
 
         stale = self._write(self.install, "old.txt", "old")
         self._write_manifest({"old.txt": self._hash(stale)})
-        with mock.patch.object(update, "_download_obsolete_files") as download:
+        with mock.patch.object(update, "_download_installed_manifest") as download:
             update._remove_obsolete_files(str(self.extracted), str(self.install), PROTECTED)
         download.assert_not_called()
         self.assertFalse(stale.exists())
@@ -160,20 +162,84 @@ class UpdateCleanupTests(TestCase):
     def test_bootstrap_download_failure_skips_cleanup(self):
         """Defer bootstrap cleanup after a download failure and retry later."""
         stale = self._write(self.install, "old.txt", "old")
-        with mock.patch.object(update, "_download_obsolete_files", side_effect=OSError("offline")):
-            update._finish_file_update(str(self.extracted), str(self.install), PROTECTED)
+        with mock.patch.object(update, "_download_installed_manifest", side_effect=OSError("offline")):
+            update._finish_file_update(
+                str(self.extracted), str(self.install), PROTECTED, previous_ref="1.3.3"
+            )
         self.assertTrue(stale.exists())
         pending_path = self.install / update.PENDING_CLEANUP
-        self.assertTrue(json.loads(pending_path.read_text())["bootstrap_pending"])
+        self.assertEqual(json.loads(pending_path.read_text())["bootstrap_ref"], "1.3.3")
         self.assertTrue((self.install / update.INSTALLED_FILES_MANIFEST).exists())
 
         with mock.patch.object(
-            update, "_download_obsolete_files", return_value={"old.txt": self._hash(stale)}
+            update, "_download_installed_manifest", return_value={"old.txt": self._hash(stale)}
         ) as download:
             update._finish_file_update(str(self.extracted), str(self.install), PROTECTED)
-        download.assert_called_once_with()
+        download.assert_called_once_with("1.3.3")
         self.assertFalse(stale.exists())
-        self.assertFalse(json.loads(pending_path.read_text())["bootstrap_pending"])
+        self.assertIsNone(json.loads(pending_path.read_text())["bootstrap_ref"])
+
+    def test_repeated_bootstrap_failure_preserves_manifest_stale_files(self):
+        shipped = self._write(self.extracted, "old.txt", "old")
+        installed = self._write(self.install, "old.txt", "old")
+        with mock.patch.object(update, "_download_installed_manifest", side_effect=OSError("offline")):
+            update._finish_file_update(
+                str(self.extracted), str(self.install), PROTECTED, previous_ref="1.3.3"
+            )
+        self.assertEqual(self._hash(installed), self._hash(shipped))
+
+        shipped.unlink()
+        with mock.patch.object(update, "_download_installed_manifest", side_effect=OSError("offline")):
+            update._finish_file_update(str(self.extracted), str(self.install), PROTECTED)
+        pending = json.loads((self.install / update.PENDING_CLEANUP).read_text())
+        self.assertEqual(pending["files"]["old.txt"], self._hash(installed))
+
+        with mock.patch.object(update, "_download_installed_manifest", return_value={}):
+            update._finish_file_update(str(self.extracted), str(self.install), PROTECTED)
+        self.assertFalse(installed.exists())
+
+    def test_installed_release_ref_prefers_commit_marker(self):
+        """Use the installed commit when a commit update followed a release."""
+        self._write(self.install, "src/webapp/version.txt", "1.3.3")
+        self._write(self.install, "src/webapp/updated_commit.txt", "7dbde7d")
+        self.assertEqual(update._installed_release_ref(str(self.install)), "7dbde7d")
+
+    def test_copy_captures_previous_release_before_replacing_version(self):
+        """Bootstrap against the old tag after the incoming files are copied."""
+        self._write(self.install, "src/webapp/version.txt", "1.3.2")
+        self._write(self.extracted, "src/webapp/version.txt", "1.3.3")
+        with mock.patch.object(update, "_finish_file_update") as finish:
+            update._apply_update_files(
+                str(self.extracted), str(self.install), PROTECTED, [".git"]
+            )
+
+        self.assertEqual((self.install / "src/webapp/version.txt").read_text(), "1.3.3")
+        self.assertEqual(finish.call_args.args[-1], "1.3.2")
+
+    def test_release_tree_returns_only_blob_hashes(self):
+        """Use the tree's file hashes without treating directories as files."""
+        response = mock.Mock()
+        response.json.return_value = {
+            "truncated": False,
+            "tree": [
+                {"type": "tree", "path": "src", "sha": "directory"},
+                {"type": "blob", "path": "src/main.py", "sha": "filehash"},
+            ],
+        }
+        with mock.patch.object(update.requests, "get", return_value=response) as get:
+            self.assertEqual(
+                update._download_installed_manifest("1.3.3"),
+                {"src/main.py": "filehash"},
+            )
+        self.assertIn("/git/trees/1.3.3?recursive=1", get.call_args.args[0])
+
+    def test_release_tree_response_must_be_complete(self):
+        """Reject truncated trees before using their missing paths for cleanup."""
+        response = mock.Mock()
+        response.json.return_value = {"truncated": True, "tree": []}
+        with mock.patch.object(update.requests, "get", return_value=response):
+            with self.assertRaises(ValueError):
+                update._download_installed_manifest("1.3.3")
 
     def test_incomplete_release_skips_cleanup(self):
         """Skip stale-file cleanup when required release files are absent."""
