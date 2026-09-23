@@ -6,7 +6,12 @@ import modules.misc.settingsManager as settingsManager
 import modules.screen.ocr as ocr
 from modules.controls.keyboard import keyboard
 from modules.controls.sleep import pause_aware_time as time
-from modules.macro.game_data import MAIN_GAME_PLACE_ID, REJOIN_COLOR_PERCENT
+from modules.macro.game_data import (
+    MAIN_GAME_PLACE_ID,
+    REJOIN_COLOR_DURATION,
+    REJOIN_COLOR_PERCENT,
+    REJOIN_COLOR_TOLERANCE,
+)
 from modules.screen.color_check import get_sample_colors, percent_pixels_similar_to_color
 from modules.screen.imageSearch import locateImageOnScreen
 from modules.screen.screenshot import mssScreenshot
@@ -200,8 +205,8 @@ class RejoinMixin:
             except Exception:
                 sample_colors = [(250, 250, 250), (20, 20, 20)]
             percent_threshold = REJOIN_COLOR_PERCENT
-            sustain_seconds = int(self.setdat.get("rejoin_color_duration", 60))
-            color_tolerance = int(self.setdat.get("rejoin_color_tolerance", 40))
+            sustain_seconds = REJOIN_COLOR_DURATION
+            color_tolerance = REJOIN_COLOR_TOLERANCE
             sustained_start = 0
             rejoinSuccess = True
             robloxOpenTime = 0

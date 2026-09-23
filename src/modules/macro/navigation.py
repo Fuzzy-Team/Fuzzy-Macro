@@ -6,6 +6,7 @@ from modules.macro.game_data import (
     fieldFaceNorthKeys,
     HIVE_HUB_PLACE_ID,
     REJOIN_COLOR_PERCENT,
+    REJOIN_COLOR_TOLERANCE,
     hiveHubStartLocationOffsets,
 )
 from modules.screen.color_check import get_sample_colors, percent_pixels_similar_to_color
@@ -157,7 +158,7 @@ class NavigationMixin:
                 if not appManager.isAppFocused("Roblox"):
                     return None
                 percent_threshold = REJOIN_COLOR_PERCENT
-                color_tolerance = int(self.setdat.get("rejoin_color_tolerance", 40))
+                color_tolerance = REJOIN_COLOR_TOLERANCE
                 sample_colors = get_sample_colors()
                 for col in sample_colors:
                     pct = percent_pixels_similar_to_color(
