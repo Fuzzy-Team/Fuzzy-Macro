@@ -885,7 +885,7 @@ class QuestMixin:
         except Exception:
             pass
 
-        objectives = quest_data[questGiver][questTitle]
+        objectives = list(quest_data[questGiver][questTitle])
         maxObjectiveScanHeight = int(((len(objectives) * 110) + 60) * self.robloxWindow.multi)
 
         #merge the texts into chunks. Using those chunks, compare it with the known objectives

@@ -1,5 +1,6 @@
 #custom sleep function with pause support
 import time
+import threading
 
 # Module-level reference to the run state (multiprocessing.Value)
 _run_state = None
@@ -137,6 +138,15 @@ class _PauseAwareTimeModule:
         self._time = time_module
 
     def sleep(self, duration):
+        if threading.current_thread() is not threading.main_thread():
+            end = time.perf_counter() + max(0, duration)
+            while True:
+                while is_paused():
+                    time.sleep(0.1)
+                remaining = end - time.perf_counter()
+                if remaining <= 0 or is_stopped():
+                    return
+                time.sleep(min(0.05, remaining))
         return pauseable_sleep(duration)
 
     def __getattr__(self, name):

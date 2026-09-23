@@ -3,17 +3,22 @@
 from dataclasses import dataclass
 
 
-def confirm_claim(press_claim, claim_prompt_visible, control_status, wait, attempts=2, checks_per_attempt=20):
+def confirm_claim(press_claim, claim_prompt_visible, control_status, wait, attempts=2, checks_per_attempt=20, required_misses=3):
     """Press claim and confirm acceptance by observing the prompt disappear."""
     for _ in range(attempts):
         if control_status() == "stopped":
             return False
         press_claim()
+        misses = 0
         for _ in range(checks_per_attempt):
             if control_status() == "stopped":
                 return False
-            if not claim_prompt_visible():
-                return True
+            if claim_prompt_visible():
+                misses = 0
+            else:
+                misses += 1
+                if misses >= required_misses:
+                    return True
             wait(0.05)
     return False
 

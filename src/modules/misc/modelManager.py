@@ -3,6 +3,7 @@ import os
 import platform
 import shutil
 import tempfile
+import threading
 import zipfile
 from io import BytesIO
 
@@ -50,6 +51,7 @@ def _macos_version():
 
 
 _coremltools = False  # not imported yet
+_coremltools_lock = threading.Lock()
 
 
 def import_coremltools():
@@ -61,25 +63,26 @@ def import_coremltools():
     errors on import, so it isn't imported at all.
     """
     global _coremltools
-    if _coremltools is not False:
-        return _coremltools
-    _coremltools = None
-    if _macos_version() < (12, 0):
-        return None
-    import sys
-    hidden = [name for name in ("torch", "torchvision") if name not in sys.modules]
-    for name in hidden:
-        sys.modules[name] = None
-    try:
-        import coremltools
-        _coremltools = coremltools
-    except Exception:
-        pass
-    finally:
+    with _coremltools_lock:
+        if _coremltools is not False:
+            return _coremltools
+        _coremltools = None
+        if _macos_version() < (12, 0):
+            return None
+        import sys
+        hidden = [name for name in ("torch", "torchvision") if name not in sys.modules]
         for name in hidden:
-            if sys.modules.get(name) is None:
-                del sys.modules[name]
-    return _coremltools
+            sys.modules[name] = None
+        try:
+            import coremltools
+            _coremltools = coremltools
+        except Exception:
+            pass
+        finally:
+            for name in hidden:
+                if sys.modules.get(name) is None:
+                    del sys.modules[name]
+        return _coremltools
 
 
 def _supported_model_names():
