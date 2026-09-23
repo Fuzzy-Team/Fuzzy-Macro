@@ -114,6 +114,29 @@ class MacroProfileStoreTests(unittest.TestCase):
         self.write("main", "generalsettings.txt", "macro_mode={'source': 'generalsettings.txt', 'value': 'quest'}\n")
         self.assertEqual(self.store.initialize("main").as_dict()["settings"]["macro_mode"], "quest")
 
+    def gumdrop_store(self, profile_settings, fields):
+        self.write("main", "settings.txt", profile_settings)
+        self.write("main", "generalsettings.txt", "goo_slot=3\n")
+        self.write("main", "fields.txt", repr(fields))
+        return MacroProfileStore(self.profiles_dir, {**PROFILE_DEFAULTS, "quest_use_gumdrops": False}, {**GENERAL_DEFAULTS, "goo_slot": 3}, FIELD_DEFAULTS)
+
+    def test_quest_gumdrop_slot_is_used_when_only_goo_quests_use_gumdrops(self):
+        store = self.gumdrop_store("quest_use_gumdrops=True\nquest_gumdrop_slot=6\n", {"pine tree": {"shape": "lines", "mins": 10, "goo": False}})
+        settings = store.initialize("main").as_dict()["settings"]
+        self.assertEqual(settings["goo_slot"], 6)
+        self.assertNotIn("quest_gumdrop_slot", settings)
+        self.assertNotIn("quest_gumdrop_slot", self.read(self.path("main", "settings.txt")))
+
+    def test_goo_slot_is_kept_when_fields_use_goo(self):
+        store = self.gumdrop_store("quest_use_gumdrops=True\nquest_gumdrop_slot=6\n", {"pine tree": {"shape": "lines", "mins": 10, "goo": True}})
+        self.assertEqual(store.initialize("main").as_dict()["settings"]["goo_slot"], 3)
+
+    def test_goo_slot_is_kept_when_goo_quests_are_off(self):
+        store = self.gumdrop_store("quest_use_gumdrops=False\nquest_gumdrop_slot=6\n", {"pine tree": {"shape": "lines", "mins": 10}})
+        settings = store.initialize("main").as_dict()["settings"]
+        self.assertEqual(settings["goo_slot"], 3)
+        self.assertNotIn("quest_gumdrop_slot", settings)
+
     def test_default_legacy_quest_gather_keeps_per_quest_settings(self):
         self.write("main", "settings.txt", "quest_gather_mins=0\npolar_bear_quest_gather_mins=5\n")
         store = MacroProfileStore(self.profiles_dir, {**PROFILE_DEFAULTS, "quest_gather_mins": 0, "polar_bear_quest_gather_mins": 2}, GENERAL_DEFAULTS, FIELD_DEFAULTS)

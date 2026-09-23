@@ -298,7 +298,6 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'bucko_bee_quest': False,
  'riley_bee_quest': False,
  'quest_use_gumdrops': False,
- 'quest_gumdrop_slot': 2,
  'quest_progress_watch': False,
  'Auto_Field_Boost': False,
  'AFB_field': 'sunflower',

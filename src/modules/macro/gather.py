@@ -472,9 +472,7 @@ class GatherMixin:
 
         self.isGathering = True
         lastGooTime = 0  # Track when goo was last used
-        lastGumdropTime = 0  # Track when gumdrop was last used
         gooTimerActive = True  # Flag to control goo timer thread
-        gumdropTimerActive = True  # Flag to control gumdrop timer thread
         honeyWreathReturnEnabled = shouldUseHoneyWreathReturn()
         honeyWreathPending = False
         honeyWreathWaitLogged = False
@@ -490,31 +488,18 @@ class GatherMixin:
         else:
             self.logger.webhook(f"Gathering: {field.title()}", f"Limit: {gatherTimeLimit} - {fieldSetting['shape']} - Backpack: {backpackLimitLabel}{gooStatus}", "light green", route_category="gathering")
 
-        # Goo timer thread: always 3s interval if goo quest, else field setting
+        # Goo timer thread: use gumdrops (which make goo) every 3s for goo quests,
+        # otherwise at the field's goo interval when the field has goo enabled
         def gooTimerThread():
             nonlocal lastGooTime
+            useGoo = questGumdrops or fieldSetting.get("goo", False)
+            gooInterval = 3 if questGumdrops else int(fieldSetting.get("goo_interval", 3))
             while gooTimerActive:
                 currentTime = time.time()
-                gooInterval = 3 if questGumdrops else int(fieldSetting.get("goo_interval", 3))
-                if fieldSetting.get("goo", False) and (currentTime - lastGooTime) >= gooInterval:
+                if useGoo and (currentTime - lastGooTime) >= gooInterval:
                     self.keyboard.press(str(self.setdat["goo_slot"]))
                     time.sleep(0.05)
                     lastGooTime = currentTime
-                time.sleep(0.5)
-
-        # Gumdrop timer thread: 3s if questGumdrops, else field setting
-        def gumdropTimerThread():
-            nonlocal lastGumdropTime
-            while gumdropTimerActive:
-                currentTime = time.time()
-                gumdropInterval = 3 if questGumdrops else int(fieldSetting.get("gumdrop_interval", 3))
-                if (currentTime - lastGumdropTime) >= gumdropInterval:
-                    if questGumdrops:
-                        self.keyboard.press(str(self.setdat["quest_gumdrop_slot"]))
-                    elif fieldSetting.get("gumdrops", False):
-                        self.keyboard.press(str(self.setdat["gumdrop_slot"]))
-                    time.sleep(0.05)
-                    lastGumdropTime = currentTime
                 time.sleep(0.5)
 
         def inactiveHoneyTimerThread():
@@ -538,8 +523,6 @@ class GatherMixin:
 
         gooThread = threading.Thread(target=gooTimerThread, daemon=True)
         gooThread.start()
-        gumdropThread = threading.Thread(target=gumdropTimerThread, daemon=True)
-        gumdropThread.start()
         if inactiveHoneyResetEnabled:
             inactiveHoneyThread = threading.Thread(target=inactiveHoneyTimerThread, daemon=True)
             inactiveHoneyThread.start()
@@ -571,9 +554,8 @@ class GatherMixin:
             gatherSession.add_cleanup(liveQuestProgressReport.stop)
         
         def stopGather(reason="completed"):
-            nonlocal gooTimerActive, gumdropTimerActive, inactiveHoneyTimerActive, questMenuKeptOpen
+            nonlocal gooTimerActive, inactiveHoneyTimerActive, questMenuKeptOpen
             gooTimerActive = False  # Stop the goo timer thread
-            gumdropTimerActive = False  # Stop the gumdrop timer thread
             inactiveHoneyTimerActive = False
             if fieldSetting["shift_lock"]: 
                 self.keyboard.press('shift')
@@ -600,13 +582,9 @@ class GatherMixin:
             except InterruptRequested:
                 stopGather("interrupted")
                 raise
-            
-            # goo and gumdrop timers are now handled by background threads
 
             patternStartTime = time.time()
             mouse.mouseDown()
-
-            # (No need to press quest gumdrops here, handled by timer)
 
             cycleResult = gatherSession.run_cycle(gatherNameSpace, owner=self)
             pattern = cycleResult.pattern
