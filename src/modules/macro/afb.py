@@ -203,7 +203,7 @@ class AFBMixin:
         dice = self.setdat["AFB_dice"]
         glitter = self.setdat["AFB_glitter"]
         diceslot = self.setdat["AFB_slotD"]
-        glitterslot = self.setdat["AFB_slotG"]
+        glitterslot = self.setdat["glitter_slot"]
         if not glitter:
             self.AFBglitter = False
             self.cAFBglitter = False
