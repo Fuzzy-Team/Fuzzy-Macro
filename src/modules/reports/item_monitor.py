@@ -314,10 +314,9 @@ def generate_item_report(snapshot, setdat=None, report_type="hourly", output_pat
 
     gui_theme = setdat.get("gui_theme", "Brown")
     theme = resolveReportTheme(gui_theme)
-    accent = setdat.get("hourly_report_accent", "green")
     time_format = setdat.get("hourly_report_time_format", 24)
 
-    drawer = ItemReportDrawer(time_format=time_format, theme=theme, accent=accent)
+    drawer = ItemReportDrawer(time_format=time_format, theme=theme)
     canvas = drawer.draw(snapshot, report_type=report_type)
     w, h = canvas.size
     canvas = canvas.resize((int(w * 1.2), int(h * 1.2)))
@@ -336,10 +335,10 @@ class ItemReportDrawer:
 
     VERSION = "0.1"
 
-    def __init__(self, time_format=24, theme="dark", accent="green"):
+    def __init__(self, time_format=24, theme="dark"):
         from modules.reports.drawer import HourlyReportDrawer
         # Reuse theme/palette construction from the hourly drawer
-        base = HourlyReportDrawer(time_format=time_format, theme=theme, accent=accent)
+        base = HourlyReportDrawer(time_format=time_format, theme=theme)
         self.backgroundColor = base.baseBackgroundColor
         self.panelColor = base.panelColor
         self.panelOutline = base.panelOutline
