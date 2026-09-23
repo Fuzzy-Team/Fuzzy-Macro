@@ -198,6 +198,35 @@ class UpdateCleanupTests(TestCase):
             update._finish_file_update(str(self.extracted), str(self.install), PROTECTED)
         self.assertFalse(installed.exists())
 
+    def test_pending_record_without_bootstrap_ref_does_not_block_cleanup(self):
+        """Accept a pending record without an optional bootstrap reference."""
+        stale = self._write(self.install, "old.txt", "old")
+        self._write_manifest({"old.txt": self._hash(stale)})
+        pending_path = self.install / update.PENDING_CLEANUP
+        pending_path.write_text(json.dumps({"files": {}}), encoding="utf-8")
+
+        update._finish_file_update(str(self.extracted), str(self.install), PROTECTED)
+
+        self.assertFalse(stale.exists())
+        self.assertIsNone(json.loads(pending_path.read_text())["bootstrap_ref"])
+
+    def test_manifest_hash_takes_precedence_over_historical_hash(self):
+        """Use the installed manifest when its file differs from an older tag."""
+        stale = self._write(self.install, "changed.txt", "new release")
+        self._write_manifest({"changed.txt": self._hash(stale)})
+        pending_path = self.install / update.PENDING_CLEANUP
+        pending_path.write_text(
+            json.dumps({"bootstrap_ref": "1.3.2", "files": {}}), encoding="utf-8"
+        )
+        with mock.patch.object(
+            update,
+            "_download_historical_hashes",
+            return_value={"changed.txt": {"a" * 40}},
+        ):
+            update._finish_file_update(str(self.extracted), str(self.install), PROTECTED)
+
+        self.assertFalse(stale.exists())
+
     def test_bootstrap_finds_files_from_older_release_tags(self):
         """Remove a historical leftover absent from the current installed tag."""
         stale = self._write(self.install, "very_old.txt", "old release")

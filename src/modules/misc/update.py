@@ -367,6 +367,7 @@ def _remove_obsolete_files(
             or not isinstance(pending.get("files"), dict)
         ):
             raise ValueError("Invalid pending-cleanup record")
+        pending.setdefault("bootstrap_ref", None)
         pending["files"] = {
             path: sha for path, sha in pending["files"].items()
             if isinstance(path, str) and isinstance(sha, str)
