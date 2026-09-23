@@ -143,6 +143,19 @@
         },
       ]);
 
+      buildStandardContainer(parentBSS, "Glitter", "", [
+        {
+          id: "glitter_slot",
+          title: "Glitter Slot",
+          desc: "The hotbar slot of your Glitter, used by field booster extending, Auto Field Boost, and TAD alt extending. Set to 0 to find Glitter in the inventory.",
+          type: {
+            name: "dropdown",
+            data: [0, 1, 2, 3, 4, 5, 6, 7],
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+      ]);
+
       buildStandardContainer(parentBSS, "Balloon", "", [
         {
           id: "convert_balloon",

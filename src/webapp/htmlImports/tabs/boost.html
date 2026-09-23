@@ -116,20 +116,10 @@
         {
           id: "field_booster_glitter_extend_enabled",
           title: "Glitter Extending",
-          desc: "Use Glitter at 14:55 to extend each detected field booster.",
+          desc: "Use Glitter at 14:55 to extend each detected field booster. Uses the Glitter Slot in Config.",
           type: {
             name: "checkbox",
             triggerFunction: saveProfileTriggerFunction,
-          },
-        },
-        {
-          id: "field_booster_glitter_slot",
-          title: "Glitter Hotbar Slot",
-          desc: "Shared with all Glitter settings. Set to 0 to find Glitter in the inventory.",
-          type: {
-            name: "dropdown",
-            data: [0, 1, 2, 3, 4, 5, 6, 7],
-            triggerFunction: "syncGlitterHotbarSlot(this)",
           },
         },
         {
@@ -248,20 +238,10 @@
         {
           id: "AFB_glitter",
           title: "Glitter",
-          desc: "Allow Glitter to maintain buff",
+          desc: "Allow Glitter to maintain buff. Uses the Glitter Slot in Config.",
           type: {
             name: "checkbox",
             triggerFunction: saveProfileTriggerFunction,
-          },
-        },
-        {
-          id: "AFB_slotG",
-          title: "Glitter Slot",
-          desc: "Hotbar of Glitter <br> Set to 0 to find via inventory",
-          type: {
-            name: "dropdown",
-            data: [0, 1, 2, 3, 4, 5, 6, 7],
-            triggerFunction: "syncGlitterHotbarSlot(this)",
           },
         },
         {
@@ -443,14 +423,8 @@
         {
           id: "tad_alt_glitter_extend_enabled",
           title: "Glitter Extending",
-          desc: "Have the host use Glitter five seconds before the TAD alt boost expires, then return alts after a second boost duration (30 minutes total when Boost Duration is 900).",
+          desc: "Have the host use Glitter five seconds before the TAD alt boost expires, then return alts after a second boost duration (30 minutes total when Boost Duration is 900). Uses the Glitter Slot in Config.",
           type: { name: "checkbox", triggerFunction: saveProfileTriggerFunction },
-        },
-        {
-          id: "tad_alt_glitter_slot",
-          title: "Glitter Hotbar Slot",
-          desc: "Shared with all Glitter settings. Set to 0 to find Glitter in the inventory.",
-          type: { name: "dropdown", data: [0, 1, 2, 3, 4, 5, 6, 7], triggerFunction: "syncGlitterHotbarSlot(this)" },
         },
       ]);
     </script>

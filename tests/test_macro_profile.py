@@ -150,6 +150,20 @@ class MacroProfileStoreTests(unittest.TestCase):
         self.assertEqual(settings["goo_slot"], 3)
         self.assertNotIn("quest_gumdrop_slot", settings)
 
+    def glitter_slot(self, profile_settings):
+        self.write("main", "settings.txt", profile_settings)
+        store = MacroProfileStore(self.profiles_dir, PROFILE_DEFAULTS, {**GENERAL_DEFAULTS, "glitter_slot": 0}, FIELD_DEFAULTS)
+        settings = store.initialize("main").as_dict()["settings"]
+        for old in ("field_booster_glitter_slot", "tad_alt_glitter_slot", "AFB_slotG"):
+            self.assertNotIn(old, settings)
+        return settings["glitter_slot"]
+
+    def test_glitter_slot_keeps_a_slot_the_user_chose(self):
+        self.assertEqual(self.glitter_slot("field_booster_glitter_slot=4\ntad_alt_glitter_slot=4\nAFB_slotG=4\n"), 4)
+
+    def test_glitter_slot_uses_inventory_when_only_old_defaults_are_stored(self):
+        self.assertEqual(self.glitter_slot("field_booster_glitter_slot=1\ntad_alt_glitter_slot=1\nAFB_slotG=0\n"), 0)
+
     def test_default_legacy_quest_gather_keeps_per_quest_settings(self):
         self.write("main", "settings.txt", "quest_gather_mins=0\npolar_bear_quest_gather_mins=5\n")
         store = MacroProfileStore(self.profiles_dir, {**PROFILE_DEFAULTS, "quest_gather_mins": 0, "polar_bear_quest_gather_mins": 2}, GENERAL_DEFAULTS, FIELD_DEFAULTS)

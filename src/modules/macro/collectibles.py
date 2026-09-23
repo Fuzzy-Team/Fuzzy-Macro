@@ -207,7 +207,7 @@ class CollectiblesMixin:
         if not self.setdat.get("field_booster_glitter_extend_enabled", False):
             return
 
-        glitterSlot = min(7, max(0, int(self.setdat.get("field_booster_glitter_slot", 1) or 0)))
+        glitterSlot = min(7, max(0, int(self.setdat.get("glitter_slot", 0) or 0)))
         with self._fieldBoosterGlitterLock:
             self._fieldBoosterGlitterGeneration += 1
             self._fieldBoosterGlitterPending = (time.monotonic() + 14 * 60 + 55, glitterSlot)
