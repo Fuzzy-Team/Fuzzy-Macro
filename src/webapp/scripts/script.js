@@ -1582,14 +1582,15 @@ function setDropdownValue(ele, value) {
     updateMultiDropdownDisplay(ele, value);
     return;
   }
-  const optionsEle = ele.children[1].children[0];
-  for (let i = 0; i < optionsEle.children.length; i++) {
-    const x = optionsEle.children[i];
-    if (x.dataset.value == value) {
-      updateDropDownDisplay(x);
-      break;
-    }
-  }
+  const options = Array.from(ele.children[1].children[0].children);
+  // settings that were never saved (or hold a value that isn't an option) show the default,
+  // matching the default the macro uses, instead of the "None" placeholder
+  const defaultValue = String(ele.dataset.default ?? "").toLowerCase();
+  const option =
+    options.find((x) => x.dataset.value == value) ||
+    options.find((x) => defaultValue && x.dataset.value == defaultValue) ||
+    options[0];
+  if (option) updateDropDownDisplay(option);
 }
 //close all other dropdown menus
 //if ele is undefined, close all menus
