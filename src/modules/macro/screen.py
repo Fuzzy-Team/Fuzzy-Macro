@@ -5,7 +5,7 @@ import modules.screen.ocr as ocr
 from modules.controls.sleep import pause_aware_time as time
 from modules.macro.game_data import cyrillicToLatin
 from modules.misc.imageManipulation import adjustImage
-from modules.screen.imageSearch import locateImageOnScreen, locateTransparentImageOnScreen
+from modules.screen.imageSearch import captureRegionBGR, locateImageInScreen, locateImageOnScreen, locateTransparentImageOnScreen
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP
 from modules.submacros.backpack import bpc
 
@@ -173,9 +173,19 @@ class ScreenMixin:
             mouse.click()
         return True
 
-    def blueTextImageSearch(self, text, threshold=0.7):
+    def blueTextScreen(self):
+        """Screenshot the blue text area once, to check several messages against the same frame."""
+        return captureRegionBGR(*self._blueTextRegion())
+
+    def _blueTextRegion(self):
+        w = self.robloxWindow
+        return w.mx+(w.mw*3/4), w.my+(w.mh*3/5), w.mw/4, w.mh-w.mh*3/5
+
+    def blueTextImageSearch(self, text, threshold=0.7, screen=None):
         target = self.adjustImage("./images/blue", text)
-        return locateImageOnScreen(target, self.robloxWindow.mx+(self.robloxWindow.mw*3/4), self.robloxWindow.my+(self.robloxWindow.mh*3/5), self.robloxWindow.mw/4, self.robloxWindow.mh-self.robloxWindow.mh*3/5, threshold)
+        if screen is None:
+            return locateImageOnScreen(target, *self._blueTextRegion(), threshold)
+        return locateImageInScreen(target, screen, threshold)
 
     #returns the coordinates of the keep old text
     def keepOldCheck(self):

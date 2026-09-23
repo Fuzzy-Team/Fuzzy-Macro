@@ -35,12 +35,13 @@ class MobMixin:
             self.logger.webhook("", "Waiting for Mondo to be defeated", "light green")
             self.keyboard.press("shift") #moves slightly up (or down) when hitting wall, so this reduces that
             while True:
+                screen = self.blueTextScreen()
                 #defeat
-                if self.blueTextImageSearch("defeated") and self.blueTextImageSearch("mondo"): 
+                if self.blueTextImageSearch("defeated", screen=screen) and self.blueTextImageSearch("mondo", screen=screen):
                     self.saveTiming("mondo") 
                     break
                 #died
-                if self.blueTextImageSearch("died"):
+                if self.blueTextImageSearch("died", screen=screen):
                     self.died = True
                     self.keyboard.press("shift")
                     self.logger.webhook("", "Player Died", "red", "screen", ping_category="ping_character_deaths")
@@ -163,10 +164,11 @@ class MobMixin:
             timeout = 40
 
         while True:
-            if self.blueTextImageSearch("died"):
+            screen = self.blueTextScreen()
+            if self.blueTextImageSearch("died", screen=screen):
                 self.mobRunStatus = "dead"
                 break
-            elif self.blueTextImageSearch("defeated"):
+            elif self.blueTextImageSearch("defeated", screen=screen):
                 self.mobRunStatus = "looting"
                 break
             elif time.time() - st > timeout:
@@ -297,16 +299,17 @@ class MobMixin:
     def stingerHuntBackground(self):
         #find vic
         while not self.stopVic:
+            screen = self.blueTextScreen()
             #detect which field the vic is in
             if self.vicField is None:
                 for field in self.vicFields:
-                    if self.blueTextImageSearch(f"vic{field}", 0.75):
+                    if self.blueTextImageSearch(f"vic{field}", 0.75, screen=screen):
                         self.vicField = field
                         break
             else:
-                if self.blueTextImageSearch("died"): self.died = True
+                if self.blueTextImageSearch("died", screen=screen): self.died = True
             
-            if self.blueTextImageSearch("vicdefeat"):
+            if self.blueTextImageSearch("vicdefeat", screen=screen):
                 self.vicStatus = "defeated"
 
     def stingerHunt(self):
@@ -536,9 +539,10 @@ class MobMixin:
 
     def coconutCrabBackground(self):
         while self.bossStatus is None:
-            if self.blueTextImageSearch("died"):
+            screen = self.blueTextScreen()
+            if self.blueTextImageSearch("died", screen=screen):
                 self.died = True
-            if self.blueTextImageSearch("coconutcrab_defeat", 0.8):
+            if self.blueTextImageSearch("coconutcrab_defeat", 0.8, screen=screen):
                 self.bossStatus = "defeated"
 
     def coconutCrab(self):
@@ -613,12 +617,13 @@ class MobMixin:
 
             # Continue the movement pattern and check for defeat
             while self.bossStatus is None and not self.died:
+                screen = self.blueTextScreen()
                 # Check if defeated
-                if self.blueTextImageSearch("defeated"):
+                if self.blueTextImageSearch("defeated", screen=screen):
                     self.bossStatus = "defeated"
                     break
                 # Check if died
-                if self.blueTextImageSearch("died"):
+                if self.blueTextImageSearch("died", screen=screen):
                     self.died = True
                     break
                 # Continue movement
@@ -661,12 +666,13 @@ class MobMixin:
             
             # Continue the movement pattern and check for defeat
             while self.bossStatus is None and not self.died:
+                screen = self.blueTextScreen()
                 # Check if defeated
-                if self.blueTextImageSearch("defeated"):
+                if self.blueTextImageSearch("defeated", screen=screen):
                     self.bossStatus = "defeated"
                     break
                 # Check if died
-                if self.blueTextImageSearch("died"):
+                if self.blueTextImageSearch("died", screen=screen):
                     self.died = True
                     break
                 # Continue movement
