@@ -144,8 +144,8 @@ class UpdateCleanupTests(TestCase):
     def test_bootstrap_is_used_only_without_manifest(self):
         """Fetch the installed release tree only when no manifest exists."""
         stale = self._write(self.install, "old.txt", "old")
-        obsolete = {"old.txt": self._hash(stale)}
-        with mock.patch.object(update, "_download_installed_manifest", return_value=obsolete) as download:
+        historical = {"old.txt": {self._hash(stale)}}
+        with mock.patch.object(update, "_download_historical_hashes", return_value=historical) as download:
             update._remove_obsolete_files(
                 str(self.extracted), str(self.install), PROTECTED, previous_ref="1.3.3"
             )
@@ -154,7 +154,7 @@ class UpdateCleanupTests(TestCase):
 
         stale = self._write(self.install, "old.txt", "old")
         self._write_manifest({"old.txt": self._hash(stale)})
-        with mock.patch.object(update, "_download_installed_manifest") as download:
+        with mock.patch.object(update, "_download_historical_hashes") as download:
             update._remove_obsolete_files(str(self.extracted), str(self.install), PROTECTED)
         download.assert_not_called()
         self.assertFalse(stale.exists())
@@ -162,7 +162,7 @@ class UpdateCleanupTests(TestCase):
     def test_bootstrap_download_failure_skips_cleanup(self):
         """Defer bootstrap cleanup after a download failure and retry later."""
         stale = self._write(self.install, "old.txt", "old")
-        with mock.patch.object(update, "_download_installed_manifest", side_effect=OSError("offline")):
+        with mock.patch.object(update, "_download_historical_hashes", side_effect=OSError("offline")):
             update._finish_file_update(
                 str(self.extracted), str(self.install), PROTECTED, previous_ref="1.3.3"
             )
@@ -172,7 +172,7 @@ class UpdateCleanupTests(TestCase):
         self.assertTrue((self.install / update.INSTALLED_FILES_MANIFEST).exists())
 
         with mock.patch.object(
-            update, "_download_installed_manifest", return_value={"old.txt": self._hash(stale)}
+            update, "_download_historical_hashes", return_value={"old.txt": {self._hash(stale)}}
         ) as download:
             update._finish_file_update(str(self.extracted), str(self.install), PROTECTED)
         download.assert_called_once_with("1.3.3")
@@ -182,21 +182,47 @@ class UpdateCleanupTests(TestCase):
     def test_repeated_bootstrap_failure_preserves_manifest_stale_files(self):
         shipped = self._write(self.extracted, "old.txt", "old")
         installed = self._write(self.install, "old.txt", "old")
-        with mock.patch.object(update, "_download_installed_manifest", side_effect=OSError("offline")):
+        with mock.patch.object(update, "_download_historical_hashes", side_effect=OSError("offline")):
             update._finish_file_update(
                 str(self.extracted), str(self.install), PROTECTED, previous_ref="1.3.3"
             )
         self.assertEqual(self._hash(installed), self._hash(shipped))
 
         shipped.unlink()
-        with mock.patch.object(update, "_download_installed_manifest", side_effect=OSError("offline")):
+        with mock.patch.object(update, "_download_historical_hashes", side_effect=OSError("offline")):
             update._finish_file_update(str(self.extracted), str(self.install), PROTECTED)
         pending = json.loads((self.install / update.PENDING_CLEANUP).read_text())
         self.assertEqual(pending["files"]["old.txt"], self._hash(installed))
 
-        with mock.patch.object(update, "_download_installed_manifest", return_value={}):
+        with mock.patch.object(update, "_download_historical_hashes", return_value={}):
             update._finish_file_update(str(self.extracted), str(self.install), PROTECTED)
         self.assertFalse(installed.exists())
+
+    def test_bootstrap_finds_files_from_older_release_tags(self):
+        """Remove a historical leftover absent from the current installed tag."""
+        stale = self._write(self.install, "very_old.txt", "old release")
+        with mock.patch.object(
+            update,
+            "_download_historical_hashes",
+            return_value={"very_old.txt": {self._hash(stale)}},
+        ):
+            update._remove_obsolete_files(
+                str(self.extracted), str(self.install), PROTECTED, previous_ref="1.3.3"
+            )
+        self.assertFalse(stale.exists())
+
+    def test_bootstrap_keeps_unrecognized_historical_file(self):
+        """Keep a file that differs from every shipped historical hash."""
+        stale = self._write(self.install, "very_old.txt", "user edit")
+        with mock.patch.object(
+            update,
+            "_download_historical_hashes",
+            return_value={"very_old.txt": {"a" * 40}},
+        ):
+            update._remove_obsolete_files(
+                str(self.extracted), str(self.install), PROTECTED, previous_ref="1.3.3"
+            )
+        self.assertTrue(stale.exists())
 
     def test_installed_release_ref_prefers_commit_marker(self):
         """Use the installed commit when a commit update followed a release."""
@@ -240,6 +266,27 @@ class UpdateCleanupTests(TestCase):
         with mock.patch.object(update.requests, "get", return_value=response):
             with self.assertRaises(ValueError):
                 update._download_installed_manifest("1.3.3")
+
+    def test_historical_hashes_include_installed_commit_and_release_tags(self):
+        """Collect hashes from older tags as well as the installed revision."""
+        tags = mock.Mock()
+        tags.json.return_value = [
+            {"commit": {"sha": "a" * 40}},
+            {"commit": {"sha": "b" * 40}},
+        ]
+        trees = {
+            "1.3.3": {"old.txt": "1" * 40},
+            "a" * 40: {"old.txt": "2" * 40},
+            "b" * 40: {"other.txt": "3" * 40},
+        }
+        with mock.patch.object(update.requests, "get", return_value=tags), mock.patch.object(
+            update, "_download_installed_manifest", side_effect=trees.__getitem__
+        ) as download:
+            hashes = update._download_historical_hashes("1.3.3")
+
+        self.assertEqual(hashes["old.txt"], {"1" * 40, "2" * 40})
+        self.assertEqual(hashes["other.txt"], {"3" * 40})
+        self.assertEqual(download.call_count, 3)
 
     def test_incomplete_release_skips_cleanup(self):
         """Skip stale-file cleanup when required release files are absent."""

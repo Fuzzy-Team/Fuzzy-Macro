@@ -238,6 +238,37 @@ def _download_installed_manifest(ref):
     }
 
 
+def _download_historical_hashes(ref):
+    """Collect file hashes shipped by the installed commit and release tags."""
+    commits = {ref}
+    page = 1
+    while True:
+        response = requests.get(
+            f"https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/tags?per_page=100&page={page}",
+            timeout=20,
+        )
+        response.raise_for_status()
+        tags = response.json()
+        if not isinstance(tags, list):
+            raise ValueError("Invalid release tag list")
+        for tag in tags:
+            if not isinstance(tag, dict) or not isinstance(tag.get("commit"), dict):
+                raise ValueError("Invalid release tag")
+            sha = tag["commit"].get("sha")
+            if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-fA-F]{40}", sha):
+                raise ValueError("Invalid release tag commit")
+            commits.add(sha)
+        if len(tags) < 100:
+            break
+        page += 1
+
+    hashes = {}
+    for commit in sorted(commits):
+        for path, sha in _download_installed_manifest(commit).items():
+            hashes.setdefault(path, set()).add(sha)
+    return hashes
+
+
 def _safe_regular_file(destination, relative_path, protected_folders):
     """Return an in-root regular file path when it is safe to remove."""
     if _is_protected_path(relative_path, protected_folders):
@@ -353,7 +384,19 @@ def _remove_obsolete_files(
 
     if pending["bootstrap_ref"]:
         try:
-            previous_manifest.update(_download_installed_manifest(pending["bootstrap_ref"]))
+            _report_update_progress(progress_callback, 79, "Checking shipped file history")
+            historical_hashes = _download_historical_hashes(pending["bootstrap_ref"])
+            for path, hashes in historical_hashes.items():
+                if path in new_manifest or path in previous_manifest:
+                    continue
+                current_path = _safe_regular_file(destination, path, protected_folders)
+                if current_path is None:
+                    continue
+                current_hash = _git_blob_sha(current_path)
+                if current_hash in hashes:
+                    previous_manifest[path] = current_hash
+                else:
+                    print(f"[updater] Kept edited or unrecognized obsolete file {path}")
             pending["bootstrap_ref"] = None
         except Exception as exc:
             print(f"[updater] Could not fetch installed-release tree; skipping bootstrap cleanup: {exc}")
