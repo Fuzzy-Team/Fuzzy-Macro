@@ -106,7 +106,7 @@ function buildInput(id, type) {
     const defaultDataValue = type.multiple ? "[]" : "none";
     let html = `
         <div data-onchange="${type.triggerFunction
-      }" id = ${id} class="custom-select poppins-regular" data-multiple="${type.multiple ? "true" : "false"}" data-max-selections="${type.maxSelections ? type.maxSelections : 0}" style="width: ${type.length ? type.length : 10
+      }" id = ${id} class="custom-select poppins-regular" data-default="${type.default ?? ""}" data-multiple="${type.multiple ? "true" : "false"}" data-max-selections="${type.maxSelections ? type.maxSelections : 0}" style="width: ${type.length ? type.length : 10
       }rem; margin-top: 0.6rem;">
             <div class="select-area">
                 <div class = "value" data-value='${defaultDataValue}'>${defaultValue}</div>
