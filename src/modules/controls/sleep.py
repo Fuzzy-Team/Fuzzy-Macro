@@ -160,3 +160,19 @@ def pauseable_sleep(duration):
         chunk = min(0.05, remaining)
         if chunk > 0:
             time.sleep(chunk)
+
+
+class _PauseAwareTimeModule:
+    """The time module, but sleep() respects pause and interrupt state."""
+
+    def __init__(self, time_module):
+        self._time = time_module
+
+    def sleep(self, duration):
+        return pauseable_sleep(duration)
+
+    def __getattr__(self, name):
+        return getattr(self._time, name)
+
+
+pause_aware_time = _PauseAwareTimeModule(time)
