@@ -818,7 +818,16 @@ DEFAULT_GENERAL_SETTINGS = {'hive_number': 1,
  'autoclicker_keybind': '',
  'auto_gifted_basic_bee_start_keybind': '',
  'macro_mode': 'normal',
- 'ignore_petal_quests': False}
+ 'ignore_petal_quests': False,
+ # values below match the fallbacks the macro already used for these settings
+ 'max_cannon_attempts': 3,
+ 'gui_theme': 'Brown',
+ 'update_channel': 'stable',
+ 'auto_update_check_disabled': False,
+ 'webhook_time_format': 24,
+ 'discord_rich_presence': False,
+ 'hourly_report_accent': 'green',
+ 'hourly_report_embed_text': True}
 
 DEFAULT_FIELDS = {'sunflower': {'shift_lock': False,
                'field_drift_compensation': False,
@@ -1616,6 +1625,15 @@ DEFAULT_FIELDS = {'sunflower': {'shift_lock': False,
                                                 'goo': False,
                                                 'goo_interval': '3'}}}}
 
+# Gather settings some fields don't list above, with the values the macro falls back to.
+for _field_defaults in DEFAULT_FIELDS.values():
+    _field_defaults.setdefault('infinite_gather', False)
+    _field_defaults.setdefault('use_whirlwig_fallback', False)
+    _field_defaults.setdefault('goo', False)
+    _field_defaults.setdefault('goo_interval', 3)
+    _field_defaults.setdefault('blooms_ai_model', 'Standard')
+del _field_defaults
+
 DEFAULT_FUZZY_AI_TOKEN_RANKINGS = {'sunflower': {'preferred_tokens': 'Token Link,Focus,Melody,Blue Boost,Honey Mark Station,Honey Mark Token,Pollen Mark '
                                    'Station,Pollen Mark Token,Haste',
                'ignored_tokens': 'Honey Token,Blueberry,Bloom,Duped Baby Love,Duped Beamstorm,Duped Beesmas Cheer '
@@ -1958,7 +1976,8 @@ DEFAULT_MANUAL_PLANTERS = ''
 DEFAULT_AUTO_PLANTERS = {'planters': [{'planter': '', 'nectar': '', 'field': '', 'harvest_time': 0, 'nectar_est_percent': 0},
               {'planter': '', 'nectar': '', 'field': '', 'harvest_time': 0, 'nectar_est_percent': 0},
               {'planter': '', 'nectar': '', 'field': '', 'harvest_time': 0, 'nectar_est_percent': 0}],
- 'nectar_last_field': {'comforting': '', 'refreshing': '', 'satisfying': '', 'motivating': '', 'invigorating': ''}}
+ 'nectar_last_field': {'comforting': '', 'refreshing': '', 'satisfying': '', 'motivating': '', 'invigorating': ''},
+ 'gather': False}
 
 DEFAULT_CURRENT_PROFILE = 'default'
 

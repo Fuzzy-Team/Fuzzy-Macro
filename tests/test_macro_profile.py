@@ -110,6 +110,10 @@ class MacroProfileStoreTests(unittest.TestCase):
         self.assertIn("gui_theme=Midnight", self.read(self.path("main", "generalsettings.txt")))
         self.assertEqual(self.store.snapshot("main").as_dict()["settings"]["gui_theme"], "Midnight")
 
+    def test_values_saved_wrapped_by_an_old_gui_bug_are_unwrapped(self):
+        self.write("main", "generalsettings.txt", "macro_mode={'source': 'generalsettings.txt', 'value': 'quest'}\n")
+        self.assertEqual(self.store.initialize("main").as_dict()["settings"]["macro_mode"], "quest")
+
     def test_default_legacy_quest_gather_keeps_per_quest_settings(self):
         self.write("main", "settings.txt", "quest_gather_mins=0\npolar_bear_quest_gather_mins=5\n")
         store = MacroProfileStore(self.profiles_dir, {**PROFILE_DEFAULTS, "quest_gather_mins": 0, "polar_bear_quest_gather_mins": 2}, GENERAL_DEFAULTS, FIELD_DEFAULTS)
