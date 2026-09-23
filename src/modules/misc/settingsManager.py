@@ -1378,9 +1378,7 @@ def _moveMisplacedSettings(settings_path, generalsettings_path):
         saveDict(generalsettings_path, general_data)
 
 def loadSettings():
-    snapshot = getMacroProfileSnapshot(profileName)["settings"]
-    general_keys = set(getDefaultGeneralSettings()) - set(getDefaultProfileSettings())
-    return {key: value for key, value in snapshot.items() if key not in general_keys}
+    return _getMacroProfileStore().profile_settings(profileName)
 
     # Legacy implementation retained temporarily for compatibility archaeology.
     ensureProfileFiles()
