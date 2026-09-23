@@ -212,8 +212,9 @@ class MacroProfileStore:
 
         profile_data, general_data, settings_changed = self._normalize_settings(profile_data, general_data)
         fields_data, fields_changed = self._normalize_fields(fields_data)
-        changed[self.PROFILE_FILE] = settings_changed[0]
-        changed[self.GENERAL_FILE] = settings_changed[1]
+        gumdrop_slot_merged = self._merge_quest_gumdrop_slot(profile_data, general_data, fields_data)
+        changed[self.PROFILE_FILE] = settings_changed[0] or gumdrop_slot_merged
+        changed[self.GENERAL_FILE] = settings_changed[1] or gumdrop_slot_merged
         changed[self.FIELDS_FILE] = fields_changed
         return profile_data, general_data, fields_data, errors, changed
 
@@ -317,6 +318,22 @@ class MacroProfileStore:
                     value.append(copy.deepcopy(default[len(value)] if len(value) < len(default) else default[-1]))
 
         return profile_data, general_data, (profile_data != original_profile, general_data != original_general)
+
+    @staticmethod
+    def _merge_quest_gumdrop_slot(profile_data, general_data, fields_data):
+        """Goo quests now use goo_slot (the gumdrop slot) instead of a separate quest_gumdrop_slot.
+
+        Keep the slot the user actually relies on: the quest slot if only goo quests use
+        gumdrops, otherwise the goo slot. Returns True if the old setting was removed.
+        """
+        source = profile_data if "quest_gumdrop_slot" in profile_data else general_data
+        if "quest_gumdrop_slot" not in source:
+            return False
+        quest_slot = source.pop("quest_gumdrop_slot")
+        uses_field_goo = any(isinstance(field, dict) and field.get("goo") for field in fields_data.values())
+        if profile_data.get("quest_use_gumdrops") and not uses_field_goo:
+            general_data["goo_slot"] = quest_slot
+        return True
 
     def _normalize_fields(self, fields_data):
         original = copy.deepcopy(fields_data)
