@@ -42,10 +42,11 @@ from modules.misc import messageBox
 from modules.submacros.memoryMatch import MemoryMatch
 import math
 import ast
-from modules.submacros.hourlyReport import BUFF_RENDER_CONFIG, HourlyReport, BuffDetector
-from modules.submacros.itemMonitor import ItemMonitor
+from modules.reports.buffs import BUFF_RENDER_CONFIG, BuffDetector
+from modules.reports.hourly import HourlyReport
+from modules.reports.item_monitor import ItemMonitor
 from modules.submacros.tadAltSync import TadAltSync
-from modules.submacros.liveGatherReport import LiveGatherReport, LiveQuestProgressReport
+from modules.reports.live_gather import LiveGatherReport, LiveQuestProgressReport
 from difflib import SequenceMatcher
 import fuzzywuzzy.process
 import fuzzywuzzy
