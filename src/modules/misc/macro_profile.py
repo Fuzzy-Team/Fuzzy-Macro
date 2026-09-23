@@ -284,6 +284,15 @@ class MacroProfileStore:
         for key in list(profile_data):
             if key in general_keys and key not in profile_keys:
                 general_data.setdefault(key, profile_data.pop(key))
+        # The three glitter slots were one setting the GUI kept in sync. Keep a slot the
+        # user chose (one that differs from its old default); otherwise find Glitter in
+        # the inventory (0) rather than pressing a slot that may hold something else.
+        old_glitter_defaults = {"field_booster_glitter_slot": 1, "tad_alt_glitter_slot": 1, "AFB_slotG": 0}
+        stored = {key: data.pop(key) for data in (profile_data, general_data) for key in list(data) if key in old_glitter_defaults}
+        chosen = [stored[key] for key in old_glitter_defaults if key in stored and stored[key] != old_glitter_defaults[key]]
+        if chosen:
+            general_data["glitter_slot"] = chosen[0]
+
         # The old global quest gather override becomes per-quest settings, but only
         # when the user changed it; a default value must not overwrite per-quest ones.
         legacy = {key: profile_data[key] for key in ("quest_gather_mins", "quest_gather_return") if key in profile_data}
