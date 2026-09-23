@@ -7,9 +7,6 @@ import imagehash
 def pillowToCv2(img):
     return cv2.cvtColor(np.array(img), cv2.COLOR_BGR2RGB)
 
-def pillowToHash(img):
-    return imagehash.average_hash(img)
-
 #resize the image based on the user's screen coordinates
 def adjustImage(folder, imageName, display_type):
     #get a list of all images and find the name of the one that matches

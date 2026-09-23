@@ -11,9 +11,6 @@ def get_sample_colors():
     return [(255, 255, 255), (18, 18, 21)]
 
 
-def _color_distance(c1, c2):
-    return sum((int(a) - int(b)) ** 2 for a, b in zip(c1, c2)) ** 0.5
-
 
 def percent_pixels_similar_to_color(x, y, w, h, target_color, tolerance=40):
     """Capture the region (x,y,w,h) and return fraction (0..1) of pixels

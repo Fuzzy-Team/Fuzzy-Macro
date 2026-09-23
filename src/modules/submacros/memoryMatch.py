@@ -489,25 +489,6 @@ class MemoryMatch:
             self._record_seen(tile_hash, i)
             break
 
-    def _find_matching_tile(self, tile_hash: imagehash.ImageHash, mm_data: List[Optional[imagehash.ImageHash]], 
-                           claimed_coords: Set[int], exclude_index: Optional[int] = None) -> Optional[int]:
-        """Find a matching tile in the existing data, optionally excluding an index.
-
-        Args:
-            tile_hash: The hash of the tile to find a match for.
-            mm_data: List of hashes for tiles already seen.
-            claimed_coords: Set of indices already claimed/matched.
-            exclude_index: Optional index to skip when searching (prevents matching a tile with itself).
-        """
-        for j, existing_hash in enumerate(mm_data):
-            if existing_hash is None or j in claimed_coords:
-                continue
-            if exclude_index is not None and j == exclude_index:
-                continue
-            if self._are_images_similar(tile_hash, existing_hash):
-                return j
-        return None
-
     def _record_seen(self, tile_hash: imagehash.ImageHash, index: int) -> None:
         """Record a seen tile hash into buckets for the current game."""
         for k, (bucket_hash, indices) in enumerate(self.seen_buckets):

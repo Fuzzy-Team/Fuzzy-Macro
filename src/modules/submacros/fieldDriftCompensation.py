@@ -1,6 +1,5 @@
 from modules.misc.imageManipulation import pillowToCv2
 from modules.screen.screenshot import mssScreenshot
-from modules.misc.appManager import openApp
 import modules.misc.settingsManager as settingsManager
 from modules.controls.keyboard import keyboard
 import numpy as np
@@ -10,7 +9,6 @@ import pyautogui as pag
 from modules.screen.robloxWindow import RobloxWindowBounds
 import os
 import platform
-import shutil
 try:
     from PIL import Image
 except Exception:
@@ -127,15 +125,6 @@ class fieldDriftCompensation():
             return
         print(f"[field drift compensation] {message}. Falling back to the current drift compensation method.")
         self._sprinkler_warning_shown = True
-
-    def _delete_model_path(self, model_path):
-        try:
-            if os.path.isdir(model_path):
-                shutil.rmtree(model_path)
-            elif os.path.exists(model_path):
-                os.remove(model_path)
-        except Exception as e:
-            print(f"[field drift compensation] could not delete alternate model {model_path}: {e}")
 
     def _load_sprinkler_model(self):
         if self._sprinkler_session is not None:

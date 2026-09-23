@@ -1,6 +1,5 @@
 import os
 import cv2
-import numpy as np
 from modules.screen.screenData import getScreenData
 from functools import lru_cache
 

@@ -1502,18 +1502,6 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                             "weight": max(0.5, 1.35 - (i * 0.12))
                         }
 
-                    def emptyAutoPlanterSlot():
-                        return {
-                            "planter": "",
-                            "nectar": "",
-                            "field": "",
-                            "harvest_time": 0,
-                            "nectar_est_percent": 0,
-                            "placed_time": 0,
-                            "grow_duration": 0,
-                            "natural_grow_duration": 0
-                        }
-
                     def emptyFieldDegradationState():
                         return {
                             fieldName: {
