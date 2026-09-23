@@ -630,19 +630,6 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         return override
 
     #macro.rejoin()
-    # Cache settings to avoid reloading on every iteration
-    settings_cache = {}
-    last_settings_load = 0
-    settings_cache_duration = 0.5  # Reload settings every 0.5 seconds max
-    
-    def get_cached_settings():
-        nonlocal settings_cache, last_settings_load
-        current_time = time.time()
-        if current_time - last_settings_load > settings_cache_duration:
-            settings_cache = settingsManager.loadAllSettings()
-            last_settings_load = current_time
-        return settings_cache
-
     def get_task_list_order(settings):
         task_list = settings.get("task_list", None)
         if isinstance(task_list, list):
@@ -696,8 +683,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         macro.completedQuestWatchTasks.clear()
         macro.completedQuestWatchObjectives.clear()
         
-        macro.setdat = get_cached_settings()
-        # Check if profile has changed and reload settings if needed
+        # Reload settings and fields from one profile snapshot.
         macro.checkAndReloadSettings()
 
         # Migration from old boolean flags to macro_mode is now handled in settings loader

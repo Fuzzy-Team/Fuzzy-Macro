@@ -202,7 +202,7 @@ elif version_at_least "$os_ver" "10.15.0"; then
 	# OpenCV 4.10 has a compatible macOS 10.15 Intel wheel. Keep exactly one
 	# OpenCV package installed because all variants share the cv2 namespace.
 	pip uninstall -y opencv-python opencv-contrib-python opencv-python-headless opencv-contrib-python-headless
-	install_pip_package "opencv-python==4.10.0.84 numpy==1.19.1 Polygon3" "--force-reinstall"
+	install_pip_package "opencv-python==4.10.0.84 numpy==1.19.1" "--force-reinstall"
 	install_pip_package "easyocr" "--no-deps"
 	install_pip_package "torch"
 	install_pip_package "torchvision>=0.5"
@@ -219,7 +219,6 @@ else
 	#python"${python_ver}" -m pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org paddlepaddle==2.4.2 -i https://pypi.tuna.tsinghua.edu.cn/simple
 	#python"${python_ver}" -m pip install --no-deps --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org paddleocr==2.6.1.3
 	#printf "\033[31;1mInstalling lxml, this can take a while \033[0m\n"
-	#python"${python_ver}" -m pip install --default-timeout=100 --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org attrdict beautifulsoup4 cython fire fonttools imgaug lanms-neo==1.0.2 lmdb lxml opencv-contrib-python==4.6.0.66 opencv-python==4.6.0.66 openpyxl Polygon3 premailer pyclipper pymupdf python-docx rapidfuzz scikit-image shapely tqdm visualdl
 	#pip"${python_ver}" install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org protobuf==3.20.0
 	#pip"${python_ver}" install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org orjson==3.9.6
 	install_pip_package "ocrmac"
@@ -230,15 +229,12 @@ install_pip_package "pillow"
 install_pip_package "discord-webhook"
 install_pip_package "discord.py"
 install_pip_package "pypresence"
-install_pip_package "matplotlib"
 install_pip_package "fuzzywuzzy"
 install_pip_package "python-Levenshtein"
 install_pip_package "pyscreeze<0.1.29"
-install_pip_package "html2image"
 install_pip_package "gevent"
 install_pip_package "eel"
 install_pip_package "ImageHash"
-install_pip_package "httpx"
 install_pip_package "flask"
 install_pip_package "pygetwindow"
 install_pip_package "requests" #used to check if this script was ran, should be installed by discord-webhooks
@@ -291,35 +287,5 @@ def main():
 
 if __name__ == '__main__':
     main()
-EOF
-"$VENV_PATH/bin/python" << "EOF"
-
-# remove self-documented expressions from chrome_cdp.py for python 3.7 compatibility
-import os
-import importlib.util
-
-spec = importlib.util.find_spec('html2image')
-if spec and spec.origin:
-    path = os.path.join(os.path.dirname(spec.origin), "browsers", "chrome_cdp.py")
-    if os.path.exists(path):
-        print(f"html2image found at {path}")
-        linesToRemove = ["print(f'{r.json()=}')", "print(f'cdp_send: {method=} {params=}')", "print(f'{method=}')", "print(f'{message=}')"]
-        with open(path, "r") as f:
-            data = f.read()
-        
-        original_data = data
-        for i in linesToRemove:
-            data = data.replace(i, "")
-        
-        if data != original_data:
-            with open(path, "w") as f:
-                f.write(data)
-            print("Fixed html2image")
-        else:
-            print("html2image already fixed or lines not found")
-    else:
-        print(f"chrome_cdp.py not found at {path}")
-else:
-    print("html2image package not found")
 EOF
 printf "\n\n\n\033[32;1mInstallation complete!\033[0m\n"
