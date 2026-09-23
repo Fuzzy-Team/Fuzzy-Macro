@@ -256,6 +256,8 @@ class MacroProfileStore:
                 parsed = ast.literal_eval(value)
             except Exception:
                 parsed = value
+            if isinstance(parsed, dict) and set(parsed) == {"source", "value"}:
+                parsed = parsed["value"]  # an old GUI bug saved some dropdowns wrapped like this
             default = defaults.get(key)
             if isinstance(default, str) and not isinstance(parsed, str):
                 parsed = "" if parsed is None else str(parsed)
