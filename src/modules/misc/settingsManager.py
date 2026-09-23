@@ -458,7 +458,7 @@ def normalizeFieldSettings(field_name, settings, default_fields=None):
     if merged_presets:
         normalized[FIELD_PATTERN_PRESETS_KEY] = merged_presets
 
-    return _ensureDefaultAIPatternPresets(normalized)
+    return _coerceNestedValues(_ensureDefaultAIPatternPresets(normalized))
 
 def _getFieldPatternPresets(settings):
     if not isinstance(settings, dict):
