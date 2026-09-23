@@ -158,12 +158,15 @@ class MacroProfileStore:
             next_profile = copy.deepcopy(profile_data)
             next_general = copy.deepcopy(general_data)
             combined = {**next_profile, **next_general}
+            owners = {}
             for setting, value in changes.items():
                 owner = self._owner(setting, scope)
-                defaults = self._profile_defaults if owner == "profile" else self._general_defaults
-                self._validate(setting, value, defaults, combined)
+                owners[setting] = owner
                 (next_profile if owner == "profile" else next_general)[setting] = copy.deepcopy(value)
                 combined[setting] = copy.deepcopy(value)
+            for setting, value in changes.items():
+                defaults = self._profile_defaults if owners[setting] == "profile" else self._general_defaults
+                self._validate(setting, value, defaults, combined)
             # A batch can span two files. Validate everything first and restore the
             # first file if the second replacement fails.
             profile_path = os.path.join(self._profile_dir(profile), self.PROFILE_FILE)
@@ -245,7 +248,7 @@ class MacroProfileStore:
     def _read_settings_file(path, defaults):
         with open(path) as handle:
             raw = handle.read()
-        raw = re.sub(r"(?<!\n)max_convert_time=", "\nmax_convert_time=", raw)
+        raw = re.sub(r"(?<![A-Za-z_])(?<!\n)max_convert_time=", "\nmax_convert_time=", raw)
         result = {}
         for line_number, line in enumerate(raw.splitlines(), 1):
             if not line.strip():

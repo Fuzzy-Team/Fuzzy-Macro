@@ -435,9 +435,9 @@ class HourlyReport():
         }
         displayBuffQuantity = [detectedBuffByKey.get(key, 0) for key in hourly_buffs]
 
-        # re-apply the theme if it changed
-        if theme != self._theme:
-            self.hourlyReportDrawer = HourlyReportDrawer(self.hourlyReportDrawer.time_format, theme=theme)
+        time_format = setdat.get("hourly_report_time_format", self.hourlyReportDrawer.time_format) if isinstance(setdat, dict) else self.hourlyReportDrawer.time_format
+        if theme != self._theme or time_format != self.hourlyReportDrawer.time_format:
+            self.hourlyReportDrawer = HourlyReportDrawer(time_format, theme=theme)
             self._theme = theme
 
         canvas = self.hourlyReportDrawer.drawHourlyReport(hourlyReportStats, sessionTime, honeyPerMin,
@@ -520,7 +520,8 @@ class HourlyReport():
     def saveHourlyReportData(self):
         path = settingsManager.getUserDataPath("hourly_report_stats.pkl")
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "wb") as f:
+        tmpPath = f"{path}.tmp"
+        with open(tmpPath, "wb") as f:
             pickle.dump({
                 "hourlyReportStats": self.hourlyReportStats,
                 "sessionReportStats": self.sessionReportStats,
@@ -533,6 +534,9 @@ class HourlyReport():
                 "latestNectarQuantity": self.latestNectarQuantity,
                 "itemMonitorSnapshot": self.itemMonitorSnapshot,
             }, f)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmpPath, path)
     
     def loadHourlyReportData(self):
         path = settingsManager.getUserDataPath("hourly_report_stats.pkl")
