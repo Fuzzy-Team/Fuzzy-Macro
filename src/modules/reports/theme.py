@@ -49,13 +49,8 @@ THEMES = {
 }
 
 
-ACCENT_COLORS = {
-    "green":  (34, 255, 6),
-    "purple": (153, 102, 255),
-    "blue":   (86, 164, 228),
-    "gold":   (254, 202, 64),
-    "pink":   (255, 102, 178),
-}
+# Accent for the legacy dark/midnight/oled palettes; every macro GUI theme has its own.
+LEGACY_THEME_ACCENT = (34, 255, 6)
 
 
 # ---------------------------------------------------------------------------
