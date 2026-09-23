@@ -1,6 +1,5 @@
 import cv2
 import numpy as np
-import pygetwindow as gw
 import modules.controls.mouse as mouse
 import modules.screen.ocr as ocr
 from modules.controls.sleep import pause_aware_time as time
@@ -17,29 +16,6 @@ class ScreenMixin:
             return ocr.imToString("blue").lower()
         except Exception:
             return ""
-
-    def isFullScreen(self):
-        windows = gw.getAllTitles()
-        for win in windows:
-            if "roblox roblox" in win.lower():
-                x,y,w,h = gw.getWindowGeometry(win)
-                return x==0 and y==0 and w==self.robloxWindow.mw and h==self.robloxWindow.mh
-        #can't find the roblox window, most likely fullscreen? Assumes that it exists
-        return True
-
-    def toggleFullScreen(self):
-        self.logger.webhook("", "Toggling fullscreen mode", "dark brown", "screen")
-        self.keyboard.keyDown("command")
-        time.sleep(0.05)
-        self.keyboard.keyDown("ctrl")
-        time.sleep(0.05)
-        self.keyboard.keyDown("f")
-        time.sleep(0.1)
-        self.keyboard.keyUp("command")
-        self.keyboard.keyUp("ctrl")
-        self.keyboard.keyUp("f")
-        time.sleep(0.5)
-        self.setRobloxWindowInfo(setYOffset=True)
 
     def adjustImage(self, path, imageName):
         return adjustImage(path, imageName, self.robloxWindow.display_type)

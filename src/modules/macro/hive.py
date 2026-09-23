@@ -227,7 +227,6 @@ class HiveMixin:
                     self.keyboard.keyUp("option", False)
                     self.keyboard.keyUp("f7", False)
                     '''
-                    pass
                 else:
                     pass
             print(f"checked performance stats: {time.time()-st}")

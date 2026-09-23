@@ -1,14 +1,10 @@
-import sys
-import re
 import os
 import subprocess
 from modules.misc.appleScript import runAppleScript
-import pygetwindow as gw
 import pyautogui as pag
 from AppKit import NSWorkspace
-from ApplicationServices import AXUIElementIsAttributeSettable, AXUIElementCreateApplication, kAXErrorSuccess, AXUIElementSetAttributeValue, AXUIElementCopyAttributeValue, AXValueCreate, kAXValueCGPointType, kAXValueCGSizeType, AXUIElementCopyAttributeNames
+from ApplicationServices import AXUIElementCreateApplication, AXUIElementSetAttributeValue, AXUIElementCopyAttributeValue, AXValueCreate, kAXValueCGPointType, kAXValueCGSizeType, AXUIElementCopyAttributeNames
 from Quartz import CGPoint, CGSize
-from CoreFoundation import CFRelease
 mw,mh = pag.size()
 
 def isAppOpenMac(app="roblox"):
@@ -52,21 +48,6 @@ def closeApp(app):
         osascript -e 'quit application "Roblox"'
     """
     os.system(cmd)
-
-def forceQuitApp(app):
-    """Forcefully terminate an app/process. More aggressive than closeApp.
-
-    Uses SIGKILL on macOS.
-    """
-    try:
-        subprocess.call(["pkill", "-9", app], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except Exception:
-        pass
-    # also try killall as a fallback (suppress errors/output)
-    try:
-        subprocess.call(["killall", "-9", app], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except Exception:
-        pass
 
 def getWindowSize(windowName):
     import Quartz

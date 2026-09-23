@@ -475,14 +475,3 @@ class cloudflaredStream:
         with self.frame_lock:
             self.frame_buffer = None
             self.frame_ready.clear()
-
-    def get_stats(self):
-        #return current streaming statistics
-        return {
-            "fps": self.current_fps,
-            "resolution": self.resolution,
-            "quality": self.jpeg_quality,
-            "frames_captured": self.frame_count,
-            "restarts": self.restart_count,
-            "url": self.publicURL
-        }

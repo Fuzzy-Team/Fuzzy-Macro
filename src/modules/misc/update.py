@@ -743,49 +743,7 @@ def delete_backup_if_pending(destination=None):
                 break
         except Exception as e:
             print(f"[delete_backup_if_pending] Error: {e}", file=sys.stderr)
-            pass
 
-
-def _discover_remote_version(remote_version_url, timeout=15):
-    """Discover the latest non-prerelease tag from GitHub, falling back to
-    the tags endpoint and finally to `remote_version_url` if all else fails.
-    Returns the version string (without a leading 'v') or None on failure.
-    """
-    github_releases_api = "https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/releases?per_page=100"
-    github_tags_api = "https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/tags?per_page=100"
-    try:
-        headers = {
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0",
-            "Accept": "application/vnd.github.v3+json",
-        }
-        r = requests.get(github_releases_api, timeout=timeout, headers=headers)
-        r.raise_for_status()
-        releases = r.json()
-        for rel in releases:
-            if not rel.get("prerelease") and rel.get("tag_name"):
-                return rel.get("tag_name").lstrip("v")
-        # fallback to tags endpoint
-        rt = requests.get(github_tags_api, timeout=timeout, headers=headers)
-        rt.raise_for_status()
-        tags = rt.json()
-        if tags:
-            return tags[0].get("name", "").lstrip("v")
-    except Exception:
-        pass
-    # final fallback: read provided remote_version_url
-    try:
-        r = requests.get(remote_version_url, timeout=timeout, headers={
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0",
-        })
-        r.raise_for_status()
-        rv = r.text.strip()
-        return rv
-    except Exception:
-        return None
 
 
 def update(t="main", update_channel="stable", progress_callback=None):
@@ -824,7 +782,6 @@ def update(t="main", update_channel="stable", progress_callback=None):
         return refreshed_result[1]
 
     # remote version URL and zip link
-    import time
     # Use GitHub releases API with channel filtering
     github_releases_api = "https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/releases?per_page=100"
     backup_path = os.path.join(destination, "backup_macro.zip")
