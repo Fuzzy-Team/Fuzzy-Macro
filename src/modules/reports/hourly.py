@@ -18,7 +18,7 @@ from modules.reports.theme import resolveReportTheme
 
 
 class HourlyReport():
-    def __init__(self, buffDetector: BuffDetector = None, time_format=24, theme="dark", accent="green", configuredUptimeBuffs=None, configuredHourlyBuffs=None):
+    def __init__(self, buffDetector: BuffDetector = None, time_format=24, theme="dark", configuredUptimeBuffs=None, configuredHourlyBuffs=None):
         self.configuredUptimeBuffs = normalizeUptimeBuffSelection(configuredUptimeBuffs)
         self.configuredHourlyBuffs = normalizeHourlyBuffSelection(configuredHourlyBuffs)
 
@@ -105,11 +105,10 @@ class HourlyReport():
         }
 
         self.buffDetector = buffDetector
-        self.hourlyReportDrawer = HourlyReportDrawer(time_format, theme=theme, accent=accent)
+        self.hourlyReportDrawer = HourlyReportDrawer(time_format, theme=theme)
 
-        # store theme/accent for re-applying when settings change
+        # store theme for re-applying when settings change
         self._theme = theme
-        self._accent = accent
 
         # setup stats
         self.hourlyReportStats = {}
@@ -422,10 +421,9 @@ class HourlyReport():
             except Exception:
                 continue
 
-        # read customization from settings — the report theme follows the macro's GUI theme
+        # the report theme (colors and accent) follows the macro's GUI theme
         gui_theme = setdat.get("gui_theme", "Brown") if isinstance(setdat, dict) else "Brown"
         theme  = resolveReportTheme(gui_theme)
-        accent = setdat.get("hourly_report_accent", "green") if isinstance(setdat, dict) else "green"
         send_embed_text = setdat.get("hourly_report_embed_text", True) if isinstance(setdat, dict) else True
 
         # parse configurable buff lists from settings (comma-separated strings)
@@ -437,11 +435,10 @@ class HourlyReport():
         }
         displayBuffQuantity = [detectedBuffByKey.get(key, 0) for key in hourly_buffs]
 
-        # re-apply theme/accent if they changed
-        if theme != self._theme or accent != self._accent:
-            self.hourlyReportDrawer = HourlyReportDrawer(self.hourlyReportDrawer.time_format, theme=theme, accent=accent)
+        # re-apply the theme if it changed
+        if theme != self._theme:
+            self.hourlyReportDrawer = HourlyReportDrawer(self.hourlyReportDrawer.time_format, theme=theme)
             self._theme = theme
-            self._accent = accent
 
         canvas = self.hourlyReportDrawer.drawHourlyReport(hourlyReportStats, sessionTime, honeyPerMin,
                                                           sessionHoney, honeyThisHour, onlyValidHourlyHoney,
