@@ -77,25 +77,9 @@ def runApp(macroTarget):
 
     disconnectCooldownUntil = 0 #only for running disconnect check on low performance
 
-    #update settings for current profile
-    currentProfile = settingsManager.getCurrentProfile()
+    #add missing defaults to the current profile's files and apply migrations
     settingsManager.ensureRuntimeData()
-    profileSettings = settingsManager.loadSettings()
-    profileSettingsReference = settingsManager.getDefaultProfileSettings()
-    settingsManager.saveDict(os.path.join(settingsManager.getProfilePath(currentProfile), "settings.txt"), {**profileSettingsReference, **profileSettings})
-
-    #update general settings for current profile
-    generalsettings_path = os.path.join(settingsManager.getProfilePath(currentProfile), "generalsettings.txt")
-    generalSettingsReference = settingsManager.getDefaultGeneralSettings()
-    try:
-        generalSettings = settingsManager.readSettingsFile(generalsettings_path, defaults=generalSettingsReference)
-    except FileNotFoundError:
-        # If generalsettings.txt doesn't exist, create it from defaults
-        generalSettings = {}
-        # Ensure the profile directory exists
-        profile_dir = settingsManager.getProfilePath(currentProfile)
-        os.makedirs(profile_dir, exist_ok=True)
-    settingsManager.saveDict(generalsettings_path, {**generalSettingsReference, **generalSettings})
+    settingsManager.initializeMacroProfile()
 
     #convert ahk pattern
     patterns_dir = settingsManager.getPatternsDir()
