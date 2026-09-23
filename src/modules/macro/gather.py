@@ -613,7 +613,7 @@ class GatherMixin:
             # anchoring / idle patrol themselves, so skip the post-cycle nudge
             # that would fight a continuous square walk around the sprinkler.
             if fieldSetting["field_drift_compensation"] and pattern not in aiPatternLabels:
-                self.fieldDriftCompensation.run()
+                self.fieldDriftCompensation.run(startLocationDimensions.get(normalized_field))
 
             #cycle ends
             mouse.mouseUp()
