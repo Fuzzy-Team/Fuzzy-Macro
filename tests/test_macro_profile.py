@@ -127,6 +127,19 @@ class MacroProfileStoreTests(unittest.TestCase):
         self.assertNotIn("quest_gumdrop_slot", settings)
         self.assertNotIn("quest_gumdrop_slot", self.read(self.path("main", "settings.txt")))
 
+    def test_quest_gumdrop_slot_is_retained_when_general_settings_are_malformed(self):
+        self.write("main", "settings.txt", "quest_use_gumdrops=True\nquest_gumdrop_slot=6\n")
+        self.write("main", "generalsettings.txt", "this is not a setting\n")
+        store = MacroProfileStore(
+            self.profiles_dir,
+            {**PROFILE_DEFAULTS, "quest_use_gumdrops": False},
+            {**GENERAL_DEFAULTS, "goo_slot": 3},
+            FIELD_DEFAULTS,
+        )
+        snapshot = store.initialize("main").as_dict()
+        self.assertIn("generalsettings.txt", " ".join(snapshot["migration_errors"]))
+        self.assertIn("quest_gumdrop_slot=6", self.read(self.path("main", "settings.txt")))
+
     def test_goo_slot_is_kept_when_fields_use_goo(self):
         store = self.gumdrop_store("quest_use_gumdrops=True\nquest_gumdrop_slot=6\n", {"pine tree": {"shape": "lines", "mins": 10, "goo": True}})
         self.assertEqual(store.initialize("main").as_dict()["settings"]["goo_slot"], 3)
