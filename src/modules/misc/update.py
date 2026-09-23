@@ -139,7 +139,7 @@ def _is_protected_path(relative_path, protected_folders):
 def _build_installed_files_manifest(root_path, protected_folders, excluded_root=None):
     """Hash regular, unprotected files without following directory symlinks."""
     manifest = {}
-    excluded_root = os.path.abspath(excluded_root) if excluded_root else None
+    excluded_root = os.path.realpath(excluded_root) if excluded_root else None
 
     def raise_walk_error(exc):
         raise exc
@@ -150,7 +150,7 @@ def _build_installed_files_manifest(root_path, protected_folders, excluded_root=
         dirs[:] = [
             directory for directory in dirs
             if not os.path.islink(os.path.join(root, directory))
-            and os.path.abspath(os.path.join(root, directory)) != excluded_root
+            and os.path.realpath(os.path.join(root, directory)) != excluded_root
             and not _is_protected_path(
                 "/".join(filter(None, (rel_root, directory))), protected_folders
             )
@@ -224,21 +224,64 @@ def _remove_empty_directories(start, destination, protected_folders):
         current = os.path.dirname(current)
 
 
+def _validate_installation_root(destination):
+    """Reject update targets that are not a Fuzzy-Macro installation."""
+    root = os.path.realpath(destination)
+    required = (
+        "src/main.py",
+        "src/modules/misc/update.py",
+    )
+    for relative_path in required:
+        current = root
+        for part in relative_path.split("/"):
+            current = os.path.join(current, part)
+            if os.path.islink(current):
+                raise OSError(f"Refusing to update through symlink {current}")
+        if not os.path.isfile(current):
+            raise OSError(f"Not a Fuzzy-Macro installation: missing {relative_path}")
+    return root
+
+
+def _installation_root():
+    """Find the install root from this updater file, independent of cwd."""
+    module_directory = os.path.dirname(os.path.realpath(__file__))
+    destination = os.path.abspath(os.path.join(module_directory, "..", "..", ".."))
+    return _validate_installation_root(destination)
+
+
 def _read_ignore_rules(extracted):
     """Use both current origin rules and the release's own ignore rules."""
     ignore_path = os.path.join(extracted, ".gitignore")
     if os.path.islink(ignore_path):
         raise ValueError("release .gitignore is a symlink")
     with open(ignore_path, "r", encoding="utf-8") as fh:
-        release_rules = [line.strip() for line in fh if line.strip() and not line.startswith("#")]
+        release_lines = fh.readlines()
     response = requests.get(
         "https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/.gitignore",
         timeout=20,
         headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
     )
     response.raise_for_status()
-    origin_rules = [line.strip() for line in response.text.splitlines()
-                    if line.strip() and not line.startswith("#")]
+    origin_lines = response.text.splitlines()
+
+    def parse(lines):
+        rules = []
+        for line in lines:
+            line = line.rstrip("\r\n")
+            if not line.strip() or line.startswith("#"):
+                continue
+            if (
+                line != line.strip()
+                or line.startswith("!")
+                or "**" in line
+                or "\\" in line
+            ):
+                raise ValueError(f"unsupported .gitignore pattern: {line.rstrip()}")
+            rules.append(line)
+        return rules
+
+    release_rules = parse(release_lines)
+    origin_rules = parse(origin_lines)
     return release_rules, origin_rules
 
 
@@ -359,6 +402,7 @@ def _apply_update_files(
     extracted, destination, protected_folders, protected_files, progress_callback=None
 ):
     """Compare installed and incoming files, then synchronize the install."""
+    destination = _validate_installation_root(destination)
     _report_update_progress(progress_callback, 78, "Hashing installed files")
     old_manifest = _build_installed_files_manifest(
         destination, protected_folders, excluded_root=extracted
@@ -729,7 +773,12 @@ def update(t="main", update_channel="stable", progress_callback=None):
     ]
     protected_files = [".git"]
     pattern_overwrite_exceptions = PATTERN_OVERWRITE_EXCEPTIONS
-    destination = os.getcwd().replace("/src", "")
+    try:
+        destination = _installation_root()
+    except OSError as exc:
+        print(f"[updater] Refusing update: {exc}")
+        _report_update_progress(progress_callback, 100, "Update failed: invalid installation folder")
+        return False
 
     refreshed_result = _run_refreshed_updater(
         destination,
@@ -967,7 +1016,12 @@ def update_from_commit(commit_hash, progress_callback=None):
     ]
     protected_files = [".git"]
     pattern_overwrite_exceptions = PATTERN_OVERWRITE_EXCEPTIONS
-    destination = os.getcwd().replace("/src", "")
+    try:
+        destination = _installation_root()
+    except OSError as exc:
+        print(f"[updater] Refusing update: {exc}")
+        _report_update_progress(progress_callback, 100, "Update failed: invalid installation folder")
+        return False
 
     refreshed_result = _run_refreshed_updater(
         destination,
@@ -1136,7 +1190,7 @@ def check_for_updates_silent(update_channel="stable"):
     Returns None on error.
     """
     try:
-        destination = os.getcwd().replace("/src", "")
+        destination = _installation_root()
         
         # Read local version
         local_version = "0.0.0"

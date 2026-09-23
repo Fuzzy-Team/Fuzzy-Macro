@@ -21,6 +21,8 @@ class UpdateCleanupTests(TestCase):
         self.install = self.root / "install"
         self.install.mkdir()
         self.extracted = self.install / "Fuzzy-Macro-release"
+        self._write(self.install, "src/main.py", "installed main")
+        self._write(self.install, "src/modules/misc/update.py", "installed updater")
         self._write(self.extracted, "src/main.py", "main")
         self._write(self.extracted, "src/modules/misc/update.py", "updater")
         self._write(self.extracted, ".gitignore", "__pycache__/\n*.py[cod]\n")
@@ -97,6 +99,16 @@ class UpdateCleanupTests(TestCase):
         stale = self._write(self.install, "old.txt")
         with mock.patch.object(update, "_read_ignore_rules", side_effect=OSError("offline")):
             self._apply()
+        self.assertTrue(stale.exists())
+
+    def test_unsupported_gitignore_patterns_skip_cleanup(self):
+        stale = self._write(self.install, "nested/secret.txt")
+        self._write(self.extracted, ".gitignore", "**/secret.txt\n")
+        self._apply()
+        self.assertTrue(stale.exists())
+
+        self._write(self.extracted, ".gitignore", "nested/\n!nested/secret.txt\n")
+        self._apply()
         self.assertTrue(stale.exists())
 
     def test_missing_release_gitignore_skips_cleanup(self):
@@ -187,7 +199,7 @@ class UpdateCleanupTests(TestCase):
         real_replace = os.replace
         with mock.patch.object(update.os, "replace", wraps=real_replace) as replace:
             self._apply()
-        manifest_path = self.install / update.INSTALLED_FILES_MANIFEST
+        manifest_path = self.install.resolve() / update.INSTALLED_FILES_MANIFEST
         manifest = json.loads(manifest_path.read_text())
         self.assertEqual(manifest["package/module.py"], update._git_blob_sha(shipped))
         self.assertNotIn("src/data/user/default.txt", manifest)
@@ -211,6 +223,25 @@ class UpdateCleanupTests(TestCase):
             self._apply()
         self.assertTrue(stale.exists())
         self.assertTrue((self.install / update.INSTALLED_FILES_MANIFEST).exists())
+
+    def test_apply_refuses_destination_without_install_markers_before_hashing(self):
+        wrong_root = self.root / "other"
+        wrong_root.mkdir()
+        with mock.patch.object(update, "_build_installed_files_manifest") as build_manifest:
+            with self.assertRaises(OSError):
+                update._apply_update_files(
+                    str(self.extracted), str(wrong_root), PROTECTED,
+                    [".git", "backup_macro.zip", ".backup_pending"],
+                )
+        build_manifest.assert_not_called()
+
+    def test_installation_root_comes_from_updater_location_not_cwd(self):
+        app_root = self.root / "app"
+        self._write(app_root, "src/main.py", "main")
+        updater = self._write(app_root, "src/modules/misc/update.py", "updater")
+        with mock.patch.object(update, "__file__", str(updater)), \
+             mock.patch.object(update.os, "getcwd", return_value=str(self.root)):
+            self.assertEqual(update._installation_root(), str(app_root.resolve()))
 
 
 if __name__ == "__main__":
