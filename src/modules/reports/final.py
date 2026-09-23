@@ -3,7 +3,10 @@ import copy
 import json
 import ast
 import statistics
-from modules.submacros.hourlyReport import HourlyReport, HourlyReportDrawer, BuffDetector, resolveReportTheme
+from modules.reports.hourly import HourlyReport
+from modules.reports.drawer import HourlyReportDrawer
+from modules.reports.buffs import BuffDetector
+from modules.reports.theme import resolveReportTheme
 from modules.misc import settingsManager
 
 
@@ -15,7 +18,7 @@ class FinalReportDrawer(HourlyReportDrawer):
 
     def drawFinalReport(self, hourlyReportStats, sessionStats, honeyPerSec, sessionHoney, onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData, uptimeBuffsValues, buffGatherIntervals, configuredUptimeBuffs=None, configuredHourlyBuffs=None, enabled_fields=None, field_patterns=None):
         """Draw comprehensive final report with session statistics and trends"""
-        from modules.submacros.hourlyReport import DEFAULT_UPTIME_BUFFS, DEFAULT_HOURLY_BUFFS
+        from modules.reports.buffs import DEFAULT_UPTIME_BUFFS, DEFAULT_HOURLY_BUFFS
         uptimeBuff_list = configuredUptimeBuffs if configuredUptimeBuffs is not None else DEFAULT_UPTIME_BUFFS
         hourlyBuff_list = configuredHourlyBuffs if configuredHourlyBuffs is not None else DEFAULT_HOURLY_BUFFS
 
@@ -229,7 +232,7 @@ class FinalReport:
         
         raw_uptime = setdat.get("hourly_report_uptime_buffs", "") if isinstance(setdat, dict) else ""
         raw_hourly = setdat.get("hourly_report_hourly_buffs", "") if isinstance(setdat, dict) else ""
-        from modules.submacros.hourlyReport import DEFAULT_UPTIME_BUFFS, DEFAULT_HOURLY_BUFFS, normalizeHourlyBuffSelection, normalizeUptimeBuffSelection
+        from modules.reports.buffs import DEFAULT_UPTIME_BUFFS, DEFAULT_HOURLY_BUFFS, normalizeHourlyBuffSelection, normalizeUptimeBuffSelection
         uptime_buffs = normalizeUptimeBuffSelection(raw_uptime, DEFAULT_UPTIME_BUFFS)
         hourly_buffs = normalizeHourlyBuffSelection(raw_hourly, DEFAULT_HOURLY_BUFFS)
         sideBuffDetectorMap = {
@@ -445,7 +448,7 @@ class FinalReport:
                 snapshot = getattr(self.hourlyReport, "itemMonitorSnapshot", None) or {}
                 session_items = snapshot.get("session_collected_items") or snapshot.get("collected_items") or {}
                 if session_items:
-                    from modules.submacros.itemMonitor import generate_item_report
+                    from modules.reports.item_monitor import generate_item_report
                     item_snapshot = {
                         "collected_items": dict(session_items),
                         "session_collected_items": dict(session_items),

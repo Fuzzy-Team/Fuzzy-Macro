@@ -26,8 +26,9 @@ from modules.submacros.fieldDriftCompensation import (
     fieldDriftCompensation as fieldDriftCompensationClass,
 )
 from modules.submacros.hasteCompensation import HasteCompensationRevamped
-from modules.submacros.hourlyReport import BuffDetector, HourlyReport
-from modules.submacros.itemMonitor import ItemMonitor
+from modules.reports.buffs import BuffDetector
+from modules.reports.hourly import HourlyReport
+from modules.reports.item_monitor import ItemMonitor
 from modules.submacros.memoryMatch import MemoryMatch
 from modules.submacros.tadAltSync import TadAltSync
 from modules.macro.shift_lock import ShiftLockMixin

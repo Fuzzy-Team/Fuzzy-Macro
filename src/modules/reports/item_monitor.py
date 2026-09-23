@@ -310,7 +310,7 @@ def generate_item_report(snapshot, setdat=None, report_type="hourly", output_pat
     if not collected:
         return None, None
 
-    from modules.submacros.hourlyReport import resolveReportTheme
+    from modules.reports.theme import resolveReportTheme
 
     gui_theme = setdat.get("gui_theme", "Brown")
     theme = resolveReportTheme(gui_theme)
@@ -337,7 +337,7 @@ class ItemReportDrawer:
     VERSION = "0.1"
 
     def __init__(self, time_format=24, theme="dark", accent="green"):
-        from modules.submacros.hourlyReport import HourlyReportDrawer
+        from modules.reports.drawer import HourlyReportDrawer
         # Reuse theme/palette construction from the hourly drawer
         base = HourlyReportDrawer(time_format=time_format, theme=theme, accent=accent)
         self.backgroundColor = base.baseBackgroundColor

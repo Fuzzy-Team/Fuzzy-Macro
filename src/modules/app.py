@@ -18,7 +18,7 @@ from modules.misc.ColorProfile import DisplayColorProfile
 from modules.misc.appManager import getWindowSize
 from modules.misc.imageManipulation import adjustImage
 from modules.screen.imageSearch import locateImageOnScreen
-from modules.submacros.hourlyReport import HourlyReport
+from modules.reports.hourly import HourlyReport
 from modules.submacros.tadAltSync import TadAltSync
 
 
@@ -521,7 +521,7 @@ def runApp(macroTarget):
             # Generate and send final report AFTER stopping inputs
             try:
                 print("Generating final report...")
-                from modules.submacros.finalReport import FinalReport
+                from modules.reports.final import FinalReport
                 import os
                 
                 # Create final report object
