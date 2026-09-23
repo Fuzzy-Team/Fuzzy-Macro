@@ -604,30 +604,17 @@ def runApp(macroTarget):
             run.value = 2
             showRunState(2)
 
-        #detect a new log message
-        if not logQueue.empty():
+        #show every log message queued since the last tick
+        while not logQueue.empty():
             logData = logQueue.get()
-            if logData["type"] == "webhook": #webhook
-                msg = f"{logData['title']}<br>{logData['desc']}"
-
-                # Add to recent logs list (keep last 100 entries)
-                log_entry = {
-                    'time': logData['time'],
-                    'title': logData['title'],
-                    'desc': logData['desc'],
-                    'color': logData['color']
-                }
-                recentLogs.append(log_entry)
-                # Keep only the last 100 entries. Manager proxies can fail
-                # if the manager process closes; guard with fallbacks.
-                if len(recentLogs) > 100:
-                    try:
-                        recentLogs[:] = recentLogs[-100:]
-                    except Exception:
-                        pass  # the manager process may be shutting down
-
-            #add it to gui
-            gui.log(logData["time"], msg, logData["color"])
+            recentLogs.append({key: logData[key] for key in ("time", "title", "desc", "color")})
+            gui.log(logData["time"], f"{logData['title']}<br>{logData['desc']}", logData["color"])
+        # keep only the last 100 entries for the discord bot
+        if len(recentLogs) > 100:
+            try:
+                recentLogs[:] = recentLogs[-100:]
+            except Exception:
+                pass  # the manager process may be shutting down
         
         #detect if the gui needs to be updated
         if updateGUI.value:

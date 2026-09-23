@@ -19,16 +19,26 @@ try:
 except (TypeError, ValueError):
     macos_version = ()
 
-# Pre-Monterey systems use the ONNX sprinkler model. Importing a stale
-# coremltools wheel on those systems emits dyld errors before Python can fall
-# back, even though the Core ML backend is never usable there.
-if len(macos_version) >= 2 and macos_version >= (12, 0):
-    try:
-        import coremltools as ct
-    except Exception:
-        ct = None
-else:
-    ct = None
+_coremltools = False  # not loaded yet
+
+
+def _load_coremltools():
+    """Import coremltools on first use; it pulls in torch, which takes seconds and lots of memory.
+
+    Pre-Monterey systems use the ONNX sprinkler model. Importing a stale
+    coremltools wheel on those systems emits dyld errors before Python can fall
+    back, even though the Core ML backend is never usable there.
+    """
+    global _coremltools
+    if _coremltools is False:
+        _coremltools = None
+        if len(macos_version) >= 2 and macos_version >= (12, 0):
+            try:
+                import coremltools
+                _coremltools = coremltools
+            except Exception:
+                pass
+    return _coremltools
 
 mw, mh = pag.size()
 
@@ -142,6 +152,7 @@ class fieldDriftCompensation():
             self._warn_sprinkler_model("sprinkler_detection_standard.mlmodelc and sprinkler_detection_standard.onnx are missing")
             return False
 
+        ct = _load_coremltools() if has_coreml else None
         try:
             if has_coreml and ct is not None:
                 if str(model_path_coreml).lower().endswith(".mlmodelc"):

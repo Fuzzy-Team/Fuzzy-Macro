@@ -133,9 +133,16 @@ def locateImageOnScreen(target, x, y, w, h, threshold=0, scales=None, return_sca
     - Returns (max_val, max_loc) or (max_val, max_loc, scale) if return_scale True.
     - Returns None when no match reaches `threshold`.
     """
-    # capture screen region (same as before)
-    screen = mssScreenshot(x, y, w, h)
-    screen = cv2.cvtColor(np.array(screen), cv2.COLOR_RGB2BGR)
+    return locateImageInScreen(target, captureRegionBGR(x, y, w, h), threshold, scales, return_scale, resize_interp, early_exit_thresh)
+
+
+def captureRegionBGR(x, y, w, h):
+    """Screenshot a region as a BGR array, for passing to locateImageInScreen."""
+    return cv2.cvtColor(np.array(mssScreenshot(x, y, w, h)), cv2.COLOR_RGB2BGR)
+
+
+def locateImageInScreen(target, screen, threshold=0, scales=None, return_scale=False, resize_interp=cv2.INTER_AREA, early_exit_thresh=0.995):
+    """locateImageOnScreen on an already captured BGR screen, so several templates can share one screenshot."""
     screen = _to_uint8(screen)
     if screen is None:
         return None
