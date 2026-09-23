@@ -11,7 +11,7 @@ import mss
 import mss.darwin
 mss.darwin.IMAGE_OPTIONS = 0
 from modules.screen.robloxWindow import RobloxWindowBounds
-from modules.submacros.hourlyReport import NATRO_BUFF_CHARACTER_TEMPLATES
+from modules.reports.buffs import NATRO_BUFF_CHARACTER_TEMPLATES
 
 class HasteCompensationOptimized():
     mw, mh = pag.size() 
