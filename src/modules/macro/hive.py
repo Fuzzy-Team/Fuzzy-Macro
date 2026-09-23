@@ -885,7 +885,8 @@ class HiveMixin:
     def claimHiveByDetectMethod(self, preferred_slot=1, excluded_slots=None):
         """
         Zoom out and pitch up, find open hives from spawn, then walk to a
-        detected pad and claim it. Hive Acquisition owns the check fallback.
+        detected pad and claim it. Returns the claimed slot, 0 if no pad on the
+        row could be claimed, or None if nothing was detected from spawn.
         """
         excluded_slots = set(excluded_slots or set())
         preferred_slot = max(1, min(6, int(preferred_slot)))
@@ -956,12 +957,14 @@ class HiveMixin:
                 failed.add(nxt)
                 current = nxt
 
-            return 0
+            # The player is on the hive row now, so check the remaining pads from here.
+            self.logger.webhook("", "Scanning remaining hives", "dark brown")
+            return self.scanHivesForClaim(current, excluded_slots | failed)
 
         self.logger.webhook("", "Spawn detection found no claimable hive", "dark brown")
         self.setCameraPitch(0, pitch)
         self.setCameraZoom(0, zoom)
-        return 0
+        return None  # still at spawn: Hive Acquisition falls back to checking slots
 
     def resyncHiveSlotFromHive(self):
         self.logger.webhook("", "Rechecking hive slot before rejoining", "dark brown", "screen")
