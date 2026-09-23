@@ -61,8 +61,15 @@ def _delete_path(path):
             print(f"[models] Kept symlink {path}")
             return False
         if os.path.isdir(path):
-            shutil.rmtree(path)
-        elif os.path.exists(path):
+            for name in os.listdir(path):
+                _delete_path(os.path.join(path, name))
+            if os.listdir(path):
+                return False
+            os.rmdir(path)
+        elif os.path.isfile(path):
+            if path.lower().endswith(".pt"):
+                print(f"[models] Kept .pt file {path}")
+                return False
             os.remove(path)
         else:
             return False

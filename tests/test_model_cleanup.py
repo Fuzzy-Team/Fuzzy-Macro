@@ -55,6 +55,21 @@ class ModelCleanupTests(TestCase):
         self.assertTrue(used.exists())
         self.assertFalse(unused.exists())
 
+    def test_pt_files_survive_cleanup_at_any_depth(self):
+        top_level = self._write("custom.pt")
+        upper_case = self._write("CUSTOM.PT")
+        nested = self._write("old_bundle/weights.pt")
+        unused = self._write("old_bundle/old.bin")
+
+        with mock.patch.object(modelManager, "_macos_version", return_value=(13, 0)):
+            deleted = modelManager.cleanup_unused_models()
+
+        self.assertTrue(top_level.exists())
+        self.assertTrue(upper_case.exists())
+        self.assertTrue(nested.exists())
+        self.assertFalse(unused.exists())
+        self.assertNotIn("old_bundle", deleted)
+
     def test_empty_model_list_does_not_delete_everything(self):
         installed = self._write("model.onnx")
         with mock.patch.object(modelManager, "_supported_model_names", return_value=()):
