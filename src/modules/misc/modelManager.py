@@ -1,4 +1,3 @@
-import hashlib
 import os
 import platform
 import shutil
@@ -7,6 +6,8 @@ import zipfile
 from io import BytesIO
 
 import requests
+
+from modules.misc.update import _git_blob_sha
 
 
 MODELS_API_URL = "https://api.github.com/repos/Fuzzy-Team/fuzzymacroaimodels/contents"
@@ -101,16 +102,6 @@ def cleanup_unused_models():
     deleted.extend(cleanup_obsolete_models())
     deleted.extend(cleanup_unsupported_model_formats())
     return deleted
-
-
-def _git_blob_sha(path):
-    h = hashlib.sha1()
-    size = os.path.getsize(path)
-    h.update(f"blob {size}\0".encode("utf-8"))
-    with open(path, "rb") as fh:
-        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
 
 
 def _github_get(url, timeout=20):

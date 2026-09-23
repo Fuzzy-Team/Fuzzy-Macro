@@ -1,6 +1,8 @@
 import stat
 import os
 import re
+import hashlib
+import json
 import importlib
 import sys
 import requests
@@ -14,6 +16,8 @@ from modules.misc.messageBox import msgBox
 # bundled model manager.  They are not user-authored patterns, so always
 # replace them during an update instead of preserving an obsolete copy.
 PATTERN_OVERWRITE_EXCEPTIONS = {"blooms_ai.py", "fuzzy_ai_gather.py"}
+OBSOLETE_FILES_URL = "https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/obsolete_files.json"
+INSTALLED_FILES_MANIFEST = os.path.join("src", "data", "user", "installed_files.json")
 
 # Preserve this flag across importlib.reload().  It prevents the freshly
 # loaded updater from handing off to itself a second time.
@@ -99,6 +103,256 @@ def _download_update_zip(zip_link, progress_callback, start_percent=35, end_perc
         return zipfile.ZipFile(data)
     finally:
         req.close()
+
+
+def _git_blob_sha(path):
+    digest = hashlib.sha1()
+    size = os.path.getsize(path)
+    digest.update(f"blob {size}\0".encode("utf-8"))
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _is_protected_path(relative_path, protected_folders):
+    parts = relative_path.split("/")
+    if (
+        not relative_path
+        or os.path.isabs(relative_path)
+        or relative_path.startswith("/")
+        or "\\" in relative_path
+        or any(part in {"", ".", ".."} for part in parts)
+    ):
+        return True
+    if parts[0] == ".git" or relative_path in {"backup_macro.zip", ".backup_pending"}:
+        return True
+    for protected in protected_folders:
+        protected = protected.replace(os.sep, "/").strip("/")
+        if relative_path == protected or relative_path.startswith(protected + "/"):
+            return True
+    return False
+
+
+def _build_installed_files_manifest(extracted, protected_folders):
+    manifest = {}
+    for root, dirs, files in os.walk(extracted, followlinks=False):
+        rel_root = os.path.relpath(root, extracted)
+        rel_root = "" if rel_root == "." else rel_root.replace(os.sep, "/")
+        dirs[:] = [
+            directory for directory in dirs
+            if not os.path.islink(os.path.join(root, directory))
+            and not _is_protected_path(
+                "/".join(filter(None, (rel_root, directory))), protected_folders
+            )
+        ]
+        for filename in files:
+            relative_path = "/".join(filter(None, (rel_root, filename)))
+            source_path = os.path.join(root, filename)
+            try:
+                mode = os.lstat(source_path).st_mode
+                if _is_protected_path(relative_path, protected_folders) or not stat.S_ISREG(mode):
+                    continue
+                manifest[relative_path] = _git_blob_sha(source_path)
+            except OSError as exc:
+                print(f"[updater] Could not hash shipped file {relative_path}: {exc}")
+    return manifest
+
+
+def _load_json_hashes(path):
+    with open(path, "r", encoding="utf-8") as fh:
+        value = json.load(fh)
+    if not isinstance(value, dict):
+        raise ValueError("expected a JSON object")
+    return {
+        key: hash_value for key, hash_value in value.items()
+        if isinstance(key, str) and isinstance(hash_value, str)
+    }
+
+
+def _download_obsolete_files():
+    response = requests.get(OBSOLETE_FILES_URL, timeout=20, headers={
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+    })
+    response.raise_for_status()
+    value = response.json()
+    if not isinstance(value, dict):
+        raise ValueError("expected a JSON object")
+    return {
+        key: hash_value for key, hash_value in value.items()
+        if isinstance(key, str) and isinstance(hash_value, str)
+    }
+
+
+def _safe_regular_file(destination, relative_path, protected_folders):
+    if _is_protected_path(relative_path, protected_folders):
+        return None
+    root = os.path.realpath(destination)
+    candidate = os.path.join(destination, *relative_path.split("/"))
+    try:
+        current = destination
+        for part in relative_path.split("/")[:-1]:
+            current = os.path.join(current, part)
+            if os.path.islink(current):
+                return None
+        mode = os.lstat(candidate).st_mode
+    except OSError:
+        return None
+    resolved = os.path.realpath(candidate)
+    try:
+        inside_root = os.path.commonpath((root, resolved)) == root
+    except ValueError:
+        inside_root = False
+    if not inside_root or not stat.S_ISREG(mode):
+        return None
+    return candidate
+
+
+def _remove_empty_directories(start, destination, protected_folders):
+    root = os.path.realpath(destination)
+    current = os.path.dirname(start)
+    while os.path.realpath(current) != root:
+        relative_path = os.path.relpath(current, destination).replace(os.sep, "/")
+        if _is_protected_path(relative_path, protected_folders) or os.path.islink(current):
+            break
+        try:
+            os.rmdir(current)
+        except OSError:
+            break
+        current = os.path.dirname(current)
+
+
+def _remove_compiled_files(source_path, destination, protected_folders):
+    if not source_path.endswith(".py"):
+        return
+    cache_dir = os.path.join(os.path.dirname(source_path), "__pycache__")
+    source_name = os.path.splitext(os.path.basename(source_path))[0]
+    try:
+        cache_entries = os.listdir(cache_dir)
+    except OSError:
+        return
+    for filename in cache_entries:
+        if not (filename.startswith(source_name + ".cpython-") and filename.endswith(".pyc")):
+            continue
+        relative_path = os.path.relpath(
+            os.path.join(cache_dir, filename), destination
+        ).replace(os.sep, "/")
+        compiled_path = _safe_regular_file(destination, relative_path, protected_folders)
+        if compiled_path is None:
+            continue
+        try:
+            os.remove(compiled_path)
+            print(f"[updater] Removed compiled file {relative_path}")
+        except OSError as exc:
+            print(f"[updater] Could not remove compiled file {relative_path}: {exc}")
+    _remove_empty_directories(os.path.join(cache_dir, "placeholder"), destination, protected_folders)
+
+
+def _remove_obsolete_files(extracted, destination, protected_folders, progress_callback=None):
+    required = (
+        os.path.join(extracted, "src", "main.py"),
+        os.path.join(extracted, "src", "modules", "misc", "update.py"),
+    )
+    if not all(os.path.isfile(path) and not os.path.islink(path) for path in required):
+        print("[updater] Skipping obsolete-file cleanup: extracted release is incomplete")
+        return
+    if os.path.isdir(os.path.join(destination, ".git")):
+        print("[updater] Skipping obsolete-file cleanup in a git checkout")
+        return
+
+    new_manifest = _build_installed_files_manifest(extracted, protected_folders)
+    manifest_path = os.path.join(destination, INSTALLED_FILES_MANIFEST)
+    if os.path.isfile(manifest_path) and not os.path.islink(manifest_path):
+        try:
+            previous_manifest = _load_json_hashes(manifest_path)
+        except Exception as exc:
+            print(f"[updater] Could not read installed-files manifest; skipping cleanup: {exc}")
+            return
+    else:
+        try:
+            previous_manifest = _download_obsolete_files()
+        except Exception as exc:
+            print(f"[updater] Could not download obsolete-files list; skipping bootstrap cleanup: {exc}")
+            return
+
+    stale = {
+        path: hash_value for path, hash_value in previous_manifest.items()
+        if path not in new_manifest
+    }
+    removals = []
+    for relative_path, expected_hash in sorted(stale.items()):
+        current_path = _safe_regular_file(destination, relative_path, protected_folders)
+        if current_path is None:
+            continue
+        try:
+            current_hash = _git_blob_sha(current_path)
+        except OSError as exc:
+            print(f"[updater] Could not check obsolete file {relative_path}: {exc}")
+            continue
+        if current_hash == expected_hash:
+            removals.append((relative_path, current_path))
+        else:
+            print(f"[updater] Kept edited obsolete file {relative_path}")
+
+    if len(removals) * 5 > len(new_manifest):
+        print(
+            f"[updater] Skipping obsolete-file cleanup: {len(removals)} files "
+            f"exceed 20% of the {len(new_manifest)} shipped files"
+        )
+        return
+
+    _report_update_progress(progress_callback, 81, "Removing obsolete files")
+    for index, (relative_path, current_path) in enumerate(removals, start=1):
+        try:
+            os.remove(current_path)
+            print(f"[updater] Removed obsolete file {relative_path}")
+            _remove_compiled_files(current_path, destination, protected_folders)
+            _remove_empty_directories(current_path, destination, protected_folders)
+            _report_update_progress(
+                progress_callback,
+                81 + int(2 * index / len(removals)),
+                f"Removed obsolete file {index} of {len(removals)}",
+            )
+        except OSError as exc:
+            print(f"[updater] Could not remove obsolete file {relative_path}: {exc}")
+
+
+def _write_installed_files_manifest(extracted, destination, protected_folders):
+    manifest = _build_installed_files_manifest(extracted, protected_folders)
+    manifest_path = os.path.join(destination, INSTALLED_FILES_MANIFEST)
+    os.makedirs(os.path.dirname(manifest_path), exist_ok=True)
+    tmp_path = manifest_path + ".tmp"
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as fh:
+            json.dump(manifest, fh, indent=2, sort_keys=True)
+            fh.write("\n")
+        os.replace(tmp_path, manifest_path)
+    finally:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except OSError:
+            pass
+
+
+def _finish_file_update(extracted, destination, protected_folders, progress_callback=None):
+    try:
+        _remove_obsolete_files(extracted, destination, protected_folders, progress_callback)
+    except Exception as exc:
+        print(f"[updater] Obsolete-file cleanup failed; continuing update: {exc}")
+    try:
+        _write_installed_files_manifest(extracted, destination, protected_folders)
+    except Exception as exc:
+        print(f"[updater] Could not write installed-files manifest: {exc}")
+
+
+def _apply_update_files(
+    extracted, destination, protected_folders, protected_files, progress_callback=None
+):
+    _merge_overwrite(extracted, destination, protected_folders, protected_files)
+    _finish_file_update(extracted, destination, protected_folders, progress_callback)
 
 
 def _refresh_updater(destination, progress_callback=None):
@@ -551,7 +805,9 @@ def update(t="main", update_channel="stable", progress_callback=None):
     # merge files, overwriting existing, but skip protected folders
     try:
         _report_update_progress(progress_callback, 78, "Applying update files")
-        _merge_overwrite(extracted, destination, protected_folders, protected_files)
+        _apply_update_files(
+            extracted, destination, protected_folders, protected_files, progress_callback
+        )
     except Exception:
         _report_update_progress(progress_callback, 100, "Update failed: could not apply files")
         msgBox("Update failed", "Error while applying update files.")
@@ -721,7 +977,9 @@ def update_from_commit(commit_hash, progress_callback=None):
 
     try:
         _report_update_progress(progress_callback, 78, "Applying update files")
-        _merge_overwrite(extracted, destination, protected_folders, protected_files)
+        _apply_update_files(
+            extracted, destination, protected_folders, protected_files, progress_callback
+        )
     except Exception:
         _report_update_progress(progress_callback, 100, "Update failed: could not apply files")
         msgBox("Update failed", "Error while applying update files.")
