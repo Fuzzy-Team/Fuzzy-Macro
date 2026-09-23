@@ -18,6 +18,7 @@ from modules.misc.messageBox import msgBox
 PATTERN_OVERWRITE_EXCEPTIONS = {"blooms_ai.py", "fuzzy_ai_gather.py"}
 OBSOLETE_FILES_URL = "https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/obsolete_files.json"
 INSTALLED_FILES_MANIFEST = os.path.join("src", "data", "user", "installed_files.json")
+PENDING_CLEANUP = os.path.join("src", "data", "user", "pending_cleanup.json")
 
 # Preserve this flag across importlib.reload().  It prevents the freshly
 # loaded updater from handing off to itself a second time.
@@ -155,7 +156,7 @@ def _build_installed_files_manifest(extracted, protected_folders):
                     continue
                 manifest[relative_path] = _git_blob_sha(source_path)
             except OSError as exc:
-                print(f"[updater] Could not hash shipped file {relative_path}: {exc}")
+                raise OSError(f"Could not hash shipped file {relative_path}") from exc
     return manifest
 
 
@@ -168,6 +169,19 @@ def _load_json_hashes(path):
         key: hash_value for key, hash_value in value.items()
         if isinstance(key, str) and isinstance(hash_value, str)
     }
+
+
+def _metadata_path(destination, relative_path):
+    """Reject metadata paths whose parent directory leaves the install root."""
+    current = destination
+    for part in relative_path.split(os.sep)[:-1]:
+        current = os.path.join(current, part)
+        if os.path.islink(current):
+            raise ValueError(f"Metadata parent is a symlink: {current}")
+    root = os.path.realpath(destination)
+    if os.path.commonpath((root, os.path.realpath(current))) != root:
+        raise ValueError(f"Metadata parent is outside the install root: {current}")
+    return os.path.join(destination, relative_path)
 
 
 def _download_obsolete_files():
@@ -224,7 +238,7 @@ def _remove_empty_directories(start, destination, protected_folders):
         current = os.path.dirname(current)
 
 
-def _remove_compiled_files(source_path, destination, protected_folders):
+def _remove_compiled_files(source_path, destination, protected_folders, new_manifest):
     if not source_path.endswith(".py"):
         return
     cache_dir = os.path.join(os.path.dirname(source_path), "__pycache__")
@@ -239,6 +253,8 @@ def _remove_compiled_files(source_path, destination, protected_folders):
         relative_path = os.path.relpath(
             os.path.join(cache_dir, filename), destination
         ).replace(os.sep, "/")
+        if relative_path in new_manifest:
+            continue
         compiled_path = _safe_regular_file(destination, relative_path, protected_folders)
         if compiled_path is None:
             continue
@@ -251,41 +267,67 @@ def _remove_compiled_files(source_path, destination, protected_folders):
 
 
 def _remove_obsolete_files(extracted, destination, protected_folders, progress_callback=None):
+    """Remove unchanged stale files and return records to retry on the next update."""
     required = (
         os.path.join(extracted, "src", "main.py"),
         os.path.join(extracted, "src", "modules", "misc", "update.py"),
     )
     if not all(os.path.isfile(path) and not os.path.islink(path) for path in required):
         print("[updater] Skipping obsolete-file cleanup: extracted release is incomplete")
-        return
-    if os.path.isdir(os.path.join(destination, ".git")):
+        return None
+    if os.path.lexists(os.path.join(destination, ".git")):
         print("[updater] Skipping obsolete-file cleanup in a git checkout")
-        return
+        return None
 
     new_manifest = _build_installed_files_manifest(extracted, protected_folders)
-    manifest_path = os.path.join(destination, INSTALLED_FILES_MANIFEST)
+    manifest_path = _metadata_path(destination, INSTALLED_FILES_MANIFEST)
+    pending_path = _metadata_path(destination, PENDING_CLEANUP)
+    pending = {"bootstrap_pending": False, "files": {}}
+    if os.path.lexists(pending_path):
+        with open(pending_path, "r", encoding="utf-8") as fh:
+            pending = json.load(fh)
+        if (
+            not isinstance(pending, dict)
+            or not isinstance(pending.get("bootstrap_pending"), bool)
+            or not isinstance(pending.get("files"), dict)
+        ):
+            raise ValueError("Invalid pending-cleanup record")
+        pending["files"] = {
+            path: sha for path, sha in pending["files"].items()
+            if isinstance(path, str) and isinstance(sha, str)
+        }
+
     if os.path.isfile(manifest_path) and not os.path.islink(manifest_path):
         try:
             previous_manifest = _load_json_hashes(manifest_path)
         except Exception as exc:
             print(f"[updater] Could not read installed-files manifest; skipping cleanup: {exc}")
-            return
+            return None
     else:
+        previous_manifest = {}
+        pending["bootstrap_pending"] = True
+
+    if pending["bootstrap_pending"]:
         try:
-            previous_manifest = _download_obsolete_files()
+            previous_manifest.update(_download_obsolete_files())
+            pending["bootstrap_pending"] = False
         except Exception as exc:
             print(f"[updater] Could not download obsolete-files list; skipping bootstrap cleanup: {exc}")
-            return
+            return pending
 
     stale = {
-        path: hash_value for path, hash_value in previous_manifest.items()
+        path: hash_value for path, hash_value in {
+            **previous_manifest, **pending["files"]
+        }.items()
         if path not in new_manifest
     }
+    pending["files"] = {}
     removals = []
     for relative_path, expected_hash in sorted(stale.items()):
         current_path = _safe_regular_file(destination, relative_path, protected_folders)
         if current_path is None:
             continue
+        pending["files"][relative_path] = expected_hash
         try:
             current_hash = _git_blob_sha(current_path)
         except OSError as exc:
@@ -301,14 +343,17 @@ def _remove_obsolete_files(extracted, destination, protected_folders, progress_c
             f"[updater] Skipping obsolete-file cleanup: {len(removals)} files "
             f"exceed 20% of the {len(new_manifest)} shipped files"
         )
-        return
+        return pending
 
     _report_update_progress(progress_callback, 81, "Removing obsolete files")
     for index, (relative_path, current_path) in enumerate(removals, start=1):
         try:
             os.remove(current_path)
+            pending["files"].pop(relative_path, None)
             print(f"[updater] Removed obsolete file {relative_path}")
-            _remove_compiled_files(current_path, destination, protected_folders)
+            _remove_compiled_files(
+                current_path, destination, protected_folders, new_manifest
+            )
             _remove_empty_directories(current_path, destination, protected_folders)
             _report_update_progress(
                 progress_callback,
@@ -317,31 +362,44 @@ def _remove_obsolete_files(extracted, destination, protected_folders, progress_c
             )
         except OSError as exc:
             print(f"[updater] Could not remove obsolete file {relative_path}: {exc}")
+    return pending
 
 
-def _write_installed_files_manifest(extracted, destination, protected_folders):
-    manifest = _build_installed_files_manifest(extracted, protected_folders)
-    manifest_path = os.path.join(destination, INSTALLED_FILES_MANIFEST)
-    os.makedirs(os.path.dirname(manifest_path), exist_ok=True)
-    tmp_path = manifest_path + ".tmp"
+def _write_json_atomically(path, value):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp_path = path + ".tmp"
     try:
         with open(tmp_path, "w", encoding="utf-8") as fh:
-            json.dump(manifest, fh, indent=2, sort_keys=True)
+            json.dump(value, fh, indent=2, sort_keys=True)
             fh.write("\n")
-        os.replace(tmp_path, manifest_path)
+        os.replace(tmp_path, path)
     finally:
         try:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
-        except OSError:
-            pass
+        except OSError as exc:
+            print(f"[updater] Could not remove temporary file {tmp_path}: {exc}")
+
+
+def _write_installed_files_manifest(extracted, destination, protected_folders):
+    manifest = _build_installed_files_manifest(extracted, protected_folders)
+    manifest_path = _metadata_path(destination, INSTALLED_FILES_MANIFEST)
+    _write_json_atomically(manifest_path, manifest)
 
 
 def _finish_file_update(extracted, destination, protected_folders, progress_callback=None):
     try:
-        _remove_obsolete_files(extracted, destination, protected_folders, progress_callback)
+        pending = _remove_obsolete_files(
+            extracted, destination, protected_folders, progress_callback
+        )
+        if pending is None:
+            return
+        pending_path = _metadata_path(destination, PENDING_CLEANUP)
+        if pending["bootstrap_pending"] or pending["files"] or os.path.lexists(pending_path):
+            _write_json_atomically(pending_path, pending)
     except Exception as exc:
         print(f"[updater] Obsolete-file cleanup failed; continuing update: {exc}")
+        return
     try:
         _write_installed_files_manifest(extracted, destination, protected_folders)
     except Exception as exc:
