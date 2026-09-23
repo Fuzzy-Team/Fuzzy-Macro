@@ -251,7 +251,6 @@ class SproutMixin:
             "turn": "none",
             "turn_times": 0,
             "goo": False,
-            "gumdrops": False,
             "skip_travel": reuseCurrentPosition or self.location == field,
             "infinite_gather": True,
             "plant_sprout": True,
