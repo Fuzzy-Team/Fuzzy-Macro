@@ -107,6 +107,7 @@ def _download_update_zip(zip_link, progress_callback, start_percent=35, end_perc
 
 
 def _git_blob_sha(path):
+    """Return the Git blob SHA-1 for the file at ``path``."""
     digest = hashlib.sha1()
     size = os.path.getsize(path)
     digest.update(f"blob {size}\0".encode("utf-8"))
@@ -117,6 +118,7 @@ def _git_blob_sha(path):
 
 
 def _is_protected_path(relative_path, protected_folders):
+    """Return whether a relative path is unsafe or protected from updates."""
     parts = relative_path.split("/")
     if (
         not relative_path
@@ -136,6 +138,7 @@ def _is_protected_path(relative_path, protected_folders):
 
 
 def _build_installed_files_manifest(extracted, protected_folders):
+    """Map regular files in an extracted release to their Git blob hashes."""
     manifest = {}
     for root, dirs, files in os.walk(extracted, followlinks=False):
         rel_root = os.path.relpath(root, extracted)
@@ -161,6 +164,7 @@ def _build_installed_files_manifest(extracted, protected_folders):
 
 
 def _load_json_hashes(path):
+    """Load string path-to-hash entries from a JSON object."""
     with open(path, "r", encoding="utf-8") as fh:
         value = json.load(fh)
     if not isinstance(value, dict):
@@ -188,6 +192,7 @@ def _metadata_path(destination, relative_path):
 
 
 def _download_obsolete_files():
+    """Download and validate the bootstrap inventory of obsolete files."""
     response = requests.get(OBSOLETE_FILES_URL, timeout=20, headers={
         "Cache-Control": "no-cache, no-store, must-revalidate",
         "Pragma": "no-cache",
@@ -204,6 +209,7 @@ def _download_obsolete_files():
 
 
 def _safe_regular_file(destination, relative_path, protected_folders):
+    """Return an in-root regular file path when it is safe to remove."""
     if _is_protected_path(relative_path, protected_folders):
         return None
     root = os.path.realpath(destination)
@@ -228,6 +234,7 @@ def _safe_regular_file(destination, relative_path, protected_folders):
 
 
 def _remove_empty_directories(start, destination, protected_folders):
+    """Remove empty parent directories up to the installation root."""
     root = os.path.realpath(destination)
     current = os.path.dirname(start)
     while os.path.realpath(current) != root:
@@ -242,6 +249,7 @@ def _remove_empty_directories(start, destination, protected_folders):
 
 
 def _remove_compiled_files(source_path, destination, protected_folders, new_manifest):
+    """Remove unshipped bytecode associated with a deleted Python source file."""
     if not source_path.endswith(".py"):
         return
     cache_dir = os.path.join(os.path.dirname(source_path), "__pycache__")
@@ -369,6 +377,7 @@ def _remove_obsolete_files(extracted, destination, protected_folders, progress_c
 
 
 def _write_json_atomically(path, value):
+    """Serialize a value to JSON and atomically replace the destination file."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp_path = path + ".tmp"
     try:
@@ -385,12 +394,14 @@ def _write_json_atomically(path, value):
 
 
 def _write_installed_files_manifest(extracted, destination, protected_folders):
+    """Atomically record the files shipped by the extracted release."""
     manifest = _build_installed_files_manifest(extracted, protected_folders)
     manifest_path = _metadata_path(destination, INSTALLED_FILES_MANIFEST)
     _write_json_atomically(manifest_path, manifest)
 
 
 def _finish_file_update(extracted, destination, protected_folders, progress_callback=None):
+    """Run best-effort stale-file cleanup and persist updater metadata."""
     try:
         pending = _remove_obsolete_files(
             extracted, destination, protected_folders, progress_callback
@@ -412,6 +423,7 @@ def _finish_file_update(extracted, destination, protected_folders, progress_call
 def _apply_update_files(
     extracted, destination, protected_folders, protected_files, progress_callback=None
 ):
+    """Merge an extracted release and finish its cleanup bookkeeping."""
     _merge_overwrite(extracted, destination, protected_folders, protected_files)
     _finish_file_update(extracted, destination, protected_folders, progress_callback)
 
@@ -729,6 +741,7 @@ def _discover_remote_version(remote_version_url, timeout=15):
 
 
 def update(t="main", update_channel="stable", progress_callback=None):
+    """Install the latest release from the selected update channel."""
     _report_update_progress(progress_callback, 0, "Starting update")
     # Don't show the blocking "Updating..." dialog while merely checking
     # for updates. Show it only after we've determined that a newer

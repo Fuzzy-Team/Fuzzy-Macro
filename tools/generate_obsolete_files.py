@@ -6,12 +6,14 @@ from pathlib import Path
 
 
 def _git(*args):
+    """Run Git with ``args`` and return its standard output."""
     return subprocess.run(
         ["git", *args], check=True, stdout=subprocess.PIPE, text=True
     ).stdout
 
 
 def deleted_files(ref):
+    """Return deleted paths at ``ref`` mapped to their last first-parent blob."""
     output = _git("log", ref, "--diff-filter=D", "--format=commit:%H", "--name-only")
     result = {}
     commit = None
@@ -27,6 +29,7 @@ def deleted_files(ref):
 
 
 def main():
+    """Generate the obsolete-file inventory from command-line arguments."""
     parser = argparse.ArgumentParser(
         description="Write hashes for every file deleted from a git branch."
     )
