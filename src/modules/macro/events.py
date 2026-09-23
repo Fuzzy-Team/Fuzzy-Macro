@@ -19,14 +19,13 @@ class EventDetectionMixin:
             y = 30*self.robloxWindow.multi
             #crop the image to only the area above buff
             bgr = bgr[0:y, 180*self.robloxWindow.multi:int(self.robloxWindow.mw)]
-            w,h = bgr.shape[:2]
-            #check if a 15x15 area that is entirely black
-            for x in range(w-15):
-                for y in range(h-15):
-                    area = bgr[x:x+15, y:y+15]
-                    if np.all(area == [0, 0, 0]):
-                        return True
-            return False
+            rows, cols = bgr.shape[:2]
+            if rows <= 15 or cols <= 15:
+                return False
+            black = np.all(bgr == 0, axis=2).astype(np.uint8)
+            sums = cv2.integral(black)
+            windows = sums[15:rows, 15:cols] - sums[:rows-15, 15:cols] - sums[15:rows, :cols-15] + sums[:rows-15, :cols-15]
+            return bool((windows == 225).any())
         
         #detect the color of the grass in fields
         #useful when gathering
