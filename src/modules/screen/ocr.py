@@ -1,14 +1,12 @@
 from modules.screen.screenshot import mssScreenshot
 import pyautogui as pag
 import numpy as np
-from PIL import Image
-import os
 import time
 import platform
 import mss
 import mss.darwin
 mss.darwin.IMAGE_OPTIONS = 0
-from modules.screen.screenData import getScreenData, scaleRegion, scaleX, scaleY
+from modules.screen.screenData import getScreenData, scaleRegion, scaleY
 import io
 
 BASE_SCREEN_WIDTH = 2880
@@ -51,13 +49,6 @@ newUI = False
 def scaledRegion(left, top, width, height, anchor_x="left", anchor_y="top"):
     return tuple(int(value) for value in scaleRegion(left, top, width, height, anchor_x, anchor_y, screenInfo))
 
-def getCenter(coords):
-    x = coords[0][0]
-    y = coords[0][1]
-    w = coords[1][0] - x #x2-x1
-    h = coords[2][1] - y #y2 -y1
-    #calculate center
-    return (x+w//2, y+h//2)
 def paddleBounding(b):
     #convert all values to int and unpack
     x1,y1,x2,y2 = [int(x) for x in b]
@@ -152,17 +143,6 @@ def imToString(m):
     except:
         out = ""
     return out
-
-def customOCR(X1,Y1,W1,H1,applym=1):
-    if applym:
-        cap = screenshot(region=scaledRegion(X1, Y1, W1, H1))
-    else:
-        cap = screenshot(region=(X1,Y1,W1,H1))
-    out = ocrFunc(cap)
-    if not out is None:
-        return out
-    else:
-        return [[[""],["",0]]]
 
 #accept pillow img
 def ocrRead(img):

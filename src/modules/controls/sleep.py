@@ -46,14 +46,6 @@ def get_interrupt_action():
         return INTERRUPT_NONE
 
 
-def clear_interrupt_action():
-    if _interrupt_action is None:
-        return
-    try:
-        _interrupt_action.value = INTERRUPT_NONE
-    except Exception:
-        pass
-
 
 def raise_if_interrupted():
     action = get_interrupt_action()
@@ -110,30 +102,6 @@ def sleep(duration, get_now=time.perf_counter):
         if chunk > 0:
             time.sleep(chunk)
         now = get_now()
-
-def high_precision_sleep(duration):
-    """Pause-aware high precision sleep"""
-    raise_if_interrupted()
-
-    # Check for pause before sleeping
-    if wait_while_paused():
-        return  # Stop was requested
-    
-    start_time = time.perf_counter()
-    while True:
-        elapsed_time = time.perf_counter() - start_time
-        remaining_time = duration - elapsed_time
-        if remaining_time <= 0:
-            break
-        raise_if_interrupted()
-        if remaining_time > 0.02:  # Sleep for 5ms if remaining time is greater
-            time.sleep(max(remaining_time/2, 0.0001))  # Sleep for the remaining time or minimum sleep interval
-        else:
-            pass
-        # Check for pause during sleep
-        if is_paused():
-            if wait_while_paused():
-                return  # Stop was requested
 
 def pauseable_sleep(duration):
     """A time.sleep replacement that respects pause state"""

@@ -1,13 +1,10 @@
-from PIL import Image, ImageDraw
 import time
 import copy
 import json
 import ast
-import pickle
 import statistics
 from modules.submacros.hourlyReport import HourlyReport, HourlyReportDrawer, BuffDetector, resolveReportTheme
 from modules.misc import settingsManager
-from modules.misc.settingsManager import getCurrentProfile, getMacroVersion
 
 
 class FinalReportDrawer(HourlyReportDrawer):
@@ -15,80 +12,6 @@ class FinalReportDrawer(HourlyReportDrawer):
 
     def __init__(self, time_format=24, theme="dark", accent="green"):
         super().__init__(time_format=time_format, theme=theme, accent=accent)
-
-    def _drawFinalSidebar(self, top, sessionStats, onlyValidHourlyHoney, planterNames, planterTimes,
-                          planterFields, buffQuantity, hourlyBuff_list, nectarQuantity,
-                          enabled_fields=None, field_patterns=None, draw=True):
-        """Draw (or measure, when draw=False) the final-report sidebar. Returns the bottom y."""
-        import math as _math
-        y2 = top
-        totalSessionTime = sessionStats.get("total_session_time", 0)
-
-        # planters (top)
-        if planterNames:
-            if draw:
-                self.draw.text((self.sidebarX, y2), "Planters", font=self.getFont("semibold", 85), fill=self.bodyColor)
-            y2 += 250
-            if draw:
-                self.drawPlanters(y2, planterNames, planterTimes, planterFields)
-            y2 += 650
-
-        # fields (beneath planters)
-        y2 = self._drawFieldsSection(y2, enabled_fields or [], field_patterns or {}, draw=draw)
-
-        # snapshot buffs
-        if draw:
-            self.draw.text((self.sidebarX, y2), "Buffs", font=self.getFont("semibold", 85), fill=self.bodyColor)
-        y2 += 250
-        if draw:
-            self.drawBuffs(y2, buffQuantity, hourlyBuff_list)
-        buffRows = _math.ceil(len(hourlyBuff_list) / 4) if hourlyBuff_list else 1
-        y2 += 300 * max(1, buffRows)
-
-        # nectars
-        y2 += 200
-        if draw:
-            self.draw.text((self.sidebarX, y2), "Nectars", font=self.getFont("semibold", 85), fill=self.bodyColor)
-        y2 += 250
-        if draw:
-            self.drawNectars(y2, nectarQuantity)
-        y2 += 500
-
-        # time breakdown
-        y2 += 100
-        if draw:
-            self.draw.text((self.sidebarX, y2), "Time Breakdown", font=self.getFont("semibold", 85), fill=self.bodyColor)
-        y2 += 250
-        if draw:
-            self.drawTaskTimes(y2, [
-                {"label": "Gathering",  "data": sessionStats.get("gathering_time", 0),  "color": self.gatherColor},
-                {"label": "Converting", "data": sessionStats.get("converting_time", 0), "color": self.convertColor},
-                {"label": "Bug Runs",   "data": sessionStats.get("bug_run_time", 0),    "color": self.otherColor},
-                {"label": "Other",      "data": sessionStats.get("misc_time", 0),       "color": self.subtleColor},
-            ], totalSessionTime)
-        y2 += 1500
-
-        # session stats (bottom)
-        y2 += 100
-        if draw:
-            self.draw.text((self.sidebarX, y2), "Session Stats", font=self.getFont("semibold", 85), fill=self.bodyColor)
-        y2 += 250
-        if draw:
-            self.drawSessionStat(y2, "time_icon", "Total Runtime", self.displayTime(totalSessionTime, ['d', 'h', 'm']), self.bodyColor)
-        y2 += 300
-        if draw:
-            finalHoney = onlyValidHourlyHoney[-1] if onlyValidHourlyHoney else 0
-            self.drawSessionStat(y2, "honey_icon", "Final Honey", self.millify(finalHoney), self.honeyColor)
-        y2 += 300
-        if draw:
-            self.drawSessionStat(y2, "session_honey_icon", "Total Gained", self.millify(sessionStats.get("total_honey", 0)), (253, 227, 149))
-        y2 += 300
-        if draw:
-            avgSidebarLabel = "Est. Avg/Hour" if totalSessionTime < 3600 else "Avg/Hour"
-            self.drawSessionStat(y2, "average_icon", avgSidebarLabel, self.millify(sessionStats.get("avg_honey_per_hour", 0)), self.accentColor)
-        y2 += 300
-
-        return y2
 
     def drawFinalReport(self, hourlyReportStats, sessionStats, honeyPerSec, sessionHoney, onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData, uptimeBuffsValues, buffGatherIntervals, configuredUptimeBuffs=None, configuredHourlyBuffs=None, enabled_fields=None, field_patterns=None):
         """Draw comprehensive final report with session statistics and trends"""

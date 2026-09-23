@@ -1,5 +1,4 @@
 from discord_webhook import DiscordEmbed, DiscordWebhook
-from requests.exceptions import SSLError, ConnectionError
 from modules.misc.settingsManager import getMacroVersion
 
 # Global variable to store message ID for pinning
