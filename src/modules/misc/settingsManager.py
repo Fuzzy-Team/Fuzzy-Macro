@@ -2,17 +2,9 @@ import ast
 import os
 import shutil
 import json
-import zipfile
 import tempfile
 from datetime import datetime
 import re
-
-# TODO: remove the leftover Macro Profile compatibility code now that the
-# refactor is done (~240 lines):
-# - unreachable "legacy" blocks after the early returns in loadFields, saveField,
-#   saveProfileSetting, saveGeneralSetting, loadSettings, and loadAllSettings
-# - unused functions: getDefaultSettingsPath, resolveProjectPath,
-#   loadUserSettingsFile, getProfileChangeCounter, removeGeneralSetting
 
 try:
     from .macro_profile import MacroProfileError, MacroProfileStore, MacroProfileValidationError
@@ -21,7 +13,6 @@ except ImportError:
 
 try:
     from .settings_defaults import (
-        BLOOMS_AI_PATTERN,
         DEFAULT_AFB,
         DEFAULT_AI_PATTERN_PRESETS,
         DEFAULT_AUTO_PLANTERS,
@@ -42,7 +33,6 @@ try:
         DEFAULT_STICKER_STACK,
         DEFAULT_TIMINGS,
         FIELD_PATTERN_PRESETS_KEY,
-        FUZZY_AI_GATHER_PATTERN,
         FUZZY_AI_RUNTIME_DEFAULTS,
         deepcopy_default,
     )
@@ -50,7 +40,6 @@ except ImportError:
     # discordBot (and similar) historically import this module as a top-level
     # `settingsManager` via sys.path, so relative imports have no parent package.
     from settings_defaults import (
-        BLOOMS_AI_PATTERN,
         DEFAULT_AFB,
         DEFAULT_AI_PATTERN_PRESETS,
         DEFAULT_AUTO_PLANTERS,
@@ -71,7 +60,6 @@ except ImportError:
         DEFAULT_STICKER_STACK,
         DEFAULT_TIMINGS,
         FIELD_PATTERN_PRESETS_KEY,
-        FUZZY_AI_GATHER_PATTERN,
         FUZZY_AI_RUNTIME_DEFAULTS,
         deepcopy_default,
     )
@@ -178,10 +166,6 @@ def getUserDataPath(filename):
     """Get an absolute path under the runtime user data directory."""
     return os.path.join(getUserDataDir(), filename)
 
-def getDefaultSettingsPath():
-    """Deprecated: defaults now live in settings_defaults.py."""
-    return os.path.join(getProjectRoot(), "src", "data", "default_settings")
-
 def getDefaultProfileSettings():
     """Return a deep copy of hardcoded profile settings defaults."""
     return deepcopy_default(DEFAULT_PROFILE_SETTINGS)
@@ -201,20 +185,6 @@ def getPatternsDir():
 def getFuzzyAIModelPath(model_filename):
     """Get the fixed fuzzy AI model path under src/data/models."""
     return os.path.join(getProjectRoot(), "src", "data", "models", model_filename)
-
-def resolveProjectPath(path_value):
-    """Resolve a path relative to the project root."""
-    if path_value is None:
-        return None
-
-    path_text = str(path_value).strip()
-    if not path_text:
-        return None
-
-    if os.path.isabs(path_text):
-        return os.path.normpath(path_text)
-
-    return os.path.normpath(os.path.join(getProjectRoot(), path_text))
 
 def loadDefaultFields():
     """Load default field settings from hardcoded defaults."""
@@ -341,10 +311,6 @@ def ensureRuntimeData():
         ensureProfileFiles(target)
         if not os.path.exists(CURRENT_PROFILE_FILE):
             _writeTextFile(CURRENT_PROFILE_FILE, target)
-
-def loadUserSettingsFile(filename):
-    """Load a key=value user settings file, creating it from defaults if needed."""
-    return readSettingsFile(ensureUserFile(filename))
 
 def saveUserSettingsFile(filename, data):
     saveDict(getUserDataPath(filename), data)
@@ -634,11 +600,6 @@ def getCurrentProfile():
     global profileName
     return profileName
 
-def getProfileChangeCounter():
-    """Get the profile change counter for detecting profile switches"""
-    global _profile_change_counter
-    return _profile_change_counter
-
 def switchProfile(name):
     """Switch to a different profile"""
     global profileName
@@ -847,16 +808,6 @@ def _getDefaultSettingsKeySets():
     }
     return _settings_key_file_cache
 
-def _resolveSettingsFileType(setting, requested_type):
-    """Prefer the file that owns this setting in defaults, falling back to the requested type."""
-    key_sets = _getDefaultSettingsKeySets()
-
-    if setting in key_sets["profile"] and setting not in key_sets["general"]:
-        return "profile"
-    if setting in key_sets["general"] and setting not in key_sets["profile"]:
-        return "general"
-    return requested_type
-
 def saveDict(path, data):
     out = "\n".join([f"{k}={v}" for k,v in data.items()])
     # Ensure file ends with a newline to avoid accidental concatenation
@@ -893,15 +844,6 @@ def saveSettingFile(setting,value, path):
     data[setting] = value
     #write it
     saveDict(path, data)
-
-def removeSettingFile(setting, path):
-    #get the dictionary
-    data = readSettingsFile(path)
-    #remove the setting if it exists
-    if setting in data:
-        del data[setting]
-        #write it back
-        saveDict(path, data)
 
 def _readFieldsFile(fields_path):
     if not os.path.exists(fields_path):
@@ -951,24 +893,6 @@ def _loadFieldsFile(fields_path, repair=True):
 def loadFields():
     return getMacroProfileSnapshot(profileName)["fields"]
 
-    # Legacy implementation retained temporarily for compatibility archaeology.
-    ensureProfileFiles()
-    fields_path = os.path.join(getProfilePath(), "fields.txt")
-    out = _loadFieldsFile(fields_path)
-
-    default_fields = loadDefaultFields()
-    fieldsUpdated = False
-    for field, settings in out.items():
-        normalized = normalizeFieldSettings(field, settings, default_fields)
-        if normalized != settings:
-            out[field] = normalized
-            fieldsUpdated = True
-
-    if fieldsUpdated:
-        _writeFieldsFile(fields_path, out)
-
-    return out
-
 def saveField(field, settings):
     snapshot = getMacroProfileSnapshot(profileName)
     existingSettings = snapshot["fields"].get(field, {})
@@ -976,14 +900,6 @@ def saveField(field, settings):
     mergedSettings = _applyFieldPatternPresets(existingSettings, normalizedSettings)
     _getMacroProfileStore().save_field(profileName, field, mergedSettings)
     return
-
-    # Legacy implementation retained temporarily for compatibility archaeology.
-    fieldsData = loadFields()
-    existingSettings = fieldsData.get(field, {})
-    normalizedSettings = normalizeFieldSettings(field, settings)
-    fieldsData[field] = _applyFieldPatternPresets(existingSettings, normalizedSettings)
-    fields_path = os.path.join(getProfilePath(), "fields.txt")
-    _writeFieldsFile(fields_path, fieldsData)
 
 def exportFieldSettings(field_name):
     """Export field settings as JSON string with metadata"""
@@ -1232,28 +1148,6 @@ def getAvailablePatterns():
         return sorted(out)
     return []
 
-def syncFieldSettings(setting, value):
-    """Synchronize field settings from profile to general settings"""
-    try:
-        # Update the general settings file
-        generalSettingsPath = os.path.join(getProfilePath(), "generalsettings.txt")
-        generalData = readSettingsFile(generalSettingsPath)
-        generalData[setting] = value
-        saveDict(generalSettingsPath, generalData)
-    except Exception as e:
-        print(f"Warning: Could not sync field settings to general settings: {e}")
-
-def syncFieldSettingsToProfile(setting, value):
-    """Synchronize field settings from general to profile settings"""
-    try:
-        # Update the profile settings file
-        profileSettingsPath = os.path.join(getProfilePath(), "settings.txt")
-        profileData = readSettingsFile(profileSettingsPath)
-        profileData[setting] = value
-        saveDict(profileSettingsPath, profileData)
-    except Exception as e:
-        print(f"Warning: Could not sync field settings to profile settings: {e}")
-
 def saveProfileSetting(setting, value):
     result = applyMacroProfileChange("profile", setting, value)
     if not result["ok"]:
@@ -1261,26 +1155,12 @@ def saveProfileSetting(setting, value):
         raise MacroProfileValidationError(error["setting"], error["reason"])
     return result["snapshot"]
 
-    # Legacy compatibility path below is intentionally unreachable for one cycle.
-    if _resolveSettingsFileType(setting, "profile") == "general":
-        saveGeneralSetting(setting, value)
-        return
-
-    settings_path = os.path.join(getProfilePath(), "settings.txt")
-    saveSettingFile(setting, value, settings_path)
-    # Synchronize field settings with general settings
-    if setting in ["fields", "fields_enabled"]:
-        syncFieldSettings(setting, value)
-
 def saveDictProfileSettings(dict):
     result = importMacroProfileChanges("profile", dict)
     if not result["ok"]:
         error = result["error"]
         raise MacroProfileValidationError(error["setting"], error["reason"])
     return result["snapshot"]
-
-    settings_path = os.path.join(getProfilePath(), "settings.txt")
-    saveDict(settings_path, {**readSettingsFile(settings_path), **dict})
 
 #increment a setting, and return the dictionary for the setting
 def incrementProfileSetting(setting, incrValue):
@@ -1290,36 +1170,12 @@ def incrementProfileSetting(setting, incrValue):
     saveProfileSetting(setting, current[setting] + incrValue)
     return loadSettings()
 
-    #get the dictionary
-    settings_path = os.path.join(getProfilePath(), "settings.txt")
-    data = readSettingsFile(settings_path)
-    #update the dictionary
-    data[setting] += incrValue
-    #write it
-    saveDict(settings_path, data)
-    return data
-
 def saveGeneralSetting(setting, value):
     result = applyMacroProfileChange("general", setting, value)
     if not result["ok"]:
         error = result["error"]
         raise MacroProfileValidationError(error["setting"], error["reason"])
     return result["snapshot"]
-
-    # Legacy compatibility path below is intentionally unreachable for one cycle.
-    if _resolveSettingsFileType(setting, "general") == "profile":
-        saveProfileSetting(setting, value)
-        return
-
-    generalsettings_path = os.path.join(getProfilePath(), "generalsettings.txt")
-    saveSettingFile(setting, value, generalsettings_path)
-    # Synchronize field settings with profile settings
-    if setting in ["fields", "fields_enabled"]:
-        syncFieldSettingsToProfile(setting, value)
-
-def removeGeneralSetting(setting):
-    generalsettings_path = os.path.join(getProfilePath(), "generalsettings.txt")
-    removeSettingFile(setting, generalsettings_path)
 
 def _moveMisplacedSettings(settings_path, generalsettings_path):
     """Move settings written to the wrong file back to their expected owner."""
@@ -1380,181 +1236,11 @@ def _moveMisplacedSettings(settings_path, generalsettings_path):
 def loadSettings():
     return _getMacroProfileStore().profile_settings(profileName)
 
-    # Legacy implementation retained temporarily for compatibility archaeology.
-    ensureProfileFiles()
-    settings_path = os.path.join(getProfilePath(), "settings.txt")
-    generalsettings_path = os.path.join(getProfilePath(), "generalsettings.txt")
-    _moveMisplacedSettings(settings_path, generalsettings_path)
-    # Read the profile settings if present (capture raw profile to detect legacy keys)
-    try:
-        profile_raw = readSettingsFile(settings_path, defaults=getDefaultProfileSettings())
-        settings = profile_raw.copy()
-    except FileNotFoundError:
-        profile_raw = {}
-        print(f"Warning: Profile '{profileName}' settings file not found, using defaults")
-        # Fall back to default settings if profile file is missing
-        settings = getDefaultProfileSettings()
-
-    # Read default settings and ensure profile contains any missing keys
-    defaultSettings = getDefaultProfileSettings()
-    merged_new_keys = False
-    for k, v in defaultSettings.items():
-        if k not in settings:
-            settings[k] = v
-            merged_new_keys = True
-
-    taskPriorityOrder = settings.get("task_priority_order", [])
-    if isinstance(taskPriorityOrder, list) and "collect_sprouts" not in taskPriorityOrder:
-        insertIndex = taskPriorityOrder.index("collect_sticker_printer") + 1 if "collect_sticker_printer" in taskPriorityOrder else len(taskPriorityOrder)
-        taskPriorityOrder.insert(insertIndex, "collect_sprouts")
-        settings["task_priority_order"] = taskPriorityOrder
-        merged_new_keys = True
-    if isinstance(taskPriorityOrder, list) and "collect_sticker_sprout" not in taskPriorityOrder:
-        insertIndex = taskPriorityOrder.index("collect_sprouts") + 1 if "collect_sprouts" in taskPriorityOrder else len(taskPriorityOrder)
-        taskPriorityOrder.insert(insertIndex, "collect_sticker_sprout")
-        settings["task_priority_order"] = taskPriorityOrder
-        merged_new_keys = True
-
-    # Migrate legacy global quest gather override to per-quest keys on first load
-    try:
-        legacy_present = any(k in profile_raw for k in ("quest_gather_mins", "quest_gather_return"))
-        if legacy_present:
-            legacy_mins = profile_raw.get("quest_gather_mins", None)
-            legacy_return = profile_raw.get("quest_gather_return", None)
-            # Only migrate if legacy values differ from defaults (i.e., the user had configured them)
-            default_mins = defaultSettings.get("quest_gather_mins")
-            default_return = defaultSettings.get("quest_gather_return")
-            do_migrate = False
-            if legacy_mins is not None and legacy_mins != default_mins:
-                do_migrate = True
-            if legacy_return is not None and legacy_return != default_return:
-                do_migrate = True
-
-            if do_migrate:
-                per_quests = ["polar_bear", "brown_bear", "black_bear", "honey_bee", "bucko_bee", "riley_bee"]
-                for q in per_quests:
-                    mins_key = f"{q}_quest_gather_mins"
-                    return_key = f"{q}_quest_gather_return"
-                    if legacy_mins is not None:
-                        settings[mins_key] = legacy_mins
-                    if legacy_return is not None:
-                        settings[return_key] = legacy_return
-                # Remove old global keys so migration happens only once
-                if "quest_gather_mins" in settings:
-                    del settings["quest_gather_mins"]
-                if "quest_gather_return" in settings:
-                    del settings["quest_gather_return"]
-                merged_new_keys = True
-    except Exception:
-        # If migration fails for any reason, skip without blocking startup
-        pass
-
-    # Ensure fields and fields_enabled arrays have 5 elements
-    defaultFields = defaultSettings.get("fields", ['pine tree', 'sunflower', 'dandelion', 'pine tree', 'sunflower'])
-    defaultFieldsEnabled = defaultSettings.get("fields_enabled", [True, False, False, False, False])
-    
-    fields = settings.get("fields", [])
-    fieldsEnabled = settings.get("fields_enabled", [])
-    
-    # Extend arrays to 5 elements if needed
-    updated = False
-    while len(fields) < 5:
-        fields.append(defaultFields[len(fields)] if len(fields) < len(defaultFields) else defaultFields[-1])
-        updated = True
-    while len(fieldsEnabled) < 5:
-        fieldsEnabled.append(defaultFieldsEnabled[len(fieldsEnabled)] if len(fieldsEnabled) < len(defaultFieldsEnabled) else False)
-        updated = True
-
-    if updated:
-        settings["fields"] = fields
-        settings["fields_enabled"] = fieldsEnabled
-
-    # Persist settings if we added default keys or extended arrays
-    if merged_new_keys or updated:
-        try:
-            saveDict(settings_path, settings)
-        except Exception:
-            pass
-
-    return settings
-
 #return a dict containing all settings except field (general, profile, planters)
 def loadAllSettings():
     # Reload the selected profile name so a switch made by another process is seen.
     loadCurrentProfile()
     return getMacroProfileSnapshot()["settings"]
-
-    # Legacy implementation retained temporarily for compatibility archaeology.
-    # Ensure current profile is reloaded from persistent storage so other processes
-    # (like the Discord bot) can change the active profile and have the main
-    # GUI process pick it up immediately.
-    try:
-        loadCurrentProfile()
-    except Exception:
-        pass
-
-    ensureRuntimeData()
-
-    # Auto-migrate profiles to have their own generalsettings.txt files
-    migrateProfilesToGeneralSettings()
-
-    generalsettings_path = os.path.join(getProfilePath(), "generalsettings.txt")
-    settings_path = os.path.join(getProfilePath(), "settings.txt")
-    _moveMisplacedSettings(settings_path, generalsettings_path)
-    try:
-        generalSettings = readSettingsFile(generalsettings_path, defaults=getDefaultGeneralSettings())
-    except FileNotFoundError:
-        print(f"Warning: Profile '{profileName}' generalsettings file not found, using defaults")
-        generalSettings = getDefaultGeneralSettings()
-
-    # Merge any new default general settings keys into the profile.
-    merged_general_keys = False
-    try:
-        defaultGeneralSettings = getDefaultGeneralSettings()
-        for k, v in defaultGeneralSettings.items():
-            if k not in generalSettings:
-                generalSettings[k] = v
-                merged_general_keys = True
-    except Exception:
-        pass
-
-    # Migrate old boolean flags to new macro_mode setting
-    migrated = False
-    field_only = generalSettings.get("field_only_mode", False)
-    quest_only = generalSettings.get("quest_only_mode", False)
-
-    # Check if old settings exist (regardless of their value)
-    if "field_only_mode" in generalSettings or "quest_only_mode" in generalSettings:
-        if field_only and quest_only:
-            # If both are somehow true, prioritize field mode
-            generalSettings["macro_mode"] = "field"
-        elif field_only:
-            generalSettings["macro_mode"] = "field"
-        elif quest_only:
-            generalSettings["macro_mode"] = "quest"
-        else:
-            generalSettings["macro_mode"] = "normal"
-
-        # Remove old settings
-        if "field_only_mode" in generalSettings:
-            del generalSettings["field_only_mode"]
-            migrated = True
-        if "quest_only_mode" in generalSettings:
-            del generalSettings["quest_only_mode"]
-            migrated = True
-
-        # Save the migrated settings back to file
-        if migrated:
-            saveDict(generalsettings_path, generalSettings)
-            print("Migrated old field_only_mode/quest_only_mode settings to new macro_mode setting")
-
-    if merged_general_keys:
-        try:
-            saveDict(generalsettings_path, generalSettings)
-        except Exception:
-            pass
-
-    return {**loadSettings(), **generalSettings}
 
 def initializeFieldSync():
     """Initialize field synchronization between profile and general settings"""
@@ -1732,52 +1418,3 @@ def clearFile(filePath):
     if directory:
         os.makedirs(directory, exist_ok=True)
     open(filePath, 'w').close()
-
-def migrateProfilesToGeneralSettings():
-    """Migrate existing profiles to have their own generalsettings.txt files"""
-    profiles_dir = getProfilesDir()
-    global_generalsettings = os.path.join(getSettingsDir(), "generalsettings.txt")
-
-    # Check if global generalsettings exists - if not, migration is already complete
-    if not os.path.exists(global_generalsettings):
-        return
-
-    if not os.path.exists(profiles_dir):
-        return
-
-    # Read global generalsettings
-    try:
-        global_data = readSettingsFile(global_generalsettings)
-    except FileNotFoundError:
-        print("Warning: Global generalsettings.txt not found, cannot migrate profiles")
-        return
-
-    migration_performed = False
-
-    # Iterate through all profiles
-    for profile_name in listProfiles():
-        profile_path = os.path.join(profiles_dir, profile_name)
-        generalsettings_file = os.path.join(profile_path, "generalsettings.txt")
-
-        # Skip if profile already has generalsettings.txt
-        if os.path.exists(generalsettings_file):
-            continue
-
-        # Copy global generalsettings to profile
-        try:
-            shutil.copy2(global_generalsettings, generalsettings_file)
-            print(f"Migrated generalsettings.txt for profile: {profile_name}")
-            migration_performed = True
-        except Exception as e:
-            print(f"Warning: Failed to migrate generalsettings.txt for profile '{profile_name}': {e}")
-
-    # Only print completion message and delete old file if migration was actually performed
-    if migration_performed:
-        print("Profile migration completed")
-
-        # Delete the old global generalsettings file since all profiles now have their own copies
-        try:
-            os.remove(global_generalsettings)
-            print("Removed old global generalsettings.txt file")
-        except Exception as e:
-            print(f"Warning: Failed to remove old global generalsettings.txt file: {e}")
