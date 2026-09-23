@@ -228,6 +228,8 @@ blenderItems = ["red extract", "blue extract", "enzymes", "oil", "glue", "tropic
 
 MAIN_GAME_PLACE_ID = "1537690962"
 HIVE_HUB_PLACE_ID = "15579077077"
+# share of the Roblox window that must match one sample color to count as the rejoin/loading screen
+REJOIN_COLOR_PERCENT = 0.7754
 
 
 SPROUT_FIELD_TOKEN_PRIORITY = {
