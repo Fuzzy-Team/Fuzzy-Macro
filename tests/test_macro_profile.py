@@ -179,6 +179,18 @@ class MacroProfileStoreTests(unittest.TestCase):
         with self.assertRaises(MacroProfileValidationError):
             self.store.apply_change("main", "general", "cannon_hive_resync_attempts", 5)
 
+    def test_field_normalization_converts_numeric_strings(self):
+        from src.modules.misc import settingsManager
+
+        normalized = settingsManager.normalizeFieldSettings(
+            "pine tree",
+            {"shape": "lines", "distance": "7", "width": "4"},
+            {"pine tree": {"shape": "lines", "distance": 1, "width": 4}},
+        )
+
+        self.assertEqual(normalized["distance"], 7)
+        self.assertEqual(normalized["width"], 4)
+
 
 if __name__ == "__main__":
     unittest.main()
