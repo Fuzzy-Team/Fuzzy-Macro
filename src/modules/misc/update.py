@@ -376,6 +376,20 @@ def _apply_update_files(
     )
 
 
+def _check_ai_models():
+    """Use the model list from the release just copied into this install."""
+    from modules.misc import modelManager
+
+    cached_bytecode = getattr(modelManager, "__cached__", None)
+    if cached_bytecode and os.path.exists(cached_bytecode):
+        try:
+            os.remove(cached_bytecode)
+        except OSError as exc:
+            raise OSError("Could not refresh cached model manager") from exc
+    importlib.invalidate_caches()
+    importlib.reload(modelManager).ensure_supported_models()
+
+
 def _refresh_updater(destination, progress_callback=None):
     update_py_url = "https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/src/modules/misc/update.py"
     headers = {
@@ -846,8 +860,7 @@ def update(t="main", update_channel="stable", progress_callback=None):
 
     try:
         _report_update_progress(progress_callback, 84, "Checking AI models")
-        from modules.misc.modelManager import ensure_supported_models
-        ensure_supported_models()
+        _check_ai_models()
     except Exception as e:
         print(f"[models] Could not check/download AI models: {e}")
 
@@ -1018,8 +1031,7 @@ def update_from_commit(commit_hash, progress_callback=None):
 
     try:
         _report_update_progress(progress_callback, 84, "Checking AI models")
-        from modules.misc.modelManager import ensure_supported_models
-        ensure_supported_models()
+        _check_ai_models()
     except Exception as e:
         print(f"[models] Could not check/download AI models: {e}")
 
