@@ -380,6 +380,14 @@ async function saveSetting(ele, type) {
     if (inputEl) inputEl.value = n;
   }
 
+  if (
+    (ele.dataset.inputType == "int" || ele.dataset.inputType == "float") &&
+    !Number.isFinite(valueToSave)
+  ) {
+    console.error(`Could not save ${id}: numeric value must be finite`);
+    return false;
+  }
+
   if (type == "profile") {
     const result = await eel.applyMacroProfileChange("profile", id, valueToSave)();
     if (!result.ok) {
