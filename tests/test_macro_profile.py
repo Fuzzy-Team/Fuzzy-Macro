@@ -217,6 +217,25 @@ class MacroProfileStoreTests(unittest.TestCase):
             self.store.apply_changes("main", "general", {"macro_mode": "quest", "max_cannon_attempts": 0})
         self.assertEqual(self.read(path), before)
 
+    def test_transactional_import_validates_cross_fields_against_final_state(self):
+        self.store.initialize("main")
+        self.store.apply_changes(
+            "main",
+            "general",
+            {"max_cannon_attempts": 3, "cannon_hive_resync_attempts": 1},
+        )
+        settings = self.store.snapshot("main").as_dict()["settings"]
+        self.assertEqual(settings["max_cannon_attempts"], 3)
+        self.assertEqual(settings["cannon_hive_resync_attempts"], 1)
+
+    def test_prefixed_max_convert_time_key_is_not_split(self):
+        defaults = {**PROFILE_DEFAULTS, "max_convert_time": 10}
+        store = MacroProfileStore(self.profiles_dir, defaults, GENERAL_DEFAULTS, FIELD_DEFAULTS)
+        self.write("main", "settings.txt", "x_max_convert_time=5\nmax_convert_time=7\n")
+        settings = store.initialize("main").as_dict()["settings"]
+        self.assertEqual(settings["x_max_convert_time"], 5)
+        self.assertEqual(settings["max_convert_time"], 7)
+
     def test_compatibility_save_adapter_delegates_to_deep_module(self):
         from src.modules.misc import settingsManager
 

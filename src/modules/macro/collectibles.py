@@ -2,7 +2,6 @@ import imagehash
 import math
 import pyautogui as pag
 import re
-import threading
 from datetime import timedelta
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
@@ -165,7 +164,9 @@ class CollectiblesMixin:
         nextY = selectorCenterY - shrineScaleY(45)
         for _ in range(80):
             selectedItemText = readSelectedShrineItem(nameX, nameY, nameW, nameH)
-            if any(alias in selectedItemText or selectedItemText in alias for alias in itemAliases):
+            if len(selectedItemText) >= 3 and any(
+                alias in selectedItemText or selectedItemText in alias for alias in itemAliases
+            ):
                 foundItem = True
                 break
             if itemImg is not None:
@@ -209,22 +210,20 @@ class CollectiblesMixin:
         glitterSlot = min(7, max(0, int(self.setdat.get("field_booster_glitter_slot", 1) or 0)))
         with self._fieldBoosterGlitterLock:
             self._fieldBoosterGlitterGeneration += 1
-            generation = self._fieldBoosterGlitterGeneration
+            self._fieldBoosterGlitterPending = (time.monotonic() + 14 * 60 + 55, glitterSlot)
 
-        def useGlitter():
-            # Field boosters last 15 minutes; Glitter needs to be used at 14:55.
-            time.sleep(14 * 60 + 55)
-            with self._fieldBoosterGlitterLock:
-                if generation != self._fieldBoosterGlitterGeneration:
-                    return
-            self.useGlitterFromSlot(glitterSlot)
-            self.logger.webhook("", f"Used Glitter from hotbar slot {glitterSlot}; extending field booster", "bright green")
-
-        threading.Thread(
-            target=useGlitter,
-            name="field-booster-glitter-extension",
-            daemon=True,
-        ).start()
+    def consumeFieldBoosterGlitterExtension(self):
+        """Use a due field-booster extension between macro tasks."""
+        with self._fieldBoosterGlitterLock:
+            pending = self._fieldBoosterGlitterPending
+            if pending is None or time.monotonic() < pending[0]:
+                return False
+            self._fieldBoosterGlitterPending = None
+        if self.run is not None and self.run.value == 0:
+            return False
+        self.useGlitterFromSlot(pending[1])
+        self.logger.webhook("", f"Used Glitter from hotbar slot {pending[1]}; extending field booster", "bright green")
+        return True
 
     def useGlitterFromSlot(self, slot):
         """Use a Glitter hotbar slot, or locate Glitter in the inventory for slot 0."""
@@ -396,11 +395,15 @@ class CollectiblesMixin:
                 self.keyboard.walk("a",1.25, False)
                 self.keyboard.walk("s",1.5)
                 self.keyboard.walk("d",0.45)
-                while not self.isBesideE(objectiveData[0]):
-                    self.keyboard.walk("s", 0.4)
                 reached = self.isBesideE(objectiveData[0])
+                for _ in range(10):
+                    if reached or self.checkPauseAndWait():
+                        break
+                    self.keyboard.walk("s", 0.4)
+                    reached = self.isBesideE(objectiveData[0])
                 if not reached:
                     self.logger.webhook("", "Failed to reach Honey Storm summon point", "dark brown", "screen")
+                    updateHourlyTime()
                     return
                 if "(" in reached and ":" in reached:
                     cooldownSeconds = objectiveData[2]
@@ -461,7 +464,7 @@ class CollectiblesMixin:
                 self.logger.webhook("", "Gummy Beacon is not unlocked", "dark brown", "screen")
                 updateHourlyTime()
                 return
-            if "(" and ":" in reachedText:
+            if "(" in reachedText and ":" in reachedText:
                 cd = self.cdTextToSecs(reachedText, True, self.collectCooldowns[objective])
                 if cd:
                     cooldownFormat = timedelta(seconds=cd)
@@ -472,7 +475,7 @@ class CollectiblesMixin:
         #check if on cooldown
         cooldownSeconds = objectiveData[2]
         returnVal = None #a return value
-        if "(" and ":" in reached:
+        if "(" in reached and ":" in reached:
             cd = self.cdTextToSecs(reached, True, self.collectCooldowns[objective])
             if cd: cooldownSeconds = cd
             cooldownFormat = timedelta(seconds=cooldownSeconds)

@@ -13,5 +13,5 @@ The process of finding an available hive and claiming it after joining a server.
 _Avoid_: Hive check, hive detection
 
 **Gather Session**:
-One continuous period of gathering in a field, from pattern setup through its final return reason. A failed pattern changes the active pattern to `e_lol` for the rest of the session.
+One continuous period of gathering in a field, from pattern setup through its final return reason. A non-fatal failure in a non-`e_lol` pattern changes the active pattern to `e_lol` for the rest of the session.
 _Avoid_: Gather loop, pattern run

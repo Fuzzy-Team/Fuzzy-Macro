@@ -204,6 +204,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
     #makes it easy to do any checks after a task is complete (like stinger hunt, rejoin every, etc)
     def runTask(func = None, args = (), resetAfter = True, convertAfter = True, allowAFB = True):
         nonlocal taskCompleted
+        macro.consumeFieldBoosterGlitterExtension()
 
         def watchedTaskKey():
             if func is None:

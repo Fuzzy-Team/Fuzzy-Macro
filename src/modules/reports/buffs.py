@@ -373,7 +373,8 @@ class BuffDetector():
         buffQuantity = []
         buffs = buffs.items()
 
-        if screen is None:
+        ownScreen = screen is None
+        if ownScreen:
             screen = self.screenshotBuffArea()
 
         for buff,v in buffs:
@@ -392,7 +393,9 @@ class BuffDetector():
                 continue
             finalBuffValues = []
 
-            for _ in range(3):
+            for attempt in range(3):
+                if ownScreen and attempt > 0:
+                    screen = self.screenshotBuffArea()
                 res = locateTransparentImage(buffTemplate, screen, threshold)
 
                 if not res: 
@@ -428,6 +431,8 @@ class BuffDetector():
                 if fullBuffImgBGR.size == 0:
                     print(f"Warning: Empty image for buff '{buff}' at ({cropX}, {cropY})")
                     finalBuffValues.append(1)
+                    if not ownScreen:
+                        break
                     time.sleep(1)
                     continue
                 
@@ -437,9 +442,10 @@ class BuffDetector():
                 # Match the hourly report detector from the provided reference file:
                 # crop the full buff tile and OCR the stack text from that tile.
                 buffVal = self.getBuffQuantityFromImgOcrRobust(fullBuffImgBGR, transform, buff=buff)
-                if buffVal == "1":
-                    time.sleep(1)
                 finalBuffValues.append(buffVal)
+                if buffVal != "1" or not ownScreen:
+                    break
+                time.sleep(1)
             
             maxFinalBuffValue = "0"
             for val in finalBuffValues:

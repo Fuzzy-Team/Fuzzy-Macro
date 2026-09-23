@@ -232,10 +232,10 @@ class ScreenMixin:
                 cooldownSeconds += int(num) * 60**i
 
         elif cooldownRaw.count("s") == 1: #only seconds
-            num = extractNumFromText(e)
+            num = extractNumFromText(cooldownRaw)
             if not num:
                 validTime = False
-            cooldownSeconds = num
+            cooldownSeconds = int(num) if num else None
         else:
             validTime = False
         

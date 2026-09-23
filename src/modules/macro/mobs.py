@@ -459,9 +459,10 @@ class MobMixin:
         def runSideTask():
             self.logger.webhook("", "Stump Snail: Running periodic side task", "dark brown")
             self.reset(convert=False)
-            self.runPath("cannon_to_field/pine")
-            runGatherPattern("skillet", patternDuration)
-            self.reset(convert=True)
+            if self.travelViaCannon("Stump Snail side task", resetIfAway=False):
+                self.goToField("pine tree")
+                runGatherPattern("skillet", patternDuration)
+                self.reset(convert=True)
             goToStump()
 
         goToStump()

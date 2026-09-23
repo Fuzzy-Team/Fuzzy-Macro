@@ -215,7 +215,7 @@ class RejoinMixin:
             # Cold starts have no prior sprinkler. In-game deeplink retries must
             # see it disappear (loading) before the post-rejoin appearance counts.
             sawSprinklerGap = not clientAlreadyOpen
-            softRejoinReadyAt = loadStartTime + (2 if clientAlreadyOpen else 0)
+            softRejoinReadyAt = loadStartTime + (20 if clientAlreadyOpen else 0)
             while time.time() - loadStartTime < 36:
                 if joinPS and self.skipServer is not None and self.skipServer.value == 1:
                     self.skipServer.value = 0
