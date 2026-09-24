@@ -1061,6 +1061,15 @@ def getMacroVersion():
     return settingsManager.getMacroVersion()
 
 @eel.expose
+def usesLegacyDiscordBot():
+    """True on macOS 10.12-10.14 (Python 3.7, discord.py 1.x), where bot commands use the fuzz! prefix"""
+    try:
+        from modules.discord_bot import legacyCommands
+        return legacyCommands.IS_LEGACY
+    except Exception:
+        return False
+
+@eel.expose
 def autoClickerClick():
     """Perform a single fast left click for the tools tab auto clicker."""
     try:
