@@ -284,16 +284,19 @@ class MacroProfileStore:
         general_keys = set(self._general_defaults)
 
         # Move settings stored in the wrong file to their owner, keeping a value the
-        # user changed over a default when both files have the key. Leave them in place
-        # while the owner file is unreadable, or saving the source file would lose them.
+        # user changed over a default when both files have the key. While the owner file
+        # is unreadable its data is only defaults, so use the value but leave it in the
+        # source file, or saving the source file would lose it.
         for source, target, owner_keys, other_keys, defaults, owner_file in (
             (general_data, profile_data, profile_keys, general_keys, self._profile_defaults, self.PROFILE_FILE),
             (profile_data, general_data, general_keys, profile_keys, self._general_defaults, self.GENERAL_FILE),
         ):
-            if owner_file in errors:
-                continue
+            owner_unreadable = owner_file in errors
             for key in list(source):
                 if key in owner_keys and key not in other_keys:
+                    if owner_unreadable:
+                        target[key] = source[key]
+                        continue
                     moved = source.pop(key)
                     if key not in target or (target[key] == defaults[key] and moved != defaults[key]):
                         target[key] = moved

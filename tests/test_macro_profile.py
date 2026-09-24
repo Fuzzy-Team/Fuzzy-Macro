@@ -237,8 +237,9 @@ class MacroProfileStoreTests(unittest.TestCase):
     def test_misplaced_setting_stays_while_its_owner_file_is_malformed(self):
         self.write("main", "settings.txt", "this is not a setting\n")
         general = self.write("main", "generalsettings.txt", "count=4\nmax_cannon_attempts=5\n")
-        self.store.initialize("main")
+        snapshot = self.store.initialize("main").as_dict()
         self.assertIn("count=4", self.read(general))
+        self.assertEqual(snapshot["settings"]["count"], 4)
 
     def test_non_ascii_values_round_trip_as_utf8(self):
         self.store.initialize("main")
