@@ -9,7 +9,7 @@ from PIL import Image
 
 import modules.controls.mouse as mouse
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP
-from modules.screen.ocr import ocrRead, imToString
+from modules.screen.ocr import ocrRead, readBlueText
 from modules.misc.imageManipulation import adjustImage, average_hash, ImageHash
 from modules.screen.imageSearch import locateImageOnScreen
 from modules.screen.robloxWindow import RobloxWindowBounds
@@ -303,7 +303,7 @@ class MemoryMatch:
         found = False
         for _ in range(6):
             try:
-                txt = imToString("blue").lower()
+                txt = readBlueText().lower()
             except Exception:
                 txt = ""
             bluetexts += txt
@@ -336,7 +336,7 @@ class MemoryMatch:
         Returns True if a winnings message or payout background is detected.
         """
         try:
-            txt = imToString("blue").lower()
+            txt = readBlueText().lower()
             if "winner" in txt or "better luck" in txt or "next time" in txt:
                 return True
         except Exception:

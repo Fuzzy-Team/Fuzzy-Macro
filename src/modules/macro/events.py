@@ -98,7 +98,7 @@ class EventDetectionMixin:
         self.lastGuidingStarScan = now
 
         try:
-            text = ocr.imToString("blue").lower()
+            text = ocr.readBlueText().lower()
         except Exception:
             return
 
