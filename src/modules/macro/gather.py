@@ -172,6 +172,8 @@ class GatherMixin:
                 preloadedAIGatherNameSpace = {**locals(), **vars(patternEnvironment)}
                 warmupResult = patternRunner.warmup(preloadedAIGatherNameSpace)
                 pattern = warmupResult.pattern
+            except InterruptRequested:
+                raise
             except Exception as error:
                 print(traceback.format_exc())
                 patternRunner.mark_failed(error)
@@ -557,15 +559,19 @@ class GatherMixin:
             nonlocal gooTimerActive, inactiveHoneyTimerActive, questMenuKeptOpen
             gooTimerActive = False  # Stop the goo timer thread
             inactiveHoneyTimerActive = False
-            if fieldSetting["shift_lock"]: 
-                self.keyboard.press('shift')
-            if questMenuKeptOpen:
-                self.toggleQuest()
-                questMenuKeptOpen = False
-            self.moveMouseToDefault()
-            self.clear_task_status()
-            self.isGathering = False
-            gatherSession.finish(gatherNameSpace, reason)
+            # toggleQuest sleeps, which raises again while an interrupt is pending,
+            # so the session cleanup must not depend on it finishing
+            try:
+                if fieldSetting["shift_lock"]:
+                    self.keyboard.press('shift')
+                if questMenuKeptOpen:
+                    self.toggleQuest()
+                    questMenuKeptOpen = False
+                self.moveMouseToDefault()
+                self.clear_task_status()
+            finally:
+                self.isGathering = False
+                gatherSession.finish(gatherNameSpace, reason)
 
         if fieldSetting["shift_lock"]: 
             self.keyboard.press('shift')
@@ -587,7 +593,14 @@ class GatherMixin:
             patternStartTime = time.time()
             mouse.mouseDown()
 
-            cycleResult = gatherSession.run_cycle(gatherNameSpace, owner=self)
+            try:
+                cycleResult = gatherSession.run_cycle(gatherNameSpace, owner=self)
+            except Exception as error:
+                # interrupts usually land inside a pattern's sleep, and e_lol failing ends the
+                # gather too; either way stop the gather's threads and reports before leaving
+                mouse.mouseUp()
+                stopGather("interrupted" if isinstance(error, InterruptRequested) else "pattern_error")
+                raise
             pattern = cycleResult.pattern
 
             #field drift compensation — AI patterns already manage sprinkler
