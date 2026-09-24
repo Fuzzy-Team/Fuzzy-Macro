@@ -279,10 +279,7 @@ class HiveMixin:
                 time.sleep(0.4)
             self.moveMouseToDefault()
             
-            if self.newUI:
-                emptyHealth = self.adjustImage("./images/menu", "emptyhealth_new")
-            else:
-                emptyHealth = self.adjustImage("./images/menu", "emptyhealth")
+            emptyHealth = self.adjustImage("./images/menu", "emptyhealth_new")
             healthBar = False #check if the health bar appears when the player resets. For some reason, the empty health bar doesnt always appear
             st = time.time()
             #wait for empty health bar to appear

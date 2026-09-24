@@ -114,8 +114,6 @@ class macro(
         self.night = False
         self.location = "spawn"
 
-        self.newUI = False
-
         self.planterCooldowns = {}
 
         #memory match
@@ -382,9 +380,6 @@ class macro(
             messageBox.msgBox(text='It seems like you have not enabled roblox scaling. The macro will not work properly.\n1. Close Roblox\n2. Go to finder -> applications -> right click roblox -> get info -> enable "scale to fit below built-in camera"', title='Roblox scaling')
         time.sleep(1)
         self.moveMouseToDefault()
-
-        self.newUI = True
-        logModule.newUI = True
 
         #check for accessibility
         #this is done by taking 2 different screenshots
