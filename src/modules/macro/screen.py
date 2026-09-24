@@ -13,7 +13,7 @@ from modules.submacros.backpack import bpc
 class ScreenMixin:
     def readBlueText(self):
         try:
-            return ocr.imToString("blue").lower()
+            return ocr.readBlueText().lower()
         except Exception:
             return ""
 

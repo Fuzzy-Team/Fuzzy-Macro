@@ -504,7 +504,7 @@ class CollectiblesMixin:
                 bluetexts = ""
                 #get the blue texts 4 times to avoid missing the field
                 for _ in range(4):
-                    bluetexts += ocr.imToString("blue").lower()
+                    bluetexts += ocr.readBlueText().lower()
                 # Reuse AFB parsing logic to robustly detect boosted field names.
                 allCandidateFields = list(startLocationDimensions.keys())
                 detectedBoostedFields = self._extractAFBBoostedFields(bluetexts, allCandidateFields)
