@@ -61,15 +61,15 @@ class InventoryMixin:
         
         def scrollToTop():
             prevHash = None
-            for i in range(9):
+            for _ in range(9):
                 mouse.scroll(100)
                 sleep(0.05)
-                if i > 10:
-                    screen = cv2.cvtColor(mssScreenshotNP(self.robloxWindow.mx, self.robloxWindow.my+120, 100, 200), cv2.COLOR_BGRA2RGB)
-                    hash = average_hash(Image.fromarray(screen))
-                    if not prevHash is None and prevHash == hash:
-                        break
-                    prevHash = hash
+                #stop once the list no longer moves
+                screen = cv2.cvtColor(mssScreenshotNP(self.robloxWindow.mx, self.robloxWindow.my+120, 100, 200), cv2.COLOR_BGRA2RGB)
+                hash = average_hash(Image.fromarray(screen))
+                if not prevHash is None and prevHash == hash:
+                    break
+                prevHash = hash
         #for retina, just a regular image search
         #for built-in, a transparency search
         itemImg = self.adjustImage("./images/inventory", itemName)
