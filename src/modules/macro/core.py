@@ -86,7 +86,7 @@ class macro(
         self.setdat = profileSnapshot["settings"]
         self.fieldSettings = profileSnapshot["fields"]
         # Track the published snapshot, including changes made by other adapters.
-        self._last_profile_change_counter = profileSnapshot["version"]
+        self._last_profile_version = profileSnapshot["version"]
         self._last_profile_name = profileSnapshot["profile"]
 
         self.robloxWindow = RobloxWindowBounds()
@@ -166,10 +166,10 @@ class macro(
         profileChanged = profileSnapshot["profile"] != self._last_profile_name
         settingsChanged = (
             profileChanged
-            or profileSnapshot["version"] != self._last_profile_change_counter
+            or profileSnapshot["version"] != self._last_profile_version
         )
         if settingsChanged:
-            self._last_profile_change_counter = profileSnapshot["version"]
+            self._last_profile_version = profileSnapshot["version"]
             self._last_profile_name = profileSnapshot["profile"]
             # Reload settings
             self.setdat = profileSnapshot["settings"]
