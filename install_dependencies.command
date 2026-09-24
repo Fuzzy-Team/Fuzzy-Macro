@@ -192,6 +192,9 @@ if [ "$python_ver" = '3.9' ] || { [ "$python_ver" = '3.8' ] && version_at_least 
 	install_pip_package "ocrmac"
 	install_pip_package "pyobjc-framework-ColorSync<12.0"
 	install_pip_package "pyobjc-framework-ApplicationServices"
+	# torch was installed here before coremltools stopped needing it, and scipy/PyWavelets
+	# only came with ImageHash. Nothing on this path uses them anymore.
+	pip uninstall -y torch torchvision scipy PyWavelets
 
 elif version_at_least "$os_ver" "10.15.0"; then
 	printf "\033[1;35mInstalling rust\n\n\033[0m"
@@ -215,13 +218,15 @@ else
 	install_pip_package "pyobjc-framework-Cocoa<11.0"
 	install_pip_package "pyobjc-framework-ColorSync<11.0" "--no-deps"
 	install_pip_package "pyobjc-framework-ApplicationServices<11.0" "--no-deps"
+	# No 4.6 wheel exists below macOS 10.15, so pip builds it from source here (slow, but known
+	# to work down to 10.12, unlike the older wheels, which bundle libraries built for 10.13).
 	install_pip_package "opencv-python==4.6.0.66"
-	#python"${python_ver}" -m pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org paddlepaddle==2.4.2 -i https://pypi.tuna.tsinghua.edu.cn/simple
-	#python"${python_ver}" -m pip install --no-deps --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org paddleocr==2.6.1.3
-	#printf "\033[31;1mInstalling lxml, this can take a while \033[0m\n"
-	#pip"${python_ver}" install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org protobuf==3.20.0
-	#pip"${python_ver}" install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org orjson==3.9.6
-	install_pip_package "ocrmac"
+	# Apple Vision OCR needs macOS 10.15, so use easyocr. 1.7.1 is the last release that
+	# works with python-bidi 0.4.2 (the newest for Python 3.7), and torch 1.13.1 is the last
+	# for Python 3.7. --no-deps keeps easyocr from adding a second OpenCV package and
+	# scikit-image (its wheels need macOS 10.15; ocr.py stands in for it).
+	install_pip_package "easyocr==1.7.1" "--no-deps"
+	install_pip_package "torch==1.13.1 torchvision==0.14.1 scipy shapely pyclipper python-bidi==0.4.2 PyYAML ninja packaging"
 fi
 install_pip_package "pyautogui"
 install_pip_package "mss"
@@ -234,12 +239,13 @@ install_pip_package "python-Levenshtein"
 install_pip_package "pyscreeze<0.1.29"
 install_pip_package "gevent"
 install_pip_package "eel"
-install_pip_package "ImageHash"
 install_pip_package "flask"
 install_pip_package "pygetwindow"
 install_pip_package "requests" #used to check if this script was ran, should be installed by discord-webhooks
 install_pip_package "aiohttp==3.10.5"
 install_pip_package "pynput"
+# no longer used; ocrmac imports matplotlib whenever it is installed, slowing startup
+pip uninstall -y matplotlib html2image httpx ImageHash
 install_pip_package "numpy<2" "--force-reinstall"
 
 "$VENV_PATH/bin/python" << "EOF"

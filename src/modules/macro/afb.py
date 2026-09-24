@@ -203,7 +203,7 @@ class AFBMixin:
         dice = self.setdat["AFB_dice"]
         glitter = self.setdat["AFB_glitter"]
         diceslot = self.setdat["AFB_slotD"]
-        glitterslot = self.setdat["AFB_slotG"]
+        glitterslot = self.setdat["glitter_slot"]
         if not glitter:
             self.AFBglitter = False
             self.cAFBglitter = False
@@ -272,7 +272,7 @@ class AFBMixin:
                                 return
 
                         for _ in range(8):
-                            bluetexts += ocr.imToString("blue") + "\n"
+                            bluetexts += ocr.readBlueText() + "\n"
 
                         allCandidateFields = list(startLocationDimensions.keys())
                         detectedBoostedFields = self._extractAFBBoostedFields(bluetexts, allCandidateFields)

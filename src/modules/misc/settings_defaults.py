@@ -163,7 +163,6 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'gather_boosted': False,
  'boost_seperate': 20,
  'field_booster_glitter_extend_enabled': False,
- 'field_booster_glitter_slot': 1,
  'tad_alt_sync_enabled': False,
  'tad_alt_1_enabled': False,
  'tad_alt_1_webhook': '',
@@ -188,7 +187,6 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'tad_alt_restart_delay': 10,
  'tad_alt_boost_duration': 900,
  'tad_alt_glitter_extend_enabled': False,
- 'tad_alt_glitter_slot': 1,
  'sticker_stack': False,
  'sticker_stack_item': 'sticker',
  'sticker_stack_interrupt_gathering': False,
@@ -309,7 +307,6 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'attempts': 10,
  'AFB_attempts': 10,
  'AFB_slotD': 0,
- 'AFB_slotG': 0,
  'AFB_wait': 8,
  'auto_planters_collect_every': 2,
  'auto_planters_collect_full': False,
@@ -804,6 +801,7 @@ DEFAULT_GENERAL_SETTINGS = {'hive_number': 1,
  'item_monitor': False,
  'bees': 50,
  'goo_slot': 3,
+ 'glitter_slot': 0,
  'start_keybind': 'F1',
  'stop_keybind': 'F3',
  'pause_keybind': 'F2',
@@ -1958,6 +1956,9 @@ DEFAULT_TIMINGS = {'wealth_clock': 0,
 DEFAULT_AFB = {'AFB_dice_cd': 0, 'AFB_glitter_cd': 0, 'AFB_limit': 0}
 
 DEFAULT_BLENDER = {'item': 1, 'collectTime': 0}
+
+# number of blender_item_N slots in DEFAULT_PROFILE_SETTINGS
+BLENDER_ITEM_SLOTS = 5
 
 DEFAULT_STICKER_STACK = 0
 

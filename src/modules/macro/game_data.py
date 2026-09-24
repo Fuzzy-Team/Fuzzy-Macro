@@ -1,5 +1,6 @@
 """Static Bee Swarm Simulator data used by the macro."""
 import json
+from modules.misc.settings_defaults import BLENDER_ITEM_SLOTS
 
 import cv2
 import numpy as np
@@ -211,7 +212,6 @@ planterGrowthData = {
 }
 
 #a list of all items that can be crafted by the blender in order
-BLENDER_ITEM_SLOTS = 5
 blenderItems = ["red extract", "blue extract", "enzymes", "oil", "glue", "tropical drink", "gumdrops", "moon charm",
     "glitter",
     "star jelly",

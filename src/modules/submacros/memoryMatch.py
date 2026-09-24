@@ -4,14 +4,13 @@ import random
 from typing import Dict, List, Tuple, Set, Optional
 
 import cv2
-import imagehash
 import numpy as np
 from PIL import Image
 
 import modules.controls.mouse as mouse
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP
-from modules.screen.ocr import ocrRead, imToString
-from modules.misc.imageManipulation import adjustImage
+from modules.screen.ocr import ocrRead, readBlueText
+from modules.misc.imageManipulation import adjustImage, average_hash, ImageHash
 from modules.screen.imageSearch import locateImageOnScreen
 from modules.screen.robloxWindow import RobloxWindowBounds
 
@@ -48,9 +47,9 @@ class MemoryMatch:
     def __init__(self, robloxWindow: RobloxWindowBounds, debug: bool = False):
         self.robloxWindow = robloxWindow
         self.debug = debug
-        self.blank_tile_hash = imagehash.average_hash(Image.open("./images/menu/mmempty.png"))
+        self.blank_tile_hash = average_hash(Image.open("./images/menu/mmempty.png"))
         # Buckets of seen tile hashes for the current memory match game.
-        # Each entry is a tuple: (imagehash.ImageHash, [indices_where_seen])
+        # Each entry is a tuple: (ImageHash, [indices_where_seen])
         self.seen_buckets = []
         # Optional templates for identifying selected reward types.
         self.reward_templates_by_type = self._load_reward_templates()
@@ -62,7 +61,7 @@ class MemoryMatch:
         time.sleep(self.CLICK_DELAY)
         mouse.click()
 
-    def _wait_for_tile_flip(self, x: int, y: int) -> imagehash.ImageHash:
+    def _wait_for_tile_flip(self, x: int, y: int) -> ImageHash:
         """Wait for a tile to flip over, compensating for lag."""
         start_time = time.time()
         while time.time() - start_time < self.MAX_WAIT_TIME:
@@ -73,7 +72,7 @@ class MemoryMatch:
                 break
         return tile_hash
     
-    def _are_images_similar(self, img1: imagehash.ImageHash, img2: imagehash.ImageHash) -> bool:
+    def _are_images_similar(self, img1: ImageHash, img2: ImageHash) -> bool:
         """Check if two image hashes are similar."""
         return img1 - img2 < 2
 
@@ -83,10 +82,10 @@ class MemoryMatch:
         width, height = self.TILE_SIZE
         return mssScreenshot(x + offset_x, y + offset_y, width, height)
 
-    def _screenshot_tile(self, x: int, y: int) -> imagehash.ImageHash:
+    def _screenshot_tile(self, x: int, y: int) -> ImageHash:
         """Take a screenshot of a tile and return its hash."""
         screenshot = self._capture_tile(x, y)
-        return imagehash.average_hash(screenshot)
+        return average_hash(screenshot)
 
     def _load_reward_templates(self) -> Dict[str, Dict[str, List[np.ndarray]]]:
         """Load reward icon templates used to identify preferred rewards."""
@@ -230,7 +229,7 @@ class MemoryMatch:
         # Initialize game state
         checked_coords: Set[Tuple[int, int]] = set()
         claimed_coords: Set[int] = set()
-        mm_data: List[Optional[imagehash.ImageHash]] = [None] * (grid_size[0] * grid_size[1])
+        mm_data: List[Optional[ImageHash]] = [None] * (grid_size[0] * grid_size[1])
         tile_rewards: List[Optional[str]] = [None] * (grid_size[0] * grid_size[1])
         
         # Get attempts count
@@ -304,7 +303,7 @@ class MemoryMatch:
         found = False
         for _ in range(6):
             try:
-                txt = imToString("blue").lower()
+                txt = readBlueText().lower()
             except Exception:
                 txt = ""
             bluetexts += txt
@@ -337,7 +336,7 @@ class MemoryMatch:
         Returns True if a winnings message or payout background is detected.
         """
         try:
-            txt = imToString("blue").lower()
+            txt = readBlueText().lower()
             if "winner" in txt or "better luck" in txt or "next time" in txt:
                 return True
         except Exception:
@@ -374,9 +373,9 @@ class MemoryMatch:
             pass  # Game might have ended
 
     def _click_first_tile(self, grid_coords: List[Tuple[int, int]], checked_coords: Set[Tuple[int, int]], 
-                          mm_data: List[Optional[imagehash.ImageHash]], tile_rewards: List[Optional[str]],
+                          mm_data: List[Optional[ImageHash]], tile_rewards: List[Optional[str]],
                           claimed_coords: Set[int], preferred_rewards: Set[str],
-                          offset_x: int, offset_y: int, middle_x: int, middle_y: int) -> Tuple[Optional[int], Optional[imagehash.ImageHash]]:
+                          offset_x: int, offset_y: int, middle_x: int, middle_y: int) -> Tuple[Optional[int], Optional[ImageHash]]:
         """Click the first tile and return its index and hash."""
         for i, (x_raw, y_raw) in enumerate(grid_coords):
             if (x_raw, y_raw) in checked_coords:
@@ -390,7 +389,7 @@ class MemoryMatch:
             mouse.moveTo(middle_x, middle_y - self.MOUSE_MOVE_OFFSET)  # Move mouse out of the way
             
             tile_image = self._capture_tile(x, y)
-            tile_hash = imagehash.average_hash(tile_image)
+            tile_hash = average_hash(tile_image)
             if self._are_images_similar(tile_hash, self.blank_tile_hash):
                 tile_hash = self._wait_for_tile_flip(x, y)
                 tile_image = self._capture_tile(x, y)
@@ -414,9 +413,9 @@ class MemoryMatch:
         return None, None
 
     def _click_second_tile(self, grid_coords: List[Tuple[int, int]], checked_coords: Set[Tuple[int, int]], 
-                          mm_data: List[Optional[imagehash.ImageHash]], tile_rewards: List[Optional[str]],
+                          mm_data: List[Optional[ImageHash]], tile_rewards: List[Optional[str]],
                           claimed_coords: Set[int], preferred_rewards: Set[str],
-                          first_tile_index: int, first_tile_hash: imagehash.ImageHash, 
+                          first_tile_index: int, first_tile_hash: ImageHash, 
                           offset_x: int, offset_y: int, middle_x: int, middle_y: int, 
                           current_attempt: int) -> None:
         """Click the second tile and handle matching logic."""
@@ -446,7 +445,7 @@ class MemoryMatch:
             mouse.moveTo(middle_x, middle_y - self.MOUSE_MOVE_OFFSET)  # Move mouse out of the way
 
             tile_image = self._capture_tile(x, y)
-            tile_hash = imagehash.average_hash(tile_image)
+            tile_hash = average_hash(tile_image)
             if self._are_images_similar(tile_hash, self.blank_tile_hash):
                 tile_hash = self._wait_for_tile_flip(x, y)
                 tile_image = self._capture_tile(x, y)
@@ -487,7 +486,7 @@ class MemoryMatch:
             self._record_seen(tile_hash, i)
             break
 
-    def _record_seen(self, tile_hash: imagehash.ImageHash, index: int) -> None:
+    def _record_seen(self, tile_hash: ImageHash, index: int) -> None:
         """Record a seen tile hash into buckets for the current game."""
         for k, (bucket_hash, indices) in enumerate(self.seen_buckets):
             if self._are_images_similar(tile_hash, bucket_hash):
@@ -530,7 +529,7 @@ class MemoryMatch:
                 return candidates[0], candidates[1]
         return None
 
-    def _lookup_seen(self, tile_hash: imagehash.ImageHash, claimed_coords: Set[int], exclude_index: Optional[int] = None) -> Optional[int]:
+    def _lookup_seen(self, tile_hash: ImageHash, claimed_coords: Set[int], exclude_index: Optional[int] = None) -> Optional[int]:
         """Lookup a previously seen index for a tile hash using only hash-buckets.
 
         Returns an index that isn't in `claimed_coords` and isn't `exclude_index`, or None.

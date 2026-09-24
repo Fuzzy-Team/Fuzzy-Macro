@@ -1,4 +1,4 @@
-import imagehash
+from modules.misc.imageManipulation import average_hash
 import math
 import pyautogui as pag
 import re
@@ -207,7 +207,7 @@ class CollectiblesMixin:
         if not self.setdat.get("field_booster_glitter_extend_enabled", False):
             return
 
-        glitterSlot = min(7, max(0, int(self.setdat.get("field_booster_glitter_slot", 1) or 0)))
+        glitterSlot = min(7, max(0, int(self.setdat.get("glitter_slot", 0) or 0)))
         with self._fieldBoosterGlitterLock:
             self._fieldBoosterGlitterGeneration += 1
             self._fieldBoosterGlitterPending = (time.monotonic() + 14 * 60 + 55, glitterSlot)
@@ -504,7 +504,7 @@ class CollectiblesMixin:
                 bluetexts = ""
                 #get the blue texts 4 times to avoid missing the field
                 for _ in range(4):
-                    bluetexts += ocr.imToString("blue").lower()
+                    bluetexts += ocr.readBlueText().lower()
                 # Reuse AFB parsing logic to robustly detect boosted field names.
                 allCandidateFields = list(startLocationDimensions.keys())
                 detectedBoostedFields = self._extractAFBBoostedFields(bluetexts, allCandidateFields)
@@ -692,7 +692,7 @@ class CollectiblesMixin:
             #if both screenshots are the same, break
 
             def quantityScreenshot(save = False):
-                return imagehash.average_hash(mssScreenshot(self.robloxWindow.mx+(self.robloxWindow.mw/2-60-140), self.robloxWindow.my+(math.floor(self.robloxWindow.mh*0.48)+140-20), 110, 20*2, save))
+                return average_hash(mssScreenshot(self.robloxWindow.mx+(self.robloxWindow.mw/2-60-140), self.robloxWindow.my+(math.floor(self.robloxWindow.mh*0.48)+140-20), 110, 20*2, save))
             quantity1Img = quantityScreenshot()
             while True:
                 for _ in range(5): #add 5 quantity

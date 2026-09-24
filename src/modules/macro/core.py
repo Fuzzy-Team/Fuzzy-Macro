@@ -6,7 +6,6 @@ import modules.controls.mouse as mouse
 import modules.logging.log as logModule
 import modules.misc.appManager as appManager
 import modules.misc.settingsManager as settingsManager
-import modules.screen.ocr as ocr
 from modules.controls.keyboard import keyboard
 from modules.controls.sleep import (
     get_interrupt_action,
@@ -121,13 +120,10 @@ class macro(
 
         #memory match
         self.latestMM = "normal"
-        self.lastGuidingStarScan = 0
+        self.lastBlueTextScan = 0
         self.guidingStarLastAnnounced = {}
-        self.lastUnusualSproutScan = 0
         self.unusualSproutLastAnnounced = {}
-        self.lastWindyBeeScan = 0
         self.windyBeeLastAnnounced = {}
-        self.lastStickerSproutScan = 0
         self.stickerSproutDetectedAt = 0
         self.stickerSproutLastAnnounced = 0
         self.stickerSproutInterruptRequested = False
@@ -312,10 +308,7 @@ class macro(
         #night detection
         if self.enableNightDetection:
             self.detectNight()
-        self.detectGuidingStarAnnouncement()
-        self.detectUnusualSproutAnnouncement()
-        self.detectWindyBeeAnnouncement()
-        self.detectStickerSproutAnnouncement()
+        self.scanBlueTextAnnouncements()
 
         #hotbar
         for i in range(1,8):
@@ -391,7 +384,6 @@ class macro(
         self.moveMouseToDefault()
 
         self.newUI = True
-        ocr.newUI = True
         logModule.newUI = True
 
         #check for accessibility
