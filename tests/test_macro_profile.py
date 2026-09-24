@@ -5,6 +5,7 @@ import unittest
 from unittest import mock
 
 from src.modules.misc.macro_profile import (
+    MacroProfileError,
     MacroProfileStore,
     MacroProfileValidationError,
 )
@@ -209,6 +210,15 @@ class MacroProfileStoreTests(unittest.TestCase):
         snapshot = self.store.initialize("main")
         with self.assertRaises(TypeError):
             snapshot.settings["count"] = 9
+
+    def test_read_falls_back_to_defaults_unless_strict(self):
+        self.write("main", "settings.txt", "this is not a setting\n")
+        profile_data, general_data, fields = self.store.read("main")
+        self.assertEqual(profile_data["enabled"], True)
+        self.assertEqual(general_data["macro_mode"], "normal")
+        self.assertIn("pine tree", fields)
+        with self.assertRaises(MacroProfileError):
+            self.store.read("main", strict=True)
 
     def test_snapshot_read_has_no_file_side_effects(self):
         self.store.initialize("main")

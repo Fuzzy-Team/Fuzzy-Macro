@@ -28,7 +28,6 @@ class HiveAcquisitionResult:
     claimed: bool
     slot: int = 0
     reason: str = ""
-    attempted_slots: tuple = ()
     detection_error: str = ""
 
 
@@ -47,7 +46,6 @@ class HiveAcquisition:
     def acquire(self, preferred_slot, excluded_slots=None):
         preferred_slot = max(1, min(6, int(preferred_slot)))
         excluded_slots = set(excluded_slots or set())
-        attempted = []
 
         if self._control_status() == "stopped":
             return HiveAcquisitionResult(False, reason="stopped")
@@ -56,54 +54,29 @@ class HiveAcquisition:
         detected = None
         try:
             detected = self._detect(preferred_slot, excluded_slots)
-            attempted.append(preferred_slot)
             if detected:
-                slot = int(detected)
-                return HiveAcquisitionResult(True, slot, "claimed", tuple(dict.fromkeys(attempted + [slot])))
+                return HiveAcquisitionResult(True, int(detected), "claimed")
         except self._fatal_exceptions:
             raise
         except Exception as exc:
             detection_error = str(exc)
 
         if self._control_status() == "stopped":
-            return HiveAcquisitionResult(
-                False,
-                reason="stopped",
-                attempted_slots=tuple(dict.fromkeys(attempted)),
-                detection_error=detection_error,
-            )
+            return HiveAcquisitionResult(False, reason="stopped", detection_error=detection_error)
 
-        if detected is not None and not detection_error:
+        if detected is not None:
             # Detection already walked to its pads and checked the rest of the row.
-            return HiveAcquisitionResult(False, reason="no_claimable_hive", attempted_slots=tuple(dict.fromkeys(attempted)))
+            return HiveAcquisitionResult(False, reason="no_claimable_hive")
 
         try:
             slot = int(self._check(preferred_slot, excluded_slots) or 0)
-            attempted.append(preferred_slot)
-            if slot:
-                return HiveAcquisitionResult(
-                    True,
-                    slot,
-                    "claimed_by_fallback",
-                    tuple(dict.fromkeys(attempted + [slot])),
-                    detection_error,
-                )
         except self._fatal_exceptions:
             raise
         except Exception as exc:
-            reason = "check_error"
-            if detection_error:
-                reason = "detection_and_check_error"
-            return HiveAcquisitionResult(
-                False,
-                reason=reason,
-                attempted_slots=tuple(dict.fromkeys(attempted)),
-                detection_error=detection_error or str(exc),
-            )
+            reason = "detection_and_check_error" if detection_error else "check_error"
+            error = f"{detection_error}; check: {exc}" if detection_error else str(exc)
+            return HiveAcquisitionResult(False, reason=reason, detection_error=error)
 
-        return HiveAcquisitionResult(
-            False,
-            reason="no_claimable_hive",
-            attempted_slots=tuple(dict.fromkeys(attempted)),
-            detection_error=detection_error,
-        )
+        if slot:
+            return HiveAcquisitionResult(True, slot, "claimed_by_fallback", detection_error)
+        return HiveAcquisitionResult(False, reason="no_claimable_hive", detection_error=detection_error)

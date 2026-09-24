@@ -125,11 +125,16 @@ class MacroProfileStore:
                     return self._snapshot
             return self._publish(profile, profile_data, general_data, fields_data, errors)
 
-    def profile_settings(self, profile):
-        """Return the settings stored in the profile's own settings file, without changing files."""
+    def read(self, profile, strict=False):
+        """Return normalized (profile settings, general settings, fields) without changing files or snapshots.
+
+        Unreadable files fall back to defaults unless strict is set, which raises instead.
+        """
         with self._lock:
-            profile_data, _, _, _, _ = self._read_and_normalize(profile)
-            return copy.deepcopy(profile_data)
+            profile_data, general_data, fields_data, errors, _ = self._read_and_normalize(profile)
+            if strict and errors:
+                raise MacroProfileError("; ".join(errors.values()))
+            return profile_data, general_data, fields_data
 
     def apply_change(self, profile, scope, setting, value):
         """Validate and atomically persist a setting-level change."""
@@ -405,18 +410,22 @@ class MacroProfileStore:
                 if fcntl is not None:
                     fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
-    @staticmethod
-    def _write_file(path, data, fields=False):
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+    @classmethod
+    def _write_file(cls, path, data, fields=False):
         if fields:
             content = str(data)
         else:
             content = "\n".join(f"{key}={value}" for key, value in data.items())
         if content and not content.endswith("\n"):
             content += "\n"
+        cls._atomic_write(path, content.encode())
+
+    @staticmethod
+    def _atomic_write(path, content):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         descriptor, temporary = tempfile.mkstemp(prefix=".macro_profile_", suffix=".tmp", dir=os.path.dirname(path))
         try:
-            with os.fdopen(descriptor, "w") as handle:
+            with os.fdopen(descriptor, "wb") as handle:
                 handle.write(content)
                 handle.flush()
                 os.fsync(handle.fileno())
@@ -435,24 +444,12 @@ class MacroProfileStore:
         with open(path, "rb") as handle:
             return handle.read()
 
-    @staticmethod
-    def _restore_bytes(path, content):
+    @classmethod
+    def _restore_bytes(cls, path, content):
         if content is None:
             try:
                 os.remove(path)
             except FileNotFoundError:
                 pass
             return
-        descriptor, temporary = tempfile.mkstemp(prefix=".macro_profile_rollback_", suffix=".tmp", dir=os.path.dirname(path))
-        try:
-            with os.fdopen(descriptor, "wb") as handle:
-                handle.write(content)
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temporary, path)
-        except Exception:
-            try:
-                os.remove(temporary)
-            except OSError:
-                pass
-            raise
+        cls._atomic_write(path, content)
