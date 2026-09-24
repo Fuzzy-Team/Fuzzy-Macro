@@ -21,7 +21,6 @@ colors = {
     "white": "FFFFFF",
     "yellow": "FFFF00",
 }
-newUI = False
 
 PING_CATEGORY_ROUTES = {
     "ping_critical_errors": "critical_errors",
