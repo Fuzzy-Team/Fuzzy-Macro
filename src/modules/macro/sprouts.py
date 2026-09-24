@@ -45,19 +45,7 @@ class SproutMixin:
             return self.stickerSproutDetectedAt
         return time.time()
 
-    def detectStickerSproutAnnouncement(self):
-        if self.setdat.get("macro_mode", "normal") == "alt":
-            return
-        if not self.setdat.get("sticker_sprout_watch", False):
-            return
-        if self.status.value == "rejoining":
-            return
-        now = time.time()
-        if now - self.lastStickerSproutScan < 5:
-            return
-        self.lastStickerSproutScan = now
-
-        text = self.readBlueText()
+    def detectStickerSproutAnnouncement(self, text, now):
         if "sticker" not in text or "sprout" not in text:
             return
 

@@ -1,7 +1,6 @@
 import cv2
 import numpy as np
 import re
-import modules.screen.ocr as ocr
 from modules.controls.sleep import pause_aware_time as time
 from modules.macro.game_data import startLocationDimensions
 from modules.screen.imageSearch import findColorObjectRGB
@@ -87,21 +86,31 @@ class EventDetectionMixin:
             self.night = False
             self.nightDetectStreaks = 0
 
-    def detectGuidingStarAnnouncement(self):
-        if not self.setdat.get("guiding_star_announcements", False):
-            return
+    def scanBlueTextAnnouncements(self):
+        """Read the blue text once and pass it to every enabled announcement detector."""
         if self.status.value == "rejoining":
             return
+        detectors = []  # (detector, seconds between scans)
+        if self.setdat.get("guiding_star_announcements", False):
+            detectors.append((self.detectGuidingStarAnnouncement, 10))
+        if self.setdat.get("ping_unusual_sprouts", False):
+            detectors.append((self.detectUnusualSproutAnnouncement, 10))
+        if self.setdat.get("ping_windy_bee", False):
+            detectors.append((self.detectWindyBeeAnnouncement, 5))
+        if self.setdat.get("sticker_sprout_watch", False) and self.setdat.get("macro_mode", "normal") != "alt":
+            detectors.append((self.detectStickerSproutAnnouncement, 5))
+        if not detectors:
+            return
         now = time.time()
-        if now - self.lastGuidingStarScan < 10:
+        if now - self.lastBlueTextScan < min(interval for _, interval in detectors):
             return
-        self.lastGuidingStarScan = now
+        self.lastBlueTextScan = now
 
-        try:
-            text = ocr.readBlueText().lower()
-        except Exception:
-            return
+        text = self.readBlueText()
+        for detect, _ in detectors:
+            detect(text, now)
 
+    def detectGuidingStarAnnouncement(self, text, now):
         if "guiding" not in text or "star" not in text:
             return
 
@@ -119,17 +128,7 @@ class EventDetectionMixin:
         self.guidingStarLastAnnounced[field] = now
         self.logger.webhook("Guiding Star", f"Detected in {field.title()}", "light blue", "screen", ping_category="ping_guiding_star")
 
-    def detectUnusualSproutAnnouncement(self):
-        if not self.setdat.get("ping_unusual_sprouts", False):
-            return
-        if self.status.value == "rejoining":
-            return
-        now = time.time()
-        if now - self.lastUnusualSproutScan < 10:
-            return
-        self.lastUnusualSproutScan = now
-
-        text = self.readBlueText()
+    def detectUnusualSproutAnnouncement(self, text, now):
         if "sprout" not in text:
             return
 
@@ -155,17 +154,7 @@ class EventDetectionMixin:
             route_category="activities",
         )
 
-    def detectWindyBeeAnnouncement(self):
-        if not self.setdat.get("ping_windy_bee", False):
-            return
-        if self.status.value == "rejoining":
-            return
-        now = time.time()
-        if now - self.lastWindyBeeScan < 5:
-            return
-        self.lastWindyBeeScan = now
-
-        text = self.readBlueText()
+    def detectWindyBeeAnnouncement(self, text, now):
         match = re.search(r"\bfound\s+windy\s+bee\s+in\s+the\s+(.+?)\s+field\b", text)
         if not match:
             return
