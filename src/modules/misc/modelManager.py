@@ -1,3 +1,4 @@
+import hashlib
 import os
 import platform
 import shutil
@@ -6,8 +7,6 @@ import zipfile
 from io import BytesIO
 
 import requests
-
-from modules.misc.update import _git_blob_sha
 
 
 MODELS_API_URL = "https://api.github.com/repos/Fuzzy-Team/fuzzymacroaimodels/contents"
@@ -31,6 +30,8 @@ ONNX_MODELS = (
     "bloom_detection_light.onnx",
     "bloom_detection_mini.onnx",
 )
+# Files macOS adds to folders it has opened; never part of a model.
+MACOS_METADATA_FILES = {".DS_Store"}
 
 
 def _macos_version():
@@ -102,6 +103,22 @@ def cleanup_unused_models():
     return deleted
 
 
+def _git_blob_sha(path):
+    """Return the Git blob SHA-1 that GitHub reports for the file at ``path``."""
+    # Kept separate from update.py, which is replaced from main mid-update.
+    digest = hashlib.sha1()
+    size = os.path.getsize(path)
+    digest.update(f"blob {size}\0".encode("utf-8"))
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _is_macos_metadata(filename):
+    return filename in MACOS_METADATA_FILES or filename.startswith("._")
+
+
 def _github_get(url, timeout=20):
     response = requests.get(
         url,
@@ -153,7 +170,7 @@ def _local_matches_remote(local_root, remote_files, remote_root_path):
             return False
         for filename in files:
             path = os.path.relpath(os.path.join(root, filename), local_root)
-            if path not in expected_paths:
+            if path not in expected_paths and not _is_macos_metadata(filename):
                 return False
     return True
 

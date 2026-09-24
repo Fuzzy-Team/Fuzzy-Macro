@@ -67,6 +67,28 @@ class UpdateCleanupTests(TestCase):
         self.assertFalse(untracked.exists())
         self.assertFalse((self.install / "old").exists())
 
+    def _record_installed(self, *paths):
+        manifest = {path: update._git_blob_sha(self.install / path) for path in paths}
+        self._write(self.install, update.INSTALLED_FILES_MANIFEST, json.dumps(manifest))
+
+    def test_user_added_path_files_are_kept(self):
+        custom = self._write(self.install, "paths/field_to_hive/my_field.py", "custom")
+        self._apply()
+        self.assertTrue(custom.exists())
+
+        self._record_installed()
+        self._apply()
+        self.assertTrue(custom.exists())
+
+    def test_previously_installed_path_files_are_removed_unless_edited(self):
+        removed = self._write(self.install, "paths/boss/old.py", "shipped")
+        edited = self._write(self.install, "paths/boss/edited.py", "shipped")
+        self._record_installed("paths/boss/old.py", "paths/boss/edited.py")
+        edited.write_text("my edit", encoding="utf-8")
+        self._apply()
+        self.assertFalse(removed.exists())
+        self.assertTrue(edited.exists())
+
     def test_incoming_file_is_never_deleted(self):
         installed = self._write(self.install, "legacy.py", "old")
         self._write(self.extracted, "legacy.py", "new")
@@ -82,6 +104,32 @@ class UpdateCleanupTests(TestCase):
         self._apply()
         self.assertTrue(all(path.exists() for path in ignored))
         self.assertFalse(stale.exists())
+
+    def test_gitignored_paths_are_not_hashed(self):
+        self._write(self.extracted, ".gitignore", "build/\n*.log\n")
+        self._write(self.install, "build/big.bin")
+        self._write(self.install, "run.log")
+        hashed = []
+        original_hash = update._git_blob_sha
+
+        def record_hash(path):
+            hashed.append(Path(path).name)
+            return original_hash(path)
+
+        with mock.patch.object(update, "_git_blob_sha", side_effect=record_hash):
+            self._apply()
+        self.assertIn("main.py", hashed)
+        self.assertNotIn("big.bin", hashed)
+        self.assertNotIn("run.log", hashed)
+
+    def test_unsafe_file_fails_before_anything_is_copied(self):
+        changed = self._write(self.install, "a_changed.txt", "old")
+        self._write(self.extracted, "a_changed.txt", "new")
+        (self.install / "z_folder.txt").mkdir()
+        self._write(self.extracted, "z_folder.txt", "file")
+        with self.assertRaises(OSError):
+            self._apply()
+        self.assertEqual(changed.read_text(), "old")
 
     def test_release_gitignore_controls_cleanup(self):
         self._write(self.install, ".gitignore", "old.txt\n")

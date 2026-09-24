@@ -95,7 +95,7 @@ class ModelCleanupTests(TestCase):
     def test_same_name_new_hash_downloads_updated_model(self):
         current = self._write("token_detection_standard.onnx", "old")
         incoming = self._write("remote.txt", "new")
-        remote_hash = update._git_blob_sha(incoming)
+        remote_hash = modelManager._git_blob_sha(incoming)
         incoming.unlink()
         remote_files = [{"path": "token_detection_standard.onnx", "sha": remote_hash}]
 
@@ -116,7 +116,7 @@ class ModelCleanupTests(TestCase):
         self._write("token_detection_standard.mlmodelc/weights.bin", "current")
         self._write("token_detection_standard.mlmodelc/old.bin", "obsolete")
         known = self._write("known.txt", "current")
-        expected_hash = update._git_blob_sha(known)
+        expected_hash = modelManager._git_blob_sha(known)
         known.unlink()
         remote_files = [{"path": "token_detection_standard.mlmodelc/weights.bin", "sha": expected_hash}]
 
@@ -131,10 +131,22 @@ class ModelCleanupTests(TestCase):
         downloader.assert_called_once()
         self.assertFalse((bundle / "old.bin").exists())
 
+    def test_macos_metadata_inside_model_bundle_does_not_force_download(self):
+        bundle = self.model_dir / "token_detection_standard.mlmodelc"
+        weights = self._write("token_detection_standard.mlmodelc/weights.bin", "current")
+        self._write("token_detection_standard.mlmodelc/.DS_Store", "finder")
+        self._write("token_detection_standard.mlmodelc/._weights.bin", "appledouble")
+        remote_files = [{
+            "path": "token_detection_standard.mlmodelc/weights.bin",
+            "sha": modelManager._git_blob_sha(weights),
+        }]
+
+        self.assertTrue(modelManager._local_matches_remote(str(bundle), remote_files, bundle.name))
+
     def test_bad_download_hash_keeps_installed_model(self):
         existing = self._write("token_detection_standard.onnx", "original")
         expected = self._write("expected.txt", "new")
-        expected_hash = update._git_blob_sha(expected)
+        expected_hash = modelManager._git_blob_sha(expected)
         expected.unlink()
         remote_files = [{"path": existing.name, "sha": expected_hash, "download_url": "unused"}]
 
