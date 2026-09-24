@@ -1957,6 +1957,9 @@ DEFAULT_AFB = {'AFB_dice_cd': 0, 'AFB_glitter_cd': 0, 'AFB_limit': 0}
 
 DEFAULT_BLENDER = {'item': 1, 'collectTime': 0}
 
+# number of blender_item_N slots in DEFAULT_PROFILE_SETTINGS
+BLENDER_ITEM_SLOTS = 5
+
 DEFAULT_STICKER_STACK = 0
 
 DEFAULT_HOTBAR_TIMINGS = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0}
