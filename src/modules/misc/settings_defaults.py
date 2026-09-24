@@ -307,6 +307,7 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'attempts': 10,
  'AFB_attempts': 10,
  'AFB_slotD': 0,
+ 'AFB_slotG': 0,
  'AFB_wait': 8,
  'auto_planters_collect_every': 2,
  'auto_planters_collect_full': False,
