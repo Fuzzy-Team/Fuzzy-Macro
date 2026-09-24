@@ -3,7 +3,7 @@ import threading
 import time
 import urllib.request
 
-from modules.misc.settings_defaults import glitter_hotbar_slot
+from modules.misc.settings_defaults import glitter_slot, glitter_slot_label
 
 
 class TadAltSync:
@@ -129,10 +129,10 @@ class TadAltSync:
         duration = max(0, float(self.settings.get("tad_alt_boost_duration", 900) or 0))
         if extend_with_glitter is None:
             extend_with_glitter = bool(self.settings.get("tad_alt_glitter_extend_enabled", False))
-        glitter_slot = glitter_hotbar_slot(self.settings)
+        slot = glitter_slot(self.settings)
         thread = threading.Thread(
             target=self._restore_after_boost,
-            args=(generation, duration, extend_with_glitter, glitter_slot, extension_duration),
+            args=(generation, duration, extend_with_glitter, slot, extension_duration),
             name="tad-alt-sync-restore",
             daemon=True,
         )
@@ -151,7 +151,7 @@ class TadAltSync:
                 glitter_used = True
                 self._log(
                     "TAD Alt Sync",
-                    f"Used Glitter from hotbar slot {glitter_slot}; extending the alt boost assignment",
+                    f"Used Glitter from {glitter_slot_label(glitter_slot)}; extending the alt boost assignment",
                     "bright green",
                 )
             except Exception:

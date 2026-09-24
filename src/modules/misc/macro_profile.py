@@ -388,14 +388,13 @@ class MacroProfileStore:
                     moved = source.pop(key)
                     if key not in target or (target[key] == defaults[key] and moved != defaults[key]):
                         target[key] = moved
-        # Field booster and TAD alt extending now share glitter_slot. Keep a hotbar slot the
-        # user chose; 0 meant the inventory, which they can't use (they fire mid-pattern), so
-        # it falls back to the default slot. AFB keeps its own AFB_slotG, where 0 still works.
+        # Field booster and TAD alt extending now share glitter_slot. Keep the slot the user
+        # chose (0 finds Glitter in the inventory). AFB keeps its own AFB_slotG.
         old_glitter_defaults = {"field_booster_glitter_slot": 1, "tad_alt_glitter_slot": 1}
         stored = {key: data.pop(key) for data in (profile_data, general_data) for key in list(data) if key in old_glitter_defaults}
         chosen = [
             stored[key] for key in old_glitter_defaults
-            if key in stored and stored[key] != old_glitter_defaults[key] and stored[key] in range(1, 8)
+            if key in stored and stored[key] != old_glitter_defaults[key] and stored[key] in range(0, 8)
         ]
         if chosen:
             general_data["glitter_slot"] = chosen[0]
