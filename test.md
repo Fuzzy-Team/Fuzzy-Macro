@@ -18,12 +18,14 @@ Changes this branch adds on top of `combined-improvements`.
 
 ## Running macro
 - [ ] Start the macro and, while it runs, change a setting in the GUI. The macro should pick it up on the next loop (settings now reload once per loop from one profile snapshot, not from a 0.5s cache).
+- [ ] Enable quests with a quest that turns on a task you have disabled (e.g. a mob kill quest). Once the quest is done, the macro should stop running that task (quest-enabled flags now reset every loop pass).
 - [ ] Switch profile while the macro is stopped, then start it. It should use the new profile's settings and fields.
 - [ ] Pause/resume during a gather pattern and a task that sleeps. Pausing should still hold the sleep (`pauseable_sleep` is now an alias of `sleep`).
 
 ## Gathering
 - [ ] Gather with a built-in pattern for several cycles. It should behave the same (the built-in pattern check is now cached per gather session).
 - [ ] Gather with a custom or edited pattern. It should still be treated as custom.
+- [ ] Edit a built-in pattern file while the macro is gathering with it. The next cycle should run your edited file.
 
 ## Hive claiming
 - [ ] Start the macro with a free hive slot. It should claim the hive (normal detection).

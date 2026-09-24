@@ -145,15 +145,20 @@ class GatherPatternRunner:
         pattern = pattern or self.active_pattern
         if pattern in AI_PATTERNS:
             return False
-        if pattern not in self._builtin:
-            installed = self._path(self._patterns_dir, pattern)
-            shipped = self._path(self._defaults_dir, pattern)
-            try:
+        installed = self._path(self._patterns_dir, pattern)
+        shipped = self._path(self._defaults_dir, pattern)
+        try:
+            # Recompare only when the installed file changes, e.g. edited mid-gather.
+            stat = os.stat(installed)
+            key = (stat.st_mtime_ns, stat.st_size)
+            cached = self._builtin.get(pattern)
+            if cached is None or cached[0] != key:
                 with open(installed, "rb") as installed_file, open(shipped, "rb") as shipped_file:
-                    self._builtin[pattern] = installed_file.read() == shipped_file.read()
-            except OSError:
-                return False  # not cached, so a later cycle retries
-        return self._builtin[pattern]
+                    cached = (key, installed_file.read() == shipped_file.read())
+                self._builtin[pattern] = cached
+        except OSError:
+            return False  # not cached, so a later cycle retries
+        return cached[1]
 
     def _run(self, pattern, namespace):
         path = self._path(self._patterns_dir, pattern)
