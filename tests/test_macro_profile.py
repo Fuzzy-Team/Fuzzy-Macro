@@ -244,8 +244,8 @@ class MacroProfileStoreTests(unittest.TestCase):
     def test_glitter_slot_uses_the_default_slot_when_only_old_defaults_are_stored(self):
         self.assertEqual(self.glitter_slot("field_booster_glitter_slot=1\ntad_alt_glitter_slot=1\nAFB_slotG=0\n"), (1, 0))
 
-    def test_glitter_extending_never_migrates_to_the_inventory_but_afb_keeps_it(self):
-        self.assertEqual(self.glitter_slot("field_booster_glitter_slot=0\ntad_alt_glitter_slot=0\nAFB_slotG=0\n"), (1, 0))
+    def test_glitter_slot_keeps_the_inventory_option(self):
+        self.assertEqual(self.glitter_slot("field_booster_glitter_slot=0\ntad_alt_glitter_slot=0\nAFB_slotG=0\n"), (0, 0))
 
     def test_default_legacy_quest_gather_keeps_per_quest_settings(self):
         self.write("main", "settings.txt", "quest_gather_mins=0\npolar_bear_quest_gather_mins=5\n")
