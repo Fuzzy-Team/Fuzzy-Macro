@@ -1,7 +1,7 @@
-"""Deep persistence module for Macro Profiles.
+"""Reads, migrates, validates, and saves Macro Profiles.
 
-Callers use snapshots and validated changes. File names, parsing, repair, migration,
-locking, and atomic replacement remain implementation details of this module.
+Callers get plain dicts and make validated changes. File names, parsing, repair, migration,
+locking, and atomic replacement stay inside this module.
 """
 
 from __future__ import annotations
@@ -13,8 +13,6 @@ import re
 import tempfile
 import threading
 from contextlib import contextmanager
-from dataclasses import dataclass
-from types import MappingProxyType
 
 try:
     import fcntl
@@ -36,49 +34,11 @@ class MacroProfileValidationError(MacroProfileError):
         return {"setting": self.setting, "reason": self.reason}
 
 
-@dataclass(frozen=True)
-class MacroProfileSnapshot:
-    profile: str
-    version: int
-    settings: object
-    fields: object
-    migration_errors: tuple = ()
-    warnings: tuple = ()
-
-    def as_dict(self):
-        return {
-            "profile": self.profile,
-            "version": self.version,
-            "settings": _thaw(self.settings),
-            "fields": _thaw(self.fields),
-            "migration_errors": list(self.migration_errors),
-            "warnings": list(self.warnings),
-        }
-
-
 def _as_int(value, default):
     try:
         return int(value)
     except (TypeError, ValueError):
         return default
-
-
-def _freeze(value):
-    if isinstance(value, dict):
-        return MappingProxyType({key: _freeze(item) for key, item in value.items()})
-    if isinstance(value, list):
-        return tuple(_freeze(item) for item in value)
-    if isinstance(value, tuple):
-        return tuple(_freeze(item) for item in value)
-    return value
-
-
-def _thaw(value):
-    if isinstance(value, MappingProxyType):
-        return {key: _thaw(item) for key, item in value.items()}
-    if isinstance(value, tuple):
-        return [_thaw(item) for item in value]
-    return copy.deepcopy(value)
 
 
 class MacroProfileStore:
@@ -101,17 +61,14 @@ class MacroProfileStore:
         self._field_defaults = copy.deepcopy(field_defaults)
         self._field_normalizer = field_normalizer
         self._lock = threading.RLock()
-        self._version = 0
-        self._snapshot = None
 
     def initialize(self, profile):
-        """Create missing files and run pending migrations, then publish the profile's first snapshot."""
+        """Create missing files and run pending migrations, then return the profile like load()."""
         with self._lock, self._file_lock(profile):
-            profile_data, general_data, fields_data, errors, warnings = self._prepare(profile)
-            return self._publish(profile, profile_data, general_data, fields_data, errors, warnings)
+            return self._profile_dict(profile, *self._prepare(profile))
 
     def prepare(self, profile):
-        """Create missing files and run pending migrations without publishing a snapshot (for imports)."""
+        """Create missing files and run pending migrations (for imports)."""
         with self._lock, self._file_lock(profile):
             self._prepare(profile)
 
@@ -152,32 +109,31 @@ class MacroProfileStore:
             self._atomic_write(os.path.join(profile_dir, self.MIGRATION_FILE), str(len(self.MIGRATIONS)).encode("utf-8"))
         return profile_data, general_data, fields_data, errors, warnings
 
-    def snapshot(self, profile):
-        """Return an immutable snapshot without changing files."""
+    def load(self, profile):
+        """Return {profile, settings, fields, errors, warnings} without changing files.
+
+        settings combines the profile and general files. errors lists files that couldn't be
+        read (their defaults are used); warnings lists lines that were skipped or replaced.
+        """
         with self._lock:
             profile_data, general_data, fields_data, errors, _, warnings = self._read_and_normalize(profile)
-            combined = {**profile_data, **general_data}
-            if self._snapshot is not None and self._snapshot.profile == profile:
-                current = self._snapshot.as_dict()
-                if current["settings"] == combined and current["fields"] == fields_data and current["migration_errors"] == list(errors.values()) and current["warnings"] == warnings:
-                    return self._snapshot
-            return self._publish(profile, profile_data, general_data, fields_data, errors, warnings)
+            return self._profile_dict(profile, profile_data, general_data, fields_data, errors, warnings)
 
     def read(self, profile, strict=False):
-        """Return normalized (profile settings, general settings, fields) without changing files or snapshots.
+        """Return normalized (profile settings, general settings, fields) without changing files.
 
         Unreadable files fall back to defaults unless strict is set, which raises instead.
         """
         with self._lock:
-            profile_data, general_data, fields_data, errors, _, warnings = self._read_and_normalize(profile)
+            profile_data, general_data, fields_data, errors, _, _ = self._read_and_normalize(profile)
             if strict and errors:
                 raise MacroProfileError("; ".join(errors.values()))
             return profile_data, general_data, fields_data
 
     def apply_change(self, profile, scope, setting, value):
-        """Validate and atomically persist a setting-level change."""
+        """Validate and save one setting. Returns all settings (profile and general) after the change."""
         with self._lock, self._file_lock(profile):
-            profile_data, general_data, fields_data, errors, _, warnings = self._read_and_normalize(profile)
+            profile_data, general_data, _, errors, _, _ = self._read_and_normalize(profile)
             owner = self._owner(setting, scope)
             filename = self.PROFILE_FILE if owner == "profile" else self.GENERAL_FILE
             self._refuse_overwrite(errors, filename)
@@ -187,14 +143,14 @@ class MacroProfileStore:
             target = profile_data if owner == "profile" else general_data
             target[setting] = copy.deepcopy(value)
             self._write_file(os.path.join(self._profile_dir(profile), filename), target)
-            return self._publish(profile, profile_data, general_data, fields_data, errors, warnings)
+            return {**profile_data, **general_data}
 
     def apply_changes(self, profile, scope, changes):
-        """Validate and persist a transactional batch for import adapters."""
+        """Validate every change first, then save them."""
         if not isinstance(changes, dict):
             raise MacroProfileValidationError("changes", "expected an object")
         with self._lock, self._file_lock(profile):
-            profile_data, general_data, fields_data, errors, _, warnings = self._read_and_normalize(profile)
+            profile_data, general_data, _, errors, _, _ = self._read_and_normalize(profile)
             self._refuse_overwrite(errors, self.PROFILE_FILE, self.GENERAL_FILE)
             next_profile = copy.deepcopy(profile_data)
             next_general = copy.deepcopy(general_data)
@@ -208,43 +164,31 @@ class MacroProfileStore:
             for setting, value in changes.items():
                 defaults = self._profile_defaults if owners[setting] == "profile" else self._general_defaults
                 self._validate(setting, value, defaults, combined)
-            # A batch can span two files. Validate everything first and restore the
-            # first file if the second replacement fails.
-            profile_path = os.path.join(self._profile_dir(profile), self.PROFILE_FILE)
-            general_path = os.path.join(self._profile_dir(profile), self.GENERAL_FILE)
-            original_profile = self._read_bytes(profile_path)
-            original_general = self._read_bytes(general_path)
-            try:
-                self._write_file(profile_path, next_profile)
-                self._write_file(general_path, next_general)
-            except Exception:
-                self._restore_bytes(profile_path, original_profile)
-                self._restore_bytes(general_path, original_general)
-                raise
-            return self._publish(profile, next_profile, next_general, fields_data, errors, warnings)
+            profile_dir = self._profile_dir(profile)
+            if next_profile != profile_data:
+                self._write_file(os.path.join(profile_dir, self.PROFILE_FILE), next_profile)
+            if next_general != general_data:
+                self._write_file(os.path.join(profile_dir, self.GENERAL_FILE), next_general)
 
     def save_field(self, profile, field, settings):
         if not isinstance(settings, dict):
             raise MacroProfileValidationError(field, "field settings must be an object")
         with self._lock, self._file_lock(profile):
-            profile_data, general_data, fields_data, errors, _, warnings = self._read_and_normalize(profile)
+            _, _, fields_data, errors, _, _ = self._read_and_normalize(profile)
             self._refuse_overwrite(errors, self.FIELDS_FILE)
             normalized = self._normalize_field(field, settings)
             fields_data[field] = normalized
             self._write_file(os.path.join(self._profile_dir(profile), self.FIELDS_FILE), fields_data, fields=True)
-            return self._publish(profile, profile_data, general_data, fields_data, errors, warnings)
 
-    def _publish(self, profile, profile_data, general_data, fields_data, errors, warnings=()):
-        self._version += 1
-        self._snapshot = MacroProfileSnapshot(
-            profile=profile,
-            version=self._version,
-            settings=_freeze({**copy.deepcopy(profile_data), **copy.deepcopy(general_data)}),
-            fields=_freeze(copy.deepcopy(fields_data)),
-            migration_errors=tuple(errors.values()),
-            warnings=tuple(warnings),
-        )
-        return self._snapshot
+    @staticmethod
+    def _profile_dict(profile, profile_data, general_data, fields_data, errors, warnings):
+        return {
+            "profile": profile,
+            "settings": {**profile_data, **general_data},
+            "fields": fields_data,
+            "errors": list(errors.values()),
+            "warnings": list(warnings),
+        }
 
     @staticmethod
     def _refuse_overwrite(errors, *filenames):
@@ -547,13 +491,3 @@ class MacroProfileStore:
             return None
         with open(path, "rb") as handle:
             return handle.read()
-
-    @classmethod
-    def _restore_bytes(cls, path, content):
-        if content is None:
-            try:
-                os.remove(path)
-            except FileNotFoundError:
-                pass
-            return
-        cls._atomic_write(path, content)

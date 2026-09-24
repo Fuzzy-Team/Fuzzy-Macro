@@ -120,20 +120,24 @@ def _getMacroProfileStore():
     return _macro_profile_store
 
 def initializeMacroProfile(profile_name=None):
-    """Run explicit repair and migration for a Macro Profile."""
-    return _getMacroProfileStore().initialize(profile_name or profileName).as_dict()
+    """Create missing files and run pending migrations for a Macro Profile."""
+    return _getMacroProfileStore().initialize(profile_name or profileName)
 
-def getMacroProfileSnapshot(profile_name=None):
-    """Return a versioned, side-effect-free Macro Profile snapshot."""
+def loadMacroProfile(profile_name=None):
+    """Return {profile, settings, fields, errors, warnings} for a profile without changing files.
+
+    Without a name, the selected profile is re-read first so a switch made by another
+    process (the GUI or the Discord bot) is seen.
+    """
     if profile_name is None:
         loadCurrentProfile()
-    return _getMacroProfileStore().snapshot(profile_name or profileName).as_dict()
+    return _getMacroProfileStore().load(profile_name or profileName)
 
 def applyMacroProfileChange(scope, setting, value):
     """Apply one validated change and return a structured result for the GUI."""
     try:
-        snapshot = _getMacroProfileStore().apply_change(profileName, scope, setting, value)
-        return {"ok": True, "snapshot": snapshot.as_dict()}
+        _getMacroProfileStore().apply_change(profileName, scope, setting, value)
+        return {"ok": True}
     except MacroProfileValidationError as exc:
         return {"ok": False, "error": exc.as_dict()}
     except MacroProfileError as exc:
@@ -840,11 +844,10 @@ def saveSettingFile(setting,value, path):
     saveDict(path, data)
 
 def loadFields():
-    return getMacroProfileSnapshot(profileName)["fields"]
+    return _getMacroProfileStore().read(profileName)[2]
 
 def saveField(field, settings):
-    snapshot = getMacroProfileSnapshot(profileName)
-    existingSettings = snapshot["fields"].get(field, {})
+    existingSettings = loadFields().get(field, {})
     normalizedSettings = normalizeFieldSettings(field, settings)
     mergedSettings = _applyFieldPatternPresets(existingSettings, normalizedSettings)
     _getMacroProfileStore().save_field(profileName, field, mergedSettings)
@@ -1097,29 +1100,27 @@ def getAvailablePatterns():
     return []
 
 def saveProfileSetting(setting, value):
-    return _getMacroProfileStore().apply_change(profileName, "profile", setting, value).as_dict()
+    _getMacroProfileStore().apply_change(profileName, "profile", setting, value)
 
 def saveDictProfileSettings(dict):
-    return _getMacroProfileStore().apply_changes(profileName, "profile", dict).as_dict()
+    _getMacroProfileStore().apply_changes(profileName, "profile", dict)
 
 #increment a setting, and return all settings after the change
 def incrementProfileSetting(setting, incrValue):
     current = loadSettings()
     if setting not in current:
         raise MacroProfileValidationError(setting, "unknown setting")
-    return saveProfileSetting(setting, current[setting] + incrValue)["settings"]
+    return _getMacroProfileStore().apply_change(profileName, "profile", setting, current[setting] + incrValue)
 
 def saveGeneralSetting(setting, value):
-    return _getMacroProfileStore().apply_change(profileName, "general", setting, value).as_dict()
+    _getMacroProfileStore().apply_change(profileName, "general", setting, value)
 
 def loadSettings():
     return _getMacroProfileStore().read(profileName)[0]
 
 #return a dict containing all settings except field (general, profile, planters)
 def loadAllSettings():
-    # Reload the selected profile name so a switch made by another process is seen.
-    loadCurrentProfile()
-    return getMacroProfileSnapshot()["settings"]
+    return loadMacroProfile()["settings"]
 
 def exportProfile(profile_name):
     """Export a profile to JSON content for browser download"""

@@ -58,9 +58,9 @@ class MacroProfileStoreTests(unittest.TestCase):
     def test_initialize_migrates_legacy_modes_and_missing_defaults(self):
         self.write("main", "settings.txt", "enabled=False\n")
         self.write("main", "generalsettings.txt", "field_only_mode=True\n")
-        snapshot = self.store.initialize("main").as_dict()
-        self.assertEqual(snapshot["settings"]["macro_mode"], "field")
-        self.assertEqual(snapshot["settings"]["count"], 1)
+        profile = self.store.initialize("main")
+        self.assertEqual(profile["settings"]["macro_mode"], "field")
+        self.assertEqual(profile["settings"]["count"], 1)
         with open(self.path("main", "generalsettings.txt")) as handle:
             persisted = handle.read()
         self.assertIn("macro_mode=field", persisted)
@@ -68,33 +68,33 @@ class MacroProfileStoreTests(unittest.TestCase):
 
     def test_initialize_keeps_hive_claim_choice(self):
         self.write("main", "generalsettings.txt", "hive_claim_method=check\n")
-        snapshot = self.store.initialize("main").as_dict()
-        self.assertEqual(snapshot["settings"]["hive_claim_method"], "check")
+        profile = self.store.initialize("main")
+        self.assertEqual(profile["settings"]["hive_claim_method"], "check")
 
     def test_a_line_that_is_not_a_setting_only_loses_that_line(self):
         self.write("main", "settings.txt", "enabled=False\nthis is not a setting\ncount=3\n")
-        snapshot = self.store.initialize("main").as_dict()
-        self.assertEqual(snapshot["settings"]["enabled"], False)
-        self.assertEqual(snapshot["settings"]["count"], 3)
-        self.assertEqual(snapshot["migration_errors"], [])
+        profile = self.store.initialize("main")
+        self.assertEqual(profile["settings"]["enabled"], False)
+        self.assertEqual(profile["settings"]["count"], 3)
+        self.assertEqual(profile["errors"], [])
         self.store.apply_change("main", "profile", "count", 4)
-        self.assertEqual(self.store.snapshot("main").as_dict()["settings"]["enabled"], False)
+        self.assertEqual(self.store.load("main")["settings"]["enabled"], False)
 
     def test_a_broken_number_or_flag_uses_its_default_and_is_reported(self):
         self.write("main", "settings.txt", "enabled=yes please\ncount=3x\nfields=pine tree,sunflower\n")
-        snapshot = self.store.initialize("main").as_dict()
-        self.assertEqual(snapshot["settings"]["enabled"], True)
-        self.assertEqual(snapshot["settings"]["count"], 1)
+        profile = self.store.initialize("main")
+        self.assertEqual(profile["settings"]["enabled"], True)
+        self.assertEqual(profile["settings"]["count"], 1)
         # text-valued formats the GUI saves are left alone
-        self.assertEqual(snapshot["settings"]["fields"], "pine tree,sunflower")
-        self.assertEqual(len(snapshot["warnings"]), 2)
-        self.assertTrue(any("count='3x'" in warning for warning in snapshot["warnings"]))
+        self.assertEqual(profile["settings"]["fields"], "pine tree,sunflower")
+        self.assertEqual(len(profile["warnings"]), 2)
+        self.assertTrue(any("count='3x'" in warning for warning in profile["warnings"]))
 
     def test_lowercase_true_false_are_read_as_flags(self):
         self.write("main", "settings.txt", "enabled=false\n")
-        snapshot = self.store.initialize("main").as_dict()
-        self.assertIs(snapshot["settings"]["enabled"], False)
-        self.assertEqual(snapshot["warnings"], [])
+        profile = self.store.initialize("main")
+        self.assertIs(profile["settings"]["enabled"], False)
+        self.assertEqual(profile["warnings"], [])
 
     def test_only_migrations_added_since_the_last_run_are_applied(self):
         calls = []
@@ -118,7 +118,7 @@ class MacroProfileStoreTests(unittest.TestCase):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "wb") as handle:
             handle.write(b"enabled=False\nname=caf\xe9\n")
-        settings = self.store.initialize("main").as_dict()["settings"]
+        settings = self.store.initialize("main")["settings"]
         self.assertEqual(settings["enabled"], False)
 
     def break_fields(self, profile="main"):
@@ -128,58 +128,57 @@ class MacroProfileStoreTests(unittest.TestCase):
         self.store.initialize("main")
         self.store.save_field("main", "pine tree", {"shape": "lines", "mins": 25})
         self.break_fields()
-        snapshot = self.store.initialize("main").as_dict()
-        self.assertEqual(snapshot["fields"]["pine tree"]["mins"], 25)
-        self.assertEqual(snapshot["migration_errors"], [])
+        profile = self.store.initialize("main")
+        self.assertEqual(profile["fields"]["pine tree"]["mins"], 25)
+        self.assertEqual(profile["errors"], [])
         self.assertIn("'shape': ", self.read(self.path("main", "fields.txt.broken")))
         self.assertIn("'mins': 25", self.read(self.path("main", "fields.txt")))
 
     def test_unreadable_fields_without_a_saved_copy_only_block_field_saves(self):
         self.break_fields()
-        snapshot = self.store.initialize("main").as_dict()
-        self.assertTrue(any("fields.txt" in error for error in snapshot["migration_errors"]))
+        profile = self.store.initialize("main")
+        self.assertTrue(any("fields.txt" in error for error in profile["errors"]))
         with self.assertRaises(MacroProfileError):
             self.store.save_field("main", "pine tree", {"shape": "lines", "mins": 5})
         self.store.apply_change("main", "profile", "count", 6)
-        self.assertEqual(self.store.snapshot("main").as_dict()["settings"]["count"], 6)
+        self.assertEqual(self.store.load("main")["settings"]["count"], 6)
         self.assertEqual(self.read(self.path("main", "fields.txt")), "{'pine tree': {'shape': ")
 
     def test_migrations_run_once_per_profile(self):
         self.write("main", "generalsettings.txt", "field_only_mode=True\n")
-        self.assertEqual(self.store.initialize("main").as_dict()["settings"]["macro_mode"], "field")
+        self.assertEqual(self.store.initialize("main")["settings"]["macro_mode"], "field")
         # a later legacy key is left alone: reads and later startups don't migrate again
         self.write("main", "generalsettings.txt", "quest_only_mode=True\n")
-        self.assertIn("quest_only_mode", self.store.snapshot("main").as_dict()["settings"])
-        self.assertIn("quest_only_mode", self.store.initialize("main").as_dict()["settings"])
+        self.assertIn("quest_only_mode", self.store.load("main")["settings"])
+        self.assertIn("quest_only_mode", self.store.initialize("main")["settings"])
 
     def test_migrations_wait_while_a_file_is_unreadable(self):
         self.write("main", "generalsettings.txt", "field_only_mode=True\n")
         self.break_fields()
-        self.assertIn("field_only_mode", self.store.initialize("main").as_dict()["settings"])
+        self.assertIn("field_only_mode", self.store.initialize("main")["settings"])
         os.remove(self.path("main", "fields.txt"))
-        self.assertEqual(self.store.initialize("main").as_dict()["settings"]["macro_mode"], "field")
+        self.assertEqual(self.store.initialize("main")["settings"]["macro_mode"], "field")
 
     def test_unknown_keys_survive_initialization_and_changes(self):
         self.write("main", "settings.txt", "enabled=True\nfuture_key={'x': 1}\n")
         self.store.initialize("main")
         self.store.apply_change("main", "profile", "count", 3)
-        snapshot = self.store.snapshot("main").as_dict()
-        self.assertEqual(snapshot["settings"]["future_key"], {"x": 1})
+        profile = self.store.load("main")
+        self.assertEqual(profile["settings"]["future_key"], {"x": 1})
 
-    def test_invalid_change_does_not_advance_snapshot_or_file(self):
-        first = self.store.initialize("main")
+    def test_invalid_change_does_not_change_the_file(self):
+        self.store.initialize("main")
         path = self.path("main", "generalsettings.txt")
         before = self.read(path)
         with self.assertRaises(MacroProfileValidationError):
             self.store.apply_change("main", "general", "max_cannon_attempts", 30)
         self.assertEqual(self.read(path), before)
-        self.assertEqual(self.store.snapshot("main").version, first.version)
 
     def test_values_are_saved_in_the_format_the_gui_sends(self):
         self.store.initialize("main")
         self.store.apply_change("main", "profile", "count", "12")
         self.store.apply_change("main", "profile", "fields", "pine tree,sunflower")
-        settings = self.store.snapshot("main").as_dict()["settings"]
+        settings = self.store.load("main")["settings"]
         self.assertEqual(settings["count"], 12)
         self.assertEqual(settings["fields"], "pine tree,sunflower")
 
@@ -188,11 +187,11 @@ class MacroProfileStoreTests(unittest.TestCase):
         self.store.initialize("main")
         self.store.apply_change("main", "general", "gui_theme", "Midnight")
         self.assertIn("gui_theme=Midnight", self.read(self.path("main", "generalsettings.txt")))
-        self.assertEqual(self.store.snapshot("main").as_dict()["settings"]["gui_theme"], "Midnight")
+        self.assertEqual(self.store.load("main")["settings"]["gui_theme"], "Midnight")
 
     def test_values_saved_wrapped_by_an_old_gui_bug_are_unwrapped(self):
         self.write("main", "generalsettings.txt", "macro_mode={'source': 'generalsettings.txt', 'value': 'quest'}\n")
-        self.assertEqual(self.store.initialize("main").as_dict()["settings"]["macro_mode"], "quest")
+        self.assertEqual(self.store.initialize("main")["settings"]["macro_mode"], "quest")
 
     def gumdrop_store(self, profile_settings, fields):
         self.write("main", "settings.txt", profile_settings)
@@ -202,7 +201,7 @@ class MacroProfileStoreTests(unittest.TestCase):
 
     def test_quest_gumdrop_slot_is_used_when_only_goo_quests_use_gumdrops(self):
         store = self.gumdrop_store("quest_use_gumdrops=True\nquest_gumdrop_slot=6\n", {"pine tree": {"shape": "lines", "mins": 10, "goo": False}})
-        settings = store.initialize("main").as_dict()["settings"]
+        settings = store.initialize("main")["settings"]
         self.assertEqual(settings["goo_slot"], 6)
         self.assertNotIn("quest_gumdrop_slot", settings)
         self.assertNotIn("quest_gumdrop_slot", self.read(self.path("main", "settings.txt")))
@@ -216,24 +215,24 @@ class MacroProfileStoreTests(unittest.TestCase):
             {**GENERAL_DEFAULTS, "goo_slot": 3},
             FIELD_DEFAULTS,
         )
-        snapshot = store.initialize("main").as_dict()
-        self.assertIn("fields.txt", " ".join(snapshot["migration_errors"]))
+        profile = store.initialize("main")
+        self.assertIn("fields.txt", " ".join(profile["errors"]))
         self.assertIn("quest_gumdrop_slot=6", self.read(self.path("main", "settings.txt")))
 
     def test_goo_slot_is_kept_when_fields_use_goo(self):
         store = self.gumdrop_store("quest_use_gumdrops=True\nquest_gumdrop_slot=6\n", {"pine tree": {"shape": "lines", "mins": 10, "goo": True}})
-        self.assertEqual(store.initialize("main").as_dict()["settings"]["goo_slot"], 3)
+        self.assertEqual(store.initialize("main")["settings"]["goo_slot"], 3)
 
     def test_goo_slot_is_kept_when_goo_quests_are_off(self):
         store = self.gumdrop_store("quest_use_gumdrops=False\nquest_gumdrop_slot=6\n", {"pine tree": {"shape": "lines", "mins": 10}})
-        settings = store.initialize("main").as_dict()["settings"]
+        settings = store.initialize("main")["settings"]
         self.assertEqual(settings["goo_slot"], 3)
         self.assertNotIn("quest_gumdrop_slot", settings)
 
     def glitter_slot(self, profile_settings):
         self.write("main", "settings.txt", profile_settings)
         store = MacroProfileStore(self.profiles_dir, PROFILE_DEFAULTS, {**GENERAL_DEFAULTS, "glitter_slot": 1}, FIELD_DEFAULTS)
-        settings = store.initialize("main").as_dict()["settings"]
+        settings = store.initialize("main")["settings"]
         for old in ("field_booster_glitter_slot", "tad_alt_glitter_slot"):
             self.assertNotIn(old, settings)
         return settings["glitter_slot"], settings["AFB_slotG"]
@@ -250,26 +249,26 @@ class MacroProfileStoreTests(unittest.TestCase):
     def test_default_legacy_quest_gather_keeps_per_quest_settings(self):
         self.write("main", "settings.txt", "quest_gather_mins=0\npolar_bear_quest_gather_mins=5\n")
         store = MacroProfileStore(self.profiles_dir, {**PROFILE_DEFAULTS, "quest_gather_mins": 0, "polar_bear_quest_gather_mins": 2}, GENERAL_DEFAULTS, FIELD_DEFAULTS)
-        settings = store.initialize("main").as_dict()["settings"]
+        settings = store.initialize("main")["settings"]
         self.assertEqual(settings["polar_bear_quest_gather_mins"], 5)
-        self.assertEqual(store.snapshot("main").as_dict()["settings"]["polar_bear_quest_gather_mins"], 5)
+        self.assertEqual(store.load("main")["settings"]["polar_bear_quest_gather_mins"], 5)
 
     def test_configured_legacy_quest_gather_migrates_once(self):
         self.write("main", "settings.txt", "quest_gather_mins=7\npolar_bear_quest_gather_mins=5\n")
         store = MacroProfileStore(self.profiles_dir, {**PROFILE_DEFAULTS, "quest_gather_mins": 0, "polar_bear_quest_gather_mins": 2}, GENERAL_DEFAULTS, FIELD_DEFAULTS)
-        self.assertEqual(store.initialize("main").as_dict()["settings"]["polar_bear_quest_gather_mins"], 7)
+        self.assertEqual(store.initialize("main")["settings"]["polar_bear_quest_gather_mins"], 7)
         store.apply_change("main", "profile", "polar_bear_quest_gather_mins", 3)
-        self.assertEqual(store.snapshot("main").as_dict()["settings"]["polar_bear_quest_gather_mins"], 3)
+        self.assertEqual(store.load("main")["settings"]["polar_bear_quest_gather_mins"], 3)
 
-    def test_failed_atomic_replace_keeps_file_and_snapshot(self):
-        first = self.store.initialize("main")
+    def test_failed_atomic_replace_keeps_the_file(self):
+        self.store.initialize("main")
         path = self.path("main", "settings.txt")
         before = self.read(path)
         with mock.patch("src.modules.misc.macro_profile.os.replace", side_effect=OSError("disk full")):
             with self.assertRaises(OSError):
                 self.store.apply_change("main", "profile", "count", 2)
         self.assertEqual(self.read(path), before)
-        self.assertEqual(self.store.snapshot("main").version, first.version)
+        self.assertEqual(self.store.load("main")["settings"]["count"], 1)
 
     def test_concurrent_unrelated_changes_both_survive(self):
         self.store.initialize("main")
@@ -290,22 +289,23 @@ class MacroProfileStoreTests(unittest.TestCase):
         for thread in threads:
             thread.join()
         self.assertEqual(errors, [])
-        snapshot = self.store.snapshot("main").as_dict()
-        self.assertEqual(snapshot["settings"]["count"], 7)
-        self.assertEqual(snapshot["settings"]["macro_mode"], "quest")
+        profile = self.store.load("main")
+        self.assertEqual(profile["settings"]["count"], 7)
+        self.assertEqual(profile["settings"]["macro_mode"], "quest")
 
-    def test_switching_profiles_publishes_distinct_versioned_snapshot(self):
-        main = self.store.initialize("main")
+    def test_profiles_are_loaded_separately(self):
+        self.store.initialize("main")
         self.store.apply_change("main", "profile", "count", 4)
         alt = self.store.initialize("alt")
-        self.assertEqual(alt.profile, "alt")
-        self.assertGreater(alt.version, main.version)
-        self.assertEqual(alt.as_dict()["settings"]["count"], 1)
+        self.assertEqual(alt["profile"], "alt")
+        self.assertEqual(alt["settings"]["count"], 1)
+        self.assertEqual(self.store.load("main")["settings"]["count"], 4)
 
-    def test_snapshot_is_immutable(self):
-        snapshot = self.store.initialize("main")
-        with self.assertRaises(TypeError):
-            snapshot.settings["count"] = 9
+    def test_apply_change_returns_all_settings(self):
+        self.store.initialize("main")
+        settings = self.store.apply_change("main", "profile", "count", 4)
+        self.assertEqual(settings["count"], 4)
+        self.assertEqual(settings["macro_mode"], "normal")
 
     def test_misplaced_setting_keeps_the_changed_value(self):
         self.write("main", "settings.txt", "count=1\nmax_cannon_attempts=9\n")
@@ -337,7 +337,7 @@ class MacroProfileStoreTests(unittest.TestCase):
         with self.assertRaises(MacroProfileError):
             self.store.read("main", strict=True)
 
-    def test_snapshot_read_has_no_file_side_effects(self):
+    def test_load_has_no_file_side_effects(self):
         self.store.initialize("main")
         paths = [
             self.path("main", "settings.txt"),
@@ -345,7 +345,7 @@ class MacroProfileStoreTests(unittest.TestCase):
             self.path("main", "fields.txt"),
         ]
         before = {path: (os.stat(path).st_mtime_ns, self.read(path)) for path in paths}
-        self.store.snapshot("main")
+        self.store.load("main")
         after = {path: (os.stat(path).st_mtime_ns, self.read(path)) for path in paths}
         self.assertEqual(after, before)
 
@@ -364,7 +364,7 @@ class MacroProfileStoreTests(unittest.TestCase):
             "general",
             {"max_cannon_attempts": 3, "cannon_hive_resync_attempts": 1},
         )
-        settings = self.store.snapshot("main").as_dict()["settings"]
+        settings = self.store.load("main")["settings"]
         self.assertEqual(settings["max_cannon_attempts"], 3)
         self.assertEqual(settings["cannon_hive_resync_attempts"], 1)
 
@@ -372,7 +372,7 @@ class MacroProfileStoreTests(unittest.TestCase):
         defaults = {**PROFILE_DEFAULTS, "max_convert_time": 10}
         store = MacroProfileStore(self.profiles_dir, defaults, GENERAL_DEFAULTS, FIELD_DEFAULTS)
         self.write("main", "settings.txt", "x_max_convert_time=5\nmax_convert_time=7\n")
-        settings = store.initialize("main").as_dict()["settings"]
+        settings = store.initialize("main")["settings"]
         self.assertEqual(settings["x_max_convert_time"], 5)
         self.assertEqual(settings["max_convert_time"], 7)
 
