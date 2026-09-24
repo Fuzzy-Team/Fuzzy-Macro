@@ -5,6 +5,7 @@ import re
 from datetime import timedelta
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
+from modules.misc.settings_defaults import glitter_hotbar_slot
 import modules.screen.ocr as ocr
 from modules.controls.sleep import pause_aware_time as time, sleep
 from modules.macro.game_data import (
@@ -207,7 +208,7 @@ class CollectiblesMixin:
         if not self.setdat.get("field_booster_glitter_extend_enabled", False):
             return
 
-        glitterSlot = min(7, max(0, int(self.setdat.get("glitter_slot", 0) or 0)))
+        glitterSlot = glitter_hotbar_slot(self.setdat)
         with self._fieldBoosterGlitterLock:
             self._fieldBoosterGlitterGeneration += 1
             self._fieldBoosterGlitterPending = (time.monotonic() + 14 * 60 + 55, glitterSlot)
@@ -226,11 +227,8 @@ class CollectiblesMixin:
         return True
 
     def useGlitterFromSlot(self, slot):
-        """Use a Glitter hotbar slot, or locate Glitter in the inventory for slot 0."""
-        if int(slot) == 0:
-            self.useItemInInventory("glitter")
-        else:
-            self.keyboard.press(str(slot))
+        """Use Glitter from its hotbar slot. Never the inventory: opening it mid-gather breaks the gather."""
+        self.keyboard.press(str(slot))
 
 
     def antChallenge(self):
