@@ -66,9 +66,6 @@ except ImportError:
 
 #returns a dictionary containing the settings
 profileName = DEFAULT_CURRENT_PROFILE
-# Track profile changes for running macro processes
-_profile_change_counter = 0
-_settings_key_file_cache = None
 _macro_profile_store = None
 
 # File to store current profile persistence (defined after getProjectRoot)
@@ -133,7 +130,7 @@ def getMacroProfileSnapshot(profile_name=None):
     return _getMacroProfileStore().snapshot(profile_name or profileName).as_dict()
 
 def applyMacroProfileChange(scope, setting, value):
-    """Apply one validated change and return a structured result for adapters."""
+    """Apply one validated change and return a structured result for the GUI."""
     try:
         snapshot = _getMacroProfileStore().apply_change(profileName, scope, setting, value)
         return {"ok": True, "snapshot": snapshot.as_dict()}
@@ -141,16 +138,6 @@ def applyMacroProfileChange(scope, setting, value):
         return {"ok": False, "error": exc.as_dict()}
     except MacroProfileError as exc:
         return {"ok": False, "error": {"setting": setting, "reason": str(exc)}}
-
-def importMacroProfileChanges(scope, changes):
-    """Apply a validated transactional batch for import adapters."""
-    try:
-        snapshot = _getMacroProfileStore().apply_changes(profileName, scope, changes)
-        return {"ok": True, "snapshot": snapshot.as_dict()}
-    except MacroProfileValidationError as exc:
-        return {"ok": False, "error": exc.as_dict()}
-    except MacroProfileError as exc:
-        return {"ok": False, "error": {"setting": "changes", "reason": str(exc)}}
 
 def getProfilePath(profile_name=None):
     """Get the path to a specific profile directory"""
@@ -615,10 +602,6 @@ def switchProfile(name):
     profileName = name
     # Save the profile selection persistently
     saveCurrentProfile()
-    # Increment the change counter to notify running processes
-    global _profile_change_counter
-    _profile_change_counter += 1
-
     # Switching is the explicit repair/migration point for the selected profile.
     _getMacroProfileStore().initialize(name)
 
@@ -785,29 +768,6 @@ def _coerceNestedValues(value):
         return [_coerceNestedValues(v) for v in value]
     return _coerceScalarValue(value)
 
-def _chooseRepairValue(existing_value, incoming_value, default_value):
-    """Prefer explicit user values over defaults when repairing misplaced keys."""
-    if existing_value is None:
-        return incoming_value
-    if existing_value == incoming_value:
-        return existing_value
-    if existing_value == default_value and incoming_value != default_value:
-        return incoming_value
-    return existing_value
-
-def _getDefaultSettingsKeySets():
-    """Return known keys for profile and general settings defaults."""
-    global _settings_key_file_cache
-
-    if _settings_key_file_cache is not None:
-        return _settings_key_file_cache
-
-    _settings_key_file_cache = {
-        "profile": set(DEFAULT_PROFILE_SETTINGS.keys()),
-        "general": set(DEFAULT_GENERAL_SETTINGS.keys()),
-    }
-    return _settings_key_file_cache
-
 def saveDict(path, data):
     out = "\n".join([f"{k}={v}" for k,v in data.items()])
     # Ensure file ends with a newline to avoid accidental concatenation
@@ -845,51 +805,6 @@ def saveSettingFile(setting,value, path):
     #write it
     saveDict(path, data)
 
-def _readFieldsFile(fields_path):
-    if not os.path.exists(fields_path):
-        return loadDefaultFields()
-    with open(fields_path) as f:
-        raw = f.read().strip()
-    if not raw:
-        return loadDefaultFields()
-    return ast.literal_eval(raw)
-
-def _repairFieldsData(fields_data, default_fields):
-    repaired = _coerceNestedValues(fields_data)
-    updated = False
-
-    for field_name, default_field_settings in default_fields.items():
-        if field_name not in repaired or not isinstance(repaired[field_name], dict):
-            repaired[field_name] = dict(default_field_settings)
-            updated = True
-            continue
-
-        field_settings = repaired[field_name]
-        for key, default_value in default_field_settings.items():
-            if key not in field_settings:
-                field_settings[key] = default_value
-                updated = True
-
-    return repaired, updated
-
-def _loadFieldsFile(fields_path, repair=True):
-    if not os.path.exists(fields_path):
-        fields_data = loadDefaultFields()
-        _writeFieldsFile(fields_path, fields_data)
-        if not repair:
-            return fields_data
-    else:
-        fields_data = _readFieldsFile(fields_path)
-
-    if not repair:
-        return _coerceNestedValues(fields_data)
-
-    default_fields = loadDefaultFields()
-    fields_data, updated = _repairFieldsData(fields_data, default_fields)
-    if updated:
-        _writeFieldsFile(fields_path, fields_data)
-    return fields_data
-
 def loadFields():
     return getMacroProfileSnapshot(profileName)["fields"]
 
@@ -899,7 +814,6 @@ def saveField(field, settings):
     normalizedSettings = normalizeFieldSettings(field, settings)
     mergedSettings = _applyFieldPatternPresets(existingSettings, normalizedSettings)
     _getMacroProfileStore().save_field(profileName, field, mergedSettings)
-    return
 
 def exportFieldSettings(field_name):
     """Export field settings as JSON string with metadata"""
@@ -1149,131 +1063,29 @@ def getAvailablePatterns():
     return []
 
 def saveProfileSetting(setting, value):
-    result = applyMacroProfileChange("profile", setting, value)
-    if not result["ok"]:
-        error = result["error"]
-        raise MacroProfileValidationError(error["setting"], error["reason"])
-    return result["snapshot"]
+    return _getMacroProfileStore().apply_change(profileName, "profile", setting, value).as_dict()
 
 def saveDictProfileSettings(dict):
-    result = importMacroProfileChanges("profile", dict)
-    if not result["ok"]:
-        error = result["error"]
-        raise MacroProfileValidationError(error["setting"], error["reason"])
-    return result["snapshot"]
+    return _getMacroProfileStore().apply_changes(profileName, "profile", dict).as_dict()
 
-#increment a setting, and return the dictionary for the setting
+#increment a setting, and return all settings after the change
 def incrementProfileSetting(setting, incrValue):
     current = loadSettings()
     if setting not in current:
         raise MacroProfileValidationError(setting, "unknown setting")
-    saveProfileSetting(setting, current[setting] + incrValue)
-    return loadSettings()
+    return saveProfileSetting(setting, current[setting] + incrValue)["settings"]
 
 def saveGeneralSetting(setting, value):
-    result = applyMacroProfileChange("general", setting, value)
-    if not result["ok"]:
-        error = result["error"]
-        raise MacroProfileValidationError(error["setting"], error["reason"])
-    return result["snapshot"]
-
-def _moveMisplacedSettings(settings_path, generalsettings_path):
-    """Move settings written to the wrong file back to their expected owner."""
-    key_sets = _getDefaultSettingsKeySets()
-    default_profile_settings = getDefaultProfileSettings()
-    default_general_settings = getDefaultGeneralSettings()
-
-    changed = False
-
-    try:
-        settings_data = readSettingsFile(settings_path, defaults=default_profile_settings)
-    except FileNotFoundError:
-        settings_data = dict(default_profile_settings)
-        changed = True
-
-    try:
-        general_data = readSettingsFile(generalsettings_path, defaults=default_general_settings)
-    except FileNotFoundError:
-        general_data = dict(default_general_settings)
-        changed = True
-
-    for key in list(general_data.keys()):
-        if key not in key_sets["profile"] or key in key_sets["general"]:
-            continue
-        moved_value = general_data.pop(key)
-        settings_data[key] = _chooseRepairValue(
-            settings_data.get(key),
-            moved_value,
-            default_profile_settings.get(key),
-        )
-        changed = True
-
-    for key in list(settings_data.keys()):
-        if key not in key_sets["general"] or key in key_sets["profile"]:
-            continue
-        moved_value = settings_data.pop(key)
-        general_data[key] = _chooseRepairValue(
-            general_data.get(key),
-            moved_value,
-            default_general_settings.get(key),
-        )
-        changed = True
-
-    for key, value in default_profile_settings.items():
-        if key not in settings_data:
-            settings_data[key] = value
-            changed = True
-
-    for key, value in default_general_settings.items():
-        if key not in general_data:
-            general_data[key] = value
-            changed = True
-
-    if changed:
-        saveDict(settings_path, settings_data)
-        saveDict(generalsettings_path, general_data)
+    return _getMacroProfileStore().apply_change(profileName, "general", setting, value).as_dict()
 
 def loadSettings():
-    return _getMacroProfileStore().profile_settings(profileName)
+    return _getMacroProfileStore().read(profileName)[0]
 
 #return a dict containing all settings except field (general, profile, planters)
 def loadAllSettings():
     # Reload the selected profile name so a switch made by another process is seen.
     loadCurrentProfile()
     return getMacroProfileSnapshot()["settings"]
-
-def initializeFieldSync():
-    """Initialize field synchronization between profile and general settings"""
-    try:
-        settings_path = os.path.join(getProfilePath(), "settings.txt")
-        generalsettings_path = os.path.join(getProfilePath(), "generalsettings.txt")
-        try:
-            profileData = readSettingsFile(settings_path)
-        except FileNotFoundError:
-            print(f"Warning: Profile '{profileName}' settings file not found during sync, skipping")
-            return
-
-        generalData = readSettingsFile(generalsettings_path)
-
-        # Check if field settings exist in both files
-        profileFields = profileData.get("fields", [])
-        generalFields = generalData.get("fields", [])
-
-        # If general settings has different fields, sync from profile to general
-        if profileFields != generalFields and profileFields:
-            generalData["fields"] = profileFields
-            saveDict(generalsettings_path, generalData)
-
-        # Sync fields_enabled as well
-        profileFieldsEnabled = profileData.get("fields_enabled", [])
-        generalFieldsEnabled = generalData.get("fields_enabled", [])
-
-        if profileFieldsEnabled != generalFieldsEnabled and profileFieldsEnabled:
-            generalData["fields_enabled"] = profileFieldsEnabled
-            saveDict(generalsettings_path, generalData)
-            
-    except Exception as e:
-        print(f"Warning: Could not initialize field synchronization: {e}")
 
 def exportProfile(profile_name):
     """Export a profile to JSON content for browser download"""
@@ -1292,10 +1104,7 @@ def exportProfile(profile_name):
         if not os.path.exists(settings_file) or not os.path.exists(fields_file) or not os.path.exists(generalsettings_file):
             return False, f"Profile '{profile_name}' is missing required files"
 
-        _moveMisplacedSettings(settings_file, generalsettings_file)
-        settings_data = readSettingsFile(settings_file)
-        fields_data = loadFields() if profile_name == getCurrentProfile() else _loadFieldsFile(fields_file)
-        generalsettings_data = readSettingsFile(generalsettings_file)
+        settings_data, generalsettings_data, fields_data = _getMacroProfileStore().read(profile_name, strict=True)
 
         # Ensure sensitive fields are removed from export
         sensitive_keys = ("discord_bot_token", "webhook_link", "private_server_link")

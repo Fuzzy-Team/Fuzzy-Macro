@@ -47,7 +47,6 @@ def get_interrupt_action():
         return INTERRUPT_NONE
 
 
-
 def raise_if_interrupted():
     action = get_interrupt_action()
     if action != INTERRUPT_NONE:
@@ -104,31 +103,8 @@ def sleep(duration, get_now=time.perf_counter):
             time.sleep(chunk)
         now = get_now()
 
-def pauseable_sleep(duration):
-    """A time.sleep replacement that respects pause state"""
-    if duration <= 0:
-        return
-
-    raise_if_interrupted()
-
-    # Check for pause before sleeping
-    if wait_while_paused():
-        return  # Stop was requested
-
-    # Sleep in short chunks so pause interrupts quickly
-    start = time.perf_counter()
-    while time.perf_counter() - start < duration:
-        raise_if_interrupted()
-        if is_stopped():
-            return
-        if is_paused() and wait_while_paused():
-            return
-
-        # Sleep in small chunks
-        remaining = duration - (time.perf_counter() - start)
-        chunk = min(0.05, remaining)
-        if chunk > 0:
-            time.sleep(chunk)
+# Kept for custom patterns that import it by name
+pauseable_sleep = sleep
 
 
 class _PauseAwareTimeModule:
@@ -147,7 +123,7 @@ class _PauseAwareTimeModule:
                 if remaining <= 0 or is_stopped():
                     return
                 time.sleep(min(0.05, remaining))
-        return pauseable_sleep(duration)
+        return sleep(duration)
 
     def __getattr__(self, name):
         return getattr(self._time, name)
