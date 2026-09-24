@@ -234,18 +234,18 @@ class MacroProfileStoreTests(unittest.TestCase):
         self.write("main", "settings.txt", profile_settings)
         store = MacroProfileStore(self.profiles_dir, PROFILE_DEFAULTS, {**GENERAL_DEFAULTS, "glitter_slot": 1}, FIELD_DEFAULTS)
         settings = store.initialize("main").as_dict()["settings"]
-        for old in ("field_booster_glitter_slot", "tad_alt_glitter_slot", "AFB_slotG"):
+        for old in ("field_booster_glitter_slot", "tad_alt_glitter_slot"):
             self.assertNotIn(old, settings)
-        return settings["glitter_slot"]
+        return settings["glitter_slot"], settings["AFB_slotG"]
 
     def test_glitter_slot_keeps_a_slot_the_user_chose(self):
-        self.assertEqual(self.glitter_slot("field_booster_glitter_slot=4\ntad_alt_glitter_slot=4\nAFB_slotG=4\n"), 4)
+        self.assertEqual(self.glitter_slot("field_booster_glitter_slot=4\ntad_alt_glitter_slot=4\nAFB_slotG=4\n"), (4, 4))
 
     def test_glitter_slot_uses_the_default_slot_when_only_old_defaults_are_stored(self):
-        self.assertEqual(self.glitter_slot("field_booster_glitter_slot=1\ntad_alt_glitter_slot=1\nAFB_slotG=0\n"), 1)
+        self.assertEqual(self.glitter_slot("field_booster_glitter_slot=1\ntad_alt_glitter_slot=1\nAFB_slotG=0\n"), (1, 0))
 
-    def test_glitter_slot_never_migrates_to_the_inventory(self):
-        self.assertEqual(self.glitter_slot("field_booster_glitter_slot=0\ntad_alt_glitter_slot=0\nAFB_slotG=0\n"), 1)
+    def test_glitter_extending_never_migrates_to_the_inventory_but_afb_keeps_it(self):
+        self.assertEqual(self.glitter_slot("field_booster_glitter_slot=0\ntad_alt_glitter_slot=0\nAFB_slotG=0\n"), (1, 0))
 
     def test_default_legacy_quest_gather_keeps_per_quest_settings(self):
         self.write("main", "settings.txt", "quest_gather_mins=0\npolar_bear_quest_gather_mins=5\n")
