@@ -9,7 +9,6 @@ import sys
 import time
 from threading import Thread
 import modules.controls.mouse as mouse
-import modules.macro as macroModule
 from modules.controls.hotkeys import watch_for_hotkeys
 from modules.controls.sleep import INTERRUPT_NONE
 from modules.discord_bot.richPresence import RichPresenceManager
@@ -17,6 +16,7 @@ from modules.misc import messageBox
 from modules.misc.ColorProfile import DisplayColorProfile
 from modules.misc.appManager import getWindowSize
 from modules.misc.imageManipulation import adjustImage
+from modules.misc.settings_defaults import BLENDER_ITEM_SLOTS
 from modules.screen.imageSearch import locateImageOnScreen
 from modules.reports.hourly import HourlyReport
 from modules.submacros.tadAltSync import TadAltSync
@@ -440,7 +440,7 @@ def runApp(macroTarget):
                         break
             #check if blender is enabled but there are no items to craft
             validBlender = not setdat["blender_enable"] #valid blender set to false if blender is enabled, else its true since blender is disabled
-            for i in range(1, macroModule.BLENDER_ITEM_SLOTS + 1):
+            for i in range(1, BLENDER_ITEM_SLOTS + 1):
                 if setdat[f"blender_item_{i}"] != "none" and (setdat[f"blender_repeat_{i}"] or setdat[f"blender_repeat_inf_{i}"]):
                     validBlender = True
             if not validBlender:
