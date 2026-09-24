@@ -66,11 +66,10 @@ class MacroProfileStoreTests(unittest.TestCase):
         self.assertIn("macro_mode=field", persisted)
         self.assertNotIn("field_only_mode", persisted)
 
-    def test_initialize_removes_obsolete_hive_claim_choice(self):
+    def test_initialize_keeps_hive_claim_choice(self):
         self.write("main", "generalsettings.txt", "hive_claim_method=check\n")
         snapshot = self.store.initialize("main").as_dict()
-        self.assertNotIn("hive_claim_method", snapshot["settings"])
-        self.assertNotIn("hive_claim_method", self.read(self.path("main", "generalsettings.txt")))
+        self.assertEqual(snapshot["settings"]["hive_claim_method"], "check")
 
     def test_a_line_that_is_not_a_setting_only_loses_that_line(self):
         self.write("main", "settings.txt", "enabled=False\nthis is not a setting\ncount=3\n")

@@ -54,7 +54,6 @@ import traceback
 import pygetwindow as gw
 from modules.submacros.hasteCompensation import HasteCompensationRevamped
 from modules import bitmap_matcher
-from modules.hive_acquisition import HiveAcquisition, confirm_claim
 from modules.gather_session import GatherPatternRunner, GatherSession
 import json
 from modules.controls.sleep import pause_aware_time as time

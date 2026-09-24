@@ -16,7 +16,6 @@ from modules.controls.sleep import (
     set_resume_callback,
     set_run_state,
 )
-from modules.hive_acquisition import HiveAcquisition
 from modules.macro.game_data import mergedCollectData, PING_SETTING_KEYS
 from modules.misc import messageBox
 from modules.screen.robloxWindow import RobloxWindowBounds
@@ -146,12 +145,6 @@ class macro(
         self.stop = False
 
         self.hiveSlotTiles = 9.75 #distance between hive slots (in tiles)
-        self.hiveAcquisition = HiveAcquisition(
-            detect=self.claimHiveByDetectMethod,
-            check=self.claimHiveByCheckMethod,
-            control_status=self._hiveAcquisitionControlStatus,
-            fatal_exceptions=(InterruptRequested,),
-        )
 
 
         self.setRobloxWindowInfo(setYOffset=False)

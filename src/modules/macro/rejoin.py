@@ -5,7 +5,8 @@ import modules.misc.appManager as appManager
 import modules.misc.settingsManager as settingsManager
 import modules.screen.ocr as ocr
 from modules.controls.keyboard import keyboard
-from modules.controls.sleep import pause_aware_time as time
+from modules.controls.sleep import InterruptRequested, pause_aware_time as time
+from modules.hive_acquisition import acquire_hive
 from modules.macro.game_data import (
     MAIN_GAME_PLACE_ID,
     REJOIN_COLOR_DURATION,
@@ -391,17 +392,21 @@ class RejoinMixin:
                 # exclusions.
                 excludedHiveSlots.discard(preferredHiveSlot)
 
-            acquisition = self.hiveAcquisition.acquire(preferredHiveSlot, excludedHiveSlots)
-            newHiveNumber = acquisition.slot
+            newHiveNumber, reason = acquire_hive(
+                str(self.setdat.get("hive_claim_method", "detect")).strip().lower(),
+                preferredHiveSlot,
+                excludedHiveSlots,
+                detect=self.claimHiveByDetectMethod,
+                check=self.claimHiveByCheckMethod,
+                stopped=lambda: self._hiveAcquisitionControlStatus() == "stopped",
+                fatal_exceptions=(InterruptRequested,),
+            )
 
-            if not acquisition.claimed:
-                if acquisition.reason == "stopped":
+            if not newHiveNumber:
+                if reason == "stopped":
                     self.clear_task_status()
                     return False
-                details = acquisition.reason
-                if acquisition.detection_error:
-                    details += f"; detection: {acquisition.detection_error}"
-                self.logger.webhook("", f"Failed to claim hive ({details}); retrying rejoin", "dark brown", "screen")
+                self.logger.webhook("", f"Failed to claim hive ({reason}); retrying rejoin", "dark brown", "screen")
                 continue
 
             self.logger.webhook("", f"Claimed hive {newHiveNumber}", "bright green", "screen", ping_category="ping_critical_errors")

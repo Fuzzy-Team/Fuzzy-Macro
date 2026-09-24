@@ -374,10 +374,6 @@ class MacroProfileStore:
         """One-time upgrades of settings saved by older versions. Returns (profile changed, general changed)."""
         original_profile = copy.deepcopy(profile_data)
         original_general = copy.deepcopy(general_data)
-        # Hive Acquisition always detects first now. Removing the obsolete
-        # choice migrates both "check" and "detect" profiles to that behavior.
-        profile_data.pop("hive_claim_method", None)
-        general_data.pop("hive_claim_method", None)
         profile_keys = set(self._profile_defaults)
         general_keys = set(self._general_defaults)
 
