@@ -74,7 +74,8 @@ class HiveAcquisition:
             raise
         except Exception as exc:
             reason = "detection_and_check_error" if detection_error else "check_error"
-            return HiveAcquisitionResult(False, reason=reason, detection_error=detection_error or str(exc))
+            error = f"{detection_error}; check: {exc}" if detection_error else str(exc)
+            return HiveAcquisitionResult(False, reason=reason, detection_error=error)
 
         if slot:
             return HiveAcquisitionResult(True, slot, "claimed_by_fallback", detection_error)

@@ -152,7 +152,7 @@ class GatherPatternRunner:
                 with open(installed, "rb") as installed_file, open(shipped, "rb") as shipped_file:
                     self._builtin[pattern] = installed_file.read() == shipped_file.read()
             except OSError:
-                self._builtin[pattern] = False
+                return False  # not cached, so a later cycle retries
         return self._builtin[pattern]
 
     def _run(self, pattern, namespace):
