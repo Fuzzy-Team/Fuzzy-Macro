@@ -1,4 +1,5 @@
 import ast
+import copy
 import json
 import threading
 from datetime import datetime
@@ -80,12 +81,11 @@ class macro(
         if skipTask is not None:
             set_interrupt_action(skipTask)
         
-        profileSnapshot = settingsManager.getMacroProfileSnapshot()
-        self.setdat = profileSnapshot["settings"]
-        self.fieldSettings = profileSnapshot["fields"]
-        # Track the published snapshot, including changes made by other adapters.
-        self._last_profile_version = profileSnapshot["version"]
-        self._last_profile_name = profileSnapshot["profile"]
+        profile = settingsManager.loadMacroProfile()
+        # tasks can change setdat and fieldSettings for one pass, so keep the loaded copy apart
+        self._loadedProfile = profile
+        self.setdat = copy.deepcopy(profile["settings"])
+        self.fieldSettings = copy.deepcopy(profile["fields"])
         self._reportedProfileProblems = []
 
         self.robloxWindow = RobloxWindowBounds()
@@ -103,7 +103,7 @@ class macro(
         )
         self._fieldBoosterGlitterGeneration = 0
         self._fieldBoosterGlitterLock = threading.Lock()
-        self.reportProfileProblems(profileSnapshot)
+        self.reportProfileProblems(profile)
         self.buffDetector = BuffDetector(self.robloxWindow)
         self.hourlyReport = HourlyReport(self.buffDetector, self.setdat.get("hourly_report_time_format", 24))
         self.itemMonitor = ItemMonitor(self.robloxWindow)
@@ -148,39 +148,40 @@ class macro(
 
         self.setRobloxWindowInfo(setYOffset=False)
 
-    def reportProfileProblems(self, profileSnapshot):
+    def reportProfileProblems(self, profile):
         """Report settings that couldn't be read (defaults are used for them) once, and again if they change."""
-        problems = profileSnapshot.get("migration_errors", []) + profileSnapshot.get("warnings", [])
+        problems = profile["errors"] + profile["warnings"]
         if problems == self._reportedProfileProblems:
             return
         self._reportedProfileProblems = problems
         if problems:
             self.logger.webhook(
                 "Settings Problem",
-                f"Profile '{profileSnapshot['profile']}' has settings that couldn't be read, so defaults are used for them:\n" + "\n".join(f"- {problem}" for problem in problems),
+                f"Profile '{profile['profile']}' has settings that couldn't be read, so defaults are used for them:\n" + "\n".join(f"- {problem}" for problem in problems),
                 "red",
                 ping_category="ping_critical_errors",
             )
 
     def checkAndReloadSettings(self):
         """Reload settings for a new loop pass and apply profile changes"""
-        profileSnapshot = settingsManager.getMacroProfileSnapshot()
+        profile = settingsManager.loadMacroProfile()
         # Start every pass from the saved settings so quest overrides do not carry over.
-        self.setdat = profileSnapshot["settings"]
-        self.reportProfileProblems(profileSnapshot)
-        profileChanged = profileSnapshot["profile"] != self._last_profile_name
+        self.setdat = copy.deepcopy(profile["settings"])
+        self.reportProfileProblems(profile)
+        last = self._loadedProfile
+        profileChanged = profile["profile"] != last["profile"]
         settingsChanged = (
             profileChanged
-            or profileSnapshot["version"] != self._last_profile_version
+            or profile["settings"] != last["settings"]
+            or profile["fields"] != last["fields"]
         )
         if settingsChanged:
-            self._last_profile_version = profileSnapshot["version"]
-            self._last_profile_name = profileSnapshot["profile"]
+            self._loadedProfile = profile
             if profileChanged or not self.setdat.get("field_booster_glitter_extend_enabled", False):
                 with self._fieldBoosterGlitterLock:
                     self._fieldBoosterGlitterGeneration += 1
             self.tadAltSync.update_settings(self.setdat)
-            self.fieldSettings = profileSnapshot["fields"]
+            self.fieldSettings = copy.deepcopy(profile["fields"])
             # Update logger with new webhook settings
             pingSettings = {key: self.setdat.get(key, False) for key in PING_SETTING_KEYS}
             self.logger.enableWebhook = logModule.delivery_uses_webhook(self.setdat)
@@ -205,7 +206,7 @@ class macro(
             if profileChanged:
                 self.logger.webhook(
                     "Profile Changed",
-                    f"Switched to profile: {profileSnapshot['profile']}",
+                    f"Switched to profile: {profile['profile']}",
                     "blue",
                 )
 
