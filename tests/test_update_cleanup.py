@@ -149,6 +149,23 @@ class UpdateCleanupTests(TestCase):
             self._apply()
         self.assertTrue(stale.exists())
 
+    def test_installed_gitignore_stands_in_when_origin_is_offline(self):
+        self._write(self.install, ".gitignore", "generated/\n")
+        kept = self._write(self.install, "generated/output.txt")
+        stale = self._write(self.install, "old.txt")
+        with mock.patch.object(update.requests, "get", side_effect=OSError("offline")):
+            update._apply_update_files(str(self.extracted), str(self.install), PROTECTED,
+                                       [".git", "backup_macro.zip", ".backup_pending"])
+        self.assertTrue(kept.exists())
+        self.assertFalse(stale.exists())
+
+    def test_offline_without_installed_gitignore_skips_cleanup(self):
+        stale = self._write(self.install, "old.txt")
+        with mock.patch.object(update.requests, "get", side_effect=OSError("offline")):
+            update._apply_update_files(str(self.extracted), str(self.install), PROTECTED,
+                                       [".git", "backup_macro.zip", ".backup_pending"])
+        self.assertTrue(stale.exists())
+
     def test_unsupported_gitignore_patterns_skip_cleanup(self):
         stale = self._write(self.install, "nested/secret.txt")
         self._write(self.extracted, ".gitignore", "**/secret.txt\n")
