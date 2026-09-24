@@ -253,10 +253,44 @@ def ensureDefaultPatterns():
         if not os.path.exists(target):
             shutil.copy2(os.path.join(defaults_dir, filename), target)
 
+def migrateProfilesToGeneralSettings():
+    """Give each profile its own generalsettings.txt, copied from the old global one.
+
+    Must run before ensureProfileFiles, which would otherwise create the current
+    profile's generalsettings.txt from defaults first and skip that profile.
+    """
+    global_generalsettings = os.path.join(getSettingsDir(), "generalsettings.txt")
+    # Check if global generalsettings exists - if not, migration is already complete
+    if not os.path.exists(global_generalsettings) or not os.path.exists(getProfilesDir()):
+        return
+
+    migrated = False
+    migration_failed = False
+    for profile_name in listProfiles():
+        generalsettings_file = os.path.join(getProfilesDir(), profile_name, "generalsettings.txt")
+        if os.path.exists(generalsettings_file):
+            continue
+        try:
+            shutil.copy2(global_generalsettings, generalsettings_file)
+            print(f"Migrated generalsettings.txt for profile: {profile_name}")
+            migrated = True
+        except Exception as e:
+            migration_failed = True
+            print(f"Warning: Failed to migrate generalsettings.txt for profile '{profile_name}': {e}")
+
+    # Every profile has its own copy now, so the global file is no longer needed
+    if migrated and not migration_failed:
+        try:
+            os.remove(global_generalsettings)
+            print("Removed old global generalsettings.txt file")
+        except Exception as e:
+            print(f"Warning: Failed to remove old global generalsettings.txt file: {e}")
+
 def ensureRuntimeData():
     """Create user/profile runtime directories and missing seed files."""
     os.makedirs(getUserDataDir(), exist_ok=True)
     os.makedirs(getProfilesDir(), exist_ok=True)
+    migrateProfilesToGeneralSettings()
     ensureDefaultPatterns()
 
     for filename in (
@@ -1207,6 +1241,9 @@ def _importProfileData(import_data, new_profile_name=None):
         generalsettings_file = os.path.join(new_profile_path, "generalsettings.txt")
         saveDict(generalsettings_file, import_data["generalsettings"])
 
+        # the export may come from an older version, so migrate it now like an installed profile
+        _getMacroProfileStore().prepare(new_profile_name)
+
         return True, f"Profile imported successfully as '{new_profile_name}'"
 
     except Exception as e:
@@ -1215,7 +1252,7 @@ def _importProfileData(import_data, new_profile_name=None):
 # Seed runtime/profile files, then load the current profile when the module is imported
 ensureRuntimeData()
 loadCurrentProfile()
-# Repair and migrate the selected Macro Profile at the explicit initialization point.
+# Create missing files and run pending migrations (once per profile after an update).
 try:
     initializeMacroProfile()
 except Exception as exc:
