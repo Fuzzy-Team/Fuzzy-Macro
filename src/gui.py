@@ -1062,12 +1062,8 @@ def getMacroVersion():
 
 @eel.expose
 def usesLegacyDiscordBot():
-    """True on macOS 10.12-10.14 (Python 3.7, discord.py 1.x), where bot commands use the fuzz! prefix"""
-    try:
-        from modules.discord_bot import legacyCommands
-        return legacyCommands.IS_LEGACY
-    except Exception:
-        return False
+    """True on macOS 10.12-10.14, where Python 3.7 can only install discord.py 1.x, so bot commands use the fuzz! prefix"""
+    return sys.version_info < (3, 8)
 
 @eel.expose
 def autoClickerClick():
