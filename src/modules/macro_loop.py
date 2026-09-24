@@ -2,7 +2,6 @@ import ast
 import json
 import time
 import modules.controls.mouse as mouse
-import modules.macro as macroModule
 import modules.misc.settingsManager as settingsManager
 from modules.controls.sleep import (
     InterruptRequested,
@@ -69,6 +68,9 @@ def canClaimTimedBearQuest(name):
 # (set_enabled moved into RichPresenceManager class)
 #controller for the macro
 def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMessageQueue=None, planterCommandQueue=None, skipServer=None):
+    # imported here so the GUI process, which only passes this function to the macro
+    # process, doesn't load the macro package (OCR, cv2, Vision, pyautogui)
+    import modules.macro as macroModule
     macro = macroModule.macro(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, skipServer)
     altHostAuthorized = (
         macro.setdat.get("macro_mode", "normal") != "alt"
