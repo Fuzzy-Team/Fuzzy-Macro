@@ -1519,6 +1519,7 @@ function updateDropDownDisplay(optionEle) {
   selectEle.dataset.value = optionEle.dataset.value;
   //set the display to match the option
   selectEle.innerHTML = optionEle.innerHTML;
+  selectEle.title = "";
   // Ensure dependent fields reflect this change
   try { updateDependentFields(); } catch (e) { /* ignore */ }
 }
@@ -1610,14 +1611,28 @@ function setDropdownValue(ele, value) {
     return;
   }
   const options = Array.from(ele.children[1].children[0].children);
-  // settings that were never saved (or hold a value that isn't an option) show the default,
-  // matching the default the macro uses, instead of the "None" placeholder
-  const defaultValue = String(ele.dataset.default ?? "").toLowerCase();
-  const option =
-    options.find((x) => x.dataset.value == value) ||
-    options.find((x) => defaultValue && x.dataset.value == defaultValue) ||
-    options[0];
-  if (option) updateDropDownDisplay(option);
+  // option values are stored trimmed and lowercased (see buildInput)
+  const normalize = (v) => String(v ?? "").trim().toLowerCase();
+  const findOption = (v) => options.find((x) => normalize(x.dataset.value) == normalize(v));
+
+  let option = findOption(value);
+  if (!option && normalize(value) === "") {
+    // never saved: show the default instead of the "None" placeholder
+    option = (ele.dataset.default && findOption(ele.dataset.default)) || options[0];
+  }
+  if (option) {
+    updateDropDownDisplay(option);
+    return;
+  }
+  if (normalize(value) === "") return;
+
+  // The saved value isn't in the list (e.g. a deleted pattern). Show it as it is rather than
+  // another option, so the GUI matches what the macro uses, and keep it as the value.
+  const selectEle = ele.children[0].children[0];
+  selectEle.dataset.value = value;
+  selectEle.textContent = options.length ? `${value} (not found)` : String(value);
+  selectEle.title = options.length ? "This saved value isn't one of the options. Choose one to replace it." : "";
+  try { updateDependentFields(); } catch (e) { /* ignore */ }
 }
 //close all other dropdown menus
 //if ele is undefined, close all menus
