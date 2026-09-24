@@ -336,6 +336,32 @@ window.refreshCurrentTabContent = async function () {
   }
 };
 if (window.eel) eel.expose(window.refreshCurrentTabContent, "refreshCurrentTabContent");
+//tell the user a setting wasn't saved and put the saved value back in its input,
+//so the GUI never shows a value the macro isn't using
+async function rejectSettingChange(id, reason) {
+  console.error(`Could not save ${id}: ${reason}`);
+  try {
+    const settings = await loadAllSettings();
+    if (id in settings) loadInputs({ [id]: settings[id] });
+  } catch (error) {
+    console.error(`Could not reload ${id}:`, error);
+  }
+  const title = document.getElementById(id)?.closest("form")?.querySelector("label")?.textContent?.trim();
+  alert(`${title || id} was not saved: ${reason}`);
+}
+
+//save one setting value; on failure the user is told and the saved value is shown again
+async function saveSettingValue(type, id, value) {
+  let result;
+  try {
+    result = await eel.applyMacroProfileChange(type, id, value)();
+  } catch (error) {
+    result = { ok: false, error: { reason: String(error?.errorText || error) } };
+  }
+  if (!result.ok) await rejectSettingChange(id, result.error.reason);
+  return result.ok;
+}
+
 //save the setting
 //element
 //type: setting type, eg: profile, general
@@ -384,16 +410,15 @@ async function saveSetting(ele, type) {
     (ele.dataset.inputType == "int" || ele.dataset.inputType == "float") &&
     !Number.isFinite(valueToSave)
   ) {
-    console.error(`Could not save ${id}: numeric value must be finite`);
+    await rejectSettingChange(id, "enter a number");
+    return false;
+  }
+
+  if ((type == "profile" || type == "general") && !(await saveSettingValue(type, id, valueToSave))) {
     return false;
   }
 
   if (type == "profile") {
-    const result = await eel.applyMacroProfileChange("profile", id, valueToSave)();
-    if (!result.ok) {
-      console.error(`Could not save ${id}: ${result.error.reason}`);
-      return false;
-    }
     // Refresh priority/drag-list highlights after profile setting changes
     try {
       loadAllSettings().then((settings) => {
@@ -403,12 +428,6 @@ async function saveSetting(ele, type) {
       });
     } catch (e) {
       // ignore
-    }
-  } else if (type == "general") {
-    const result = await eel.applyMacroProfileChange("general", id, valueToSave)();
-    if (!result.ok) {
-      console.error(`Could not save ${id}: ${result.error.reason}`);
-      return false;
     }
   }
 
