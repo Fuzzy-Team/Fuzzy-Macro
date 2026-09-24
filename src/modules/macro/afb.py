@@ -1,6 +1,6 @@
 import re
-import threading
 import modules.misc.settingsManager as settingsManager
+from modules.misc.settings_defaults import glitter_hotbar_slot
 import modules.screen.ocr as ocr
 from modules.controls.sleep import pause_aware_time as time
 from modules.macro.game_data import startLocationDimensions
@@ -56,33 +56,12 @@ class AFBMixin:
     def _AFBApplyGlitter(self, targetField, glitterslot):
         self.logger.webhook("", "Rebuffing: Glitter", "white")
 
-        glitterCoords = None
-        if glitterslot == 0:
-            try:
-                glitterCoords = self.findItemInInventory("glitter")
-            except Exception:
-                glitterCoords = None
-
         if not self.travelViaCannon("Auto Field Boost"):
             return False
 
-        if glitterslot == 0 and glitterCoords:
-            self.useItemInInventory(x=glitterCoords[0], y=glitterCoords[1], closeInventoryAfter=False)
-            self.goToField(targetField)
-            self.clickYes()
-            self.toggleInventory("close")
-        elif glitterslot == 0:
-            glitterThread = threading.Thread(target=self.useItemInInventory, args=("glitter",))
-            fieldThread = threading.Thread(target=self.goToField, args=(targetField,))
-            glitterThread.start()
-            fieldThread.start()
-            fieldThread.join()
-            glitterThread.join()
-            self.clickYes()
-        else:
-            self.goToField(targetField)
-            time.sleep(0.5)
-            self.keyboard.press(str(glitterslot))
+        self.goToField(targetField)
+        time.sleep(0.5)
+        self.keyboard.press(str(glitterslot))
 
         self.logger.webhook("", "Rebuffed: Glitter", "white")
         self.saveAFB("AFB_dice_cd")
@@ -203,7 +182,7 @@ class AFBMixin:
         dice = self.setdat["AFB_dice"]
         glitter = self.setdat["AFB_glitter"]
         diceslot = self.setdat["AFB_slotD"]
-        glitterslot = self.setdat["glitter_slot"]
+        glitterslot = glitter_hotbar_slot(self.setdat)
         if not glitter:
             self.AFBglitter = False
             self.cAFBglitter = False
