@@ -1220,23 +1220,8 @@ class HourlyReportDrawer:
         return y2
 
     def drawHourlyReport(self, hourlyReportStats, sessionTime, honeyPerMin, sessionHoney, honeyThisHour, onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData, uptimeBuffsValues, buffGatherIntervals, enabled_fields=None, field_patterns=None, configuredUptimeBuffs=None, configuredHourlyBuffs=None):
-
-        def getAverageBuff(buffValues):
-            count = 0
-            total = 0
-            for i, e in enumerate(buffGatherIntervals):
-                if e and i < len(buffValues):
-                    total += buffValues[i]
-                    count += 1
-            res = total / count if count else 0
-            return f"x{res:.2f}"
-
         uptimeBuff_list = configuredUptimeBuffs if configuredUptimeBuffs is not None else DEFAULT_UPTIME_BUFFS
         hourlyBuff_list = configuredHourlyBuffs if configuredHourlyBuffs is not None else DEFAULT_HOURLY_BUFFS
-        if enabled_fields is None:
-            enabled_fields = []
-        if field_patterns is None:
-            field_patterns = {}
 
         return self._drawStatMonitorReport(
             "Hourly Report", hourlyReportStats, sessionTime, honeyPerMin, sessionHoney,
@@ -1245,103 +1230,3 @@ class HourlyReportDrawer:
             configuredUptimeBuffs=uptimeBuff_list,
             configuredHourlyBuffs=hourlyBuff_list,
         )
-
-        self.sidebarX = self.canvasW - self.sidebarWidth + self.sidebarPadding
-        mins = list(range(61))
-
-        # working canvas (cropped to content height at the end)
-        self.canvas = Image.new('RGBA', self.canvasSize, (*self.backgroundColor, 255))
-        self.draw = ImageDraw.Draw(self.canvas)
-
-        # gather planter data for the sidebar
-        planterNames, planterTimes, planterFields = [], [], []
-        if planterData:
-            for i in range(len(planterData["planters"])):
-                if planterData["planters"][i]:
-                    planterNames.append(planterData["planters"][i])
-                    planterTimes.append(planterData["harvestTimes"][i] - time.time())
-                    planterFields.append(planterData["fields"][i])
-
-        # ---- header banner (full width) ----
-        headerBottom = self._drawHeaderBanner("Hourly Report", "Your stats for this hour")
-
-        # ---- measure sidebar height so its background can be sized first ----
-        sidebarTop = headerBottom + 80
-        sidebarBottom = self._drawHourlySidebar(sidebarTop, sessionTime, onlyValidHourlyHoney, sessionHoney,
-                                                hourlyReportStats, planterNames, planterTimes, planterFields,
-                                                buffQuantity, hourlyBuff_list, nectarQuantity,
-                                                enabled_fields, field_patterns, draw=False)
-
-        # ---- left column: stat cards, charts, buff grid ----
-        y = headerBottom + 80
-        # stat cards (evenly fill the left region width)
-        cardGap = 60
-        cardW = (self.availableSpace - cardGap * 4) // 5
-        avgHoneyPerHour = max(0, sessionHoney / (sessionTime / 3600)) if sessionTime > 0 else 0
-        cards = [
-            ("average_icon",     self.millify(avgHoneyPerHour),          "Average Honey\nPer Hour",     None,            None),
-            ("honey_icon",       self.millify(honeyThisHour),            "Honey Made\nThis Hour",       self.honeyColor, None),
-            ("kill_icon",        hourlyReportStats["bugs"],              "Bugs Killed\nThis Hour",      (254, 101, 99),  (254, 101, 99)),
-            ("quest_icon",       hourlyReportStats["quests_completed"],  "Quests Completed\nThis Hour", (103, 253, 153), (103, 253, 153)),
-            ("vicious_bee_icon", hourlyReportStats["vicious_bees"],      "Vicious Bees\nThis Hour",     (132, 233, 254), (132, 233, 254)),
-        ]
-        for i, (icon, val, label, fc, ic) in enumerate(cards):
-            self.drawStatCard(self.leftPadding + i * (cardW + cardGap), y, icon, val, label, fc, ic, cardWidth=cardW)
-        y += 750 + 150
-
-        # buff uptime — two-column grid (moved to the top of the report)
-        self.draw.text((self.leftPadding, y), "Buff Uptime", fill=self.bodyColor, font=self.getFont("semibold", 85))
-        y += 250
-
-        def gridTimeLabel(i, val):
-            if i % 100:
-                return
-            m = val // 10
-            hour = self.hour
-            if m == 60:
-                hour = (hour + 1) % 24
-                m = 0
-            return f"{str(hour).zfill(2)}:{str(int(m)).zfill(2)}"
-
-        y = self._drawBuffGrid(self.leftPadding, y, self.availableSpace, uptimeBuff_list,
-                               uptimeBuffsValues, getAverageBuff, columns=2, xLabelFunc=gridTimeLabel)
-
-        chartContentWidth = self.canvasW - self.leftPadding * 2
-        chartGraphX = self.leftPadding + 450
-        chartGraphWidth = chartContentWidth - 570
-        y = max(y, sidebarBottom + 180)
-
-        # honey/sec — accent colored
-        y += 150
-        self.draw.text((self.leftPadding, y), "Honey / Sec", fill=self.bodyColor, font=self.getFont("semibold", 85))
-        y += 950
-        ar, ag, ab = self.accentColor
-        self.drawGraph(chartGraphX, y, chartGraphWidth, 700, mins,
-                       [{"data": honeyPerMin, "lineColor": self.accentColor,
-                         "gradientFill": {0: (ar, ag, ab, 38), 1: (ar, ag, ab, 153)}}],
-                       xLabelFunc=self.transformXLabelTime, yLabelFunc=lambda i, x: self.millify(x))
-
-        # backpack
-        y += 200
-        self.draw.text((self.leftPadding, y), "Backpack", fill=self.bodyColor, font=self.getFont("semibold", 85))
-        y += 950
-        self.drawGraph(chartGraphX, y, chartGraphWidth, 700, mins,
-                       [{"data": hourlyReportStats["backpack_per_min"], "lineColor": "gradient",
-                         "gradientFill": {0: (65, 255, 128, 90), 0.6: (201, 163, 36, 90), 0.9: (255, 65, 84, 90), 1: (255, 65, 84, 90)}}],
-                       maxY=100, xLabelFunc=self.transformXLabelTime, yLabelFunc=lambda i, x: f"{int(x)}%")
-
-        leftBottom = y
-
-        # ---- draw the sidebar (background ends at its own content, then content) ----
-        finalContentBottom = max(leftBottom, sidebarBottom)
-        self.draw.rectangle((self.canvasW - self.sidebarWidth, headerBottom + 40, self.canvasW, sidebarBottom + 60), fill=self.sideBarBackground)
-        self._drawHourlySidebar(sidebarTop, sessionTime, onlyValidHourlyHoney, sessionHoney,
-                                hourlyReportStats, planterNames, planterTimes, planterFields,
-                                buffQuantity, hourlyBuff_list, nectarQuantity,
-                                enabled_fields, field_patterns, draw=True)
-
-        # ---- crop to actual content height ----
-        finalH = min(self.canvasMaxH, int(finalContentBottom) + 120)
-        self.canvas = self.canvas.crop((0, 0, self.canvasW, finalH))
-        self.draw = ImageDraw.Draw(self.canvas)
-        return self.canvas

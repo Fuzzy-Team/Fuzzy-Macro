@@ -205,7 +205,7 @@ elif version_at_least "$os_ver" "10.15.0"; then
 	# OpenCV 4.10 has a compatible macOS 10.15 Intel wheel. Keep exactly one
 	# OpenCV package installed because all variants share the cv2 namespace.
 	pip uninstall -y opencv-python opencv-contrib-python opencv-python-headless opencv-contrib-python-headless
-	install_pip_package "opencv-python==4.10.0.84 numpy==1.19.1 Polygon3" "--force-reinstall"
+	install_pip_package "opencv-python==4.10.0.84 numpy==1.19.1" "--force-reinstall"
 	install_pip_package "easyocr" "--no-deps"
 	install_pip_package "torch"
 	install_pip_package "torchvision>=0.5"

@@ -125,11 +125,16 @@ class MacroProfileStore:
                     return self._snapshot
             return self._publish(profile, profile_data, general_data, fields_data, errors)
 
-    def profile_settings(self, profile):
-        """Return the settings stored in the profile's own settings file, without changing files."""
+    def read(self, profile, strict=False):
+        """Return normalized (profile settings, general settings, fields) without changing files or snapshots.
+
+        Unreadable files fall back to defaults unless strict is set, which raises instead.
+        """
         with self._lock:
-            profile_data, _, _, _, _ = self._read_and_normalize(profile)
-            return copy.deepcopy(profile_data)
+            profile_data, general_data, fields_data, errors, _ = self._read_and_normalize(profile)
+            if strict and errors:
+                raise MacroProfileError("; ".join(errors.values()))
+            return profile_data, general_data, fields_data
 
     def apply_change(self, profile, scope, setting, value):
         """Validate and atomically persist a setting-level change."""
@@ -213,7 +218,7 @@ class MacroProfileStore:
         general_data = self._safe_read(os.path.join(profile_dir, self.GENERAL_FILE), self._general_defaults, errors)
         fields_data = self._safe_read_fields(os.path.join(profile_dir, self.FIELDS_FILE), errors)
 
-        profile_data, general_data, settings_changed = self._normalize_settings(profile_data, general_data)
+        profile_data, general_data, settings_changed = self._normalize_settings(profile_data, general_data, errors)
         fields_data, fields_changed = self._normalize_fields(fields_data)
         gumdrop_slot_merged = self._merge_quest_gumdrop_slot(profile_data, general_data, fields_data, errors)
         changed[self.PROFILE_FILE] = settings_changed[0] or gumdrop_slot_merged
@@ -234,7 +239,7 @@ class MacroProfileStore:
         if not os.path.exists(path):
             return copy.deepcopy(self._field_defaults)
         try:
-            with open(path) as handle:
+            with open(path, encoding="utf-8") as handle:
                 raw = handle.read().strip()
             value = ast.literal_eval(raw) if raw else {}
             if not isinstance(value, dict):
@@ -246,7 +251,7 @@ class MacroProfileStore:
 
     @staticmethod
     def _read_settings_file(path, defaults):
-        with open(path) as handle:
+        with open(path, encoding="utf-8") as handle:
             raw = handle.read()
         raw = re.sub(r"(?<![A-Za-z_])(?<!\n)max_convert_time=", "\nmax_convert_time=", raw)
         result = {}
@@ -268,7 +273,7 @@ class MacroProfileStore:
             result[key] = parsed
         return result
 
-    def _normalize_settings(self, profile_data, general_data):
+    def _normalize_settings(self, profile_data, general_data, errors=()):
         original_profile = copy.deepcopy(profile_data)
         original_general = copy.deepcopy(general_data)
         # Hive Acquisition always detects first now. Removing the obsolete
@@ -278,12 +283,23 @@ class MacroProfileStore:
         profile_keys = set(self._profile_defaults)
         general_keys = set(self._general_defaults)
 
-        for key in list(general_data):
-            if key in profile_keys and key not in general_keys:
-                profile_data.setdefault(key, general_data.pop(key))
-        for key in list(profile_data):
-            if key in general_keys and key not in profile_keys:
-                general_data.setdefault(key, profile_data.pop(key))
+        # Move settings stored in the wrong file to their owner, keeping a value the
+        # user changed over a default when both files have the key. While the owner file
+        # is unreadable its data is only defaults, so use the value but leave it in the
+        # source file, or saving the source file would lose it.
+        for source, target, owner_keys, other_keys, defaults, owner_file in (
+            (general_data, profile_data, profile_keys, general_keys, self._profile_defaults, self.PROFILE_FILE),
+            (profile_data, general_data, general_keys, profile_keys, self._general_defaults, self.GENERAL_FILE),
+        ):
+            owner_unreadable = owner_file in errors
+            for key in list(source):
+                if key in owner_keys and key not in other_keys:
+                    if owner_unreadable:
+                        target[key] = source[key]
+                        continue
+                    moved = source.pop(key)
+                    if key not in target or (target[key] == defaults[key] and moved != defaults[key]):
+                        target[key] = moved
         # The three glitter slots were one setting the GUI kept in sync. Keep a slot the
         # user chose (one that differs from its old default); otherwise find Glitter in
         # the inventory (0) rather than pressing a slot that may hold something else.
@@ -414,18 +430,22 @@ class MacroProfileStore:
                 if fcntl is not None:
                     fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
-    @staticmethod
-    def _write_file(path, data, fields=False):
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+    @classmethod
+    def _write_file(cls, path, data, fields=False):
         if fields:
             content = str(data)
         else:
             content = "\n".join(f"{key}={value}" for key, value in data.items())
         if content and not content.endswith("\n"):
             content += "\n"
+        cls._atomic_write(path, content.encode("utf-8"))
+
+    @staticmethod
+    def _atomic_write(path, content):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         descriptor, temporary = tempfile.mkstemp(prefix=".macro_profile_", suffix=".tmp", dir=os.path.dirname(path))
         try:
-            with os.fdopen(descriptor, "w") as handle:
+            with os.fdopen(descriptor, "wb") as handle:
                 handle.write(content)
                 handle.flush()
                 os.fsync(handle.fileno())
@@ -444,24 +464,12 @@ class MacroProfileStore:
         with open(path, "rb") as handle:
             return handle.read()
 
-    @staticmethod
-    def _restore_bytes(path, content):
+    @classmethod
+    def _restore_bytes(cls, path, content):
         if content is None:
             try:
                 os.remove(path)
             except FileNotFoundError:
                 pass
             return
-        descriptor, temporary = tempfile.mkstemp(prefix=".macro_profile_rollback_", suffix=".tmp", dir=os.path.dirname(path))
-        try:
-            with os.fdopen(descriptor, "wb") as handle:
-                handle.write(content)
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temporary, path)
-        except Exception:
-            try:
-                os.remove(temporary)
-            except OSError:
-                pass
-            raise
+        cls._atomic_write(path, content)

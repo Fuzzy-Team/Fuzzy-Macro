@@ -54,6 +54,15 @@ class GatherPatternRunnerTests(unittest.TestCase):
         self.assertFalse(runner.is_builtin())
         self.assertEqual(namespace["cycles"], ["edited"])
 
+    def test_builtin_edited_mid_session_runs_the_users_file(self):
+        self.write("lines", "cycles.append('default')", shipped=True)
+        runner = self.runner("lines")
+        namespace = {"cycles": []}
+        runner.run_cycle(namespace)
+        self.write("lines", "cycles.append('edited!')")
+        runner.run_cycle(namespace)
+        self.assertEqual(namespace["cycles"], ["default", "edited!"])
+
     def test_custom_failure_alerts_once_and_falls_back_for_session(self):
         self.write("custom", "raise RuntimeError('broken move')")
         runner = self.runner("custom")

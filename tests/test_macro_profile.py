@@ -5,6 +5,7 @@ import unittest
 from unittest import mock
 
 from src.modules.misc.macro_profile import (
+    MacroProfileError,
     MacroProfileStore,
     MacroProfileValidationError,
 )
@@ -223,6 +224,42 @@ class MacroProfileStoreTests(unittest.TestCase):
         snapshot = self.store.initialize("main")
         with self.assertRaises(TypeError):
             snapshot.settings["count"] = 9
+
+    def test_misplaced_setting_keeps_the_changed_value(self):
+        self.write("main", "settings.txt", "count=1\nmax_cannon_attempts=9\n")
+        self.write("main", "generalsettings.txt", "count=4\nmax_cannon_attempts=5\n")
+        profile_data, general_data, _ = self.store.read("main", strict=True)
+        self.assertEqual(profile_data["count"], 4)
+        self.assertEqual(general_data["max_cannon_attempts"], 9)
+        self.assertNotIn("count", general_data)
+        self.assertNotIn("max_cannon_attempts", profile_data)
+
+    def test_misplaced_setting_stays_while_its_owner_file_is_malformed(self):
+        self.write("main", "settings.txt", "this is not a setting\n")
+        general = self.write("main", "generalsettings.txt", "count=4\nmax_cannon_attempts=5\n")
+        snapshot = self.store.initialize("main").as_dict()
+        self.assertIn("count=4", self.read(general))
+        self.assertEqual(snapshot["settings"]["count"], 4)
+
+    def test_non_ascii_values_round_trip_as_utf8(self):
+        self.store.initialize("main")
+        self.store.apply_change("main", "profile", "fields", ["café"] * 5)
+        with open(self.path("main", "settings.txt"), "rb") as handle:
+            self.assertIn("café".encode("utf-8"), handle.read())
+        with mock.patch("builtins.open", wraps=open) as opened:
+            self.store.read("main", strict=True)
+        for call in opened.call_args_list:
+            if "b" not in (call.args[1] if len(call.args) > 1 else call.kwargs.get("mode", "r")):
+                self.assertEqual(call.kwargs.get("encoding"), "utf-8")
+
+    def test_read_falls_back_to_defaults_unless_strict(self):
+        self.write("main", "settings.txt", "this is not a setting\n")
+        profile_data, general_data, fields = self.store.read("main")
+        self.assertEqual(profile_data["enabled"], True)
+        self.assertEqual(general_data["macro_mode"], "normal")
+        self.assertIn("pine tree", fields)
+        with self.assertRaises(MacroProfileError):
+            self.store.read("main", strict=True)
 
     def test_snapshot_read_has_no_file_side_effects(self):
         self.store.initialize("main")
