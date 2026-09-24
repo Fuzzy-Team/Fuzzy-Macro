@@ -2,6 +2,7 @@ from modules.misc.imageManipulation import average_hash
 import math
 import pyautogui as pag
 import re
+import threading
 from datetime import timedelta
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
@@ -211,23 +212,23 @@ class CollectiblesMixin:
         glitterSlot = glitter_hotbar_slot(self.setdat)
         with self._fieldBoosterGlitterLock:
             self._fieldBoosterGlitterGeneration += 1
-            self._fieldBoosterGlitterPending = (time.monotonic() + 14 * 60 + 55, glitterSlot)
+            generation = self._fieldBoosterGlitterGeneration
 
-    def consumeFieldBoosterGlitterExtension(self):
-        """Use a due field-booster extension between macro tasks."""
-        with self._fieldBoosterGlitterLock:
-            pending = self._fieldBoosterGlitterPending
-            if pending is None or time.monotonic() < pending[0]:
-                return False
-            self._fieldBoosterGlitterPending = None
-        if self.run is not None and self.run.value == 0:
-            return False
-        self.useGlitterFromSlot(pending[1])
-        self.logger.webhook("", f"Used Glitter from hotbar slot {pending[1]}; extending field booster", "bright green")
-        return True
+        def useGlitter():
+            # Field boosters last 15 minutes; Glitter needs to be used at 14:55.
+            time.sleep(14 * 60 + 55)
+            with self._fieldBoosterGlitterLock:
+                if generation != self._fieldBoosterGlitterGeneration:
+                    return
+            if self.run is not None and self.run.value == 0:
+                return
+            self.useGlitterFromSlot(glitterSlot)
+            self.logger.webhook("", f"Used Glitter from hotbar slot {glitterSlot}; extending field booster", "bright green")
+
+        threading.Thread(target=useGlitter, name="field-booster-glitter-extension", daemon=True).start()
 
     def useGlitterFromSlot(self, slot):
-        """Use Glitter from its hotbar slot. Never the inventory: opening it mid-gather breaks the gather."""
+        """Use Glitter from its hotbar slot. This can run mid-pattern, where opening the inventory would break the gather."""
         self.keyboard.press(str(slot))
 
 

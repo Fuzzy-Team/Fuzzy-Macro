@@ -103,7 +103,6 @@ class macro(
         )
         self._fieldBoosterGlitterGeneration = 0
         self._fieldBoosterGlitterLock = threading.Lock()
-        self._fieldBoosterGlitterPending = None
         self.reportProfileProblems(profileSnapshot)
         self.buffDetector = BuffDetector(self.robloxWindow)
         self.hourlyReport = HourlyReport(self.buffDetector, self.setdat.get("hourly_report_time_format", 24))
@@ -180,7 +179,6 @@ class macro(
             if profileChanged or not self.setdat.get("field_booster_glitter_extend_enabled", False):
                 with self._fieldBoosterGlitterLock:
                     self._fieldBoosterGlitterGeneration += 1
-                    self._fieldBoosterGlitterPending = None
             self.tadAltSync.update_settings(self.setdat)
             self.fieldSettings = profileSnapshot["fields"]
             # Update logger with new webhook settings

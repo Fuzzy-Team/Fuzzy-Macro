@@ -238,9 +238,19 @@
         {
           id: "AFB_glitter",
           title: "Glitter",
-          desc: "Allow Glitter to maintain buff. Uses the Glitter Slot in Config.",
+          desc: "Allow Glitter to maintain buff",
           type: {
             name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "AFB_slotG",
+          title: "Glitter Slot",
+          desc: "Hotbar of Glitter <br> Set to 0 to find via inventory",
+          type: {
+            name: "dropdown",
+            data: [0, 1, 2, 3, 4, 5, 6, 7],
             triggerFunction: saveProfileTriggerFunction,
           },
         },
