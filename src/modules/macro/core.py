@@ -120,13 +120,10 @@ class macro(
 
         #memory match
         self.latestMM = "normal"
-        self.lastGuidingStarScan = 0
+        self.lastBlueTextScan = 0
         self.guidingStarLastAnnounced = {}
-        self.lastUnusualSproutScan = 0
         self.unusualSproutLastAnnounced = {}
-        self.lastWindyBeeScan = 0
         self.windyBeeLastAnnounced = {}
-        self.lastStickerSproutScan = 0
         self.stickerSproutDetectedAt = 0
         self.stickerSproutLastAnnounced = 0
         self.stickerSproutInterruptRequested = False
@@ -311,10 +308,7 @@ class macro(
         #night detection
         if self.enableNightDetection:
             self.detectNight()
-        self.detectGuidingStarAnnouncement()
-        self.detectUnusualSproutAnnouncement()
-        self.detectWindyBeeAnnouncement()
-        self.detectStickerSproutAnnouncement()
+        self.scanBlueTextAnnouncements()
 
         #hotbar
         for i in range(1,8):
