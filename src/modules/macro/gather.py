@@ -555,7 +555,7 @@ class GatherMixin:
             )
             gatherSession.add_cleanup(liveQuestProgressReport.stop)
         
-        def stopGather(reason="completed"):
+        def stopGather():
             nonlocal gooTimerActive, inactiveHoneyTimerActive, questMenuKeptOpen
             gooTimerActive = False  # Stop the goo timer thread
             inactiveHoneyTimerActive = False
@@ -571,7 +571,7 @@ class GatherMixin:
                 self.clear_task_status()
             finally:
                 self.isGathering = False
-                gatherSession.finish(gatherNameSpace, reason)
+                gatherSession.finish(gatherNameSpace)
 
         if fieldSetting["shift_lock"]: 
             self.keyboard.press('shift')
@@ -580,13 +580,13 @@ class GatherMixin:
             # Check if paused and wait
             if self.checkPauseAndWait():
                 # Stop was requested while paused
-                stopGather("stopped")
+                stopGather()
                 return
             
             try:
                 self.raiseIfInterrupted()
             except InterruptRequested:
-                stopGather("interrupted")
+                stopGather()
                 raise
 
             patternStartTime = time.time()
@@ -594,11 +594,11 @@ class GatherMixin:
 
             try:
                 cycleResult = gatherSession.run_cycle(gatherNameSpace, owner=self)
-            except Exception as error:
+            except Exception:
                 # interrupts usually land inside a pattern's sleep, and e_lol failing ends the
                 # gather too; either way stop the gather's threads and reports before leaving
                 mouse.mouseUp()
-                stopGather("interrupted" if isinstance(error, InterruptRequested) else "pattern_error")
+                stopGather()
                 raise
             pattern = cycleResult.pattern
 

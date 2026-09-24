@@ -134,17 +134,13 @@ class GatherPatternRunnerTests(unittest.TestCase):
             os.chdir(previous)
         self.assertEqual(namespace["cycles"], ["lines"])
 
-    def test_session_clock_excludes_paused_time_and_returns_outcome(self):
-        self.write("lines", "cycles.append('lines')", shipped=True)
+    def test_session_clock_excludes_paused_time(self):
         times = iter((10.0, 12.0, 17.0, 20.0))
         session = GatherSession(self.runner("lines"), lambda: next(times))
         session.start()
         self.assertEqual(session.elapsed(True), 2.0)
         self.assertEqual(session.elapsed(False), 2.0)
-        result = session.finish({"cycles": []}, "time_limit")
-        self.assertEqual(result.reason, "time_limit")
-        self.assertEqual(result.elapsed_seconds, 5.0)
-        self.assertEqual(result.active_pattern, "lines")
+        self.assertEqual(session.elapsed(False), 5.0)
 
     def test_session_cleanup_runs_once(self):
         session = GatherSession(self.runner("e_lol"), lambda: 10.0)
@@ -152,10 +148,9 @@ class GatherPatternRunnerTests(unittest.TestCase):
         calls = []
         session.add_cleanup(lambda: calls.append("report"))
         namespace = {"onGatherEnd": lambda: calls.append("pattern")}
-        session.finish(namespace, "stopped")
-        session.finish(namespace, "completed")
+        session.finish(namespace)
+        session.finish(namespace)
         self.assertEqual(calls, ["pattern", "report"])
-        self.assertEqual(session.result.reason, "stopped")
 
 
 if __name__ == "__main__":
