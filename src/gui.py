@@ -18,11 +18,18 @@ import modules.logging.log as logModule
 
 eel.init('webapp')
 HOURLY_REPORT_ASSET_ROOT = os.path.join(settingsManager.getProjectRoot(), "src", "hourly_report", "assets")
+MEMORY_MATCH_ICON_ROOT = os.path.join(settingsManager.getProjectRoot(), "src", "images", "memorymatch")
 
 
 @route("/hourly-report-assets/<filename:re:[A-Za-z0-9_\\-]+\\.png>")
 def serve_hourly_report_asset(filename):
     return static_file(filename, root=HOURLY_REPORT_ASSET_ROOT)
+
+
+#reward icons for the memory match settings, shared with the macro's reward detection
+@route("/memory-match-icons/<filename:re:(?:normal|mega|extreme|winter)/[a-z0-9 \\-]+\\.webp>")
+def serve_memory_match_icon(filename):
+    return static_file(filename, root=MEMORY_MATCH_ICON_ROOT)
 
 run = None
 _recent_logs = []
