@@ -239,7 +239,7 @@ class MacroProfileStore:
         if not os.path.exists(path):
             return copy.deepcopy(self._field_defaults)
         try:
-            with open(path) as handle:
+            with open(path, encoding="utf-8") as handle:
                 raw = handle.read().strip()
             value = ast.literal_eval(raw) if raw else {}
             if not isinstance(value, dict):
@@ -251,7 +251,7 @@ class MacroProfileStore:
 
     @staticmethod
     def _read_settings_file(path, defaults):
-        with open(path) as handle:
+        with open(path, encoding="utf-8") as handle:
             raw = handle.read()
         raw = re.sub(r"(?<![A-Za-z_])(?<!\n)max_convert_time=", "\nmax_convert_time=", raw)
         result = {}
@@ -283,12 +283,17 @@ class MacroProfileStore:
         profile_keys = set(self._profile_defaults)
         general_keys = set(self._general_defaults)
 
-        for key in list(general_data):
-            if key in profile_keys and key not in general_keys:
-                profile_data.setdefault(key, general_data.pop(key))
-        for key in list(profile_data):
-            if key in general_keys and key not in profile_keys:
-                general_data.setdefault(key, profile_data.pop(key))
+        # Move settings stored in the wrong file to their owner, keeping a value the
+        # user changed over a default when both files have the key.
+        for source, target, owner_keys, other_keys, defaults in (
+            (general_data, profile_data, profile_keys, general_keys, self._profile_defaults),
+            (profile_data, general_data, general_keys, profile_keys, self._general_defaults),
+        ):
+            for key in list(source):
+                if key in owner_keys and key not in other_keys:
+                    moved = source.pop(key)
+                    if key not in target or (target[key] == defaults[key] and moved != defaults[key]):
+                        target[key] = moved
         # The three glitter slots were one setting the GUI kept in sync. Keep a slot the
         # user chose (one that differs from its old default); otherwise find Glitter in
         # the inventory (0) rather than pressing a slot that may hold something else.
@@ -427,7 +432,7 @@ class MacroProfileStore:
             content = "\n".join(f"{key}={value}" for key, value in data.items())
         if content and not content.endswith("\n"):
             content += "\n"
-        cls._atomic_write(path, content.encode())
+        cls._atomic_write(path, content.encode("utf-8"))
 
     @staticmethod
     def _atomic_write(path, content):

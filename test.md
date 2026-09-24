@@ -14,6 +14,8 @@ Changes this branch adds on top of `combined-improvements`.
 - [ ] Enter an invalid value (e.g. text in a number box). The GUI should show an error, not crash or save garbage.
 - [ ] Switch profiles in the GUI and check each profile keeps its own settings and field list.
 - [ ] **Export a profile** (current and a non-current one). The exported JSON should include settings, general settings, and fields, and must NOT contain `discord_bot_token`, `webhook_link`, or `private_server_link`.
+- [ ] Old profile with a setting saved in the wrong file (e.g. a profile setting in `generalsettings.txt` that you changed from its default): after loading/exporting, your changed value is kept, not the default.
+- [ ] Settings or field names with non-ASCII characters save and reload unchanged.
 - [ ] Export a profile whose files are corrupted or missing. You should get an error message and no crash.
 
 ## Running macro
@@ -23,7 +25,7 @@ Changes this branch adds on top of `combined-improvements`.
 - [ ] Pause/resume during a gather pattern and a task that sleeps. Pausing should still hold the sleep (`pauseable_sleep` is now an alias of `sleep`).
 
 ## Gathering
-- [ ] Gather with a built-in pattern for several cycles. It should behave the same (the built-in pattern check is now cached per gather session).
+- [ ] Gather with a built-in pattern for several cycles. It should behave the same (the shipped pattern file is now read once per gather session).
 - [ ] Gather with a custom or edited pattern. It should still be treated as custom.
 - [ ] Edit a built-in pattern file while the macro is gathering with it. The next cycle should run your edited file.
 

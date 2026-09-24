@@ -98,7 +98,7 @@ class GatherPatternRunner:
         self._alerted = False
         self._fallback_active = False
         self._compiled = {}
-        self._builtin = {}
+        self._shipped = {}
 
     def run_cycle(self, namespace, owner=None):
         """Run one pattern cycle, falling back to e_lol for this session on failure."""
@@ -146,19 +146,16 @@ class GatherPatternRunner:
         if pattern in AI_PATTERNS:
             return False
         installed = self._path(self._patterns_dir, pattern)
-        shipped = self._path(self._defaults_dir, pattern)
         try:
-            # Recompare only when the installed file changes, e.g. edited mid-gather.
-            stat = os.stat(installed)
-            key = (stat.st_mtime_ns, stat.st_size)
-            cached = self._builtin.get(pattern)
-            if cached is None or cached[0] != key:
-                with open(installed, "rb") as installed_file, open(shipped, "rb") as shipped_file:
-                    cached = (key, installed_file.read() == shipped_file.read())
-                self._builtin[pattern] = cached
+            # The shipped file does not change during a gather, so read it once. The
+            # installed file is read every cycle so an edit takes effect right away.
+            if pattern not in self._shipped:
+                with open(self._path(self._defaults_dir, pattern), "rb") as shipped_file:
+                    self._shipped[pattern] = shipped_file.read()
+            with open(installed, "rb") as installed_file:
+                return installed_file.read() == self._shipped[pattern]
         except OSError:
-            return False  # not cached, so a later cycle retries
-        return cached[1]
+            return False
 
     def _run(self, pattern, namespace):
         path = self._path(self._patterns_dir, pattern)
