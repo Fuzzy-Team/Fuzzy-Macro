@@ -1,6 +1,4 @@
-"""Hive Acquisition policy with detection first and slot checking as fallback."""
-
-from dataclasses import dataclass
+"""Hive claiming: the claim confirmation and the order of the claim methods."""
 
 
 def confirm_claim(press_claim, claim_prompt_visible, control_status, wait, attempts=2, checks_per_attempt=20, required_misses=3):
@@ -23,60 +21,33 @@ def confirm_claim(press_claim, claim_prompt_visible, control_status, wait, attem
     return False
 
 
-@dataclass(frozen=True)
-class HiveAcquisitionResult:
-    claimed: bool
-    slot: int = 0
-    reason: str = ""
-    detection_error: str = ""
+def acquire_hive(method, preferred_slot, excluded_slots, detect, check, stopped, fatal_exceptions=()):
+    """Claim a hive and return (slot, reason); slot is 0 when no hive was claimed.
 
-
-class HiveAcquisition:
-    """Owns strategy order and the observable result of Hive Acquisition."""
-
-    def __init__(self, detect, check, control_status=lambda: "running", fatal_exceptions=()):
-        """`detect` returns the claimed slot, 0 if it walked the hive row without a claim,
-        or None if it found nothing from spawn. `check` walks from spawn, so it only runs
-        while the player is still there (None) or detection raised."""
-        self._detect = detect
-        self._check = check
-        self._control_status = control_status
-        self._fatal_exceptions = fatal_exceptions
-
-    def acquire(self, preferred_slot, excluded_slots=None):
-        preferred_slot = max(1, min(6, int(preferred_slot)))
-        excluded_slots = set(excluded_slots or set())
-
-        if self._control_status() == "stopped":
-            return HiveAcquisitionResult(False, reason="stopped")
-
-        detection_error = ""
-        detected = None
+    "check" walks from spawn to the preferred pad and scans from there. "detect" reads open
+    pads from spawn first and falls back to checking when it found nothing from spawn (it
+    returns None) or raised; when it returns 0 it already walked the hive row.
+    """
+    if stopped():
+        return 0, "stopped"
+    detection_error = ""
+    if method != "check":
         try:
-            detected = self._detect(preferred_slot, excluded_slots)
-            if detected:
-                return HiveAcquisitionResult(True, int(detected), "claimed")
-        except self._fatal_exceptions:
+            detected = detect(preferred_slot, excluded_slots)
+        except fatal_exceptions:
             raise
         except Exception as exc:
-            detection_error = str(exc)
-
-        if self._control_status() == "stopped":
-            return HiveAcquisitionResult(False, reason="stopped", detection_error=detection_error)
-
+            detected, detection_error = None, f"; detection: {exc}"
+        if detected:
+            return int(detected), "claimed"
+        if stopped():
+            return 0, "stopped"
         if detected is not None:
-            # Detection already walked to its pads and checked the rest of the row.
-            return HiveAcquisitionResult(False, reason="no_claimable_hive")
-
-        try:
-            slot = int(self._check(preferred_slot, excluded_slots) or 0)
-        except self._fatal_exceptions:
-            raise
-        except Exception as exc:
-            reason = "detection_and_check_error" if detection_error else "check_error"
-            error = f"{detection_error}; check: {exc}" if detection_error else str(exc)
-            return HiveAcquisitionResult(False, reason=reason, detection_error=error)
-
-        if slot:
-            return HiveAcquisitionResult(True, slot, "claimed_by_fallback", detection_error)
-        return HiveAcquisitionResult(False, reason="no_claimable_hive", detection_error=detection_error)
+            return 0, "no_claimable_hive"
+    try:
+        slot = int(check(preferred_slot, excluded_slots) or 0)
+    except fatal_exceptions:
+        raise
+    except Exception as exc:
+        return 0, f"check_error: {exc}{detection_error}"
+    return (slot, "claimed") if slot else (0, "no_claimable_hive" + detection_error)
