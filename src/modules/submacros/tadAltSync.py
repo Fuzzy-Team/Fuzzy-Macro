@@ -3,6 +3,8 @@ import threading
 import time
 import urllib.request
 
+from modules.misc.settings_defaults import glitter_hotbar_slot
+
 
 class TadAltSync:
     """Synchronize Discord-remote-controlled TAD alt macros with field boosts."""
@@ -127,7 +129,7 @@ class TadAltSync:
         duration = max(0, float(self.settings.get("tad_alt_boost_duration", 900) or 0))
         if extend_with_glitter is None:
             extend_with_glitter = bool(self.settings.get("tad_alt_glitter_extend_enabled", False))
-        glitter_slot = min(7, max(0, int(self.settings.get("glitter_slot", 0) or 0)))
+        glitter_slot = glitter_hotbar_slot(self.settings)
         thread = threading.Thread(
             target=self._restore_after_boost,
             args=(generation, duration, extend_with_glitter, glitter_slot, extension_duration),

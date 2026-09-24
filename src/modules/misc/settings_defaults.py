@@ -801,7 +801,7 @@ DEFAULT_GENERAL_SETTINGS = {'hive_number': 1,
  'item_monitor': False,
  'bees': 50,
  'goo_slot': 3,
- 'glitter_slot': 0,
+ 'glitter_slot': 1,
  'start_keybind': 'F1',
  'stop_keybind': 'F3',
  'pause_keybind': 'F2',
@@ -2050,3 +2050,13 @@ DEFAULT_AI_PATTERN_PRESETS = {
 
 def deepcopy_default(value):
     return copy.deepcopy(value)
+
+
+def glitter_hotbar_slot(settings):
+    """Glitter's hotbar slot (1-7). There is no inventory option: using the inventory
+    during a gather opens it over the field and breaks the gather."""
+    try:
+        slot = int(settings.get("glitter_slot", 1))
+    except (TypeError, ValueError):
+        return 1
+    return slot if 1 <= slot <= 7 else 1
