@@ -962,24 +962,29 @@ def _initialise_runtime():
         elif requested_filename_override.startswith("loot_detection_"):
             requested_label = f"{requested_label} Loot"
             requested_labels = {0: "Loot"}
+    coreml_ok = agc.coreml_available()
     standard_candidates = [
         (MODEL_DIR / "token_detection_standard.mlmodelc", "coreml", LABELS_TOKENS, "Standard", INPUT_WIDTH, INPUT_HEIGHT),
         (MODEL_DIR / "token_detection_standard.onnx", "opencv_onnx", LABELS_TOKENS, "Standard", INPUT_WIDTH, INPUT_HEIGHT),
     ]
+    if not coreml_ok:
+        standard_candidates.reverse()
     token_candidates = []
-    if requested_filename is not None:
+    if requested_filename is not None and coreml_ok:
         token_candidates.append((MODEL_DIR / requested_filename, "coreml", requested_labels, requested_label, requested_width, requested_height))
     token_candidates.extend(standard_candidates)
     token_candidates = [candidate for candidate in token_candidates if candidate[0].exists()]
     download_result = {}
     if not token_candidates:
         missing_model_names = []
-        if requested_filename is not None:
+        if requested_filename is not None and coreml_ok:
             missing_model_names.append(requested_filename)
-        missing_model_names.extend(["token_detection_standard.mlmodelc", "token_detection_standard.onnx"])
+        missing_model_names.append("token_detection_standard.onnx")
+        if coreml_ok:
+            missing_model_names.append("token_detection_standard.mlmodelc")
         download_result = agc.check_missing_models("fuzzy_ai_gather", missing_model_names)
         token_candidates = []
-        if requested_filename is not None:
+        if requested_filename is not None and coreml_ok:
             token_candidates.append((MODEL_DIR / requested_filename, "coreml", requested_labels, requested_label, requested_width, requested_height))
         token_candidates.extend(standard_candidates)
         token_candidates = [candidate for candidate in token_candidates if candidate[0].exists()]
