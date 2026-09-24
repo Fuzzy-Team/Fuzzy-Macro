@@ -1,7 +1,7 @@
 import cv2
 import fuzzywuzzy
 import fuzzywuzzy.process
-import imagehash
+from modules.misc.imageManipulation import average_hash
 import numpy as np
 import traceback
 from PIL import Image
@@ -175,7 +175,7 @@ class QuestMixin:
         for _ in range(200):
             mouse.scroll(100)
             sleep(0.08)
-            currentHash = imagehash.average_hash(Image.fromarray(screenshotQuest(100)))
+            currentHash = average_hash(Image.fromarray(screenshotQuest(100)))
             if prevHash is not None and prevHash == currentHash:
                 break
             prevHash = currentHash
@@ -187,7 +187,7 @@ class QuestMixin:
             screens.append(screenshotQuest(800, mode="RGBA"))
             mouse.scroll(-1, True)
             time.sleep(0.06)
-            currentHash = imagehash.average_hash(Image.fromarray(screenshotQuest(100)))
+            currentHash = average_hash(Image.fromarray(screenshotQuest(100)))
             if prevHash is not None and prevHash == currentHash:
                 break
             prevHash = currentHash
@@ -589,7 +589,7 @@ class QuestMixin:
             for _ in range(200):
                 mouse.scroll(100)
                 sleep(0.08)
-                hash = imagehash.average_hash(Image.fromarray(screenshotQuest(100)))
+                hash = average_hash(Image.fromarray(screenshotQuest(100)))
                 if not prevHash is None and prevHash == hash:
                     break
                 prevHash = hash
@@ -677,7 +677,7 @@ class QuestMixin:
             if manageQuestUi:
                 mouse.scroll(-1, True)
                 time.sleep(0.06)
-                hash = imagehash.average_hash(Image.fromarray(screenshotQuest(100)))
+                hash = average_hash(Image.fromarray(screenshotQuest(100)))
                 if not prevHash is None and prevHash == hash:
                     break
                 prevHash = hash
@@ -1186,13 +1186,13 @@ class QuestMixin:
         def screenshotDialog():
             px, py, w, h = clamp_region(sx, sy, sample_w, sample_h)
             try:
-                return imagehash.average_hash(mssScreenshot(px, py, w, h))
+                return average_hash(mssScreenshot(px, py, w, h))
             except Exception:
                 # fallback to a very small safe capture
                 try:
-                    return imagehash.average_hash(mssScreenshot(self.robloxWindow.mx + self.robloxWindow.mw // 2, self.robloxWindow.my + self.robloxWindow.mh // 2, 10, 10))
+                    return average_hash(mssScreenshot(self.robloxWindow.mx + self.robloxWindow.mw // 2, self.robloxWindow.my + self.robloxWindow.mh // 2, 10, 10))
                 except Exception:
-                    return imagehash.average_hash(mssScreenshot(self.robloxWindow.mx, self.robloxWindow.my, 1, 1))
+                    return average_hash(mssScreenshot(self.robloxWindow.mx, self.robloxWindow.my, 1, 1))
 
         # Move cursor away before taking baseline to avoid cursor overlay affecting the hash
         mouse.moveTo(self.robloxWindow.mx + 10, self.robloxWindow.my + 10)

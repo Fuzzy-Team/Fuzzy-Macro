@@ -2,7 +2,29 @@ import numpy as np
 import cv2
 import os
 from PIL import Image
-import imagehash
+
+
+class ImageHash:
+    """Average hash of an image. `a - b` is the number of differing bits."""
+
+    def __init__(self, bits):
+        self.bits = bits
+
+    def __sub__(self, other):
+        return int(np.count_nonzero(self.bits != other.bits))
+
+    def __eq__(self, other):
+        return isinstance(other, ImageHash) and np.array_equal(self.bits, other.bits)
+
+    def __hash__(self):
+        return hash(self.bits.tobytes())
+
+
+#same algorithm as imagehash.average_hash: shrink to 8x8 grayscale and compare each pixel to the mean
+def average_hash(img):
+    pixels = np.asarray(img.convert("L").resize((8, 8), Image.LANCZOS))
+    return ImageHash(pixels > pixels.mean())
+
 #accept a pillow image and return a cv2 one
 def pillowToCv2(img):
     return cv2.cvtColor(np.array(img), cv2.COLOR_BGR2RGB)
