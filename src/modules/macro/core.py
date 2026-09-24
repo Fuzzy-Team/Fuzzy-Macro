@@ -6,7 +6,6 @@ import modules.controls.mouse as mouse
 import modules.logging.log as logModule
 import modules.misc.appManager as appManager
 import modules.misc.settingsManager as settingsManager
-import modules.screen.ocr as ocr
 from modules.controls.keyboard import keyboard
 from modules.controls.sleep import (
     get_interrupt_action,
@@ -391,7 +390,6 @@ class macro(
         self.moveMouseToDefault()
 
         self.newUI = True
-        ocr.newUI = True
         logModule.newUI = True
 
         #check for accessibility
