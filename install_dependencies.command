@@ -218,9 +218,9 @@ else
 	install_pip_package "pyobjc-framework-Cocoa<11.0"
 	install_pip_package "pyobjc-framework-ColorSync<11.0" "--no-deps"
 	install_pip_package "pyobjc-framework-ApplicationServices<11.0" "--no-deps"
-	# OpenCV 4.6+ wheels need macOS 10.15. With --prefer-binary this picks the newest
-	# wheel for this macOS (4.5.1.48 on 10.13-10.14) instead of building from source.
-	install_pip_package "opencv-python<4.6"
+	# No 4.6 wheel exists below macOS 10.15, so pip builds it from source here (slow, but known
+	# to work down to 10.12, unlike the older wheels, which bundle libraries built for 10.13).
+	install_pip_package "opencv-python==4.6.0.66"
 	# Apple Vision OCR needs macOS 10.15, so use easyocr. 1.7.1 is the last release that
 	# works with python-bidi 0.4.2 (the newest for Python 3.7), and torch 1.13.1 is the last
 	# for Python 3.7. --no-deps keeps easyocr from adding a second OpenCV package and
