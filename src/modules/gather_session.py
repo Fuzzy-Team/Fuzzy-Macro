@@ -16,16 +16,8 @@ class PatternCycleResult:
     error: str = ""
 
 
-@dataclass(frozen=True)
-class GatherSessionResult:
-    reason: str
-    elapsed_seconds: float
-    selected_pattern: str
-    active_pattern: str
-
-
 class GatherSession:
-    """Owns a Gather Session's clock, pattern execution, cleanup, and outcome."""
+    """Owns a Gather Session's clock, pattern execution, and cleanup."""
 
     def __init__(self, pattern_runner, now):
         self.pattern_runner = pattern_runner
@@ -34,7 +26,7 @@ class GatherSession:
         self._pause_started = None
         self._paused_duration = 0.0
         self._cleanup = []
-        self.result = None
+        self._finished = False
 
     def start(self, started_at=None):
         self._started_at = self._now() if started_at is None else started_at
@@ -59,9 +51,11 @@ class GatherSession:
         if callable(callback):
             self._cleanup.append(callback)
 
-    def finish(self, namespace, reason="completed"):
-        if self.result is not None:
-            return self.result
+    def finish(self, namespace):
+        """Run the pattern's and the session's cleanup once, however the gather ended."""
+        if self._finished:
+            return
+        self._finished = True
         first_error = None
         try:
             self.pattern_runner.finish(namespace)
@@ -73,15 +67,8 @@ class GatherSession:
             except Exception as exc:
                 if first_error is None:
                     first_error = exc
-        self.result = GatherSessionResult(
-            reason=reason,
-            elapsed_seconds=max(0.0, self.elapsed(False)),
-            selected_pattern=self.pattern_runner.selected_pattern,
-            active_pattern=self.pattern_runner.active_pattern,
-        )
         if first_error is not None:
             raise first_error
-        return self.result
 
 
 class GatherPatternRunner:
