@@ -87,6 +87,7 @@ class macro(
         # Track the published snapshot, including changes made by other adapters.
         self._last_profile_version = profileSnapshot["version"]
         self._last_profile_name = profileSnapshot["profile"]
+        self._reportedProfileProblems = []
 
         self.robloxWindow = RobloxWindowBounds()
         
@@ -104,6 +105,7 @@ class macro(
         self._fieldBoosterGlitterGeneration = 0
         self._fieldBoosterGlitterLock = threading.Lock()
         self._fieldBoosterGlitterPending = None
+        self.reportProfileProblems(profileSnapshot)
         self.buffDetector = BuffDetector(self.robloxWindow)
         self.hourlyReport = HourlyReport(self.buffDetector, self.setdat.get("hourly_report_time_format", 24))
         self.itemMonitor = ItemMonitor(self.robloxWindow)
@@ -154,11 +156,26 @@ class macro(
 
         self.setRobloxWindowInfo(setYOffset=False)
 
+    def reportProfileProblems(self, profileSnapshot):
+        """Report settings that couldn't be read (defaults are used for them) once, and again if they change."""
+        problems = profileSnapshot.get("migration_errors", []) + profileSnapshot.get("warnings", [])
+        if problems == self._reportedProfileProblems:
+            return
+        self._reportedProfileProblems = problems
+        if problems:
+            self.logger.webhook(
+                "Settings Problem",
+                f"Profile '{profileSnapshot['profile']}' has settings that couldn't be read, so defaults are used for them:\n" + "\n".join(f"- {problem}" for problem in problems),
+                "red",
+                ping_category="ping_critical_errors",
+            )
+
     def checkAndReloadSettings(self):
         """Reload settings for a new loop pass and apply profile changes"""
         profileSnapshot = settingsManager.getMacroProfileSnapshot()
         # Start every pass from the saved settings so quest overrides do not carry over.
         self.setdat = profileSnapshot["settings"]
+        self.reportProfileProblems(profileSnapshot)
         profileChanged = profileSnapshot["profile"] != self._last_profile_name
         settingsChanged = (
             profileChanged

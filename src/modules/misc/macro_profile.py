@@ -43,6 +43,7 @@ class MacroProfileSnapshot:
     settings: object
     fields: object
     migration_errors: tuple = ()
+    warnings: tuple = ()
 
     def as_dict(self):
         return {
@@ -51,6 +52,7 @@ class MacroProfileSnapshot:
             "settings": _thaw(self.settings),
             "fields": _thaw(self.fields),
             "migration_errors": list(self.migration_errors),
+            "warnings": list(self.warnings),
         }
 
 
@@ -85,6 +87,12 @@ class MacroProfileStore:
     PROFILE_FILE = "settings.txt"
     GENERAL_FILE = "generalsettings.txt"
     FIELDS_FILE = "fields.txt"
+    # last fields.txt the store wrote, used if the user's copy stops parsing
+    FIELDS_BACKUP_FILE = "fields.txt.bak"
+    MIGRATION_FILE = ".migration_version"
+    # One-time upgrades, in order. Append new ones to the end and never reorder or remove
+    # them: each profile stores how many have run, so the version bumps by itself.
+    MIGRATIONS = ("_migrate_legacy_settings",)
 
     def __init__(self, profiles_dir, profile_defaults, general_defaults, field_defaults, field_normalizer=None):
         self._profiles_dir = os.path.abspath(profiles_dir)
@@ -97,33 +105,63 @@ class MacroProfileStore:
         self._snapshot = None
 
     def initialize(self, profile):
-        """Repair and migrate one profile, then publish its first snapshot."""
+        """Create missing files and run pending migrations, then publish the profile's first snapshot."""
         with self._lock, self._file_lock(profile):
-            profile_data, general_data, fields_data, errors, changed = self._read_and_normalize(profile)
-            profile_dir = self._profile_dir(profile)
-            os.makedirs(profile_dir, exist_ok=True)
-            for filename, data in (
-                (self.PROFILE_FILE, profile_data),
-                (self.GENERAL_FILE, general_data),
-                (self.FIELDS_FILE, fields_data),
-            ):
-                if filename in errors:
-                    continue
-                path = os.path.join(profile_dir, filename)
-                if changed.get(filename) or not os.path.exists(path):
-                    self._write_file(path, data, fields=filename == self.FIELDS_FILE)
-            return self._publish(profile, profile_data, general_data, fields_data, errors)
+            profile_data, general_data, fields_data, errors, warnings = self._prepare(profile)
+            return self._publish(profile, profile_data, general_data, fields_data, errors, warnings)
+
+    def prepare(self, profile):
+        """Create missing files and run pending migrations without publishing a snapshot (for imports)."""
+        with self._lock, self._file_lock(profile):
+            self._prepare(profile)
+
+    def _prepare(self, profile):
+        profile_data, general_data, fields_data, errors, changed, warnings = self._read_and_normalize(profile)
+        profile_dir = self._profile_dir(profile)
+        os.makedirs(profile_dir, exist_ok=True)
+        for warning in warnings:
+            print(f"Warning: Macro Profile '{profile}': {warning}")
+
+        # Migrations wait until every file reads, so a half-read profile is never migrated.
+        pending = () if errors else self.MIGRATIONS[self._migrated_version(profile):]
+        for migration in pending:
+            profile_changed, general_changed = getattr(self, migration)(profile_data, general_data, fields_data)
+            changed[self.PROFILE_FILE] = changed[self.PROFILE_FILE] or profile_changed
+            changed[self.GENERAL_FILE] = changed[self.GENERAL_FILE] or general_changed
+
+        fields_path = os.path.join(profile_dir, self.FIELDS_FILE)
+        if changed.get(self.FIELDS_BACKUP_FILE):
+            # fields.txt stopped parsing; keep the user's copy, then restore the last saved one
+            with open(fields_path, "rb") as broken, open(fields_path + ".broken", "wb") as copy_file:
+                copy_file.write(broken.read())
+            changed[self.FIELDS_FILE] = True
+
+        for filename, data in (
+            (self.PROFILE_FILE, profile_data),
+            (self.GENERAL_FILE, general_data),
+            (self.FIELDS_FILE, fields_data),
+        ):
+            if filename in errors:
+                continue
+            path = os.path.join(profile_dir, filename)
+            if changed.get(filename) or not os.path.exists(path):
+                self._write_file(path, data, fields=filename == self.FIELDS_FILE)
+        if self.FIELDS_FILE not in errors:
+            self._ensure_fields_backup(profile_dir)
+        if pending:
+            self._atomic_write(os.path.join(profile_dir, self.MIGRATION_FILE), str(len(self.MIGRATIONS)).encode("utf-8"))
+        return profile_data, general_data, fields_data, errors, warnings
 
     def snapshot(self, profile):
         """Return an immutable snapshot without changing files."""
         with self._lock:
-            profile_data, general_data, fields_data, errors, _ = self._read_and_normalize(profile)
+            profile_data, general_data, fields_data, errors, _, warnings = self._read_and_normalize(profile)
             combined = {**profile_data, **general_data}
             if self._snapshot is not None and self._snapshot.profile == profile:
                 current = self._snapshot.as_dict()
-                if current["settings"] == combined and current["fields"] == fields_data and current["migration_errors"] == list(errors.values()):
+                if current["settings"] == combined and current["fields"] == fields_data and current["migration_errors"] == list(errors.values()) and current["warnings"] == warnings:
                     return self._snapshot
-            return self._publish(profile, profile_data, general_data, fields_data, errors)
+            return self._publish(profile, profile_data, general_data, fields_data, errors, warnings)
 
     def read(self, profile, strict=False):
         """Return normalized (profile settings, general settings, fields) without changing files or snapshots.
@@ -131,7 +169,7 @@ class MacroProfileStore:
         Unreadable files fall back to defaults unless strict is set, which raises instead.
         """
         with self._lock:
-            profile_data, general_data, fields_data, errors, _ = self._read_and_normalize(profile)
+            profile_data, general_data, fields_data, errors, _, warnings = self._read_and_normalize(profile)
             if strict and errors:
                 raise MacroProfileError("; ".join(errors.values()))
             return profile_data, general_data, fields_data
@@ -139,27 +177,25 @@ class MacroProfileStore:
     def apply_change(self, profile, scope, setting, value):
         """Validate and atomically persist a setting-level change."""
         with self._lock, self._file_lock(profile):
-            profile_data, general_data, fields_data, errors, _ = self._read_and_normalize(profile)
-            if errors:
-                raise MacroProfileError("Cannot save while Macro Profile files contain migration errors")
-
+            profile_data, general_data, fields_data, errors, _, warnings = self._read_and_normalize(profile)
             owner = self._owner(setting, scope)
+            filename = self.PROFILE_FILE if owner == "profile" else self.GENERAL_FILE
+            self._refuse_overwrite(errors, filename)
+
             defaults = self._profile_defaults if owner == "profile" else self._general_defaults
             self._validate(setting, value, defaults, {**profile_data, **general_data})
             target = profile_data if owner == "profile" else general_data
             target[setting] = copy.deepcopy(value)
-            filename = self.PROFILE_FILE if owner == "profile" else self.GENERAL_FILE
             self._write_file(os.path.join(self._profile_dir(profile), filename), target)
-            return self._publish(profile, profile_data, general_data, fields_data, {})
+            return self._publish(profile, profile_data, general_data, fields_data, errors, warnings)
 
     def apply_changes(self, profile, scope, changes):
         """Validate and persist a transactional batch for import adapters."""
         if not isinstance(changes, dict):
             raise MacroProfileValidationError("changes", "expected an object")
         with self._lock, self._file_lock(profile):
-            profile_data, general_data, fields_data, errors, _ = self._read_and_normalize(profile)
-            if errors:
-                raise MacroProfileError("Cannot import while Macro Profile files contain migration errors")
+            profile_data, general_data, fields_data, errors, _, warnings = self._read_and_normalize(profile)
+            self._refuse_overwrite(errors, self.PROFILE_FILE, self.GENERAL_FILE)
             next_profile = copy.deepcopy(profile_data)
             next_general = copy.deepcopy(general_data)
             combined = {**next_profile, **next_general}
@@ -185,21 +221,20 @@ class MacroProfileStore:
                 self._restore_bytes(profile_path, original_profile)
                 self._restore_bytes(general_path, original_general)
                 raise
-            return self._publish(profile, next_profile, next_general, fields_data, {})
+            return self._publish(profile, next_profile, next_general, fields_data, errors, warnings)
 
     def save_field(self, profile, field, settings):
         if not isinstance(settings, dict):
             raise MacroProfileValidationError(field, "field settings must be an object")
         with self._lock, self._file_lock(profile):
-            profile_data, general_data, fields_data, errors, _ = self._read_and_normalize(profile)
-            if errors:
-                raise MacroProfileError("Cannot save while Macro Profile files contain migration errors")
+            profile_data, general_data, fields_data, errors, _, warnings = self._read_and_normalize(profile)
+            self._refuse_overwrite(errors, self.FIELDS_FILE)
             normalized = self._normalize_field(field, settings)
             fields_data[field] = normalized
             self._write_file(os.path.join(self._profile_dir(profile), self.FIELDS_FILE), fields_data, fields=True)
-            return self._publish(profile, profile_data, general_data, fields_data, {})
+            return self._publish(profile, profile_data, general_data, fields_data, errors, warnings)
 
-    def _publish(self, profile, profile_data, general_data, fields_data, errors):
+    def _publish(self, profile, profile_data, general_data, fields_data, errors, warnings=()):
         self._version += 1
         self._snapshot = MacroProfileSnapshot(
             profile=profile,
@@ -207,73 +242,136 @@ class MacroProfileStore:
             settings=_freeze({**copy.deepcopy(profile_data), **copy.deepcopy(general_data)}),
             fields=_freeze(copy.deepcopy(fields_data)),
             migration_errors=tuple(errors.values()),
+            warnings=tuple(warnings),
         )
         return self._snapshot
 
+    @staticmethod
+    def _refuse_overwrite(errors, *filenames):
+        """An unreadable file is shown as defaults; saving would replace the user's copy with them."""
+        for filename in filenames:
+            if filename in errors:
+                raise MacroProfileError(f"Cannot save: {errors[filename]}. Fix or remove {filename} first.")
+
     def _read_and_normalize(self, profile):
+        """Read the profile and fill in defaults. Migrations run in _prepare, not here."""
+        warnings = []
         profile_dir = self._profile_dir(profile)
         errors = {}
         changed = {}
-        profile_data = self._safe_read(os.path.join(profile_dir, self.PROFILE_FILE), self._profile_defaults, errors)
-        general_data = self._safe_read(os.path.join(profile_dir, self.GENERAL_FILE), self._general_defaults, errors)
-        fields_data = self._safe_read_fields(os.path.join(profile_dir, self.FIELDS_FILE), errors)
+        profile_data = self._safe_read(os.path.join(profile_dir, self.PROFILE_FILE), self._profile_defaults, errors, warnings)
+        general_data = self._safe_read(os.path.join(profile_dir, self.GENERAL_FILE), self._general_defaults, errors, warnings)
+        fields_data, restored = self._safe_read_fields(profile_dir, errors, warnings)
 
-        profile_data, general_data, settings_changed = self._normalize_settings(profile_data, general_data, errors)
+        profile_data, general_data, settings_changed = self._normalize_settings(profile_data, general_data)
         fields_data, fields_changed = self._normalize_fields(fields_data)
-        gumdrop_slot_merged = self._merge_quest_gumdrop_slot(profile_data, general_data, fields_data, errors)
-        changed[self.PROFILE_FILE] = settings_changed[0] or gumdrop_slot_merged
-        changed[self.GENERAL_FILE] = settings_changed[1] or gumdrop_slot_merged
+        changed[self.PROFILE_FILE] = settings_changed[0]
+        changed[self.GENERAL_FILE] = settings_changed[1]
         changed[self.FIELDS_FILE] = fields_changed
-        return profile_data, general_data, fields_data, errors, changed
+        changed[self.FIELDS_BACKUP_FILE] = restored
+        return profile_data, general_data, fields_data, errors, changed, warnings
 
-    def _safe_read(self, path, defaults, errors):
+    def _safe_read(self, path, defaults, errors, warnings):
         if not os.path.exists(path):
             return copy.deepcopy(defaults)
         try:
-            return self._read_settings_file(path, defaults)
+            return self._read_settings_file(path, defaults, warnings)
         except Exception as exc:
             errors[os.path.basename(path)] = f"{os.path.basename(path)}: {exc}"
             return copy.deepcopy(defaults)
 
-    def _safe_read_fields(self, path, errors):
+    def _safe_read_fields(self, profile_dir, errors, warnings):
+        """Return (fields, restored). A fields.txt that doesn't parse falls back to the last
+        copy the store saved; without one, it's reported as an error and shown as defaults."""
+        path = os.path.join(profile_dir, self.FIELDS_FILE)
         if not os.path.exists(path):
-            return copy.deepcopy(self._field_defaults)
+            return copy.deepcopy(self._field_defaults), False
         try:
-            with open(path, encoding="utf-8") as handle:
-                raw = handle.read().strip()
-            value = ast.literal_eval(raw) if raw else {}
-            if not isinstance(value, dict):
-                raise ValueError("expected an object")
-            return value
+            return self._read_fields_file(path), False
         except Exception as exc:
-            errors[os.path.basename(path)] = f"{os.path.basename(path)}: {exc}"
-            return copy.deepcopy(self._field_defaults)
+            error = f"{self.FIELDS_FILE}: {exc}"
+        try:
+            fields = self._read_fields_file(os.path.join(profile_dir, self.FIELDS_BACKUP_FILE))
+            warnings.append(f"{error}; using the last saved field settings (the unreadable copy is kept as {self.FIELDS_FILE}.broken)")
+            return fields, True
+        except Exception:
+            errors[self.FIELDS_FILE] = error
+            return copy.deepcopy(self._field_defaults), False
 
     @staticmethod
-    def _read_settings_file(path, defaults):
+    def _read_fields_file(path):
         with open(path, encoding="utf-8") as handle:
-            raw = handle.read()
+            raw = handle.read().strip()
+        value = ast.literal_eval(raw) if raw else {}
+        if not isinstance(value, dict):
+            raise ValueError("expected an object")
+        return value
+
+    def _ensure_fields_backup(self, profile_dir):
+        path = os.path.join(profile_dir, self.FIELDS_FILE)
+        backup = os.path.join(profile_dir, self.FIELDS_BACKUP_FILE)
+        content = self._read_bytes(path)
+        if content is not None and content != self._read_bytes(backup):
+            self._atomic_write(backup, content)
+
+    def _migrated_version(self, profile):
+        try:
+            with open(os.path.join(self._profile_dir(profile), self.MIGRATION_FILE), encoding="utf-8") as handle:
+                return int(handle.read().strip())
+        except (OSError, ValueError):
+            return 0
+
+    @staticmethod
+    def _read_settings_file(path, defaults, warnings):
+        """Parse key=value lines. A line that isn't a setting is skipped (and reported)
+        rather than failing the file, so one bad line can't reset every other setting."""
+        with open(path, "rb") as handle:
+            content = handle.read()
+        try:
+            raw = content.decode("utf-8")
+        except UnicodeDecodeError:
+            raw = content.decode("utf-8", errors="replace")
+            warnings.append(f"{os.path.basename(path)} is not valid UTF-8; unreadable characters were replaced")
         raw = re.sub(r"(?<![A-Za-z_])(?<!\n)max_convert_time=", "\nmax_convert_time=", raw)
         result = {}
         for line_number, line in enumerate(raw.splitlines(), 1):
             if not line.strip():
                 continue
-            if "=" not in line:
-                raise ValueError(f"line {line_number} has no '='")
-            key, value = (part.strip() for part in line.split("=", 1))
+            key, separator, value = line.partition("=")
+            key, value = key.strip(), value.strip()
+            if not separator or not key:
+                warnings.append(f"{os.path.basename(path)} line {line_number} is not a setting and was skipped: {line.strip()[:60]!r}")
+                continue
+            default = defaults.get(key)
             try:
                 parsed = ast.literal_eval(value)
             except Exception:
                 parsed = value
+                # Text where a number or true/false belongs would break the macro later, so use
+                # the default. Other settings keep text: the GUI saves some as plain text.
+                if isinstance(default, bool) and value.lower() in ("true", "false"):
+                    parsed = value.lower() == "true"
+                elif isinstance(default, (bool, int, float)):
+                    warnings.append(f"{os.path.basename(path)}: {key}={value!r} is not a valid value; using the default ({default!r})")
+                    parsed = copy.deepcopy(default)
             if isinstance(parsed, dict) and set(parsed) == {"source", "value"}:
                 parsed = parsed["value"]  # an old GUI bug saved some dropdowns wrapped like this
-            default = defaults.get(key)
             if isinstance(default, str) and not isinstance(parsed, str):
                 parsed = "" if parsed is None else str(parsed)
             result[key] = parsed
         return result
 
-    def _normalize_settings(self, profile_data, general_data, errors=()):
+    def _normalize_settings(self, profile_data, general_data):
+        original_profile = copy.deepcopy(profile_data)
+        original_general = copy.deepcopy(general_data)
+        for key, value in self._profile_defaults.items():
+            profile_data.setdefault(key, copy.deepcopy(value))
+        for key, value in self._general_defaults.items():
+            general_data.setdefault(key, copy.deepcopy(value))
+        return profile_data, general_data, (profile_data != original_profile, general_data != original_general)
+
+    def _migrate_legacy_settings(self, profile_data, general_data, fields_data):
+        """One-time upgrades of settings saved by older versions. Returns (profile changed, general changed)."""
         original_profile = copy.deepcopy(profile_data)
         original_general = copy.deepcopy(general_data)
         # Hive Acquisition always detects first now. Removing the obsolete
@@ -284,28 +382,25 @@ class MacroProfileStore:
         general_keys = set(self._general_defaults)
 
         # Move settings stored in the wrong file to their owner, keeping a value the
-        # user changed over a default when both files have the key. While the owner file
-        # is unreadable its data is only defaults, so use the value but leave it in the
-        # source file, or saving the source file would lose it.
-        for source, target, owner_keys, other_keys, defaults, owner_file in (
-            (general_data, profile_data, profile_keys, general_keys, self._profile_defaults, self.PROFILE_FILE),
-            (profile_data, general_data, general_keys, profile_keys, self._general_defaults, self.GENERAL_FILE),
+        # user changed over a default when both files have the key.
+        for source, target, owner_keys, other_keys, defaults in (
+            (general_data, profile_data, profile_keys, general_keys, self._profile_defaults),
+            (profile_data, general_data, general_keys, profile_keys, self._general_defaults),
         ):
-            owner_unreadable = owner_file in errors
             for key in list(source):
                 if key in owner_keys and key not in other_keys:
-                    if owner_unreadable:
-                        target[key] = source[key]
-                        continue
                     moved = source.pop(key)
                     if key not in target or (target[key] == defaults[key] and moved != defaults[key]):
                         target[key] = moved
-        # The three glitter slots were one setting the GUI kept in sync. Keep a slot the
-        # user chose (one that differs from its old default); otherwise find Glitter in
-        # the inventory (0) rather than pressing a slot that may hold something else.
+        # The three glitter slots were one setting the GUI kept in sync. Keep a hotbar slot
+        # the user chose (one that differs from its old default); 0 meant the inventory,
+        # which Glitter no longer uses, so it falls back to the default slot.
         old_glitter_defaults = {"field_booster_glitter_slot": 1, "tad_alt_glitter_slot": 1, "AFB_slotG": 0}
         stored = {key: data.pop(key) for data in (profile_data, general_data) for key in list(data) if key in old_glitter_defaults}
-        chosen = [stored[key] for key in old_glitter_defaults if key in stored and stored[key] != old_glitter_defaults[key]]
+        chosen = [
+            stored[key] for key in old_glitter_defaults
+            if key in stored and stored[key] != old_glitter_defaults[key] and stored[key] in range(1, 8)
+        ]
         if chosen:
             general_data["glitter_slot"] = chosen[0]
 
@@ -320,11 +415,6 @@ class MacroProfileStore:
                     profile_data[f"{quest}_quest_gather_return"] = legacy["quest_gather_return"]
             for key in legacy:
                 profile_data.pop(key)
-
-        for key, value in self._profile_defaults.items():
-            profile_data.setdefault(key, copy.deepcopy(value))
-        for key, value in self._general_defaults.items():
-            general_data.setdefault(key, copy.deepcopy(value))
 
         order = profile_data.get("task_priority_order")
         if isinstance(order, list):
@@ -345,26 +435,23 @@ class MacroProfileStore:
                 while len(value) < 5:
                     value.append(copy.deepcopy(default[len(value)] if len(value) < len(default) else default[-1]))
 
-        return profile_data, general_data, (profile_data != original_profile, general_data != original_general)
+        self._merge_quest_gumdrop_slot(profile_data, general_data, fields_data)
+        return profile_data != original_profile, general_data != original_general
 
     @staticmethod
-    def _merge_quest_gumdrop_slot(profile_data, general_data, fields_data, errors=None):
+    def _merge_quest_gumdrop_slot(profile_data, general_data, fields_data):
         """Goo quests now use goo_slot (the gumdrop slot) instead of a separate quest_gumdrop_slot.
 
         Keep the slot the user actually relies on: the quest slot if only goo quests use
-        gumdrops, otherwise the goo slot. Returns True if the old setting was removed.
+        gumdrops, otherwise the goo slot.
         """
         source = profile_data if "quest_gumdrop_slot" in profile_data else general_data
         if "quest_gumdrop_slot" not in source:
-            return False
-        source_file = MacroProfileStore.PROFILE_FILE if source is profile_data else MacroProfileStore.GENERAL_FILE
-        if errors and (source_file in errors or MacroProfileStore.GENERAL_FILE in errors):
-            return False
+            return
         quest_slot = source.pop("quest_gumdrop_slot")
         uses_field_goo = any(isinstance(field, dict) and field.get("goo") for field in fields_data.values())
         if profile_data.get("quest_use_gumdrops") and not uses_field_goo:
             general_data["goo_slot"] = quest_slot
-        return True
 
     def _normalize_fields(self, fields_data):
         original = copy.deepcopy(fields_data)
@@ -439,6 +526,8 @@ class MacroProfileStore:
         if content and not content.endswith("\n"):
             content += "\n"
         cls._atomic_write(path, content.encode("utf-8"))
+        if fields:
+            cls._atomic_write(os.path.join(os.path.dirname(path), cls.FIELDS_BACKUP_FILE), content.encode("utf-8"))
 
     @staticmethod
     def _atomic_write(path, content):
