@@ -63,7 +63,8 @@ class InventoryMixin:
             prevHash = None
             for _ in range(9):
                 mouse.scroll(100)
-                sleep(0.05)
+                #leave time for the scroll to render, so a lagging frame isn't mistaken for the top
+                sleep(0.15)
                 #stop once the list no longer moves
                 screen = cv2.cvtColor(mssScreenshotNP(self.robloxWindow.mx, self.robloxWindow.my+120, 100, 200), cv2.COLOR_BGRA2RGB)
                 hash = average_hash(Image.fromarray(screen))
