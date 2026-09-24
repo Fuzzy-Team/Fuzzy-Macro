@@ -218,7 +218,7 @@ class MacroProfileStore:
         general_data = self._safe_read(os.path.join(profile_dir, self.GENERAL_FILE), self._general_defaults, errors)
         fields_data = self._safe_read_fields(os.path.join(profile_dir, self.FIELDS_FILE), errors)
 
-        profile_data, general_data, settings_changed = self._normalize_settings(profile_data, general_data)
+        profile_data, general_data, settings_changed = self._normalize_settings(profile_data, general_data, errors)
         fields_data, fields_changed = self._normalize_fields(fields_data)
         gumdrop_slot_merged = self._merge_quest_gumdrop_slot(profile_data, general_data, fields_data, errors)
         changed[self.PROFILE_FILE] = settings_changed[0] or gumdrop_slot_merged
@@ -273,7 +273,7 @@ class MacroProfileStore:
             result[key] = parsed
         return result
 
-    def _normalize_settings(self, profile_data, general_data):
+    def _normalize_settings(self, profile_data, general_data, errors=()):
         original_profile = copy.deepcopy(profile_data)
         original_general = copy.deepcopy(general_data)
         # Hive Acquisition always detects first now. Removing the obsolete
@@ -284,11 +284,14 @@ class MacroProfileStore:
         general_keys = set(self._general_defaults)
 
         # Move settings stored in the wrong file to their owner, keeping a value the
-        # user changed over a default when both files have the key.
-        for source, target, owner_keys, other_keys, defaults in (
-            (general_data, profile_data, profile_keys, general_keys, self._profile_defaults),
-            (profile_data, general_data, general_keys, profile_keys, self._general_defaults),
+        # user changed over a default when both files have the key. Leave them in place
+        # while the owner file is unreadable, or saving the source file would lose them.
+        for source, target, owner_keys, other_keys, defaults, owner_file in (
+            (general_data, profile_data, profile_keys, general_keys, self._profile_defaults, self.PROFILE_FILE),
+            (profile_data, general_data, general_keys, profile_keys, self._general_defaults, self.GENERAL_FILE),
         ):
+            if owner_file in errors:
+                continue
             for key in list(source):
                 if key in owner_keys and key not in other_keys:
                     moved = source.pop(key)
