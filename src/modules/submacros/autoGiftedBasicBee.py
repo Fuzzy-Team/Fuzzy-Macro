@@ -6,7 +6,7 @@ import time
 from difflib import SequenceMatcher
 
 import cv2
-import imagehash
+from modules.misc.imageManipulation import average_hash
 import numpy as np
 import pyautogui as pag
 from PIL import Image
@@ -258,7 +258,7 @@ class AutoGiftedBasicBeeRunner:
                 mssScreenshotNP(self._roblox_window.mx, self._roblox_window.my + 100, 100, 200),
                 cv2.COLOR_BGRA2RGB,
             )
-            current_hash = imagehash.average_hash(Image.fromarray(screen))
+            current_hash = average_hash(Image.fromarray(screen))
             if previous_hash is not None and previous_hash == current_hash:
                 break
             previous_hash = current_hash
@@ -358,7 +358,7 @@ class AutoGiftedBasicBeeRunner:
                 mssScreenshotNP(self._roblox_window.mx, self._roblox_window.my + 100, 100, 200),
                 cv2.COLOR_BGRA2RGB,
             )
-            current_hash = imagehash.average_hash(Image.fromarray(scan))
+            current_hash = average_hash(Image.fromarray(scan))
             if previous_hash is not None and previous_hash == current_hash:
                 break
             previous_hash = current_hash
