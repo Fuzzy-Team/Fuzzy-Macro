@@ -231,7 +231,6 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         pending_action = int(skipTask.value)
         if pending_action != INTERRUPT_NONE:
             return handle_interrupt(pending_action)
-        macro.consumeFieldBoosterGlitterExtension()
         
         questWatchContext = None
         taskWatchKey = watchedTaskKey()
