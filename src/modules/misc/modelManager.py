@@ -30,10 +30,8 @@ ONNX_MODELS = (
     "bloom_detection_light.onnx",
     "bloom_detection_mini.onnx",
 )
-OBSOLETE_MODELS = (
-    "best.mlpackage",
-    "sprinkler.mlpackage",
-)
+# Files macOS adds to folders it has opened; never part of a model.
+MACOS_METADATA_FILES = {".DS_Store"}
 
 
 def _macos_version():
@@ -60,9 +58,19 @@ def _supported_model_names():
 
 def _delete_path(path):
     try:
+        if os.path.islink(path):
+            print(f"[models] Kept symlink {path}")
+            return False
         if os.path.isdir(path):
-            shutil.rmtree(path)
-        elif os.path.exists(path):
+            for name in os.listdir(path):
+                _delete_path(os.path.join(path, name))
+            if os.listdir(path):
+                return False
+            os.rmdir(path)
+        elif os.path.isfile(path):
+            if path.lower().endswith(".pt"):
+                print(f"[models] Kept .pt file {path}")
+                return False
             os.remove(path)
         else:
             return False
@@ -72,45 +80,43 @@ def _delete_path(path):
         return False
 
 
-def cleanup_obsolete_models():
-    deleted = []
-    for model_name in OBSOLETE_MODELS:
-        model_path = os.path.join(MODEL_DIR, model_name)
-        if _delete_path(model_path):
-            deleted.append(model_name)
-    if deleted:
-        print(f"[models] Deleted obsolete models: {', '.join(deleted)}")
-    return deleted
-
-
-def cleanup_unsupported_model_formats():
-    supported = set(_supported_model_names())
-    all_known = set(COREML_MODELS).union(ONNX_MODELS)
-    deleted = []
-    for model_name in sorted(all_known - supported):
-        model_path = os.path.join(MODEL_DIR, model_name)
-        if _delete_path(model_path):
-            deleted.append(model_name)
-    if deleted:
-        print(f"[models] Deleted unsupported model format: {', '.join(deleted)}")
-    return deleted
-
-
 def cleanup_unused_models():
+    """Remove every local model not used by this release on this platform."""
+    if os.path.islink(MODEL_DIR):
+        print(f"[models] Skipping cleanup through symlinked model folder {MODEL_DIR}")
+        return []
+    try:
+        entries = list(os.scandir(MODEL_DIR))
+    except OSError as exc:
+        print(f"[models] Could not list model folder: {exc}")
+        return []
+    supported = set(_supported_model_names())
+    if not supported:
+        print("[models] Skipping cleanup: release has no supported model list")
+        return []
     deleted = []
-    deleted.extend(cleanup_obsolete_models())
-    deleted.extend(cleanup_unsupported_model_formats())
+    for entry in entries:
+        if entry.name not in supported and _delete_path(entry.path):
+            deleted.append(entry.name)
+    if deleted:
+        print(f"[models] Deleted unused models: {', '.join(deleted)}")
     return deleted
 
 
 def _git_blob_sha(path):
-    h = hashlib.sha1()
+    """Return the Git blob SHA-1 that GitHub reports for the file at ``path``."""
+    # Kept separate from update.py, which is replaced from main mid-update.
+    digest = hashlib.sha1()
     size = os.path.getsize(path)
-    h.update(f"blob {size}\0".encode("utf-8"))
+    digest.update(f"blob {size}\0".encode("utf-8"))
     with open(path, "rb") as fh:
         for chunk in iter(lambda: fh.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _is_macos_metadata(filename):
+    return filename in MACOS_METADATA_FILES or filename.startswith("._")
 
 
 def _github_get(url, timeout=20):
@@ -143,17 +149,29 @@ def _remote_tree(api_url):
 
 
 def _local_matches_remote(local_root, remote_files, remote_root_path):
-    if not os.path.exists(local_root):
+    if not remote_files or not os.path.exists(local_root):
         return False
     if len(remote_files) == 1 and remote_files[0].get("path") == remote_root_path:
-        return os.path.isfile(local_root) and _git_blob_sha(local_root) == remote_files[0].get("sha")
+        return (os.path.isfile(local_root) and not os.path.islink(local_root)
+                and _git_blob_sha(local_root) == remote_files[0].get("sha"))
+    if not os.path.isdir(local_root) or os.path.islink(local_root):
+        return False
+    expected_paths = set()
     for remote_file in remote_files:
         rel_path = os.path.relpath(remote_file["path"], remote_root_path)
+        expected_paths.add(rel_path)
         local_path = os.path.join(local_root, rel_path)
-        if not os.path.isfile(local_path):
+        if not os.path.isfile(local_path) or os.path.islink(local_path):
             return False
         if _git_blob_sha(local_path) != remote_file.get("sha"):
             return False
+    for root, dirs, files in os.walk(local_root):
+        if any(os.path.islink(os.path.join(root, name)) for name in dirs):
+            return False
+        for filename in files:
+            path = os.path.relpath(os.path.join(root, filename), local_root)
+            if path not in expected_paths and not _is_macos_metadata(filename):
+                return False
     return True
 
 
@@ -173,6 +191,8 @@ def _download_remote_tree(remote_files, remote_root_path, destination_root):
         if len(remote_files) == 1 and remote_files[0].get("path") == remote_root_path:
             tmp_file = os.path.join(tmp_root, remote_root_path)
             _download_file(remote_files[0]["download_url"], tmp_file)
+            if not _local_matches_remote(tmp_file, remote_files, remote_root_path):
+                raise ValueError(f"Downloaded model failed hash check: {remote_root_path}")
             if os.path.exists(destination_root):
                 if os.path.isdir(destination_root):
                     shutil.rmtree(destination_root)
@@ -184,6 +204,8 @@ def _download_remote_tree(remote_files, remote_root_path, destination_root):
         for remote_file in remote_files:
             rel_path = os.path.relpath(remote_file["path"], remote_root_path)
             _download_file(remote_file["download_url"], os.path.join(tmp_root, rel_path))
+        if not _local_matches_remote(tmp_root, remote_files, remote_root_path):
+            raise ValueError(f"Downloaded model failed hash check: {remote_root_path}")
         if os.path.exists(destination_root):
             if os.path.isdir(destination_root):
                 shutil.rmtree(destination_root)
