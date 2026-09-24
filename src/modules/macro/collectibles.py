@@ -6,7 +6,7 @@ import threading
 from datetime import timedelta
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
-from modules.misc.settings_defaults import glitter_hotbar_slot
+from modules.misc.settings_defaults import glitter_slot, glitter_slot_label
 import modules.screen.ocr as ocr
 from modules.controls.sleep import pause_aware_time as time, sleep
 from modules.macro.game_data import (
@@ -209,7 +209,7 @@ class CollectiblesMixin:
         if not self.setdat.get("field_booster_glitter_extend_enabled", False):
             return
 
-        glitterSlot = glitter_hotbar_slot(self.setdat)
+        glitterSlot = glitter_slot(self.setdat)
         with self._fieldBoosterGlitterLock:
             self._fieldBoosterGlitterGeneration += 1
             generation = self._fieldBoosterGlitterGeneration
@@ -223,13 +223,16 @@ class CollectiblesMixin:
             if self.run is not None and self.run.value == 0:
                 return
             self.useGlitterFromSlot(glitterSlot)
-            self.logger.webhook("", f"Used Glitter from hotbar slot {glitterSlot}; extending field booster", "bright green")
+            self.logger.webhook("", f"Used Glitter from {glitter_slot_label(glitterSlot)}; extending field booster", "bright green")
 
         threading.Thread(target=useGlitter, name="field-booster-glitter-extension", daemon=True).start()
 
     def useGlitterFromSlot(self, slot):
-        """Use Glitter from its hotbar slot. This can run mid-pattern, where opening the inventory would break the gather."""
-        self.keyboard.press(str(slot))
+        """Use a Glitter hotbar slot, or locate Glitter in the inventory for slot 0."""
+        if int(slot) == 0:
+            self.useItemInInventory("glitter")
+        else:
+            self.keyboard.press(str(slot))
 
 
     def antChallenge(self):

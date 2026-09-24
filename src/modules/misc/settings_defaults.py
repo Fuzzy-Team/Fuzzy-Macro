@@ -2054,11 +2054,14 @@ def deepcopy_default(value):
     return copy.deepcopy(value)
 
 
-def glitter_hotbar_slot(settings):
-    """Glitter's hotbar slot (1-7). There is no inventory option: using the inventory
-    during a gather opens it over the field and breaks the gather."""
+def glitter_slot(settings):
+    """Glitter's hotbar slot (1-7), or 0 to find Glitter in the inventory."""
     try:
         slot = int(settings.get("glitter_slot", 1))
     except (TypeError, ValueError):
         return 1
-    return slot if 1 <= slot <= 7 else 1
+    return slot if 0 <= slot <= 7 else 1
+
+
+def glitter_slot_label(slot):
+    return "the inventory" if slot == 0 else f"hotbar slot {slot}"
