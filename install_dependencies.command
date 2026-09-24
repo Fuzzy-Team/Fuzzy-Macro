@@ -218,14 +218,15 @@ else
 	install_pip_package "pyobjc-framework-Cocoa<11.0"
 	install_pip_package "pyobjc-framework-ColorSync<11.0" "--no-deps"
 	install_pip_package "pyobjc-framework-ApplicationServices<11.0" "--no-deps"
-	install_pip_package "opencv-python==4.6.0.66"
-	#python"${python_ver}" -m pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org paddlepaddle==2.4.2 -i https://pypi.tuna.tsinghua.edu.cn/simple
-	#python"${python_ver}" -m pip install --no-deps --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org paddleocr==2.6.1.3
-	#printf "\033[31;1mInstalling lxml, this can take a while \033[0m\n"
-	#python"${python_ver}" -m pip install --default-timeout=100 --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org attrdict beautifulsoup4 cython fire fonttools imgaug lanms-neo==1.0.2 lmdb lxml opencv-contrib-python==4.6.0.66 opencv-python==4.6.0.66 openpyxl Polygon3 premailer pyclipper pymupdf python-docx rapidfuzz scikit-image shapely tqdm visualdl
-	#pip"${python_ver}" install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org protobuf==3.20.0
-	#pip"${python_ver}" install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org orjson==3.9.6
-	install_pip_package "ocrmac"
+	# OpenCV 4.6+ wheels need macOS 10.15. With --prefer-binary this picks the newest
+	# wheel for this macOS (4.5.1.48 on 10.13-10.14) instead of building from source.
+	install_pip_package "opencv-python<4.6"
+	# Apple Vision OCR needs macOS 10.15, so use easyocr. 1.7.1 is the last release that
+	# works with python-bidi 0.4.2 (the newest for Python 3.7), and torch 1.13.1 is the last
+	# for Python 3.7. --no-deps keeps easyocr from adding a second OpenCV package and
+	# scikit-image (its wheels need macOS 10.15; ocr.py stands in for it).
+	install_pip_package "easyocr==1.7.1" "--no-deps"
+	install_pip_package "torch==1.13.1 torchvision==0.14.1 scipy shapely pyclipper python-bidi==0.4.2 PyYAML ninja packaging"
 fi
 install_pip_package "pyautogui"
 install_pip_package "mss"

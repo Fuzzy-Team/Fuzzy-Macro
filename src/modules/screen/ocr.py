@@ -15,6 +15,20 @@ if len(mac_version) >= 2 and mac_version >= (11, 0):
         pass
 
 if ocrLib is None:
+    try:
+        import skimage.io
+    except ImportError:
+        # easyocr imports skimage.io only to read image files, and the macro passes it arrays.
+        # scikit-image isn't installed below macOS 10.15 (its wheels bundle a libomp that
+        # needs 10.15), so give easyocr a stand-in.
+        import sys
+        import types
+        from PIL import Image
+        skimageStub = types.ModuleType("skimage")
+        skimageStub.io = types.ModuleType("skimage.io")
+        skimageStub.io.imread = lambda path: np.asarray(Image.open(path))
+        sys.modules["skimage"] = skimageStub
+        sys.modules["skimage.io"] = skimageStub.io
     import easyocr
     import ssl
     ssl._create_default_https_context = ssl._create_unverified_context
