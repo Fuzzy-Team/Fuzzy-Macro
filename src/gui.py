@@ -1194,9 +1194,7 @@ def update():
 
     try:
         # Get the update channel preference
-        generalsettings_path = os.path.join(settingsManager.getProfilePath(), "generalsettings.txt")
-        settings = settingsManager.readSettingsFile(generalsettings_path)
-        update_channel = settings.get("update_channel", "stable")
+        update_channel = settingsManager.loadAllSettings().get("update_channel", "stable")
         
         updated = updateModule.update(update_channel=update_channel, progress_callback=send_update_progress)
     except Exception:
@@ -1239,9 +1237,7 @@ def checkForUpdates():
     """Check for updates silently and return update information"""
     try:
         # Get the update channel preference
-        generalsettings_path = os.path.join(settingsManager.getProfilePath(), "generalsettings.txt")
-        settings = settingsManager.readSettingsFile(generalsettings_path)
-        update_channel = settings.get("update_channel", "stable")
+        update_channel = settingsManager.loadAllSettings().get("update_channel", "stable")
         
         update_info = updateModule.check_for_updates_silent(update_channel)
         return update_info
@@ -1263,9 +1259,7 @@ def disableAutoUpdateCheck():
 def getAutoUpdateCheckDisabled():
     """Check if automatic update checking is disabled"""
     try:
-        generalsettings_path = os.path.join(settingsManager.getProfilePath(), "generalsettings.txt")
-        settings = settingsManager.readSettingsFile(generalsettings_path)
-        return settings.get("auto_update_check_disabled", False)
+        return settingsManager.loadAllSettings().get("auto_update_check_disabled", False)
     except Exception:
         return False
 
