@@ -844,7 +844,7 @@ def saveSettingFile(setting,value, path):
     saveDict(path, data)
 
 def loadFields():
-    return _getMacroProfileStore().read(profileName)[2]
+    return _getMacroProfileStore().load(profileName)["fields"]
 
 def saveField(field, settings):
     existingSettings = loadFields().get(field, {})
@@ -1116,7 +1116,7 @@ def saveGeneralSetting(setting, value):
     _getMacroProfileStore().apply_change(profileName, "general", setting, value)
 
 def loadSettings():
-    return _getMacroProfileStore().read(profileName)[0]
+    return _getMacroProfileStore().load(profileName)["profile_settings"]
 
 #return a dict containing all settings except field (general, profile, planters)
 def loadAllSettings():
@@ -1139,7 +1139,12 @@ def exportProfile(profile_name):
         if not os.path.exists(settings_file) or not os.path.exists(fields_file) or not os.path.exists(generalsettings_file):
             return False, f"Profile '{profile_name}' is missing required files"
 
-        settings_data, generalsettings_data, fields_data = _getMacroProfileStore().read(profile_name, strict=True)
+        profile = _getMacroProfileStore().load(profile_name)
+        if profile["errors"]:
+            return False, f"Failed to export profile: {'; '.join(profile['errors'])}"
+        settings_data = profile["profile_settings"]
+        generalsettings_data = profile["general_settings"]
+        fields_data = profile["fields"]
 
         # Ensure sensitive fields are removed from export
         sensitive_keys = ("discord_bot_token", "webhook_link", "private_server_link")
@@ -1243,7 +1248,7 @@ def _importProfileData(import_data, new_profile_name=None):
         saveDict(generalsettings_file, import_data["generalsettings"])
 
         # the export may come from an older version, so migrate it now like an installed profile
-        _getMacroProfileStore().prepare(new_profile_name)
+        _getMacroProfileStore().initialize(new_profile_name)
 
         return True, f"Profile imported successfully as '{new_profile_name}'"
 

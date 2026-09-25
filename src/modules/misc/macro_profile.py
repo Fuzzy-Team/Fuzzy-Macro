@@ -47,8 +47,6 @@ class MacroProfileStore:
     PROFILE_FILE = "settings.txt"
     GENERAL_FILE = "generalsettings.txt"
     FIELDS_FILE = "fields.txt"
-    # last fields.txt the store wrote, used if the user's copy stops parsing
-    FIELDS_BACKUP_FILE = "fields.txt.bak"
     MIGRATION_FILE = ".migration_version"
     # One-time upgrades, in order. Append new ones to the end and never reorder or remove
     # them: each profile stores how many have run, so the version bumps by itself.
@@ -65,70 +63,44 @@ class MacroProfileStore:
     def initialize(self, profile):
         """Create missing files and run pending migrations, then return the profile like load()."""
         with self._lock, self._file_lock(profile):
-            return self._profile_dict(profile, *self._prepare(profile))
+            profile_data, general_data, fields_data, errors, changed, warnings = self._read_and_normalize(profile)
+            profile_dir = self._profile_dir(profile)
+            os.makedirs(profile_dir, exist_ok=True)
+            for warning in warnings:
+                print(f"Warning: Macro Profile '{profile}': {warning}")
 
-    def prepare(self, profile):
-        """Create missing files and run pending migrations (for imports)."""
-        with self._lock, self._file_lock(profile):
-            self._prepare(profile)
+            # Migrations wait until every file reads, so a half-read profile is never migrated.
+            pending = () if errors else self.MIGRATIONS[self._migrated_version(profile):]
+            for migration in pending:
+                profile_changed, general_changed = getattr(self, migration)(profile_data, general_data, fields_data)
+                changed[self.PROFILE_FILE] = changed[self.PROFILE_FILE] or profile_changed
+                changed[self.GENERAL_FILE] = changed[self.GENERAL_FILE] or general_changed
 
-    def _prepare(self, profile):
-        profile_data, general_data, fields_data, errors, changed, warnings = self._read_and_normalize(profile)
-        profile_dir = self._profile_dir(profile)
-        os.makedirs(profile_dir, exist_ok=True)
-        for warning in warnings:
-            print(f"Warning: Macro Profile '{profile}': {warning}")
-
-        # Migrations wait until every file reads, so a half-read profile is never migrated.
-        pending = () if errors else self.MIGRATIONS[self._migrated_version(profile):]
-        for migration in pending:
-            profile_changed, general_changed = getattr(self, migration)(profile_data, general_data, fields_data)
-            changed[self.PROFILE_FILE] = changed[self.PROFILE_FILE] or profile_changed
-            changed[self.GENERAL_FILE] = changed[self.GENERAL_FILE] or general_changed
-
-        fields_path = os.path.join(profile_dir, self.FIELDS_FILE)
-        if changed.get(self.FIELDS_BACKUP_FILE):
-            # fields.txt stopped parsing; keep the user's copy, then restore the last saved one
-            with open(fields_path, "rb") as broken, open(fields_path + ".broken", "wb") as copy_file:
-                copy_file.write(broken.read())
-            changed[self.FIELDS_FILE] = True
-
-        for filename, data in (
-            (self.PROFILE_FILE, profile_data),
-            (self.GENERAL_FILE, general_data),
-            (self.FIELDS_FILE, fields_data),
-        ):
-            if filename in errors:
-                continue
-            path = os.path.join(profile_dir, filename)
-            if changed.get(filename) or not os.path.exists(path):
-                self._write_file(path, data, fields=filename == self.FIELDS_FILE)
-        if self.FIELDS_FILE not in errors:
-            self._ensure_fields_backup(profile_dir)
-        if pending:
-            self._atomic_write(os.path.join(profile_dir, self.MIGRATION_FILE), str(len(self.MIGRATIONS)).encode("utf-8"))
-        return profile_data, general_data, fields_data, errors, warnings
+            for filename, data in (
+                (self.PROFILE_FILE, profile_data),
+                (self.GENERAL_FILE, general_data),
+                (self.FIELDS_FILE, fields_data),
+            ):
+                if filename in errors:
+                    continue
+                path = os.path.join(profile_dir, filename)
+                if changed.get(filename) or not os.path.exists(path):
+                    self._write_file(path, data, fields=filename == self.FIELDS_FILE)
+            if pending:
+                self._atomic_write(os.path.join(profile_dir, self.MIGRATION_FILE), str(len(self.MIGRATIONS)).encode("utf-8"))
+            return self._profile_dict(profile, profile_data, general_data, fields_data, errors, warnings)
 
     def load(self, profile):
-        """Return {profile, settings, fields, errors, warnings} without changing files.
+        """Return the profile without changing files:
+        {profile, settings, profile_settings, general_settings, fields, errors, warnings}.
 
-        settings combines the profile and general files. errors lists files that couldn't be
-        read (their defaults are used); warnings lists lines that were skipped or replaced.
+        settings combines profile_settings and general_settings. errors lists files that
+        couldn't be read (their defaults are used); warnings lists lines that were skipped
+        or replaced.
         """
         with self._lock:
             profile_data, general_data, fields_data, errors, _, warnings = self._read_and_normalize(profile)
             return self._profile_dict(profile, profile_data, general_data, fields_data, errors, warnings)
-
-    def read(self, profile, strict=False):
-        """Return normalized (profile settings, general settings, fields) without changing files.
-
-        Unreadable files fall back to defaults unless strict is set, which raises instead.
-        """
-        with self._lock:
-            profile_data, general_data, fields_data, errors, _, _ = self._read_and_normalize(profile)
-            if strict and errors:
-                raise MacroProfileError("; ".join(errors.values()))
-            return profile_data, general_data, fields_data
 
     def apply_change(self, profile, scope, setting, value):
         """Validate and save one setting. Returns all settings (profile and general) after the change."""
@@ -185,6 +157,8 @@ class MacroProfileStore:
         return {
             "profile": profile,
             "settings": {**profile_data, **general_data},
+            "profile_settings": profile_data,
+            "general_settings": general_data,
             "fields": fields_data,
             "errors": list(errors.values()),
             "warnings": list(warnings),
@@ -198,21 +172,20 @@ class MacroProfileStore:
                 raise MacroProfileError(f"Cannot save: {errors[filename]}. Fix or remove {filename} first.")
 
     def _read_and_normalize(self, profile):
-        """Read the profile and fill in defaults. Migrations run in _prepare, not here."""
+        """Read the profile and fill in defaults. Migrations run in initialize, not here."""
         warnings = []
         profile_dir = self._profile_dir(profile)
         errors = {}
         changed = {}
         profile_data = self._safe_read(os.path.join(profile_dir, self.PROFILE_FILE), self._profile_defaults, errors, warnings)
         general_data = self._safe_read(os.path.join(profile_dir, self.GENERAL_FILE), self._general_defaults, errors, warnings)
-        fields_data, restored = self._safe_read_fields(profile_dir, errors, warnings)
+        fields_data = self._safe_read_fields(os.path.join(profile_dir, self.FIELDS_FILE), errors)
 
         profile_data, general_data, settings_changed = self._normalize_settings(profile_data, general_data)
         fields_data, fields_changed = self._normalize_fields(fields_data)
         changed[self.PROFILE_FILE] = settings_changed[0]
         changed[self.GENERAL_FILE] = settings_changed[1]
         changed[self.FIELDS_FILE] = fields_changed
-        changed[self.FIELDS_BACKUP_FILE] = restored
         return profile_data, general_data, fields_data, errors, changed, warnings
 
     def _safe_read(self, path, defaults, errors, warnings):
@@ -224,23 +197,14 @@ class MacroProfileStore:
             errors[os.path.basename(path)] = f"{os.path.basename(path)}: {exc}"
             return copy.deepcopy(defaults)
 
-    def _safe_read_fields(self, profile_dir, errors, warnings):
-        """Return (fields, restored). A fields.txt that doesn't parse falls back to the last
-        copy the store saved; without one, it's reported as an error and shown as defaults."""
-        path = os.path.join(profile_dir, self.FIELDS_FILE)
+    def _safe_read_fields(self, path, errors):
         if not os.path.exists(path):
-            return copy.deepcopy(self._field_defaults), False
+            return copy.deepcopy(self._field_defaults)
         try:
-            return self._read_fields_file(path), False
+            return self._read_fields_file(path)
         except Exception as exc:
-            error = f"{self.FIELDS_FILE}: {exc}"
-        try:
-            fields = self._read_fields_file(os.path.join(profile_dir, self.FIELDS_BACKUP_FILE))
-            warnings.append(f"{error}; using the last saved field settings (the unreadable copy is kept as {self.FIELDS_FILE}.broken)")
-            return fields, True
-        except Exception:
-            errors[self.FIELDS_FILE] = error
-            return copy.deepcopy(self._field_defaults), False
+            errors[self.FIELDS_FILE] = f"{self.FIELDS_FILE}: {exc}"
+            return copy.deepcopy(self._field_defaults)
 
     @staticmethod
     def _read_fields_file(path):
@@ -250,13 +214,6 @@ class MacroProfileStore:
         if not isinstance(value, dict):
             raise ValueError("expected an object")
         return value
-
-    def _ensure_fields_backup(self, profile_dir):
-        path = os.path.join(profile_dir, self.FIELDS_FILE)
-        backup = os.path.join(profile_dir, self.FIELDS_BACKUP_FILE)
-        content = self._read_bytes(path)
-        if content is not None and content != self._read_bytes(backup):
-            self._atomic_write(backup, content)
 
     def _migrated_version(self, profile):
         try:
@@ -462,8 +419,6 @@ class MacroProfileStore:
         if content and not content.endswith("\n"):
             content += "\n"
         cls._atomic_write(path, content.encode("utf-8"))
-        if fields:
-            cls._atomic_write(os.path.join(os.path.dirname(path), cls.FIELDS_BACKUP_FILE), content.encode("utf-8"))
 
     @staticmethod
     def _atomic_write(path, content):
@@ -481,10 +436,3 @@ class MacroProfileStore:
             except OSError:
                 pass
             raise
-
-    @staticmethod
-    def _read_bytes(path):
-        if not os.path.exists(path):
-            return None
-        with open(path, "rb") as handle:
-            return handle.read()
