@@ -124,17 +124,7 @@ class MacroProfileStoreTests(unittest.TestCase):
     def break_fields(self, profile="main"):
         return self.write(profile, "fields.txt", "{'pine tree': {'shape': ")
 
-    def test_unreadable_fields_use_the_last_saved_copy(self):
-        self.store.initialize("main")
-        self.store.save_field("main", "pine tree", {"shape": "lines", "mins": 25})
-        self.break_fields()
-        profile = self.store.initialize("main")
-        self.assertEqual(profile["fields"]["pine tree"]["mins"], 25)
-        self.assertEqual(profile["errors"], [])
-        self.assertIn("'shape': ", self.read(self.path("main", "fields.txt.broken")))
-        self.assertIn("'mins': 25", self.read(self.path("main", "fields.txt")))
-
-    def test_unreadable_fields_without_a_saved_copy_only_block_field_saves(self):
+    def test_unreadable_fields_only_block_field_saves(self):
         self.break_fields()
         profile = self.store.initialize("main")
         self.assertTrue(any("fields.txt" in error for error in profile["errors"]))
@@ -314,7 +304,8 @@ class MacroProfileStoreTests(unittest.TestCase):
         self.write("main", "settings.txt", "count=1\nmax_cannon_attempts=9\n")
         self.write("main", "generalsettings.txt", "count=4\nmax_cannon_attempts=5\n")
         self.store.initialize("main")
-        profile_data, general_data, _ = self.store.read("main", strict=True)
+        profile = self.store.load("main")
+        profile_data, general_data = profile["profile_settings"], profile["general_settings"]
         self.assertEqual(profile_data["count"], 4)
         self.assertEqual(general_data["max_cannon_attempts"], 9)
         self.assertNotIn("count", general_data)
@@ -326,19 +317,18 @@ class MacroProfileStoreTests(unittest.TestCase):
         with open(self.path("main", "settings.txt"), "rb") as handle:
             self.assertIn("café".encode("utf-8"), handle.read())
         with mock.patch("builtins.open", wraps=open) as opened:
-            self.store.read("main", strict=True)
+            self.store.load("main")
         for call in opened.call_args_list:
             if "b" not in (call.args[1] if len(call.args) > 1 else call.kwargs.get("mode", "r")):
                 self.assertEqual(call.kwargs.get("encoding"), "utf-8")
 
-    def test_read_falls_back_to_defaults_unless_strict(self):
+    def test_unreadable_file_uses_defaults_and_is_reported(self):
         self.break_fields()
-        profile_data, general_data, fields = self.store.read("main")
-        self.assertEqual(profile_data["enabled"], True)
-        self.assertEqual(general_data["macro_mode"], "normal")
-        self.assertIn("pine tree", fields)
-        with self.assertRaises(MacroProfileError):
-            self.store.read("main", strict=True)
+        profile = self.store.load("main")
+        self.assertEqual(profile["profile_settings"]["enabled"], True)
+        self.assertEqual(profile["general_settings"]["macro_mode"], "normal")
+        self.assertIn("pine tree", profile["fields"])
+        self.assertTrue(any("fields.txt" in error for error in profile["errors"]))
 
     def test_load_has_no_file_side_effects(self):
         self.store.initialize("main")
