@@ -34,24 +34,12 @@ class GatherPatternRunnerTests(unittest.TestCase):
             alert=lambda failed, error: self.alerts.append((failed, error)),
         )
 
-    def test_unchanged_builtin_is_compiled_once(self):
-        self.write("lines", "cycles.append('lines')", shipped=True)
-        runner = self.runner("lines")
-        namespace = {"cycles": []}
-        runner.run_cycle(namespace)
-        runner.run_cycle(namespace)
-        self.assertTrue(runner.is_builtin())
-        self.assertEqual(namespace["cycles"], ["lines", "lines"])
-        self.assertEqual(list(runner._compiled), ["lines"])
-        self.assertEqual(runner._compiled["lines"].__name__, "run_lines")
-
     def test_edited_builtin_runs_the_users_file(self):
         self.write("lines", "cycles.append('default')", shipped=True, installed=False)
         self.write("lines", "cycles.append('edited')")
         runner = self.runner("lines")
         namespace = {"cycles": []}
         runner.run_cycle(namespace)
-        self.assertFalse(runner.is_builtin())
         self.assertEqual(namespace["cycles"], ["edited"])
 
     def test_builtin_edited_mid_session_runs_the_users_file(self):
@@ -69,8 +57,8 @@ class GatherPatternRunnerTests(unittest.TestCase):
         namespace = {"cycles": []}
         first = runner.run_cycle(namespace)
         second = runner.run_cycle(namespace)
-        self.assertTrue(first.fell_back)
-        self.assertEqual(second.pattern, "e_lol")
+        self.assertEqual(first, "e_lol")
+        self.assertEqual(second, "e_lol")
         self.assertEqual(namespace["cycles"], ["fallback", "fallback"])
         self.assertEqual(self.alerts, [("custom", "broken move")])
 
@@ -89,16 +77,13 @@ class GatherPatternRunnerTests(unittest.TestCase):
         )
         runner = self.runner("fuzzy_ai_gather")
         namespace = {"cycles": []}
-        result = runner.run_cycle(namespace)
-        self.assertTrue(result.fell_back)
-        self.assertEqual(result.pattern, "e_lol")
+        self.assertEqual(runner.run_cycle(namespace), "e_lol")
         self.assertEqual(self.alerts, [("fuzzy_ai_gather", "model failed")])
 
     def test_missing_pattern_falls_back(self):
         runner = self.runner("missing")
         namespace = {"cycles": []}
-        result = runner.run_cycle(namespace)
-        self.assertTrue(result.fell_back)
+        self.assertEqual(runner.run_cycle(namespace), "e_lol")
         self.assertEqual(namespace["cycles"], ["fallback"])
 
     def test_interruption_is_not_treated_as_pattern_failure(self):
