@@ -229,7 +229,15 @@ install_pip_package "pyautogui"
 install_pip_package "mss"
 install_pip_package "pillow"
 install_pip_package "discord-webhook"
-install_pip_package "discord.py"
+if [ "$python_ver" = '3.7' ]; then
+	# discord.py 2.x needs Python 3.8. 1.7.3 has no slash commands, so the bot runs them as
+	# fuzz! prefix commands (modules/discord_bot/legacyCommands.py). It needs aiohttp below 3.8;
+	# 3.7.4.post0 is the newest, and pip builds it from source below macOS 10.14.
+	install_pip_package "discord.py==1.7.3 aiohttp==3.7.4.post0"
+else
+	install_pip_package "discord.py"
+	install_pip_package "aiohttp==3.10.5"
+fi
 install_pip_package "pypresence"
 install_pip_package "matplotlib"
 install_pip_package "fuzzywuzzy"
@@ -243,7 +251,6 @@ install_pip_package "httpx"
 install_pip_package "flask"
 install_pip_package "pygetwindow"
 install_pip_package "requests" #used to check if this script was ran, should be installed by discord-webhooks
-install_pip_package "aiohttp==3.10.5"
 install_pip_package "pynput"
 install_pip_package "numpy<2" "--force-reinstall"
 
