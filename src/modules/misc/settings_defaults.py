@@ -187,6 +187,7 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'tad_alt_restart_delay': 10,
  'tad_alt_boost_duration': 900,
  'tad_alt_glitter_extend_enabled': False,
+ 'tad_alt_glitter_slot': 1,
  'sticker_stack': False,
  'sticker_stack_item': 'sticker',
  'sticker_stack_interrupt_gathering': False,
@@ -2054,10 +2055,10 @@ def deepcopy_default(value):
     return copy.deepcopy(value)
 
 
-def glitter_slot(settings):
+def glitter_slot(settings, key="glitter_slot"):
     """Glitter's hotbar slot (1-7), or 0 to find Glitter in the inventory."""
     try:
-        slot = int(settings.get("glitter_slot", 1))
+        slot = int(settings.get(key, 1))
     except (TypeError, ValueError):
         return 1
     return slot if 0 <= slot <= 7 else 1
