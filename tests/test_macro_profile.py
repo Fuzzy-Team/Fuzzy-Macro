@@ -231,20 +231,23 @@ class MacroProfileStoreTests(unittest.TestCase):
 
     def glitter_slot(self, profile_settings):
         self.write("main", "settings.txt", profile_settings)
-        store = MacroProfileStore(self.profiles_dir, PROFILE_DEFAULTS, {**GENERAL_DEFAULTS, "glitter_slot": 1}, FIELD_DEFAULTS)
+        profile_defaults = {**PROFILE_DEFAULTS, "tad_alt_glitter_slot": 1}
+        store = MacroProfileStore(self.profiles_dir, profile_defaults, {**GENERAL_DEFAULTS, "glitter_slot": 1}, FIELD_DEFAULTS)
         settings = store.initialize("main")["settings"]
-        for old in ("field_booster_glitter_slot", "tad_alt_glitter_slot"):
-            self.assertNotIn(old, settings)
-        return settings["glitter_slot"], settings["AFB_slotG"]
+        self.assertNotIn("field_booster_glitter_slot", settings)
+        return settings["glitter_slot"], settings["tad_alt_glitter_slot"], settings["AFB_slotG"]
 
     def test_glitter_slot_keeps_a_slot_the_user_chose(self):
-        self.assertEqual(self.glitter_slot("field_booster_glitter_slot=4\ntad_alt_glitter_slot=4\nAFB_slotG=4\n"), (4, 4))
+        self.assertEqual(self.glitter_slot("field_booster_glitter_slot=4\ntad_alt_glitter_slot=4\nAFB_slotG=4\n"), (4, 4, 4))
 
     def test_glitter_slot_uses_the_default_slot_when_only_old_defaults_are_stored(self):
-        self.assertEqual(self.glitter_slot("field_booster_glitter_slot=1\ntad_alt_glitter_slot=1\nAFB_slotG=0\n"), (1, 0))
+        self.assertEqual(self.glitter_slot("field_booster_glitter_slot=1\ntad_alt_glitter_slot=1\nAFB_slotG=0\n"), (1, 1, 0))
 
     def test_glitter_slot_keeps_the_inventory_option(self):
-        self.assertEqual(self.glitter_slot("field_booster_glitter_slot=0\ntad_alt_glitter_slot=0\nAFB_slotG=0\n"), (0, 0))
+        self.assertEqual(self.glitter_slot("field_booster_glitter_slot=0\ntad_alt_glitter_slot=0\nAFB_slotG=0\n"), (0, 0, 0))
+
+    def test_tad_alt_keeps_its_own_glitter_slot(self):
+        self.assertEqual(self.glitter_slot("field_booster_glitter_slot=1\ntad_alt_glitter_slot=5\nAFB_slotG=0\n"), (1, 5, 0))
 
     def test_default_legacy_quest_gather_keeps_per_quest_settings(self):
         self.write("main", "settings.txt", "quest_gather_mins=0\npolar_bear_quest_gather_mins=5\n")
