@@ -82,7 +82,7 @@ class macro(
             set_interrupt_action(skipTask)
         
         profile = settingsManager.loadMacroProfile()
-        # tasks can change setdat and fieldSettings for one pass, so keep the loaded copy apart
+        # tasks can change setdat for one pass, so keep the loaded copy apart
         self._loadedProfile = profile
         self.setdat = copy.deepcopy(profile["settings"])
         self.fieldSettings = copy.deepcopy(profile["fields"])
