@@ -100,16 +100,17 @@ ui = types.SimpleNamespace(
 
 # --- Interaction adapter ------------------------------------------------------------
 
-async def _send(ctx, content=None, *, embed=None, embeds=None, file=None, files=None, view=None, **_ignored):
-    """Send like InteractionResponse.send_message; ephemeral is ignored."""
+async def _send(ctx, content=None, *, embed=None, embeds=None, file=None, files=None, view=None, ephemeral=False, **_ignored):
+    """Send like InteractionResponse.send_message, using DMs for ephemeral replies."""
     if view is not None:
         content = f"{content}\n{INTERACTIVE_UNAVAILABLE}" if content else INTERACTIVE_UNAVAILABLE
     extraEmbeds = []
     if embeds:
         embed, extraEmbeds = (embed, list(embeds)) if embed else (embeds[0], list(embeds[1:]))
-    message = await ctx.send(content, embed=embed, file=file, files=files)
+    destination = ctx.author if ephemeral else ctx
+    message = await destination.send(content, embed=embed, file=file, files=files)
     for extra in extraEmbeds:
-        await ctx.send(embed=extra)
+        await destination.send(embed=extra)
     return message
 
 
@@ -238,7 +239,7 @@ class LegacyCommandTree:
         callback.__signature__ = inspect.Signature(
             [inspect.Parameter("ctx", inspect.Parameter.POSITIONAL_OR_KEYWORD)] + params
         )
-        return commands.Command(callback, name=name, help=description, usage=_usage(name, params))
+        return commands.Command(callback, name=name, help=description, usage=_usage(name, params), ignore_extra=False)
 
 
 def attach(bot):
