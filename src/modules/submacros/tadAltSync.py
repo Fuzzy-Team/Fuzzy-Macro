@@ -129,7 +129,7 @@ class TadAltSync:
         duration = max(0, float(self.settings.get("tad_alt_boost_duration", 900) or 0))
         if extend_with_glitter is None:
             extend_with_glitter = bool(self.settings.get("tad_alt_glitter_extend_enabled", False))
-        slot = glitter_slot(self.settings)
+        slot = glitter_slot(self.settings, "tad_alt_glitter_slot")
         thread = threading.Thread(
             target=self._restore_after_boost,
             args=(generation, duration, extend_with_glitter, slot, extension_duration),
