@@ -1,19 +1,10 @@
 """Gather session pattern execution and failure policy."""
 
-from dataclasses import dataclass
 import os
-from types import FunctionType
 
 
 AI_PATTERNS = {"fuzzy_ai_gather", "blooms_ai"}
 FALLBACK_PATTERN = "e_lol"
-
-
-@dataclass(frozen=True)
-class PatternCycleResult:
-    pattern: str
-    fell_back: bool = False
-    error: str = ""
 
 
 class GatherSession:
@@ -84,38 +75,34 @@ class GatherPatternRunner:
         self.active_pattern = self.selected_pattern
         self._alerted = False
         self._fallback_active = False
-        self._compiled = {}
-        self._shipped = {}
 
     def run_cycle(self, namespace, owner=None):
-        """Run one pattern cycle, falling back to e_lol for this session on failure."""
+        """Run one pattern cycle, falling back to e_lol for this session on failure.
+        Returns the pattern that ran."""
         try:
             self._run(self.active_pattern, namespace)
             error = self._ai_runtime_error(namespace, owner)
             if error:
                 raise RuntimeError(error)
-            return PatternCycleResult(self.active_pattern)
         except self._fatal_exceptions:
             raise
         except Exception as exc:
-            failed_pattern = self.active_pattern
-            if failed_pattern == FALLBACK_PATTERN:
+            if self.active_pattern == FALLBACK_PATTERN:
                 raise
-            self._activate_fallback(failed_pattern, exc)
+            self._activate_fallback(self.active_pattern, exc)
             self._run(FALLBACK_PATTERN, namespace)
-            return PatternCycleResult(FALLBACK_PATTERN, True, str(exc))
+        return self.active_pattern
 
     def warmup(self, namespace):
-        """Run an AI pattern's existing warmup without changing its implementation."""
+        """Run an AI pattern's existing warmup without changing its implementation.
+        Returns the pattern the gather should use."""
         try:
             self._run(self.active_pattern, namespace)
-            return PatternCycleResult(self.active_pattern)
         except self._fatal_exceptions:
             raise
         except Exception as exc:
-            failed_pattern = self.active_pattern
-            self._activate_fallback(failed_pattern, exc)
-            return PatternCycleResult(FALLBACK_PATTERN, True, str(exc))
+            self._activate_fallback(self.active_pattern, exc)
+        return self.active_pattern
 
     def mark_failed(self, error):
         """Record a warmup failure before the first gather cycle."""
@@ -127,43 +114,12 @@ class GatherPatternRunner:
         if callable(callback):
             callback()
 
-    def is_builtin(self, pattern=None):
-        """An unchanged shipped movement pattern can use the compiled built-in path."""
-        pattern = pattern or self.active_pattern
-        if pattern in AI_PATTERNS:
-            return False
-        installed = self._path(self._patterns_dir, pattern)
-        try:
-            # The shipped file does not change during a gather, so read it once. The
-            # installed file is read every cycle so an edit takes effect right away.
-            if pattern not in self._shipped:
-                with open(self._path(self._defaults_dir, pattern), "rb") as shipped_file:
-                    self._shipped[pattern] = shipped_file.read()
-            with open(installed, "rb") as installed_file:
-                return installed_file.read() == self._shipped[pattern]
-        except OSError:
-            return False
-
     def _run(self, pattern, namespace):
-        path = self._path(self._patterns_dir, pattern)
-        if self.is_builtin(pattern) or (pattern == FALLBACK_PATTERN and self._fallback_active):
-            function = self._compiled.get(pattern)
-            if function is None:
-                function = self._compile_builtin(pattern, namespace)
-                self._compiled[pattern] = function
-            function.__globals__.update(namespace)
-            function()
-            return
+        # the fallback runs the shipped e_lol, so a broken edit of e_lol can't break it too
+        directory = self._defaults_dir if pattern == FALLBACK_PATTERN and self._fallback_active else self._patterns_dir
+        path = self._path(directory, pattern)
         with open(path) as pattern_file:
             exec(compile(pattern_file.read(), path, "exec"), namespace)
-
-    def _compile_builtin(self, pattern, namespace):
-        """Compile an unchanged built-in once and expose it as a normal callable."""
-        path = self._path(self._defaults_dir, pattern)
-        with open(path) as pattern_file:
-            code = compile(pattern_file.read(), path, "exec")
-        namespace.setdefault("__builtins__", __builtins__)
-        return FunctionType(code, namespace, f"run_{pattern.replace(' ', '_')}")
 
     def _activate_fallback(self, failed_pattern, error):
         self.active_pattern = FALLBACK_PATTERN
