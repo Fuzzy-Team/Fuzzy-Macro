@@ -108,9 +108,15 @@ async def _send(ctx, content=None, *, embed=None, embeds=None, file=None, files=
     if embeds:
         embed, extraEmbeds = (embed, list(embeds)) if embed else (embeds[0], list(embeds[1:]))
     destination = ctx.author if ephemeral else ctx
-    message = await destination.send(content, embed=embed, file=file, files=files)
-    for extra in extraEmbeds:
-        await destination.send(embed=extra)
+    try:
+        message = await destination.send(content, embed=embed, file=file, files=files)
+        for extra in extraEmbeds:
+            await destination.send(embed=extra)
+    except discord.Forbidden:
+        if not ephemeral:
+            raise
+        # DMs are closed; the reply is private, so don't post it in the channel
+        return await ctx.send(f"{ctx.author.mention} ❌ Couldn't DM you the reply. Allow direct messages from server members and try again.")
     return message
 
 
