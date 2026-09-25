@@ -170,8 +170,7 @@ class GatherMixin:
                 if isSproutGather and pattern == "fuzzy_ai_gather":
                     self._fuzzy_ai_gather_state = {}
                 preloadedAIGatherNameSpace = {**locals(), **vars(patternEnvironment)}
-                warmupResult = patternRunner.warmup(preloadedAIGatherNameSpace)
-                pattern = warmupResult.pattern
+                pattern = patternRunner.warmup(preloadedAIGatherNameSpace)
             except InterruptRequested:
                 raise
             except Exception as error:
@@ -593,14 +592,13 @@ class GatherMixin:
             mouse.mouseDown()
 
             try:
-                cycleResult = gatherSession.run_cycle(gatherNameSpace, owner=self)
+                pattern = gatherSession.run_cycle(gatherNameSpace, owner=self)
             except Exception:
                 # interrupts usually land inside a pattern's sleep, and e_lol failing ends the
                 # gather too; either way stop the gather's threads and reports before leaving
                 mouse.mouseUp()
                 stopGather()
                 raise
-            pattern = cycleResult.pattern
 
             #field drift compensation — AI patterns already manage sprinkler
             # anchoring / idle patrol themselves, so skip the post-cycle nudge
