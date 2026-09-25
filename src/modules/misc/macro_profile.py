@@ -332,16 +332,13 @@ class MacroProfileStore:
                     moved = source.pop(key)
                     if key not in target or (target[key] == defaults[key] and moved != defaults[key]):
                         target[key] = moved
-        # Field booster and TAD alt extending now share glitter_slot. Keep the slot the user
-        # chose (0 finds Glitter in the inventory). AFB keeps its own AFB_slotG.
-        old_glitter_defaults = {"field_booster_glitter_slot": 1, "tad_alt_glitter_slot": 1}
-        stored = {key: data.pop(key) for data in (profile_data, general_data) for key in list(data) if key in old_glitter_defaults}
-        chosen = [
-            stored[key] for key in old_glitter_defaults
-            if key in stored and stored[key] != old_glitter_defaults[key] and stored[key] in range(0, 8)
-        ]
-        if chosen:
-            general_data["glitter_slot"] = chosen[0]
+        # Field booster extending now uses the general glitter_slot. Keep the slot the user
+        # chose (0 finds Glitter in the inventory). TAD alts and AFB keep their own slots.
+        for data in (profile_data, general_data):
+            if "field_booster_glitter_slot" in data:
+                slot = data.pop("field_booster_glitter_slot")
+                if slot != 1 and slot in range(0, 8):
+                    general_data["glitter_slot"] = slot
 
         # The old global quest gather override becomes per-quest settings, but only
         # when the user changed it; a default value must not overwrite per-quest ones.
