@@ -222,15 +222,21 @@ class CollectiblesMixin:
                     return
             if self.run is not None and self.run.value == 0:
                 return
-            self.useGlitterFromSlot(glitterSlot)
+            try:
+                self.useGlitterFromSlot(glitterSlot)
+            except RuntimeError as error:
+                self.logger.webhook("", f"Could not extend field booster: {error}", "red")
+                return
             self.logger.webhook("", f"Used Glitter from {glitter_slot_label(glitterSlot)}; extending field booster", "bright green")
 
         threading.Thread(target=useGlitter, name="field-booster-glitter-extension", daemon=True).start()
 
     def useGlitterFromSlot(self, slot):
-        """Use a Glitter hotbar slot, or locate Glitter in the inventory for slot 0."""
+        """Use a Glitter hotbar slot, or locate Glitter in the inventory for slot 0.
+        Raises RuntimeError if Glitter isn't in the inventory."""
         if int(slot) == 0:
-            self.useItemInInventory("glitter")
+            if not self.useItemInInventory("glitter"):
+                raise RuntimeError("Glitter was not found in the inventory")
         else:
             self.keyboard.press(str(slot))
 
