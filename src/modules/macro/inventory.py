@@ -1,4 +1,5 @@
 import cv2
+from contextlib import contextmanager
 from modules.misc.imageManipulation import average_hash
 from PIL import Image
 from difflib import SequenceMatcher
@@ -10,6 +11,25 @@ from modules.screen.screenshot import mssScreenshot, mssScreenshotNP
 
 
 class InventoryMixin:
+    @contextmanager
+    def inventoryInteraction(self):
+        """Release the gather click and shift lock while the inventory is in use."""
+        with self._inventoryInteractionLock:
+            wasGathering = self.isGathering
+            restoreShiftLock = False
+            if wasGathering:
+                mouse.mouseUp()
+                restoreShiftLock = self.ensure_shift_lock_off("inventory access")
+            try:
+                yield
+            finally:
+                if wasGathering and self.isGathering:
+                    if restoreShiftLock:
+                        self.keyboard.press("shift")
+                        time.sleep(0.35)
+                    self.moveMouseToDefault()
+                    mouse.mouseDown()
+
     def toggleInventory(self, mode):
         def clickInv():
             mouse.moveTo(self.robloxWindow.mx+30, self.robloxWindow.my+113)
@@ -58,6 +78,10 @@ class InventoryMixin:
         return SequenceMatcher(None, str1, str2).ratio()
 
     def findItemInInventory(self, itemName):
+        with self.inventoryInteraction():
+            return self._findItemInInventory(itemName)
+
+    def _findItemInInventory(self, itemName):
         
         def scrollToTop():
             hashes = []
@@ -121,21 +145,22 @@ class InventoryMixin:
     #click at the specified coordinates to use an item in the inventory
     #if x/y is not provided, find the item in inventory
     def useItemInInventory(self, itemName = None, x = None, y = None, closeInventoryAfter=True):
-        if x is None or y is None:
-            if itemName is None: raise Exception("tried searching for item but no item name is provided")
-            res = self.findItemInInventory(itemName)
-            if res is None:
-                return False
-            x, y = res
+        with self.inventoryInteraction():
+            if x is None or y is None:
+                if itemName is None: raise Exception("tried searching for item but no item name is provided")
+                res = self._findItemInInventory(itemName)
+                if res is None:
+                    return False
+                x, y = res
 
-        mouse.moveTo(self.robloxWindow.mx+x, self.robloxWindow.my+y)
-        mouse.moveBy(10,15)
-        for _ in range(3):
-            mouse.click()
-            mouse.moveBy(0,15, pause=False)
-            time.sleep(0.03)
-        self.clickYes()
-        #close inventory
-        if closeInventoryAfter:
-            self.toggleInventory("close")
-        return True
+            mouse.moveTo(self.robloxWindow.mx+x, self.robloxWindow.my+y)
+            mouse.moveBy(10,15)
+            for _ in range(3):
+                mouse.click()
+                mouse.moveBy(0,15, pause=False)
+                time.sleep(0.03)
+            self.clickYes()
+            #close inventory
+            if closeInventoryAfter:
+                self.toggleInventory("close")
+            return True

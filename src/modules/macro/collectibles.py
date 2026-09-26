@@ -205,7 +205,7 @@ class CollectiblesMixin:
         return cooldownSeconds
 
     def scheduleFieldBoosterGlitterExtension(self):
-        """Use Glitter at 14:55 of a detected field booster."""
+        """Use Glitter at 14:30 of a detected field booster."""
         if not self.setdat.get("field_booster_glitter_extend_enabled", False):
             return
 
@@ -215,8 +215,8 @@ class CollectiblesMixin:
             generation = self._fieldBoosterGlitterGeneration
 
         def useGlitter():
-            # Field boosters last 15 minutes; Glitter needs to be used at 14:55.
-            time.sleep(14 * 60 + 55)
+            # Leave enough time for an inventory search before the 15-minute boost expires.
+            time.sleep(14 * 60 + 30)
             with self._fieldBoosterGlitterLock:
                 if generation != self._fieldBoosterGlitterGeneration:
                     return

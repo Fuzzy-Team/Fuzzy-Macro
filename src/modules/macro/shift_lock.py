@@ -26,3 +26,4 @@ class ShiftLockMixin:
             self.logger.webhook("", message, "dark brown")
             self.keyboard.press("shift")
             time.sleep(0.35)
+            return True

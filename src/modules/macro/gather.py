@@ -589,7 +589,9 @@ class GatherMixin:
                 raise
 
             patternStartTime = time.time()
-            mouse.mouseDown()
+            # wait for any inventory interaction to finish before clicking again
+            with self._inventoryInteractionLock:
+                mouse.mouseDown()
 
             try:
                 pattern = gatherSession.run_cycle(gatherNameSpace, owner=self)
