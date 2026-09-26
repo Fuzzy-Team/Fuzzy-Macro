@@ -103,6 +103,7 @@ class macro(
         )
         self._fieldBoosterGlitterGeneration = 0
         self._fieldBoosterGlitterLock = threading.Lock()
+        self._inventoryInteractionLock = threading.RLock()
         self.reportProfileProblems(profile)
         self.buffDetector = BuffDetector(self.robloxWindow)
         self.hourlyReport = HourlyReport(self.buffDetector, self.setdat.get("hourly_report_time_format", 24))
