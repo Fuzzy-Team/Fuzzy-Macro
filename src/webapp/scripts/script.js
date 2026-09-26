@@ -197,6 +197,8 @@ function getInputValueFromElement(ele) {
     )
       return 0;
     if (!value) return "";
+    if (ele.dataset.inputType == "int") return parseInt(value, 10);
+    if (ele.dataset.inputType == "float") return parseFloat(value);
     return value;
   } else if (ele.tagName == "DIV" && ele.className.includes("custom-select")) {
     const value = getDropdownValue(ele);
@@ -207,7 +209,7 @@ function getInputValueFromElement(ele) {
   } else if (ele.tagName == "DIV" && ele.className.includes("multi-checklist")) {
     return Array.from(ele.querySelectorAll("input[type='checkbox']:checked")).map((x) => x.value);
   } else if (ele.tagName == "INPUT" && ele.type == "range") {
-    return ele.value;
+    return ele.dataset.inputType == "float" ? parseFloat(ele.value) : parseInt(ele.value, 10);
   } else if (ele.tagName == "DIV" && ele.className.includes("keybind-input")) {
     return ele.dataset.keybind || "";
   }
@@ -334,6 +336,32 @@ window.refreshCurrentTabContent = async function () {
   }
 };
 if (window.eel) eel.expose(window.refreshCurrentTabContent, "refreshCurrentTabContent");
+//tell the user a setting wasn't saved and put the saved value back in its input,
+//so the GUI never shows a value the macro isn't using
+async function rejectSettingChange(id, reason) {
+  console.error(`Could not save ${id}: ${reason}`);
+  try {
+    const settings = await loadAllSettings();
+    if (id in settings) loadInputs({ [id]: settings[id] });
+  } catch (error) {
+    console.error(`Could not reload ${id}:`, error);
+  }
+  const title = document.getElementById(id)?.closest("form")?.querySelector("label")?.textContent?.trim();
+  alert(`${title || id} was not saved: ${reason}`);
+}
+
+//save one setting value; on failure the user is told and the saved value is shown again
+async function saveSettingValue(type, id, value) {
+  let result;
+  try {
+    result = await eel.applyMacroProfileChange(type, id, value)();
+  } catch (error) {
+    result = { ok: false, error: { reason: String(error?.errorText || error) } };
+  }
+  if (!result.ok) await rejectSettingChange(id, result.error.reason);
+  return result.ok;
+}
+
 //save the setting
 //element
 //type: setting type, eg: profile, general
@@ -378,8 +406,19 @@ async function saveSetting(ele, type) {
     if (inputEl) inputEl.value = n;
   }
 
+  if (
+    (ele.dataset.inputType == "int" || ele.dataset.inputType == "float") &&
+    !Number.isFinite(valueToSave)
+  ) {
+    await rejectSettingChange(id, "enter a number");
+    return false;
+  }
+
+  if ((type == "profile" || type == "general") && !(await saveSettingValue(type, id, valueToSave))) {
+    return false;
+  }
+
   if (type == "profile") {
-    try { await eel.saveProfileSetting(id, valueToSave)(); } catch (e) { /* ignore */ }
     // Refresh priority/drag-list highlights after profile setting changes
     try {
       loadAllSettings().then((settings) => {
@@ -390,8 +429,6 @@ async function saveSetting(ele, type) {
     } catch (e) {
       // ignore
     }
-  } else if (type == "general") {
-    try { await eel.saveGeneralSetting(id, valueToSave)(); } catch (e) { /* ignore */ }
   }
 
   if (ele.dataset && ele.dataset.settingId) {
@@ -404,6 +441,7 @@ async function saveSetting(ele, type) {
       }
     });
   }
+  return true;
 }
 
 function isPriorityLockedTask(taskId) {
@@ -1481,6 +1519,7 @@ function updateDropDownDisplay(optionEle) {
   selectEle.dataset.value = optionEle.dataset.value;
   //set the display to match the option
   selectEle.innerHTML = optionEle.innerHTML;
+  selectEle.title = "";
   // Ensure dependent fields reflect this change
   try { updateDependentFields(); } catch (e) { /* ignore */ }
 }
@@ -1571,14 +1610,29 @@ function setDropdownValue(ele, value) {
     updateMultiDropdownDisplay(ele, value);
     return;
   }
-  const optionsEle = ele.children[1].children[0];
-  for (let i = 0; i < optionsEle.children.length; i++) {
-    const x = optionsEle.children[i];
-    if (x.dataset.value == value) {
-      updateDropDownDisplay(x);
-      break;
-    }
+  const options = Array.from(ele.children[1].children[0].children);
+  // option values are stored trimmed and lowercased (see buildInput)
+  const normalize = (v) => String(v ?? "").trim().toLowerCase();
+  const findOption = (v) => options.find((x) => normalize(x.dataset.value) == normalize(v));
+
+  let option = findOption(value);
+  if (!option && normalize(value) === "") {
+    // never saved: show the default instead of the "None" placeholder
+    option = (ele.dataset.default && findOption(ele.dataset.default)) || options[0];
   }
+  if (option) {
+    updateDropDownDisplay(option);
+    return;
+  }
+  if (normalize(value) === "") return;
+
+  // The saved value isn't in the list (e.g. a deleted pattern). Show it as it is rather than
+  // another option, so the GUI matches what the macro uses, and keep it as the value.
+  const selectEle = ele.children[0].children[0];
+  selectEle.dataset.value = value;
+  selectEle.textContent = options.length ? `${value} (not found)` : String(value);
+  selectEle.title = options.length ? "This saved value isn't one of the options. Choose one to replace it." : "";
+  try { updateDependentFields(); } catch (e) { /* ignore */ }
 }
 //close all other dropdown menus
 //if ele is undefined, close all menus

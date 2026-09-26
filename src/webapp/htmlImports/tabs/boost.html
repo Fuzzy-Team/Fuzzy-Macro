@@ -116,20 +116,10 @@
         {
           id: "field_booster_glitter_extend_enabled",
           title: "Glitter Extending",
-          desc: "Use Glitter at 14:55 to extend each detected field booster.",
+          desc: "Use Glitter at 14:30 to extend each detected field booster. Uses the Glitter Slot in Config.",
           type: {
             name: "checkbox",
             triggerFunction: saveProfileTriggerFunction,
-          },
-        },
-        {
-          id: "field_booster_glitter_slot",
-          title: "Glitter Hotbar Slot",
-          desc: "Shared with all Glitter settings. Set to 0 to find Glitter in the inventory.",
-          type: {
-            name: "dropdown",
-            data: [0, 1, 2, 3, 4, 5, 6, 7],
-            triggerFunction: "syncGlitterHotbarSlot(this)",
           },
         },
         {
@@ -261,7 +251,7 @@
           type: {
             name: "dropdown",
             data: [0, 1, 2, 3, 4, 5, 6, 7],
-            triggerFunction: "syncGlitterHotbarSlot(this)",
+            triggerFunction: saveProfileTriggerFunction,
           },
         },
         {
@@ -449,8 +439,8 @@
         {
           id: "tad_alt_glitter_slot",
           title: "Glitter Hotbar Slot",
-          desc: "Shared with all Glitter settings. Set to 0 to find Glitter in the inventory.",
-          type: { name: "dropdown", data: [0, 1, 2, 3, 4, 5, 6, 7], triggerFunction: "syncGlitterHotbarSlot(this)" },
+          desc: "The hotbar slot of the Glitter used for TAD alt extending. Set to 0 to find Glitter in the inventory.",
+          type: { name: "dropdown", data: [0, 1, 2, 3, 4, 5, 6, 7], triggerFunction: saveProfileTriggerFunction },
         },
       ]);
     </script>

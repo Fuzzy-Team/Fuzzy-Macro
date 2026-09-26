@@ -3,6 +3,7 @@ import os
 import platform
 import shutil
 import tempfile
+import threading
 import zipfile
 from io import BytesIO
 
@@ -45,6 +46,41 @@ def _macos_version():
     while len(parts) < 2:
         parts.append(0)
     return tuple(parts[:2])
+
+
+_coremltools = False  # not imported yet
+_coremltools_lock = threading.Lock()
+
+
+def import_coremltools():
+    """Return coremltools, or None where Core ML isn't used (before macOS 12) or it fails to load.
+
+    coremltools imports torch when it is installed, which takes ~1s and ~240MB, but it only
+    needs torch to convert PyTorch models. Running models doesn't, so hide torch during the import.
+    Pre-Monterey systems use the ONNX models, and a stale coremltools wheel there emits dyld
+    errors on import, so it isn't imported at all.
+    """
+    global _coremltools
+    with _coremltools_lock:
+        if _coremltools is not False:
+            return _coremltools
+        _coremltools = None
+        if _macos_version() < (12, 0):
+            return None
+        import sys
+        hidden = [name for name in ("torch", "torchvision") if name not in sys.modules]
+        for name in hidden:
+            sys.modules[name] = None
+        try:
+            import coremltools
+            _coremltools = coremltools
+        except Exception:
+            pass
+        finally:
+            for name in hidden:
+                if sys.modules.get(name) is None:
+                    del sys.modules[name]
+        return _coremltools
 
 
 def _supported_model_names():

@@ -1,6 +1,5 @@
 from modules.misc.imageManipulation import pillowToCv2
 from modules.screen.screenshot import mssScreenshot
-from modules.misc.appManager import openApp
 import modules.misc.settingsManager as settingsManager
 from modules.controls.keyboard import keyboard
 import numpy as np
@@ -9,28 +8,11 @@ import time
 import pyautogui as pag
 from modules.screen.robloxWindow import RobloxWindowBounds
 import os
-import platform
-import shutil
+from modules.misc.modelManager import import_coremltools
 try:
     from PIL import Image
 except Exception:
     Image = None
-
-try:
-    macos_version = tuple(int(part) for part in platform.mac_ver()[0].split(".")[:2])
-except (TypeError, ValueError):
-    macos_version = ()
-
-# Pre-Monterey systems use the ONNX sprinkler model. Importing a stale
-# coremltools wheel on those systems emits dyld errors before Python can fall
-# back, even though the Core ML backend is never usable there.
-if len(macos_version) >= 2 and macos_version >= (12, 0):
-    try:
-        import coremltools as ct
-    except Exception:
-        ct = None
-else:
-    ct = None
 
 mw, mh = pag.size()
 
@@ -128,15 +110,6 @@ class fieldDriftCompensation():
         print(f"[field drift compensation] {message}. Falling back to the current drift compensation method.")
         self._sprinkler_warning_shown = True
 
-    def _delete_model_path(self, model_path):
-        try:
-            if os.path.isdir(model_path):
-                shutil.rmtree(model_path)
-            elif os.path.exists(model_path):
-                os.remove(model_path)
-        except Exception as e:
-            print(f"[field drift compensation] could not delete alternate model {model_path}: {e}")
-
     def _load_sprinkler_model(self):
         if self._sprinkler_session is not None:
             return True
@@ -153,6 +126,7 @@ class fieldDriftCompensation():
             self._warn_sprinkler_model("sprinkler_detection_standard.mlmodelc and sprinkler_detection_standard.onnx are missing")
             return False
 
+        ct = import_coremltools() if has_coreml else None
         try:
             if has_coreml and ct is not None:
                 if str(model_path_coreml).lower().endswith(".mlmodelc"):
@@ -342,11 +316,32 @@ class fieldDriftCompensation():
         time.sleep(t)
         keyboard.keyUp(k, False)
         
-    def slowFieldDriftCompensation(self, initialSaturatorLocation):
+    @staticmethod
+    def correctionBudget(fieldDimensions):
+        """Return the maximum correction time and 0.2s correction steps.
+
+        Field dimensions are the center-to-edge travel times used by the
+        field-start positioning code (milliseconds at the reference speed).
+        Keeping the correction below the narrow axis prevents a bad detection
+        from walking all the way across a small field.
+        """
+        default_seconds = 1.6
+        try:
+            narrow_axis = min(float(value) for value in fieldDimensions if float(value) > 0)
+        except (TypeError, ValueError):
+            narrow_axis = 0
+        if narrow_axis <= 0:
+            return default_seconds, 8
+        max_seconds = round(max(0.2, min(default_seconds, narrow_axis / 1000 * 0.8)), 2)
+        return max_seconds, max(1, round(max_seconds / 0.2))
+
+    def slowFieldDriftCompensation(self, initialSaturatorLocation, locator=None, fieldDimensions=None):
         winUp, winDown = self.robloxWindow.mh/2.14, self.robloxWindow.mh/1.88
         winLeft, winRight = self.robloxWindow.mw/2.14, self.robloxWindow.mw/1.88
         saturatorLocation = initialSaturatorLocation
-        for _ in range(8):
+        locator = locator or self.getSaturatorLocation
+        _, correction_steps = self.correctionBudget(fieldDimensions)
+        for _ in range(correction_steps):
             if saturatorLocation is None: break #cant find saturator
             x,y = saturatorLocation
             if x >= winLeft and x <= winRight and y >= winUp and y <= winDown: 
@@ -360,16 +355,17 @@ class fieldDriftCompensation():
             elif y > winDown:
                 self.press("s",0.2)
 
-            saturatorLocation = self.getSaturatorLocation()
+            saturatorLocation = locator()
 
     #natro's field drift compensation
     #works well with fast detection times (<0.2s)
-    def fastFieldDriftCompensation(self, initialSaturatorLocation):
+    def fastFieldDriftCompensation(self, initialSaturatorLocation, locator=None, fieldDimensions=None):
         
-        winUp, winDown = mh/2.14, mh/1.88
-        winLeft, winRight = mw/2.14, mw/1.88
+        winUp, winDown = self.robloxWindow.mh/2.14, self.robloxWindow.mh/1.88
+        winLeft, winRight = self.robloxWindow.mw/2.14, self.robloxWindow.mw/1.88
         hmove, vmove = "", ""
-        st = time.time()
+        locator = locator or self.getSaturatorLocation
+        max_seconds, _ = self.correctionBudget(fieldDimensions)
         if initialSaturatorLocation:
             x,y = initialSaturatorLocation
 
@@ -402,12 +398,12 @@ class fieldDriftCompensation():
                 
                 time.sleep(0.02)
                 #taking too long, just give up
-                if i >= 100:
+                if i >= max(1, int(max_seconds / 0.02)):
                     print("give up")
                     keyboard.releaseMovement()
                     break
                 #update saturator location
-                saturatorLocation = self.getSaturatorLocation()
+                saturatorLocation = locator()
                 if saturatorLocation is not None:
                     x,y = saturatorLocation
 
@@ -416,7 +412,7 @@ class fieldDriftCompensation():
                     #try to find saturator
                     for _ in range(10):
                         time.sleep(0.02)
-                        saturatorLocation = self.getSaturatorLocation()
+                        saturatorLocation = locator()
                         #saturator found
                         if saturatorLocation:
                             #move towards saturator
@@ -430,7 +426,7 @@ class fieldDriftCompensation():
                         return
                 i += 1
                 
-    def run(self):
+    def run(self, fieldDimensions=None):
         try:
             settings = settingsManager.loadAllSettings()
         except Exception:
@@ -444,6 +440,6 @@ class fieldDriftCompensation():
         saturatorLocation = locator()
         timing = time.time()-st
         if timing > 0.25:
-            self.slowFieldDriftCompensation(saturatorLocation)
+            self.slowFieldDriftCompensation(saturatorLocation, locator, fieldDimensions)
         else:
-            self.fastFieldDriftCompensation(saturatorLocation)
+            self.fastFieldDriftCompensation(saturatorLocation, locator, fieldDimensions)

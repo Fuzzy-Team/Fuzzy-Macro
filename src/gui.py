@@ -18,11 +18,18 @@ import modules.logging.log as logModule
 
 eel.init('webapp')
 HOURLY_REPORT_ASSET_ROOT = os.path.join(settingsManager.getProjectRoot(), "src", "hourly_report", "assets")
+MEMORY_MATCH_ICON_ROOT = os.path.join(settingsManager.getProjectRoot(), "src", "images", "memorymatch")
 
 
 @route("/hourly-report-assets/<filename:re:[A-Za-z0-9_\\-]+\\.png>")
 def serve_hourly_report_asset(filename):
     return static_file(filename, root=HOURLY_REPORT_ASSET_ROOT)
+
+
+#reward icons for the memory match settings, shared with the macro's reward detection
+@route("/memory-match-icons/<filename:re:(?:normal|mega|extreme|winter)/[a-z0-9 \\-]+\\.webp>")
+def serve_memory_match_icon(filename):
+    return static_file(filename, root=MEMORY_MATCH_ICON_ROOT)
 
 run = None
 _recent_logs = []
@@ -1187,9 +1194,7 @@ def update():
 
     try:
         # Get the update channel preference
-        generalsettings_path = os.path.join(settingsManager.getProfilePath(), "generalsettings.txt")
-        settings = settingsManager.readSettingsFile(generalsettings_path)
-        update_channel = settings.get("update_channel", "stable")
+        update_channel = settingsManager.loadAllSettings().get("update_channel", "stable")
         
         updated = updateModule.update(update_channel=update_channel, progress_callback=send_update_progress)
     except Exception:
@@ -1232,9 +1237,7 @@ def checkForUpdates():
     """Check for updates silently and return update information"""
     try:
         # Get the update channel preference
-        generalsettings_path = os.path.join(settingsManager.getProfilePath(), "generalsettings.txt")
-        settings = settingsManager.readSettingsFile(generalsettings_path)
-        update_channel = settings.get("update_channel", "stable")
+        update_channel = settingsManager.loadAllSettings().get("update_channel", "stable")
         
         update_info = updateModule.check_for_updates_silent(update_channel)
         return update_info
@@ -1256,9 +1259,7 @@ def disableAutoUpdateCheck():
 def getAutoUpdateCheckDisabled():
     """Check if automatic update checking is disabled"""
     try:
-        generalsettings_path = os.path.join(settingsManager.getProfilePath(), "generalsettings.txt")
-        settings = settingsManager.readSettingsFile(generalsettings_path)
-        return settings.get("auto_update_check_disabled", False)
+        return settingsManager.loadAllSettings().get("auto_update_check_disabled", False)
     except Exception:
         return False
 
@@ -1271,10 +1272,10 @@ eel.expose(settingsManager.getDefaultFuzzyAIGatherPatternPreset)
 eel.expose(settingsManager.getDefaultBloomsAIPatternPreset)
 eel.expose(settingsManager.loadSettings)
 eel.expose(settingsManager.loadAllSettings)
+eel.expose(settingsManager.applyMacroProfileChange)
 eel.expose(settingsManager.saveProfileSetting)
 eel.expose(settingsManager.saveGeneralSetting)
 eel.expose(settingsManager.saveDictProfileSettings)
-eel.expose(settingsManager.initializeFieldSync)
 
 # Profile management functions
 eel.expose(settingsManager.listProfiles)

@@ -6,7 +6,7 @@ import time
 from difflib import SequenceMatcher
 
 import cv2
-import imagehash
+from modules.misc.imageManipulation import average_hash
 import numpy as np
 import pyautogui as pag
 from PIL import Image
@@ -15,7 +15,6 @@ import modules.controls.mouse as mouse
 import modules.misc.appManager as appManager
 from modules.misc import messageBox
 import modules.screen.ocr as ocr
-from modules.misc.imageManipulation import adjustImage
 from modules.screen.imageSearch import templateMatch
 from modules.screen.robloxWindow import RobloxWindowBounds
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP
@@ -259,7 +258,7 @@ class AutoGiftedBasicBeeRunner:
                 mssScreenshotNP(self._roblox_window.mx, self._roblox_window.my + 100, 100, 200),
                 cv2.COLOR_BGRA2RGB,
             )
-            current_hash = imagehash.average_hash(Image.fromarray(screen))
+            current_hash = average_hash(Image.fromarray(screen))
             if previous_hash is not None and previous_hash == current_hash:
                 break
             previous_hash = current_hash
@@ -359,7 +358,7 @@ class AutoGiftedBasicBeeRunner:
                 mssScreenshotNP(self._roblox_window.mx, self._roblox_window.my + 100, 100, 200),
                 cv2.COLOR_BGRA2RGB,
             )
-            current_hash = imagehash.average_hash(Image.fromarray(scan))
+            current_hash = average_hash(Image.fromarray(scan))
             if previous_hash is not None and previous_hash == current_hash:
                 break
             previous_hash = current_hash
