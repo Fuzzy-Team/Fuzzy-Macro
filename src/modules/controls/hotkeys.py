@@ -10,10 +10,7 @@ from modules.misc import messageBox
 DEBOUNCE_SECONDS = 0.3
 STUCK_KEY_RESET_SECONDS = 5.0
 SETTINGS_CACHE_SECONDS = 1.0
-RECORDING_CACHE_SECONDS = 0.5
 
-# keybind inputs in the GUI that can be recording a new keybind
-RECORDABLE_KEYBINDS = ("start", "pause", "stop", "hotbar_buff_start", "autoclicker", "auto_gifted_basic_bee_start")
 # (setting, default keybind, gui function, display name) for tools startable from a hotkey
 TOOL_KEYBINDS = (
     ("hotbar_buff_start_keybind", "F4", "startHotbarBuffTool", "Hotbar Buff"),
@@ -103,8 +100,6 @@ def watch_for_hotkeys(run):
     last_stuck_key_reset = 0
     settings_cache = {}
     last_settings_load = 0
-    recording = False
-    last_recording_check = 0
 
     def get_settings():
         nonlocal settings_cache, last_settings_load
@@ -112,20 +107,6 @@ def watch_for_hotkeys(run):
             settings_cache = settingsManager.loadAllSettings()
             last_settings_load = time.time()
         return settings_cache
-
-    def is_recording_keybind():
-        nonlocal recording, last_recording_check
-        if time.time() - last_recording_check > RECORDING_CACHE_SECONDS:
-            try:
-                import eel
-                recording = any(
-                    eel.getElementProperty(f"{name}_keybind", "dataset.recording")() == "true"
-                    for name in RECORDABLE_KEYBINDS
-                )
-                last_recording_check = time.time()
-            except Exception:
-                recording = False
-        return recording
 
     def keys_match_keybind(keybind):
         expected_keys = parse_keybind(keybind)
@@ -169,7 +150,7 @@ def watch_for_hotkeys(run):
                 settings = get_settings()
                 pressed_keys.add(normalize_key_name(getattr(key, "char", None) or str(key)))
 
-                if is_recording_keybind():
+                if gui_call("isKeybindRecording"):
                     return
 
                 # stop works any time the stop keybind is held, even alongside other keys
