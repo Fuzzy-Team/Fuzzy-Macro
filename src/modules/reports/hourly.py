@@ -112,10 +112,12 @@ class HourlyReport():
         # store theme for re-applying when settings change
         self._theme = theme
 
-        # setup stats
-        self.hourlyReportStats = {}
-        self.sessionReportStats = {}
-        self.sessionUptimeBuffsValues = {}
+        # setup stats; loadHourlyReportData replaces these when saved stats exist
+        self.hourlyReportStats = {**self._defaultSessionReportStats(), "start_time": 0, "start_honey": 0}
+        self.sessionReportStats = self._defaultSessionReportStats()
+        self.uptimeBuffsValues = self._defaultHourlyUptimeBuffs()
+        self.buffGatherIntervals = [0]*600
+        self.sessionUptimeBuffsValues = self._defaultSessionUptimeBuffs()
         self.sessionBuffGatherIntervals = []
         self.latestBuffQuantity = []
         self.latestBuffKeys = []

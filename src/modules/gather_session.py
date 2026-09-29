@@ -5,6 +5,36 @@ import os
 
 AI_PATTERNS = {"fuzzy_ai_gather", "blooms_ai"}
 FALLBACK_PATTERN = "e_lol"
+PATTERN_SIZES = {"xs": 0.25, "s": 0.5, "m": 1, "l": 1.5, "xl": 2}
+
+
+def field_pattern_variables(field_setting):
+    """Names a gather pattern reads for a field: movement keys (with its invert settings) and size."""
+    fwdkey, leftkey, backkey, rightkey = "w", "a", "s", "d"
+    invert_lr = bool(field_setting.get("invert_lr", False))
+    invert_fb = bool(field_setting.get("invert_fb", False))
+    sizeword = field_setting.get("size", "m")
+    return {
+        "fwdkey": fwdkey,
+        "leftkey": leftkey,
+        "backkey": backkey,
+        "rightkey": rightkey,
+        "rotleft": ",",
+        "rotright": ".",
+        "rotup": "pageup",
+        "rotdown": "pagedown",
+        "zoomin": "i",
+        "zoomout": "o",
+        "sc_space": "space",
+        "tcfbkey": backkey if invert_fb else fwdkey,
+        "afcfbkey": fwdkey if invert_fb else backkey,
+        "tclrkey": rightkey if invert_lr else leftkey,
+        "afclrkey": leftkey if invert_lr else rightkey,
+        "facingcorner": 0,
+        "sizeword": sizeword,
+        "size": PATTERN_SIZES.get(sizeword, 1),
+        "width": field_setting.get("width", 1),
+    }
 
 
 class GatherSession:

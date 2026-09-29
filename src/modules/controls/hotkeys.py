@@ -85,11 +85,11 @@ def parse_keybind(keybind):
 
 
 def release_inputs():
-    try:
-        keyboardModule.releaseMovement()
-        mouse.mouseUp()
-    except Exception:
-        pass
+    for release in (keyboardModule.releaseMovement, mouse.mouseUp):
+        try:
+            release()
+        except Exception as e:
+            print(f"Could not release inputs ({release.__name__}): {e}")
 
 
 def watch_for_hotkeys(run):

@@ -257,6 +257,12 @@ class CollectiblesMixin:
                 self.collect("ant_pass_dispenser")
             except Exception:
                 self.logger.webhook("", "Failed to collect ant pass","red", "screen", ping_category="ping_critical_errors")
+            else:
+                # the player is at the dispenser now, so walk back before reading the challenge prompt
+                self.logger.webhook("","Travelling: Ant Challenge","dark brown")
+                if not self.travelViaCannon("Ant Challenge"):
+                    return False
+                self.runPath("boss/ant_challenge")
             time.sleep(1)
 
         if self.isBesideE(["spen","play"], ["need"]):
@@ -758,10 +764,11 @@ class CollectiblesMixin:
         if ocrRes:
             times = []
             if "x" in ocrRes[0]: #number of stickers
-                stickerCount = int(''.join([x for x in ocrRes[0] if x.isdigit()]))
-                times.append(15*60 + 10*stickerCount)
+                stickerDigits = ''.join([x for x in ocrRes[0] if x.isdigit()])
+                if stickerDigits:
+                    times.append(15*60 + 10*int(stickerDigits))
                 ocrRes.pop(0)
-            if ":" in ocrRes[0]: #direct
+            if ocrRes and ":" in ocrRes[0]: #direct
                 times.append(self.cdTextToSecs(ocrRes[0], True, 0))
             if times:
                 finalTime = max(times)

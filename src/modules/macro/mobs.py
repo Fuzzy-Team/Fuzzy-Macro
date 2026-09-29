@@ -2,7 +2,8 @@ import threading
 import traceback
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
-from modules.controls.sleep import pause_aware_time as time, sleep
+from modules.controls.sleep import InterruptRequested, pause_aware_time as time, sleep
+from modules.gather_session import field_pattern_variables, GatherPatternRunner
 import modules.macro.pattern_environment as patternEnvironment
 from modules.macro.game_data import (
     mobRespawnTimes,
@@ -439,33 +440,56 @@ class MobMixin:
                 self.reset()
             return False
 
-        def runGatherPattern(patternName, duration):
+        def runGatherPattern(patternName, field, duration):
             st = time.time()
             mouse.moveBy(10, 5)
             self.keyboard.releaseMovement()
-            nameSpace = {**locals(), **vars(patternEnvironment)}
-            while time.time() - st < duration:
-                if self.checkPauseAndWait():
-                    break
-                mouse.mouseDown()
-                try:
-                    exec(open(f"../settings/patterns/{patternName}.py").read(), nameSpace)
-                except Exception:
-                    print(traceback.format_exc())
-                    break
+            # patterns read the field's size, width and movement keys, as in a normal gather
+            nameSpace = {
+                **locals(),
+                **field_pattern_variables(self.fieldSettings.get(field, {})),
+                **vars(patternEnvironment),
+                "setPatternYaw": lambda targetYaw: None,
+            }
+            patternRunner = GatherPatternRunner(
+                settingsManager.getProjectRoot(),
+                patternName,
+                alert=lambda failedPattern, error: self.logger.webhook(
+                    "Gather Pattern Failed",
+                    f"{failedPattern}: {error}. Using e_lol for the rest of this side task.",
+                    "red",
+                    ping_category="ping_critical_errors",
+                ),
+                fatal_exceptions=(InterruptRequested,),
+            )
+            try:
+                while time.time() - st < duration:
+                    if self.checkPauseAndWait():
+                        break
+                    mouse.mouseDown()
+                    try:
+                        patternRunner.run_cycle(nameSpace, owner=self)
+                    except InterruptRequested:
+                        raise
+                    except Exception:
+                        print(traceback.format_exc())
+                        break
+                    mouse.mouseUp()
+            finally:
                 mouse.mouseUp()
-            mouse.mouseUp()
+                patternRunner.finish(nameSpace)
 
         def runSideTask():
             self.logger.webhook("", "Stump Snail: Running periodic side task", "dark brown")
             self.reset(convert=False)
             if self.travelViaCannon("Stump Snail side task", resetIfAway=False):
                 self.goToField("pine tree")
-                runGatherPattern("skillet", patternDuration)
+                runGatherPattern("skillet", "pine tree", patternDuration)
                 self.reset(convert=True)
-            goToStump()
+            return goToStump()
 
-        goToStump()
+        if not goToStump():
+            return
 
         # Set status to attacking for hotbar logic
         self.set_task_status("attacking", activity="stump_snail")
@@ -487,8 +511,8 @@ class MobMixin:
                         mouse.mouseUp()
                         break
 
-                if keepOldData is None and sideTaskInterval > 0:
-                    runSideTask()
+                if keepOldData is None and sideTaskInterval > 0 and not runSideTask():
+                    return
         finally:
             self.set_task_status(None, update_presence=False)  # Reset status after attack
         #handle the other stump snail

@@ -1,6 +1,6 @@
 import unittest
 
-from src.modules.hive_acquisition import acquire_hive, confirm_claim
+from src.modules.hive_acquisition import acquire_hive, confirm_claim, DetectionAfterWalkError
 
 
 class AcquireHiveTests(unittest.TestCase):
@@ -60,6 +60,14 @@ class AcquireHiveTests(unittest.TestCase):
 
         with self.assertRaises(StopNow):
             self.acquire(detect=interrupted, check=lambda *_: 2, fatal_exceptions=(StopNow,))
+
+
+    def test_detection_error_after_walking_does_not_check_from_the_wrong_spot(self):
+        def walkedThenFailed(*_):
+            raise DetectionAfterWalkError("prompt read failed")
+
+        self.assertEqual(self.acquire(detect=walkedThenFailed, check=lambda *_: 3), (0, "detection_error: prompt read failed"))
+        self.assertEqual([call[0] for call in self.calls], ["detect"])
 
 
 class ConfirmClaimTests(unittest.TestCase):

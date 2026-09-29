@@ -120,7 +120,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
 
     def clearCollectedPlanterState(command):
         mode = int(command.get("mode", 0) or 0)
-        index = int(command.get("index", -1) or -1)
+        index = command.get("index")
+        index = -1 if index is None or index == "" else int(index)
         if index < 0:
             return
 
@@ -190,6 +191,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             return taskKeys.get(functionName)
 
         def handle_interrupt(action):
+            nonlocal taskCompleted
             skipTask.value = INTERRUPT_NONE
             macro.keyboard.releaseMovement()
             mouse.mouseUp()

@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from src.modules.gather_session import GatherPatternRunner, GatherSession
+from src.modules.gather_session import field_pattern_variables, GatherPatternRunner, GatherSession
 
 
 class GatherPatternRunnerTests(unittest.TestCase):
@@ -136,6 +136,17 @@ class GatherPatternRunnerTests(unittest.TestCase):
         session.finish(namespace)
         session.finish(namespace)
         self.assertEqual(calls, ["pattern", "report"])
+
+
+class FieldPatternVariablesTests(unittest.TestCase):
+    def test_size_width_and_keys_follow_the_field(self):
+        names = field_pattern_variables({"size": "l", "width": 3, "invert_lr": False, "invert_fb": False})
+        self.assertEqual((names["sizeword"], names["size"], names["width"]), ("l", 1.5, 3))
+        self.assertEqual((names["tcfbkey"], names["afcfbkey"], names["tclrkey"], names["afclrkey"]), ("w", "s", "a", "d"))
+
+    def test_invert_settings_swap_the_pattern_keys(self):
+        names = field_pattern_variables({"size": "m", "width": 1, "invert_lr": True, "invert_fb": True})
+        self.assertEqual((names["tcfbkey"], names["afcfbkey"], names["tclrkey"], names["afclrkey"]), ("s", "w", "d", "a"))
 
 
 if __name__ == "__main__":

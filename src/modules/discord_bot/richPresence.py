@@ -96,6 +96,7 @@ class RichPresenceManager:
             self.rpc = Presence(self.application_id)
             self.rpc.connect()
             self.connected = True
+            self.last_activity = ""  # resend the current status on the new connection
             print("Discord Rich Presence connected")
             return True
         except Exception:
@@ -182,10 +183,10 @@ class RichPresenceManager:
             "small_text": None,
         }, payload_overrides)
 
-    def update_presence(self, activity_data: dict):
-        """Update Discord Rich Presence with new activity data"""
+    def update_presence(self, activity_data: dict) -> bool:
+        """Update Discord Rich Presence with new activity data. Returns True if Discord accepted it."""
         if not self.connected or not self.rpc:
-            return
+            return False
         
         try:
             # Build presence payload
@@ -203,9 +204,11 @@ class RichPresenceManager:
                 payload["small_text"] = activity_data["small_text"]
             
             self.rpc.update(**payload)
+            return True
         except Exception:
             # Silently handle errors (e.g., Discord closed)
             self.connected = False
+            return False
     
     def update_loop(self):
         """Background thread to monitor status and update RPC"""
@@ -240,8 +243,8 @@ class RichPresenceManager:
                 # Update if status changed
                 if current_status != self.last_activity:
                     activity_data = self.parse_activity(current_status)
-                    self.update_presence(activity_data)
-                    self.last_activity = current_status
+                    if self.update_presence(activity_data):
+                        self.last_activity = current_status
                 
                 time.sleep(1)  # Check every second
             except Exception:
