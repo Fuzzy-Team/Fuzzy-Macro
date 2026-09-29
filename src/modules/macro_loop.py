@@ -2020,9 +2020,9 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                         # This allows checking all fields for the mob before moving on
                         if not isRegularMobTask:
                             executedTasks.add(taskId)
-                        else:
-                            # Task couldn't be executed - mark as executed to avoid repeated attempts
-                            executedTasks.add(taskId)
+                    elif isRegularMobTask:
+                        # Task couldn't be executed - mark as executed to avoid repeated attempts
+                        executedTasks.add(taskId)
                     # For regular mob tasks, if we killed in any field, break to start next iteration
                     # This ensures we check all fields for the mob before moving to the next task
                     # The break causes the while loop to continue, which will re-check this mob
@@ -2039,6 +2039,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                     if k == "wreath" and not isBackpackReadyForWreath():
                         macro.logger.webhook("", "Honey Wreath ready, but backpack is not full yet. Deferring claim", "dark brown", "screen")
                         continue
+                    runTask(macro.collect, args=(k,))
             
             #blender
             if macro.setdat["blender_enable"]:

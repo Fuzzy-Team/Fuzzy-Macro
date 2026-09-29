@@ -18,6 +18,9 @@ from modules.reports.buffs import (
 from modules.reports.drawer import HourlyReportDrawer
 from modules.reports.theme import resolveReportTheme
 
+# session uptime history is halved in resolution whenever it grows past this many samples
+MAX_SESSION_UPTIME_SAMPLES = 3600
+
 
 class HourlyReport():
     def __init__(self, buffDetector: BuffDetector = None, time_format=24, theme="dark", configuredUptimeBuffs=None, configuredHourlyBuffs=None):
@@ -119,6 +122,8 @@ class HourlyReport():
         self.buffGatherIntervals = [0]*600
         self.sessionUptimeBuffsValues = self._defaultSessionUptimeBuffs()
         self.sessionBuffGatherIntervals = []
+        self.sessionUptimeStride = 1
+        self.sessionUptimeSampleCount = 0
         self.latestBuffQuantity = []
         self.latestBuffKeys = []
         self.latestNectarQuantity = []
@@ -161,6 +166,9 @@ class HourlyReport():
 
     def recordUptimeSample(self, index, sampleValues, isGathering=False, monitoredBuffs=None):
         monitored = set(monitoredBuffs or self._defaultSessionUptimeBuffs().keys())
+        # the session history keeps one sample per stride so long sessions stay bounded
+        recordSession = self.sessionUptimeSampleCount % self.sessionUptimeStride == 0
+        self.sessionUptimeSampleCount += 1
         for buffName in monitored:
             try:
                 value = float(sampleValues.get(buffName, 0) or 0)
@@ -173,6 +181,8 @@ class HourlyReport():
             if 0 <= index < len(self.uptimeBuffsValues[buffName]):
                 self.uptimeBuffsValues[buffName][index] = value
 
+            if not recordSession:
+                continue
             if buffName not in self.sessionUptimeBuffsValues:
                 self.sessionUptimeBuffsValues[buffName] = []
             self.sessionUptimeBuffsValues[buffName].append(value)
@@ -182,9 +192,17 @@ class HourlyReport():
         if 0 <= index < len(self.buffGatherIntervals):
             self.buffGatherIntervals[index] = 1 if isGathering else 0
 
+        if not recordSession:
+            return
         if not hasattr(self, "sessionBuffGatherIntervals") or self.sessionBuffGatherIntervals is None:
             self.sessionBuffGatherIntervals = []
         self.sessionBuffGatherIntervals.append(1 if isGathering else 0)
+
+        if len(self.sessionBuffGatherIntervals) > MAX_SESSION_UPTIME_SAMPLES:
+            self.sessionBuffGatherIntervals = self.sessionBuffGatherIntervals[::2]
+            for buffName, values in self.sessionUptimeBuffsValues.items():
+                self.sessionUptimeBuffsValues[buffName] = values[::2]
+            self.sessionUptimeStride *= 2
 
     def filterOutliers(self, values, threshold=3):
         nonZeroValues = [x for x in values if x]
@@ -357,20 +375,28 @@ class HourlyReport():
 
         planterData = ""
         #get planter data
-        if setdat["planters_mode"] == 1:
-            planterData = settingsManager.loadUserText("manualplanters.txt")
+        try:
+            try:
+                plantersMode = int(setdat.get("planters_mode", 0)) if isinstance(setdat, dict) else 0
+            except (TypeError, ValueError):
+                plantersMode = 0
+            if plantersMode == 1:
+                planterData = settingsManager.loadUserText("manualplanters.txt")
 
-            if planterData:
-                planterData = ast.literal_eval(planterData)
-        elif setdat["planters_mode"] == 2:
-            planterData = settingsManager.loadUserJson("auto_planters.json")["planters"]
-            planterData = {
-                "planters": [p["planter"] for p in planterData],
-                "harvestTimes": [p["harvest_time"] for p in planterData],
-                "fields": [p["field"] for p in planterData],
-            }
-            if all(not p for p in planterData["planters"]):
-                planterData = ""
+                if planterData:
+                    planterData = ast.literal_eval(planterData)
+            elif plantersMode == 2:
+                planterData = settingsManager.loadUserJson("auto_planters.json")["planters"]
+                planterData = {
+                    "planters": [p["planter"] for p in planterData],
+                    "harvestTimes": [p["harvest_time"] for p in planterData],
+                    "fields": [p["field"] for p in planterData],
+                }
+                if all(not p for p in planterData["planters"]):
+                    planterData = ""
+        except Exception as e:
+            print(f"Error loading planter data: {e}")
+            planterData = ""
 
 
         #get history
@@ -497,6 +523,8 @@ class HourlyReport():
         self.sessionReportStats = self._defaultSessionReportStats()
         self.sessionUptimeBuffsValues = self._defaultSessionUptimeBuffs()
         self.sessionBuffGatherIntervals = []
+        self.sessionUptimeStride = 1
+        self.sessionUptimeSampleCount = 0
         self.latestBuffQuantity = []
         self.latestBuffKeys = []
         self.latestNectarQuantity = []
@@ -533,6 +561,8 @@ class HourlyReport():
                 "buffGatherIntervals": self.buffGatherIntervals,
                 "sessionUptimeBuffsValues": self.sessionUptimeBuffsValues,
                 "sessionBuffGatherIntervals": self.sessionBuffGatherIntervals,
+                "sessionUptimeStride": self.sessionUptimeStride,
+                "sessionUptimeSampleCount": self.sessionUptimeSampleCount,
                 "latestBuffQuantity": self.latestBuffQuantity,
                 "latestBuffKeys": self.latestBuffKeys,
                 "latestNectarQuantity": self.latestNectarQuantity,
@@ -562,6 +592,8 @@ class HourlyReport():
             self.buffGatherIntervals = data.get("buffGatherIntervals", [0]*600)
             self.sessionUptimeBuffsValues = data.get("sessionUptimeBuffsValues", self._defaultSessionUptimeBuffs())
             self.sessionBuffGatherIntervals = data.get("sessionBuffGatherIntervals", [])
+            self.sessionUptimeStride = data.get("sessionUptimeStride", 1)
+            self.sessionUptimeSampleCount = data.get("sessionUptimeSampleCount", len(self.sessionBuffGatherIntervals))
             self.latestBuffQuantity = data.get("latestBuffQuantity", [])
             self.latestBuffKeys = data.get("latestBuffKeys", [])
             self.latestNectarQuantity = data.get("latestNectarQuantity", [])

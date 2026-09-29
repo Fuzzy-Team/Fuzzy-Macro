@@ -134,6 +134,10 @@ def watch_for_hotkeys(run):
         except Exception:
             return None
 
+    def show_message(title, text):
+        # a modal box would block the pynput callback and hold key_lock
+        threading.Thread(target=messageBox.msgBox, kwargs={"title": title, "text": text}, daemon=True).start()
+
     def set_run_state(value, gui_state):
         run.value = value
         gui_call("setRunState", gui_state)
@@ -164,7 +168,7 @@ def watch_for_hotkeys(run):
                     if run.value != 3:  # only start from fully stopped
                         return
                     if gui_call("isAnyToolRunning"):
-                        messageBox.msgBox(title="Tool Running", text="Stop the running tool before starting the macro.")
+                        show_message("Tool Running", "Stop the running tool before starting the macro.")
                         return
                     if debounced("start"):
                         return
@@ -177,7 +181,7 @@ def watch_for_hotkeys(run):
                             return
                         result = gui_call(start_tool)
                         if result is not None and not result.get("ok") and not gui_call("isAnyToolRunning"):
-                            messageBox.msgBox(title=title, text=result.get("message", f"Could not start {title}."))
+                            show_message(title, result.get("message", f"Could not start {title}."))
                         return
 
                 if keys_match_keybind(settings.get("pause_keybind", "F2")):

@@ -184,13 +184,11 @@ class AFBMixin:
                     break
         return boostedFields
 
-    def AFB(self, gatherInterrupt = False, turnOffShiftLock = False):  # Auto Field Boost - WOOHOO
-
-        returnVal = None
+    def _AFBTimeLimitReached(self):
         if self.AFBLIMIT:
             return True
         limitHours = float(self.setdat.get("AFB_limit", 0) or 0)
-        if not self.AFBLIMIT and self.setdat["AFB_limit_on"] and limitHours > 0:
+        if self.setdat["AFB_limit_on"] and limitHours > 0:
             limitTiming = self.getAFBtiming("AFB_limit")
             if not limitTiming or limitTiming <= 0:
                 self.saveAFB("AFB_limit")
@@ -198,6 +196,32 @@ class AFBMixin:
                 self.logger.webhook("AFB", "Time limit reached: Skipping", "red")
                 self.AFBLIMIT = True
                 return True
+        return False
+
+    def canAFBInterruptGather(self):
+        """True if AFB(gatherInterrupt=True) would leave the field to boost. Does not start the boost."""
+        if self._AFBTimeLimitReached():
+            return False
+        rebuff = self.setdat["AFB_rebuff"]
+        glitter = self.setdat["AFB_glitter"]
+        afbGlitter = glitter and self.AFBglitter
+        diceReady = self.hasAFBRespawned("AFB_dice_cd", rebuff * 60)
+        glitterReady = glitter and self.hasAFBRespawned("AFB_glitter_cd", rebuff * 60)
+        canUseGlitter = glitterReady and afbGlitter
+        canUseDice = diceReady and not afbGlitter
+        return bool(canUseGlitter or canUseDice) and not self.failed
+
+    def AFB(self, gatherInterrupt = False, turnOffShiftLock = False):  # Auto Field Boost - WOOHOO
+        """Returns the target fields on a boost. On a gather interrupt, other exits return whether
+        the player was reset out of the field; the time limit always returns False."""
+
+        returnVal = None
+        leftField = False
+        def failedExit():
+            return leftField if gatherInterrupt else None
+
+        if self._AFBTimeLimitReached():
+            return False
 
         attempts = max(1, int(self.setdat.get("AFB_attempts", 10) or self.setdat.get("attempts", 10) or 10))
         targetFields = self._getAFBTargetFields()
@@ -225,13 +249,14 @@ class AFBMixin:
                     self.reset(convert=False)
                 else:
                     self.reset(AFB=True)
+                leftField = True
 
         if diceReady or (glitterReady and self.AFBglitter):
             self.failed = False
             if self.setdat["Auto_Field_Boost"]:
                 if self.AFBglitter and glitterReady:
                     if self._AFBApplyGlitter(targetFields[0], glitterslot) is False:
-                        return
+                        return failedExit()
                     return targetFields
 
                 if self.cAFBDice or (diceReady and not self.AFBglitter):
@@ -243,7 +268,7 @@ class AFBMixin:
 
                     if "loaded" in dice:
                         if not self.travelViaCannon("Auto Field Boost"):
-                            return
+                            return failedExit()
                         self.goToField(targetFields[0])
 
                     diceCoords = None
@@ -271,7 +296,7 @@ class AFBMixin:
                                 self.toggleInventory("close")
                                 self.saveAFB("AFB_dice_cd")
                                 self.AFBglitter = False
-                                return
+                                return failedExit()
 
                         for _ in range(8):
                             bluetexts += ocr.readBlueText() + "\n"
@@ -329,7 +354,7 @@ class AFBMixin:
                             if glitter and not self.failed and self.hasAFBRespawned("AFB_glitter_cd", rebuff*60):
                                 if self.AFBglitter:
                                     if self._AFBApplyGlitter(targetFields[0], glitterslot) is False:
-                                        return
+                                        return failedExit()
                                     return targetFields
 
             if returnVal is None:
@@ -344,4 +369,5 @@ class AFBMixin:
                     self.AFBglitter = False
                 if diceslot == 0:
                     self.toggleInventory("close")
-                return
+                return failedExit()
+        return failedExit()
