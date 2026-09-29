@@ -127,6 +127,8 @@ def detect_shift_lock(roblox_window):
                     cv2.TM_CCORR_NORMED,
                     mask=scaled_mask,
                 )
+                # masked matching can produce NaN/inf where the mask is empty
+                result = np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)
                 _, max_val, _, max_loc = cv2.minMaxLoc(result)
                 match_x, match_y = max_loc
                 icon_crop = screen_bgr[match_y:match_y + template_h, match_x:match_x + template_w]

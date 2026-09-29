@@ -45,6 +45,7 @@ class NavigationMixin:
 
     #run the path to go to a field
     #faceDir what direction to face after landing in a field (default, north, south)
+    #returns False if the field couldn't be reached (joining Hive Hub failed)
     def goToField(self, field, faceDir = "default", startLocation = "center"):
         # Accept a string or a list/tuple of tokens/words and normalize to a
         # single field name (e.g. ["blue", "flower"] -> "blue flower").
@@ -61,12 +62,14 @@ class NavigationMixin:
             startLocation = str(startLocation or "center").replace("_", " ").strip().lower()
             if startLocation not in hiveHubStartLocationOffsets:
                 startLocation = "center"
-            self.rejoin(
+            if not self.rejoin(
                 rejoinMsg="Travelling: Hive Hub",
                 placeId=HIVE_HUB_PLACE_ID,
                 claimHive=False,
                 usePrivateServer=bool(self.setdat.get("hive_hub_private_server", False)),
-            )
+            ):
+                self.location = "spawn"
+                return False
             #HIVE HUB PATH
             self.keyboard.press("shift")
             self.keyboard.keyDown("w")
@@ -92,10 +95,11 @@ class NavigationMixin:
                 time.sleep(seconds)
                 self.keyboard.keyUp(key)
             self.keyboard.press("shift")
-            return
+            return True
         self.runPath(f"cannon_to_field/{normalized_field}")
-        if faceDir == "default": return
-        self.faceDirection(normalized_field, faceDir)
+        if faceDir != "default":
+            self.faceDirection(normalized_field, faceDir)
+        return True
 
     def moveMouseToDefault(self):
         mouse.moveTo(self.robloxWindow.mx+370, self.robloxWindow.my+self.robloxWindow.yOffset+110)

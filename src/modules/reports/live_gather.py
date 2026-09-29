@@ -129,6 +129,8 @@ class LiveGatherReport:
             )
 
         if response.status_code >= 400:
+            if response.status_code == 404 and self.message_id:
+                self.message_id = None  # the report was deleted; post a new one next time
             raise requests.HTTPError(
                 f"{response.status_code} Client Error: {response.text}",
                 response=response,
@@ -171,6 +173,8 @@ class LiveGatherReport:
             )
 
         if response.status_code >= 400:
+            if response.status_code == 404 and self.message_id:
+                self.message_id = None  # the report was deleted; post a new one next time
             raise requests.HTTPError(
                 f"{response.status_code} Client Error: {response.text}",
                 response=response,

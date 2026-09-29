@@ -1,6 +1,10 @@
 """Hive claiming: the claim confirmation and the order of the claim methods."""
 
 
+class DetectionAfterWalkError(Exception):
+    """Detection failed after it left spawn, so checking slots from spawn would start in the wrong place."""
+
+
 def confirm_claim(press_claim, claim_prompt_visible, control_status, wait, attempts=2, checks_per_attempt=20, required_misses=3):
     """Press claim and confirm acceptance by observing the prompt disappear."""
     for _ in range(attempts):
@@ -26,7 +30,8 @@ def acquire_hive(method, preferred_slot, excluded_slots, detect, check, stopped,
 
     "check" walks from spawn to the preferred pad and scans from there. "detect" reads open
     pads from spawn first and falls back to checking when it found nothing from spawn (it
-    returns None) or raised; when it returns 0 it already walked the hive row.
+    returns None) or raised before walking; when it returns 0 or raises
+    DetectionAfterWalkError it already left spawn, so checking isn't attempted.
     """
     if stopped():
         return 0, "stopped"
@@ -36,6 +41,8 @@ def acquire_hive(method, preferred_slot, excluded_slots, detect, check, stopped,
             detected = detect(preferred_slot, excluded_slots)
         except fatal_exceptions:
             raise
+        except DetectionAfterWalkError as exc:
+            return 0, f"detection_error: {exc}"
         except Exception as exc:
             detected, detection_error = None, f"; detection: {exc}"
         if detected:

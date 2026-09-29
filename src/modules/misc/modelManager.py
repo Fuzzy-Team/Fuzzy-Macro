@@ -74,8 +74,8 @@ def import_coremltools():
         try:
             import coremltools
             _coremltools = coremltools
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"[models] Could not load coremltools, so Core ML models are unavailable: {exc}")
         finally:
             for name in hidden:
                 if sys.modules.get(name) is None:
