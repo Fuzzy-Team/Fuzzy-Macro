@@ -1147,16 +1147,19 @@ def exportProfile(profile_name):
         fields_data = profile["fields"]
 
         # Ensure sensitive fields are removed from export
-        sensitive_keys = ("discord_bot_token", "webhook_link", "private_server_link")
-        route_sensitive_keys = [
-            key for key in generalsettings_data.keys()
-            if str(key).startswith("route_") and str(generalsettings_data.get(key, "")).startswith("https://")
-        ]
-        for k in list(sensitive_keys) + route_sensitive_keys:
-            if k in settings_data:
-                settings_data[k] = ""
-            if k in generalsettings_data:
-                generalsettings_data[k] = ""
+        def isSensitive(key, value):
+            key = str(key)
+            return (
+                key in ("discord_bot_token", "webhook_link")
+                or (key.startswith("tad_alt_") and key.endswith("_webhook"))
+                or "private_server_link" in key
+                or (key.startswith("route_") and str(value).startswith("https://"))
+            )
+
+        for data in (settings_data, generalsettings_data):
+            for k, v in data.items():
+                if isSensitive(k, v):
+                    data[k] = ""
 
         # Create export data structure
         export_data = {
