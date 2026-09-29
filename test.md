@@ -94,8 +94,8 @@ numpy/OpenCV force-reinstall run while you relaunch.
 - [x] Toggle `hourly_report_embed_text` and confirm hourly and final Discord/webhook posts always include the report image, with text fields only when enabled.
 
 ## Controls
-- [x] Start / pause / resume / stop hotkeys work (hotkey code was rewritten).
-- [x] While **recording a keybind** in the GUI, pressing F1/F3 does not start or stop the macro. *(Failed: F1/F3 started/stopped the macro while recording, because the recording check called a GUI function that didn't exist. Fixed; retest.)*
+- [ ] Start / pause / resume / stop hotkeys work (hotkey code was rewritten). *(Native hotkeys remain unverified; see the Controls check below.)*
+- [ ] While **recording a keybind** in the GUI, pressing F1/F3 does not start or stop the macro. *(Failed: F1/F3 started/stopped the macro while recording, because the recording check called a GUI function that didn't exist. Fixed; retest.)*
 - [x] Hotbar Buff / Auto Clicker / Auto Gifted Basic Bee hotkeys start their tools.
 - [x] Stop the macro with a hotkey while a hotkey-launched tool is running; the tool stops too.
 - [ ] Pause and resume during a gather pattern and a sleeping task; movement and the sleep wait while paused, then continue.

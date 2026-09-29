@@ -641,8 +641,10 @@ class GatherMixin:
                         self.logger.webhook("Sprouts", "Final sprout loot collection finished. Resetting to hive.", "light green", route_category="activities")
                         self.reset()
                         return
-                elif not altMode and self.setdat["Auto_Field_Boost"] and not self.AFBLIMIT and self.AFB(gatherInterrupt=True, turnOffShiftLock = fieldSetting["shift_lock"]):
+                elif not altMode and self.setdat["Auto_Field_Boost"] and not self.AFBLIMIT and self.canAFBInterruptGather():
+                    # stopGather already turns shift lock off, so AFB must not toggle it again
                     stopGather()
+                    self.AFB(gatherInterrupt=True, turnOffShiftLock=False)
                     return
                 #check for gather interrupts
                 elif (
