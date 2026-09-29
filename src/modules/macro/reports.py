@@ -69,40 +69,42 @@ class ReportMixin:
 
             #check if its time to send hourly report
             if currMin == 0 and time.time() - self.lastHourlyReport > 120:
-                itemSnapshot = self.itemMonitor.get_snapshot() if self.setdat.get("item_monitor", True) else None
-                hourlyReportData = self.hourlyReport.generateHourlyReport(self.setdat)
-                self.logger.hourlyReport("Hourly Report", "", "purple", fields=getattr(self.hourlyReport, "lastEmbedFields", None))
-
-                if itemSnapshot and itemSnapshot.get("collected_items"):
-                    try:
-                        from modules.reports.item_monitor import generate_item_report
-                        path, fields = generate_item_report(itemSnapshot, self.setdat, report_type="hourly")
-                        if path:
-                            self.logger.itemReport("Item Monitor", "", "purple", fields=fields, imagePath=path)
-                    except Exception:
-                        self.logger.webhook("Item Monitor Error", traceback.format_exc(), "red", ping_category="ping_critical_errors")
-
-                #add to history
-                history = settingsManager.loadUserLiteral("hourly_report_history.txt")
-                if not isinstance(history, list):
-                    history = []
-
-                historyObj = {
-                    "endHour": datetime.now().hour,
-                    "date": str(datetime.today().date()),
-                    "honey": hourlyReportData["honey_per_min"][-1] - hourlyReportData["honey_per_min"][0]
-                }
-                #max 5 objs
-                if len(history) > 4:
-                    history.pop(-1)
-                history.insert(0,historyObj)
-
-                settingsManager.saveUserLiteral("hourly_report_history.txt", history)
-
+                # mark first so a failing report is not retried every second
                 self.lastHourlyReport = time.time()
-                #reset stats
-                self.hourlyReport.resetHourlyStats()
-                self.itemMonitor.reset_hourly()
+                try:
+                    itemSnapshot = self.itemMonitor.get_snapshot() if self.setdat.get("item_monitor", True) else None
+                    hourlyReportData = self.hourlyReport.generateHourlyReport(self.setdat)
+                    self.logger.hourlyReport("Hourly Report", "", "purple", fields=getattr(self.hourlyReport, "lastEmbedFields", None))
+
+                    if itemSnapshot and itemSnapshot.get("collected_items"):
+                        try:
+                            from modules.reports.item_monitor import generate_item_report
+                            path, fields = generate_item_report(itemSnapshot, self.setdat, report_type="hourly")
+                            if path:
+                                self.logger.itemReport("Item Monitor", "", "purple", fields=fields, imagePath=path)
+                        except Exception:
+                            self.logger.webhook("Item Monitor Error", traceback.format_exc(), "red", ping_category="ping_critical_errors")
+
+                    #add to history
+                    history = settingsManager.loadUserLiteral("hourly_report_history.txt")
+                    if not isinstance(history, list):
+                        history = []
+
+                    historyObj = {
+                        "endHour": datetime.now().hour,
+                        "date": str(datetime.today().date()),
+                        "honey": hourlyReportData["honey_per_min"][-1] - hourlyReportData["honey_per_min"][0]
+                    }
+                    #max 5 objs
+                    if len(history) > 4:
+                        history.pop(-1)
+                    history.insert(0,historyObj)
+
+                    settingsManager.saveUserLiteral("hourly_report_history.txt", history)
+                finally:
+                    #reset stats even if the report failed, so this hour's data is not carried forward
+                    self.hourlyReport.resetHourlyStats()
+                    self.itemMonitor.reset_hourly()
 
             #Hourly report
             if self.status.value != "rejoining":
