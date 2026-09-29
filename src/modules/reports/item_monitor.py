@@ -190,6 +190,7 @@ class ItemMonitor:
     def _detect_digits(self, digits_img: Image.Image) -> int:
         """Read toast quantity via digit templates; special-case 1 vs 4 and 3 vs 8."""
         found = {}
+        scale = self._scale()
 
         def search_digit(n: int):
             needle = self.digit_templates.get(n)
@@ -197,9 +198,9 @@ class ItemMonitor:
                 return
             hits = bitmap_matcher.find_all_bitmap_cython(digits_img, needle, variance=1, max_matches=8) or []
             for x, _y in hits:
-                if n == 1 and found.get(x - 5) == 4:
+                if n == 1 and found.get(x - 5 * scale) == 4:
                     continue
-                if n == 3 and found.get(x - 1) == 8:
+                if n == 3 and found.get(x - 1 * scale) == 8:
                     continue
                 found[x] = n
 

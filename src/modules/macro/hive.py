@@ -3,8 +3,8 @@ import numpy as np
 import sys
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
-from modules.controls.sleep import pause_aware_time as time
-from modules.hive_acquisition import confirm_claim
+from modules.controls.sleep import InterruptRequested, pause_aware_time as time
+from modules.hive_acquisition import confirm_claim, DetectionAfterWalkError
 from modules.macro.game_data import resetKernel, resetLower1, resetLower2, resetUpper1, resetUpper2
 from modules.misc.imageManipulation import pillowToCv2
 from modules.screen.imageSearch import locateImageOnScreen, locateTransparentImageOnScreen
@@ -890,73 +890,88 @@ class HiveMixin:
         self.logger.webhook("", "Detecting Hive", "dark brown")
 
         # Zoom out so all six pads (and their claim arrows) fit on screen.
-        zoom = self.setCameraZoom(5, 0)
-        pitch = self.setCameraPitch(2, 0)
-        time.sleep(0.35)
+        zoom = pitch = 0
+        try:
+            zoom = self.setCameraZoom(5, 0)
+            pitch = self.setCameraPitch(2, 0)
+            time.sleep(0.35)
 
-        available = self.detectOpenHiveSlotsFromSpawn()
-        if available:
-            self.logger.webhook(
-                "",
-                f"Open hives from spawn: {', '.join(str(s) for s in available)}",
-                "dark brown",
-            )
-            for slot in available:
-                self.logger.webhook("", f"Hive {slot} detected as available", "dark brown")
-        else:
-            self.logger.webhook("", "no open hives were detected from spawn", "dark brown")
+            available = self.detectOpenHiveSlotsFromSpawn()
+            if available:
+                self.logger.webhook(
+                    "",
+                    f"Open hives from spawn: {', '.join(str(s) for s in available)}",
+                    "dark brown",
+                )
+                for slot in available:
+                    self.logger.webhook("", f"Hive {slot} detected as available", "dark brown")
+            else:
+                self.logger.webhook("", "no open hives were detected from spawn", "dark brown")
 
-        target = self.chooseDetectedHiveSlot(available, preferred_slot, excluded_slots)
+            target = self.chooseDetectedHiveSlot(available, preferred_slot, excluded_slots)
+        except BaseException:
+            # leave the camera as the slot check expects it
+            try:
+                self.setCameraPitch(0, pitch)
+                self.setCameraZoom(0, zoom)
+            except Exception:
+                pass
+            raise
         if target:
             self.logger.webhook("", f"Selecting hive {target} from spawn detection", "dark brown")
             self.setCameraPitch(0, pitch)
             self.setCameraZoom(0, zoom)
             time.sleep(0.15)
-            self.walkSpawnToHiveSlot(target)
-            prompt = self.waitForHivePrompt(target, max_attempts=3)
-            if not prompt:
-                for _ in range(3):
-                    self.stepBackOntoHivePad()
-                    time.sleep(0.35)
-                    prompt = self.hivePromptKind()
-                    if prompt:
-                        break
-            claimed = self.tryClaimHiveSlot(
-                target, excluded_slots, prompt_confirmed=(prompt == "claim")
-            )
-            if claimed:
-                self.walkStuds("s", 4)
-                return claimed
-
-            # First pick was wrong/occupied — try other spawn-detected pads before a full scan.
-            failed = {target}
-            if self.occupiedHivePromptVisible():
-                self.logger.webhook("", f"Hive {target} occupied after walk", "dark brown")
-            else:
-                self.logger.webhook("", f"Hive {target} prompt missing after walk", "dark brown")
-
-            current = target
-            while True:
-                nxt = self.chooseDetectedHiveSlot(
-                    available, preferred_slot, excluded_slots | failed
+            try:
+                self.walkSpawnToHiveSlot(target)
+                prompt = self.waitForHivePrompt(target, max_attempts=3)
+                if not prompt:
+                    for _ in range(3):
+                        self.stepBackOntoHivePad()
+                        time.sleep(0.35)
+                        prompt = self.hivePromptKind()
+                        if prompt:
+                            break
+                claimed = self.tryClaimHiveSlot(
+                    target, excluded_slots, prompt_confirmed=(prompt == "claim")
                 )
-                if not nxt:
-                    break
-                self.logger.webhook(
-                    "",
-                    f"Trying next detected hive {nxt} (from {current})",
-                    "dark brown",
-                )
-                claimed = self.walkBetweenHiveSlotsForClaim(current, nxt, excluded_slots | failed)
                 if claimed:
                     self.walkStuds("s", 4)
                     return claimed
-                failed.add(nxt)
-                current = nxt
 
-            # The player is on the hive row now, so check the remaining pads from here.
-            self.logger.webhook("", "Scanning remaining hives", "dark brown")
-            return self.scanHivesForClaim(current, excluded_slots | failed)
+                # First pick was wrong/occupied — try other spawn-detected pads before a full scan.
+                failed = {target}
+                if self.occupiedHivePromptVisible():
+                    self.logger.webhook("", f"Hive {target} occupied after walk", "dark brown")
+                else:
+                    self.logger.webhook("", f"Hive {target} prompt missing after walk", "dark brown")
+
+                current = target
+                while True:
+                    nxt = self.chooseDetectedHiveSlot(
+                        available, preferred_slot, excluded_slots | failed
+                    )
+                    if not nxt:
+                        break
+                    self.logger.webhook(
+                        "",
+                        f"Trying next detected hive {nxt} (from {current})",
+                        "dark brown",
+                    )
+                    claimed = self.walkBetweenHiveSlotsForClaim(current, nxt, excluded_slots | failed)
+                    if claimed:
+                        self.walkStuds("s", 4)
+                        return claimed
+                    failed.add(nxt)
+                    current = nxt
+
+                # The player is on the hive row now, so check the remaining pads from here.
+                self.logger.webhook("", "Scanning remaining hives", "dark brown")
+                return self.scanHivesForClaim(current, excluded_slots | failed)
+            except InterruptRequested:
+                raise
+            except Exception as exc:
+                raise DetectionAfterWalkError(exc) from exc
 
         self.logger.webhook("", "Spawn detection found no claimable hive", "dark brown")
         self.setCameraPitch(0, pitch)

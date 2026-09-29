@@ -281,6 +281,7 @@ class macro(
             data = settingsManager.readSettingsFile(timings_path)
             if data: break #most likely another process is writing to the file
             time.sleep(0.1)
+        data = data or {}
         if name is not None:
             if not name in data:
                 print(f"could not find timing for {name}, setting a new one")

@@ -385,7 +385,7 @@ class fieldDriftCompensation():
                 keyboard.keyDown("s", False)
                 vmove = "s"
 
-            i = 0
+            deadline = time.monotonic() + max_seconds
             while hmove or vmove:
                 #check if reached saturator
                 if (hmove == "a" and x >= winLeft) or (hmove == "d" and x <= winRight):
@@ -398,7 +398,7 @@ class fieldDriftCompensation():
                 
                 time.sleep(0.02)
                 #taking too long, just give up
-                if i >= max(1, int(max_seconds / 0.02)):
+                if time.monotonic() >= deadline:
                     print("give up")
                     keyboard.releaseMovement()
                     break
@@ -424,7 +424,6 @@ class fieldDriftCompensation():
                             break
                     else: #still cant find it, give up
                         return
-                i += 1
                 
     def run(self, fieldDimensions=None):
         try:

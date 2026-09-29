@@ -30,8 +30,14 @@ if ocrLib is None:
         sys.modules["skimage"] = skimageStub
         sys.modules["skimage.io"] = skimageStub.io
     import easyocr
+    import functools
     import ssl
-    ssl._create_default_https_context = ssl._create_unverified_context
+    try:
+        # older Python installs may lack system CA certificates; verify with certifi's instead
+        import certifi
+        ssl._create_default_https_context = functools.partial(ssl.create_default_context, cafile=certifi.where())
+    except ImportError:
+        pass
     print("Imported easyocr")
     easyocrReader = easyocr.Reader(['en'])
     ocrLib = "easyocr"

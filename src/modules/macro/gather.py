@@ -3,7 +3,7 @@ import traceback
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
 from modules.controls.sleep import InterruptRequested, pause_aware_time as time, sleep
-from modules.gather_session import GatherPatternRunner, GatherSession
+from modules.gather_session import field_pattern_variables, GatherPatternRunner, GatherSession
 import modules.macro.pattern_environment as patternEnvironment
 from modules.macro.game_data import (
     collectData,
@@ -156,20 +156,10 @@ class GatherMixin:
                 pattern_preferred_tokens = fieldSetting.get("fuzzy_ai_preferred_tokens", fuzzyAITokenRanking.get("preferred_tokens", ""))
                 pattern_ignored_tokens = fieldSetting.get("fuzzy_ai_ignored_tokens", fuzzyAITokenRanking.get("ignored_tokens", ""))
                 pattern_sprout_idle_square = isSproutGather
-                sizeData = {
-                    "xs": 0.25,
-                    "s": 0.5,
-                    "m": 1,
-                    "l": 1.5,
-                    "xl": 2
-                }
-                sizeword = fieldSetting["size"]
-                size = sizeData[sizeword]
-                width = fieldSetting["width"]
                 pattern_ai_warmup_only = True
                 if isSproutGather and pattern == "fuzzy_ai_gather":
                     self._fuzzy_ai_gather_state = {}
-                preloadedAIGatherNameSpace = {**locals(), **vars(patternEnvironment)}
+                preloadedAIGatherNameSpace = {**locals(), **field_pattern_variables(fieldSetting), **vars(patternEnvironment)}
                 pattern = patternRunner.warmup(preloadedAIGatherNameSpace)
             except InterruptRequested:
                 raise
@@ -194,10 +184,11 @@ class GatherMixin:
                     if not self.travelViaCannon("Gathering", resetIfAway=False):
                         return
                 self.logger.webhook("",f"Travelling: {field.title()}, Attempt {i+1}", "dark brown")
-                self.goToField(
+                if not self.goToField(
                     field,
                     startLocation=fieldSetting.get("start_location", "center"),
-                )
+                ):
+                    continue
                 if isHiveHubField:
                     landedInField = True
                     break
@@ -224,7 +215,8 @@ class GatherMixin:
                 self.reset()
         if not landedInField: #failed too many times
             return
-        pattern = fieldSetting['shape']
+        # the AI warmup may already have switched to the fallback pattern
+        pattern = patternRunner.active_pattern
         #rotate camera
         if fieldSetting["turn"] == "left":
             for _ in range(fieldSetting["turn_times"]):
@@ -324,40 +316,6 @@ class GatherMixin:
             if initialSproutPlantResult == "gather_limit":
                 self.logger.webhook("", "Sprout gather limit reached before planting", "orange", route_category="activities")
                 return
-        #key variables
-        #check invert L/R and invert B/R
-        fwdkey = "w"
-        leftkey = "a" 
-        backkey = "s" 
-        rightkey = "d"
-        rotleft = ","
-        rotright = "."
-        rotup = "pageup"
-        rotdown = "pagedown"
-        zoomin = "i"
-        zoomout = "o"
-        sc_space = "space"
-        tcfbkey = fwdkey
-        afcfbkey = backkey
-        tclrkey = leftkey
-        afclrkey = rightkey
-        if fieldSetting["invert_lr"]:
-            tclrkey = rightkey
-            afclrkey = leftkey
-        if fieldSetting["invert_fb"]:
-            tcfbkey = backkey
-            afcfbkey = fwdkey
-        facingcorner = 0
-        sizeData = {
-            "xs": 0.25,
-            "s": 0.5,
-            "m": 1,
-            "l": 1.5,
-            "xl": 2
-        }
-        sizeword = fieldSetting["size"]
-        size = sizeData[sizeword]
-        width = fieldSetting["width"]
         infiniteGather = altMode or bool(fieldSetting.get("infinite_gather", False))
         maxGatherTime = fieldSetting["mins"]*60
         gatherTimeLimit = "Infinite" if infiniteGather else self.convertSecsToMinsAndSecs(maxGatherTime)
@@ -411,11 +369,11 @@ class GatherMixin:
         self.died = False
         #time to gather
         if preloadedAIGatherNameSpace is not None:
-            preloadedAIGatherNameSpace.update({**locals(), **vars(patternEnvironment), "pattern_ai_warmup_only": False})
+            preloadedAIGatherNameSpace.update({**locals(), **field_pattern_variables(fieldSetting), **vars(patternEnvironment), "pattern_ai_warmup_only": False})
             preloadedAIGatherNameSpace["setPatternYaw"] = setPatternYaw
             gatherNameSpace = preloadedAIGatherNameSpace
         else:
-            gatherNameSpace = {**locals(), **vars(patternEnvironment)}
+            gatherNameSpace = {**locals(), **field_pattern_variables(fieldSetting), **vars(patternEnvironment)}
             gatherNameSpace["setPatternYaw"] = setPatternYaw
         if isSproutGather:
             self.set_task_status("collect_sprouts", task="collect", field=field, activity="sprouts")
@@ -554,8 +512,12 @@ class GatherMixin:
             )
             gatherSession.add_cleanup(liveQuestProgressReport.stop)
         
+        gatherStopped = False
         def stopGather():
-            nonlocal gooTimerActive, inactiveHoneyTimerActive, questMenuKeptOpen
+            nonlocal gooTimerActive, inactiveHoneyTimerActive, questMenuKeptOpen, gatherStopped
+            if gatherStopped:
+                return
+            gatherStopped = True
             gooTimerActive = False  # Stop the goo timer thread
             inactiveHoneyTimerActive = False
             # toggleQuest sleeps, which raises again while an interrupt is pending,
@@ -575,210 +537,184 @@ class GatherMixin:
         if fieldSetting["shift_lock"]: 
             self.keyboard.press('shift')
         
-        while keepGathering:
-            # Check if paused and wait
-            if self.checkPauseAndWait():
-                # Stop was requested while paused
-                stopGather()
-                return
-            
-            try:
-                self.raiseIfInterrupted()
-            except InterruptRequested:
-                stopGather()
-                raise
-
-            patternStartTime = time.time()
-            # wait for any inventory interaction to finish before clicking again
-            with self._inventoryInteractionLock:
-                mouse.mouseDown()
-
-            try:
-                pattern = gatherSession.run_cycle(gatherNameSpace, owner=self)
-            except Exception:
-                # interrupts usually land inside a pattern's sleep, and e_lol failing ends the
-                # gather too; either way stop the gather's threads and reports before leaving
-                mouse.mouseUp()
-                stopGather()
-                raise
-
-            #field drift compensation — AI patterns already manage sprinkler
-            # anchoring / idle patrol themselves, so skip the post-cycle nudge
-            # that would fight a continuous square walk around the sprinkler.
-            if fieldSetting["field_drift_compensation"] and pattern not in aiPatternLabels:
-                self.fieldDriftCompensation.run(startLocationDimensions.get(normalized_field))
-
-            #cycle ends
-            mouse.mouseUp()
-            #add gather time stat
-            if not isSproutGather:
-                self.hourlyReport.addHourlyStat("gathering_time", time.time()-patternStartTime)
-            gatherTime = self.convertSecsToMinsAndSecs(getGatherTime())
-
-            if questMenuKeptOpen and time.time() - lastQuestProgressCheck >= 2:
-                lastQuestProgressCheck = time.time()
-                try:
-                    visibleObjectives = self.findQuest(
-                        questWatchGiver,
-                        questScreens=[self.captureQuestWatchScreen()],
-                        logDetection=False,
-                    )
-                    if visibleObjectives is not None and questWatchObjective not in visibleObjectives:
-                        self.logger.webhook(
-                            "Gathering: Ended",
-                            f"{questWatchGiver.title()} objective completed: {questWatchObjective.replace('_', ' ').title()}",
-                            "light green",
-                            "screen",
-                            route_category="gathering",
-                        )
-                        keepGathering = False
-                        continue
-                except Exception:
-                    # A single bad OCR frame should never end a gather. The next
-                    # pattern cycle will try the visible objective again.
-                    print(traceback.format_exc())
-
-            #check for AFB
-            if inactiveHoneyEvent.is_set():
-                stopGather()
-                self.logger.webhook("Gathering: interrupted", "Inactive Honey Reset (Beta)", "orange", "screen")
-                self.reset()
-                return
-            elif not altMode and fieldSetting.get("plant_sprout", False):
-                sproutGatherLimitReached = sproutBeansUsedThisGather >= sproutGatherBeanLimit
-                sproutSessionLimitReached = self.sproutBeansUsed >= self._sproutBeanLimit()
-                if sproutFinalLootStart is None and not sproutGatherLimitReached and not sproutSessionLimitReached:
-                    sproutInfo = self.blueSproutMessageInfo()
-                    if sproutInfo:
-                        if sproutInfo.get("rarity"):
-                            currentSproutRarity = sproutInfo["rarity"]
-                        if self.isSproutCompletionMessage(sproutInfo.get("text", "")):
-                            sproutCompletionMessageSeen = True
-                    if sproutCompletionMessageSeen and not self.blueSproutMessageVisible():
-                        self.logger.webhook("Sprouts", f"Detected sprout pop message; planting next sprout ({self.sproutBeansUsed + 1}/{self._sproutBeanLimit()}).", "light blue", "screen", route_category="activities")
-                        plantSproutBean()
-                    else:
-                        fallbackSeconds = self.sproutReplantFallbackSeconds(currentSproutRarity)
-                        if time.time() - lastSproutPlantAttempt >= fallbackSeconds:
-                            rarityLabel = currentSproutRarity.title() if currentSproutRarity else "unknown"
-                            self.logger.webhook("Sprouts", f"No sprout pop message detected for {fallbackSeconds} seconds ({rarityLabel}); trying next sprout ({self.sproutBeansUsed + 1}/{self._sproutBeanLimit()}).", "light blue", "screen", route_category="activities")
-                            plantSproutBean()
-                sproutGatherLimitReached = sproutBeansUsedThisGather >= sproutGatherBeanLimit
-                sproutSessionLimitReached = self.sproutBeansUsed >= self._sproutBeanLimit()
-                if sproutFinalLootStart is None and (sproutSessionLimitReached or sproutGatherLimitReached):
-                    sproutFinalLootStart = time.time()
-                    if not sproutLimitLogged:
-                        if sproutSessionLimitReached:
-                            self.logSproutBeanLimitReached(f"Sprout session limit reached. Collecting remaining drops for {sproutFinalLootSeconds} seconds before resetting.")
-                        else:
-                            self.logger.webhook("Sprouts", f"Sprout gather limit reached ({sproutBeansUsedThisGather}/{sproutGatherBeanLimit}). Collecting remaining drops for {sproutFinalLootSeconds} seconds before moving on.", "light blue", "screen", route_category="activities")
-                        sproutLimitLogged = True
-                if sproutFinalLootStart is not None and time.time() - sproutFinalLootStart >= sproutFinalLootSeconds:
+        try:
+            while keepGathering:
+                # Check if paused and wait
+                if self.checkPauseAndWait():
+                    # Stop was requested while paused
                     stopGather()
-                    self.logger.webhook("Sprouts", "Final sprout loot collection finished. Resetting to hive.", "light green", route_category="activities")
+                    return
+            
+                try:
+                    self.raiseIfInterrupted()
+                except InterruptRequested:
+                    stopGather()
+                    raise
+
+                patternStartTime = time.time()
+                # wait for any inventory interaction to finish before clicking again
+                with self._inventoryInteractionLock:
+                    mouse.mouseDown()
+
+                try:
+                    pattern = gatherSession.run_cycle(gatherNameSpace, owner=self)
+                except Exception:
+                    # interrupts usually land inside a pattern's sleep, and e_lol failing ends the
+                    # gather too; either way stop the gather's threads and reports before leaving
+                    mouse.mouseUp()
+                    stopGather()
+                    raise
+
+                #field drift compensation — AI patterns already manage sprinkler
+                # anchoring / idle patrol themselves, so skip the post-cycle nudge
+                # that would fight a continuous square walk around the sprinkler.
+                if fieldSetting["field_drift_compensation"] and pattern not in aiPatternLabels:
+                    self.fieldDriftCompensation.run(startLocationDimensions.get(normalized_field))
+
+                #cycle ends
+                mouse.mouseUp()
+                #add gather time stat
+                if not isSproutGather:
+                    self.hourlyReport.addHourlyStat("gathering_time", time.time()-patternStartTime)
+                gatherTime = self.convertSecsToMinsAndSecs(getGatherTime())
+
+                if questMenuKeptOpen and time.time() - lastQuestProgressCheck >= 2:
+                    lastQuestProgressCheck = time.time()
+                    try:
+                        visibleObjectives = self.findQuest(
+                            questWatchGiver,
+                            questScreens=[self.captureQuestWatchScreen()],
+                            logDetection=False,
+                        )
+                        if visibleObjectives is not None and questWatchObjective not in visibleObjectives:
+                            self.logger.webhook(
+                                "Gathering: Ended",
+                                f"{questWatchGiver.title()} objective completed: {questWatchObjective.replace('_', ' ').title()}",
+                                "light green",
+                                "screen",
+                                route_category="gathering",
+                            )
+                            keepGathering = False
+                            continue
+                    except Exception:
+                        # A single bad OCR frame should never end a gather. The next
+                        # pattern cycle will try the visible objective again.
+                        print(traceback.format_exc())
+
+                #check for AFB
+                if inactiveHoneyEvent.is_set():
+                    stopGather()
+                    self.logger.webhook("Gathering: interrupted", "Inactive Honey Reset (Beta)", "orange", "screen")
                     self.reset()
                     return
-            elif not altMode and self.setdat["Auto_Field_Boost"] and not self.AFBLIMIT and self.AFB(gatherInterrupt=True, turnOffShiftLock = fieldSetting["shift_lock"]):
-                stopGather()
-                return
-            #check for gather interrupts
-            elif (
-                self.setdat.get("macro_mode", "normal") not in ("quest", "alt")
-                and self.night
-                and self.setdat["stinger_hunt"]
-            ):
-                #rely on task function in main to execute the stinger hunt
-                stopGather()
-                self.logger.webhook("Gathering: interrupted","Stinger Hunt","dark brown")
-                self.reset(convert=False)
-                break
-            elif (
-                self.setdat.get("macro_mode", "normal") not in ("quest", "alt")
-                and self.setdat["mondo_buff"]
-                and self.hasMondoRespawned()
-                and self.setdat["mondo_buff_interrupt_gathering"]
-            ):
-                stopGather()
-                self.logger.webhook("Gathering: interrupted","Mondo Buff","dark brown")
-                self.reset(convert=False)
-                self.collectMondoBuff()
-                break
-            elif (
-                self.setdat.get("macro_mode", "normal") not in ("quest", "alt")
-                and self.setdat["sticker_stack"]
-                and self.setdat.get("sticker_stack_interrupt_gathering", False)
-                and self.hasStickerStackRespawned()
-            ):
-                stopGather()
-                self.logger.webhook("Gathering: interrupted", "Sticker Stack", "dark brown")
-                self.reset(convert=False)
-                self.collect("sticker_stack")
-                break
-            elif not altMode:
-                questMobsByGiver = getattr(self, "questGatherInterruptMobs", {})
-                questMobs = {
-                    mob
-                    for questGiver, mobs in questMobsByGiver.items()
-                    if self.setdat.get(f"{questGiver.replace(' ', '_')}_quest_gather_interrupt", False)
-                    for mob in mobs
-                }
-                respawnedQuestMobs = [
-                    (mob, mobField)
-                    for mob in questMobs
-                    for mobField in regularMobTypesInFields
-                    if mob in regularMobTypesInFields[mobField] and self.hasMobRespawned(mob, mobField)
-                ]
-                if respawnedQuestMobs:
+                elif not altMode and fieldSetting.get("plant_sprout", False):
+                    sproutGatherLimitReached = sproutBeansUsedThisGather >= sproutGatherBeanLimit
+                    sproutSessionLimitReached = self.sproutBeansUsed >= self._sproutBeanLimit()
+                    if sproutFinalLootStart is None and not sproutGatherLimitReached and not sproutSessionLimitReached:
+                        sproutInfo = self.blueSproutMessageInfo()
+                        if sproutInfo:
+                            if sproutInfo.get("rarity"):
+                                currentSproutRarity = sproutInfo["rarity"]
+                            if self.isSproutCompletionMessage(sproutInfo.get("text", "")):
+                                sproutCompletionMessageSeen = True
+                        if sproutCompletionMessageSeen and not self.blueSproutMessageVisible():
+                            self.logger.webhook("Sprouts", f"Detected sprout pop message; planting next sprout ({self.sproutBeansUsed + 1}/{self._sproutBeanLimit()}).", "light blue", "screen", route_category="activities")
+                            plantSproutBean()
+                        else:
+                            fallbackSeconds = self.sproutReplantFallbackSeconds(currentSproutRarity)
+                            if time.time() - lastSproutPlantAttempt >= fallbackSeconds:
+                                rarityLabel = currentSproutRarity.title() if currentSproutRarity else "unknown"
+                                self.logger.webhook("Sprouts", f"No sprout pop message detected for {fallbackSeconds} seconds ({rarityLabel}); trying next sprout ({self.sproutBeansUsed + 1}/{self._sproutBeanLimit()}).", "light blue", "screen", route_category="activities")
+                                plantSproutBean()
+                    sproutGatherLimitReached = sproutBeansUsedThisGather >= sproutGatherBeanLimit
+                    sproutSessionLimitReached = self.sproutBeansUsed >= self._sproutBeanLimit()
+                    if sproutFinalLootStart is None and (sproutSessionLimitReached or sproutGatherLimitReached):
+                        sproutFinalLootStart = time.time()
+                        if not sproutLimitLogged:
+                            if sproutSessionLimitReached:
+                                self.logSproutBeanLimitReached(f"Sprout session limit reached. Collecting remaining drops for {sproutFinalLootSeconds} seconds before resetting.")
+                            else:
+                                self.logger.webhook("Sprouts", f"Sprout gather limit reached ({sproutBeansUsedThisGather}/{sproutGatherBeanLimit}). Collecting remaining drops for {sproutFinalLootSeconds} seconds before moving on.", "light blue", "screen", route_category="activities")
+                            sproutLimitLogged = True
+                    if sproutFinalLootStart is not None and time.time() - sproutFinalLootStart >= sproutFinalLootSeconds:
+                        stopGather()
+                        self.logger.webhook("Sprouts", "Final sprout loot collection finished. Resetting to hive.", "light green", route_category="activities")
+                        self.reset()
+                        return
+                elif not altMode and self.setdat["Auto_Field_Boost"] and not self.AFBLIMIT and self.AFB(gatherInterrupt=True, turnOffShiftLock = fieldSetting["shift_lock"]):
                     stopGather()
-                    mobNames = ", ".join(sorted({mob.replace("_", " ").title() for mob, _ in respawnedQuestMobs}))
-                    self.logger.webhook("Gathering: interrupted", f"Quest mobs ready: {mobNames}", "dark brown")
+                    return
+                #check for gather interrupts
+                elif (
+                    self.setdat.get("macro_mode", "normal") not in ("quest", "alt")
+                    and self.night
+                    and self.setdat["stinger_hunt"]
+                ):
+                    #rely on task function in main to execute the stinger hunt
+                    stopGather()
+                    self.logger.webhook("Gathering: interrupted","Stinger Hunt","dark brown")
                     self.reset(convert=False)
-                    for mob, mobField in respawnedQuestMobs:
-                        # Recheck because another field run can update shared mob timings.
-                        if self.hasMobRespawned(mob, mobField):
-                            self.killMob(mob, mobField)
                     break
-            if self.died:
-                self.clear_task_status()
-                stopGather()
-                self.logger.webhook("","Player died", "dark brown","screen", ping_category="ping_character_deaths")
-                time.sleep(0.4)
-                self.reset()
-                break
-            elif not infiniteGather and getGatherTime() > maxGatherTime:
-                if honeyWreathReturnEnabled and isHoneyWreathReady():
-                    backpack = self.getBackpack()
-                    if isHoneyWreathBackpackReady(backpack):
-                        self.logger.webhook(
-                            "Gathering: Ended",
-                            f"Time: {gatherTime} - Time Limit - Backpack Full - Return: Honey Wreath",
-                            "light green",
-                            "screen"
-                        )
-                        honeyWreathPending = True
-                        keepGathering = False
-                    elif not honeyWreathWaitLogged:
-                        self.logger.webhook(
-                            "Gathering: Extended",
-                            "Time limit reached. Waiting for backpack to fill before claiming Honey Wreath",
-                            "light green",
-                            "screen"
-                        )
-                        honeyWreathWaitLogged = True
-                else:
-                    self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Time Limit - Return: {returnType.title()}", "light green", "screen", route_category="gathering")
-                    keepGathering = False
-            #check backpack
-            elif isHiveHubField or infiniteGather:
-                continue
-            else:
-                backpack = self.getBackpack()
-                if backpack >= fieldSetting["backpack"]:
+                elif (
+                    self.setdat.get("macro_mode", "normal") not in ("quest", "alt")
+                    and self.setdat["mondo_buff"]
+                    and self.hasMondoRespawned()
+                    and self.setdat["mondo_buff_interrupt_gathering"]
+                ):
+                    stopGather()
+                    self.logger.webhook("Gathering: interrupted","Mondo Buff","dark brown")
+                    self.reset(convert=False)
+                    self.collectMondoBuff()
+                    break
+                elif (
+                    self.setdat.get("macro_mode", "normal") not in ("quest", "alt")
+                    and self.setdat["sticker_stack"]
+                    and self.setdat.get("sticker_stack_interrupt_gathering", False)
+                    and self.hasStickerStackRespawned()
+                ):
+                    stopGather()
+                    self.logger.webhook("Gathering: interrupted", "Sticker Stack", "dark brown")
+                    self.reset(convert=False)
+                    self.collect("sticker_stack")
+                    break
+                elif not altMode:
+                    questMobsByGiver = getattr(self, "questGatherInterruptMobs", {})
+                    questMobs = {
+                        mob
+                        for questGiver, mobs in questMobsByGiver.items()
+                        if self.setdat.get(f"{questGiver.replace(' ', '_')}_quest_gather_interrupt", False)
+                        for mob in mobs
+                    }
+                    respawnedQuestMobs = [
+                        (mob, mobField)
+                        for mob in questMobs
+                        for mobField in regularMobTypesInFields
+                        if mob in regularMobTypesInFields[mobField] and self.hasMobRespawned(mob, mobField)
+                    ]
+                    if respawnedQuestMobs:
+                        stopGather()
+                        mobNames = ", ".join(sorted({mob.replace("_", " ").title() for mob, _ in respawnedQuestMobs}))
+                        self.logger.webhook("Gathering: interrupted", f"Quest mobs ready: {mobNames}", "dark brown")
+                        self.reset(convert=False)
+                        for mob, mobField in respawnedQuestMobs:
+                            # Recheck because another field run can update shared mob timings.
+                            if self.hasMobRespawned(mob, mobField):
+                                self.killMob(mob, mobField)
+                        break
+                if self.died:
+                    self.clear_task_status()
+                    stopGather()
+                    self.logger.webhook("","Player died", "dark brown","screen", ping_category="ping_character_deaths")
+                    time.sleep(0.4)
+                    self.reset()
+                    break
+                elif not infiniteGather and getGatherTime() > maxGatherTime:
                     if honeyWreathReturnEnabled and isHoneyWreathReady():
+                        backpack = self.getBackpack()
                         if isHoneyWreathBackpackReady(backpack):
                             self.logger.webhook(
                                 "Gathering: Ended",
-                                f"Time: {gatherTime} - Backpack Full - Return: Honey Wreath",
+                                f"Time: {gatherTime} - Time Limit - Backpack Full - Return: Honey Wreath",
                                 "light green",
                                 "screen"
                             )
@@ -787,14 +723,46 @@ class GatherMixin:
                         elif not honeyWreathWaitLogged:
                             self.logger.webhook(
                                 "Gathering: Extended",
-                                f"Honey Wreath is ready. Waiting for the configured backpack limit ({fieldSetting['backpack']}%) before claiming",
+                                "Time limit reached. Waiting for backpack to fill before claiming Honey Wreath",
                                 "light green",
                                 "screen"
                             )
                             honeyWreathWaitLogged = True
                     else:
-                        self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Backpack - Return: {returnType.title()}", "light green", "screen", route_category="gathering")
+                        self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Time Limit - Return: {returnType.title()}", "light green", "screen", route_category="gathering")
                         keepGathering = False
+                #check backpack
+                elif isHiveHubField or infiniteGather:
+                    continue
+                else:
+                    backpack = self.getBackpack()
+                    if backpack >= fieldSetting["backpack"]:
+                        if honeyWreathReturnEnabled and isHoneyWreathReady():
+                            if isHoneyWreathBackpackReady(backpack):
+                                self.logger.webhook(
+                                    "Gathering: Ended",
+                                    f"Time: {gatherTime} - Backpack Full - Return: Honey Wreath",
+                                    "light green",
+                                    "screen"
+                                )
+                                honeyWreathPending = True
+                                keepGathering = False
+                            elif not honeyWreathWaitLogged:
+                                self.logger.webhook(
+                                    "Gathering: Extended",
+                                    f"Honey Wreath is ready. Waiting for the configured backpack limit ({fieldSetting['backpack']}%) before claiming",
+                                    "light green",
+                                    "screen"
+                                )
+                                honeyWreathWaitLogged = True
+                        else:
+                            self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Backpack - Return: {returnType.title()}", "light green", "screen", route_category="gathering")
+                            keepGathering = False
+        except BaseException:
+            # whatever raised, stop the gather's threads and reports before leaving
+            mouse.mouseUp()
+            stopGather()
+            raise
 
         #gathering was interrupted
         if keepGathering:

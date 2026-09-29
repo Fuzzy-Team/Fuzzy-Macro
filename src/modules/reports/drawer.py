@@ -2,7 +2,7 @@
 import math
 import time
 from PIL import Image, ImageDraw, ImageFont
-from datetime import datetime
+from datetime import datetime, timedelta
 from modules.misc.settingsManager import getCurrentProfile, getMacroVersion
 from modules.reports.buffs import (
     BUFF_RENDER_CONFIG,
@@ -143,7 +143,11 @@ class HourlyReportDrawer:
 
     def _timeLabels(self, count=7):
         labels = []
-        base = datetime.now().replace(minute=0, second=0, microsecond=0)
+        now = datetime.now()
+        # a report sent in the first minute of an hour covers the hour that just ended
+        if now.minute == 0:
+            now -= timedelta(hours=1)
+        base = now.replace(minute=0, second=0, microsecond=0)
         for i in range(count):
             minute = i * 10
             t = base.replace(hour=(base.hour + (minute // 60)) % 24, minute=minute % 60)
