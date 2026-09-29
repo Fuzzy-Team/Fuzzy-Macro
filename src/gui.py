@@ -1135,6 +1135,16 @@ def stopHotbarBuffTool():
 def getHotbarBuffStatus():
     return _hotbar_buff_runner.get_status()
 
+_keybind_recording = False
+
+@eel.expose
+def setKeybindRecording(recording):
+    global _keybind_recording
+    _keybind_recording = bool(recording)
+
+def isKeybindRecording():
+    return _keybind_recording
+
 @eel.expose
 def isAnyToolRunning():
     return _auto_clicker_runner.is_active() or _auto_gifted_basic_bee_runner.is_active() or _hotbar_buff_runner.is_active()

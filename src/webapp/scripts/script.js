@@ -1664,6 +1664,8 @@ document.addEventListener("mouseout", dropdownHoverLeave);
 
 // Keybind recording functionality
 let keybindRecording = false;
+// clear a flag left on if the page reloaded mid-recording
+if (window.eel) eel.setKeybindRecording(false);
 let currentKeybindElement = null;
 let keybindSequence = [];
 
@@ -1677,6 +1679,7 @@ function startKeybindRecording(elementId) {
   keybindRecording = true;
   currentKeybindElement = element;
   element.dataset.recording = "true";
+  if (window.eel) eel.setKeybindRecording(true);
   element.style.borderColor = "var(--primary)";
   element.style.backgroundColor = "#36393F";
   element.style.boxShadow = "0 0 10px rgba(var(--primary-rgb), 0.3)";
@@ -1786,6 +1789,7 @@ function stopKeybindRecording() {
   if (!keybindRecording) return;
 
   keybindRecording = false;
+  if (window.eel) eel.setKeybindRecording(false);
   if (currentKeybindElement) {
     currentKeybindElement.dataset.recording = "false";
     currentKeybindElement.style.borderColor = "var(--primary)";
