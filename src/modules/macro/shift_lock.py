@@ -1,3 +1,4 @@
+import modules.controls.mouse as mouse
 from modules.controls.sleep import pause_aware_time as time
 from modules.screen.shiftLock import detect_shift_lock, detect_shift_lock_with_retries
 
@@ -27,3 +28,9 @@ class ShiftLockMixin:
             self.keyboard.press("shift")
             time.sleep(0.35)
             return True
+
+    def enableShiftLock(self):
+        # Enabling Shift Lock snaps the cursor to the window centre. Since Roblox 0.741 that
+        # jump is applied as mouse movement and swings the camera, so centre the cursor first.
+        mouse.moveTo(self.robloxWindow.mx + self.robloxWindow.mw // 2, self.robloxWindow.my + self.robloxWindow.mh // 2)
+        self.keyboard.press("shift")
