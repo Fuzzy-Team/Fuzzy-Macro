@@ -16,7 +16,7 @@ in the background when it finishes, so the uninstall of torch/matplotlib/etc. an
 numpy/OpenCV force-reinstall run while you relaunch.
 - [x] The update completes, the macro restarts, and the GUI opens without errors in the terminal.
 - [x] Relaunch **immediately** after the "Update complete" box (while the background installer is still running `pip`). The GUI opens and the macro starts; if it fails, relaunch again after `pip` finishes (`ps aux | grep pip`) and note the error so the release notes can say to wait.
-- [ ] After the background installer finishes, `~/fuzzy-macro-env/bin/pip list` no longer shows torch, torchvision, scipy, PyWavelets, matplotlib, html2image, httpx, or ImageHash (Apple Silicon / macOS 12+), and the macro still launches.
+- [ ] After the background installer finishes, `~/fuzzy-macro-env/bin/pip list` no longer shows torch, torchvision, scipy, PyWavelets, matplotlib, html2image, httpx, or ImageHash (Apple Silicon / macOS 12+), and the macro still launches. *(Automated 2026-10-01: pip list is clean, and the macro's modules import without torch or ImageHash. On this Mac the installer's uninstall didn't take effect (see Automated checks below), so the packages were removed with the venv's own pip. Still needs: launch the macro from the GUI.)*
 - [x] `src/modules/macro.py`, `src/modules/submacros/hourlyReport.py`, and `src/images/inventory/old/` are gone, and `src/modules/macro/` exists.
 - [x] Your custom patterns and edited built-in patterns in `settings/patterns/` are unchanged; `blooms_ai.py` and `fuzzy_ai_gather.py` were replaced with the new versions.
 - [x] The old venv (still has torch, matplotlib, ImageHash, html2image, httpx) starts and runs normally, and startup does not import torch.
@@ -27,7 +27,7 @@ numpy/OpenCV force-reinstall run while you relaunch.
 
 ## Slot migrations (users will not notice these changes until something misfires)
 - [x] On `main`, set the Boost-tab glitter slot to **0 (inventory)** and turn on field booster **Glitter Extending**, then update. Config → Glitter Slot shows 0, and at 14:30 the macro finds Glitter in the inventory and logs "Used Glitter from the inventory". No hotbar key is pressed. If gathering with shift lock, shift lock and the held gather click pause during inventory access, then resume afterwards.
-- [ ] Watch a field booster Glitter extension from the inventory that lands mid-pattern. The gather should carry on afterwards (this is how `main` behaved; if the open inventory breaks the gather, note it).
+- [ ] Watch a field booster Glitter extension from the inventory that lands mid-pattern. The gather should carry on afterwards (this is how `main` behaved; if the open inventory breaks the gather, note it). *(Automated 2026-10-01: slot 0 searches the inventory and a missing Glitter is logged, not raised. Still needs: a live extension landing mid-pattern.)*
 - [x] On `main`, set the field booster glitter slot to a non-default slot (e.g. 4), then update. Config → Glitter Slot shows 4, and AFB's own Glitter slot is unchanged.
 - [x] On `main`, set AFB's glitter slot to 0, then update. AFB still finds Glitter in the inventory.
 - [x] On `main`, turn on quest gumdrops with Quest Gumdrop Slot 2 and no field using goo, then update. Config → Gumdrop Slot is 2.
@@ -47,8 +47,8 @@ numpy/OpenCV force-reinstall run while you relaunch.
 ## Settings (highest risk: the Macro Profile store was rewritten)
 - [x] Change **Theme**, restart the macro, confirm it stuck. *(Verified across a GUI reload; Commander Theme restored.)*
 - [x] Change **Max cannon attempts** and **Hive resync attempts**, restart, confirm both stuck. *(Verified 6/4 across a GUI reload; restored to 5/3.)*
-- [ ] Change **Update channel** and **Webhook time format**, restart, confirm both stuck. *(Webhook format verified across a GUI reload and restored to 12. Update Channel initially displayed “None”; Stable persisted across reload, but the dropdown has no None option, so it is currently Stable and this item needs follow-up.)*
-- [ ] Set Update channel to Beta, then check for updates from the GUI; it offers the latest beta release. Set it back to Stable; it offers only stable releases. Turn off automatic update checks and restart; the startup check stays off. (These now read through the profile store, which also handles values an old GUI bug saved wrapped in `{'source': ..., 'value': ...}`.)
+- [ ] Change **Update channel** and **Webhook time format**, restart, confirm both stuck. *(Webhook format verified across a GUI reload and restored to 12. Update Channel initially displayed “None”; Stable persisted across reload, but the dropdown has no None option, so it is currently Stable and this item needs follow-up.)* *(Automated 2026-10-01: update channel, webhook time format and the startup check setting persist across a fresh profile load, and all 17 profiles load with update_channel `stable`/`beta` (no `None`). Still needs: change them in the GUI and restart.)*
+- [ ] Set Update channel to Beta, then check for updates from the GUI; it offers the latest beta release. Set it back to Stable; it offers only stable releases. Turn off automatic update checks and restart; the startup check stays off. (These now read through the profile store, which also handles values an old GUI bug saved wrapped in `{'source': ..., 'value': ...}`.) *(Automated 2026-10-01: Stable offered the newest stable release and Beta the newest release overall (both 1.3.4 today; no newer prerelease exists), a wrapped `{'source': ..., 'value': 'beta'}` reads as `beta`, and the GUI's startup check reads `auto_update_check_disabled`. Still needs: Check for Updates in the GUI on each channel, and a restart with checks off.)*
 - [x] Change a **per-quest gather time** (e.g. Polar Bear) and its return method, restart, confirm both stuck. *(Verified across GUI reload; restored to 0 / No Override.)*
 - [x] Change the **hourly report time format** and **uptime buffs**, restart, confirm both stuck. *(Verified across GUI reloads; restored to 24-hour format and original buff selections.)*
 - [x] Switch profiles in the GUI; the new profile's settings and fields load correctly. *(Switched from testing to pine, saw different settings and Field 1 values, then returned to testing.)*
@@ -57,8 +57,8 @@ numpy/OpenCV force-reinstall run while you relaunch.
 - [x] Start the macro, change a setting while it runs: it reloads without a "Profile Changed" message. *(Changed max cannon attempts to 6; the run logged attempt 1/6 and no Profile Changed message. Restored to 5.)*
 - [x] Import a profile JSON and field settings, restart, and confirm the imported settings and fields persist.
 - [x] Export both the current and another profile. Confirm each JSON has its own settings, general settings, and fields, with no `discord_bot_token`, `webhook_link`, TAD alt webhooks, private server or fallback server links, or HTTPS `route_` links. *(TAD alt webhooks and fallback server links used to be exported; fixed.)*
-- [ ] Config → **Gumdrop Slot** (replaces the Quests-tab gumdrop slot): a goo quest, a field with Goo on, and the glue dispenser all use gumdrops from that slot.
-- [ ] Config → **Glitter Slot** (0–7; replaces the Boost-tab field booster glitter slot): field booster extending presses it, and 0 finds Glitter in the inventory. Auto Field Boost uses its own Glitter slot, and 0 finds Glitter in the inventory there too.
+- [ ] Config → **Gumdrop Slot** (replaces the Quests-tab gumdrop slot): a goo quest, a field with Goo on, and the glue dispenser all use gumdrops from that slot. *(Automated 2026-10-01: the glue dispenser presses `goo_slot` (or uses gumdrops from the inventory when the slot option is off), the goo timer presses `goo_slot` for field goo and goo quests (source check), and nothing reads `quest_gumdrop_slot` outside the migration. Still needs: watch the slot get pressed in a gather.)*
+- [ ] Config → **Glitter Slot** (0–7; replaces the Boost-tab field booster glitter slot): field booster extending presses it, and 0 finds Glitter in the inventory. Auto Field Boost uses its own Glitter slot, and 0 finds Glitter in the inventory there too. *(Automated 2026-10-01: slots 1–7 press the key and 0 uses the inventory, for the field booster and for AFB (which keeps its own slot); all profiles store the slots as ints 0–7. Still needs: a live extension and an AFB rebuff.)*
 
 ## Hive claiming
 - [ ] Rejoin with your **preferred hive free**: it claims that hive.
@@ -67,7 +67,7 @@ numpy/OpenCV force-reinstall run while you relaunch.
 
 ## Gathering
 - [x] Gather with a **built-in pattern** (e.g. e_lol, lines). *(`qa_07_drift_builtin` logged a full 12-minute Blue Flower `e_lol` gather.)*
-- [ ] Gather with a **custom/edited pattern**.
+- [ ] Gather with a **custom/edited pattern**. *(Automated 2026-10-01: all 26 non-AI patterns, plus a synthetic custom pattern and an edited `e_lol`, ran a cycle from `settings/patterns` with no fallback. Still needs: a live gather with your custom pattern.)*
 - [x] Gather with a **broken custom pattern**: one critical-error alert, then e_lol for the rest of that gather. *(`qa_11_pattern_broken` logged one syntax alert and used `e_lol`.)*
 - [x] Gather with **fuzzy_ai_gather** and **blooms_ai**. *(`qa_08` ran `fuzzy_ai_gather` for 10m58s; `qa_09` ran a 12m01s Dandelion `blooms_ai` gather. The separate drift and token-leash checks below remain open.)*
 - [x] Gather with **field drift compensation** on (color-based, Supreme Saturator). In a narrow field, a bad locator reading must not cause a correction that walks out of the field.
@@ -82,36 +82,36 @@ numpy/OpenCV force-reinstall run while you relaunch.
 - [ ] **Mob run**: detects "defeated" / "died" and loots.
 - [ ] **Vicious Bee** hunt: finds the field and detects the defeat.
 - [ ] Coconut Crab / King Beetle / Tunnel Bear / Mondo if you use them.
-- [ ] **Planters**: place and collect (inventory images moved from `images/inventory/old`).
-- [ ] **Memory match** identifies rewards (icons moved out of the code into image files).
+- [ ] **Planters**: place and collect (inventory images moved from `images/inventory/old`). *(Automated 2026-10-01: every planter and the inventory items the macro searches for have readable images. Still needs: place and collect a planter.)*
+- [ ] **Memory match** identifies rewards (icons moved out of the code into image files). *(Automated 2026-10-01: every GUI picker icon and every reward/type template exists and loads. Still needs: a live memory match.)*
 - [ ] Quests: get a quest, gather for it, submit it.
-- [ ] Complete a quest that temporarily enables a disabled task (such as a mob run). On the next loop, the task returns to the profile's disabled setting.
+- [ ] Complete a quest that temporarily enables a disabled task (such as a mob run). On the next loop, the task returns to the profile's disabled setting. *(Automated 2026-10-01: the next loop pass reloads saved settings, so quest-enabled tasks turn back off. Still needs: a live quest that enables a disabled mob run.)*
 
 ## Reports and integrations
 - [x] **Hourly report** image looks right in your theme.
-- [ ] After an hourly report and counter reset, the next hourly report starts a new hour while the final report retains session totals and collected items.
+- [ ] After an hourly report and counter reset, the next hourly report starts a new hour while the final report retains session totals and collected items. *(Automated 2026-10-01: an hourly reset clears the hour but keeps session totals, the session start, and session collected items, and they are saved for the final report. Still needs: a run past one hourly report.)*
 - [x] **Final report** on stop, and the **item monitor** report; check the final report's theme and session totals.
 - [x] Toggle `hourly_report_embed_text` and confirm hourly and final Discord/webhook posts always include the report image, with text fields only when enabled.
 
 ## Controls
-- [ ] Start / pause / resume / stop hotkeys work (hotkey code was rewritten). *(Native hotkeys remain unverified; see the Controls check below.)*
-- [ ] While **recording a keybind** in the GUI, pressing F1/F3 does not start or stop the macro. *(Failed: F1/F3 started/stopped the macro while recording, because the recording check called a GUI function that didn't exist. Fixed; retest.)*
+- [ ] Start / pause / resume / stop hotkeys work (hotkey code was rewritten). *(Native hotkeys remain unverified; see the Controls check below.)* *(Automated 2026-10-01: with simulated key events, F1 starts, F2 pauses and resumes, F3 stops (stopping tools and releasing held input), and F4 starts Hotbar Buff. Still needs: real key presses with Roblox focused.)*
+- [ ] While **recording a keybind** in the GUI, pressing F1/F3 does not start or stop the macro. *(Failed: F1/F3 started/stopped the macro while recording, because the recording check called a GUI function that didn't exist. Fixed; retest.)* *(Automated 2026-10-01: every GUI function the hotkeys call exists (including `isKeybindRecording`, the cause of the failure), and F1/F2/F3 are ignored while recording. Still needs: real key presses while recording.)*
 - [x] Hotbar Buff / Auto Clicker / Auto Gifted Basic Bee hotkeys start their tools.
 - [x] Stop the macro with a hotkey while a hotkey-launched tool is running; the tool stops too.
-- [ ] Pause and resume during a gather pattern and a sleeping task; movement and the sleep wait while paused, then continue.
+- [ ] Pause and resume during a gather pattern and a sleeping task; movement and the sleep wait while paused, then continue. *(Automated 2026-10-01: the pause-aware sleep (main thread and pattern threads) doesn't end while paused, runs the resume callback, and returns promptly on stop; paused time counts toward the sleep, as on `main`. Still needs: a pause during a live gather and a long wait.)*
 
 ## Performance and dependency cleanup
 - [x] Start the macro from the GUI: it runs normally (the macro loop moved from `main.py` to `modules/macro_loop.py`). *(Multiple QA profiles started from the GUI, claimed a hive, and reached gathering.)*
 - [x] With the Discord bot enabled, the bot starts and responds to commands (it no longer loads the macro at startup).
 - [ ] **Intel Mac on macOS 12+** (Python 3.8). It uses the same installer branch as Apple Silicon, so re-running the installer now uninstalls torch, torchvision, scipy, and PyWavelets there too. Afterwards: the macro launches; fuzzy_ai_gather and blooms_ai load a model (Core ML, or ONNX if Core ML fails) and gather; OCR works through Apple Vision (blue text pings, quest titles); and the terminal shows no dyld or torch import errors. Also run a fresh install on that Mac. If no such Mac is available, say so in the release notes.
-- [ ] Re-run `install_dependencies.command` on an existing install: matplotlib, html2image, httpx, ImageHash, and (Apple Silicon) torch/torchvision are uninstalled, and the macro still launches.
-- [ ] **Guiding star**, **windy bee**, **unusual sprout**, and **sticker sprout** pings still fire, including with several enabled at once (they now share one OCR scan).
-- [ ] **Memory match** still pairs tiles (image hash replaced; blue text read renamed).
+- [ ] Re-run `install_dependencies.command` on an existing install: matplotlib, html2image, httpx, ImageHash, and (Apple Silicon) torch/torchvision are uninstalled, and the macro still launches. *(Automated 2026-10-01: on this Mac the re-run reported "Skipping … not installed" for every package and left them in the venv, because this venv was moved from `/tmp/fuzzy-framework-env` and its `activate` still points there (see Automated checks below). Retest on a normally installed venv.)*
+- [ ] **Guiding star**, **windy bee**, **unusual sprout**, and **sticker sprout** pings still fire, including with several enabled at once (they now share one OCR scan). *(Automated 2026-10-01: one blue text read feeds every enabled detector, and sample text fires the Guiding Star, Windy Bee and Unusual Sprout pings. Still needs: pings arriving in Discord during a session.)*
+- [ ] **Memory match** still pairs tiles (image hash replaced; blue text read renamed). *(Automated 2026-10-01: reward templates load (see Memory match above). Still needs: a live memory match.)*
 - [ ] **Blender** with max quantity stops adding once the quantity stops changing (image hash replaced).
 - [ ] Quests: the quest page scrolls to the top and reads quest titles (image hash replaced).
-- [ ] Inventory item search scrolls and finds items, e.g. using glitter or a planter (image hash replaced).
+- [ ] Inventory item search scrolls and finds items, e.g. using glitter or a planter (image hash replaced). *(Automated 2026-10-01: the item images exist (see Planters above). Still needs: a live inventory search.)*
 - [ ] **Auto Gifted Basic Bee** scrolls and detects rolls (image hash replaced).
-- [ ] **Auto Field Boost** and field booster quests detect the boosted field from the blue text.
+- [ ] **Auto Field Boost** and field booster quests detect the boosted field from the blue text. *(Automated 2026-10-01: sample blue text gives the right field, the latest boost wins, and Coconut kick messages are ignored. Still needs: a live AFB run.)*
 - [x] GUI → Collect → Seasonal: the **Petals & Blooms** cheat sheet shows and stays sharp when clicked to zoom (now WebP).
 - [x] GUI → Collect → Memory Match: all reward icons show in the reward picker (now loaded from `src/images/memorymatch/`).
 - [ ] Start the macro with blender enabled and no items left to craft: the "no more items left to craft" popup still appears.
@@ -181,3 +181,34 @@ that profile's enabled fields and `blooms_ai` pattern.
 The macro was stopped after each final live run. The last verified state was
 `qa_04_gumdrop_quest_only` active with the GUI showing Start. Alt/TAD items
 remain intentionally skipped at the user's request.
+
+## Automated checks — 2026-10-01
+
+Ran the local QA scripts (`./qa/run_qa.command`, not shipped) against this checkout on
+Apple Silicon, macOS 27, venv Python 3.9.8: 26 checks and 107 unit tests passed. These
+check logic and files with stand-in keyboard, mouse and screenshots, and settings
+changes run on a temporary copy of the profiles, so nothing was played in Roblox. The
+notes on the items above say what each one still needs live.
+
+- **Installer re-run left the removed packages installed on this Mac.** Every
+  `pip uninstall` printed "Skipping … not installed" because bare `pip` resolved to
+  pyenv's pip (`~/.pyenv/shims/pip`), not the venv's. This venv was created at
+  `/tmp/fuzzy-framework-env` and moved to `~/fuzzy-macro-env`: its `activate` still adds
+  `/tmp/fuzzy-framework-env/bin` to `PATH`, and the installer's "venv is valid" check only
+  tests that `bin/python` and `bin/pip` exist. Venvs the installer creates in place are
+  not affected. The packages were then removed with `~/fuzzy-macro-env/bin/python -m pip
+  uninstall`, and `pip check` found no broken requirements. Calling
+  `"$VENV_PATH/bin/python" -m pip` in the installer instead of bare `pip` would avoid this.
+- Before the packages were removed, importing the macro loaded matplotlib. The macro
+  doesn't import it: `ocrmac` imports it whenever it is installed. After removal,
+  nothing heavy loads.
+- Stable and Beta both offered 1.3.4, because no prerelease is newer than the latest
+  stable release right now.
+- Only `testing` has a `.migration_version`; the other 16 profiles haven't been opened
+  since updating, which is expected until they are.
+- This checkout has no custom or edited patterns, so the dry run also used a synthetic
+  custom pattern and an edited `e_lol`.
+- Still not covered by any script: preferred hive free, convert (including night), mob
+  run, Vicious Bee, bosses, quests, the Intel Mac on macOS 12+, blender (both items), the
+  quest page scroll, and Auto Gifted Basic Bee.
+
