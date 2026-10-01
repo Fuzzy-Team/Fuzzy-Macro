@@ -525,7 +525,7 @@ def _find_best_token(runtime, detections):
             continue
 
         future_dist = math.hypot(future_x, future_y)
-        if metrics["field_bounded"] and future_dist > metrics["hard_leash"]:
+        if future_dist > metrics["hard_leash"]:
             rejected.append({"name": token_name, "reason": "hard_leash", "confidence": confidence, "distance": distance, "future_dist": future_dist, "tx": tx, "ty": ty})
             continue
         proximity = 1.0 / (0.3 + distance) ** metrics["proximity_exp"]

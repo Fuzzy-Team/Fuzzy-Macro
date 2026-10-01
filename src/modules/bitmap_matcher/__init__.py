@@ -29,7 +29,10 @@ def load_bitmap_matcher():
         )
 
     # clear the download quarantine flag, otherwise macOS refuses to load the unsigned extension
-    subprocess.run(["xattr", "-cr", str(so_path)])
+    try:
+        subprocess.run(["xattr", "-cr", str(so_path)])
+    except OSError as e:
+        print(f"Warning: could not clear quarantine flag on {so_path.name}: {e}")
 
     spec = importlib.util.spec_from_file_location("bitmap_matcher", so_path)
     module = importlib.util.module_from_spec(spec)
