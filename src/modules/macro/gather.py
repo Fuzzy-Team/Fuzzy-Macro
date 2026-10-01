@@ -534,9 +534,9 @@ class GatherMixin:
                 self.isGathering = False
                 gatherSession.finish(gatherNameSpace)
 
-        if fieldSetting["shift_lock"]: 
-            self.keyboard.press('shift')
-        
+        if fieldSetting["shift_lock"]:
+            self.enableShiftLock()
+
         try:
             while keepGathering:
                 # Check if paused and wait
