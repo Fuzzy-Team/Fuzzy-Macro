@@ -34,7 +34,7 @@ class MobMixin:
         self.keyboard.walk("d",3) 
         if self.setdat["mondo_buff_loot"]: # If looting is enabled, wait until mondo is defeated
             self.logger.webhook("", "Waiting for Mondo to be defeated", "light green")
-            self.keyboard.press("shift") #moves slightly up (or down) when hitting wall, so this reduces that
+            self.enableShiftLock() #moves slightly up (or down) when hitting wall, so this reduces that
             while True:
                 screen = self.blueTextScreen()
                 #defeat

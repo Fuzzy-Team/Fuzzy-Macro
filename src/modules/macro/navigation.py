@@ -71,7 +71,7 @@ class NavigationMixin:
                 self.location = "spawn"
                 return False
             #HIVE HUB PATH
-            self.keyboard.press("shift")
+            self.enableShiftLock()
             self.keyboard.keyDown("w")
             time.sleep(6)
             self.keyboard.keyUp("w")
