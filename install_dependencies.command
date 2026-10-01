@@ -17,6 +17,12 @@ activate_virtual_env() {
     source "$VENV_PATH/bin/activate"
 }
 
+# Run the venv's pip directly. A venv moved from where it was created still points
+# `activate` at the old path, so a bare `pip` would fall through to another Python.
+venv_pip() {
+    "$VENV_PATH/bin/python" -m pip "$@"
+}
+
 install_pip_package() {
 	local packages="$1"
 	local extra_args="$2"
@@ -31,10 +37,10 @@ install_pip_package() {
 	fi
 
 	if [ "$chip" = "arm64" ]; then
-		arch -arm64 pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 $extra_args $packages $constraint_arg
+		arch -arm64 "$VENV_PATH/bin/python" -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 $extra_args $packages $constraint_arg
 	else
 		#fallback for other architectures
-		pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 $extra_args $packages $constraint_arg
+		venv_pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 $extra_args $packages $constraint_arg
 	fi
 
 	if [ -n "$tmp_constraint" ] && [ -f "$tmp_constraint" ]; then
@@ -179,7 +185,7 @@ while [ "$attempt" -le 3 ]; do
 	fi
 done
 
-pip install --upgrade pip setuptools wheel
+venv_pip install --upgrade pip setuptools wheel
 install_pip_package "numpy<2"
 printf "\033[1;35mInstalling libraries\033[0m\n\n"
 
@@ -194,7 +200,7 @@ if [ "$python_ver" = '3.9' ] || { [ "$python_ver" = '3.8' ] && version_at_least 
 	install_pip_package "pyobjc-framework-ApplicationServices"
 	# torch was installed here before coremltools stopped needing it, and scipy/PyWavelets
 	# only came with ImageHash. Nothing on this path uses them anymore.
-	pip uninstall -y torch torchvision scipy PyWavelets
+	venv_pip uninstall -y torch torchvision scipy PyWavelets
 
 elif version_at_least "$os_ver" "10.15.0"; then
 	printf "\033[1;35mInstalling rust\n\n\033[0m"
@@ -204,7 +210,7 @@ elif version_at_least "$os_ver" "10.15.0"; then
 	# OpenCV 4.4 and 4.6 cannot load the current AI Gather ONNX models.
 	# OpenCV 4.10 has a compatible macOS 10.15 Intel wheel. Keep exactly one
 	# OpenCV package installed because all variants share the cv2 namespace.
-	pip uninstall -y opencv-python opencv-contrib-python opencv-python-headless opencv-contrib-python-headless
+	venv_pip uninstall -y opencv-python opencv-contrib-python opencv-python-headless opencv-contrib-python-headless
 	install_pip_package "opencv-python==4.10.0.84 numpy==1.19.1" "--force-reinstall"
 	install_pip_package "easyocr" "--no-deps"
 	install_pip_package "torch"
@@ -252,7 +258,7 @@ install_pip_package "pygetwindow"
 install_pip_package "requests" #used to check if this script was ran, should be installed by discord-webhooks
 install_pip_package "pynput"
 # no longer used; ocrmac imports matplotlib whenever it is installed, slowing startup
-pip uninstall -y matplotlib html2image httpx ImageHash
+venv_pip uninstall -y matplotlib html2image httpx ImageHash
 install_pip_package "numpy<2" "--force-reinstall"
 
 "$VENV_PATH/bin/python" << "EOF"
