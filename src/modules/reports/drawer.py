@@ -490,7 +490,8 @@ class HourlyReportDrawer:
             {"label": "Other", "seconds": sessionSource.get("bug_run_time", hourlyReportStats.get("bug_run_time", 0)) + sessionSource.get("misc_time", hourlyReportStats.get("misc_time", 0)), "color": self.otherColor},
         ]
 
-        self._drawActivityCard(statRegions["lasthour"], "LAST HOUR", hourRows, honeyData, timeLabels)
+        firstCardTitle = "SESSION TOTAL" if reportTitle == "Session Report" else "LAST HOUR"
+        self._drawActivityCard(statRegions["lasthour"], firstCardTitle, hourRows, honeyData, timeLabels)
         x, y, w, _ = statRegions["lasthour"]
         topFont = self.getFont("bold", 60)
         self.draw.text((x + 200, y + 96), "Honey Earned", font=topFont, fill=self.bodyColor)

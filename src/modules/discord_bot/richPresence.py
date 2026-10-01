@@ -274,6 +274,5 @@ class RichPresenceManager:
 
     def set_enabled(self, enabled: bool):
         """Enable or disable Rich Presence"""
+        # update_loop owns the RPC client and disconnects it when disabled
         self.enabled = enabled
-        if not enabled and self.connected:
-            self.disconnect()
