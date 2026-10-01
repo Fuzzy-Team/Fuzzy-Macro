@@ -103,7 +103,8 @@ Follow our [installation guide](https://fuzzy-team.gitbook.io/fuzzy-macro) to ge
 - Pattern Makers: Existance, NatroTeam, tvojamamkajenic, sev, dully176, chillketchup, Electro
 
 ## Preview
-<img width="1312" height="1022" alt="image" src="https://github.com/user-attachments/assets/5e4f2840-61fe-4452-a3f4-8bc03bfe9905" />
+<img width="1312" height="1022" alt="image" src="https://github.com/user-attachments/assets/1cfc3c25-f51e-4ec9-9470-35636af1583e" />
+
 
 ## Notes
 
