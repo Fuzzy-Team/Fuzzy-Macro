@@ -1028,6 +1028,12 @@ class macro:
 
     def ensure_shift_lock_off_on_start(self):
         self.ensure_shift_lock_off("startup")
+
+    def enableShiftLock(self):
+        # Enabling Shift Lock snaps the cursor to the window centre. Since Roblox 0.741 that
+        # jump is applied as mouse movement and swings the camera, so centre the cursor first.
+        mouse.moveTo(self.robloxWindow.mx + self.robloxWindow.mw // 2, self.robloxWindow.my + self.robloxWindow.mh // 2)
+        self.keyboard.press("shift")
     
     def _set_presence_payload(self, payload: dict):
         if self.presence is None:
@@ -1912,7 +1918,7 @@ class macro:
                 usePrivateServer=bool(self.setdat.get("hive_hub_private_server", False)),
             )
             #HIVE HUB PATH
-            self.keyboard.press("shift")
+            self.enableShiftLock()
             self.keyboard.keyDown("w")
             time.sleep(6)
             self.keyboard.keyUp("w")
@@ -4773,9 +4779,9 @@ class macro:
             if "onGatherEnd" in gatherNameSpace and callable(gatherNameSpace["onGatherEnd"]):
                 gatherNameSpace["onGatherEnd"]()
 
-        if fieldSetting["shift_lock"]: 
-            self.keyboard.press('shift')
-        
+        if fieldSetting["shift_lock"]:
+            self.enableShiftLock()
+
         while keepGathering:
             # Check if paused and wait
             if self.checkPauseAndWait():
@@ -5264,7 +5270,7 @@ class macro:
         self.keyboard.walk("d",3) 
         if self.setdat["mondo_buff_loot"]: # If looting is enabled, wait until mondo is defeated
             self.logger.webhook("", "Waiting for Mondo to be defeated", "light green")
-            self.keyboard.press("shift") #moves slightly up (or down) when hitting wall, so this reduces that
+            self.enableShiftLock() #moves slightly up (or down) when hitting wall, so this reduces that
             while True:
                 #defeat
                 if self.blueTextImageSearch("defeated") and self.blueTextImageSearch("mondo"): 
@@ -5331,7 +5337,7 @@ class macro:
             # if collecting tokens produced by bees
             if self.setdat["mondo_collect_token"]:
                 # enable shiftlock
-                self.keyboard.press("shift")
+                self.enableShiftLock()
                 while time.perf_counter() < end_time: 
                     self.keyboard.walk("a", 0.45)
                     for slowmove in range(9):
