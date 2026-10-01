@@ -1816,6 +1816,10 @@ class macro:
         return cooldownSeconds
 
     def isFullScreen(self):
+        if platform.system() == "Windows":
+            x, y, w, h = appManager.getWindowSize("Roblox")
+            screen_w, screen_h = pag.size()
+            return x == 0 and y == 0 and w == screen_w and h == screen_h
         windows = gw.getAllTitles()
         for win in windows:
             win_l = win.lower()

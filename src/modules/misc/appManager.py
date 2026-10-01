@@ -9,6 +9,28 @@ mw, mh = pag.size()
 
 
 if _IS_WINDOWS:
+    import ctypes
+    from ctypes import wintypes
+
+    # HWND is pointer-sized. ctypes defaults to C int without these signatures,
+    # which can truncate window handles in 64-bit Python.
+    _user32 = ctypes.windll.user32
+    _enum_proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    _window_api_signatures = {
+        "EnumWindows": ([_enum_proc, wintypes.LPARAM], wintypes.BOOL),
+        "IsWindowVisible": ([wintypes.HWND], wintypes.BOOL),
+        "GetWindowTextLengthW": ([wintypes.HWND], ctypes.c_int),
+        "GetWindowTextW": ([wintypes.HWND, wintypes.LPWSTR, ctypes.c_int], ctypes.c_int),
+        "GetForegroundWindow": ([], wintypes.HWND),
+        "ShowWindow": ([wintypes.HWND, ctypes.c_int], wintypes.BOOL),
+        "SetForegroundWindow": ([wintypes.HWND], wintypes.BOOL),
+        "GetWindowRect": ([wintypes.HWND, ctypes.POINTER(wintypes.RECT)], wintypes.BOOL),
+    }
+    for _name, (_args, _result) in _window_api_signatures.items():
+        _function = getattr(_user32, _name)
+        _function.argtypes = _args
+        _function.restype = _result
+
     # Roblox Windows clients use RobloxPlayerBeta.exe, not "roblox.exe".
     _ROBLOX_PROCESS_NAMES = (
         "RobloxPlayerBeta.exe",
@@ -66,8 +88,7 @@ if _IS_WINDOWS:
                     return False
             return True
 
-        enum_proc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.wintypes.HWND, ctypes.c_void_p)
-        user32.EnumWindows(enum_proc(_enum_callback), None)
+        user32.EnumWindows(_enum_proc(_enum_callback), 0)
 
     def _focus_window_by_app(app="Roblox"):
         try:
@@ -141,10 +162,9 @@ if _IS_WINDOWS:
             return False
 
     def openDeeplink(link):
-        try:
-            subprocess.Popen(["cmd", "/c", "start", "", link], shell=False)
-        except Exception:
-            os.startfile(link)
+        # ShellExecute opens the registered URL handler without cmd interpreting
+        # query-string characters such as & as additional commands.
+        os.startfile(link)
 
     def closeApp(app):
         for image_name in _process_names_for_app(app):
@@ -178,7 +198,8 @@ if _IS_WINDOWS:
 
             def _collect(hwnd, _title):
                 rect = ctypes.wintypes.RECT()
-                user32.GetWindowRect(hwnd, ctypes.byref(rect))
+                if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                    return True
                 width = rect.right - rect.left
                 height = rect.bottom - rect.top
                 # Prefer the main game window over tiny helper windows

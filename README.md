@@ -24,6 +24,16 @@ Roblox Bee Swarm Simulator macro for macOS and Windows. Free, open source, and a
 
 Follow our [installation guide](https://fuzzy-team.gitbook.io/fuzzy-macro) to get started, if you have any questions or need help feel free to [join our discord](https://discord.gg/rGRVG8Rpsb).
 
+### Windows setup
+
+Windows support is in beta. Use 64-bit Python 3.9 or 3.8; the bundled bitmap matcher does not support newer Python versions or Windows ARM64 Python.
+
+1. Download or check out the `windows` branch.
+2. Run `install_dependencies.bat`. It creates a virtual environment, checks dependencies, and launches the macro after installation succeeds.
+3. Use `run_macro.bat` for later launches and accept the administrator prompt for game input.
+
+Keep Roblox on your primary display. Windows updates use the `windows` branch, including its update rules and ONNX models.
+
 ## Features
 
 ### Field Management & Gathering

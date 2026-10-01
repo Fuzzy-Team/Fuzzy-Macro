@@ -337,7 +337,7 @@ def _read_ignore_rules(extracted):
     with open(ignore_path, "r", encoding="utf-8") as fh:
         release_lines = fh.readlines()
     response = requests.get(
-        "https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/.gitignore",
+        f"https://raw.githubusercontent.com/{_REPO_SLUG}/refs/heads/{_update_source_branch()}/.gitignore",
         timeout=20,
         headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
     )
@@ -726,6 +726,7 @@ def _create_backup(destination, backup_path, protected_folders, protected_files)
     excluded_folders = set(protected_folders)
     excluded_folders.update({
         ".git",
+        "fuzzy-macro-env",
         os.path.join("src", "data", "user", "fuzzy_ai_recordings"),
     })
     backup_abs = os.path.abspath(backup_path)
