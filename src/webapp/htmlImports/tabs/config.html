@@ -871,6 +871,13 @@
         },
       ]);
 
+      // discord.py 1.x (macOS 10.12-10.14) has no slash commands, so the bot uses a text prefix
+      eel.usesLegacyDiscordBot()((legacy) => {
+        if (!legacy) return;
+        const tokenDesc = document.getElementById("discord_bot_token")?.closest("form")?.querySelector("p");
+        if (tokenDesc) tokenDesc.innerHTML += "<br><strong>On this macOS version, bot commands use <code>fuzz!</code> instead of <code>/</code>, e.g. <code>fuzz!status</code>. To use <code>fuzz!</code> commands in guild channels, enable Message Content access in the Discord Developer Portal. If it is unavailable, mention the bot instead, e.g. <code>@Bot status</code>.</strong>";
+      });
+
       buildStandardContainer(parentDiscord, "Message Options", "", [
         {
           id: "send_screenshot",

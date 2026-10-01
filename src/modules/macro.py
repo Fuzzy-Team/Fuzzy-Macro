@@ -1028,6 +1028,12 @@ class macro:
 
     def ensure_shift_lock_off_on_start(self):
         self.ensure_shift_lock_off("startup")
+
+    def enableShiftLock(self):
+        # Enabling Shift Lock snaps the cursor to the window centre. Since Roblox 0.741 that
+        # jump is applied as mouse movement and swings the camera, so centre the cursor first.
+        mouse.moveTo(self.robloxWindow.mx + self.robloxWindow.mw // 2, self.robloxWindow.my + self.robloxWindow.mh // 2)
+        self.keyboard.press("shift")
     
     def _set_presence_payload(self, payload: dict):
         if self.presence is None:
@@ -1917,7 +1923,7 @@ class macro:
                 usePrivateServer=bool(self.setdat.get("hive_hub_private_server", False)),
             )
             #HIVE HUB PATH
-            self.keyboard.press("shift")
+            self.enableShiftLock()
             self.keyboard.keyDown("w")
             time.sleep(6)
             self.keyboard.keyUp("w")
@@ -4778,9 +4784,9 @@ class macro:
             if "onGatherEnd" in gatherNameSpace and callable(gatherNameSpace["onGatherEnd"]):
                 gatherNameSpace["onGatherEnd"]()
 
-        if fieldSetting["shift_lock"]: 
-            self.keyboard.press('shift')
-        
+        if fieldSetting["shift_lock"]:
+            self.enableShiftLock()
+
         while keepGathering:
             # Check if paused and wait
             if self.checkPauseAndWait():
@@ -5269,7 +5275,7 @@ class macro:
         self.keyboard.walk("d",3) 
         if self.setdat["mondo_buff_loot"]: # If looting is enabled, wait until mondo is defeated
             self.logger.webhook("", "Waiting for Mondo to be defeated", "light green")
-            self.keyboard.press("shift") #moves slightly up (or down) when hitting wall, so this reduces that
+            self.enableShiftLock() #moves slightly up (or down) when hitting wall, so this reduces that
             while True:
                 #defeat
                 if self.blueTextImageSearch("defeated") and self.blueTextImageSearch("mondo"): 
@@ -5336,7 +5342,7 @@ class macro:
             # if collecting tokens produced by bees
             if self.setdat["mondo_collect_token"]:
                 # enable shiftlock
-                self.keyboard.press("shift")
+                self.enableShiftLock()
                 while time.perf_counter() < end_time: 
                     self.keyboard.walk("a", 0.45)
                     for slowmove in range(9):
@@ -5937,28 +5943,73 @@ class macro:
         self.reset()
 
     def stumpSnail(self):
-        for _ in range(3):
-            if not self.travelViaCannon("Stump Snail"):
-                return
-            self.logger.webhook("","Travelling: Stump Snail", "dark brown")
-            self.goToField("stump")
-            if self.placeSprinkler():
-                break
-            self.logger.webhook("", "Failed to land in stump field", "red", "screen", ping_category="ping_critical_errors")
-            self.reset()
+        sideTaskIntervalMinutes = self.setdat.get("stump_snail_balloon_interval", 0)
+        try:
+            sideTaskInterval = max(0, int(sideTaskIntervalMinutes)) * 60
+        except (TypeError, ValueError):
+            sideTaskInterval = 0
+        patternDuration = 120
+
+        def goToStump():
+            for _ in range(3):
+                self.cannon()
+                self.logger.webhook("", "Travelling: Stump Snail", "dark brown")
+                self.goToField("stump")
+                if self.placeSprinkler():
+                    return True
+                self.logger.webhook("", "Failed to land in stump field", "red", "screen", ping_category="ping_critical_errors")
+                self.reset()
+            return False
+
+        def runGatherPattern(patternName, duration):
+            st = time.time()
+            mouse.moveBy(10, 5)
+            self.keyboard.releaseMovement()
+            nameSpace = {**locals(), **globals()}
+            while time.time() - st < duration:
+                if self.checkPauseAndWait():
+                    break
+                mouse.mouseDown()
+                try:
+                    exec(open(f"../settings/patterns/{patternName}.py").read(), nameSpace)
+                except Exception:
+                    print(traceback.format_exc())
+                    break
+                mouse.mouseUp()
+            mouse.mouseUp()
+
+        def runSideTask():
+            self.logger.webhook("", "Stump Snail: Running periodic side task", "dark brown")
+            self.reset(convert=False)
+            self.runPath("cannon_to_field/pine")
+            runGatherPattern("skillet", patternDuration)
+            self.reset(convert=True)
+            goToStump()
+
+        goToStump()
+
         # Set status to attacking for hotbar logic
         self.set_task_status("attacking", activity="stump_snail")
         try:
-            while True:
-                # Check if paused and wait
+            keepOldData = None
+            while keepOldData is None:
+                cycleStart = time.time()
                 if self.checkPauseAndWait():
-                    # Stop was requested while paused
                     return
-                mouse.click()
-                keepOldData = self.keepOldCheck()
-                if keepOldData is not None:
-                    mouse.mouseUp()
-                    break
+                while True:
+                    if self.checkPauseAndWait():
+                        return
+                    mouse.click()
+                    keepOldData = self.keepOldCheck()
+                    if keepOldData is not None:
+                        mouse.mouseUp()
+                        break
+                    if sideTaskInterval <= 0 or time.time() - cycleStart >= sideTaskInterval:
+                        mouse.mouseUp()
+                        break
+
+                if keepOldData is None and sideTaskInterval > 0:
+                    runSideTask()
         finally:
             self.set_task_status(None, update_presence=False)  # Reset status after attack
         #handle the other stump snail

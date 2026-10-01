@@ -38,15 +38,19 @@ done
 chip=$(arch)
 os_ver=$(sw_vers -productVersion)
 
+version_at_least() {
+    [ "$(printf '%s\n' "$1" "$2" | sort -V | head -n1)" = "$2" ]
+}
+
 python_ver="3.9"
 if [ "$chip" = "i386" ]; then
-    if echo -e "$os_ver\n10.15.0" | sort -V | tail -n1 | grep -Fq "10.15.0"; then
-        python_ver="3.7"
-        printf "Correct python ver: 3.7\n"
-    elif echo -e "$os_ver\n12.0.0" | sort -V | tail -n1 | grep -Fq "12.0.0"; then
-        python_ver="3.8"
-        printf "Correct python ver: 3.8\n"
-    fi
+	if version_at_least "$os_ver" "10.15.0"; then
+		python_ver="3.8"
+		printf "Correct python ver: 3.8\n"
+	else
+		python_ver="3.7"
+		printf "Correct python ver: 3.7\n"
+	fi
 fi
 
 cd "$(dirname "$0")"
