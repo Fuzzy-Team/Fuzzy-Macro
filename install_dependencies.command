@@ -37,9 +37,11 @@ install_pip_package() {
 		pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 $extra_args $packages $constraint_arg
 	fi
 
+	local install_status=$?
 	if [ -n "$tmp_constraint" ] && [ -f "$tmp_constraint" ]; then
 		rm -f "$tmp_constraint"
 	fi
+	return "$install_status"
 }
 
 upgrade_pip_tools() {
@@ -54,11 +56,16 @@ upgrade_pip_tools() {
 chip=$(arch)
 os_ver=$(sw_vers -productVersion)
 
-# BSD sort on macOS supports version sorting.  The old checks compared the
-# result to an exact version (for example, 10.15.0), which misclassified every
-# later patch release such as Catalina 10.15.7 and Monterey 12.3.3.
+# Compare numeric components, treating omitted patch versions as zero.
 version_at_least() {
-	[ "$(printf '%s\n' "$1" "$2" | sort -V | head -n1)" = "$2" ]
+    awk -v actual="$1" -v required="$2" 'BEGIN {
+        split(actual, a, "."); split(required, b, ".")
+        for (i = 1; i <= 3; i++) {
+            if (a[i] + 0 > b[i] + 0) exit 0
+            if (a[i] + 0 < b[i] + 0) exit 1
+        }
+        exit 0
+    }'
 }
 
 #check mac compatibility
@@ -199,11 +206,18 @@ elif version_at_least "$os_ver" "10.15.0"; then
 	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 	source "$HOME/.cargo/env"
 
-	# OpenCV 4.4 and 4.6 cannot load the current AI Gather ONNX models.
-	# OpenCV 4.10 has a compatible macOS 10.15 Intel wheel. Keep exactly one
-	# OpenCV package installed because all variants share the cv2 namespace.
+	# OpenCV 4.10 Intel wheels require macOS 12. Older Intel Macs must build
+	# the ONNX-compatible version from source with the Xcode command-line tools.
+	if ! xcrun --find clang >/dev/null 2>&1; then
+		printf "OpenCV 4.10 needs the Xcode command-line tools on this macOS version. Run xcode-select --install, then rerun this installer.\n"
+		exit 1
+	fi
+	# Keep exactly one OpenCV package because all variants share cv2.
 	pip uninstall -y opencv-python opencv-contrib-python opencv-python-headless opencv-contrib-python-headless
-	install_pip_package "opencv-python==4.10.0.84 numpy==1.19.1 Polygon3" "--force-reinstall"
+	if ! MACOSX_DEPLOYMENT_TARGET=10.15 CMAKE_ARGS="-DCMAKE_OSX_DEPLOYMENT_TARGET=10.15" install_pip_package "opencv-python==4.10.0.84 numpy==1.19.1 Polygon3" "--force-reinstall --no-binary=opencv-python"; then
+		printf "OpenCV source build failed. See the build error above; installation is incomplete.\n"
+		exit 1
+	fi
 	install_pip_package "easyocr" "--no-deps"
 	install_pip_package "torch"
 	install_pip_package "torchvision>=0.5"

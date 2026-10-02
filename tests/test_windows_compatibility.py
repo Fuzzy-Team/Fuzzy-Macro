@@ -142,6 +142,9 @@ class UpdaterTests(unittest.TestCase):
             custom.write_text('# user path\n', encoding='utf-8')
             obsolete = installed / 'src/obsolete.py'
             obsolete.write_text('# obsolete\n', encoding='utf-8')
+            self.module._write_installed_files_manifest(str(installed), {
+                'src/obsolete.py': self.module._git_blob_sha(str(obsolete)),
+            })
             (incoming / 'src/main.py').write_text('# updated main\n', encoding='utf-8')
             rules = (['fuzzy-macro-env/'], ['fuzzy-macro-env/'])
             with mock.patch.object(self.module, '_load_ignore_rules', return_value=rules), mock.patch('sys.stdout', new=io.StringIO()):

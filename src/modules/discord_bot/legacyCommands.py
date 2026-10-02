@@ -9,6 +9,7 @@ that needs buttons or forms replies with a note instead.
 import inspect
 import types
 from typing import Optional
+import requests
 
 import discord
 from discord.ext import commands
@@ -19,6 +20,28 @@ INTERACTIVE_UNAVAILABLE = (
     "ℹ️ Buttons, menus, and forms aren't available on this macOS version. "
     "Use the macro's GUI or the text commands in `" + PREFIX + "help` instead."
 )
+
+
+def gateway_intents(token):
+    """Request message content only if Discord authorizes it for this legacy bot."""
+    intents = discord.Intents.default()
+    try:
+        response = requests.get(
+            "https://discord.com/api/v10/oauth2/applications/@me",
+            headers={"Authorization": f"Bot {token}"}, timeout=10,
+        )
+        response.raise_for_status()
+        application = response.json()
+        flags = int(application.get("flags_new", application.get("flags", 0)))
+        if flags & ((1 << 18) | (1 << 19)):
+            # discord.py 1.7 predates the message_content property. Its raw
+            # intent value still supports the gateway's MESSAGE_CONTENT bit.
+            intents.value |= 1 << 15
+        else:
+            print("Legacy Discord commands require a bot mention in guilds; Message Content is not enabled.")
+    except (requests.RequestException, ValueError, TypeError):
+        print("Could not check legacy Discord intents; guild commands require a bot mention.")
+    return intents
 
 
 # --- app_commands stand-ins ---------------------------------------------------------

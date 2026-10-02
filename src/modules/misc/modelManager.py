@@ -34,6 +34,23 @@ ONNX_MODELS = (
 MACOS_METADATA_FILES = {".DS_Store"}
 
 
+class ModelIntegrityError(ValueError):
+    """Downloaded model bytes do not match the repository's recorded hashes."""
+
+
+def _contains_protected_entries(path):
+    """Check the whole model package before deleting anything beside user files."""
+    def raise_walk_error(exc):
+        raise exc
+
+    for root, dirs, files in os.walk(path, followlinks=False, onerror=raise_walk_error):
+        if any(os.path.islink(os.path.join(root, name)) for name in dirs + files):
+            return True
+        if any(name.lower().endswith(".pt") for name in files):
+            return True
+    return False
+
+
 def _macos_version():
     version = platform.mac_ver()[0]
     parts = []
@@ -62,11 +79,10 @@ def _delete_path(path):
             print(f"[models] Kept symlink {path}")
             return False
         if os.path.isdir(path):
-            for name in os.listdir(path):
-                _delete_path(os.path.join(path, name))
-            if os.listdir(path):
+            if _contains_protected_entries(path):
+                print(f"[models] Kept package containing protected entries {path}")
                 return False
-            os.rmdir(path)
+            shutil.rmtree(path)
         elif os.path.isfile(path):
             if path.lower().endswith(".pt"):
                 print(f"[models] Kept .pt file {path}")
@@ -192,7 +208,7 @@ def _download_remote_tree(remote_files, remote_root_path, destination_root):
             tmp_file = os.path.join(tmp_root, remote_root_path)
             _download_file(remote_files[0]["download_url"], tmp_file)
             if not _local_matches_remote(tmp_file, remote_files, remote_root_path):
-                raise ValueError(f"Downloaded model failed hash check: {remote_root_path}")
+                raise ModelIntegrityError(f"Downloaded model failed hash check: {remote_root_path}")
             if os.path.exists(destination_root):
                 if os.path.isdir(destination_root):
                     shutil.rmtree(destination_root)
@@ -205,7 +221,7 @@ def _download_remote_tree(remote_files, remote_root_path, destination_root):
             rel_path = os.path.relpath(remote_file["path"], remote_root_path)
             _download_file(remote_file["download_url"], os.path.join(tmp_root, rel_path))
         if not _local_matches_remote(tmp_root, remote_files, remote_root_path):
-            raise ValueError(f"Downloaded model failed hash check: {remote_root_path}")
+            raise ModelIntegrityError(f"Downloaded model failed hash check: {remote_root_path}")
         if os.path.exists(destination_root):
             if os.path.isdir(destination_root):
                 shutil.rmtree(destination_root)
@@ -217,7 +233,12 @@ def _download_remote_tree(remote_files, remote_root_path, destination_root):
         raise
 
 
-def _copy_from_repo_zip(model_name, destination_root):
+def _copy_from_repo_zip(model_name, destination_root, remote_files=None):
+    """Install ZIP model files only after verifying them against remote blob hashes."""
+    if remote_files is None:
+        remote_files = _remote_tree(f"{MODELS_API_URL}/{model_name}")
+    if not remote_files:
+        raise ModelIntegrityError(f"No remote hashes available for {model_name}")
     response = requests.get(MODELS_ZIP_URL, timeout=90)
     response.raise_for_status()
     archive = zipfile.ZipFile(BytesIO(response.content))
@@ -236,6 +257,8 @@ def _copy_from_repo_zip(model_name, destination_root):
         if model_name.endswith(".onnx"):
             archive.extract(model_prefix, tmp_root)
             extracted_path = os.path.join(tmp_root, model_prefix)
+            if not _local_matches_remote(extracted_path, remote_files, model_name):
+                raise ModelIntegrityError(f"ZIP model failed hash check: {model_name}")
             if os.path.exists(destination_root):
                 if os.path.isdir(destination_root):
                     shutil.rmtree(destination_root)
@@ -253,6 +276,8 @@ def _copy_from_repo_zip(model_name, destination_root):
             os.makedirs(os.path.dirname(target), exist_ok=True)
             with archive.open(name) as src, open(target, "wb") as dst:
                 shutil.copyfileobj(src, dst)
+        if not _local_matches_remote(package_tmp, remote_files, model_name):
+            raise ModelIntegrityError(f"ZIP model failed hash check: {model_name}")
         if os.path.exists(destination_root):
             if os.path.isdir(destination_root):
                 shutil.rmtree(destination_root)
@@ -270,6 +295,7 @@ def ensure_supported_models():
     for model_name in _supported_model_names():
         api_url = f"{MODELS_API_URL}/{model_name}"
         local_path = os.path.join(MODEL_DIR, model_name)
+        remote_files = None
         try:
             remote_files = _remote_tree(api_url)
             if _local_matches_remote(local_path, remote_files, model_name):
@@ -278,13 +304,15 @@ def ensure_supported_models():
             print(f"[models] Downloading {model_name}...")
             _download_remote_tree(remote_files, model_name, local_path)
             downloaded.append(model_name)
+        except ModelIntegrityError:
+            raise
         except Exception as exc:
             if os.path.exists(local_path):
                 print(f"[models] Skipping remote hash check for {model_name}: {exc}")
                 skipped.append(model_name)
                 continue
             print(f"[models] Downloading {model_name} from repository zip...")
-            _copy_from_repo_zip(model_name, local_path)
+            _copy_from_repo_zip(model_name, local_path, remote_files)
             downloaded.append(model_name)
     if downloaded:
         print(f"[models] Downloaded/updated: {', '.join(downloaded)}")
@@ -303,14 +331,17 @@ def ensure_missing_supported_models():
         if os.path.exists(local_path):
             skipped.append(model_name)
             continue
+        remote_files = None
         try:
             remote_files = _remote_tree(f"{MODELS_API_URL}/{model_name}")
             print(f"[models] Downloading missing {model_name}...")
             _download_remote_tree(remote_files, model_name, local_path)
+        except ModelIntegrityError:
+            raise
         except Exception as exc:
             print(f"[models] Could not download {model_name} directly: {exc}")
             print(f"[models] Checking repository zip for {model_name}...")
-            _copy_from_repo_zip(model_name, local_path)
+            _copy_from_repo_zip(model_name, local_path, remote_files)
         downloaded.append(model_name)
     cleanup_unused_models()
     return {"downloaded": downloaded, "skipped": skipped, "model_dir": MODEL_DIR}
@@ -330,16 +361,20 @@ def ensure_missing_models(model_names):
         if os.path.exists(local_path):
             skipped.append(model_name)
             continue
+        remote_files = None
         try:
             remote_files = _remote_tree(f"{MODELS_API_URL}/{model_name}")
             print(f"[models] Downloading missing {model_name}...")
             _download_remote_tree(remote_files, model_name, local_path)
             downloaded.append(model_name)
+        except ModelIntegrityError as exc:
+            missing_remote.append(model_name)
+            failures[model_name] = str(exc)
         except Exception as exc:
             print(f"[models] Remote check failed for {model_name}: {exc}")
             try:
                 print(f"[models] Checking repository zip for {model_name}...")
-                _copy_from_repo_zip(model_name, local_path)
+                _copy_from_repo_zip(model_name, local_path, remote_files)
                 downloaded.append(model_name)
             except Exception as zip_exc:
                 missing_remote.append(model_name)

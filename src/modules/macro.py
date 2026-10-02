@@ -5956,7 +5956,8 @@ class macro:
 
         def goToStump():
             for _ in range(3):
-                self.cannon()
+                if not self.cannon():
+                    return False
                 self.logger.webhook("", "Travelling: Stump Snail", "dark brown")
                 self.goToField("stump")
                 if self.placeSprinkler():
@@ -5965,32 +5966,23 @@ class macro:
                 self.reset()
             return False
 
-        def runGatherPattern(patternName, duration):
-            st = time.time()
-            mouse.moveBy(10, 5)
-            self.keyboard.releaseMovement()
-            nameSpace = {**locals(), **globals()}
-            while time.time() - st < duration:
-                if self.checkPauseAndWait():
-                    break
-                mouse.mouseDown()
-                try:
-                    exec(open(f"../settings/patterns/{patternName}.py").read(), nameSpace)
-                except Exception:
-                    print(traceback.format_exc())
-                    break
-                mouse.mouseUp()
-            mouse.mouseUp()
-
         def runSideTask():
             self.logger.webhook("", "Stump Snail: Running periodic side task", "dark brown")
             self.reset(convert=False)
-            self.runPath("cannon_to_field/pine")
-            runGatherPattern("skillet", patternDuration)
-            self.reset(convert=True)
-            goToStump()
+            # gather handles cannon travel and supplies the pattern's movement
+            # variables, then resets and converts before returning to Stump.
+            self.gather("pine tree", {
+                "shape": "skillet", "mins": patternDuration / 60,
+                "return": "reset", "infinite_gather": False,
+                "plant_sprout": False, "skip_travel": False,
+            })
+            if not goToStump():
+                return False
+            self.set_task_status("attacking", activity="stump_snail")
+            return True
 
-        goToStump()
+        if not goToStump():
+            return
 
         # Set status to attacking for hotbar logic
         self.set_task_status("attacking", activity="stump_snail")
@@ -6013,7 +6005,8 @@ class macro:
                         break
 
                 if keepOldData is None and sideTaskInterval > 0:
-                    runSideTask()
+                    if not runSideTask():
+                        return
         finally:
             self.set_task_status(None, update_presence=False)  # Reset status after attack
         #handle the other stump snail

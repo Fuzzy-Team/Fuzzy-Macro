@@ -39,7 +39,14 @@ chip=$(arch)
 os_ver=$(sw_vers -productVersion)
 
 version_at_least() {
-    [ "$(printf '%s\n' "$1" "$2" | sort -V | head -n1)" = "$2" ]
+    awk -v actual="$1" -v required="$2" 'BEGIN {
+        split(actual, a, "."); split(required, b, ".")
+        for (i = 1; i <= 3; i++) {
+            if (a[i] + 0 > b[i] + 0) exit 0
+            if (a[i] + 0 < b[i] + 0) exit 1
+        }
+        exit 0
+    }'
 }
 
 python_ver="3.9"

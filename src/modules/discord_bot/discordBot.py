@@ -824,7 +824,8 @@ def _build_logger_embed(data):
 def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None, updateGUI=None, discord_message_queue=None, planter_command_queue=None, stream_control_queue=None, skipServer=None):
     import modules.macro
     _patch_discord_response_footers()
-    bot = commands.Bot(command_prefix="fuzz!", intents=discord.Intents.all())
+    intents = legacyCommands.gateway_intents(token) if legacyCommands.IS_LEGACY else discord.Intents.all()
+    bot = commands.Bot(command_prefix="fuzz!", intents=intents)
     if legacyCommands.IS_LEGACY:
         legacyCommands.attach(bot)
     

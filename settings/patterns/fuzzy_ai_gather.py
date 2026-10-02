@@ -961,7 +961,7 @@ def _initialise_runtime():
         (MODEL_DIR / "token_detection_standard.onnx", "opencv_onnx", LABELS_TOKENS, "Standard", INPUT_WIDTH, INPUT_HEIGHT),
     ]
     if not coreml_ok:
-        standard_candidates.reverse()
+        standard_candidates = [candidate for candidate in standard_candidates if candidate[1] != "coreml"]
     token_candidates = []
     if requested_filename is not None and coreml_ok:
         token_candidates.append((MODEL_DIR / requested_filename, "coreml", requested_labels, requested_label, requested_width, requested_height))

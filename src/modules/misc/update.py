@@ -25,9 +25,7 @@ _DEFAULT_UPDATE_BRANCH = "main"
 # replace them during an update instead of preserving an obsolete copy.
 PATTERN_OVERWRITE_EXCEPTIONS = {"blooms_ai.py", "fuzzy_ai_gather.py"}
 INSTALLED_FILES_MANIFEST = os.path.join("src", "data", "user", "installed_files.json")
-# Users add their own files next to the shipped ones in these folders. Only
-# remove a file here when a previous update installed it and it is unedited.
-USER_EXTENSIBLE_FOLDERS = {"paths"}
+# Only remove files recorded by a previous update, with unchanged contents.
 
 # Preserve this flag across importlib.reload().  It prevents the freshly
 # loaded updater from handing off to itself a second time.
@@ -415,13 +413,13 @@ def _remove_obsolete_files(
         return
 
     previously_installed = _read_installed_files_manifest(destination)
+    if previously_installed is None:
+        print("[updater] Skipping obsolete-file cleanup: no readable installed-files manifest")
+        return
     _report_update_progress(progress_callback, 81, "Removing obsolete files")
     stale = sorted(old_manifest.keys() - new_manifest.keys())
     for index, relative_path in enumerate(stale, start=1):
-        if (
-            relative_path.split("/")[0] in USER_EXTENSIBLE_FOLDERS
-            and previously_installed.get(relative_path) != old_manifest[relative_path]
-        ):
+        if previously_installed.get(relative_path) != old_manifest[relative_path]:
             print(f"[updater] Kept user file {relative_path}")
             continue
         current_path = _safe_regular_file(destination, relative_path, protected_folders)
@@ -462,17 +460,17 @@ def _write_json_atomically(path, value):
 
 
 def _read_installed_files_manifest(destination):
-    """Return the files recorded by the previous update, or {} if unavailable."""
+    """Return recorded files, including an empty manifest, or None if unavailable."""
     try:
         manifest_path = _metadata_path(destination, INSTALLED_FILES_MANIFEST)
         with open(manifest_path, "r", encoding="utf-8") as fh:
             manifest = json.load(fh)
     except FileNotFoundError:
-        return {}
+        return None
     except (OSError, ValueError) as exc:
         print(f"[updater] Ignoring unreadable installed-files manifest: {exc}")
-        return {}
-    return manifest if isinstance(manifest, dict) else {}
+        return None
+    return manifest if isinstance(manifest, dict) else None
 
 
 def _write_installed_files_manifest(destination, manifest):
