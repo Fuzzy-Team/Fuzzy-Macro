@@ -1,9 +1,12 @@
 import discord
-try:
-    from discord import app_commands
-except ImportError:
-    print("discord bot not supported")
 from discord.ext import commands
+from modules.discord_bot import legacyCommands
+if legacyCommands.IS_LEGACY:
+    # discord.py 1.x (Python 3.7): run slash commands as prefix commands
+    legacyCommands.install()
+    app_commands = legacyCommands.app_commands
+else:
+    from discord import app_commands
 from modules.screen.screenshot import screenshotRobloxWindow
 import io
 from modules.misc.messageBox import msgBox
@@ -821,7 +824,10 @@ def _build_logger_embed(data):
 def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None, updateGUI=None, discord_message_queue=None, planter_command_queue=None, stream_control_queue=None, skipServer=None):
     import modules.macro
     _patch_discord_response_footers()
-    bot = commands.Bot(command_prefix="fuzz!", intents=discord.Intents.all())
+    intents = legacyCommands.gateway_intents(token) if legacyCommands.IS_LEGACY else discord.Intents.all()
+    bot = commands.Bot(command_prefix="fuzz!", intents=intents)
+    if legacyCommands.IS_LEGACY:
+        legacyCommands.attach(bot)
     
     # Store pin requests queue
     _pin_requests = pin_requests
@@ -4257,6 +4263,9 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             inline=False,
         )
 
+        if legacyCommands.IS_LEGACY:
+            for index, field in enumerate(embed.fields):
+                embed.set_field_at(index, name=field.name, value=field.value.replace("`/", f"`{legacyCommands.PREFIX}"), inline=field.inline)
         await interaction.response.send_message(embed=embed)
 
 
