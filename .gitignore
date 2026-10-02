@@ -34,3 +34,6 @@ src/data/legacy_user_backups
 docs/
 tools/
 generate_theme_reports.py
+
+# user patterns; seeded from settings/defaults/patterns at startup
+settings/patterns/

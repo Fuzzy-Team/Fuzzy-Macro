@@ -21,7 +21,6 @@ colors = {
     "white": "FFFFFF",
     "yellow": "FFFF00",
 }
-newUI = False
 
 PING_CATEGORY_ROUTES = {
     "ping_critical_errors": "critical_errors",
@@ -277,13 +276,6 @@ class log:
     def log(self, msg):
         # Display in GUI or macro logs (to be implemented)
         pass
-
-    def update_routes_from_settings(self, settings):
-        settings = settings or {}
-        self.routeSettings = build_route_settings(settings)
-        self.webhookURL = get_default_delivery_route(settings)
-        self.enableWebhook = delivery_uses_webhook(settings)
-        self.enableDiscordBot = delivery_uses_bot_messages(settings)
 
     def _capture_image(self, ss=None, imagePath=None):
         if not self.sendScreenshots:
