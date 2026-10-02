@@ -126,6 +126,24 @@ class ModelSafetyTests(unittest.TestCase):
         self.assertTrue(self.module._delete_path(str(package)))
         self.assertFalse(package.exists())
 
+    def test_cleanup_keeps_custom_models_and_removes_only_unused_managed_models(self):
+        custom = self.root / 'custom.mlmodelc'
+        custom.mkdir()
+        (custom / 'weights.bin').write_bytes(b'user model')
+        custom_file = self.root / 'custom.onnx'
+        custom_file.write_bytes(b'user model')
+        unused = self.root / 'token_detection_standard.mlmodelc'
+        unused.mkdir()
+        (unused / 'weights.bin').write_bytes(b'managed model')
+        active = self.root / 'token_detection_standard.onnx'
+        active.write_bytes(b'active model')
+        with mock.patch.object(self.module, '_supported_model_names', return_value=(active.name,)), mock.patch('sys.stdout', new=io.StringIO()):
+            self.assertEqual(self.module.cleanup_unused_models(), [unused.name])
+        self.assertEqual((custom / 'weights.bin').read_bytes(), b'user model')
+        self.assertEqual(custom_file.read_bytes(), b'user model')
+        self.assertTrue(active.exists())
+        self.assertFalse(unused.exists())
+
     def test_corrupt_zip_never_replaces_existing_single_file_or_package(self):
         for name, relative_path in [('token_detection_standard.onnx', 'token_detection_standard.onnx'),
                                     ('token_detection_standard.mlmodelc', 'token_detection_standard.mlmodelc/weights.bin')]:
@@ -191,7 +209,7 @@ class StumpSnailTests(unittest.TestCase):
         self.macro.cannon.side_effect = [True, False]
         self.macro.placeSprinkler.return_value = True
         self.stump(self.macro)
-        field, override = self.macro.gather.call_args.args
+        field, override = self.macro.gather.call_args[0]
         self.assertEqual(field, 'pine tree')
         self.assertEqual(override['shape'], 'skillet')
         self.assertEqual(override['mins'], 2)
@@ -201,6 +219,7 @@ class StumpSnailTests(unittest.TestCase):
         self.macro.set_task_status.assert_called_with(None, update_presence=False)
 
 
+@unittest.skipIf(sys.platform == 'win32', 'macOS installer tests require POSIX shells')
 class MacVersionTests(unittest.TestCase):
     def test_short_versions_and_patch_releases_compare_numerically(self):
         for script in ('install_dependencies.command', 'run_macro.command'):

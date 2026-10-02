@@ -97,7 +97,7 @@ def _delete_path(path):
 
 
 def cleanup_unused_models():
-    """Remove every local model not used by this release on this platform."""
+    """Remove known application models unused on this platform; keep custom models."""
     if os.path.islink(MODEL_DIR):
         print(f"[models] Skipping cleanup through symlinked model folder {MODEL_DIR}")
         return []
@@ -111,8 +111,9 @@ def cleanup_unused_models():
         print("[models] Skipping cleanup: release has no supported model list")
         return []
     deleted = []
+    managed = set(COREML_MODELS) | set(ONNX_MODELS)
     for entry in entries:
-        if entry.name not in supported and _delete_path(entry.path):
+        if entry.name in managed and entry.name not in supported and _delete_path(entry.path):
             deleted.append(entry.name)
     if deleted:
         print(f"[models] Deleted unused models: {', '.join(deleted)}")
