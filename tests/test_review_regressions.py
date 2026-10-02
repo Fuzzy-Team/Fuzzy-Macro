@@ -179,6 +179,25 @@ class ModelSafetyTests(unittest.TestCase):
                         getattr(self.module, entry_point)()
                 fallback.assert_not_called()
 
+    def test_manual_requests_reject_unavailable_coreml_and_always_allow_onnx(self):
+        coreml_name = 'token_detection_standard.mlmodelc'
+        onnx_name = 'token_detection_standard.onnx'
+        helper = types.ModuleType('modules.misc.ai_gather_common')
+        for available in (False, True):
+            helper.coreml_available = mock.Mock(return_value=available)
+            with self.subTest(available=available), mock.patch.dict(sys.modules, {helper.__name__: helper}), mock.patch.object(
+                self.module, '_remote_tree', return_value=[]
+            ) as remote, mock.patch.object(self.module, '_download_remote_tree') as download, mock.patch('sys.stdout', new=io.StringIO()):
+                result = self.module.ensure_missing_models([coreml_name, onnx_name])
+                expected = [coreml_name, onnx_name] if available else [onnx_name]
+                self.assertEqual(result['downloaded'], expected)
+                self.assertEqual(download.call_count, len(expected))
+                self.assertEqual(remote.call_count, len(expected))
+                if available:
+                    self.assertEqual(result['failures'], {})
+                else:
+                    self.assertIn(coreml_name, result['failures'])
+
 
 class StumpSnailTests(unittest.TestCase):
     def setUp(self):

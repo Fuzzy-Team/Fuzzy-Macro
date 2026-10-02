@@ -349,6 +349,7 @@ def ensure_missing_supported_models():
 
 
 def ensure_missing_models(model_names):
+    """Download requested usable models, preserving explicit ONNX fallbacks."""
     os.makedirs(MODEL_DIR, exist_ok=True)
     downloaded = []
     skipped = []
@@ -358,6 +359,11 @@ def ensure_missing_models(model_names):
         if model_name not in set(COREML_MODELS).union(ONNX_MODELS):
             failures[model_name] = "unknown model name"
             continue
+        if model_name in COREML_MODELS:
+            from modules.misc.ai_gather_common import coreml_available
+            if not coreml_available():
+                failures[model_name] = "Core ML is not available in this environment"
+                continue
         local_path = os.path.join(MODEL_DIR, model_name)
         if os.path.exists(local_path):
             skipped.append(model_name)
