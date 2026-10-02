@@ -216,7 +216,11 @@ else
 	install_pip_package "pyobjc-framework-Cocoa<11.0"
 	install_pip_package "pyobjc-framework-ColorSync<11.0" "--no-deps"
 	install_pip_package "pyobjc-framework-ApplicationServices<11.0" "--no-deps"
+	# OpenCV builds from source here. BUILD_JAVA=OFF skips its Java detection, which runs
+	# `java` and makes macOS show a "you need to install a JDK" dialog when no JDK is installed.
+	export CMAKE_ARGS="-DBUILD_JAVA=OFF"
 	install_pip_package "opencv-python==4.6.0.66"
+	unset CMAKE_ARGS
 	#python"${python_ver}" -m pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org paddlepaddle==2.4.2 -i https://pypi.tuna.tsinghua.edu.cn/simple
 	#python"${python_ver}" -m pip install --no-deps --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org paddleocr==2.6.1.3
 	#printf "\033[31;1mInstalling lxml, this can take a while \033[0m\n"
