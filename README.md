@@ -85,6 +85,7 @@ Follow our [installation guide](https://fuzzy-team.gitbook.io/fuzzy-macro) to ge
 - Automatic rejoin with configurable intervals
 - Discord webhook integration
 - Discord bot for remote control
+- Discord standby mode: `/standby 30m` or `/standby 1h 30m` stops the macro, quits Roblox, and keeps the Mac awake. Omit the duration for indefinite standby, repeat the command to disable it, or use `/start` to resume. Durations must be greater than zero and at most 7 days. On macOS 10.12-10.14, use `fuzz!standby` and `fuzz!start` instead.
 - Web-based GUI for configuration
 - Profile system for multiple configurations
 - Task priority system with drag-and-drop ordering
