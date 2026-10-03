@@ -4,6 +4,7 @@ import numpy as np
 from PIL import Image
 import os
 import time
+import platform
 import mss
 import mss.darwin
 mss.darwin.IMAGE_OPTIONS = 0
@@ -15,10 +16,18 @@ BASE_SCREEN_HEIGHT = 1800
 
 ocrLib = None
 useLangPref = True
-try:
-    from ocrmac import ocrmac #see if ocr mac is installed
-    ocrLib = "ocrmac"
-except:
+mac_version = tuple(int(part) for part in platform.mac_ver()[0].split(".")[:2] if part.isdigit())
+# Apple Vision OCR is used on Monterey and newer.  In particular, do not load
+# ocrmac on Catalina: recent transitive Core ML wheels can be compiled for a
+# newer macOS and emit noisy dyld errors before the fallback OCR is selected.
+if len(mac_version) >= 2 and mac_version >= (12, 0):
+    try:
+        from ocrmac import ocrmac #see if ocr mac is installed
+        ocrLib = "ocrmac"
+    except:
+        pass
+
+if ocrLib is None:
     try:
         from paddleocr import PaddleOCR
         ocrP = PaddleOCR(lang='en', show_log = False, use_angle_cls=False)
@@ -174,4 +183,3 @@ elif ocrLib == "paddleocr":
     ocrFunc = ocrPaddle
 elif ocrLib == "easyocr":
     ocrFunc = ocrEasy
-

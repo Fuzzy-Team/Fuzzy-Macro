@@ -108,7 +108,7 @@ class TadAltSync:
         except Exception:
             self._log("TAD Alt Sync", "Could not initialize TAD alt(s)", "red")
 
-    def sync_to_boost(self, field):
+    def sync_to_boost(self, field, extend_with_glitter=None, extension_duration=0):
         webhooks = self._enabled_webhooks()
         field = str(field or "").strip().lower()
         if not webhooks or not field:
@@ -125,18 +125,19 @@ class TadAltSync:
             self._log("TAD Alt Sync", f"TAD alt(s) moved to {field.title()}", "bright green")
 
         duration = max(0, float(self.settings.get("tad_alt_boost_duration", 900) or 0))
-        extend_with_glitter = bool(self.settings.get("tad_alt_glitter_extend_enabled", False))
-        glitter_slot = min(7, max(1, int(self.settings.get("tad_alt_glitter_slot", 1) or 1)))
+        if extend_with_glitter is None:
+            extend_with_glitter = bool(self.settings.get("tad_alt_glitter_extend_enabled", False))
+        glitter_slot = min(7, max(0, int(self.settings.get("tad_alt_glitter_slot", 1) or 0)))
         thread = threading.Thread(
             target=self._restore_after_boost,
-            args=(generation, duration, extend_with_glitter, glitter_slot),
+            args=(generation, duration, extend_with_glitter, glitter_slot, extension_duration),
             name="tad-alt-sync-restore",
             daemon=True,
         )
         thread.start()
         return True
 
-    def _restore_after_boost(self, generation, duration, extend_with_glitter=False, glitter_slot=1):
+    def _restore_after_boost(self, generation, duration, extend_with_glitter=False, glitter_slot=1, extension_duration=0):
         glitter_used = False
         if extend_with_glitter and self.use_glitter is not None:
             time.sleep(max(0, duration - 5))
@@ -155,7 +156,7 @@ class TadAltSync:
                 self._log("TAD Alt Sync", "Could not use Glitter; using the normal boost duration", "red")
             time.sleep(duration + 5 if glitter_used else min(5, duration))
         else:
-            time.sleep(duration)
+            time.sleep(duration + max(0, extension_duration))
         with self._lock:
             if generation != self._generation:
                 return

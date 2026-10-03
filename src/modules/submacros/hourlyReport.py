@@ -126,6 +126,7 @@ MACRO_THEME_ACCENTS = {
     "gummy":       (255, 0,   255),  # Gummy        #ff00ff
     "tadpole":     (32,  189, 150),  # Tadpole      #20bd96
     "gifted_tad":  (144, 240, 224),  # Gifted Tad   #90f0e0
+    "spicy_bee":   (207, 32,  19),    # Spicy Bee    #cf2013
 }
 
 def _mixColor(base, accent, ratio):
@@ -1057,6 +1058,7 @@ class HourlyReport():
             fields.append({"name": "Hourly", "value": "\n".join(honeyLines), "inline": False})
 
             session_lines = [
+                f"🍯 Starting: {fmt(hourlyReportStats.get('start_honey', 0))}",
                 f"🍯 Current: {fmt(currentHoney)}",
                 f"🍯 Session: {fmt(sessionHoney)}",
                 f"🕓 Duration: {fmtTime(sessionTime)}",
@@ -1819,7 +1821,12 @@ class HourlyReportDrawer:
         self._drawActivityCard(statRegions["session"], "SESSION", sessionRows, onlyValidHourlyHoney or [0], timeLabels)
         x, y, w, _ = statRegions["session"]
         currentHoney = onlyValidHourlyHoney[-1] if onlyValidHourlyHoney else 0
-        sessionLines = [("Current Honey", self.millify(currentHoney)), ("Session Honey", self.millify(sessionHoney)), ("Session Time", self._durationHMS(sessionTime))]
+        sessionLines = [
+            ("Starting Honey", self.millify(hourlyReportStats.get("start_honey", 0))),
+            ("Current Honey", self.millify(currentHoney)),
+            ("Session Honey", self.millify(sessionHoney)),
+            ("Session Time", self._durationHMS(sessionTime)),
+        ]
         for i, (label, value) in enumerate(sessionLines):
             yy = y + 96 + i * 84
             self.draw.text((x + 210, yy), label, font=topFont, fill=self.bodyColor)
