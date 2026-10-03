@@ -1,141 +1,67 @@
 @echo off
-setlocal enabledelayedexpansion
+setlocal EnableExtensions DisableDelayedExpansion
+set "PYTHONUTF8=1"
 
-set "VENV_NAME=fuzzy-macro-env"
 set "PROJECT_ROOT=%~dp0"
-set "PROJECT_VENV_PATH=%PROJECT_ROOT%%VENV_NAME%"
-set "LEGACY_VENV_PATH=%USERPROFILE%\%VENV_NAME%"
-set "VENV_PATH=%PROJECT_VENV_PATH%"
+set "VENV_PATH=%PROJECT_ROOT%fuzzy-macro-env"
+if exist "%VENV_PATH%\Scripts\python.exe" goto :venv_ready
+if exist "%USERPROFILE%\fuzzy-macro-env\Scripts\python.exe" set "VENV_PATH=%USERPROFILE%\fuzzy-macro-env"
+if exist "%VENV_PATH%\Scripts\python.exe" goto :venv_ready
 
-if exist "%PROJECT_VENV_PATH%\Scripts\activate.bat" (
-    set "VENV_PATH=%PROJECT_VENV_PATH%"
-) else if exist "%LEGACY_VENV_PATH%\Scripts\activate.bat" (
-    set "VENV_PATH=%LEGACY_VENV_PATH%"
-)
-
-echo [35mChecking Python installation...[0m
-
-rem Prefer the py launcher to select a supported 3.x version (3.9, 3.8, 3.7)
+:: The bundled bitmap matcher and Windows dependencies require x64 Python 3.8/3.9.
+echo Checking Python installation...
 set "PYTHON_CMD="
-where py >nul 2>&1
-if %errorlevel%==0 (
-    for %%v in (3.9 3.8 3.7) do (
-        py -%%v --version >nul 2>&1
-        if not errorlevel 1 (
-            set "PYTHON_CMD=py -%%v"
-            goto :py_found
-        )
-    )
-)
-:py_found
-
-rem Fallback to python/python3 on PATH
+call :try_python py -3.9
+if not defined PYTHON_CMD call :try_python py -3.8
+if not defined PYTHON_CMD call :try_python python3.9.exe
+if not defined PYTHON_CMD call :try_python python3.8.exe
+if not defined PYTHON_CMD call :try_python python.exe
+if not defined PYTHON_CMD call :try_python python3.exe
 if not defined PYTHON_CMD (
-    where python >nul 2>&1
-    if %errorlevel%==0 (
-        for /f "usebackq delims=" %%W in (`python -c "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')" 2^>nul`) do (
-            if "%%W"=="3.9" set "PYTHON_CMD=python"
-            if "%%W"=="3.8" set "PYTHON_CMD=python"
-            if "%%W"=="3.7" set "PYTHON_CMD=python"
-        )
-    )
+    echo Install 64-bit Python 3.9 or 3.8 with the Python launcher or add it to PATH.
+    goto :failed
 )
 
-if not defined PYTHON_CMD (
-    where python3 >nul 2>&1
-    if %errorlevel%==0 (
-        for /f "usebackq delims=" %%W in (`python3 -c "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')" 2^>nul`) do (
-            if "%%W"=="3.9" set "PYTHON_CMD=python3"
-            if "%%W"=="3.8" set "PYTHON_CMD=python3"
-            if "%%W"=="3.7" set "PYTHON_CMD=python3"
-        )
-    )
+echo Creating virtual environment at "%VENV_PATH%"...
+%PYTHON_CMD% -m venv "%VENV_PATH%"
+if errorlevel 1 goto :failed
+
+:venv_ready
+set "PYTHON_EXE=%VENV_PATH%\Scripts\python.exe"
+"%PYTHON_EXE%" -c "import struct, sys; sys.exit(0 if (3, 8) <= sys.version_info[:2] <= (3, 9) and struct.calcsize('P') == 8 else 1)"
+if errorlevel 1 (
+    echo Existing virtual environment requires 64-bit Python 3.8 or 3.9.
+    echo Rename "%VENV_PATH%" and run this installer again to create a supported environment.
+    goto :failed
 )
+cd /d "%PROJECT_ROOT%"
+if errorlevel 1 goto :failed
 
-if not defined PYTHON_CMD (
-    echo [31mPython 3.7/3.8/3.9 not found on system.[0m
-    echo [33mPlease install Python 3.9, 3.8, or 3.7 and ensure it's on PATH or install the py launcher.[0m
-    pause
-    exit /b 1
-)
+"%PYTHON_EXE%" -m pip install --upgrade pip "setuptools<82" wheel
+if errorlevel 1 goto :failed
 
-for /f "tokens=*" %%i in ('%PYTHON_CMD% --version 2^>^&1') do set PY_VERSION=%%i
-echo [32mFound: %PY_VERSION%[0m
+:: Remove conflicting cv2 distributions before installing one pinned version.
+"%PYTHON_EXE%" -m pip uninstall -y opencv-python opencv-contrib-python opencv-python-headless opencv-contrib-python-headless
+if errorlevel 1 goto :failed
+"%PYTHON_EXE%" -m pip install --prefer-binary --default-timeout=100 -r "%PROJECT_ROOT%requirements-windows.txt"
+if errorlevel 1 goto :failed
+"%PYTHON_EXE%" -m pip check
+if errorlevel 1 goto :failed
+"%PYTHON_EXE%" -c "import cv2, easyocr, eel, pydirectinput, sys; sys.path.insert(0, 'src'); from modules import bitmap_matcher; assert bitmap_matcher._bitmap_matcher; assert callable(bitmap_matcher.find_bitmap_cython); assert callable(bitmap_matcher.find_all_bitmap_cython)"
+if errorlevel 1 goto :failed
 
-:: Create virtual environment
-if not exist "%VENV_PATH%" (
-    echo [35mCreating virtual environment at %VENV_PATH% using %PYTHON_CMD%[0m
-    %PYTHON_CMD% -m venv "%VENV_PATH%"
-    if %errorlevel% neq 0 (
-        echo [31mFailed to create virtual environment.[0m
-        pause
-        exit /b 1
-    )
-) else (
-    echo [32mVirtual environment already exists at %VENV_PATH%[0m
-)
+echo Installation complete.
+if /i "%~1"=="--no-launch" exit /b 0
+call "%PROJECT_ROOT%run_macro.bat"
+exit /b %errorlevel%
 
-:: Activate virtual environment
-echo [35mActivating virtual environment[0m
-call "%VENV_PATH%\Scripts\activate.bat"
-if %errorlevel% neq 0 (
-    echo [31mFailed to activate virtual environment.[0m
-    pause
-    exit /b 1
-)
+:try_python
+if defined PYTHON_CMD exit /b 0
+%* -c "import struct, sys; sys.exit(0 if (3, 8) <= sys.version_info[:2] <= (3, 9) and struct.calcsize('P') == 8 else 1)" >nul 2>&1
+if not errorlevel 1 set "PYTHON_CMD=%*"
+exit /b 0
 
-:: Upgrade pip
-echo [35mUpgrading pip, pinning setuptools<82, and installing wheel[0m
-python -m pip install --upgrade pip "setuptools<82" wheel
-
-:: Install PyTorch first (prefer CUDA on Windows, fallback to default wheels)
-echo [35mInstalling PyTorch (GPU if available)[0m
-python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --trusted-host download.pytorch.org --default-timeout=100 --index-url https://download.pytorch.org/whl/cu121 torch torchvision
-if %errorlevel% neq 0 (
-    echo [33mCUDA PyTorch install failed, falling back to default PyTorch wheels.[0m
-    python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 torch torchvision
-)
-
-:: Install core packages
-echo [35mInstalling libraries[0m
-python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 "numpy<2"
-python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 "opencv-python-headless<4.11" "numpy<2" --force-reinstall
-python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 easyocr
-python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 pyautogui
-python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 pydirectinput
-python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 mss
-python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 pillow
-python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 discord-webhook
-python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 "discord.py"
-python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 pypresence
-python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 matplotlib
-python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 fuzzywuzzy
-python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 python-Levenshtein
-python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 "pyscreeze<0.1.29"
-python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 html2image
-python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 gevent
-python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 eel
-python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 ImageHash
-python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 httpx
-python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 flask
-python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 pygetwindow
-python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 requests
-python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 "aiohttp==3.10.5"
-python -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 pynput
-
-:: Install certifi and update SSL certificates
-python -c "import subprocess, sys; subprocess.check_call([sys.executable, '-E', '-s', '-m', 'pip', 'install', '--upgrade', 'certifi'])"
-
-:: Fix html2image chrome_cdp.py for Python 3.7 compatibility
-python -c ^
-"import os, importlib.util; spec = importlib.util.find_spec('html2image'); ^
-path = os.path.join(os.path.dirname(spec.origin), 'browsers', 'chrome_cdp.py') if spec and spec.origin else None; ^
-linesToRemove = [\"print(f'{r.json()=}')\", \"print(f'cdp_send: {method=} {params=}')\", \"print(f'{method=}')\", \"print(f'{message=}')\"] if path and os.path.exists(path) else []; ^
-[open(path, 'w').write(open(path).read().replace(l, '')) for l in linesToRemove] if linesToRemove else None"
-
-echo.
-echo.
-echo [32mInstallation complete![0m
-echo [32mStarting Fuzzy Macro...[0m
-cd /d "%~dp0"
-call "%~dp0run_macro.bat"
+:failed
+echo Dependency installation failed. See the error above.
+pause
+exit /b 1

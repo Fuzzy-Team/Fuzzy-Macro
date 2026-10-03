@@ -1105,19 +1105,18 @@ def _initialise_runtime():
     agc.require_vision_deps()
 
     model_label, model_coreml, model_onnx, model_size, model_output = BLOOM_MODEL_VARIANTS[BLOOM_MODEL_SELECTION]
-    combined_candidates = [
-        (MODEL_DIR / model_coreml, "coreml"),
-        (MODEL_DIR / model_onnx, "opencv_onnx"),
-    ]
-    combined_candidates = [candidate for candidate in combined_candidates if candidate[0].exists()]
+    coreml_ok = agc.coreml_available()
+    model_candidates = [(MODEL_DIR / model_onnx, "opencv_onnx")]
+    if coreml_ok:
+        model_candidates.insert(0, (MODEL_DIR / model_coreml, "coreml"))
+    combined_candidates = [candidate for candidate in model_candidates if candidate[0].exists()]
     download_result = {}
     if not combined_candidates:
-        download_result = agc.check_missing_models("blooms_ai", [model_coreml, model_onnx])
-        combined_candidates = [
-            (MODEL_DIR / model_coreml, "coreml"),
-            (MODEL_DIR / model_onnx, "opencv_onnx"),
-        ]
-        combined_candidates = [candidate for candidate in combined_candidates if candidate[0].exists()]
+        missing_names = [model_onnx]
+        if coreml_ok:
+            missing_names.insert(0, model_coreml)
+        download_result = agc.check_missing_models("blooms_ai", missing_names)
+        combined_candidates = [candidate for candidate in model_candidates if candidate[0].exists()]
     if not combined_candidates:
         failures = download_result.get("failures", {})
         detail = f" Download attempt failed: {'; '.join(failures.values())}" if failures else ""
