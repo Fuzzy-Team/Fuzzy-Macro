@@ -58,12 +58,16 @@ def parse_standby_duration(value: Optional[str]):
         return None, None
 
     text = str(value).strip().lower()
-    matches = re.findall(r"(\d+)\s*([smhd])", text)
-    if not matches or re.sub(r"[\d\s smhd]", "", text):
+    if not re.fullmatch(r"(?:[0-9]+\s*[smhd]\s*)+", text):
         return None, "Use a duration such as `30m`, `2h`, or `1h 30m`."
 
+    matches = re.findall(r"([0-9]+)\s*([smhd])", text)
+    # Reject oversized numbers before int conversion, including on Python 3.7.
+    if any(len(amount.lstrip("0")) > 6 for amount, _ in matches):
+        return None, "Standby duration cannot exceed 7 days."
+
     unit_seconds = {"s": 1, "m": 60, "h": 3600, "d": 86400}
-    seconds = sum(int(amount) * unit_seconds[unit] for amount, unit in matches)
+    seconds = sum(int(amount.lstrip("0") or "0") * unit_seconds[unit] for amount, unit in matches)
     if seconds <= 0:
         return None, "Standby duration must be greater than zero."
     if seconds > 7 * 86400:
@@ -4203,7 +4207,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         """Show available commands"""
         embed = discord.Embed(title="BSS Macro Discord Bot", description="Available Commands:", color=0x0099ff)
 
-        embed.add_field(name="**Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/stop` - Stop the macro\n`/pause` - Pause the macro\n`/resume` - Resume the macro\n`/status` - Get macro status and current task\n`/reroll` - Reroll Auto Field Boost\n`/rejoin` - Make macro rejoin game\n`/skipserver` - Skip the current private-server join\n`/screenshot` - Get screenshot\n`/settings` - Open settings panel\n`/hiveslot <1-6>` - Change hive slot number\n`/shiftlock <on/off/toggle>` - Control shift lock", inline=False)
+        embed.add_field(name="**Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/stop` - Stop the macro\n`/standby [duration]` - Stop, quit Roblox, and keep the Mac awake. Use 30m or 1h 30m; repeat to disable\n`/pause` - Pause the macro\n`/resume` - Resume the macro\n`/status` - Get macro status and current task\n`/reroll` - Reroll Auto Field Boost\n`/rejoin` - Make macro rejoin game\n`/skipserver` - Skip the current private-server join\n`/screenshot` - Get screenshot\n`/settings` - Open settings panel\n`/hiveslot <1-6>` - Change hive slot number\n`/shiftlock <on/off/toggle>` - Control shift lock", inline=False)
 
         embed.add_field(name="**Field Management**", value="`/fields` - View field configuration\n`/field <field> <true/false>` - Enable or disable a field\n`/swapfield <current> <new>` - Swap one field for another (new can be any field)", inline=False)
 
