@@ -73,9 +73,7 @@ def find_compatible_so():
         search_patterns = [
             f"bitmap_matcher_py{py_ver_nodot}_{arch}.pyd",
             f"bitmap_matcher_{arch}_py{py_ver_nodot}.pyd",
-            f"bitmap_matcher.{_get_cp_tag()}-win_amd64.pyd",
-            f"bitmap_matcher.{_get_cp_tag()}-win32.pyd",
-            f"bitmap_matcher.{_get_cp_tag()}-win_arm64.pyd",
+            *[f"bitmap_matcher.{_get_cp_tag()}-{tag}.pyd" for tag in _get_windows_platform_tags()],
             f"bitmap_matcher_py{py_ver_nodot}.pyd",
             f"bitmap_matcher_{arch}.pyd",
             "bitmap_matcher.pyd",
@@ -224,13 +222,17 @@ except ImportError as e:
     print(f"Warning: {e}")
     print("bitmap_matcher extension not available.")
     
-    # You could provide fallback implementations here if needed
-    def fallback_function():
-        raise RuntimeError("bitmap_matcher extension not loaded. Please build the extension first.")
+    # Keep the public API available so failures explain how to install it.
+    def fallback_function(*args, **kwargs):
+        raise RuntimeError(
+            "bitmap_matcher extension not loaded. On Windows, run "
+            "install_dependencies.bat with 64-bit Python 3.8 or 3.9."
+        )
     
-    # Example fallback (adjust based on your actual functions)
-    __all__ = ['match_bitmap']  # Add your actual function names
+    __all__ = ['match_bitmap', 'find_bitmap_cython', 'find_all_bitmap_cython']
     match_bitmap = fallback_function
+    find_bitmap_cython = fallback_function
+    find_all_bitmap_cython = fallback_function
 
 # bitmap_matcher_loader.py - Alternative standalone loader
 """
@@ -297,6 +299,10 @@ class BitmapMatcherLoader:
 
                     # Try wheel files first
                     for wheel_path in search_dir.glob("*.whl"):
+                        if f"-{cp_tag}-" not in wheel_path.name or not any(
+                            wheel_path.name.endswith(f"-{tag}.whl") for tag in plat_tags
+                        ):
+                            continue
                         try:
                             with zipfile.ZipFile(wheel_path) as wheel_zip:
                                 member_names = wheel_zip.namelist()
@@ -324,6 +330,7 @@ class BitmapMatcherLoader:
                     pyd_patterns = [
                         f"bitmap_matcher_py{py_ver}_{arch}.pyd",
                         f"bitmap_matcher_{arch}_py{py_ver}.pyd",
+                        *[f"bitmap_matcher.{cp_tag}-{tag}.pyd" for tag in plat_tags],
                         f"bitmap_matcher_py{py_ver}.pyd",
                         f"bitmap_matcher_{arch}.pyd",
                         "bitmap_matcher.pyd",

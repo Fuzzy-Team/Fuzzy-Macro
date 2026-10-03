@@ -1,4 +1,5 @@
 __pycache__/
+fuzzy-macro-env/
 
 .DS_STORE
 macroLogs.log
