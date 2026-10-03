@@ -3560,16 +3560,22 @@ if __name__ == "__main__":
             )
 
     while True:
-        # In Standby, do not drive Eel, refresh settings, update rich
-        # presence, or inspect macro state. The remaining work is only the
-        # Discord command queue and optional expiry timer.
-        if standbyState.active:
-            time.sleep(1)
-        else:
-            eel.sleep(0.5)
+        # Keep Eel responsive so GUI controls and hotkey recording checks can
+        # complete. Standby still skips settings refresh and macro supervision.
+        eel.sleep(1 if standbyState.active else 0.5)
 
         current_time = time.time()
         processStandbyCommands()
+
+        # Standby has already stopped the macro. A stop hotkey can still assign
+        # 0; acknowledge it here so subsequent start requests are accepted.
+        if standbyState.active and run.value == 0:
+            run.value = 3
+            gui.setRunState(3)
+            try:
+                gui.toggleStartStop()
+            except Exception:
+                pass
 
         if standbyState.active and standbyState.deadline and current_time >= standbyState.deadline:
             stopStandbyKeepAwake()
