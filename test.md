@@ -16,7 +16,7 @@ in the background when it finishes, so the uninstall of torch/matplotlib/etc. an
 numpy/OpenCV force-reinstall run while you relaunch.
 - [x] The update completes, the macro restarts, and the GUI opens without errors in the terminal.
 - [x] Relaunch **immediately** after the "Update complete" box (while the background installer is still running `pip`). The GUI opens and the macro starts; if it fails, relaunch again after `pip` finishes (`ps aux | grep pip`) and note the error so the release notes can say to wait.
-- [ ] After the background installer finishes, `~/fuzzy-macro-env/bin/pip list` no longer shows torch, torchvision, scipy, PyWavelets, matplotlib, html2image, httpx, or ImageHash (Apple Silicon / macOS 12+), and the macro still launches. *(Automated 2026-10-01: pip list is clean, and the macro's modules import without torch or ImageHash. On this Mac the installer's uninstall didn't take effect (see Automated checks below), so the packages were removed with the venv's own pip. Still needs: launch the macro from the GUI.)*
+- [x] After the background installer finishes, `~/fuzzy-macro-env/bin/pip list` no longer shows torch, torchvision, scipy, PyWavelets, matplotlib, html2image, httpx, or ImageHash (Apple Silicon / macOS 12+), and the macro still launches. *(Automated 2026-10-01: pip list is clean, and the macro's modules import without torch or ImageHash. On this Mac the installer's uninstall didn't take effect (see Automated checks below), so the packages were removed with the venv's own pip. The GUI launches (confirmed by the user 2026-10-03).)*
 - [x] `src/modules/macro.py`, `src/modules/submacros/hourlyReport.py`, and `src/images/inventory/old/` are gone, and `src/modules/macro/` exists.
 - [x] Your custom patterns and edited built-in patterns in `settings/patterns/` are unchanged; `blooms_ai.py` and `fuzzy_ai_gather.py` were replaced with the new versions.
 - [x] The old venv (still has torch, matplotlib, ImageHash, html2image, httpx) starts and runs normally, and startup does not import torch.
@@ -106,15 +106,15 @@ numpy/OpenCV force-reinstall run while you relaunch.
 - [ ] **Intel Mac on macOS 12+** (Python 3.8). It uses the same installer branch as Apple Silicon, so re-running the installer now uninstalls torch, torchvision, scipy, and PyWavelets there too. Afterwards: the macro launches; fuzzy_ai_gather and blooms_ai load a model (Core ML, or ONNX if Core ML fails) and gather; OCR works through Apple Vision (blue text pings, quest titles); and the terminal shows no dyld or torch import errors. Also run a fresh install on that Mac. If no such Mac is available, say so in the release notes.
 - [ ] Re-run `install_dependencies.command` on an existing install: matplotlib, html2image, httpx, ImageHash, and (Apple Silicon) torch/torchvision are uninstalled, and the macro still launches. *(Automated 2026-10-01: on this Mac the re-run reported "Skipping … not installed" for every package and left them in the venv, because this venv was moved from `/tmp/fuzzy-framework-env` and its `activate` still points there (see Automated checks below). Retest on a normally installed venv.)*
 - [ ] **Guiding star**, **windy bee**, **unusual sprout**, and **sticker sprout** pings still fire, including with several enabled at once (they now share one OCR scan). *(Automated 2026-10-01: one blue text read feeds every enabled detector, and sample text fires the Guiding Star, Windy Bee and Unusual Sprout pings. Still needs: pings arriving in Discord during a session.)*
-- [ ] **Memory match** still pairs tiles (image hash replaced; blue text read renamed). *(Automated 2026-10-01: reward templates load (see Memory match above). Still needs: a live memory match.)*
-- [ ] **Blender** with max quantity stops adding once the quantity stops changing (image hash replaced).
-- [ ] Quests: the quest page scrolls to the top and reads quest titles (image hash replaced).
-- [ ] Inventory item search scrolls and finds items, e.g. using glitter or a planter (image hash replaced). *(Automated 2026-10-01: the item images exist (see Planters above). Still needs: a live inventory search.)*
-- [ ] **Auto Gifted Basic Bee** scrolls and detects rolls (image hash replaced).
+- [ ] **Memory match** still pairs tiles (image hash replaced; blue text read renamed). *(Automated 2026-10-01: reward templates load (see Memory match above). Still needs: a live memory match.)* *(Automated 2026-10-03: the new `average_hash` matches the removed ImageHash 4.3.2 bit for bit on 3,386 images (every repo image in each mode, crops, noise, flat colours) and gives identical distances and equality on 20,000 pairs; every caller is a straight swap using only `==` and `-`. Still needs: a live memory match.)*
+- [ ] **Blender** with max quantity stops adding once the quantity stops changing (image hash replaced). *(Automated 2026-10-03: the new `average_hash` matches the removed ImageHash 4.3.2 bit for bit on 3,386 images (every repo image in each mode, crops, noise, flat colours) and gives identical distances and equality on 20,000 pairs; every caller is a straight swap using only `==` and `-`. The max-quantity loop is otherwise unchanged. Still needs: a live blender run with max quantity.)*
+- [ ] Quests: the quest page scrolls to the top and reads quest titles (image hash replaced). *(Automated 2026-10-03: the new `average_hash` matches the removed ImageHash 4.3.2 bit for bit on 3,386 images (every repo image in each mode, crops, noise, flat colours) and gives identical distances and equality on 20,000 pairs; every caller is a straight swap using only `==` and `-`. The real title reader (run unchanged with Apple Vision OCR on `latest-quest.png`) read "polar bear: teriyaki jerky" at full confidence and all 30 objective lines. Still needs: a live quest page scroll.)*
+- [ ] Inventory item search scrolls and finds items, e.g. using glitter or a planter (image hash replaced). *(Automated 2026-10-01: the item images exist (see Planters above). Still needs: a live inventory search.)* *(Automated 2026-10-03: the new `average_hash` matches the removed ImageHash 4.3.2 bit for bit on 3,386 images (every repo image in each mode, crops, noise, flat colours) and gives identical distances and equality on 20,000 pairs; every caller is a straight swap using only `==` and `-`. Still needs: a live inventory search.)*
+- [ ] **Auto Gifted Basic Bee** scrolls and detects rolls (image hash replaced). *(Automated 2026-10-03: the new `average_hash` matches the removed ImageHash 4.3.2 bit for bit on 3,386 images (every repo image in each mode, crops, noise, flat colours) and gives identical distances and equality on 20,000 pairs; every caller is a straight swap using only `==` and `-`. Still needs: a live Auto Gifted Basic Bee run.)*
 - [ ] **Auto Field Boost** and field booster quests detect the boosted field from the blue text. *(Automated 2026-10-01: sample blue text gives the right field, the latest boost wins, and Coconut kick messages are ignored. Still needs: a live AFB run.)*
 - [x] GUI → Collect → Seasonal: the **Petals & Blooms** cheat sheet shows and stays sharp when clicked to zoom (now WebP).
 - [x] GUI → Collect → Memory Match: all reward icons show in the reward picker (now loaded from `src/images/memorymatch/`).
-- [ ] Start the macro with blender enabled and no items left to craft: the "no more items left to craft" popup still appears.
+- [ ] Start the macro with blender enabled and no items left to craft: the "no more items left to craft" popup still appears. *(Automated 2026-10-03: the check matches `main` apart from the constant's import, runs on all 17 profiles without a missing setting, shows the popup when blender is on with nothing left, and doesn't with one infinite-repeat item. Still needs: start the macro and see the popup.)*
 
 ## Optional
 - [x] A fresh install on Apple Silicon (macOS 13+) installs without torch and AI gathering works. `settings/patterns/` is created and filled from the defaults on first launch.
@@ -211,4 +211,20 @@ notes on the items above say what each one still needs live.
 - Still not covered by any script: preferred hive free, convert (including night), mob
   run, Vicious Bee, bosses, quests, the Intel Mac on macOS 12+, blender (both items), the
   quest page scroll, and Auto Gifted Basic Bee.
+
+## Automated checks — 2026-10-03
+
+- **ImageHash replacement:** the new `average_hash` in `imageManipulation.py` was compared with
+  the removed ImageHash 4.3.2 in a separate venv with the same Pillow (11.3.0) and numpy
+  (1.26.4). Hashes matched on all 3,386 test images, and distances and equality matched on
+  20,000 pairs. All callers (blender, quest page, inventory, Auto Gifted Basic Bee, memory
+  match) only swapped the function and use `==` or `-`, which behave the same.
+- **Quest titles:** Apple Vision OCR read the Polar Bear title and all objective lines from
+  `latest-quest.png`. The Black Bear title in that file is covered by the macro's own red
+  annotation, so it isn't a fair test. Stick Bug titles have no "Stick Bug:" prefix and are
+  skipped, the same as on `main`; the macro has no Stick Bug quest giver.
+- **AI models without torch:** all 9 Core ML models (token standard/small/mini, loot
+  small/mini, bloom standard/light/mini, sprinkler) load with `load_coreml_model` and return
+  results at the input size their pattern uses; torch never loads.
+- **GUI launch:** confirmed working by the user.
 
