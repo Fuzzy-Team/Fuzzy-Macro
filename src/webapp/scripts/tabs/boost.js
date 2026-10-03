@@ -37,6 +37,20 @@ function switchBoostHotbarSlot(slot) {
     panel.classList.add("active")
 }
 
+async function syncGlitterHotbarSlot(source) {
+    const slot = Number(source.value);
+    const glitterSlotIds = ["field_booster_glitter_slot", "AFB_slotG", "tad_alt_glitter_slot"];
+
+    glitterSlotIds.forEach((id) => {
+        const input = document.getElementById(id);
+        if (input) input.value = slot;
+    });
+
+    await Promise.all(glitterSlotIds.map(async (id) => {
+        try { await eel.saveProfileSetting(id, slot)(); } catch (error) { /* ignore */ }
+    }));
+}
+
 async function loadBoost(){
     switchBoostTab(document.getElementById(getActiveSubtab("activeBoostSubtab", "boost-hotbar")))
     switchBoostHotbarSlot(1)
@@ -46,6 +60,11 @@ async function loadBoost(){
         const settings = await loadAllSettings();
         const patternDropdown = document.getElementById("tad_alt_gather_shape");
         if (patternDropdown) setDropdownValue(patternDropdown, settings.tad_alt_gather_shape || "e_lol");
+        const glitterSlot = settings.field_booster_glitter_slot ?? settings.tad_alt_glitter_slot ?? settings.AFB_slotG ?? 1;
+        ["field_booster_glitter_slot", "AFB_slotG", "tad_alt_glitter_slot"].forEach((id) => {
+            const input = document.getElementById(id);
+            if (input) input.value = glitterSlot;
+        });
     } catch (error) {
         console.error("Could not load TAD Alt patterns", error);
     }

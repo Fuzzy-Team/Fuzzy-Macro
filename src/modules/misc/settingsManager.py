@@ -975,16 +975,16 @@ def importFieldSettings(field_name, json_settings):
             if settings.get("shape") == "blooms_ai":
                 blooms_model_names = {
                     "standard": (
-                        "blooms-and-petals-standard.mlmodelc",
-                        "blooms-and-petals-standard.onnx",
+                        "bloom_detection_standard.mlmodelc",
+                        "bloom_detection_standard.onnx",
                     ),
                     "light": (
-                        "Blooms-and-petals-light.mlmodelc",
-                        "Blooms-and-petals-light.onnx",
+                        "bloom_detection_light.mlmodelc",
+                        "bloom_detection_light.onnx",
                     ),
                     "mini": (
-                        "Blooms-and-petals-mini.mlmodelc",
-                        "Blooms-and-petals-mini.onnx",
+                        "bloom_detection_mini.mlmodelc",
+                        "bloom_detection_mini.onnx",
                     ),
                 }
                 selected_blooms_model = str(settings.get("blooms_ai_model", "Standard")).strip().lower()
