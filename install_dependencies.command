@@ -175,6 +175,12 @@ if [ -z "$PYTHON_BIN" ]; then
 	fi
 fi
 
+# SciPy 1.15.3's Python 3.10 macOS wheel has a malformed Mach-O section
+# rejected by recent macOS releases. 1.14.1 passed live Core ML inference.
+if [ "$python_ver" = '3.10' ]; then
+	constraints+=$'\nscipy==1.14.1'
+fi
+
 filename=$(echo "${python_link}" | sed -e 's/\/.*\///g')
 
 if "$PYTHON_BIN" --version 2>/dev/null; then
@@ -277,6 +283,7 @@ if [ "$python_ver" = '3.12' ] || [ "$python_ver" = '3.11' ] || [ "$python_ver" =
 		printf "\033[1;33mtorch==2.7.0 unavailable for Python %s; installing latest torch/torchvision\033[0m\n" "$python_ver"
 		install_pip_package "torch torchvision" "--force-reinstall"
 	fi
+	install_pip_package "coremltools"
 	install_pip_package "ocrmac"
 	install_pip_package "pyobjc-framework-ColorSync"
 	install_pip_package "pyobjc-framework-ApplicationServices"
