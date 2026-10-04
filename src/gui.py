@@ -10,6 +10,7 @@ import ast
 import json
 import webbrowser
 import time
+from modules.misc.planterRuntime import route_remaining
 import threading
 from bottle import route, static_file
 from modules.submacros.autoGiftedBasicBee import AutoGiftedBasicBeeRunner
@@ -26,6 +27,12 @@ def serve_hourly_report_asset(filename):
 
 run = None
 _recent_logs = []
+_planter_runtime = None
+
+def setPlanterRuntime(runtime):
+    global _planter_runtime
+    _planter_runtime = runtime
+
 _tool_logger = None
 _tool_status = None
 _tool_presence = None
@@ -641,6 +648,8 @@ def emptyAutoPlanterSlot():
         "placed_time": 0,
         "grow_duration": 0,
         "natural_grow_duration": 0,
+        "runtime_baseline": None,
+        "growth_runtime": 0.0,
         "special_drop_id": ""
     }
 
@@ -729,7 +738,12 @@ def normalizeAutoPlanterData(data):
 @eel.expose
 def getAutoPlanterData():
     try:
-        return normalizeAutoPlanterData(settingsManager.loadUserJson("auto_planters.json"))
+        data = normalizeAutoPlanterData(settingsManager.loadUserJson("auto_planters.json"))
+        runtime = _planter_runtime.value if _planter_runtime is not None else 0.0
+        for planter in data["planters"]:
+            if planter.get("special_drop_id"):
+                planter["runtime_remaining"] = route_remaining(planter, runtime)
+        return data
     except Exception:
         return defaultAutoPlanterData()
 
