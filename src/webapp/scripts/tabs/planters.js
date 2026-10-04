@@ -354,7 +354,7 @@ async function loadPlanters(){
 
     //load inputs
     const settings = await loadAllSettings()
-    if ((!settings.auto_planters_special_drop_queue || !settings.auto_planters_special_drop_queue.length) && settings.auto_planters_special_drop){
+    if (!Object.prototype.hasOwnProperty.call(settings, "auto_planters_special_drop_queue") && settings.auto_planters_special_drop){
         settings.auto_planters_special_drop_queue = [settings.auto_planters_special_drop]
     }
     loadPlanterHotbarSections(settings)
