@@ -1,78 +1,62 @@
 #!/bin/sh
 
-VENV_NAME="fuzzy-macro-env"
-VENV_PATH="$HOME/$VENV_NAME"
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 1
+VENV_PATH="$HOME/fuzzy-macro-env"
+MATCHER_DIR="$SCRIPT_DIR/src/modules/bitmap_matcher"
 
-# Stop only an existing Fuzzy Macro launched from this virtual environment.
-# The old implementation killed every Python process on the machine.
-stop_fuzzy_macro() {
-    fuzzy_pids=$(pgrep -f "$VENV_PATH/bin/python.*main\.py" 2>/dev/null || true)
-    if [ -z "$fuzzy_pids" ]; then
-        return
+# Check the interpreter's architecture, which can differ from the host under Rosetta.
+compatible_python() {
+    metadata=$("$1" -c 'import sys, platform; print("%s.%s %s" % (sys.version_info[0], sys.version_info[1], platform.machine().lower()))' 2>/dev/null) || return 1
+    python_ver=${metadata%% *}
+    python_arch=${metadata#* }
+    case "$python_ver" in
+        3.7|3.8|3.9|3.10|3.11|3.12) ;;
+        *) return 1 ;;
+    esac
+    case "$python_arch" in
+        amd64) python_arch=x86_64 ;;
+        aarch64) python_arch=arm64 ;;
+        arm64|x86_64) ;;
+        *) return 1 ;;
+    esac
+    version_tag=$(printf '%s' "$python_ver" | tr -d '.')
+    [ -f "$MATCHER_DIR/bitmap_matcher_py${version_tag}_${python_arch}.so" ] \
+        || [ -f "$MATCHER_DIR/bitmap_matcher_py${version_tag}.so" ]
+}
+
+PYTHON_BIN=""
+if [ -e "$VENV_PATH" ] || [ -L "$VENV_PATH" ]; then
+    if [ ! -x "$VENV_PATH/bin/python" ] || ! compatible_python "$VENV_PATH/bin/python"; then
+        printf '%s\n' 'The macro virtual environment is broken or has no compatible bitmap matcher. Run install_dependencies.command to repair it.' >&2
+        exit 1
     fi
-
-    printf "Stopping existing Fuzzy Macro process(es): %s\n" "$fuzzy_pids"
-    kill $fuzzy_pids 2>/dev/null || true
-    sleep 1
-
-    # Fall back to SIGKILL only if a stale process did not exit cleanly.
-    for pid in $fuzzy_pids; do
-        if kill -0 "$pid" 2>/dev/null; then
-            kill -9 "$pid" 2>/dev/null || true
+    PYTHON_BIN="$VENV_PATH/bin/python"
+    # Direct invocation uses venv packages; PATH also covers child Python processes.
+    VIRTUAL_ENV="$VENV_PATH"
+    PATH="$VENV_PATH/bin:$PATH"
+    export VIRTUAL_ENV PATH
+else
+    for version in 3.12 3.11 3.10 3.9 3.8 3.7; do
+        candidate=$(command -v "python$version") || continue
+        if compatible_python "$candidate" && [ "$python_ver" = "$version" ]; then
+            PYTHON_BIN="$candidate"
+            break
         fi
     done
-}
-
-stop_fuzzy_macro
-
-# force Python to use certifi for SSL (fixes Discord/aiohttp on macOS)
-for py_dir in python3.12 python3.11 python3.10 python3.9 python3.8 python3.7 python3 python; do
-    cert_path="$VENV_PATH/lib/$py_dir/site-packages/certifi/cacert.pem"
-    if [ -f "$cert_path" ]; then
-        export SSL_CERT_FILE="$cert_path"
-        break
+    if [ -z "$PYTHON_BIN" ]; then
+        printf '%s\n' 'No supported Python with a shipped bitmap matcher was found. Run install_dependencies.command first.' >&2
+        exit 1
     fi
-done
-
-# get system information
-chip=$(arch)
-os_ver=$(sw_vers -productVersion)
-
-version_at_least() {
-    [ "$(printf '%s\n' "$1" "$2" | sort -V | head -n1)" = "$2" ]
-}
-
-python_ver="3.9"
-if [ "$chip" = "i386" ]; then
-	if version_at_least "$os_ver" "10.15.0"; then
-		python_ver="3.8"
-		printf "Correct python ver: 3.8\n"
-	else
-		python_ver="3.7"
-		printf "Correct python ver: 3.7\n"
-	fi
 fi
 
-cd "$(dirname "$0")"
-
-runPython() {
-    echo "Loading macro with $1..."
-    $1 main.py
-}
-
-cd src
-if [ -d "$VENV_PATH" ]; then
-    # shellcheck disable=SC1091
-    . "$VENV_PATH/bin/activate"
-    printf "activating virtual environment\n"
-    "$VENV_PATH/bin/python" --version
-    "$VENV_PATH/bin/python" main.py
-else
-    # Prefer newest supported interpreters when no venv exists
-    runPython python3.12
-    runPython python3.11
-    runPython python3.10
-    runPython python3.9
-    runPython python3.8
-    runPython python3.7
+# Use the selected interpreter's certificate bundle rather than a stale venv version.
+cert_path=$("$PYTHON_BIN" -c 'import certifi; print(certifi.where())' 2>/dev/null) || cert_path=""
+if [ -n "$cert_path" ] && [ -f "$cert_path" ]; then
+    SSL_CERT_FILE="$cert_path"
+    export SSL_CERT_FILE
 fi
+
+cd "$SCRIPT_DIR/src" || exit 1
+printf 'Loading macro with %s...\n' "$PYTHON_BIN"
+# Run once and return the macro's exit status to the caller.
+exec "$PYTHON_BIN" main.py
