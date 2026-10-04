@@ -60,30 +60,31 @@ class keyboard:
     def walk(self, k, t, applyHaste=True, method='predictive'):
         if applyHaste and self.enableHasteCompensation:
             keyboard.keyDown(k, False)
-            
-            if method == 'predictive':
-                self.predictiveTimeWait(t)
-            else:
-                self.timeWait(t)  # Original method
-                
-            keyboard.keyUp(k, False)
+            try:
+                if method == 'predictive':
+                    self.predictiveTimeWait(t)
+                else:
+                    self.timeWait(t)  # Original method
+            finally:
+                keyboard.keyUp(k, False)
         else:
             self.press(k, t * 28 / self.ws)
     
     def multiWalk(self, keys, t, applyHaste=True, method='predictive'):
-        for k in keys:
-            pag.keyDown(k, _pause=False)
-        
-        if applyHaste and self.enableHasteCompensation:
-            if method == 'predictive':
-                self.predictiveTimeWait(t)
+        try:
+            for k in keys:
+                pag.keyDown(k, _pause=False)
+
+            if applyHaste and self.enableHasteCompensation:
+                if method == 'predictive':
+                    self.predictiveTimeWait(t)
+                else:
+                    self.timeWait(t)
             else:
-                self.timeWait(t)
-        else:
-            time.sleep(t * 28 / self.ws)
-        
-        for k in keys:
-            pag.keyUp(k, _pause=False)
+                time.sleep(t * 28 / self.ws)
+        finally:
+            for k in keys:
+                pag.keyUp(k, _pause=False)
 
     @staticmethod
     #call the press function of the pag library
@@ -102,8 +103,10 @@ class keyboard:
     #pyautogui without the pause
     def press(self,key, delay = 0.02):
         keyboard.keyDown(key, False)
-        time.sleep(delay)
-        keyboard.keyUp(key, False)
+        try:
+            time.sleep(delay)
+        finally:
+            keyboard.keyUp(key, False)
 
     def write(self, text, interval = 0.1):
         pag.typewrite(text, interval)
