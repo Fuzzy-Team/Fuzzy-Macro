@@ -1,0 +1,104 @@
+{
+   "_about": "Wax evidence for Auto Planters' wax goals. Sourced from the BSS Fandom wiki (researched 2026-10-03). Guaranteed quantities are full-harvest minimums stated by the wiki. Preference points are a scheduling policy derived from the wiki's wording, not drop rates: 2 = listed as a bonus or uncommon drop, 1 = listed as a random or rare drop, 0 = very/extremely rare or not listed. Field affinities add 1 point. Monthly guaranteed Caustic/Swirled field rewards are not modelled here yet because they need cooldown tracking.",
+   "waxes": ["soft", "hard", "caustic", "swirled"],
+   "planters": {
+      "paper": {
+         "consumable": true,
+         "guaranteed": {},
+         "preference": {"soft": 1, "hard": 1},
+         "source": "https://bee-swarm-simulator.fandom.com/wiki/Paper_Planter#Drops"
+      },
+      "ticket": {
+         "consumable": true,
+         "guaranteed": {},
+         "preference": {"soft": 1, "hard": 1},
+         "source": "https://bee-swarm-simulator.fandom.com/wiki/Ticket_Planter#Drops"
+      },
+      "sticker": {
+         "consumable": true,
+         "guaranteed": {"soft": 1},
+         "preference": {"soft": 1},
+         "source": "https://bee-swarm-simulator.fandom.com/wiki/Sticker_Planter#Drops"
+      },
+      "festive": {
+         "consumable": true,
+         "guaranteed": {},
+         "preference": {"soft": 1, "hard": 1, "swirled": 2},
+         "source": "https://bee-swarm-simulator.fandom.com/wiki/Festive_Planter#Drops"
+      },
+      "plastic": {
+         "guaranteed": {},
+         "preference": {"soft": 1, "hard": 1},
+         "source": "https://bee-swarm-simulator.fandom.com/wiki/Plastic_Planter#Drops"
+      },
+      "candy": {
+         "guaranteed": {},
+         "preference": {"soft": 1, "hard": 1},
+         "source": "https://bee-swarm-simulator.fandom.com/wiki/Candy_Planter#Drops"
+      },
+      "red clay": {
+         "guaranteed": {"soft": 2},
+         "preference": {"soft": 1, "hard": 2},
+         "source": "https://bee-swarm-simulator.fandom.com/wiki/Red_Clay_Planter#Drops"
+      },
+      "blue clay": {
+         "guaranteed": {},
+         "preference": {"hard": 1},
+         "source": "https://bee-swarm-simulator.fandom.com/wiki/Blue_Clay_Planter#Drops"
+      },
+      "tacky": {
+         "guaranteed": {},
+         "preference": {"soft": 1, "hard": 1},
+         "source": "https://bee-swarm-simulator.fandom.com/wiki/Tacky_Planter#Drops"
+      },
+      "pesticide": {
+         "guaranteed": {},
+         "preference": {"soft": 1, "hard": 1, "caustic": 2},
+         "source": "https://bee-swarm-simulator.fandom.com/wiki/Pesticide_Planter#Drops"
+      },
+      "heat-treated": {
+         "guaranteed": {},
+         "preference": {"hard": 1},
+         "source": "https://bee-swarm-simulator.fandom.com/wiki/Heat-Treated_Planter#Drops"
+      },
+      "hydroponic": {
+         "guaranteed": {},
+         "preference": {"soft": 1, "hard": 1},
+         "source": "https://bee-swarm-simulator.fandom.com/wiki/Hydroponic_Planter#Drops"
+      },
+      "petal": {
+         "guaranteed": {},
+         "preference": {"soft": 1, "hard": 1},
+         "source": "https://bee-swarm-simulator.fandom.com/wiki/Petal_Planter#Drops"
+      },
+      "planter of plenty": {
+         "guaranteed": {},
+         "preference": {"soft": 2, "hard": 2, "caustic": 2, "swirled": 2},
+         "source": "https://bee-swarm-simulator.fandom.com/wiki/The_Planter_Of_Plenty#Drops"
+      }
+   },
+   "field_affinities": [
+      {
+         "wax": "soft",
+         "fields": ["pumpkin", "mushroom"],
+         "source": "https://bee-swarm-simulator.fandom.com/wiki/Soft_Wax#Drops"
+      },
+      {
+         "wax": "hard",
+         "fields": ["pumpkin"],
+         "source": "https://bee-swarm-simulator.fandom.com/wiki/Hard_Wax#Drops"
+      },
+      {
+         "wax": "caustic",
+         "planters": ["pesticide"],
+         "fields": ["strawberry", "spider", "bamboo"],
+         "source": "https://bee-swarm-simulator.fandom.com/wiki/Caustic_Wax#Drops"
+      },
+      {
+         "wax": "swirled",
+         "planters": ["red clay"],
+         "fields": ["blue flower", "bamboo", "pine tree"],
+         "source": "https://bee-swarm-simulator.fandom.com/wiki/Swirled_Wax#Drops"
+      }
+   ]
+}

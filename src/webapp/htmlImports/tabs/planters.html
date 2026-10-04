@@ -145,7 +145,29 @@
                     <p>Maximum number of planters that can be placed at any time</p>
                 </div>
                 <input type="text" id="auto_max_planters" style="width: 8rem; margin-top: 0.6rem;" class="poppins-regular textbox" data-input-type="int" data-input-limit="1" onkeypress="return textboxRestriction(this, event)" onchange="saveSetting(this, 'profile')">
-            </form> 
+            </form>
+            <form style="display: flex; align-items:flex-start; justify-content: space-between; padding-right: 5%; margin-top:1rem">
+                <div style="width: 70%;">
+                    <label>Planter Goal</label>
+                    <p>Nectar keeps the normal behavior. A wax goal places your enabled planters where the wiki says they drop that wax, using nectar only to break ties. Planters with guaranteed wax (Red Clay's 2 Soft Wax) come first. Wax planters always grow fully, ignoring the harvest settings above, and need 'Collect Planter Loot' enabled. Free slots fall back to nectar. Guaranteed monthly Caustic/Swirled field rewards aren't tracked yet.</p>
+                </div>
+                <div data-onchange="saveSetting(this, 'profile')" id="auto_planters_goal" class="custom-select poppins-regular" style="width: 10rem; margin-top: 0.6rem;">
+                    <div class="select-area">
+                        <div class="value" data-value="nectar">Nectar</div>
+                        <div class="chevron">&gt;</div>
+                    </div>
+                    <div class="select-menu-relative">
+                        <div class="select-menu" style="display: none;">
+                            <div class="option" data-value="nectar">Nectar</div>
+                            <div class="option" data-value="any_wax">Any Wax</div>
+                            <div class="option" data-value="soft">Soft Wax</div>
+                            <div class="option" data-value="hard">Hard Wax</div>
+                            <div class="option" data-value="caustic">Caustic Wax</div>
+                            <div class="option" data-value="swirled">Swirled Wax</div>
+                        </div>
+                    </div>
+                </div>
+            </form>
             <form style="display: flex; align-items:flex-start; justify-content: space-between; padding-right: 5%; margin-top:1rem">
                 <div style="width: 70%;">
                     <label>Clear Planter Timers</label>

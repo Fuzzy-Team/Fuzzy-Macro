@@ -318,6 +318,7 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'auto_planters_collect_every': 2,
  'auto_planters_collect_full': False,
  'auto_planters_collect_auto': False,
+ 'auto_planters_goal': 'nectar',
  'auto_planters_check': False,
  'auto_max_planters': 3,
  'auto_preset': 'blue',

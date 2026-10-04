@@ -1029,6 +1029,7 @@ def _isPlanterSettingKey(key):
         "auto_planters_collect_every",
         "auto_planters_collect_full",
         "auto_planters_collect_auto",
+        "auto_planters_goal",
         "auto_planters_check",
         "auto_max_planters",
         "auto_preset",

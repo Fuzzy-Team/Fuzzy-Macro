@@ -640,7 +640,10 @@ def emptyAutoPlanterSlot():
         "nectar_est_percent": 0,
         "placed_time": 0,
         "grow_duration": 0,
-        "natural_grow_duration": 0
+        "natural_grow_duration": 0,
+        "goal": "",
+        "requires_full_growth": False,
+        "reward_reason": ""
     }
 
 def emptyAutoPlanterFieldDegradation():

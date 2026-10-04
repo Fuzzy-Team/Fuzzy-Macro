@@ -1,6 +1,7 @@
 import modules.screen.ocr as ocr
 import modules.misc.appManager as appManager
 import modules.misc.settingsManager as settingsManager
+import modules.misc.planterRewards as planterRewards
 import time
 import pyautogui as pag
 
@@ -513,6 +514,7 @@ nectarFields = {
 allPlanters = ["paper", "ticket", "festive", "sticker", "plastic", "candy", "red_clay", "blue_clay", "tacky", "pesticide", "heat-treated", "hydroponic", "petal", "planter_of_plenty"]
 with open("./data/bss/auto_planter_ranking.json", "r") as f:
     autoPlanterRankings = json.load(f)
+planterRewardCatalog = planterRewards.loadCatalog("./data/bss/planter_rewards.json")
 
 
 # Quest completer name mappings
