@@ -30,6 +30,7 @@ from modules.misc.appManager import getWindowSize
 import traceback
 import modules.misc.settingsManager as settingsManager
 import modules.macro as macroModule
+import modules.misc.planterRewards as planterRewards
 import modules.controls.mouse as mouse
 import json
 from modules.misc.modelManager import ensure_missing_supported_models
@@ -1851,6 +1852,15 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                             "weight": max(0.5, 1.35 - (i * 0.12))
                         }
 
+                    plantersGoal = planterRewards.normalizeGoal(macro.setdat.get("auto_planters_goal", "nectar"))
+                    if planterRewards.isWaxGoal(plantersGoal) and not macro.setdat.get("planters_collect_loot", True):
+                        # Wax drops are tokens, so a wax goal is pointless without collecting loot
+                        if not getattr(macro, "waxGoalLootWarningSent", False):
+                            macro.logger.webhook("", "Auto-planter wax goal needs 'Collect Planter Loot' enabled. Using the nectar goal instead", "orange")
+                            macro.waxGoalLootWarningSent = True
+                        plantersGoal = "nectar"
+                    waxGoal = planterRewards.isWaxGoal(plantersGoal)
+
                     def emptyAutoPlanterSlot():
                         return {
                             "planter": "",
@@ -1860,7 +1870,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                             "nectar_est_percent": 0,
                             "placed_time": 0,
                             "grow_duration": 0,
-                            "natural_grow_duration": 0
+                            "natural_grow_duration": 0,
+                            "goal": "",
+                            "requires_full_growth": False,
+                            "reward_reason": ""
                         }
 
                     def emptyFieldDegradationState():
@@ -2033,6 +2046,17 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                             "natural_grow_duration": naturalGrowTimeSeconds
                         }
 
+                    def calculateFullGrowthPlan(fieldName, planterObj):
+                        now = time.time()
+                        naturalGrowTimeSeconds = getEffectiveNaturalGrowTimeSeconds(fieldName, planterObj)
+                        return {
+                            "grow_duration": naturalGrowTimeSeconds,
+                            "harvest_time": now + naturalGrowTimeSeconds,
+                            "placed_time": now,
+                            "nectar_est_percent": estimateNectarGain(planterObj, naturalGrowTimeSeconds),
+                            "natural_grow_duration": naturalGrowTimeSeconds
+                        }
+
                     def sendNectarPercentageWebhook():
                         try:
                             nectarPercentages = []
@@ -2076,8 +2100,9 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                         except Exception:
                             pass
 
-                    def savePlacedPlanter(slot, field, planterObj, nectar, placementPlan):
+                    def savePlacedPlanter(slot, field, planterObj, nectar, placementPlan, reward):
                         nonlocal planterData, nectarLastFields
+                        rewardPlacement = reward["tier"] != planterRewards.TIER_FALLBACK
                         planterData[slot] = {
                             "planter": planterObj["name"],
                             "nectar": nectar,
@@ -2086,7 +2111,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                             "nectar_est_percent": placementPlan["nectar_est_percent"],
                             "placed_time": placementPlan["placed_time"],
                             "grow_duration": placementPlan["grow_duration"],
-                            "natural_grow_duration": placementPlan["natural_grow_duration"]
+                            "natural_grow_duration": placementPlan["natural_grow_duration"],
+                            "goal": plantersGoal if rewardPlacement else "nectar",
+                            "requires_full_growth": rewardPlacement,
+                            "reward_reason": reward["reason"]
                         }
                         planterReady = time.strftime("%H:%M:%S", time.gmtime(placementPlan["grow_duration"]))
                         macro.logger.webhook("", f"Planter will be ready in: {planterReady}", "light blue")
@@ -2152,7 +2180,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                                 continue
 
                             for slot, planter in enumerate(planterData):
-                                if planter["planter"] and planter.get("nectar") == nectarName:
+                                if planter["planter"] and planter.get("nectar") == nectarName and not planter.get("requires_full_growth"):
                                     matchingPlanters.append((slot, planter, getNaturalPlanterProgress(planter)))
 
                             matchingPlanters.sort(key=lambda item: (-item[2], item[1]["harvest_time"]))
@@ -2214,18 +2242,28 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                                 if not macro.setdat.get(f"auto_planter_{settingPlanter}_field_{field.replace(' ', '_')}", True):
                                     continue
 
+                                reward = planterRewards.evaluateReward(
+                                    macroModule.planterRewardCatalog,
+                                    plantersGoal,
+                                    planterName,
+                                    field,
+                                    getEffectiveNaturalGrowTimeSeconds(field, planterObj) / 3600.0
+                                )
+                                if reward["tier"] == planterRewards.TIER_FALLBACK:
+                                    if addedForField >= 4:
+                                        continue
+                                    addedForField += 1
+
                                 candidates.append({
                                     "field": field,
                                     "nectar": fieldToNectar[field],
                                     "planter": planterName,
-                                    "planter_obj": planterObj
+                                    "planter_obj": planterObj,
+                                    "reward": reward
                                 })
-                                addedForField += 1
-                                if addedForField >= 4:
-                                    break
                         return candidates
 
-                    def evaluateCandidate(candidate, projectedNectarPercentages, availableFieldCounts):
+                    def evaluateNectarCandidate(candidate, projectedNectarPercentages, availableFieldCounts):
                         nectar = candidate["nectar"]
                         priorityInfo = getPriorityInfo(nectar)
                         projectedPercent = projectedNectarPercentages[nectar]
@@ -2260,13 +2298,31 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                             "plan": placementPlan
                         }
 
+                    def evaluateCandidate(candidate, projectedNectarPercentages, availableFieldCounts):
+                        reward = candidate["reward"]
+                        nectarEvaluation = evaluateNectarCandidate(candidate, projectedNectarPercentages, availableFieldCounts)
+                        if reward["tier"] == planterRewards.TIER_FALLBACK:
+                            if not nectarEvaluation or nectarEvaluation["score"] <= 0:
+                                return None
+                            return {
+                                "key": planterRewards.placementKey(reward, nectarEvaluation["score"]),
+                                "plan": nectarEvaluation["plan"]
+                            }
+
+                        # Wax placements always grow fully; nectar only breaks ties, so a capped nectar can't block them
+                        nectarScore = nectarEvaluation["score"] if nectarEvaluation else 0.0
+                        return {
+                            "key": planterRewards.placementKey(reward, nectarScore),
+                            "plan": calculateFullGrowthPlan(candidate["field"], candidate["planter_obj"])
+                        }
+
                     def findBestPlacements(slotsRemaining, occupiedFields, occupiedPlanters, projectedNectarPercentages):
                         if slotsRemaining <= 0:
-                            return 0.0, []
+                            return planterRewards.ZERO_KEY, []
 
                         candidates = buildPlacementCandidates(occupiedFields, occupiedPlanters)
                         if not candidates:
-                            return 0.0, []
+                            return planterRewards.ZERO_KEY, []
 
                         availableFieldCounts = {}
                         for candidate in candidates:
@@ -2276,16 +2332,16 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                         scoredCandidates = []
                         for candidate in candidates:
                             evaluation = evaluateCandidate(candidate, projectedNectarPercentages, availableFieldCounts)
-                            if evaluation and evaluation["score"] > 0:
-                                scoredCandidates.append((evaluation["score"], candidate, evaluation["plan"]))
+                            if evaluation:
+                                scoredCandidates.append((evaluation["key"], candidate, evaluation["plan"]))
 
                         if not scoredCandidates:
-                            return 0.0, []
+                            return planterRewards.ZERO_KEY, []
 
                         scoredCandidates.sort(key=lambda item: item[0], reverse=True)
                         scoredCandidates = scoredCandidates[:36]
 
-                        bestScore = 0.0
+                        bestScore = planterRewards.ZERO_KEY
                         bestPlacements = []
 
                         for score, candidate, placementPlan in scoredCandidates:
@@ -2299,7 +2355,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                                 updatedProjected
                             )
 
-                            totalScore = score + futureScore
+                            totalScore = planterRewards.addKeys(score, futureScore)
                             if totalScore > bestScore:
                                 bestScore = totalScore
                                 bestPlacements = [(candidate, placementPlan)] + futurePlacements
@@ -2333,9 +2389,17 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
 
                         slot = openSlots[0]
                         candidate, placementPlan = plannedPlacements[0]
+                        reward = candidate["reward"]
+                        if reward["tier"] != planterRewards.TIER_FALLBACK:
+                            goalName = "any" if plantersGoal == "any_wax" else plantersGoal
+                            choiceReason = f"{goalName.title()} Wax: {reward['reason']}"
+                        elif waxGoal:
+                            choiceReason = f"{candidate['nectar'].title()} (nectar fallback, no wax pick left for this slot)"
+                        else:
+                            choiceReason = candidate["nectar"].title()
                         macro.logger.webhook(
                             "",
-                            f"Auto-planter chose {candidate['planter'].title()} in {candidate['field'].title()} for {candidate['nectar'].title()}",
+                            f"Auto-planter chose {candidate['planter'].title()} in {candidate['field'].title()} for {choiceReason}",
                             "dark brown"
                         )
 
@@ -2345,7 +2409,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                             convertAfter=False,
                             allowAFB=False
                         ):
-                            savePlacedPlanter(slot, candidate["field"], candidate["planter_obj"], candidate["nectar"], placementPlan)
+                            savePlacedPlanter(slot, candidate["field"], candidate["planter_obj"], candidate["nectar"], placementPlan, reward)
                             if gatherFlag:
                                 runTask(macro.gather, args=(candidate["field"],), resetAfter=False)
                         else:
