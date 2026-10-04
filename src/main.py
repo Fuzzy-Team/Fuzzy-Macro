@@ -500,9 +500,45 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             "natural_grow_duration": 0,
         }
 
+    def completeSpecialDropStep(planter, specialDropState):
+        dropId = planter.get("special_drop_id", "")
+        drop = next((drop for drop in macroModule.specialPlanterDrops if drop["id"] == dropId), None)
+        if not drop:
+            return
+        runtime = planterRuntime.value if planterRuntime is not None else 0.0
+        duration = planter.get("natural_grow_duration", 0)
+        if duration <= 0 or route_growth(planter, runtime) < duration:
+            macro.logger.webhook(
+                "",
+                f"Special planter drop route for {drop['reward']} was not fully grown. Progress was not advanced.",
+                "orange"
+            )
+            return
+        state = specialDropState.setdefault(dropId, {"progress": 0, "cooldown_until": 0})
+        expectedIndex = min(int(state.get("progress", 0) or 0), len(drop["fields"]) - 1)
+        if planter.get("field") != drop["fields"][expectedIndex]:
+            state["progress"] = 0
+            return
+        if expectedIndex >= len(drop["fields"]) - 1:
+            state["progress"] = 0
+            state["cooldown_until"] = time.time() + (float(drop["cooldown_days"]) * 24 * 60 * 60)
+            macro.logger.webhook(
+                "",
+                f"Completed special planter drop route for {drop['reward']}. Cooldown started.",
+                "light blue"
+            )
+        else:
+            state["progress"] = expectedIndex + 1
+            nextField = drop["fields"][state["progress"]].title()
+            macro.logger.webhook(
+                "",
+                f"Special planter drop progress saved for {drop['reward']}. Next field: {nextField}",
+                "light blue"
+            )
+
     def clearCollectedPlanterState(command):
         mode = int(command.get("mode", 0) or 0)
-        index = int(command.get("index", -1) or -1)
+        index = int(command.get("index", -1))
         if index < 0:
             return
 
@@ -522,6 +558,14 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 autoData = json.load(f)
             planters = autoData.get("planters", [])
             if index < len(planters):
+                planter = planters[index]
+                state = autoData.setdefault("special_drops", {})
+                drop = next((drop for drop in macroModule.specialPlanterDrops
+                             if drop["id"] == planter.get("special_drop_id")), None)
+                if drop:
+                    progress = min(int(state.get(drop["id"], {}).get("progress", 0) or 0), len(drop["fields"]) - 1)
+                    if planter.get("field") == drop["fields"][progress]:
+                        completeSpecialDropStep(planter, state)
                 planters[index] = emptyAutoPlanterSlot()
             autoData["planters"] = planters
             with open(settingsManager.ensureUserFile("auto_planters.json"), "w") as f:
@@ -2158,7 +2202,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                             queue = []
 
                         legacyDrop = macro.setdat.get("auto_planters_special_drop", "")
-                        if not queue and legacyDrop:
+                        if "auto_planters_special_drop_queue" not in macro.setdat and legacyDrop:
                             queue = [legacyDrop]
 
                         selected = []
@@ -2232,40 +2276,6 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                             return None
                         placements.sort(key=lambda placement: placement["score"], reverse=True)
                         return placements[0]
-
-                    def completeSpecialDropStep(planter):
-                        dropId = planter.get("special_drop_id", "")
-                        drop = getSpecialDropById(dropId)
-                        if not drop:
-                            return
-                        if getNaturalPlanterProgress(planter) < 1.0:
-                            macro.logger.webhook(
-                                "",
-                                f"Special planter drop route for {drop['reward']} was not fully grown. Progress was not advanced.",
-                                "orange"
-                            )
-                            return
-                        state = specialDropState.setdefault(dropId, {"progress": 0, "cooldown_until": 0})
-                        expectedIndex = min(int(state.get("progress", 0) or 0), len(drop["fields"]) - 1)
-                        if planter.get("field") != drop["fields"][expectedIndex]:
-                            state["progress"] = 0
-                            return
-                        if expectedIndex >= len(drop["fields"]) - 1:
-                            state["progress"] = 0
-                            state["cooldown_until"] = time.time() + (float(drop["cooldown_days"]) * 24 * 60 * 60)
-                            macro.logger.webhook(
-                                "",
-                                f"Completed special planter drop route for {drop['reward']}. Cooldown started.",
-                                "light blue"
-                            )
-                        else:
-                            state["progress"] = expectedIndex + 1
-                            nextField = drop["fields"][state["progress"]].title()
-                            macro.logger.webhook(
-                                "",
-                                f"Special planter drop progress saved for {drop['reward']}. Next field: {nextField}",
-                                "light blue"
-                            )
 
                     def getFieldDegradationHours(fieldName):
                         entry = getDecayedDegradationEntry(fieldName)
@@ -2363,7 +2373,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                         if not planter["planter"]:
                             continue
                         if runTask(macro.collectPlanter, args=(planter["planter"], planter["field"])):
-                            completeSpecialDropStep(planter)
+                            completeSpecialDropStep(planter, specialDropState)
                             recordFieldDegradation(planter)
                             planterData[slot] = emptyAutoPlanterSlot()
                             currentNectarCache.clear()

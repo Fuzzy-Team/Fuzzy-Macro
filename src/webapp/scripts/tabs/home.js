@@ -648,7 +648,10 @@ async function loadTasks() {
 
   function getPlanterHTML(planter, field, harvestTime, index, runtimeRemaining = null) {
     const currTime = Date.now() / 1000;
-    const timeRemaining = secondsToMinsAndHours(runtimeRemaining ?? (harvestTime - currTime));
+    const timeRemaining =
+      runtimeRemaining != null && runtimeRemaining <= 0
+        ? "Ready!"
+        : secondsToMinsAndHours(runtimeRemaining ?? (harvestTime - currTime));
     // Normalize field to fieldNectarIcons key format (lowercase, spaces -> underscores)
     const fieldKey = (field || "").toLowerCase().replace(/\s+/g, "_");
     const nectarIcon = fieldNectarIcons[fieldKey]

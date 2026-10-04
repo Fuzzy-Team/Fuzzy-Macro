@@ -1259,6 +1259,11 @@ def _moveMisplacedSettings(settings_path, generalsettings_path):
         )
         changed = True
 
+    if "auto_planters_special_drop_queue" not in settings_data:
+        legacy_drop = settings_data.get("auto_planters_special_drop", "")
+        settings_data["auto_planters_special_drop_queue"] = [legacy_drop] if legacy_drop else []
+        changed = True
+
     for key, value in default_profile_settings.items():
         if key not in settings_data:
             settings_data[key] = value

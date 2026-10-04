@@ -2,6 +2,8 @@
 
 import ast
 import copy
+import json
+import tempfile
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -27,7 +29,7 @@ class SpecialDropTests(unittest.TestCase):
     def setUp(self):
         names = {'getSpecialDropById', 'canPlaceSpecialDrop',
                  'findBestSpecialDropPlacement', 'completeSpecialDropStep',
-                 'getNaturalPlanterProgress', 'specialRuntime'}
+                 'getNaturalPlanterProgress', 'specialRuntime', 'getSelectedSpecialDrops'}
         module = ast.Module(body=[node for node in ast.walk(SOURCE)
                                   if isinstance(node, ast.FunctionDef) and node.name in names],
                             type_ignores=[])
@@ -38,7 +40,7 @@ class SpecialDropTests(unittest.TestCase):
         self.blocked_placements = set()
         self.macro = SimpleNamespace(setdat={f"auto_planter_{drop['planter'].replace(' ', '_')}": True
                                             for drop in DROPS}, logger=SimpleNamespace(webhook=Mock()))
-        self.ns = dict(planterRuntime=self.runtime, route_growth=route_growth, route_remaining=route_remaining, macroModule=SimpleNamespace(specialPlanterDrops=DROPS),
+        self.ns = dict(ast=ast, planterRuntime=self.runtime, route_growth=route_growth, route_remaining=route_remaining, macroModule=SimpleNamespace(specialPlanterDrops=DROPS),
                        macro=self.macro, specialDropState=self.state,
                        blockedPlanters=self.blocked, blockedPlacements=self.blocked_placements,
                        time=SimpleNamespace(time=lambda: self.now),
@@ -58,7 +60,51 @@ class SpecialDropTests(unittest.TestCase):
         self.ns['completeSpecialDropStep'](dict(
             special_drop_id=self.drop['id'], planter=self.drop['planter'], field=field,
             placed_time=self.now - age, natural_grow_duration=3600,
-            harvest_time=0, runtime_baseline=self.runtime.value - age, growth_runtime=0))
+            harvest_time=0, runtime_baseline=self.runtime.value - age, growth_runtime=0), self.state)
+
+    def test_legacy_selection_is_used_only_when_queue_is_absent(self):
+        self.macro.setdat.update(auto_planters_special_drops=True,
+                                 auto_planters_special_drop=self.drop['id'])
+        self.assertEqual(self.ns['getSelectedSpecialDrops'](), [self.drop])
+        for queue in ([], '[]'):
+            self.macro.setdat['auto_planters_special_drop_queue'] = queue
+            self.assertEqual(self.ns['getSelectedSpecialDrops'](), [])
+
+    def test_manual_collection_saves_route_progress_before_clearing_slot(self):
+        names = {'clearCollectedPlanterState', 'emptyAutoPlanterSlot'}
+        module = ast.Module(body=[node for node in ast.walk(SOURCE)
+                                  if isinstance(node, ast.FunctionDef) and node.name in names],
+                            type_ignores=[])
+        for age, field, expected in ((3600, 'stump', 1), (1800, 'stump', 0),
+                                     (3600, 'cactus', 0)):
+            with self.subTest(age=age, field=field), tempfile.TemporaryDirectory() as folder:
+                path = Path(folder) / 'auto_planters.json'
+                planter = dict(planter='candy', field=field, special_drop_id=self.drop['id'],
+                               natural_grow_duration=3600, runtime_baseline=0, growth_runtime=0)
+                path.write_text(json.dumps({'planters': [planter], 'special_drops': {}}))
+                self.runtime.value = age
+                self.ns.update(json=json, settingsManager=SimpleNamespace(
+                    ensureUserFile=lambda name: str(path)))
+                exec(compile(module, '<manual-collection>', 'exec'), self.ns)
+                self.ns['clearCollectedPlanterState']({'mode': 2, 'index': 0})
+                saved = json.loads(path.read_text())
+                self.assertEqual(saved['planters'][0]['planter'], '')
+                self.assertEqual(saved['special_drops'].get(self.drop['id'], {}).get('progress', 0), expected)
+
+    def test_profile_repair_migrates_missing_queue_and_preserves_empty_queue(self):
+        source = ast.parse((ROOT / 'src/modules/misc/settingsManager.py').read_text())
+        function = next(node for node in source.body if isinstance(node, ast.FunctionDef)
+                        and node.name == '_moveMisplacedSettings')
+        migration = next(node for node in function.body if isinstance(node, ast.If)
+                         and 'auto_planters_special_drop_queue' in ast.unparse(node.test))
+        code = compile(ast.Module(body=[migration], type_ignores=[]), '<queue-migration>', 'exec')
+        for present in (False, True):
+            settings = {'auto_planters_special_drop': self.drop['id']}
+            if present:
+                settings['auto_planters_special_drop_queue'] = []
+            exec(code, {'settings_data': settings})
+            self.assertEqual(settings['auto_planters_special_drop_queue'],
+                             [] if present else [self.drop['id']])
 
     def test_missing_inventory_is_not_retried_on_another_route(self):
         self.blocked.add('candy')
