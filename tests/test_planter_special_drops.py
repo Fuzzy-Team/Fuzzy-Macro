@@ -2,6 +2,7 @@
 
 import ast
 import copy
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
@@ -10,6 +11,9 @@ from unittest.mock import Mock
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ast.parse((ROOT / 'src/main.py').read_text())
+sys.path.insert(0, str(ROOT / 'src'))
+from modules.misc.planterRuntime import route_growth, route_remaining
+
 MACRO_SOURCE = ast.parse((ROOT / 'src/modules/macro.py').read_text())
 DROPS = ast.literal_eval(next(
     node.value for node in MACRO_SOURCE.body
@@ -23,17 +27,18 @@ class SpecialDropTests(unittest.TestCase):
     def setUp(self):
         names = {'getSpecialDropById', 'canPlaceSpecialDrop',
                  'findBestSpecialDropPlacement', 'completeSpecialDropStep',
-                 'getNaturalPlanterProgress'}
+                 'getNaturalPlanterProgress', 'specialRuntime'}
         module = ast.Module(body=[node for node in ast.walk(SOURCE)
                                   if isinstance(node, ast.FunctionDef) and node.name in names],
                             type_ignores=[])
         self.now = 1000000
+        self.runtime = SimpleNamespace(value=0.0)
         self.state = {}
         self.blocked = set()
         self.blocked_placements = set()
         self.macro = SimpleNamespace(setdat={f"auto_planter_{drop['planter'].replace(' ', '_')}": True
                                             for drop in DROPS}, logger=SimpleNamespace(webhook=Mock()))
-        self.ns = dict(macroModule=SimpleNamespace(specialPlanterDrops=DROPS),
+        self.ns = dict(planterRuntime=self.runtime, route_growth=route_growth, route_remaining=route_remaining, macroModule=SimpleNamespace(specialPlanterDrops=DROPS),
                        macro=self.macro, specialDropState=self.state,
                        blockedPlanters=self.blocked, blockedPlacements=self.blocked_placements,
                        time=SimpleNamespace(time=lambda: self.now),
@@ -53,7 +58,7 @@ class SpecialDropTests(unittest.TestCase):
         self.ns['completeSpecialDropStep'](dict(
             special_drop_id=self.drop['id'], planter=self.drop['planter'], field=field,
             placed_time=self.now - age, natural_grow_duration=3600,
-            harvest_time=self.now - age + 3600))
+            harvest_time=0, runtime_baseline=self.runtime.value - age, growth_runtime=0))
 
     def test_missing_inventory_is_not_retried_on_another_route(self):
         self.blocked.add('candy')
@@ -91,7 +96,7 @@ class SpecialDropTests(unittest.TestCase):
     def test_special_route_waits_for_full_growth(self):
         plan = self.placement()['plan']
         self.assertEqual(plan['grow_duration'], 3600)
-        self.assertEqual(plan['harvest_time'], self.now + 3600)
+        self.assertEqual(plan['harvest_time'], 0)
         self.harvest(age=1800)
         self.assertEqual(self.state, {})
 
@@ -133,19 +138,48 @@ class SpecialDropTests(unittest.TestCase):
         self.ns['saveAutoPlanterData'].assert_called_once()
         return slots[0]
 
+    def harvest_candidates(self, elapsed):
+        loop = next(node for node in ast.walk(SOURCE)
+                    if isinstance(node, ast.For)
+                    and isinstance(node.target, ast.Tuple)
+                    and [getattr(item, 'id', '') for item in node.target.elts] == ['slot', 'planter']
+                    and any(isinstance(child, ast.If) and isinstance(child.test, ast.Call)
+                            and isinstance(child.test.func, ast.Attribute)
+                            and child.test.func.attr == 'get'
+                            and child.test.args and isinstance(child.test.args[0], ast.Constant)
+                            and child.test.args[0].value == 'special_drop_id' for child in node.body))
+        self.ns.update(planterData=[dict(planter='candy', special_drop_id=self.drop['id'],
+                                       natural_grow_duration=3600, harvest_time=1,
+                                       runtime_baseline=0, growth_runtime=0)],
+                       planterSlotsToHarvest=[])
+        self.runtime.value = elapsed
+        exec(compile(ast.Module(body=[loop], type_ignores=[]), '<harvest-scheduler>', 'exec'), self.ns)
+        return self.ns['planterSlotsToHarvest']
+
+    def test_expired_wall_deadline_does_not_harvest_a_runtime_route(self):
+        self.now += 86400
+        self.assertEqual(self.harvest_candidates(1800), [])
+
+    def test_full_macro_runtime_makes_route_ready(self):
+        self.assertEqual(self.harvest_candidates(3600), [0])
+
     def test_full_growth_starts_after_travel_and_successful_placement(self):
         plan = self.placement()['plan']
-        selected_at = self.now
         self.now += 120
+        self.runtime.value += 120
         saved = self.save_placement(plan)
-        self.assertEqual(saved['placed_time'], self.now)
-        self.assertEqual(saved['harvest_time'], self.now + 3600)
+        self.assertEqual(saved['placed_time'], 0)
+        self.assertEqual(saved['harvest_time'], 0)
+        self.assertEqual(saved['runtime_baseline'], 120)
+        self.assertEqual(route_remaining(saved, self.runtime.value), 3600)
         self.assertEqual(saved['special_drop_id'], self.drop['id'])
-        self.assertEqual(plan['placed_time'], selected_at)
+        self.assertEqual(plan['placed_time'], 0)
 
     def test_normal_planters_keep_their_synchronized_harvest_deadline(self):
         plan = self.placement()['plan']
         plan['special_drop_id'] = ''
+        plan['placed_time'] = self.now
+        plan['harvest_time'] = self.now + 3600
         self.now += 120
         saved = self.save_placement(plan)
         self.assertEqual(saved['placed_time'], plan['placed_time'])

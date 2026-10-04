@@ -32,6 +32,7 @@ import modules.misc.settingsManager as settingsManager
 import modules.macro as macroModule
 import modules.controls.mouse as mouse
 import json
+from modules.misc.planterRuntime import PlanterRuntimeClock, normalize_route_runtime, route_growth, route_remaining
 from modules.misc.modelManager import ensure_missing_supported_models
 from modules.controls.sleep import (
     InterruptRequested,
@@ -451,7 +452,7 @@ def canClaimTimedBearQuest(name):
     
 # (set_enabled moved into RichPresenceManager class)
 #controller for the macro
-def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMessageQueue=None, planterCommandQueue=None, skipServer=None):
+def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMessageQueue=None, planterCommandQueue=None, skipServer=None, planterRuntime=None):
     macro = macroModule.macro(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, skipServer)
     altHostAuthorized = (
         macro.setdat.get("macro_mode", "normal") != "alt"
@@ -1862,6 +1863,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                             "placed_time": 0,
                             "grow_duration": 0,
                             "natural_grow_duration": 0,
+                            "runtime_baseline": None,
+                            "growth_runtime": 0.0,
                             "special_drop_id": ""
                         }
 
@@ -1926,6 +1929,9 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                     def getEffectiveNaturalGrowTimeSeconds(fieldName, planterObj):
                         return max(0.0, (planterObj["grow_time"] + getFieldDegradationHours(fieldName)) * 60 * 60)
 
+                    def specialRuntime():
+                        return planterRuntime.value if planterRuntime is not None else 0.0
+
                     def normalizeAutoPlanterSlot(slot):
                         normalized = emptyAutoPlanterSlot()
                         if isinstance(slot, dict):
@@ -1951,16 +1957,12 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                             if normalized["nectar_est_percent"] <= 0:
                                 normalized["nectar_est_percent"] = estimateNectarGain(ranking, normalized["grow_duration"])
 
-                        if normalized["planter"] and normalized.get("special_drop_id") and normalized["natural_grow_duration"] > 0:
-                            fullGrowHarvestTime = normalized["placed_time"] + normalized["natural_grow_duration"]
-                            if normalized["placed_time"] > 0 and normalized["harvest_time"] < fullGrowHarvestTime:
-                                normalized["harvest_time"] = fullGrowHarvestTime
-                                normalized["grow_duration"] = normalized["natural_grow_duration"]
-                                normalized["nectar_est_percent"] = estimateNectarGain(ranking, normalized["natural_grow_duration"]) if ranking else normalized["nectar_est_percent"]
+                        normalize_route_runtime(normalized, specialRuntime())
 
                         return normalized
 
                     normalizeFieldDegradation()
+                    runtimeMigrationNeeded = any(slot.get("special_drop_id") and slot.get("runtime_baseline") is None for slot in planterData if isinstance(slot, dict))
                     planterData = [normalizeAutoPlanterSlot(slot) for slot in planterData[:3]]
                     while len(planterData) < 3:
                         planterData.append(emptyAutoPlanterSlot())
@@ -2089,12 +2091,12 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                     def savePlacedPlanter(slot, field, planterObj, nectar, placementPlan):
                         nonlocal planterData, nectarLastFields
                         if placementPlan.get("special_drop_id"):
-                            # Route selection happens before travel and placement. Start
-                            # full-growth timing only once placement has succeeded.
                             placementPlan = dict(placementPlan)
-                            placementPlan["placed_time"] = time.time()
+                            placementPlan["runtime_baseline"] = specialRuntime()
+                            placementPlan["growth_runtime"] = 0.0
+                            placementPlan["placed_time"] = 0
+                            placementPlan["harvest_time"] = 0
                             placementPlan["grow_duration"] = placementPlan["natural_grow_duration"]
-                            placementPlan["harvest_time"] = placementPlan["placed_time"] + placementPlan["grow_duration"]
                         planterData[slot] = {
                             "planter": planterObj["name"],
                             "nectar": nectar,
@@ -2104,6 +2106,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                             "placed_time": placementPlan["placed_time"],
                             "grow_duration": placementPlan["grow_duration"],
                             "natural_grow_duration": placementPlan["natural_grow_duration"],
+                            "runtime_baseline": placementPlan.get("runtime_baseline"),
+                            "growth_runtime": placementPlan.get("growth_runtime", 0.0),
                             "special_drop_id": placementPlan.get("special_drop_id", "")
                         }
                         planterReady = time.strftime("%H:%M:%S", time.gmtime(placementPlan["grow_duration"]))
@@ -2210,8 +2214,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                             "score": score,
                             "plan": {
                                 "grow_duration": naturalGrowTimeSeconds,
-                                "harvest_time": time.time() + naturalGrowTimeSeconds,
-                                "placed_time": time.time(),
+                                "harvest_time": 0,
+                                "placed_time": 0,
                                 "nectar_est_percent": estimateNectarGain(planterObj, naturalGrowTimeSeconds),
                                 "natural_grow_duration": naturalGrowTimeSeconds,
                                 "special_drop_id": drop["id"]
@@ -2234,7 +2238,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                         drop = getSpecialDropById(dropId)
                         if not drop:
                             return
-                        if getNaturalPlanterProgress(planter) < 0.995:
+                        if getNaturalPlanterProgress(planter) < 1.0:
                             macro.logger.webhook(
                                 "",
                                 f"Special planter drop route for {drop['reward']} was not fully grown. Progress was not advanced.",
@@ -2269,11 +2273,15 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                         return entry["hours"]
 
                     normalizeSpecialDropState()
+                    if runtimeMigrationNeeded:
+                        saveAutoPlanterData()
 
                     def getNaturalPlanterProgress(planter):
                         if not planter["planter"]:
                             return 0.0
                         naturalGrowDuration = planter.get("natural_grow_duration", 0)
+                        if planter.get("special_drop_id"):
+                            return min(1.0, route_growth(planter, specialRuntime()) / naturalGrowDuration) if naturalGrowDuration > 0 else 0.0
                         placedTime = planter.get("placed_time", 0)
                         if naturalGrowDuration > 0 and placedTime > 0:
                             return max(0.0, min(1.0, (time.time() - placedTime) / naturalGrowDuration))
@@ -2342,12 +2350,9 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                     for slot, planter in enumerate(planterData):
                         if not planter["planter"]:
                             continue
-                        if planter.get("special_drop_id") and getNaturalPlanterProgress(planter) < 0.995:
-                            fullGrowHarvestTime = planter.get("placed_time", 0) + planter.get("natural_grow_duration", 0)
-                            if fullGrowHarvestTime > planter.get("harvest_time", 0):
-                                planter["harvest_time"] = fullGrowHarvestTime
-                                planter["grow_duration"] = planter.get("natural_grow_duration", planter.get("grow_duration", 0))
-                                saveAutoPlanterData()
+                        if planter.get("special_drop_id"):
+                            if planter.get("natural_grow_duration", 0) > 0 and route_remaining(planter, specialRuntime()) <= 0:
+                                planterSlotsToHarvest.append(slot)
                             continue
                         if time.time() > planter["harvest_time"]:
                             planterSlotsToHarvest.append(slot)
@@ -3400,6 +3405,9 @@ if __name__ == "__main__":
     #4: disconnected (rejoin)
     manager = multiprocessing.Manager()
     run = manager.Value('i', 3)
+    planterRuntime = manager.Value('d', 0.0)
+    planterRuntimeClock = PlanterRuntimeClock(settingsManager.getUserDataPath("special_planter_runtime.json"), planterRuntime)
+    gui.setPlanterRuntime(planterRuntime)
     gui.setRunState(3)  # Initialize the global run state
     recentLogs = manager.list()  # Shared list to store recent log entries for discord bot
     gui.setRecentLogs(recentLogs)
@@ -3529,6 +3537,10 @@ if __name__ == "__main__":
             print(f"Failed to release mouse during shutdown: {e}")
 
     def onExit():
+        try:
+            planterRuntimeClock.save()
+        except OSError as e:
+            print(f"Failed to save special planter runtime: {e}")
         stopStandbyKeepAwake()
         try:
             stopApp()
@@ -3788,6 +3800,7 @@ if __name__ == "__main__":
         eel.sleep(1 if standbyState.active else 0.5)
 
         current_time = time.time()
+        planterRuntimeClock.tick(run.value == 2 and macroProc is not None and macroProc.is_alive() and status.value != "rejoining" and not standbyState.active)
         processStandbyCommands()
 
         # Standby has already stopped the macro. A stop hotkey can still assign
@@ -3969,7 +3982,7 @@ if __name__ == "__main__":
                                     but there are no more items left to craft.\n\
 				                    Check the 'repeat' setting on your blender items and reset blender data.")
             #macro proc
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer, planterRuntime), daemon=True)
             macroProc.start()
 
             macro_version = settingsManager.getMacroVersion()
@@ -4115,7 +4128,7 @@ if __name__ == "__main__":
             appManager.closeApp("Roblox")
             keyboardModule.releaseMovement()
             mouse.mouseUp()
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer, planterRuntime), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state
@@ -4148,7 +4161,7 @@ if __name__ == "__main__":
             keyboardModule.releaseMovement()
             mouse.mouseUp()
             # restart macro process
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer, planterRuntime), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state

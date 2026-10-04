@@ -646,9 +646,9 @@ async function loadTasks() {
 
   //planter timers
 
-  function getPlanterHTML(planter, field, harvestTime, index) {
+  function getPlanterHTML(planter, field, harvestTime, index, runtimeRemaining = null) {
     const currTime = Date.now() / 1000;
-    const timeRemaining = secondsToMinsAndHours(harvestTime - currTime);
+    const timeRemaining = secondsToMinsAndHours(runtimeRemaining ?? (harvestTime - currTime));
     // Normalize field to fieldNectarIcons key format (lowercase, spaces -> underscores)
     const fieldKey = (field || "").toLowerCase().replace(/\s+/g, "_");
     const nectarIcon = fieldNectarIcons[fieldKey]
@@ -703,7 +703,8 @@ async function loadTasks() {
             planter.planter,
             planter.field,
             planter.harvest_time,
-            i
+            i,
+            planter.runtime_remaining ?? null
           );
         }
       }
