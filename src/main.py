@@ -32,6 +32,7 @@ import modules.misc.settingsManager as settingsManager
 import modules.macro as macroModule
 import modules.controls.mouse as mouse
 import json
+from modules.misc.planterRuntime import PlanterRuntimeClock, normalize_route_runtime, route_growth, route_remaining
 from modules.misc.modelManager import ensure_missing_supported_models
 from modules.controls.sleep import (
     InterruptRequested,
@@ -451,7 +452,7 @@ def canClaimTimedBearQuest(name):
     
 # (set_enabled moved into RichPresenceManager class)
 #controller for the macro
-def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMessageQueue=None, planterCommandQueue=None, skipServer=None):
+def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMessageQueue=None, planterCommandQueue=None, skipServer=None, planterRuntime=None):
     macro = macroModule.macro(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, skipServer)
     altHostAuthorized = (
         macro.setdat.get("macro_mode", "normal") != "alt"
@@ -499,9 +500,45 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             "natural_grow_duration": 0,
         }
 
+    def completeSpecialDropStep(planter, specialDropState):
+        dropId = planter.get("special_drop_id", "")
+        drop = next((drop for drop in macroModule.specialPlanterDrops if drop["id"] == dropId), None)
+        if not drop:
+            return
+        runtime = planterRuntime.value if planterRuntime is not None else 0.0
+        duration = planter.get("natural_grow_duration", 0)
+        if duration <= 0 or route_growth(planter, runtime) < duration:
+            macro.logger.webhook(
+                "",
+                f"Special planter drop route for {drop['reward']} was not fully grown. Progress was not advanced.",
+                "orange"
+            )
+            return
+        state = specialDropState.setdefault(dropId, {"progress": 0, "cooldown_until": 0})
+        expectedIndex = min(int(state.get("progress", 0) or 0), len(drop["fields"]) - 1)
+        if planter.get("field") != drop["fields"][expectedIndex]:
+            state["progress"] = 0
+            return
+        if expectedIndex >= len(drop["fields"]) - 1:
+            state["progress"] = 0
+            state["cooldown_until"] = time.time() + (float(drop["cooldown_days"]) * 24 * 60 * 60)
+            macro.logger.webhook(
+                "",
+                f"Completed special planter drop route for {drop['reward']}. Cooldown started.",
+                "light blue"
+            )
+        else:
+            state["progress"] = expectedIndex + 1
+            nextField = drop["fields"][state["progress"]].title()
+            macro.logger.webhook(
+                "",
+                f"Special planter drop progress saved for {drop['reward']}. Next field: {nextField}",
+                "light blue"
+            )
+
     def clearCollectedPlanterState(command):
         mode = int(command.get("mode", 0) or 0)
-        index = int(command.get("index", -1) or -1)
+        index = int(command.get("index", -1))
         if index < 0:
             return
 
@@ -521,6 +558,14 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 autoData = json.load(f)
             planters = autoData.get("planters", [])
             if index < len(planters):
+                planter = planters[index]
+                state = autoData.setdefault("special_drops", {})
+                drop = next((drop for drop in macroModule.specialPlanterDrops
+                             if drop["id"] == planter.get("special_drop_id")), None)
+                if drop:
+                    progress = min(int(state.get(drop["id"], {}).get("progress", 0) or 0), len(drop["fields"]) - 1)
+                    if planter.get("field") == drop["fields"][progress]:
+                        completeSpecialDropStep(planter, state)
                 planters[index] = emptyAutoPlanterSlot()
             autoData["planters"] = planters
             with open(settingsManager.ensureUserFile("auto_planters.json"), "w") as f:
@@ -1839,6 +1884,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                     nectarLastFields = data.get("nectar_last_field", {})
                     gatherFlag = data.get("gather", False)
                     fieldDegradation = data.get("field_degradation", {})
+                    specialDropState = data.get("special_drops", {})
 
                     priorityMap = {}
                     for i in range(5):
@@ -1860,7 +1906,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                             "nectar_est_percent": 0,
                             "placed_time": 0,
                             "grow_duration": 0,
-                            "natural_grow_duration": 0
+                            "natural_grow_duration": 0,
+                            "runtime_baseline": None,
+                            "growth_runtime": 0.0,
+                            "special_drop_id": ""
                         }
 
                     def emptyFieldDegradationState():
@@ -1903,7 +1952,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                             "planters": planterData,
                             "nectar_last_field": nectarLastFields,
                             "gather": gatherFlag,
-                            "field_degradation": fieldDegradation
+                            "field_degradation": fieldDegradation,
+                            "special_drops": specialDropState
                         }
                         with open(settingsManager.ensureUserFile("auto_planters.json"), "w") as f:
                             json.dump(data, f, indent=3)
@@ -1922,6 +1972,9 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
 
                     def getEffectiveNaturalGrowTimeSeconds(fieldName, planterObj):
                         return max(0.0, (planterObj["grow_time"] + getFieldDegradationHours(fieldName)) * 60 * 60)
+
+                    def specialRuntime():
+                        return planterRuntime.value if planterRuntime is not None else 0.0
 
                     def normalizeAutoPlanterSlot(slot):
                         normalized = emptyAutoPlanterSlot()
@@ -1948,9 +2001,12 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                             if normalized["nectar_est_percent"] <= 0:
                                 normalized["nectar_est_percent"] = estimateNectarGain(ranking, normalized["grow_duration"])
 
+                        normalize_route_runtime(normalized, specialRuntime())
+
                         return normalized
 
                     normalizeFieldDegradation()
+                    runtimeMigrationNeeded = any(slot.get("special_drop_id") and slot.get("runtime_baseline") is None for slot in planterData if isinstance(slot, dict))
                     planterData = [normalizeAutoPlanterSlot(slot) for slot in planterData[:3]]
                     while len(planterData) < 3:
                         planterData.append(emptyAutoPlanterSlot())
@@ -2078,6 +2134,13 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
 
                     def savePlacedPlanter(slot, field, planterObj, nectar, placementPlan):
                         nonlocal planterData, nectarLastFields
+                        if placementPlan.get("special_drop_id"):
+                            placementPlan = dict(placementPlan)
+                            placementPlan["runtime_baseline"] = specialRuntime()
+                            placementPlan["growth_runtime"] = 0.0
+                            placementPlan["placed_time"] = 0
+                            placementPlan["harvest_time"] = 0
+                            placementPlan["grow_duration"] = placementPlan["natural_grow_duration"]
                         planterData[slot] = {
                             "planter": planterObj["name"],
                             "nectar": nectar,
@@ -2086,7 +2149,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                             "nectar_est_percent": placementPlan["nectar_est_percent"],
                             "placed_time": placementPlan["placed_time"],
                             "grow_duration": placementPlan["grow_duration"],
-                            "natural_grow_duration": placementPlan["natural_grow_duration"]
+                            "natural_grow_duration": placementPlan["natural_grow_duration"],
+                            "runtime_baseline": placementPlan.get("runtime_baseline"),
+                            "growth_runtime": placementPlan.get("growth_runtime", 0.0),
+                            "special_drop_id": placementPlan.get("special_drop_id", "")
                         }
                         planterReady = time.strftime("%H:%M:%S", time.gmtime(placementPlan["grow_duration"]))
                         macro.logger.webhook("", f"Planter will be ready in: {planterReady}", "light blue")
@@ -2094,15 +2160,138 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                         saveAutoPlanterData()
                         sendNectarPercentageWebhook()
 
+                    def getSpecialDropById(dropId):
+                        for drop in macroModule.specialPlanterDrops:
+                            if drop["id"] == dropId:
+                                return drop
+                        return None
+
+                    def normalizeSpecialDropState():
+                        nonlocal specialDropState
+                        if not isinstance(specialDropState, dict):
+                            specialDropState = {}
+                        for drop in macroModule.specialPlanterDrops:
+                            state = specialDropState.get(drop["id"], {})
+                            if not isinstance(state, dict):
+                                state = {}
+                            try:
+                                progress = int(state.get("progress", 0) or 0)
+                            except Exception:
+                                progress = 0
+                            try:
+                                cooldownUntil = float(state.get("cooldown_until", 0) or 0)
+                            except Exception:
+                                cooldownUntil = 0
+                            specialDropState[drop["id"]] = {
+                                "progress": min(max(progress, 0), len(drop["fields"]) - 1),
+                                "cooldown_until": cooldownUntil
+                            }
+
+                    def getSelectedSpecialDrops():
+                        if not macro.setdat.get("auto_planters_special_drops", False):
+                            return []
+
+                        queue = macro.setdat.get("auto_planters_special_drop_queue", [])
+                        if isinstance(queue, str):
+                            try:
+                                parsedQueue = ast.literal_eval(queue)
+                                queue = parsedQueue if isinstance(parsedQueue, list) else [queue]
+                            except Exception:
+                                queue = [queue]
+                        elif not isinstance(queue, list):
+                            queue = []
+
+                        legacyDrop = macro.setdat.get("auto_planters_special_drop", "")
+                        if "auto_planters_special_drop_queue" not in macro.setdat and legacyDrop:
+                            queue = [legacyDrop]
+
+                        selected = []
+                        seen = set()
+                        for dropId in queue:
+                            drop = getSpecialDropById(str(dropId))
+                            if drop and drop["id"] not in seen:
+                                selected.append(drop)
+                                seen.add(drop["id"])
+                        return selected
+
+                    def canPlaceSpecialDrop(drop, occupiedFields, occupiedPlanters, projectedNectarPercentages):
+                        if not drop:
+                            return None
+                        state = specialDropState.get(drop["id"], {"progress": 0, "cooldown_until": 0})
+                        if state.get("cooldown_until", 0) > time.time():
+                            return None
+                        planterName = drop["planter"]
+                        progress = min(int(state.get("progress", 0) or 0), len(drop["fields"]) - 1)
+                        fieldName = drop["fields"][progress]
+                        settingPlanter = planterName.replace(" ", "_")
+                        if planterName in occupiedPlanters or planterName in blockedPlanters or fieldName in occupiedFields:
+                            return None
+                        if not macro.setdat.get(f"auto_planter_{settingPlanter}", False):
+                            return None
+                        planterObj = getPlanterRanking(fieldName, planterName)
+                        if not planterObj:
+                            return None
+                        nectar = fieldToNectar.get(fieldName, "")
+                        naturalGrowTimeSeconds = getEffectiveNaturalGrowTimeSeconds(fieldName, planterObj)
+                        nectarProjected = projectedNectarPercentages.get(nectar, getTotalNectarPercent(nectar))
+                        priorityInfo = getPriorityInfo(nectar)
+                        deficitToMin = max(0.0, priorityInfo["min"] - nectarProjected)
+                        if deficitToMin > 0:
+                            nectarScore = 24.0 + deficitToMin
+                        elif nectarProjected < 100:
+                            nectarScore = 10.0 + ((100 - nectarProjected) / 5.0)
+                        else:
+                            nectarScore = max(-18.0, -((nectarProjected - 100) / 2.5))
+                        degradationHours = getFieldDegradationHours(fieldName)
+                        progressScore = progress * 35.0
+                        routeLengthScore = max(0, len(drop["fields"]) - 1) * 4.0
+                        rewardScore = min(16.0, float(drop["cooldown_days"]))
+                        degradationPenalty = degradationHours * 1.4
+                        score = rewardScore + routeLengthScore + progressScore + nectarScore - degradationPenalty
+                        return {
+                            "field": fieldName,
+                            "nectar": nectar,
+                            "planter": planterName,
+                            "planter_obj": planterObj,
+                            "drop": drop,
+                            "progress": progress,
+                            "score": score,
+                            "plan": {
+                                "grow_duration": naturalGrowTimeSeconds,
+                                "harvest_time": 0,
+                                "placed_time": 0,
+                                "nectar_est_percent": estimateNectarGain(planterObj, naturalGrowTimeSeconds),
+                                "natural_grow_duration": naturalGrowTimeSeconds,
+                                "special_drop_id": drop["id"]
+                            }
+                        }
+
+                    def findBestSpecialDropPlacement(drops, occupiedFields, occupiedPlanters, projectedNectarPercentages):
+                        placements = []
+                        for drop in drops:
+                            placement = canPlaceSpecialDrop(drop, occupiedFields, occupiedPlanters, projectedNectarPercentages)
+                            if placement and (placement["planter"], placement["field"]) not in blockedPlacements:
+                                placements.append(placement)
+                        if not placements:
+                            return None
+                        placements.sort(key=lambda placement: placement["score"], reverse=True)
+                        return placements[0]
+
                     def getFieldDegradationHours(fieldName):
                         entry = getDecayedDegradationEntry(fieldName)
                         fieldDegradation[fieldName] = entry
                         return entry["hours"]
 
+                    normalizeSpecialDropState()
+                    if runtimeMigrationNeeded:
+                        saveAutoPlanterData()
+
                     def getNaturalPlanterProgress(planter):
                         if not planter["planter"]:
                             return 0.0
                         naturalGrowDuration = planter.get("natural_grow_duration", 0)
+                        if planter.get("special_drop_id"):
+                            return min(1.0, route_growth(planter, specialRuntime()) / naturalGrowDuration) if naturalGrowDuration > 0 else 0.0
                         placedTime = planter.get("placed_time", 0)
                         if naturalGrowDuration > 0 and placedTime > 0:
                             return max(0.0, min(1.0, (time.time() - placedTime) / naturalGrowDuration))
@@ -2152,7 +2341,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                                 continue
 
                             for slot, planter in enumerate(planterData):
-                                if planter["planter"] and planter.get("nectar") == nectarName:
+                                if planter["planter"] and not planter.get("special_drop_id") and planter.get("nectar") == nectarName:
                                     matchingPlanters.append((slot, planter, getNaturalPlanterProgress(planter)))
 
                             matchingPlanters.sort(key=lambda item: (-item[2], item[1]["harvest_time"]))
@@ -2169,7 +2358,13 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                                     break
 
                     for slot, planter in enumerate(planterData):
-                        if planter["planter"] and time.time() > planter["harvest_time"]:
+                        if not planter["planter"]:
+                            continue
+                        if planter.get("special_drop_id"):
+                            if planter.get("natural_grow_duration", 0) > 0 and route_remaining(planter, specialRuntime()) <= 0:
+                                planterSlotsToHarvest.append(slot)
+                            continue
+                        if time.time() > planter["harvest_time"]:
                             planterSlotsToHarvest.append(slot)
 
                     planterSlotsToHarvest = sorted(set(planterSlotsToHarvest))
@@ -2178,6 +2373,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                         if not planter["planter"]:
                             continue
                         if runTask(macro.collectPlanter, args=(planter["planter"], planter["field"])):
+                            completeSpecialDropStep(planter, specialDropState)
                             recordFieldDegradation(planter)
                             planterData[slot] = emptyAutoPlanterSlot()
                             currentNectarCache.clear()
@@ -2192,6 +2388,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
 
                     blockedPlacements = set()
                     blockedPlanters = set()
+
+                    selectedSpecialDrops = getSelectedSpecialDrops()
 
                     def getAvailableFields(occupiedFields):
                         return [
@@ -2306,6 +2504,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
 
                         return bestScore, bestPlacements
 
+                    specialPlacementMadeThisRun = False
                     while True:
                         plantersPlaced = sum(bool(planter["planter"]) for planter in planterData)
                         if plantersPlaced >= maxAllowedPlanters:
@@ -2315,12 +2514,51 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                         if not openSlots:
                             break
 
+                        occupiedFields = {planter["field"] for planter in planterData if planter["field"]}
+                        occupiedPlanters = {planter["planter"] for planter in planterData if planter["planter"]}
+
                         projectedNectarPercentages = {
                             nectarName: getTotalNectarPercent(nectarName)
                             for nectarName in macroModule.nectarNames
                         }
-                        occupiedFields = {planter["field"] for planter in planterData if planter["field"]}
-                        occupiedPlanters = {planter["planter"] for planter in planterData if planter["planter"]}
+
+                        specialPlacement = None
+                        if not specialPlacementMadeThisRun:
+                            specialPlacement = findBestSpecialDropPlacement(
+                                selectedSpecialDrops,
+                                occupiedFields,
+                                occupiedPlanters,
+                                projectedNectarPercentages
+                            )
+                        if specialPlacement:
+                            slot = openSlots[0]
+                            macro.logger.webhook(
+                                "",
+                                f"Auto-planter chose special drop route {specialPlacement['planter'].title()} in {specialPlacement['field'].title()} for {specialPlacement['drop']['reward']} (score {round(specialPlacement['score'], 1)})",
+                                "dark brown"
+                            )
+                            if runTask(
+                                macro.placePlanter,
+                                args=(specialPlacement["planter"], specialPlacement["field"], False),
+                                convertAfter=False,
+                                allowAFB=False
+                            ):
+                                savePlacedPlanter(
+                                    slot,
+                                    specialPlacement["field"],
+                                    specialPlacement["planter_obj"],
+                                    specialPlacement["nectar"],
+                                    specialPlacement["plan"]
+                                )
+                                if gatherFlag:
+                                    runTask(macro.gather, args=(specialPlacement["field"],), resetAfter=False)
+                                specialPlacementMadeThisRun = True
+                                continue
+                            if getattr(macro, "lastPlanterPlacementFailure", None) == "missing_inventory":
+                                blockedPlanters.add(specialPlacement["planter"])
+                            else:
+                                blockedPlacements.add((specialPlacement["planter"], specialPlacement["field"]))
+
                         _, plannedPlacements = findBestPlacements(
                             min(len(openSlots), maxAllowedPlanters - plantersPlaced),
                             occupiedFields,
@@ -3177,6 +3415,9 @@ if __name__ == "__main__":
     #4: disconnected (rejoin)
     manager = multiprocessing.Manager()
     run = manager.Value('i', 3)
+    planterRuntime = manager.Value('d', 0.0)
+    planterRuntimeClock = PlanterRuntimeClock(settingsManager.getUserDataPath("special_planter_runtime.json"), planterRuntime)
+    gui.setPlanterRuntime(planterRuntime)
     gui.setRunState(3)  # Initialize the global run state
     recentLogs = manager.list()  # Shared list to store recent log entries for discord bot
     gui.setRecentLogs(recentLogs)
@@ -3306,6 +3547,10 @@ if __name__ == "__main__":
             print(f"Failed to release mouse during shutdown: {e}")
 
     def onExit():
+        try:
+            planterRuntimeClock.save()
+        except OSError as e:
+            print(f"Failed to save special planter runtime: {e}")
         stopStandbyKeepAwake()
         try:
             stopApp()
@@ -3565,6 +3810,7 @@ if __name__ == "__main__":
         eel.sleep(1 if standbyState.active else 0.5)
 
         current_time = time.time()
+        planterRuntimeClock.tick(run.value == 2 and macroProc is not None and macroProc.is_alive() and status.value != "rejoining" and not standbyState.active)
         processStandbyCommands()
 
         # Standby has already stopped the macro. A stop hotkey can still assign
@@ -3746,7 +3992,7 @@ if __name__ == "__main__":
                                     but there are no more items left to craft.\n\
 				                    Check the 'repeat' setting on your blender items and reset blender data.")
             #macro proc
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer, planterRuntime), daemon=True)
             macroProc.start()
 
             macro_version = settingsManager.getMacroVersion()
@@ -3894,7 +4140,7 @@ if __name__ == "__main__":
             mouse.mouseUp()
             time.sleep(0.2)
             appManager.closeApp("Roblox")
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer, planterRuntime), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state
@@ -3928,7 +4174,7 @@ if __name__ == "__main__":
             time.sleep(0.2)
             appManager.openApp("Roblox")
             # restart macro process
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer), daemon=True)
+            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer, planterRuntime), daemon=True)
             macroProc.start()
             run.value = 2
             gui.setRunState(2)  # Update the global run state
