@@ -10,6 +10,7 @@
   <script type="text/javascript" src="./scripts/utilities.js"></script>
   <script type="text/javascript" src="./scripts/emojis.js"></script>
   <script type="text/javascript" src="./scripts/memory-match-rewards.js"></script>
+  <script type="text/javascript" src="./scripts/report-buffs.js"></script>
   <script>
     (function () {
       const theme = localStorage.getItem("gui_theme");
@@ -33,6 +34,8 @@
         document.documentElement.classList.add("theme-tadpole");
       } else if (t === "gifted tad" || t === "gifted tadpole") {
         document.documentElement.classList.add("theme-gifted-tadpole");
+      } else if (t === "spicy bee") {
+        document.documentElement.classList.add("theme-spicy-bee");
       }
     })();
   </script>

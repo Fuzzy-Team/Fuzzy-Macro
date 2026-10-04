@@ -1,10 +1,12 @@
 import cv2
+import base64
 import pyautogui as pag
 from modules.screen.imageSearch import templateMatch
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP
 import numpy as np
 import time
 from PIL import Image
+from io import BytesIO
 from modules.misc.imageManipulation import pillowToCv2
 from concurrent.futures import ThreadPoolExecutor
 from modules import bitmap_matcher
@@ -13,6 +15,7 @@ import mss
 import mss.darwin
 mss.darwin.IMAGE_OPTIONS = 0
 from modules.screen.robloxWindow import RobloxWindowBounds
+from modules.submacros.hourlyReport import NATRO_BUFF_CHARACTER_TEMPLATES
 
 class HasteCompensation():
     def __init__(self, isRetina, baseMoveSpeed):
@@ -394,32 +397,19 @@ class HasteCompensationRevamped():
         self.robloxWindow = robloxWindow
         self.baseMoveSpeed = baseMoveSpeed
 
-        self.countBitmaps = []
+        self.countBitmaps = self._loadCountBitmaps()
         self.bearMorphs = []
         self.hasteBitmap = Image.new('RGBA', (10, 1), '#f0f0f0ff')
         self.melodyBitmap = Image.new('RGBA', (3, 2), '#2b2b2bff')
 
         if self.robloxWindow.isRetina:
-            for i in range(2,11):
-                self.countBitmaps.append(Image.open(f"images/buffs/counts/{i}.png").convert('RGBA'))
-
             for i in range(6):
                 self.bearMorphs.append(Image.open(f"./images/buffs/bearmorph{i+1}-retina.png").convert('RGBA'))
-            
+
             self.hastePlus = Image.open("./images/buffs/haste+-retina.png").convert('RGBA')
         else:
             #base64 images taken directly from natro macro
             #https://github.com/NatroTeam/NatroMacro/blob/main/lib/Walk.ahk
-
-            self.countBitmaps.append(bitmap_matcher.create_bitmap_from_base64("iVBORw0KGgoAAAANSUhEUgAAAAQAAAALCAAAAAB9zHN3AAAAAnRSTlMAAHaTzTgAAABCSURBVHgBATcAyP8BAPMAAADzAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPMAAADzAAAA8wAAAPMAAAAB8wAAAAIAAAAAtc8GqohTl5oAAAAASUVORK5CYII=")) #2
-            self.countBitmaps.append(bitmap_matcher.create_bitmap_from_base64("iVBORw0KGgoAAAANSUhEUgAAAAQAAAAKCAAAAAC2kKDSAAAAAnRSTlMAAHaTzTgAAAA9SURBVHgBATIAzf8BAPMAAAAAAAAAAAAAAAAAAAAAAAAAAADzAAAAAAAAAAAAAAAAAAAAAPMAAAABAPMAAFILA8/B68+8AAAAAElFTkSuQmCC"))
-            self.countBitmaps.append(bitmap_matcher.create_bitmap_from_base64("iVBORw0KGgoAAAANSUhEUgAAAAQAAAAGCAAAAADBUmCpAAAAAnRSTlMAAHaTzTgAAAApSURBVHgBAR4A4f8AAAAA8wAAAAAAAAAA8wAAAPMAAALzAAAAAfMAAABBtgTDARckPAAAAABJRU5ErkJggg=="))
-            self.countBitmaps.append(bitmap_matcher.create_bitmap_from_base64("iVBORw0KGgoAAAANSUhEUgAAAAQAAAALCAAAAAB9zHN3AAAAAnRSTlMAAHaTzTgAAABCSURBVHgBATcAyP8B8wAAAAIAAAAAAPMAAAACAAAAAAHzAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHzAAAAgmID1KbRt+YAAAAASUVORK5CYII="))
-            self.countBitmaps.append(bitmap_matcher.create_bitmap_from_base64("iVBORw0KGgoAAAANSUhEUgAAAAQAAAAJCAAAAAAwBNJ8AAAAAnRSTlMAAHaTzTgAAAA4SURBVHgBAS0A0v8AAAAA8wAAAPMAAADzAAACAAAAAAEA8wAAAPPzAAAA8wAAAAAA8wAAAQAA8wC5oAiQ09KYngAAAABJRU5ErkJggg=="))
-            self.countBitmaps.append(bitmap_matcher.create_bitmap_from_base64("iVBORw0KGgoAAAANSUhEUgAAAAQAAAAMCAAAAABgyUPPAAAAAnRSTlMAAHaTzTgAAABHSURBVHgBATwAw/8B8wAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA8wIAAAAAAgAAAABDdgHu70cIeQAAAABJRU5ErkJggg=="))
-            self.countBitmaps.append(bitmap_matcher.create_bitmap_from_base64("iVBORw0KGgoAAAANSUhEUgAAAAQAAAAKCAAAAAC2kKDSAAAAAnRSTlMAAHaTzTgAAAA9SURBVHgBATIAzf8BAADzAAAA8wAAAgAAAAABAPMAAAEAAPMAAADzAAAAAAAAAADzAAAAAADzAAABAADzALv5B59oKTe0AAAAAElFTkSuQmCC"))
-            self.countBitmaps.append(bitmap_matcher.create_bitmap_from_base64("iVBORw0KGgoAAAANSUhEUgAAAAQAAAAKCAAAAAC2kKDSAAAAAnRSTlMAAHaTzTgAAAA9SURBVHgBATIAzf8BAADzAAAA8wAAAPMAAAAAAPMAAAEAAPMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA87TcBbXcfy3eAAAAAElFTkSuQmCC"))
-            self.countBitmaps.append(bitmap_matcher.create_bitmap_from_base64("iVBORw0KGgoAAAANSUhEUgAAAAgAAAAKCAAAAACsrEBcAAAAAnRSTlMAAHaTzTgAAAArSURBVHgBY2Rg+MzAwMALxCAaQoDBZyYYmwlMYmXAAFApWPVnBkYIi5cBAJNvCLCTFAy9AAAAAElFTkSuQmCC")) #0
 
             self.bearMorphs.append(bitmap_matcher.create_bitmap_from_base64("iVBORw0KGgoAAAANSUhEUgAAAAwAAAABBAMAAAAYxVIKAAAAD1BMVEUwLi1STEihfVWzpZbQvKTt7OCuAAAAEklEQVR4AQEHAPj/ACJDEAE0IgLvAM1oKEJeAAAAAElFTkSuQmCC"))
             self.bearMorphs.append(bitmap_matcher.create_bitmap_from_base64("iVBORw0KGgoAAAANSUhEUgAAAA4AAAABBAMAAAAcMII3AAAAFVBMVEUwLi1TTD9lbHNmbXN5enW5oXHQuYJDhTsuAAAAE0lEQVR4AQEIAPf/ACNGUQAVZDIFbwFmjB55HwAAAABJRU5ErkJggg=="))
@@ -432,6 +422,24 @@ class HasteCompensationRevamped():
 
         self.prevHaste = 0
         self.endTime = 0
+
+    def _loadCountBitmaps(self):
+        if self.robloxWindow.isRetina:
+            return [
+                Image.open(f"images/buffs/counts/{value}.png").convert("RGBA")
+                for value in range(2, 11)
+            ]
+
+        scale = max(1, int(round(getattr(self.robloxWindow, "multi", 1) or 1)))
+        bitmaps = []
+        for value in range(2, 11):
+            templateDigit = 1 if value == 10 else value
+            raw = base64.b64decode(NATRO_BUFF_CHARACTER_TEMPLATES[templateDigit])
+            img = Image.open(BytesIO(raw)).convert("RGBA")
+            if scale != 1:
+                img = img.resize((img.width * scale, img.height * scale), Image.Resampling.NEAREST)
+            bitmaps.append(img)
+        return bitmaps
 
     def screenshotBuff(self):   
         with mss.mss() as sct:

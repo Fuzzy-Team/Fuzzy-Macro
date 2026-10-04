@@ -18,7 +18,8 @@ const slotArray = [1, 2, 3, 4, 5, 6, 7];
         data: ["a","b","c"],
         triggerFunction: "saveData()",
         length: 13, //in rem units, defaults to 10 if not included
-        multiple: true // optional multi-select behavior
+        multiple: true, // optional multi-select behavior
+        maxSelections: 5 // optional max selected items for multi-select dropdowns
     }
     textbox:
     type: {
@@ -83,7 +84,14 @@ function toggleMultiCheckOption(option, event) {
   }
   const input = option.querySelector("input[type='checkbox']");
   if (!input) return;
-  input.checked = !input.checked;
+  const list = option.closest(".multi-checklist");
+  const maxSelections = Number(list?.dataset?.maxSelections || 0);
+  const willCheck = !input.checked;
+  if (willCheck && maxSelections > 0) {
+    const selected = Array.from(list.querySelectorAll("input[type='checkbox']:checked"));
+    if (selected.length >= maxSelections) return;
+  }
+  input.checked = willCheck;
   input.dispatchEvent(new Event("change"));
 }
 
@@ -98,7 +106,7 @@ function buildInput(id, type) {
     const defaultDataValue = type.multiple ? "[]" : "none";
     let html = `
         <div data-onchange="${type.triggerFunction
-      }" id = ${id} class="custom-select poppins-regular" data-multiple="${type.multiple ? "true" : "false"}" style="width: ${type.length ? type.length : 10
+      }" id = ${id} class="custom-select poppins-regular" data-multiple="${type.multiple ? "true" : "false"}" data-max-selections="${type.maxSelections ? type.maxSelections : 0}" style="width: ${type.length ? type.length : 10
       }rem; margin-top: 0.6rem;">
             <div class="select-area">
                 <div class = "value" data-value='${defaultDataValue}'>${defaultValue}</div>
@@ -164,11 +172,13 @@ function buildInput(id, type) {
       }</div>`;
     return html;
   } else if (type.name == "keybind") {
-    let html = `<div id="${id}" class="keybind-input poppins-regular" style="width: ${type.length ? type.length : 10
-      }rem; margin-top: 0.6rem; padding: 0.5rem; border: 2px solid var(--primary); border-radius: 4px; background: var(--textbox-bg); color: #d2d3d2; cursor: pointer; text-align: center; user-select: none; font-size: 1rem; transition: all 0.2s ease;" onclick="startKeybindRecording('${id}')" data-recording="false" data-trigger-function="${type.triggerFunction
-      }">
+    const keybindWidth = type.length ? type.length : 10;
+    let html = `<div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.6rem;">
+        <div id="${id}" class="keybind-input poppins-regular" style="width: ${keybindWidth}rem; padding: 0.5rem; border: 2px solid var(--primary); border-radius: 4px; background: var(--textbox-bg); color: #d2d3d2; cursor: pointer; text-align: center; user-select: none; font-size: 1rem; transition: all 0.2s ease;" onclick="startKeybindRecording('${id}')" data-recording="false" data-trigger-function="${type.triggerFunction}">
             <span class="keybind-display">Click to record</span>
-        </div>`;
+        </div>
+        <button type="button" class="purple-button keybind-clear-button" onclick="clearKeybind('${id}', event)" title="Clear this keybind">Clear</button>
+      </div>`;
     return html;
   } else if (type.name == "draglist") {
     let html = `<div id="${id}" class="drag-list" data-onchange="${type.triggerFunction}" style="margin-top: 0.6rem;">
@@ -186,7 +196,12 @@ function buildInput(id, type) {
     const triggerFunction = type.triggerFunction
       ? type.triggerFunction.replaceAll("this", `document.getElementById('${id}')`)
       : "";
-    let html = `<div id="${id}" class="multi-checklist" style="margin-top: 0.6rem;">`;
+    const variantClass = type.variant
+      ? ` ${String(type.variant).split(/\s+/).filter(Boolean).map((x) => `multi-checklist-${x}`).join(" ")}`
+      : "";
+    const showTileLabel = String(type.variant || "").split(/\s+/).includes("report-buffs");
+    const maxSelectionsAttr = type.maxSelections ? ` data-max-selections="${type.maxSelections}"` : "";
+    let html = `<div id="${id}" class="multi-checklist${variantClass}"${maxSelectionsAttr} style="margin-top: 0.6rem;">`;
     for (let i = 0; i < type.data.length; i++) {
       const item = type.data[i];
       let value = item;
@@ -206,7 +221,8 @@ function buildInput(id, type) {
         value = value.replace(/[^\p{L}\p{N}\p{P}\p{Z}^$\n]/gu, "");
         value = value.trim().toLowerCase();
       }
-      const imageHtml = image ? `<img src="${image}" alt="${display}" draggable="false">` : `<span>${display}</span>`;
+      const labelHtml = showTileLabel ? `<span class="multi-check-label">${display}</span>` : "";
+      const imageHtml = image ? `<img src="${image}" alt="${display}" draggable="false">${labelHtml}` : `<span>${display}</span>`;
       const typeLabels = {
         normal: "Memory Match",
         mega: "Mega Memory Match",
@@ -269,6 +285,15 @@ function buildStandardContainer(parentElement, title, desc, settings) {
 
   //add each setting
   settings.forEach((e, i) => {
+    if (e.type && e.type.name === "separator") {
+      out += `
+        <div class="seperator" style="margin-top: 1.5rem;"></div>
+        <p style="font-weight:600; font-size:1rem; margin: 1rem 0 0.5rem;">${e.title}</p>
+        ${e.desc ? `<p style="font-size:0.9rem; opacity:0.8; margin:0;">${e.desc}</p>` : ""}
+      `;
+      return;
+    }
+
     //note: if i > 0, set a margin-top
     //if the control is a standalone button, vertically center the left text block
     const isSingleButton = e.type && e.type.name === 'button';
@@ -281,7 +306,7 @@ function buildStandardContainer(parentElement, title, desc, settings) {
     const elementTag = isMultiCheck ? "div" : "form";
     out += `
       <${elementTag} style="display: flex; flex-direction:${formDirection}; align-items:${alignItems}; justify-content: space-between; padding-right: ${formPaddingRight
-      }; ${i ? "margin-top:1rem" : ""};">
+      }; ${i ? "margin-top:1rem" : ""};" ${elementTag === "form" ? 'onsubmit="return false"' : ""}>
         <div style="width: ${leftWidth}; ${leftDivStyle}">
           <label>${e.title}</label>
           <p>${e.desc}</p>

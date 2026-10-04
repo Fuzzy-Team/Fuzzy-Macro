@@ -24,9 +24,9 @@
       const parentBSS = document.getElementById("bss");
       buildStandardContainer(parentBSS, "Basic", "", [
         {
-          id: "hive_number",
-          title: "Hive slot",
-          desc: "The hive slot claimed.<br>1 is the closest to cannon, 6 is the furthest.",
+          id: "preferred_hive_slot",
+          title: "Preferred Hive Slot",
+          desc: "The preferred hive to claim first. If taken, the macro takes the open slot closest to the red cannon (hive 1). 1 is closest to cannon and 6 is furthest.",
           type: {
             name: "dropdown",
             data: [1, 2, 3, 4, 5, 6],
@@ -34,9 +34,22 @@
           },
         },
         {
+          id: "hive_claim_method",
+          title: "Hive Claim Method",
+          desc: "Check walks from spawn to your preferred hive slot, then scans neighboring pads if it's taken. Detect zooms out, finds open hives from spawn, then walks to the chosen slot.",
+          type: {
+            name: "dropdown",
+            data: [
+              { label: "Detect", value: "detect" },
+              { label: "Check", value: "check" },
+            ],
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
           id: "hive_exclude_slot",
-          title: "Exclude Hive Slot On Rejoin",
-          desc: "Skip these hive slots when the macro scans for an available hive after rejoining. Leave it empty to allow all slots.",
+          title: "Exclude Hive Slot On Private-Server Rejoin",
+          desc: "Skip these hive slots only when rejoining a private server. Your preferred hive slot is never excluded.",
           type: {
             name: "dropdown",
             multiple: true,
@@ -52,9 +65,9 @@
           },
         },
         {
-          id: "claim_first_available_hive",
-          title: "Claim First Available Hive",
-          desc: "When the selected hive is unavailable, claim the first open hive slot reached during the scan instead of checking every slot first.",
+          id: "disable_tool_at_hive",
+          title: "Disable Tool at Hive",
+          desc: "Stops mouse clicking while converting at your hive, so your equipped tool is not used.",
           type: {
             name: "checkbox",
             triggerFunction: saveGeneralTriggerFunction,
@@ -111,6 +124,20 @@
           desc: "Use AI to detect your sprinkler for field drift compensation instead of the color-based method. If the model cannot run, the macro falls back automatically.",
           type: {
             name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "ai_gather_model",
+          title: "AI Gather Model",
+          desc: "Choose the token detection model used by AI Gathering. Light and Mini automatically fall back to Standard if they cannot load.",
+          type: {
+            name: "dropdown",
+            data: [
+              "Standard",
+              { label: "Light (macOS 12+)", value: "Light" },
+              { label: "Mini (macOS 12+)", value: "Mini" },
+            ],
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
@@ -237,7 +264,7 @@
       }
 
       // Create standard container using shared builder
-      buildStandardContainer(parentPriorities, "Task Priority Order", "Drag and drop tasks to set their priority order. Tasks at the top have higher priority (quests and planters ignore task priority). Use the search box to quickly find tasks. Grayed out tasks are not in task queue, but can still be rearranged.", []);
+      buildStandardContainer(parentPriorities, "Task Priority Order", "Drag and drop tasks to set their priority order. Tasks at the top run sooner. Quests and planters are handled automatically — their order doesn't matter. Use the search box to quickly find tasks. Grayed out tasks are not in the task queue, but can still be rearranged.", []);
 
       // Find the container we just created
       const priorityContainer = parentPriorities.querySelector('.standard-container');
@@ -245,8 +272,9 @@
       // Insert search input and drag list
       const dragListHTML = `
         <style>
-          .priority-search-wrapper { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+          .priority-search-wrapper { display:flex; align-items:center; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
           .priority-search {
+            flex:1 1 280px;
             width:100%;
             max-width:520px;
             padding:8px 12px;
@@ -269,6 +297,9 @@
         </style>
         <div class="priority-search-wrapper">
           <input type="text" id="priority-search-input" class="priority-search" placeholder="🔍 Search tasks... (e.g., 'pine', 'collect', 'kill')" autocomplete="off" />
+          <button id="reset-task-priorities-button" class="import-export-button" type="button">
+            Reset Task Priorities
+          </button>
         </div>
         <div id="task_priority_order" class="drag-list" data-onchange="saveSetting(this, 'profile')">
           <div class="drag-list-container" id="task_priority_order-container">
@@ -300,6 +331,7 @@
             <div class="drag-item" data-id="collect_royal_jelly_dispenser" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Royal Jelly Dispenser</span></div>
             <div class="drag-item" data-id="collect_treat_dispenser" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Treat Dispenser</span></div>
             <div class="drag-item" data-id="collect_ant_pass_dispenser" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Ant Pass Dispenser</span></div>
+            <div class="drag-item" data-id="collect_buy_ant_pass" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Buy Ant Pass</span></div>
             <div class="drag-item" data-id="collect_robo_pass_dispenser" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Robo Pass Dispenser</span></div>
             <div class="drag-item" data-id="collect_glue_dispenser" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Glue Dispenser</span></div>
             <div class="drag-item" data-id="collect_stockings" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Stockings</span></div>
@@ -321,6 +353,7 @@
             <div class="drag-item" data-id="collect_mountain_booster" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Mountain Booster</span></div>
             <div class="drag-item" data-id="collect_sticker_stack" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Sticker Stack</span></div>
             <div class="drag-item" data-id="collect_sticker_printer" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Sticker Printer</span></div>
+            <div class="drag-item" data-id="collect_sprouts" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Collect: Sprouts</span></div>
             <div class="drag-item" data-id="kill_stump_snail" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Kill: Stump Snail</span></div>
             <div class="drag-item" data-id="kill_king_beetle" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Kill: King Beetle</span></div>
             <div class="drag-item" data-id="kill_tunnel_bear" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Kill: Tunnel Bear</span></div>
@@ -335,14 +368,7 @@
             <div class="drag-item" data-id="stinger_hunt" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Stinger Hunt</span></div>
             <div class="drag-item" data-id="auto_field_boost" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Auto Field Boost</span></div>
             <div class="drag-item" data-id="ant_challenge" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Ant Challenge</span></div>
-            <div class="drag-item" data-id="quest_polar_bear" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Quest: Polar Bear</span></div>
-            <div class="drag-item" data-id="quest_brown_bear" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Quest: Brown Bear</span></div>
-            <div class="drag-item" data-id="quest_black_bear" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Quest: Black Bear</span></div>
-            <div class="drag-item" data-id="quest_honey_bee" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Quest: Honey Bee</span></div>
-            <div class="drag-item" data-id="quest_bucko_bee" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Quest: Bucko Bee</span></div>
-            <div class="drag-item" data-id="quest_riley_bee" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Quest: Riley Bee</span></div>
             <div class="drag-item" data-id="blender" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Blender</span></div>
-            <div class="drag-item" data-id="planters" draggable="true"><span class="drag-handle">⋮⋮</span><span class="drag-text">Planters</span></div>
           </div>
         </div>
       `;
@@ -356,30 +382,30 @@
           const items = container.querySelectorAll(".drag-item");
           items.forEach((item) => {
             const taskId = item.getAttribute("data-id");
-            if (taskId && !item.getAttribute("data-category")) {
-              const category = getTaskCategory(taskId);
-              const badge = getCategoryBadge(category);
-              item.setAttribute("data-category", category);
+            if (!taskId || item.getAttribute("data-category")) return;
 
-              if (!item.querySelector(".category-badge")) {
-                const dragText = item.querySelector(".drag-text");
-                if (dragText) {
-                  const badgeEl = document.createElement("span");
-                  badgeEl.className = "category-badge";
-                  badgeEl.textContent = badge;
-                  dragText.parentNode.insertBefore(badgeEl, dragText);
-                }
+            const category = getTaskCategory(taskId);
+            const badge = getCategoryBadge(category);
+            item.setAttribute("data-category", category);
+
+            if (!item.querySelector(".category-badge")) {
+              const dragText = item.querySelector(".drag-text");
+              if (dragText) {
+                const badgeEl = document.createElement("span");
+                badgeEl.className = "category-badge";
+                badgeEl.textContent = badge;
+                dragText.parentNode.insertBefore(badgeEl, dragText);
               }
+            }
 
-              if (!item.querySelector(".drag-actions")) {
-                const actionsDiv = document.createElement("div");
-                actionsDiv.className = "drag-actions";
-                actionsDiv.innerHTML = `
+            if (!item.querySelector(".drag-actions")) {
+              const actionsDiv = document.createElement("div");
+              actionsDiv.className = "drag-actions";
+              actionsDiv.innerHTML = `
                   <button class="drag-action-btn move-to-top" title="Move to top">↑ Top</button>
                   <button class="drag-action-btn move-to-bottom" title="Move to bottom">↓ Bottom</button>
                 `;
-                item.appendChild(actionsDiv);
-              }
+              item.appendChild(actionsDiv);
             }
           });
         }
@@ -391,6 +417,15 @@
       const parentOther = document.getElementById("other");
       buildStandardContainer(parentOther, "Rejoining", "", [
         {
+          id: "always_rejoin",
+          title: "Always Rejoin",
+          desc: "Rejoin Bee Swarm whenever the macro starts. Disable this to keep the current Roblox session when it is already open.",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
           id: "private_server_link",
           title: "Private Server Link (Optional)",
           desc: "The link of a private server for the macro to join.<br>If left blank, the macro will join a public server instead",
@@ -401,13 +436,23 @@
           },
         },
         {
-          id: "rejoin_method",
-          title: "Rejoin Method",
-          desc: "How the macro should rejoin. Deeplink is highly recommended, and all other methods use the browser",
+          id: "hive_hub_private_server",
+          title: "Use Private Server for Hive Hub",
+          desc: "When travelling to Hive Hub, join through the configured private server link using the Hive Hub game ID. If disabled, Hive Hub uses a public server.",
           type: {
-            name: "dropdown",
-            data: ["Deeplink", "New Tab", "Reload"],
+            name: "checkbox",
             triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "manage-fallback-private-servers-button",
+          title: "Fallback Private Servers",
+          desc: "Configure up to three backup servers. Fuzzy tries each one after the primary server fails, before trying public servers.",
+          type: {
+            name: "button",
+            text: "Manage Servers",
+            length: 11,
+            triggerFunction: "openFallbackPrivateServersPopup()",
           },
         },
         {
@@ -482,6 +527,25 @@
         },
       ]);
 
+      parentOther.insertAdjacentHTML("beforeend", `
+        <div id="fallback-private-servers-modal" class="modal-overlay" style="display:none;">
+          <div class="modal-dialog poppins-regular" style="max-width:42rem;">
+            <h3>Fallback Private Servers</h3>
+            <p>Fuzzy tries these in order after the main private server fails. Leave a field blank to skip it.</p>
+            <label for="fallback_private_server_link_1">Backup server 1</label>
+            <input id="fallback_private_server_link_1" class="poppins-regular textbox" type="text" style="width:100%; box-sizing:border-box; margin:0.4rem 0 1rem;" data-input-type="string">
+            <label for="fallback_private_server_link_2">Backup server 2</label>
+            <input id="fallback_private_server_link_2" class="poppins-regular textbox" type="text" style="width:100%; box-sizing:border-box; margin:0.4rem 0 1rem;" data-input-type="string">
+            <label for="fallback_private_server_link_3">Backup server 3</label>
+            <input id="fallback_private_server_link_3" class="poppins-regular textbox" type="text" style="width:100%; box-sizing:border-box; margin:0.4rem 0;" data-input-type="string">
+            <div class="modal-actions">
+              <button type="button" id="cancel-fallback-private-servers-button" class="btn-cancel">Cancel</button>
+              <button type="button" id="save-fallback-private-servers-button" class="btn-confirm">Save Servers</button>
+            </div>
+          </div>
+        </div>
+      `);
+
       buildStandardContainer(parentOther, "Auto Stop", "", [
         {
           id: "auto_stop_after",
@@ -538,6 +602,7 @@
               { label: "Gummy Theme", value: "Gummy" },
               { label: "Tadpole Theme", value: "Tadpole" },
               { label: "Gifted Tad Theme", value: "Gifted Tad" },
+              { label: "Spicy Bee Theme", value: "Spicy Bee" },
             ],
             triggerFunction: saveGeneralTriggerFunction,
           },
@@ -572,11 +637,11 @@
         },
       ]);
 
-      buildStandardContainer(parentOther, "Time Format", "", [
+      buildStandardContainer(parentOther, "Hourly / Session Reports", "", [
         {
           id: "hourly_report_time_format",
-          title: "Hourly Report Time Format",
-          desc: "Choose between 12-hour (AM/PM) or 24-hour format for hourly report time labels",
+          title: "Report Time Format",
+          desc: "Choose between 12-hour (AM/PM) or 24-hour format for report time labels",
           type: {
             name: "dropdown",
             data: [12, 24],
@@ -584,12 +649,34 @@
           },
         },
         {
-          id: "webhook_time_format",
-          title: "Webhook Time Format",
-          desc: "Choose between 12-hour (AM/PM) or 24-hour format for webhook message timestamps",
+          id: "item_monitor",
+          title: "Item Monitor",
+          desc: "Track loot toast popups (+N Item) and send a separate Item Monitor report with hourly/session reports",
           type: {
-            name: "dropdown",
-            data: [12, 24],
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "hourly_report_uptime_buffs",
+          title: "Buff Uptime Options",
+          desc: "Choose buff keys to track for hourly/session reports. The first 16 selected keys are visible.",
+          type: {
+            name: "multicheck",
+            variant: "report-buffs",
+            data: hourlyReportUptimeBuffOptions,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "hourly_report_hourly_buffs",
+          title: "Side Buff Options",
+          desc: "Choose up to 5 buff keys to show in the report side Buffs card.",
+          type: {
+            name: "multicheck",
+            variant: "report-buffs compact",
+            maxSelections: 5,
+            data: hourlyReportSideBuffOptions,
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
@@ -599,7 +686,7 @@
         {
           id: "start_keybind",
           title: "Start Macro Keybind",
-          desc: "Click to record a new keybind for starting the macro",
+          desc: "Click to record. Clear removes the keybind; Backspace/Delete clears while recording.",
           type: {
             name: "keybind",
             triggerFunction: saveGeneralTriggerFunction,
@@ -608,7 +695,7 @@
         {
           id: "pause_keybind",
           title: "Pause/Resume Macro Keybind",
-          desc: "Click to record a new keybind for pausing and resuming the macro",
+          desc: "Click to record. Clear removes the keybind; Backspace/Delete clears while recording.",
           type: {
             name: "keybind",
             triggerFunction: saveGeneralTriggerFunction,
@@ -617,16 +704,41 @@
         {
           id: "stop_keybind",
           title: "Stop Macro Keybind",
-          desc: "Click to record a new keybind for stopping the macro",
+          desc: "Click to record. Clear removes the keybind; Backspace/Delete clears while recording.",
           type: {
             name: "keybind",
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
         {
+          title: "Tool Keybinds",
+          desc: "Optional hotkeys for starting tools while the macro is stopped.",
+          type: {
+            name: "separator",
+          },
+        },
+        {
           id: "hotbar_buff_start_keybind",
           title: "Start Hotbar Buff Keybind",
-          desc: "Click to record a new keybind for starting the Hotbar Buff tool",
+          desc: "Click to record. Clear removes the keybind; Backspace/Delete clears while recording.",
+          type: {
+            name: "keybind",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "autoclicker_keybind",
+          title: "Start Auto Clicker Keybind",
+          desc: "Click to record. Clear removes the keybind; Backspace/Delete clears while recording.",
+          type: {
+            name: "keybind",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "auto_gifted_basic_bee_start_keybind",
+          title: "Start Auto Gifted Basic Bee Keybind",
+          desc: "Click to record. Clear removes the keybind; Backspace/Delete clears while recording.",
           type: {
             name: "keybind",
             triggerFunction: saveGeneralTriggerFunction,
@@ -667,86 +779,48 @@
           },
         },
       ]);
+
+      parentOther.insertAdjacentHTML("beforeend", `
+        <details class="model-downloads">
+          <summary>
+            <span>AI Models</span>
+            <span id="model-download-summary" class="model-download-summary">Checking…</span>
+          </summary>
+          <div class="model-download-content">
+            <p>Download only the AI models that are missing from this Mac.</p>
+            <div class="model-download-actions">
+              <button id="download-missing-models-button" class="purple-button" type="button" onclick="downloadMissingModels()">Download Missing Models</button>
+            </div>
+            <div id="model-download-status" class="model-download-status" aria-live="polite">Checking installed models…</div>
+            <div id="model-download-list" class="model-download-list"></div>
+          </div>
+        </details>
+      `);
     </script>
   </div>
   <div id="discord" class="standard-container sub-tab-panel" style="display: none">
     <script>
       const parentDiscord = document.getElementById("discord");
-      buildStandardContainer(parentDiscord, "Webhook", "", [
+      buildStandardContainer(parentDiscord, "Discord Delivery", "", [
         {
-          id: "enable_webhook",
-          title: "Enable Webhook",
-          desc: "A webhook to send the macro's status. Does not receive commands",
+          id: "discord_delivery_mode",
+          title: "Delivery Mode",
+          desc: "Choose how Discord messages and commands are handled",
           type: {
-            name: "checkbox",
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-        {
-          id: "webhook_link",
-          title: "Webhook Link",
-          desc: "The link of the webhook for the macro to use",
-          type: {
-            name: "textbox",
-            inputType: "string",
+            name: "dropdown",
+            data: [
+              { label: "Use Both", value: "both" },
+              { label: "Use Webhook", value: "webhook" },
+              { label: "Use Discord Bot", value: "discord_bot" },
+            ],
             length: 13,
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-        {
-          id: "send_screenshot",
-          title: "Send Screenshots",
-          desc: "Send screenshots of the game via the webhook",
-          type: {
-            name: "checkbox",
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-        {
-          id: "only_send_hourly_report",
-          title: "Only Send Hourly Reports",
-          desc: "Disable sending the regular status messages in the webhook and only send hourly reports",
-          type: {
-            name: "checkbox",
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-        {
-          id: "live_gather_report",
-          title: "Live Gather Report",
-          desc: "While gathering, edit one Discord webhook message with a honey/pollen screenshot and gather timer",
-          type: {
-            name: "checkbox",
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-        {
-          id: "live_gather_report_interval",
-          title: "Live Gather Report Interval",
-          desc: "Seconds between updates. Values below 10 or above 20 are clamped automatically",
-          type: {
-            name: "textbox",
-            inputType: "int",
-            inputLimit: 2,
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-      ]);
-
-      buildStandardContainer(parentDiscord, "Discord Bot", "", [
-        {
-          id: "discord_bot",
-          title: "Enable Discord Bot",
-          desc: "A discord bot to receive commands",
-          type: {
-            name: "checkbox",
-            triggerFunction: saveGeneralTriggerFunction,
+            triggerFunction: "saveSetting(this, 'general'); updateDiscordUniversalRouteText();",
           },
         },
         {
           id: "discord_bot_token",
           title: "Discord Bot Token",
-          desc: "The token of your discord bot",
+          desc: "Required for Discord bot commands and bot channel delivery",
           type: {
             name: "textbox",
             inputType: "string",
@@ -754,9 +828,38 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
-      ]);
-
-      buildStandardContainer(parentDiscord, "Discord Rich Presence", "", [
+        {
+          id: "webhook_time_format",
+          title: "Webhook Time Format",
+          desc: "Choose between 12-hour (AM/PM) or 24-hour format for webhook message timestamps",
+          type: {
+            name: "dropdown",
+            data: [12, 24],
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "webhook_link",
+          title: "Webhook URL",
+          desc: "Default webhook used for Discord notifications.",
+          type: {
+            name: "textbox",
+            inputType: "string",
+            length: 13,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "discord_channel_id",
+          title: "Channel ID",
+          desc: "Default Discord channel ID used for bot-sent notifications.",
+          type: {
+            name: "textbox",
+            inputType: "string",
+            length: 13,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
         {
           id: "discord_rich_presence",
           title: "Enable Discord Rich Presence",
@@ -768,20 +871,74 @@
         },
       ]);
 
-      buildStandardContainer(parentDiscord, "Discord Pings", "", [
+      // discord.py 1.x (macOS 10.12-10.14) has no slash commands, so the bot uses a text prefix
+      eel.usesLegacyDiscordBot()((legacy) => {
+        if (!legacy) return;
+        const tokenDesc = document.getElementById("discord_bot_token")?.closest("form")?.querySelector("p");
+        if (tokenDesc) tokenDesc.innerHTML += "<br><strong>On this macOS version, bot commands use <code>fuzz!</code> instead of <code>/</code>, e.g. <code>fuzz!status</code>. To use <code>fuzz!</code> commands in guild channels, enable Message Content access in the Discord Developer Portal. If it is unavailable, mention the bot instead, e.g. <code>@Bot status</code>.</strong>";
+      });
+
+      buildStandardContainer(parentDiscord, "Message Options", "", [
         {
-          id: "enable_discord_ping",
-          title: "Enable Discord Pings",
-          desc: "Enable pinging your Discord user for important events",
+          id: "send_screenshot",
+          title: "Send Screenshots",
+          desc: "Attach game screenshots to Discord notifications",
           type: {
             name: "checkbox",
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
         {
+          id: "only_send_hourly_report",
+          title: "Only Send Reports",
+          desc: "Disable regular status messages and only send hourly and session reports",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "live_gather_report",
+          title: "Enable Live Gather Report",
+          desc: "While gathering, edit one Discord message every 10 seconds with a honey/pollen screenshot and gather timer",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+      ]);
+
+      const discordRouteCategories = [
+        ["route_macro_status", "Macro", "Start, stop, pause, resume, and profile messages"],
+        ["route_reports", "Reports", "Hourly and final report images"],
+        ["route_gathering", "Gathering", "Gathering start/end and live gather report messages"],
+        ["route_combat", "Combat", "Mobs, Vicious Bee, and character death messages"],
+        ["route_activities", "Activities", "Boosts, crafting, stickers, ant challenge, planters, quests, collectibles, and conversion messages"],
+        ["route_system", "System", "Critical errors, disconnects, stream messages, and other system-level notices"],
+      ];
+
+      buildStandardContainer(
+        parentDiscord,
+        "Notification Routes",
+        "Optional category-specific destinations. Paste a Discord webhook URL or a Discord channel ID.",
+        discordRouteCategories.map(([routeId, title, desc]) => ({
+          id: routeId,
+          title,
+          desc,
+          type: {
+            name: "textbox",
+            inputType: "string",
+            length: 16,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        }))
+      );
+
+      buildStandardContainer(parentDiscord, "Discord Pings", "", [
+        {
           id: "discord_user_id",
           title: "Discord User ID",
-          desc: "Your Discord User ID to ping for important events",
+          desc: "Used by the ping options below",
           type: {
             name: "textbox",
             inputType: "string",
@@ -789,114 +946,127 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
+        {
+          id: "ping_critical_errors",
+          title: "Critical Errors",
+          desc: "Ping when a critical error is sent",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "ping_disconnects",
+          title: "Disconnects",
+          desc: "Ping for reconnect and connection issue messages",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "ping_character_deaths",
+          title: "Character Deaths",
+          desc: "Ping when the character dies",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "ping_hourly_reports",
+          title: "Hourly/Session Reports",
+          desc: "Ping when hourly or session reports are sent",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "ping_unusual_sprouts",
+          title: "Unusual Sprouts",
+          desc: "Ping when a Moon, Gummy, Festive, Epic, Legendary, or Supreme Sprout announcement is detected",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "ping_windy_bee",
+          title: "Windy Bee Spawn",
+          desc: "Ping when a Windy Bee spawn announcement is detected",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
       ]);
+
+      const discordPermissionCategories = [
+        [
+          "discord_permission_public_info_ids",
+          "Public Info",
+          "Commands: /help, /ping. Leave blank to let anyone use these commands.",
+        ],
+        [
+          "discord_permission_observation_ids",
+          "Observation",
+          "Commands: /battery, /logs, /nectar, /screenshot, /status, /tasklist, /plantertimers.",
+        ],
+        [
+          "discord_permission_macro_control_ids",
+          "Macro Control",
+          "Commands: /start, /stop, /pause, /resume, /rejoin, /skipserver.",
+        ],
+        [
+          "discord_permission_task_interrupt_ids",
+          "Task Interrupts",
+          "Commands: /amulet, /collectplanter, /planterreset, /reroll, /reset, /skip, /usehotbar.",
+        ],
+        [
+          "discord_permission_configuration_ids",
+          "Configuration",
+          "Commands that view or change macro configuration, fields, quests, collectibles, mobs, hive slot, shift lock, and macro mode.",
+        ],
+        [
+          "discord_permission_system_action_ids",
+          "System Actions",
+          "Commands: /close, /mute, /unmute.",
+        ],
+        [
+          "discord_permission_profile_access_ids",
+          "Profile Access",
+          "Commands: /privateserver, /swapprofile.",
+        ],
+        [
+          "discord_permission_streaming_ids",
+          "Streaming",
+          "Commands: /stream, /streamurl.",
+        ],
+        [
+          "discord_permission_reports_ids",
+          "Reports",
+          "Commands: /hourlyreport, /session.",
+        ],
+      ];
 
       buildStandardContainer(
         parentDiscord,
-        "Ping Categories",
-        "Choose which types of events should trigger Discord pings",
-        [
-          {
-            id: "ping_critical_errors",
-            title: "Critical Errors",
-            desc: "Ping for critical errors like failed operations, system failures, and major issues",
-            type: {
-              name: "checkbox",
-              triggerFunction: saveGeneralTriggerFunction,
-            },
+        "Bot Command Permissions",
+        "Enter Discord user IDs allowed to use each category. Separate multiple IDs with commas. Leave a category blank to allow everyone.",
+        discordPermissionCategories.map(([id, title, desc]) => ({
+          id,
+          title,
+          desc,
+          type: {
+            name: "textbox",
+            inputType: "string",
+            length: 18,
+            triggerFunction: saveGeneralTriggerFunction,
           },
-          {
-            id: "ping_disconnects",
-            title: "Disconnects",
-            desc: "Ping when the macro fails to reconnect or has connection issues",
-            type: {
-              name: "checkbox",
-              triggerFunction: saveGeneralTriggerFunction,
-            },
-          },
-          {
-            id: "ping_character_deaths",
-            title: "Character Deaths",
-            desc: "Ping for all character deaths during gameplay",
-            type: {
-              name: "checkbox",
-              triggerFunction: saveGeneralTriggerFunction,
-            },
-          },
-          {
-            id: "ping_vicious_bee",
-            title: "Vicious Bee Events",
-            desc: "Ping for Vicious Bee defeats and related events",
-            type: {
-              name: "checkbox",
-              triggerFunction: saveGeneralTriggerFunction,
-            },
-          },
-          {
-            id: "ping_mondo_buff",
-            title: "Mondo Buff Events",
-            desc: "Ping for Mondo Buff collection and related events",
-            type: {
-              name: "checkbox",
-              triggerFunction: saveGeneralTriggerFunction,
-            },
-          },
-          {
-            id: "ping_ant_challenge",
-            title: "Ant Challenge Events",
-            desc: "Ping for Ant Challenge completions and related events",
-            type: {
-              name: "checkbox",
-              triggerFunction: saveGeneralTriggerFunction,
-            },
-          },
-          {
-            id: "ping_sticker_events",
-            title: "Sticker Events",
-            desc: "Ping for sticker printer claims and sticker-related events",
-            type: {
-              name: "checkbox",
-              triggerFunction: saveGeneralTriggerFunction,
-            },
-          },
-          {
-            id: "ping_mob_events",
-            title: "Mob Events",
-            desc: "Ping for mob defeats like Stump Snail, Coconut Crab, and other mobs",
-            type: {
-              name: "checkbox",
-              triggerFunction: saveGeneralTriggerFunction,
-            },
-          },
-          {
-            id: "ping_conversion_events",
-            title: "Conversion Events",
-            desc: "Ping for pollen conversion completions and related events",
-            type: {
-              name: "checkbox",
-              triggerFunction: saveGeneralTriggerFunction,
-            },
-          },
-          {
-            id: "ping_hourly_reports",
-            title: "Hourly Reports",
-            desc: "Ping when hourly reports are generated and sent",
-            type: {
-              name: "checkbox",
-              triggerFunction: saveGeneralTriggerFunction,
-            },
-          },
-          {
-            id: "ping_guiding_star",
-            title: "Guiding Star",
-            desc: "Ping when a Guiding Star field is detected",
-            type: {
-              name: "checkbox",
-              triggerFunction: saveGeneralTriggerFunction,
-            },
-          },
-        ]
+        }))
       );
+
     </script>
   </div>
   <div id="stream" class="standard-container sub-tab-panel" style="display: none">

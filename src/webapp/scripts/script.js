@@ -406,6 +406,247 @@ async function saveSetting(ele, type) {
   }
 }
 
+function isPriorityLockedTask(taskId) {
+  return !!taskId && (String(taskId).startsWith("quest_") || taskId === "planters");
+}
+
+function normalizePriorityOrderGrouping(orderArray) {
+  if (!Array.isArray(orderArray)) return [];
+  const order = orderArray.slice();
+  const quests = order.filter((id) => String(id).startsWith("quest_"));
+  if (!quests.length) return order;
+  const firstQuestIdx = order.findIndex((id) => String(id).startsWith("quest_"));
+  const insertAt = order
+    .slice(0, firstQuestIdx)
+    .filter((id) => !String(id).startsWith("quest_")).length;
+  const withoutQuests = order.filter((id) => !String(id).startsWith("quest_"));
+  withoutQuests.splice(insertAt, 0, ...quests);
+  return withoutQuests;
+}
+
+function getPriorityLockAnchors(orderArray) {
+  const order = normalizePriorityOrderGrouping(orderArray);
+  let unlockedCount = 0;
+  let questAnchor = null;
+  let planterAnchor = null;
+  let questBeforePlanter = true;
+  let seenQuest = false;
+  let seenPlanter = false;
+
+  for (const id of order) {
+    if (String(id).startsWith("quest_")) {
+      if (questAnchor === null) {
+        questAnchor = unlockedCount;
+        if (seenPlanter) questBeforePlanter = false;
+      }
+      seenQuest = true;
+      continue;
+    }
+    if (id === "planters") {
+      if (planterAnchor === null) {
+        planterAnchor = unlockedCount;
+        if (!seenQuest) questBeforePlanter = false;
+      }
+      seenPlanter = true;
+      continue;
+    }
+    unlockedCount += 1;
+  }
+
+  return { order, questAnchor, planterAnchor, questBeforePlanter };
+}
+
+function createPriorityLockHeader(group, title, detail) {
+  const header = document.createElement("div");
+  header.className = "priority-lock-header";
+  header.dataset.lockGroup = group;
+  header.innerHTML = `
+    <span class="priority-lock-badge">LOCKED</span>
+    <div class="priority-lock-copy">
+      <strong>${title}</strong>
+      <span>${detail}</span>
+    </div>
+  `;
+  return header;
+}
+
+function storePriorityLockAnchors(container, orderArray) {
+  if (!container) return getPriorityLockAnchors(orderArray);
+  const anchors = getPriorityLockAnchors(orderArray);
+  const questIds = anchors.order.filter((id) => String(id).startsWith("quest_"));
+  container.dataset.questAnchor =
+    anchors.questAnchor === null || anchors.questAnchor === undefined
+      ? ""
+      : String(anchors.questAnchor);
+  container.dataset.planterAnchor =
+    anchors.planterAnchor === null || anchors.planterAnchor === undefined
+      ? ""
+      : String(anchors.planterAnchor);
+  container.dataset.questBeforePlanter = anchors.questBeforePlanter ? "true" : "false";
+  container.dataset.lockedQuestIds = JSON.stringify(questIds);
+  container.dataset.hasPlanters = anchors.order.includes("planters") ? "true" : "false";
+  return anchors;
+}
+
+function getPriorityLockAnchorValues(container) {
+  const questAnchor =
+    container.dataset.questAnchor === "" || container.dataset.questAnchor == null
+      ? null
+      : Number(container.dataset.questAnchor);
+  const planterAnchor =
+    container.dataset.planterAnchor === "" || container.dataset.planterAnchor == null
+      ? null
+      : Number(container.dataset.planterAnchor);
+  const questBeforePlanter = container.dataset.questBeforePlanter !== "false";
+  let questIds = [];
+  try {
+    questIds = JSON.parse(container.dataset.lockedQuestIds || "[]");
+  } catch (e) {
+    questIds = [];
+  }
+  if (!Array.isArray(questIds)) questIds = [];
+  const hasPlanters = container.dataset.hasPlanters === "true";
+  return { questAnchor, planterAnchor, questBeforePlanter, questIds, hasPlanters };
+}
+
+function mergePriorityOrderWithLocks(unlockedIds, lockState) {
+  const {
+    questAnchor,
+    planterAnchor,
+    questBeforePlanter,
+    questIds,
+    hasPlanters,
+  } = lockState;
+  const order = [];
+  let unlockedIndex = 0;
+  let questsInserted = !questIds.length;
+  let planterInserted = !hasPlanters;
+
+  const insertQuests = () => {
+    order.push(...questIds);
+    questsInserted = true;
+  };
+  const insertPlanter = () => {
+    order.push("planters");
+    planterInserted = true;
+  };
+  const maybeInsertLocked = () => {
+    const atQuest =
+      !questsInserted && questAnchor !== null && unlockedIndex === questAnchor;
+    const atPlanter =
+      !planterInserted &&
+      planterAnchor !== null &&
+      unlockedIndex === planterAnchor;
+    if (atQuest && atPlanter) {
+      if (questBeforePlanter) {
+        insertQuests();
+        insertPlanter();
+      } else {
+        insertPlanter();
+        insertQuests();
+      }
+    } else if (atQuest) {
+      insertQuests();
+    } else if (atPlanter) {
+      insertPlanter();
+    }
+  };
+
+  while (unlockedIndex < unlockedIds.length) {
+    maybeInsertLocked();
+    order.push(unlockedIds[unlockedIndex]);
+    unlockedIndex += 1;
+  }
+  maybeInsertLocked();
+  if (!questsInserted) insertQuests();
+  if (!planterInserted) insertPlanter();
+  return order;
+}
+
+function reapplyPriorityLockedPositions(container) {
+  if (!container || container.id !== "task_priority_order-container") return;
+
+  const {
+    questAnchor,
+    planterAnchor,
+    questBeforePlanter,
+    questIds,
+    hasPlanters,
+  } = getPriorityLockAnchorValues(container);
+
+  const unlocked = [
+    ...container.querySelectorAll(".drag-item:not(.priority-locked)"),
+  ];
+  const questHeader = container.querySelector(
+    '.priority-lock-header[data-lock-group="quest"]'
+  );
+  const planterHeader = container.querySelector(
+    '.priority-lock-header[data-lock-group="planter"]'
+  );
+
+  const fragment = document.createDocumentFragment();
+  let questsInserted = !questIds.length || !questHeader;
+  let planterInserted = !hasPlanters || !planterHeader;
+  let unlockedIndex = 0;
+
+  const insertQuests = () => {
+    if (questHeader) fragment.appendChild(questHeader);
+    questsInserted = true;
+  };
+  const insertPlanter = () => {
+    if (planterHeader) fragment.appendChild(planterHeader);
+    planterInserted = true;
+  };
+  const maybeInsertLocked = () => {
+    const atQuest =
+      !questsInserted && questAnchor !== null && unlockedIndex === questAnchor;
+    const atPlanter =
+      !planterInserted &&
+      planterAnchor !== null &&
+      unlockedIndex === planterAnchor;
+    if (atQuest && atPlanter) {
+      if (questBeforePlanter) {
+        insertQuests();
+        insertPlanter();
+      } else {
+        insertPlanter();
+        insertQuests();
+      }
+    } else if (atQuest) {
+      insertQuests();
+    } else if (atPlanter) {
+      insertPlanter();
+    }
+  };
+
+  while (unlockedIndex < unlocked.length) {
+    maybeInsertLocked();
+    fragment.appendChild(unlocked[unlockedIndex]);
+    unlockedIndex += 1;
+  }
+  maybeInsertLocked();
+  if (!questsInserted) insertQuests();
+  if (!planterInserted) insertPlanter();
+
+  container.appendChild(fragment);
+}
+
+function buildPriorityOrderFromContainer(container) {
+  if (!container) return [];
+  if (typeof reapplyPriorityLockedPositions === "function") {
+    reapplyPriorityLockedPositions(container);
+  }
+  const unlockedIds = [
+    ...container.querySelectorAll(".drag-item:not(.priority-locked)"),
+  ]
+    .map((item) => item.dataset.id)
+    .filter(Boolean);
+  return mergePriorityOrderWithLocks(
+    unlockedIds,
+    getPriorityLockAnchorValues(container)
+  );
+}
+
 // Update enabled/disabled state for all drag items based on settings
 function refreshPriorityHighlights(settings) {
   if (!settings) return;
@@ -454,6 +695,12 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
   // Clear existing items
   container.innerHTML = "";
 
+  const isPriorityList = dragListElement.id === "task_priority_order";
+  const lockAnchors = isPriorityList
+    ? storePriorityLockAnchors(container, orderArray)
+    : { order: orderArray.slice() };
+  const renderOrder = lockAnchors.order;
+
   // Helper function to check if a task is enabled
   function isTaskEnabled(taskId, settings) {
     if (taskId.startsWith("gather_")) {
@@ -472,6 +719,12 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
     if (taskId.startsWith("collect_")) {
       const collectName = taskId.replace("collect_", "");
       // Handle special cases
+      if (collectName === "sprouts") {
+        return settings.sprouts_enable || false;
+      }
+      if (collectName === "sticker_sprout") {
+        return settings.sticker_sprout_watch || false;
+      }
       if (collectName === "sticker_printer") {
         return settings.sticker_printer || false;
       }
@@ -506,10 +759,11 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
       return settings.ant_challenge || false;
     }
     if (taskId === "blender") {
-      return settings.blender || false;
+      return settings.blender_enable || settings.blender || false;
     }
     if (taskId === "planters") {
-      return settings.planters || false;
+      const mode = Number(settings.planters_mode);
+      return settings.planters || (Number.isFinite(mode) && mode > 0);
     }
 
     return false;
@@ -554,6 +808,8 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
 
     if (taskId.startsWith("collect_")) {
       const collectName = taskId.replace("collect_", "");
+      if (collectName === "sprouts") return settingsObj.sprouts_enable || false;
+      if (collectName === "sticker_sprout") return settingsObj.sticker_sprout_watch || false;
       if (collectName === "sticker_printer") return settingsObj.sticker_printer || false;
       if (collectName === "sticker_stack") return settingsObj.sticker_stack || false;
       return settingsObj[collectName] || false;
@@ -583,7 +839,10 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
   };
 
   // Create items in the specified order
-  orderArray.forEach((taskId) => {
+  let questHeaderInserted = false;
+  let planterHeaderInserted = false;
+
+  renderOrder.forEach((taskId) => {
     let taskName = taskId; // Default to taskId if not found in map
 
     // Convert task ID to display name
@@ -613,6 +872,7 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
       collect_royal_jelly_dispenser: "Collect: Royal Jelly Dispenser",
       collect_treat_dispenser: "Collect: Treat Dispenser",
       collect_ant_pass_dispenser: "Collect: Ant Pass Dispenser",
+      collect_buy_ant_pass: "Collect: Buy Ant Pass",
       collect_glue_dispenser: "Collect: Glue Dispenser",
       collect_stockings: "Collect: Stockings",
       collect_wreath: "Collect: Wreath",
@@ -636,6 +896,8 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
       collect_mountain_booster: "Collect: Mountain Booster",
       collect_sticker_stack: "Collect: Sticker Stack",
       collect_sticker_printer: "Collect: Sticker Printer",
+      collect_sprouts: "Collect: Sprouts",
+      collect_sticker_sprout: "Collect: Sticker Sprout",
       kill_stump_snail: "Kill: Stump Snail",
       kill_ladybug: "Kill: Ladybug",
       kill_rhinobeetle: "Kill: Rhinobeetle",
@@ -667,14 +929,41 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
     const category = getCategory(taskId);
     const badge = getCategoryBadge(category);
     const enabled = isTaskEnabled(taskId, settings);
+    const locked = isPriorityList && isPriorityLockedTask(taskId);
+
+    if (isPriorityList && taskId.startsWith("quest_") && !questHeaderInserted) {
+      container.appendChild(
+        createPriorityLockHeader(
+          "quest",
+          "Quests",
+          "Handled automatically — order doesn't matter."
+        )
+      );
+      questHeaderInserted = true;
+    }
+    if (isPriorityList && taskId === "planters" && !planterHeaderInserted) {
+      container.appendChild(
+        createPriorityLockHeader(
+          "planter",
+          "Planters",
+          "Handled automatically — order doesn't matter."
+        )
+      );
+      planterHeaderInserted = true;
+    }
+
+    // Quests/planters are represented only by the locked summary blocks above.
+    if (isPriorityList && locked) {
+      return;
+    }
 
     const itemElement = document.createElement("div");
-    itemElement.className = `drag-item ${enabled ? '' : 'disabled'}`;
+    itemElement.className = `drag-item${enabled ? "" : " disabled"}`;
     itemElement.setAttribute("data-id", taskId);
     itemElement.setAttribute("data-category", category);
     itemElement.setAttribute("draggable", "true");
     itemElement.innerHTML = `
-      <span class="drag-handle">⋮⋮</span>
+      <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
       <span class="category-badge">${badge}</span>
       <span class="drag-text">${taskName}</span>
       <div class="drag-actions">
@@ -706,7 +995,15 @@ function loadInputs(obj, save = "") {
       // Handle drag list elements
       loadDragListOrder(ele, v, obj);
     } else if (ele.className.includes("multi-checklist")) {
-      const selected = Array.isArray(v) ? v : [];
+      let selected = Array.isArray(v) ? v : [];
+      if (!Array.isArray(v) && typeof v === "string") {
+        try {
+          const parsed = JSON.parse(v.replaceAll("'", '"'));
+          selected = Array.isArray(parsed) ? parsed : [];
+        } catch (error) {
+          selected = v.split(",").map((value) => value.trim()).filter(Boolean);
+        }
+      }
       Array.from(ele.querySelectorAll("input[type='checkbox']")).forEach((input) => {
         input.checked = selected.includes(input.value);
       });
@@ -750,7 +1047,7 @@ function loadInputs(obj, save = "") {
 function applyTheme(theme) {
   if (theme) localStorage.setItem("gui_theme", theme);
   // remove any known theme classes first
-  document.documentElement.classList.remove("theme-purple", "theme-cream", "theme-red", "theme-blue", "theme-commander", "theme-basic-black", "theme-gummy", "theme-tadpole", "theme-gifted-tadpole");
+  document.documentElement.classList.remove("theme-purple", "theme-cream", "theme-red", "theme-blue", "theme-commander", "theme-basic-black", "theme-gummy", "theme-tadpole", "theme-gifted-tadpole", "theme-spicy-bee");
   if (!theme) return;
   const t = theme.toLowerCase();
   if (t === "purple") {
@@ -772,6 +1069,8 @@ function applyTheme(theme) {
     document.documentElement.classList.add("theme-tadpole");
   } else if (t === "gifted tad" || t === "gifted tadpole") {
     document.documentElement.classList.add("theme-gifted-tadpole");
+  } else if (t === "spicy bee") {
+    document.documentElement.classList.add("theme-spicy-bee");
   }
 }
 
@@ -848,6 +1147,36 @@ window.oncontextmenu = function(event) {
 };
 */
 const keybindModifierOrder = ["Ctrl", "Alt", "Shift", "Cmd"];
+const keybindIds = [
+  "start_keybind",
+  "pause_keybind",
+  "stop_keybind",
+  "hotbar_buff_start_keybind",
+  "autoclicker_keybind",
+  "auto_gifted_basic_bee_start_keybind",
+];
+const keybindLabels = {
+  start_keybind: "Start Macro",
+  pause_keybind: "Pause/Resume Macro",
+  stop_keybind: "Stop Macro",
+  hotbar_buff_start_keybind: "Start Hotbar Buff",
+  autoclicker_keybind: "Start Auto Clicker",
+  auto_gifted_basic_bee_start_keybind: "Start Auto Gifted Basic Bee",
+};
+// These keys are generated by the macro while it runs. They cannot safely be
+// used as a hotkey's non-modifier key, even when combined with modifiers.
+const macroReservedKeybindKeys = new Set([
+  "A", "D", "E", "F", "I", "O", "R", "S", "W",
+  "Space", "Enter", "Escape", "PageUp", "PageDown", "F7",
+  ",", ".", "\\", ...Array.from({ length: 10 }, (_, index) => String(index)),
+]);
+const browserReservedKeybindKeys = new Set(["F5", "F11", "F12"]);
+const browserOrAppReservedKeybinds = new Set([
+  "Ctrl+L", "Ctrl+N", "Ctrl+O", "Ctrl+P", "Ctrl+R", "Ctrl+S", "Ctrl+T", "Ctrl+W",
+  "Ctrl+Shift+C", "Ctrl+Shift+I", "Ctrl+Shift+J", "Ctrl+Shift+N", "Ctrl+Shift+P", "Ctrl+Shift+T",
+  "Cmd+H", "Cmd+L", "Cmd+M", "Cmd+N", "Cmd+O", "Cmd+P", "Cmd+Q", "Cmd+R", "Cmd+S", "Cmd+Space", "Cmd+T", "Cmd+W",
+  "Alt+F4", "Alt+Tab", "Cmd+Tab",
+]);
 
 function normalizeKeybindKey(key) {
   if (!key) return "";
@@ -924,6 +1253,57 @@ function keybindFromEvent(event) {
   return sortKeybindKeys(keys).join("+");
 }
 
+function getKeybindConflict(keybind, currentId) {
+  return keybindIds.find((id) => id !== currentId &&
+    normalizeKeybindString(document.getElementById(id)?.dataset.keybind) === keybind);
+}
+
+function keybindValidationError(keybind, currentId) {
+  const keys = keybind.split("+").filter(Boolean);
+  const nonModifierKeys = keys.filter((key) => !keybindModifierOrder.includes(key));
+  if (!nonModifierKeys.length) return "Include a non-modifier key in the keybind.";
+
+  const conflictId = getKeybindConflict(keybind, currentId);
+  if (conflictId) return `That keybind is already assigned to ${keybindLabels[conflictId]}.`;
+
+  if (nonModifierKeys.some((key) => macroReservedKeybindKeys.has(key))) {
+    return "That key is used by the macro while it runs. Choose a different keybind.";
+  }
+  if (nonModifierKeys.some((key) => browserReservedKeybindKeys.has(key)) ||
+      browserOrAppReservedKeybinds.has(keybind)) {
+    return "That shortcut is reserved by the browser or operating system. Choose a different keybind.";
+  }
+  return "";
+}
+
+async function saveKeybind(element, keybind) {
+  element.dataset.keybind = keybind;
+  element.querySelector(".keybind-display").textContent = keybind
+    ? keybindDisplayText(keybind)
+    : "Click to record";
+  const triggerFunction = element.getAttribute("data-trigger-function");
+  if (triggerFunction) {
+    try {
+      const functionCall = triggerFunction.replace("this", "element");
+      await eval(functionCall);
+    } catch (error) {
+      console.error("Failed to save keybind:", error);
+    }
+  }
+  await updateKeybindDisplay();
+}
+
+async function clearKeybind(elementId, event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  const element = document.getElementById(elementId);
+  if (!element) return;
+  if (keybindRecording) stopKeybindRecording();
+  await saveKeybind(element, "");
+}
+
 // Function to check if current key combination matches a configured keybind
 function isConfiguredKeybind(event) {
   // Get current keybinds from settings
@@ -939,8 +1319,14 @@ function isConfiguredKeybind(event) {
   const hotbarBuffStartKeybind = normalizeKeybindString(
     document.getElementById("hotbar_buff_start_keybind")?.dataset.keybind
   );
+  const autoClickerKeybind = normalizeKeybindString(
+    document.getElementById("autoclicker_keybind")?.dataset.keybind
+  );
+  const autoGiftedBasicBeeStartKeybind = normalizeKeybindString(
+    document.getElementById("auto_gifted_basic_bee_start_keybind")?.dataset.keybind
+  );
 
-  if (!startKeybind && !pauseKeybind && !stopKeybind && !hotbarBuffStartKeybind) return false;
+  if (!startKeybind && !pauseKeybind && !stopKeybind && !hotbarBuffStartKeybind && !autoClickerKeybind && !autoGiftedBasicBeeStartKeybind) return false;
 
   const currentComboString = keybindFromEvent(event);
 
@@ -949,7 +1335,9 @@ function isConfiguredKeybind(event) {
     currentComboString === startKeybind ||
     currentComboString === pauseKeybind ||
     currentComboString === stopKeybind ||
-    currentComboString === hotbarBuffStartKeybind
+    currentComboString === hotbarBuffStartKeybind ||
+    currentComboString === autoClickerKeybind ||
+    currentComboString === autoGiftedBasicBeeStartKeybind
   );
 }
 
@@ -982,6 +1370,16 @@ window.addEventListener("keydown", (event) => {
   }
 });
 
+// Ignore Enter in settings textboxes so it can't submit/reload a surrounding form.
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" || event.isComposing) return;
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement) || target.type !== "text") return;
+  if (!target.classList.contains("textbox")) return;
+  event.preventDefault();
+  target.blur();
+});
+
 /*
 =============================================
 Custom Select
@@ -990,6 +1388,11 @@ Custom Select
 dropdownOpen = false;
 function isMultiSelectDropdown(ele) {
   return ele?.dataset?.multiple === "true";
+}
+
+function getDropdownMaxSelections(ele) {
+  const maxSelections = Number(ele?.dataset?.maxSelections || 0);
+  return Number.isFinite(maxSelections) && maxSelections > 0 ? maxSelections : 0;
 }
 
 function normalizeDropdownOptionValue(value) {
@@ -1020,13 +1423,23 @@ function normalizeDropdownMultiValue(value) {
         // fall through and treat as scalar
       }
     }
+    if (trimmed.includes(",")) {
+      return trimmed
+        .split(",")
+        .map(normalizeDropdownOptionValue)
+        .filter((item) => item !== "");
+    }
   }
   const normalized = normalizeDropdownOptionValue(value);
   return normalized === 0 || normalized === "0" || normalized === "" ? [] : [normalized];
 }
 
 function updateMultiDropdownDisplay(parentEle, values) {
-  const normalizedValues = normalizeDropdownMultiValue(values);
+  let normalizedValues = normalizeDropdownMultiValue(values);
+  const maxSelections = getDropdownMaxSelections(parentEle);
+  if (maxSelections && normalizedValues.length > maxSelections) {
+    normalizedValues = normalizedValues.slice(0, maxSelections);
+  }
   const selectEle = parentEle.children[0].children[0];
   const optionsEle = parentEle.children[1].children[0];
   const selectedLabels = [];
@@ -1051,6 +1464,12 @@ function updateDropDownDisplay(optionEle) {
   if (isMultiSelectDropdown(parentEle)) {
     const currentValues = normalizeDropdownMultiValue(getDropdownValue(parentEle));
     const optionValue = normalizeDropdownOptionValue(optionEle.dataset.value);
+    const isSelected = currentValues.some((value) => value == optionValue);
+    const maxSelections = getDropdownMaxSelections(parentEle);
+    if (!isSelected && maxSelections && currentValues.length >= maxSelections) {
+      updateMultiDropdownDisplay(parentEle, currentValues);
+      return;
+    }
     const nextValues = currentValues.some((value) => value == optionValue)
       ? currentValues.filter((value) => value != optionValue)
       : [...currentValues, optionValue];
@@ -1122,15 +1541,16 @@ function dropdownClicked(event) {
   }
 
   if (dropdownOption) {
-    closeAllDropdowns();
     const parentEle = dropdownOption.parentElement.parentElement.parentElement;
+    const isMulti = isMultiSelectDropdown(parentEle);
+    if (!isMulti) closeAllDropdowns();
     updateDropDownDisplay(dropdownOption);
     if (parentEle.id === "gui_theme") {
       applyTheme(getDropdownValue(parentEle));
     }
     let funcParams = parentEle.dataset.onchange.replace("this", "parentEle");
     eval(funcParams);
-    dropdownOpen = false;
+    if (!isMulti) dropdownOpen = false;
     return;
   }
 
@@ -1207,7 +1627,7 @@ function startKeybindRecording(elementId) {
   element.style.backgroundColor = "#36393F";
   element.style.boxShadow = "0 0 10px rgba(var(--primary-rgb), 0.3)";
   element.querySelector(".keybind-display").textContent =
-    "Press key combination...";
+    "Press key combination... (Backspace/Delete to clear)";
 
   // Reset sequence
   keybindSequence = [];
@@ -1242,14 +1662,16 @@ async function updateKeybindDisplay() {
 
     // Also update the button text directly as fallback
     const settings = await loadAllSettings();
-    const startKey = settings.start_keybind || "F1";
-    const pauseKey = settings.pause_keybind || "F2";
-    const stopKey = settings.stop_keybind || "F3";
-    const hotbarBuffStartKey = settings.hotbar_buff_start_keybind || "F4";
+    const startKey = settings.start_keybind ?? "F1";
+    const pauseKey = settings.pause_keybind ?? "F2";
+    const stopKey = settings.stop_keybind ?? "F3";
+    const hotbarBuffStartKey = settings.hotbar_buff_start_keybind ?? "F4";
+    const autoClickerKey = settings.autoclicker_keybind ?? "";
+    const autoGiftedBasicBeeStartKey = settings.auto_gifted_basic_bee_start_keybind ?? "";
 
     const startButton = document.getElementById("start-btn");
     if (startButton) {
-      startButton.textContent = `Start [${startKey}]`;
+      startButton.textContent = `Start [${startKey || "Not set"}]`;
     }
 
     // Update keybind input field displays
@@ -1257,13 +1679,15 @@ async function updateKeybindDisplay() {
     const pauseKeybindElement = document.getElementById("pause_keybind");
     const stopKeybindElement = document.getElementById("stop_keybind");
     const hotbarBuffStartKeybindElement = document.getElementById("hotbar_buff_start_keybind");
+    const autoClickerKeybindElement = document.getElementById("autoclicker_keybind");
+    const autoGiftedBasicBeeStartKeybindElement = document.getElementById("auto_gifted_basic_bee_start_keybind");
 
     if (
       startKeybindElement &&
       startKeybindElement.querySelector(".keybind-display")
     ) {
       startKeybindElement.querySelector(".keybind-display").textContent =
-        keybindDisplayText(startKey);
+        startKey ? keybindDisplayText(startKey) : "Click to record";
     }
 
     if (
@@ -1271,7 +1695,7 @@ async function updateKeybindDisplay() {
       pauseKeybindElement.querySelector(".keybind-display")
     ) {
       pauseKeybindElement.querySelector(".keybind-display").textContent =
-        keybindDisplayText(pauseKey);
+        pauseKey ? keybindDisplayText(pauseKey) : "Click to record";
     }
 
     if (
@@ -1279,7 +1703,7 @@ async function updateKeybindDisplay() {
       stopKeybindElement.querySelector(".keybind-display")
     ) {
       stopKeybindElement.querySelector(".keybind-display").textContent =
-        keybindDisplayText(stopKey);
+        stopKey ? keybindDisplayText(stopKey) : "Click to record";
     }
 
     if (
@@ -1287,7 +1711,17 @@ async function updateKeybindDisplay() {
       hotbarBuffStartKeybindElement.querySelector(".keybind-display")
     ) {
       hotbarBuffStartKeybindElement.querySelector(".keybind-display").textContent =
-        keybindDisplayText(hotbarBuffStartKey);
+        hotbarBuffStartKey ? keybindDisplayText(hotbarBuffStartKey) : "Click to record";
+    }
+
+    if (autoClickerKeybindElement && autoClickerKeybindElement.querySelector(".keybind-display")) {
+      autoClickerKeybindElement.querySelector(".keybind-display").textContent =
+        autoClickerKey ? keybindDisplayText(autoClickerKey) : "Click to record";
+    }
+
+    if (autoGiftedBasicBeeStartKeybindElement && autoGiftedBasicBeeStartKeybindElement.querySelector(".keybind-display")) {
+      autoGiftedBasicBeeStartKeybindElement.querySelector(".keybind-display").textContent =
+        autoGiftedBasicBeeStartKey ? keybindDisplayText(autoGiftedBasicBeeStartKey) : "Click to record";
     }
   } catch (error) {
     // Silently handle errors
@@ -1322,6 +1756,13 @@ function handleKeybindKeyDown(event) {
   const keyName = keybindKeyFromEvent(event);
   if (!keyName || keyName === "Fn") return;
 
+  if (keyName === "Backspace" || keyName === "Delete") {
+    const element = currentKeybindElement;
+    stopKeybindRecording();
+    saveKeybind(element, "");
+    return;
+  }
+
   // Add to sequence if not already present
   if (!keybindSequence.includes(keyName)) {
     keybindSequence.push(keyName);
@@ -1333,40 +1774,23 @@ function handleKeybindKeyDown(event) {
     displayText;
 }
 
-function finalizeKeybind() {
+async function finalizeKeybind() {
   if (!keybindRecording || !currentKeybindElement) return;
 
-  // Save the keybind combination
+  const element = currentKeybindElement;
   const keybindString = sortKeybindKeys(keybindSequence).join("+");
-  currentKeybindElement.dataset.keybind = keybindString;
-
-  // Update the display to show the saved keybind
-  const displayText = keybindDisplayText(keybindString);
-  currentKeybindElement.querySelector(".keybind-display").textContent =
-    displayText;
-
-  // Trigger the save function
-  const triggerFunction = currentKeybindElement.getAttribute(
-    "data-trigger-function"
-  );
-  if (triggerFunction) {
-    try {
-      // Replace 'this' with the actual element reference
-      const functionCall = triggerFunction.replace(
-        "this",
-        "currentKeybindElement"
-      );
-      eval(functionCall);
-
-      // Update UI elements in real time
-      updateKeybindDisplay();
-    } catch (error) {
-      // Silently handle errors
-    }
-  }
-
-  // Stop recording
+  const error = keybindValidationError(keybindString, element.id);
+  // Stop first so releasing the remaining modifier keys cannot save twice.
   stopKeybindRecording();
+  if (error) {
+    alert(error);
+    const existingKeybind = normalizeKeybindString(element.dataset.keybind);
+    element.querySelector(".keybind-display").textContent = existingKeybind
+      ? keybindDisplayText(existingKeybind)
+      : "Click to record";
+  } else {
+    await saveKeybind(element, keybindString);
+  }
 }
 
 function handleKeybindKeyUp(event) {

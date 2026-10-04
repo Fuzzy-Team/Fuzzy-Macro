@@ -17,6 +17,7 @@ from modules.controls.sleep import (
     get_interrupt_action,
     InterruptRequested,
     INTERRUPT_NONE,
+    INTERRUPT_STICKER_SPROUT,
 )
 import modules.controls.mouse as mouse
 import modules.logging.log as logModule
@@ -30,7 +31,6 @@ import numpy as np
 import threading
 from modules.submacros.backpack import bpc
 from modules.screen.imageSearch import *
-import webbrowser
 from pynput.keyboard import Controller
 import cv2
 from modules.screen.color_check import get_sample_colors, percent_pixels_similar_to_color
@@ -42,8 +42,10 @@ from modules.submacros.memoryMatch import MemoryMatch
 import math
 import re
 import ast
-from modules.submacros.hourlyReport import HourlyReport, BuffDetector
-from modules.submacros.liveGatherReport import LiveGatherReport
+from modules.submacros.hourlyReport import BUFF_RENDER_CONFIG, HourlyReport, BuffDetector
+from modules.submacros.itemMonitor import ItemMonitor
+from modules.submacros.tadAltSync import TadAltSync
+from modules.submacros.liveGatherReport import LiveGatherReport, LiveQuestProgressReport
 from difflib import SequenceMatcher
 import fuzzywuzzy.process
 import fuzzywuzzy
@@ -54,6 +56,34 @@ from modules import bitmap_matcher
 import json
 
 _shift_lock_template_cache = None
+
+SPROUT_RARITIES = (
+    "legendary",
+    "supreme",
+    "sticker",
+    "gummy",
+    "debug",
+    "festive",
+    "moon",
+    "epic",
+    "rare",
+    "common",
+)
+SPROUT_REPLANT_FALLBACK_SECONDS = {
+    "common": 15,
+    "rare": 30,
+    "moon": 45,
+    "epic": 60,
+    "gummy": 75,
+    "festive": 75,
+    "legendary": 90,
+    "supreme": 120,
+    "sticker": 120,
+    "debug": 120,
+}
+STICKER_SPROUT_SPAWN_MINUTE_OF_DAY = (2 * 60) + 30
+STICKER_SPROUT_INTERVAL_SECONDS = 3 * 60 * 60
+STICKER_SPROUT_COLLECTION_WINDOW_SECONDS = 12 * 60
 
 class _PauseAwareTimeModule:
     def __init__(self, time_module):
@@ -80,6 +110,8 @@ collectData = {
     "royal_jelly_dispenser": [["claim", "royal"], "a",22*60*60], #22hr
     "treat_dispenser": [["use", "treat"], "w", 1*60*60], #1hr
     "ant_pass_dispenser": [["use", "free"], "w", 2*60*60], #2hr
+    # "Spend 10 Tickets to Use the Ant Pass Dispenser" — same inventory cap as free
+    "buy_ant_pass": [["spend", "ticket"], "w", 0],
     "robo_pass_dispenser": [["use", "free", "robo", "pass", "passes"], None, 22*60*60], #22hr
     "glue_dispenser": [["use", "glue"], None, 22*60*60], #22hr
     "stockings": [["check", "inside", "stocking"], "a", 1*60*60], #1hr
@@ -108,6 +140,7 @@ fieldBoosterData = {
 
 mergedCollectData = {**collectData, **fieldBoosterData}
 mergedCollectData["sticker_stack"] = [["add", "sticker"], None, 0]
+mergedCollectData["sticker_sprout"] = [["sticker", "sprout"], None, 3*60*60]
 
 windShrineDonationItems = [
     "ticket", "tickets",
@@ -289,6 +322,50 @@ blenderItems = ["red extract", "blue extract", "enzymes", "oil", "glue", "tropic
 MAIN_GAME_PLACE_ID = "1537690962"
 HIVE_HUB_PLACE_ID = "15579077077"
 
+SPROUT_AI_TOKEN_LABELS = {
+    "Beesmas Cheer Token",
+    "Blueberry",
+    "Coconut",
+    "Festive Blessing Token",
+    "Honey Token",
+    "Jelly Bean",
+    "Pineapple",
+    "Snowflake",
+    "Strawberry",
+    "Sunflower Seed",
+    "Token Link",
+    "Treat",
+}
+
+SPROUT_FIELD_TOKEN_PRIORITY = {
+    "sunflower": ["Sunflower Seed"],
+    "pineapple": ["Pineapple"],
+    "strawberry": ["Strawberry"],
+    "coconut": ["Coconut"],
+    "blue flower": ["Blueberry"],
+    "bamboo": ["Blueberry"],
+    "pine tree": ["Blueberry"],
+    "stump": ["Blueberry"],
+    "mushroom": ["Strawberry"],
+    "rose": ["Strawberry"],
+    "pepper": ["Strawberry"],
+}
+
+SPROUT_BASE_TOKEN_PRIORITY = [
+    "Token Link",
+    "Coconut",
+    "Pineapple",
+    "Blueberry",
+    "Strawberry",
+    "Sunflower Seed",
+    "Jelly Bean",
+    "Snowflake",
+    "Beesmas Cheer Token",
+    "Festive Blessing Token",
+    "Treat",
+    "Honey Token",
+]
+
 #a list of keys to press to face north after running the cannon_to_field path
 fieldFaceNorthKeys = {
     "sunflower": ["."]*2,
@@ -353,6 +430,18 @@ startLocationDimensions = {
     "pepper": [1500, 2250],
     "coconut": [1500, 2250],
     "hive hub": [0, 0]
+}
+
+hiveHubStartLocationOffsets = {
+    "center": [],
+    "right": [("d", 2)],
+    "left": [("a", 2)],
+    "top": [("w", 2)],
+    "bottom": [("s", 2)],
+    "upper right": [("w", 2), ("d", 2)],
+    "lower right": [("s", 2), ("d", 2)],
+    "upper left": [("a", 2), ("w", 2)],
+    "lower left": [("a", 2), ("s", 2)],
 }
 
 #for the ocr
@@ -566,6 +655,8 @@ questCompleterCollectNames = {
     "treat dispenser": "treat_dispenser",
     "ant_pass_dispenser": "ant_pass_dispenser",
     "ant pass dispenser": "ant_pass_dispenser",
+    "buy_ant_pass": "buy_ant_pass",
+    "buy ant pass": "buy_ant_pass",
     "glue_dispenser": "glue_dispenser",
     "glue dispenser": "glue_dispenser",
     "wealth_clock": "wealth_clock",
@@ -603,13 +694,41 @@ questCompleterCollectNames = {
     "wind shrine": "wind_shrine"
 } 
 
+PING_SETTING_KEYS = [
+    "ping_critical_errors",
+    "ping_disconnects",
+    "ping_character_deaths",
+    "ping_vicious_bee",
+    "ping_mondo_buff",
+    "ping_ant_challenge",
+    "ping_sticker_events",
+    "ping_mob_events",
+    "ping_conversion_events",
+    "ping_hourly_reports",
+    "ping_guiding_star",
+    "ping_unusual_sprouts",
+    "ping_windy_bee",
+    "ping_macro_status",
+    "ping_gathering",
+    "ping_live_gather_report",
+    "ping_final_reports",
+    "ping_planters",
+    "ping_collectibles",
+    "ping_quests",
+    "ping_boosts",
+    "ping_crafting",
+    "ping_stream",
+]
+
+
 class macro:
-    def __init__(self, status, logQueue, updateGUI, run=None, skipTask=None, presence=None):
+    def __init__(self, status, logQueue, updateGUI, run=None, skipTask=None, presence=None, discordMessageQueue=None, skipServer=None):
         self.status = status
         self.presence = presence
         self.updateGUI = updateGUI
         self.run = run
         self.skipTask = skipTask
+        self.skipServer = skipServer
         
         # Set the run state for pause-aware sleep functions
         if run is not None:
@@ -628,24 +747,19 @@ class macro:
         self.hasteCompensation = HasteCompensationRevamped(self.robloxWindow, self.setdat["movespeed"])
         self.fieldDriftCompensation = fieldDriftCompensationClass(self.robloxWindow)
         self.keyboard = keyboard(self.setdat["movespeed"], self.setdat["haste_compensation"], self.hasteCompensation)
-        # Prepare ping settings
-        pingSettings = {
-            "ping_critical_errors": self.setdat.get("ping_critical_errors", False),
-            "ping_disconnects": self.setdat.get("ping_disconnects", False),
-            "ping_character_deaths": self.setdat.get("ping_character_deaths", False),
-            "ping_vicious_bee": self.setdat.get("ping_vicious_bee", False),
-            "ping_mondo_buff": self.setdat.get("ping_mondo_buff", False),
-            "ping_ant_challenge": self.setdat.get("ping_ant_challenge", False),
-            "ping_sticker_events": self.setdat.get("ping_sticker_events", False),
-            "ping_mob_events": self.setdat.get("ping_mob_events", False),
-            "ping_conversion_events": self.setdat.get("ping_conversion_events", False),
-            "ping_hourly_reports": self.setdat.get("ping_hourly_reports", False),
-            "ping_guiding_star": self.setdat.get("ping_guiding_star", False)
-        }
+        pingSettings = {key: self.setdat.get(key, False) for key in PING_SETTING_KEYS}
         
-        self.logger = logModule.log(logQueue, self.setdat.get("enable_webhook", False), self.setdat.get("webhook_link", ""), self.setdat.get("send_screenshot", True), blocking=self.setdat.get("low_performance", False), hourlyReportOnly=self.setdat.get("only_send_hourly_report", False), robloxWindow=self.robloxWindow, enableDiscordPing=self.setdat.get("enable_discord_ping", False), discordUserID=self.setdat.get("discord_user_id", ""), pingSettings=pingSettings, webhookTimeFormat=self.setdat.get("webhook_time_format", 24))
+        self.logger = logModule.log(logQueue, logModule.delivery_uses_webhook(self.setdat), logModule.get_default_delivery_route(self.setdat), self.setdat.get("send_screenshot", True), blocking=self.setdat.get("low_performance", False), hourlyReportOnly=self.setdat.get("only_send_hourly_report", False), robloxWindow=self.robloxWindow, enableDiscordPing=True, discordUserID=self.setdat.get("discord_user_id", ""), pingSettings=pingSettings, webhookTimeFormat=self.setdat.get("webhook_time_format", 24), enableDiscordBot=logModule.delivery_uses_bot_messages(self.setdat), discordMessageQueue=discordMessageQueue, routeSettings=logModule.build_route_settings(self.setdat))
+        self.tadAltSync = TadAltSync(
+            self.setdat,
+            self.logger,
+            use_glitter=self.useGlitterFromSlot,
+        )
+        self._fieldBoosterGlitterGeneration = 0
+        self._fieldBoosterGlitterLock = threading.Lock()
         self.buffDetector = BuffDetector(self.robloxWindow)
         self.hourlyReport = HourlyReport(self.buffDetector, self.setdat.get("hourly_report_time_format", 24))
+        self.itemMonitor = ItemMonitor(self.robloxWindow)
         self.memoryMatch = MemoryMatch(self.robloxWindow, debug=True)
 
         #setup an internal cooldown tracker. The cooldowns can be modified
@@ -670,6 +784,16 @@ class macro:
         self.latestMM = "normal"
         self.lastGuidingStarScan = 0
         self.guidingStarLastAnnounced = {}
+        self.lastUnusualSproutScan = 0
+        self.unusualSproutLastAnnounced = {}
+        self.lastWindyBeeScan = 0
+        self.windyBeeLastAnnounced = {}
+        self.lastStickerSproutScan = 0
+        self.stickerSproutDetectedAt = 0
+        self.stickerSproutLastAnnounced = 0
+        self.stickerSproutInterruptRequested = False
+        self.sproutBeansUsed = 0
+        self.lastSproutBeanLimitLog = 0
 
         self.isGathering = False
         self.converting = False
@@ -686,7 +810,7 @@ class macro:
         self.afb = False
         self.stop = False
 
-        self.hiveSlotTiles = 9.2 #distance between hive slots (in tiles)
+        self.hiveSlotTiles = 9.75 #distance between hive slots (in tiles)
 
 
         self.setRobloxWindowInfo(setYOffset=False)
@@ -699,25 +823,16 @@ class macro:
             # Reload settings
             old_profile = settingsManager.getCurrentProfile()
             self.setdat = settingsManager.loadAllSettings()
+            self.tadAltSync.update_settings(self.setdat)
             self.fieldSettings = settingsManager.loadFields()
             # Update logger with new webhook settings
-            pingSettings = {
-                "ping_critical_errors": self.setdat.get("ping_critical_errors", False),
-                "ping_disconnects": self.setdat.get("ping_disconnects", False),
-                "ping_character_deaths": self.setdat.get("ping_character_deaths", False),
-                "ping_vicious_bee": self.setdat.get("ping_vicious_bee", False),
-                "ping_mondo_buff": self.setdat.get("ping_mondo_buff", False),
-                "ping_ant_challenge": self.setdat.get("ping_ant_challenge", False),
-                "ping_sticker_events": self.setdat.get("ping_sticker_events", False),
-                "ping_mob_events": self.setdat.get("ping_mob_events", False),
-                "ping_conversion_events": self.setdat.get("ping_conversion_events", False),
-                "ping_hourly_reports": self.setdat.get("ping_hourly_reports", False),
-                "ping_guiding_star": self.setdat.get("ping_guiding_star", False)
-            }
-            self.logger.enableWebhook = self.setdat.get("enable_webhook", False)
-            self.logger.webhookURL = self.setdat.get("webhook_link", "")
+            pingSettings = {key: self.setdat.get(key, False) for key in PING_SETTING_KEYS}
+            self.logger.enableWebhook = logModule.delivery_uses_webhook(self.setdat)
+            self.logger.enableDiscordBot = logModule.delivery_uses_bot_messages(self.setdat)
+            self.logger.webhookURL = logModule.get_default_delivery_route(self.setdat)
+            self.logger.routeSettings = logModule.build_route_settings(self.setdat)
             self.logger.sendScreenshots = self.setdat.get("send_screenshot", True)
-            self.logger.enableDiscordPing = self.setdat.get("enable_discord_ping", False)
+            self.logger.enableDiscordPing = True
             self.logger.discordUserID = self.setdat.get("discord_user_id", "")
             self.logger.pingSettings = pingSettings
             self.logger.webhookTimeFormat = self.setdat.get("webhook_time_format", 24)
@@ -921,7 +1036,7 @@ class macro:
 
         return last_detection
 
-    def ensure_shift_lock_off_on_start(self):
+    def ensure_shift_lock_off(self, reason=""):
         try:
             detection = self._detect_shift_lock_state_with_retries()
         except Exception:
@@ -931,9 +1046,21 @@ class macro:
             return
 
         if detection["state"]:
-            self.logger.webhook("", "Shift Lock detected on startup, turning it off", "dark brown")
+            message = "Shift Lock detected, turning it off"
+            if reason:
+                message = f"Shift Lock detected during {reason}, turning it off"
+            self.logger.webhook("", message, "dark brown")
             self.keyboard.press("shift")
             time.sleep(0.35)
+
+    def ensure_shift_lock_off_on_start(self):
+        self.ensure_shift_lock_off("startup")
+
+    def enableShiftLock(self):
+        # Enabling Shift Lock snaps the cursor to the window centre. Since Roblox 0.741 that
+        # jump is applied as mouse movement and swings the camera, so centre the cursor first.
+        mouse.moveTo(self.robloxWindow.mx + self.robloxWindow.mw // 2, self.robloxWindow.my + self.robloxWindow.mh // 2)
+        self.keyboard.press("shift")
     
     def _set_presence_payload(self, payload: dict):
         if self.presence is None:
@@ -1166,6 +1293,374 @@ class macro:
             return
         self.guidingStarLastAnnounced[field] = now
         self.logger.webhook("Guiding Star", f"Detected in {field.title()}", "light blue", "screen", ping_category="ping_guiding_star")
+
+    def detectUnusualSproutAnnouncement(self):
+        if not self.setdat.get("ping_unusual_sprouts", False):
+            return
+        if self.status.value == "rejoining":
+            return
+        now = time.time()
+        if now - self.lastUnusualSproutScan < 10:
+            return
+        self.lastUnusualSproutScan = now
+
+        text = self.readBlueText()
+        if "sprout" not in text:
+            return
+
+        rarity = self.extractPlantedSproutRarity(text)
+        unusualRarities = {"epic", "legendary", "supreme", "gummy", "festive", "moon", "sticker", "debug"}
+        if rarity not in unusualRarities:
+            return
+
+        rarity = rarity.title()
+        if not rarity:
+            return
+
+        if now - self.unusualSproutLastAnnounced.get(rarity, 0) < 10 * 60:
+            return
+        self.unusualSproutLastAnnounced[rarity] = now
+        message = f"{rarity} Sprout"
+        self.logger.webhook(
+            "Unusual Sprout",
+            message,
+            "light blue",
+            "screen",
+            ping_category="ping_unusual_sprouts",
+            route_category="activities",
+        )
+
+    def detectWindyBeeAnnouncement(self):
+        if not self.setdat.get("ping_windy_bee", False):
+            return
+        if self.status.value == "rejoining":
+            return
+        now = time.time()
+        if now - self.lastWindyBeeScan < 5:
+            return
+        self.lastWindyBeeScan = now
+
+        text = self.readBlueText()
+        match = re.search(r"\bfound\s+windy\s+bee\s+in\s+the\s+(.+?)\s+field\b", text)
+        if not match:
+            return
+
+        field = match.group(1).strip()
+        if field not in startLocationDimensions:
+            return
+        if now - self.windyBeeLastAnnounced.get(field, 0) < 10 * 60:
+            return
+        self.windyBeeLastAnnounced[field] = now
+        self.logger.webhook(
+            "Windy Bee",
+            f"Spawn detected in {field.title()} Field",
+            "light blue",
+            "screen",
+            ping_category="ping_windy_bee",
+            route_category="activities",
+        )
+
+    def isStickerSproutSpawnMessage(self, text):
+        if "sticker" not in text or "sprout" not in text:
+            return False
+        if "spawned" not in text:
+            return False
+        return "hive hub" in text or "hive hubs" in text
+
+    def isStickerSproutSoonMessage(self, text):
+        if "sticker" not in text or "sprout" not in text:
+            return False
+        if "spawn" not in text:
+            return False
+        return "about" in text and ("hive hub" in text or "hive hubs" in text)
+
+    def secondsSinceScheduledStickerSprout(self):
+        now = datetime.now()
+        secondsIntoDay = now.hour * 60 * 60 + now.minute * 60 + now.second
+        firstSpawnSecond = STICKER_SPROUT_SPAWN_MINUTE_OF_DAY * 60
+        return (secondsIntoDay - firstSpawnSecond) % STICKER_SPROUT_INTERVAL_SECONDS
+
+    def isScheduledStickerSproutWindow(self):
+        return self.secondsSinceScheduledStickerSprout() < STICKER_SPROUT_COLLECTION_WINDOW_SECONDS
+
+    def stickerSproutTimingAnchor(self):
+        if self.isScheduledStickerSproutWindow():
+            return time.time() - self.secondsSinceScheduledStickerSprout()
+        if self.stickerSproutDetectedAt:
+            return self.stickerSproutDetectedAt
+        return time.time()
+
+    def detectStickerSproutAnnouncement(self):
+        if self.setdat.get("macro_mode", "normal") == "alt":
+            return
+        if not self.setdat.get("sticker_sprout_watch", False):
+            return
+        if self.status.value == "rejoining":
+            return
+        now = time.time()
+        if now - self.lastStickerSproutScan < 5:
+            return
+        self.lastStickerSproutScan = now
+
+        text = self.readBlueText()
+        if "sticker" not in text or "sprout" not in text:
+            return
+
+        if self.isStickerSproutSpawnMessage(text):
+            self.stickerSproutDetectedAt = now
+            if (
+                self.skipTask is not None
+                and not self.stickerSproutInterruptRequested
+                and self.status.value != "collect_sticker_sprout"
+                and self.stickerSproutReady()
+            ):
+                self.stickerSproutInterruptRequested = True
+                self.skipTask.value = INTERRUPT_STICKER_SPROUT
+            if now - self.stickerSproutLastAnnounced >= 10 * 60:
+                self.stickerSproutLastAnnounced = now
+                self.logger.webhook(
+                    "Sticker Sprout",
+                    "Spawn detected in Hive Hub",
+                    "light green",
+                    "screen",
+                    ping_category="ping_sticker_events",
+                    route_category="activities",
+                )
+        elif self.isStickerSproutSoonMessage(text) and now - self.stickerSproutLastAnnounced >= 10 * 60:
+            self.stickerSproutLastAnnounced = now
+            self.logger.webhook(
+                "Sticker Sprout",
+                "Hive Hub spawn soon",
+                "light blue",
+                "screen",
+                ping_category="ping_sticker_events",
+                route_category="activities",
+            )
+
+    def stickerSproutReady(self):
+        if not self.setdat.get("sticker_sprout_watch", False):
+            return False
+        cooldownReady = self.hasRespawned("sticker_sprout", self.collectCooldowns.get("sticker_sprout", 3*60*60))
+        if cooldownReady:
+            text = self.readBlueText()
+            if self.isStickerSproutSpawnMessage(text):
+                self.stickerSproutDetectedAt = time.time()
+        recentlyDetected = self.stickerSproutDetectedAt and time.time() - self.stickerSproutDetectedAt < 10 * 60
+        return cooldownReady and (recentlyDetected or self.isScheduledStickerSproutWindow())
+
+    def readBlueText(self):
+        try:
+            return ocr.imToString("blue").lower()
+        except Exception:
+            return ""
+
+    def extractSproutRarity(self, text):
+        if "sprout" not in text:
+            return None
+        for rarity in SPROUT_RARITIES:
+            if re.search(rf"\b{re.escape(rarity)}\b", text):
+                return rarity
+        return None
+
+    def extractPlantedSproutRarity(self, text):
+        if "sprout" not in text or "planted" not in text:
+            return None
+        rarityPattern = "|".join(re.escape(rarity) for rarity in SPROUT_RARITIES)
+        match = re.search(rf"\bplanted\s+a(?:n)?\s+({rarityPattern})\s+sprout\b", text)
+        return match.group(1) if match else None
+
+    def blueSproutMessageInfo(self):
+        text = self.readBlueText()
+        if "sprout" not in text:
+            return None
+        rarity = self.extractPlantedSproutRarity(text)
+        if rarity is None and "appeared" not in text and "planted" not in text:
+            rarity = self.extractSproutRarity(text)
+        return {
+            "text": text,
+            "rarity": rarity,
+        }
+
+    def isSproutCompletionMessage(self, text):
+        if "sprout" not in text:
+            return False
+        if "already" in text and "field" in text:
+            return False
+        if "planted" in text or "appeared" in text:
+            return False
+        return True
+
+    def sproutReplantFallbackSeconds(self, rarity):
+        return SPROUT_REPLANT_FALLBACK_SECONDS.get(rarity or "", 120)
+
+    def blueSproutMessageVisible(self):
+        text = self.readBlueText()
+        return "sprout" in text
+
+    def blueSproutCompletionMessageVisible(self):
+        text = self.readBlueText()
+        return self.isSproutCompletionMessage(text)
+
+    def blueSproutAlreadyInFieldVisible(self):
+        text = self.readBlueText()
+        return "sprout" in text and "already" in text and "field" in text
+
+    def buildSproutTokenPriority(self, field):
+        configuredPriority = str(self.setdat.get("sprouts_preferred_tokens", "") or "").strip()
+        if configuredPriority:
+            return configuredPriority
+        normalizedField = str(field or "").replace("_", " ").strip().lower()
+        priority = []
+        for token in SPROUT_FIELD_TOKEN_PRIORITY.get(normalizedField, []):
+            if token not in priority:
+                priority.append(token)
+        for token in SPROUT_BASE_TOKEN_PRIORITY:
+            if token not in priority:
+                priority.append(token)
+        return ",".join(priority)
+
+    def _sproutBeanLimit(self):
+        try:
+            value = int(self.setdat.get("sprouts_max_beans", 500) or 500)
+        except Exception:
+            value = 500
+        return max(1, min(500, value))
+
+    def _sproutGatherBeanLimit(self):
+        try:
+            value = int(self.setdat.get("sprouts_max_beans_per_gather", 500) or 500)
+        except Exception:
+            value = 500
+        return max(1, min(500, value))
+
+    def _sproutFinalLootSeconds(self):
+        try:
+            value = int(self.setdat.get("sprouts_final_loot_seconds", 60) or 0)
+        except Exception:
+            value = 60
+        return max(0, min(999, value))
+
+    def logSproutBeanLimitReached(self, message, color="light blue"):
+        now = time.time()
+        if now - getattr(self, "lastSproutBeanLimitLog", 0) < 60:
+            return
+        self.lastSproutBeanLimitLog = now
+        self.logger.webhook("Sprouts", message, color, "screen", route_category="activities")
+
+    def canUseSproutBeanSlot(self, slot):
+        if not self.setdat.get("sprouts_enable", False):
+            return True
+        try:
+            sproutSlot = int(self.setdat.get("sprouts_magic_bean_slot", 1) or 1)
+            currentSlot = int(slot)
+        except Exception:
+            return True
+        if currentSlot != sproutSlot:
+            return True
+        return self.sproutBeansUsed < self._sproutBeanLimit()
+
+    def markSproutBeanUsed(self):
+        self.sproutBeansUsed += 1
+
+    def unmarkSproutBeanUsed(self):
+        self.sproutBeansUsed = max(0, self.sproutBeansUsed - 1)
+
+    def collectSprouts(self):
+        if not self.setdat.get("sprouts_enable", False):
+            return False
+        if self.sproutBeansUsed >= self._sproutBeanLimit():
+            self.logSproutBeanLimitReached("Sprout bean limit reached", "orange")
+            return False
+
+        field = str(self.setdat.get("sprouts_field", "sunflower") or "sunflower").replace("_", " ").strip().lower()
+        if field not in startLocationDimensions:
+            field = "sunflower"
+        reuseCurrentPosition = self.location == field
+        try:
+            slot = max(1, min(7, int(self.setdat.get("sprouts_magic_bean_slot", 1) or 1)))
+        except Exception:
+            slot = 1
+        sproutAIModel = str(self.setdat.get("sprouts_ai_model", "Standard") or "Standard")
+        sproutAIModelKey = sproutAIModel.strip().lower().replace(" ", "_").replace("-", "_")
+        sproutModelConfig = {
+            "standard": ("Standard", ""),
+            "loot_light": ("Light", "loot_detection_small.mlmodelc"),
+            "light": ("Light", "loot_detection_small.mlmodelc"),
+            "token_light": ("Light", ""),
+            "loot_mini": ("Mini", "loot_detection_mini.mlmodelc"),
+            "mini": ("Mini", "loot_detection_mini.mlmodelc"),
+            "token_mini": ("Mini", ""),
+        }
+        sproutModelName, sproutModelFile = sproutModelConfig.get(
+            sproutAIModelKey,
+            ("Standard", ""),
+        )
+        try:
+            sproutPatternWidth = max(1, min(10, int(self.setdat.get("sprouts_pattern_width", 5) or 5)))
+        except Exception:
+            sproutPatternWidth = 5
+
+        sproutOverride = {
+            "shape": "fuzzy_ai_gather",
+            "shift_lock": False,
+            "field_drift_compensation": True,
+            "start_location": "center",
+            "distance": 1,
+            "width": sproutPatternWidth,
+            "turn": "none",
+            "turn_times": 0,
+            "goo": False,
+            "gumdrops": False,
+            "skip_travel": reuseCurrentPosition or self.location == field,
+            "infinite_gather": True,
+            "plant_sprout": True,
+            "sprout_magic_bean_slot": slot,
+            "sprout_max_beans_per_gather": self._sproutGatherBeanLimit(),
+            "ai_gather_model": sproutModelName,
+            "ai_gather_model_file": sproutModelFile,
+            "fuzzy_ai_preferred_tokens": self.buildSproutTokenPriority(field),
+            "fuzzy_ai_ignored_tokens": str(self.setdat.get("sprouts_ignored_tokens", "") or ""),
+        }
+        nextSessionBean = self.sproutBeansUsed + 1
+        gatherLimit = self._sproutGatherBeanLimit()
+        sessionLimit = self._sproutBeanLimit()
+        self.logger.webhook(
+            "Sprouts",
+            f"Travelling to {field.title()} to plant sprout (1/{gatherLimit} gather and {nextSessionBean}/{sessionLimit} session)",
+            "light blue",
+            route_category="activities",
+        )
+        self.gather(field, sproutOverride)
+        return True
+
+    def collectStickerSprout(self):
+        if not self.stickerSproutReady():
+            return False
+        try:
+            gatherMinutes = max(1, min(30, int(self.setdat.get("sticker_sprout_gather_minutes", 8) or 8)))
+        except Exception:
+            gatherMinutes = 8
+        timingAnchor = self.stickerSproutTimingAnchor()
+        self.stickerSproutDetectedAt = 0
+        self.stickerSproutInterruptRequested = False
+        settingsManager.saveSettingFile("sticker_sprout", timingAnchor, settingsManager.getUserDataPath("timings.txt"))
+        self.collectCooldowns["sticker_sprout"] = 3 * 60 * 60
+        self.logger.webhook(
+            "Sticker Sprout",
+            f"Travelling to Hive Hub to collect for {gatherMinutes} minutes",
+            "light green",
+            "screen",
+            ping_category="ping_sticker_events",
+            route_category="activities",
+        )
+        self.gather("hive hub", {
+            "mins": gatherMinutes,
+            "infinite_gather": False,
+            "backpack": 100,
+            "return": "rejoin",
+        })
+        return True
+
 
     def collectWindShrine(self, reached):
         displayName = "Wind Shrine"
@@ -1427,7 +1922,7 @@ class macro:
 
     #run the path to go to a field
     #faceDir what direction to face after landing in a field (default, north, south)
-    def goToField(self, field, faceDir = "default"):
+    def goToField(self, field, faceDir = "default", startLocation = "center"):
         # Accept a string or a list/tuple of tokens/words and normalize to a
         # single field name (e.g. ["blue", "flower"] -> "blue flower").
         if isinstance(field, (list, tuple)):
@@ -1440,14 +1935,17 @@ class macro:
         normalized_field = str(field).replace('_', ' ').strip()
         self.location = normalized_field
         if normalized_field == "hive hub":
+            startLocation = str(startLocation or "center").replace("_", " ").strip().lower()
+            if startLocation not in hiveHubStartLocationOffsets:
+                startLocation = "center"
             self.rejoin(
                 rejoinMsg="Travelling: Hive Hub",
                 placeId=HIVE_HUB_PLACE_ID,
                 claimHive=False,
-                usePrivateServer=False,
+                usePrivateServer=bool(self.setdat.get("hive_hub_private_server", False)),
             )
             #HIVE HUB PATH
-            self.keyboard.press("shift")
+            self.enableShiftLock()
             self.keyboard.keyDown("w")
             time.sleep(6)
             self.keyboard.keyUp("w")
@@ -1457,11 +1955,19 @@ class macro:
             self.keyboard.keyDown("w")
             time.sleep(1.25)
             self.keyboard.keyUp("w")
-            self.keyboard.press(",")
-            self.keyboard.press(",")
-            self.keyboard.keyDown("s")
-            time.sleep(0.7)
-            self.keyboard.keyUp("s")
+            self.keyboard.keyDown("a")
+            time.sleep(0.5)
+            self.keyboard.keyUp("a")
+            self.keyboard.press(".")
+            self.keyboard.press(".")
+            self.keyboard.press("O")
+            self.keyboard.press("O")
+            self.keyboard.press("O")
+            self.keyboard.press("O")
+            for key, seconds in hiveHubStartLocationOffsets[startLocation]:
+                self.keyboard.keyDown(key)
+                time.sleep(seconds)
+                self.keyboard.keyUp(key)
             self.keyboard.press("shift")
             return
         self.runPath(f"cannon_to_field/{normalized_field}")
@@ -1517,13 +2023,13 @@ class macro:
         promptText = self.getTextBesideE() if promptText is None else promptText
         compactPrompt = self._compactPromptText(promptText)
         compactPlanter = self._compactPromptText(planter)
-        if not compactPrompt or not compactPlanter:
+        if not compactPrompt:
             return False
-        return (
-            "harvest" in compactPrompt
-            and "planter" in compactPrompt
-            and compactPlanter in compactPrompt
-        )
+        if "harvest" not in compactPrompt or "planter" not in compactPrompt:
+            return False
+        if not compactPlanter:
+            return True
+        return compactPlanter in compactPrompt
 
     def isBesideEImage(self, name):
         template = self.adjustImage("./images/menu",name)
@@ -1535,20 +2041,54 @@ class macro:
         return ("make" in text and "honey" in text) or self.isBesideEImage("makehoney")
 
     def getTiming(self,name = None):
+        timings_path = settingsManager.getUserDataPath("timings.txt")
         for _ in range(3):
-            data = settingsManager.readSettingsFile("./data/user/timings.txt")
+            data = settingsManager.readSettingsFile(timings_path)
             if data: break #most likely another process is writing to the file
             time.sleep(0.1)
         if name is not None:
             if not name in data:
                 print(f"could not find timing for {name}, setting a new one")
-                settingsManager.saveSettingFile(name, 0, "./data/user/timings.txt")
+                settingsManager.saveSettingFile(name, 0, timings_path)
                 return 0
             return data[name]
         return data
-    
+
     def saveTiming(self, name):
-        return settingsManager.saveSettingFile(name, time.time(), "./data/user/timings.txt")
+        return settingsManager.saveSettingFile(name, time.time(), settingsManager.getUserDataPath("timings.txt"))
+
+    def scheduleFieldBoosterGlitterExtension(self):
+        """Use Glitter at 14:55 of a detected field booster."""
+        if not self.setdat.get("field_booster_glitter_extend_enabled", False):
+            return
+
+        glitterSlot = min(7, max(0, int(self.setdat.get("field_booster_glitter_slot", 1) or 0)))
+        with self._fieldBoosterGlitterLock:
+            self._fieldBoosterGlitterGeneration += 1
+            generation = self._fieldBoosterGlitterGeneration
+
+        def useGlitter():
+            # Field boosters last 15 minutes; Glitter needs to be used at 14:55.
+            time.sleep(14 * 60 + 55)
+            with self._fieldBoosterGlitterLock:
+                if generation != self._fieldBoosterGlitterGeneration:
+                    return
+            self.useGlitterFromSlot(glitterSlot)
+            self.logger.webhook("", f"Used Glitter from hotbar slot {glitterSlot}; extending field booster", "bright green")
+
+        threading.Thread(
+            target=useGlitter,
+            name="field-booster-glitter-extension",
+            daemon=True,
+        ).start()
+
+    def useGlitterFromSlot(self, slot):
+        """Use a Glitter hotbar slot, or locate Glitter in the inventory for slot 0."""
+        if int(slot) == 0:
+            self.useItemInInventory("glitter")
+        else:
+            self.keyboard.press(str(slot))
+
     #returns true if the cooldown is up
     #note that cooldown is in seconds
     def hasRespawned(self, name, cooldown, applyMobRespawnBonus = False, timing = None):
@@ -1653,6 +2193,56 @@ class macro:
     #click the yes popup
     #if detect is set to true, the macro will check if the yes button is there
     #if detectOnly is set to true, the macro will not click 
+    def _clickYesByColor(self, detectOnly=False, clickOnce=False):
+        """
+        Fallback for Yes/No dialogs: click the green Yes button by color.
+        Yes is always the left green button; No is red on the right.
+        """
+        x = self.robloxWindow.mx + self.robloxWindow.mw // 2 - 270
+        y = self.robloxWindow.my + self.robloxWindow.mh // 2 - 60
+        w, h = 580, 265
+        screen = mssScreenshotNP(x, y, w, h)
+        if screen is None:
+            return False
+        if screen.ndim == 3 and screen.shape[2] == 4:
+            screen = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
+        hsv = cv2.cvtColor(screen, cv2.COLOR_BGR2HSV)
+        # BSS Yes button greens (covers both bright and darker confirmation shades)
+        mask = cv2.inRange(hsv, (35, 60, 35), (95, 255, 255))
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        minArea = 800 * (self.robloxWindow.multi ** 2)
+        candidates = []
+        for contour in contours:
+            area = cv2.contourArea(contour)
+            if area < minArea:
+                continue
+            bx, by, bw, bh = cv2.boundingRect(contour)
+            # Button-like aspect: wider than tall
+            if bw < bh:
+                continue
+            candidates.append((bx, by, bw, bh, area))
+        if not candidates:
+            return False
+        # Prefer the leftmost green button (Yes), ignoring any larger background greens
+        candidates.sort(key=lambda c: (c[0], -c[4]))
+        bx, by, bw, bh, _ = candidates[0]
+        # Must sit on the left half of the captured dialog region (Yes is always left of No)
+        if (bx + bw // 2) > screen.shape[1] // 2:
+            return False
+        if detectOnly:
+            return True
+        clickX = x + (bx + bw // 2) // self.robloxWindow.multi
+        clickY = y + (by + bh // 2) // self.robloxWindow.multi
+        mouse.moveTo(clickX, clickY)
+        time.sleep(0.2)
+        mouse.moveBy(2, 2)
+        time.sleep(0.1)
+        for _ in range(1 if clickOnce else 2):
+            mouse.click()
+        return True
+
     def clickYes(self, detect = False, detectOnly = False, clickOnce=False):
         yesImg = self.adjustImage("./images/menu", "yes")
         x = self.robloxWindow.mx+self.robloxWindow.mw//2-270
@@ -1661,12 +2251,21 @@ class macro:
         threshold = 0
         if detect or detectOnly: threshold = 0.75
         res = locateImageOnScreen(yesImg, x, y, 580, 265, threshold)
-        if res is None: return False
+        # Template match can land on the No button under some Retina/scale mismatches.
+        # Yes is always left of center in this search region — reject right-side hits.
+        matchOk = False
+        bestX = bestY = None
+        if res is not None:
+            bestX, bestY = [v // self.robloxWindow.multi for v in res[1]]
+            if bestX <= 580 // 2:
+                matchOk = True
+        if not matchOk:
+            return self._clickYesByColor(detectOnly=detectOnly, clickOnce=clickOnce)
         if detectOnly: return True
-        bestX, bestY = [x//self.robloxWindow.multi for x in res[1]]
         mouse.moveTo(bestX+x, bestY+y)
         time.sleep(0.2)
-        mouse.moveBy(5, 5)
+        # Nudge into the Yes button body (template is only the "Y") without reaching No
+        mouse.moveBy(15, 5)
         time.sleep(0.1)
         for _ in range(1 if clickOnce else 2):
             mouse.click()
@@ -1951,6 +2550,10 @@ class macro:
         self.logger.webhook("", "Converting", "brown", "screen")
         self.alreadyConverted = True
         self.converting = True
+        liveGatherReport = None
+        if self.liveGatherReportEnabled():
+            liveGatherReport = self.createLiveGatherReport("conversion_events")
+            liveGatherReport.start("converting", "", lambda: time.time() - st, activity="Converting")
 
         #check if convert balloon
         conv_setting = str(self.setdat.get("convert_balloon", "")).lower().replace(" ", "_")
@@ -1969,6 +2572,8 @@ class macro:
             if self.checkPauseAndWait():
                 # Stop was requested while paused
                 self.clear_task_status()
+                if liveGatherReport:
+                    liveGatherReport.stop()
                 self.converting = False
                 return False
             
@@ -1996,16 +2601,27 @@ class macro:
                     if inactiveHoneyChecks > 30:
                         self.logger.webhook("Converting: interrupted", "Inactive Honey Reset (Beta)", "orange", "screen")
                         self.clear_task_status()
+                        if liveGatherReport:
+                            liveGatherReport.stop()
                         if self.enableNightDetection:
                             self.keyboard.press(".")
                         self.converting = False
                         self.reset(convert=False)
                         return False
 
-            mouse.click()
+            # Clicking during conversion keeps the equipped tool active. Allow users
+            # to leave it idle while they are at their hive instead.
+            if not self.setdat.get("disable_tool_at_hive", False):
+                mouse.click()
 
-            if self.night and self.setdat["stinger_hunt"]:
+            if (
+                self.setdat.get("macro_mode", "normal") not in ("quest", "alt")
+                and self.night
+                and self.setdat["stinger_hunt"]
+            ):
                 self.hourlyReport.addHourlyStat("converting_time", time.time()-st)
+                if liveGatherReport:
+                    liveGatherReport.stop()
                 self.keyboard.press(".")
                 self.converting = False
                 self.stingerHunt()
@@ -2064,6 +2680,8 @@ class macro:
 
         if convertBalloon: self.saveTiming("convert_balloon")
         self.clear_task_status()
+        if liveGatherReport:
+            liveGatherReport.stop()
         #deal with the extra delay
         self.logger.webhook("", f"Finished converting (Time: {self.convertSecsToMinsAndSecs(time.time()-st)})", "brown", "screen", ping_category="ping_conversion_events")
         wait = self.setdat["convert_wait"]
@@ -2076,6 +2694,163 @@ class macro:
         self.converting = False
         self.hourlyReport.addHourlyStat("converting_time", time.time()-st)
         return True
+
+    def liveGatherReportEnabled(self):
+        return (
+            (logModule.delivery_uses_webhook(self.setdat) or logModule.delivery_uses_bot_messages(self.setdat))
+            and self.setdat.get("live_gather_report", self.setdat.get("live_honey_report", False))
+            and not self.setdat.get("only_send_hourly_report", False)
+        )
+
+    def createLiveGatherReport(self, route_category="gathering"):
+        return LiveGatherReport(
+            logModule.get_default_delivery_route(self.setdat),
+            self.robloxWindow,
+            self.setdat.get("live_gather_report_interval", 10),
+            self.setdat.get("webhook_time_format", 24),
+            logModule.build_route_settings(self.setdat),
+            self.setdat.get("discord_bot_token", ""),
+            None,
+            logModule.get_delivery_mode(self.setdat),
+            route_category,
+        )
+
+    def createLiveQuestProgressReport(self):
+        return LiveQuestProgressReport(
+            logModule.get_default_delivery_route(self.setdat),
+            self.robloxWindow,
+            self.setdat.get("live_gather_report_interval", 10),
+            self.setdat.get("webhook_time_format", 24),
+            logModule.build_route_settings(self.setdat),
+            self.setdat.get("discord_bot_token", ""),
+            None,
+            logModule.get_delivery_mode(self.setdat),
+            "quests",
+            capture_quest_screen=self.captureQuestWatchScreen,
+        )
+
+    def startQuestTaskWatch(self, taskKey):
+        """Open and publish the quest tied to a non-gather quest task."""
+        if not self.setdat.get("quest_progress_watch", False):
+            return None
+
+        normalizedTask = str(taskKey).replace("-", "_").replace(" ", "_").strip().lower()
+        watchers = (getattr(self, "questTaskWatchers", {}) or {}).get(normalizedTask, [])
+        if not watchers:
+            return None
+
+        completedObjectives = getattr(self, "completedQuestWatchObjectives", set())
+        for questGiver, objective in watchers:
+            identity = (normalizedTask, questGiver, objective)
+            if identity in completedObjectives:
+                continue
+
+            menuOpen = False
+            try:
+                menuOpen = True
+                visibleObjectives = self.findQuest(
+                    questGiver,
+                    keepQuestMenuOpen=True,
+                    logDetection=False,
+                )
+                if visibleObjectives is None:
+                    # findQuest closes the menu when the quest cannot be located.
+                    return None
+                if objective not in visibleObjectives:
+                    self.toggleQuest()
+                    self.moveMouseToDefault()
+                    completedObjectives.add(identity)
+                    continue
+
+                startedAt = time.time()
+                report = self.createLiveQuestProgressReport()
+                report.start(
+                    questGiver,
+                    objective,
+                    lambda: time.time() - startedAt,
+                    lambda: self.run is not None and self.run.value == 6,
+                    activity="Quest Progress",
+                )
+                self.moveMouseToDefault()
+                self.logger.webhook(
+                    "Live Quest Progress",
+                    f"Watching {questGiver.title()}: {objective.replace('_', ' ').title()}",
+                    "light blue",
+                )
+                return {
+                    "task": normalizedTask,
+                    "quest_giver": questGiver,
+                    "objective": objective,
+                    "report": report,
+                    "menu_open": True,
+                }
+            except Exception:
+                print(traceback.format_exc())
+                if menuOpen:
+                    self.toggleQuest()
+                    self.moveMouseToDefault()
+                return None
+
+        self.completedQuestWatchTasks.add(normalizedTask)
+        return {"skip_task": True, "task": normalizedTask}
+
+    def markQuestTaskWatchCompleted(self, context):
+        """Mark one objective done and skip the task only when no quest still needs it."""
+        taskKey = context["task"]
+        identity = (taskKey, context["quest_giver"], context["objective"])
+        self.completedQuestWatchObjectives.add(identity)
+        watchers = (getattr(self, "questTaskWatchers", {}) or {}).get(taskKey, [])
+        allComplete = all(
+            (taskKey, questGiver, objective) in self.completedQuestWatchObjectives
+            for questGiver, objective in watchers
+        )
+        if allComplete:
+            self.completedQuestWatchTasks.add(taskKey)
+            self.logger.webhook(
+                "Quest Task Complete",
+                f"Skipping remaining {taskKey.replace('_', ' ').title()} runs; no watched quest still needs them.",
+                "light green",
+                "screen",
+                route_category="quests",
+            )
+        else:
+            self.logger.webhook(
+                "Quest Objective Complete",
+                f"{context['quest_giver'].title()} no longer needs {taskKey.replace('_', ' ').title()}; continuing for another active quest.",
+                "light green",
+                route_category="quests",
+            )
+
+    def finishQuestTaskWatch(self, context, checkCompletion=True):
+        """Close a task watcher and report whether its objective just completed."""
+        if not context:
+            return False
+
+        report = context.get("report")
+        if report:
+            report.stop()
+
+        completed = False
+        try:
+            if checkCompletion and context.get("menu_open"):
+                time.sleep(0.5)
+                visibleObjectives = self.findQuest(
+                    context["quest_giver"],
+                    questScreens=[self.captureQuestWatchScreen()],
+                    logDetection=False,
+                )
+                completed = (
+                    visibleObjectives is not None
+                    and context["objective"] not in visibleObjectives
+                )
+        except Exception:
+            print(traceback.format_exc())
+        finally:
+            if context.get("menu_open"):
+                self.toggleQuest()
+            self.moveMouseToDefault()
+
+        return completed
 
     def moveMouseToDefault(self):
         mouse.moveTo(self.robloxWindow.mx+370, self.robloxWindow.my+self.robloxWindow.yOffset+110)
@@ -2285,6 +3060,657 @@ class macro:
         self.keyboard.tileWalk("s", 1.7)
         time.sleep(0.1)
 
+    # Hive path distances are in studs; 1 tile == 4 studs.
+    _STUDS_PER_TILE = 4.0
+    # Spawn → hive pad walks (overlap async+sync legs, then a short nudge).
+    # Values: (async_key, async_studs, sync_key, sync_studs, nudge_key, nudge_studs)
+    # hive_3 is a single Forward walk (async_key is None).
+    _HIVE_SPAWN_PATHS = {
+        1: ("w", 82, "d", 96, "d", 4),
+        2: ("d", 50, "w", 75, "w", 4),
+        3: (None, 0, "w", 58, "w", 4),
+        4: ("a", 50, "w", 75, "w", 4),
+        5: ("w", 82, "a", 100, "a", 4),
+        6: ("w", 82, "a", 132, "a", 4),
+    }
+
+    def walkStuds(self, key, studs):
+        studs = float(studs or 0)
+        if studs <= 0 or not key:
+            return
+        self.keyboard.tileWalk(key, studs / self._STUDS_PER_TILE)
+
+    def walkStudsAsyncThen(self, async_key, async_studs, sync_key, sync_studs):
+        """Walk two keys at once for the shorter leg, then finish the longer leg alone."""
+        async_studs = max(0.0, float(async_studs or 0))
+        sync_studs = max(0.0, float(sync_studs or 0))
+        if not async_key or async_studs <= 0:
+            self.walkStuds(sync_key, sync_studs)
+            return
+        if not sync_key or sync_studs <= 0:
+            self.walkStuds(async_key, async_studs)
+            return
+
+        overlap = min(async_studs, sync_studs)
+        self.keyboard.keyDown(async_key, False)
+        self.keyboard.keyDown(sync_key, False)
+        self.keyboard.tileWait(overlap / self._STUDS_PER_TILE)
+        if async_studs <= sync_studs:
+            self.keyboard.keyUp(async_key, False)
+            remaining = sync_studs - overlap
+            if remaining > 0:
+                self.keyboard.tileWait(remaining / self._STUDS_PER_TILE)
+            self.keyboard.keyUp(sync_key, False)
+        else:
+            self.keyboard.keyUp(sync_key, False)
+            remaining = async_studs - overlap
+            if remaining > 0:
+                self.keyboard.tileWait(remaining / self._STUDS_PER_TILE)
+            self.keyboard.keyUp(async_key, False)
+
+    def walkSpawnToHiveSlot(self, slot):
+        """Walk from spawn to the given hive pad using _HIVE_SPAWN_PATHS."""
+        path = self._HIVE_SPAWN_PATHS.get(int(slot))
+        if not path:
+            return False
+        async_key, async_studs, sync_key, sync_studs, _, _ = path
+        if async_key:
+            self.walkStudsAsyncThen(async_key, async_studs, sync_key, sync_studs)
+        else:
+            self.walkStuds(sync_key, sync_studs)
+        time.sleep(0.3)
+        return True
+
+    def nudgeHiveCheckpoint(self, slot):
+        path = self._HIVE_SPAWN_PATHS.get(int(slot))
+        if not path:
+            return
+        _, _, _, _, nudge_key, nudge_studs = path
+        self.walkStuds(nudge_key, nudge_studs)
+        time.sleep(0.25)
+
+    def claimHivePromptVisible(self):
+        try:
+            if self.isBesideEImage("claimhive"):
+                return True
+        except Exception:
+            pass
+        return bool(self.isBesideE(["claim"], ["send", "trad", "trade"], log=True))
+
+    def occupiedHivePromptVisible(self):
+        for name in ("sendtrade", "tradedisabled", "tradelocked"):
+            try:
+                if self.isBesideEImage(name):
+                    return True
+            except Exception:
+                pass
+        return bool(self.isBesideE(["send", "trad", "trade"], ["claim"], log=True))
+
+    def anyHivePromptVisible(self):
+        return bool(self.hivePromptKind())
+
+    def hivePromptKind(self):
+        """Return the currently observed hive-prompt type, if any."""
+        if self.claimHivePromptVisible():
+            return "claim"
+        if self.occupiedHivePromptVisible():
+            return "occupied"
+        return None
+
+    def waitForHivePrompt(self, slot, max_attempts=3):
+        """Wait for a hive prompt and return its type; nudge as needed."""
+        time.sleep(0.2)
+        for attempt in range(max(1, int(max_attempts))):
+            prompt = self.hivePromptKind()
+            if prompt:
+                return prompt
+            if attempt + 1 >= max_attempts:
+                break
+            self.nudgeHiveCheckpoint(slot)
+        return self.hivePromptKind()
+
+    def tryClaimHiveSlot(self, slot, excluded_slots=None, prompt_confirmed=False):
+        """Claim ``slot`` when its Claim prompt has just been observed.
+
+        Prompt recognition can flicker while the player is crossing a hive pad.
+        Callers that have already seen the Claim prompt pass ``prompt_confirmed``
+        so a missed second screenshot cannot make us walk away from an open hive.
+        """
+        excluded_slots = excluded_slots or set()
+        self.keyboard.keyUp("a", False)
+        self.keyboard.keyUp("d", False)
+        if slot in excluded_slots:
+            return 0
+        if not prompt_confirmed and not self.claimHivePromptVisible():
+            return 0
+        self.keyboard.press("e")
+        return slot
+
+    def moveToNextHiveSlot(self, slot, direction, excluded_slots=None):
+        """Leave the current pad and stop when the next hive prompt appears."""
+        excluded_slots = excluded_slots or set()
+        self.keyboard.keyDown(direction, False)
+        # Wait until the current pad's prompt disappears.
+        for _ in range(40):
+            if not self.anyHivePromptVisible():
+                break
+            time.sleep(0.01)
+        # Walk until the next pad's claim/occupied prompt appears.
+        claimed = 0
+        for _ in range(200):
+            if self.claimHivePromptVisible():
+                self.keyboard.keyUp("a", False)
+                self.keyboard.keyUp("d", False)
+                self.logger.webhook("", f"Hive {slot} detected as available", "dark brown")
+                claimed = self.tryClaimHiveSlot(
+                    slot, excluded_slots, prompt_confirmed=True
+                )
+                break
+            if self.occupiedHivePromptVisible():
+                self.logger.webhook("", f"Hive {slot} occupied", "dark brown")
+                break
+            time.sleep(0.01)
+        self.keyboard.keyUp("a", False)
+        self.keyboard.keyUp("d", False)
+        time.sleep(0.1)
+        return claimed
+
+    def scanHivesForClaim(self, start_slot, excluded_slots=None):
+        """
+        From start_slot, search toward hive 1 (red cannon), then reverse toward hive 6.
+        Prefers the open slot closest to the red cannon when the preferred pad is taken.
+        """
+        excluded_slots = excluded_slots or set()
+        start_slot = max(1, min(6, int(start_slot)))
+        # Direction -1 walks Right (d) and decrements slot; +1 walks Left (a) and increments.
+        check_direction = -1
+        checking_hive = start_slot
+        checked_hives = 1
+        check_skip = 0
+
+        while checked_hives < 6:
+            if checking_hive == 1 and check_direction == -1:
+                check_direction = 1
+                check_skip = checked_hives
+
+            if check_direction == 1:
+                direction = "a"
+                checking_hive += 1
+            else:
+                direction = "d"
+                checking_hive -= 1
+
+            if checking_hive < 1 or checking_hive > 6:
+                break
+
+            claimed = self.moveToNextHiveSlot(checking_hive, direction, excluded_slots)
+            if claimed:
+                return claimed
+
+            if check_skip == 0:
+                checked_hives += 1
+            else:
+                check_skip -= 1
+
+        return 0
+
+    def claimHiveByCheckMethod(self, preferred_slot, excluded_slots=None):
+        """Walk spawn → preferred hive, claim it, or scan neighboring pads if taken."""
+        excluded_slots = set(excluded_slots or set())
+        preferred_slot = max(1, min(6, int(preferred_slot)))
+        self.logger.webhook("", f"Walking spawn → hive {preferred_slot} (check)", "dark brown")
+        self.walkSpawnToHiveSlot(preferred_slot)
+        prompt = self.waitForHivePrompt(preferred_slot, max_attempts=3)
+        if not prompt:
+            for _ in range(3):
+                self.stepBackOntoHivePad()
+                time.sleep(0.35)
+                prompt = self.hivePromptKind()
+                if prompt:
+                    break
+            else:
+                return 0
+
+        claimed = self.tryClaimHiveSlot(
+            preferred_slot, excluded_slots, prompt_confirmed=(prompt == "claim")
+        )
+        if claimed:
+            self.logger.webhook("", f"Hive {claimed} detected as available", "dark brown")
+            self.walkStuds("s", 4)
+            return claimed
+
+        if self.occupiedHivePromptVisible():
+            self.logger.webhook("", f"Hive {preferred_slot} occupied", "dark brown")
+        # Preferred taken/excluded, or prompt was ambiguous — scan toward cannon first.
+        return self.scanHivesForClaim(preferred_slot, excluded_slots)
+
+    def setCameraPitch(self, target_pitch, current_pitch=0):
+        """
+        Adjust camera pitch with PageUp/PageDown.
+        Higher pitch = look up. Practical range: about -6..3.
+        """
+        try:
+            target_pitch = int(target_pitch)
+        except (TypeError, ValueError):
+            target_pitch = 0
+        target_pitch = max(-6, min(3, target_pitch))
+        try:
+            current_pitch = int(current_pitch)
+        except (TypeError, ValueError):
+            current_pitch = 0
+
+        delta = target_pitch - current_pitch
+        if delta == 0:
+            return target_pitch
+        key = "pageup" if delta > 0 else "pagedown"
+        for _ in range(abs(delta)):
+            self.keyboard.keyDown(key, False)
+            time.sleep(0.01)
+            self.keyboard.keyUp(key, False)
+            time.sleep(0.01)
+        return target_pitch
+
+    def setCameraZoom(self, target_zoom, current_zoom=0):
+        """
+        Adjust camera zoom with I/O. Higher zoom = more zoomed out (O).
+        Range 0..5.
+        """
+        try:
+            target_zoom = int(target_zoom)
+        except (TypeError, ValueError):
+            target_zoom = 0
+        target_zoom = max(0, min(5, target_zoom))
+        try:
+            current_zoom = int(current_zoom)
+        except (TypeError, ValueError):
+            current_zoom = 0
+
+        delta = target_zoom - current_zoom
+        if delta == 0:
+            return target_zoom
+        key = "o" if delta > 0 else "i"
+        for _ in range(abs(delta)):
+            self.keyboard.keyDown(key, False)
+            time.sleep(0.01)
+            self.keyboard.keyUp(key, False)
+            time.sleep(0.01)
+        return target_zoom
+
+    def detectOpenHiveSlotsFromSpawn(self):
+        """
+        From spawn (zoomed out + pitched up), find unclaimed hive slots.
+
+        Screen left→right is slots 6..1.
+
+        Signals (in priority order):
+        1) Red claim arrows floating above pads — used when ≥2 tips map cleanly.
+        2) White claim disks on the pad row, plus nearby empty faces (covers
+           disks hidden under annotation/occlusion).
+        3) Low bee-cell density on the hive face (ignores balloon/glare columns).
+
+        Pad columns come from the bright pad/nametag row when spacing is even;
+        otherwise an equal 6-way split of the yellow/white platform span.
+        """
+        x = int(self.robloxWindow.mx + self.robloxWindow.mw * 0.01)
+        y = int(self.robloxWindow.my + self.robloxWindow.mh * 0.12)
+        w = int(self.robloxWindow.mw * 0.98)
+        h = int(self.robloxWindow.mh * 0.32)
+        if w < 60 or h < 40:
+            return []
+
+        try:
+            screen = mssScreenshotNP(x, y, w, h)
+            bgr = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
+            hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+        except Exception:
+            return []
+
+        red_mask = cv2.bitwise_or(
+            cv2.inRange(hsv, np.array([0, 130, 130]), np.array([8, 255, 255])),
+            cv2.inRange(hsv, np.array([172, 130, 130]), np.array([179, 255, 255])),
+        )
+        # Keep the unfiltered mask for identifying red/Festive hive faces. The
+        # component cleanup below intentionally removes their large red panels.
+        raw_red_mask = red_mask.copy()
+        # Strip ultra-wide red strokes (hand-drawn arrows / UI, not claim chevrons).
+        num_red, red_labels, red_stats, _ = cv2.connectedComponentsWithStats(red_mask, 8)
+        for i in range(1, num_red):
+            bw = int(red_stats[i, cv2.CC_STAT_WIDTH])
+            bh = int(red_stats[i, cv2.CC_STAT_HEIGHT])
+            area = int(red_stats[i, cv2.CC_STAT_AREA])
+            if area > 400 and (bw > w * 0.12 or bh > h * 0.35):
+                red_mask[red_labels == i] = 0
+
+        kernel = np.ones((3, 3), np.uint8)
+        red_mask = cv2.morphologyEx(red_mask, cv2.MORPH_OPEN, kernel, iterations=1)
+        red_mask = cv2.morphologyEx(red_mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+
+        band_h, band_w = red_mask.shape[:2]
+        min_area = max(140, int(200 * (band_w / 1024.0) ** 2))
+
+        # --- 6 pad column centers ---
+        pad_row = hsv[: max(1, int(band_h * 0.35))]
+        bright = (
+            (pad_row[:, :, 2] > 175) & (pad_row[:, :, 1] < 100)
+        ).astype(np.uint8) * 255
+        proj = bright.sum(axis=0).astype(np.float32)
+        if float(proj.max()) <= 0:
+            proj = np.ones(band_w, dtype=np.float32)
+        k = max(9, (band_w // 90) | 1)
+        proj_s = np.convolve(proj, np.ones(k, dtype=np.float32) / k, mode="same")
+        min_dist = max(40, band_w // 14)
+        height_thr = max(10.0, float(proj_s.max()) * 0.10)
+        peaks = []
+        for i in range(1, band_w - 1):
+            if proj_s[i] < height_thr:
+                continue
+            if proj_s[i] >= proj_s[i - 1] and proj_s[i] >= proj_s[i + 1]:
+                if band_w * 0.02 < i < band_w * 0.98:
+                    peaks.append((float(proj_s[i]), i))
+        peaks.sort(reverse=True)
+        kept_peaks = []
+        for _hgt, px in peaks:
+            if any(abs(px - kx) < min_dist for kx in kept_peaks):
+                continue
+            kept_peaks.append(px)
+            if len(kept_peaks) >= 6:
+                break
+        kept_peaks = sorted(kept_peaks)
+
+        use_peaks = False
+        if len(kept_peaks) == 6:
+            diffs = np.diff(kept_peaks)
+            spacing_ratio = float(np.max(diffs)) / max(float(np.min(diffs)), 1.0)
+            # Uneven peaks remap slots (e.g. 5,6 → wrong columns); fall back.
+            use_peaks = spacing_ratio < 2.2
+
+        if use_peaks:
+            centers = [float(p) for p in kept_peaks]
+        else:
+            white_mask = cv2.inRange(hsv, np.array([0, 0, 200]), np.array([179, 55, 255]))
+            yellow_mask = cv2.inRange(hsv, np.array([16, 100, 140]), np.array([40, 255, 255]))
+            plat = cv2.bitwise_or(white_mask, yellow_mask)
+            pproj = plat.sum(axis=0).astype(np.float32)
+            if float(pproj.max()) > 0:
+                thr = max(float(pproj.max()) * 0.18, 1.0)
+                xs = np.where(pproj >= thr)[0]
+                if xs.size >= 2:
+                    row_left, row_right = int(xs[0]), int(xs[-1])
+                else:
+                    row_left, row_right = int(band_w * 0.06), int(band_w * 0.94)
+            else:
+                row_left, row_right = int(band_w * 0.06), int(band_w * 0.94)
+            if (row_right - row_left) > band_w * 0.92 or (row_right - row_left) < band_w * 0.30:
+                row_left, row_right = int(band_w * 0.06), int(band_w * 0.94)
+            span = max(1, row_right - row_left)
+            centers = [row_left + (i + 0.5) * span / 6.0 for i in range(6)]
+
+        slot_w = float(np.median(np.diff(centers))) if len(centers) > 1 else band_w / 6.0
+
+        # --- Per-slot face / pad metrics ---
+        bees_map = {}
+        white_map = {}
+        bright_mid_map = {}
+        red_hive_map = {}
+        for i, slot in enumerate((6, 5, 4, 3, 2, 1)):
+            cx = centers[i]
+            half = max(18.0, slot_w * 0.36)
+            x0 = max(0, int(cx - half))
+            x1 = min(band_w, int(cx + half))
+            face = hsv[: max(1, int(band_h * 0.50)), x0:x1]
+            face_red = red_mask[: max(1, int(band_h * 0.50)), x0:x1]
+            if face.size == 0:
+                bees_map[slot] = 1.0
+                white_map[slot] = 0.0
+                bright_mid_map[slot] = 0.0
+                red_hive_map[slot] = 0.0
+                continue
+            fh, fs, fv = face[:, :, 0], face[:, :, 1], face[:, :, 2]
+            colored_px = (fs > 110) & (fv > 100) & ~((fh >= 35) & (fh <= 85))
+            # A claim arrow can overlap the lower face region, so red used to be
+            # discarded here entirely.  That also discarded red/Festive hive
+            # cells and made occupied hives (most noticeably slot 3) look empty.
+            # Red in the upper hive-cell region is occupancy; keep excluding it
+            # below that region where floating claim arrows appear.
+            face_rows = np.arange(face.shape[0])[:, None]
+            upper_hive = face_rows < int(band_h * 0.25)
+            bee_px = colored_px & ((face_red == 0) | upper_hive)
+            bees_map[slot] = float(bee_px.mean())
+            upper_red = raw_red_mask[: max(1, int(band_h * 0.25)), x0:x1]
+            red_hive_map[slot] = float((upper_red > 0).mean())
+            pad = hsv[int(band_h * 0.40) :, x0:x1]
+            if pad.size:
+                white_map[slot] = float(
+                    ((pad[:, :, 2] > 200) & (pad[:, :, 1] < 70)).mean()
+                )
+            else:
+                white_map[slot] = 0.0
+            mid = hsv[int(band_h * 0.25) : int(band_h * 0.55), x0:x1]
+            if mid.size:
+                # Balloons / bright glare falsely look "empty" on bee density alone.
+                bright_mid_map[slot] = float(
+                    ((mid[:, :, 2] > 210) & (mid[:, :, 1] < 80)).mean()
+                )
+            else:
+                bright_mid_map[slot] = 0.0
+
+        pad_slots = {
+            slot
+            for slot, bees in bees_map.items()
+            if bees < 0.40 and bright_mid_map[slot] < 0.15
+        }
+        white_slots = {slot for slot, white in white_map.items() if white >= 0.08}
+
+        # --- Floating red claim arrows ---
+        num_labels, labels, stats, _centroids = cv2.connectedComponentsWithStats(
+            red_mask, connectivity=8
+        )
+        # Tips in the top of the band are usually drawings/UI on the pad row,
+        # not floating claim arrows.
+        pad_row_y = int(band_h * 0.28)
+        tips = []
+        for i in range(1, num_labels):
+            area = int(stats[i, cv2.CC_STAT_AREA])
+            if area < 80:
+                continue
+            bw = int(stats[i, cv2.CC_STAT_WIDTH])
+            bh = int(stats[i, cv2.CC_STAT_HEIGHT])
+            if bw > slot_w * 0.95 and bh < bw * 0.35:
+                continue
+            if bw > slot_w * 1.55:
+                continue
+            ys, xs = np.where(labels == i)
+            if ys.size == 0:
+                continue
+            ycut = float(np.quantile(ys, 0.80))
+            tip_xs = xs[ys >= ycut]
+            tip_ys = ys[ys >= ycut]
+            if tip_xs.size == 0:
+                continue
+            tip_x = float(tip_xs.mean())
+            tip_y = float(tip_ys.mean())
+            if tip_y < pad_row_y:
+                continue
+            tips.append((area, tip_x, tip_y))
+
+        tips.sort(key=lambda t: t[0], reverse=True)
+        kept = []
+        for area, tip_x, tip_y in tips:
+            if area < min_area:
+                continue
+            if any(abs(tip_x - kx) < slot_w * 0.85 for _, kx, _ in kept):
+                continue
+            kept.append((area, tip_x, tip_y))
+
+        tip_bias = 0.18 * slot_w
+        arrow_slots = set()
+        for area, tip_x, tip_y in kept:
+            eff_x = tip_x - tip_bias
+            dists = [abs(eff_x - c) for c in centers]
+            idx = int(np.argmin(dists))
+            if dists[idx] > slot_w * 0.55:
+                continue
+            slot = 6 - idx
+            # A red/Festive hive panel can leave arrow-sized red components in
+            # the lower face. Do not accept those as claim arrows when the same
+            # slot has substantial red coverage across its upper hive face.
+            if red_hive_map.get(slot, 0.0) >= 0.08:
+                continue
+            arrow_slots.add(slot)
+
+        # Prefer multiple floating arrows; else white disks (+ empty companions);
+        # else empty faces alone.
+        if len(arrow_slots) >= 2:
+            available = sorted(arrow_slots)
+        elif len(white_slots) >= 2:
+            companions = {slot for slot in pad_slots if bees_map[slot] < 0.32}
+            available = sorted(white_slots | companions)
+        elif pad_slots:
+            available = sorted(pad_slots)
+        else:
+            available = sorted(arrow_slots | white_slots)
+
+        return available
+
+    def chooseDetectedHiveSlot(self, available_slots, preferred_slot, excluded_slots=None):
+        excluded_slots = set(excluded_slots or set())
+        open_slots = sorted(
+            slot for slot in available_slots
+            if 1 <= int(slot) <= 6 and int(slot) not in excluded_slots
+        )
+        if not open_slots:
+            return 0
+        preferred_slot = max(1, min(6, int(preferred_slot)))
+        if preferred_slot in open_slots:
+            return preferred_slot
+        # Closest to red cannon = lowest hive number.
+        return min(open_slots)
+
+    def walkBetweenHiveSlotsForClaim(self, from_slot, to_slot, excluded_slots=None):
+        """Walk pad-to-pad from from_slot toward to_slot; claim if an open prompt appears."""
+        excluded_slots = set(excluded_slots or set())
+        from_slot = max(1, min(6, int(from_slot)))
+        to_slot = max(1, min(6, int(to_slot)))
+        if from_slot == to_slot:
+            return 0
+        step = 1 if to_slot > from_slot else -1
+        direction = "a" if step > 0 else "d"
+        slot = from_slot
+        while slot != to_slot:
+            slot += step
+            claimed = self.moveToNextHiveSlot(slot, direction, excluded_slots)
+            if claimed:
+                return claimed
+        return 0
+
+    def claimHiveByDetectMethod(self, preferred_slot=1, excluded_slots=None):
+        """
+        Detect claim method: zoom out + pitch up → find open hives from spawn →
+        walk to the chosen pad and claim. Falls back to a forward hive-3 scan
+        if nothing is detected from spawn.
+        """
+        excluded_slots = set(excluded_slots or set())
+        preferred_slot = max(1, min(6, int(preferred_slot)))
+        self.logger.webhook("", "Detecting Hive", "dark brown")
+
+        # Zoom out so all six pads (and their claim arrows) fit on screen.
+        zoom = self.setCameraZoom(5, 0)
+        pitch = self.setCameraPitch(2, 0)
+        time.sleep(0.35)
+
+        available = self.detectOpenHiveSlotsFromSpawn()
+        if available:
+            self.logger.webhook(
+                "",
+                f"Open hives from spawn: {', '.join(str(s) for s in available)}",
+                "dark brown",
+            )
+            for slot in available:
+                self.logger.webhook("", f"Hive {slot} detected as available", "dark brown")
+        else:
+            self.logger.webhook("", "no open hives were detected from spawn", "dark brown")
+
+        target = self.chooseDetectedHiveSlot(available, preferred_slot, excluded_slots)
+        if target:
+            self.logger.webhook("", f"Selecting hive {target} from spawn detection", "dark brown")
+            self.setCameraPitch(0, pitch)
+            self.setCameraZoom(0, zoom)
+            time.sleep(0.15)
+            self.walkSpawnToHiveSlot(target)
+            prompt = self.waitForHivePrompt(target, max_attempts=3)
+            if not prompt:
+                for _ in range(3):
+                    self.stepBackOntoHivePad()
+                    time.sleep(0.35)
+                    prompt = self.hivePromptKind()
+                    if prompt:
+                        break
+            claimed = self.tryClaimHiveSlot(
+                target, excluded_slots, prompt_confirmed=(prompt == "claim")
+            )
+            if claimed:
+                self.walkStuds("s", 4)
+                return claimed
+
+            # First pick was wrong/occupied — try other spawn-detected pads before a full scan.
+            failed = {target}
+            if self.occupiedHivePromptVisible():
+                self.logger.webhook("", f"Hive {target} occupied after walk", "dark brown")
+            else:
+                self.logger.webhook("", f"Hive {target} prompt missing after walk", "dark brown")
+
+            current = target
+            while True:
+                nxt = self.chooseDetectedHiveSlot(
+                    available, preferred_slot, excluded_slots | failed
+                )
+                if not nxt:
+                    break
+                self.logger.webhook(
+                    "",
+                    f"Trying next detected hive {nxt} (from {current})",
+                    "dark brown",
+                )
+                claimed = self.walkBetweenHiveSlotsForClaim(current, nxt, excluded_slots | failed)
+                if claimed:
+                    self.walkStuds("s", 4)
+                    return claimed
+                failed.add(nxt)
+                current = nxt
+
+            self.logger.webhook("", "Scanning remaining hives", "dark brown")
+            return self.scanHivesForClaim(current, excluded_slots | failed)
+
+        self.logger.webhook("", "Falling back to hive 3 walk detect", "dark brown")
+        self.setCameraPitch(0, pitch)
+        self.setCameraZoom(0, zoom)
+        time.sleep(0.15)
+
+        self.keyboard.keyDown("w", False)
+        found = False
+        for _ in range(500):
+            if self.anyHivePromptVisible():
+                self.keyboard.keyUp("w", False)
+                self.walkStuds("s", 2)
+                found = True
+                break
+            time.sleep(0.01)
+        self.keyboard.keyUp("w", False)
+        if not found:
+            return 0
+
+        time.sleep(0.1)
+        if self.claimHivePromptVisible() and 3 not in excluded_slots:
+            self.logger.webhook("", "Hive 3 detected as available", "dark brown")
+            claimed = self.tryClaimHiveSlot(3, excluded_slots, prompt_confirmed=True)
+            if claimed:
+                self.walkStuds("s", 4)
+                return claimed
+        elif self.occupiedHivePromptVisible():
+            self.logger.webhook("", "Hive 3 occupied", "dark brown")
+
+        return self.scanHivesForClaim(3, excluded_slots)
+
     def resyncHiveSlotFromHive(self):
         self.logger.webhook("", "Rechecking hive slot before rejoining", "dark brown", "screen")
         if not self.reset(convert=False):
@@ -2334,7 +3760,7 @@ class macro:
         self.logger.webhook("", f"Updated hive slot to {hiveNumber}; retrying cannon", "bright green", "screen")
         return True
 
-    def cannon(self, fast = False, allowHiveResync = True):
+    def cannon(self, fast = False, allowHiveResync = True, allowRejoin = True):
         def detect_rejoin_mode_color():
             try:
                 if not appManager.isAppFocused("Roblox"):
@@ -2357,7 +3783,6 @@ class macro:
                 pass
             return None
 
-        # Honor the configured retry count before forcing a rejoin.
         try:
             max_attempts = int(self.setdat.get("max_cannon_attempts", 3))
         except (TypeError, ValueError):
@@ -2372,176 +3797,236 @@ class macro:
             hive_resync_attempts = max(0, max_attempts - 1)
         first_attempt_color = None
         for i in range(max_attempts):
-            #Move to canon:
-            fieldDist = 0.9
             if self.cannonFromHive:
-                self.keyboard.walk("w",0.8)
                 hiveNumber = self.setdat["hive_number"]
             else:
                 hiveNumber = 3
-            self.keyboard.walk("d",1.2*hiveNumber+i)
-            if not self.cannonFromHive:
-                self.keyboard.walk("w", 0.2)
+            forwardTime = 0.8 if self.cannonFromHive else 0.2
+            self.keyboard.walk("w", forwardTime / 2)
+            self.keyboard.walk("d", 1.2 * hiveNumber + i + 1)
             self.keyboard.keyDown("d")
             time.sleep(0.5)
             self.keyboard.slowPress("space")
-            #os.system('osascript -e \'tell application "System Events" to key code 49\'')
             time.sleep(0.2)
             self.keyboard.keyDown("d")
-            self.keyboard.walk("w",0.2)
-            
+            self.keyboard.walk("w", 0.2)
+
             if fast:
-                self.keyboard.walk("d",0.95)
+                self.keyboard.walk("d", 0.95)
                 time.sleep(0.1)
-                return
-            self.keyboard.walk("d",0.2)
-            self.keyboard.walk("s",0.07)
-            st = time.time()
+                return True
+            self.keyboard.walk("d", 0.2)
+            self.keyboard.walk("s", 0.07)
+            startTime = time.time()
             self.keyboard.keyDown("d")
             foundCannon = False
-            while time.time()-st < 0.15*6:
+            while time.time() - startTime < 0.9:
                 if self.isBesideEImage("cannon"):
                     foundCannon = True
                     break
             self.keyboard.keyUp("d")
             if foundCannon:
-                #check if overrun cannon
                 for _ in range(3):
                     time.sleep(0.4)
                     if self.isBesideEImage("cannon"):
-                        return
-                    self.keyboard.walk("a",0.2)
-            self.logger.webhook(
-                "Notice",
-                f"Could not find cannon (attempt {i+1}/{max_attempts})",
-                "dark brown",
-                "screen",
-            )
+                        return True
+                    self.keyboard.walk("a", 0.2)
+            self.logger.webhook("Notice", f"Could not find cannon (attempt {i + 1}/{max_attempts})", "dark brown", "screen")
             detected_color = detect_rejoin_mode_color()
             if allowHiveResync and hive_resync_attempts and i + 1 >= hive_resync_attempts:
                 if self.resyncHiveSlotFromHive():
-                    self.cannon(fast=fast, allowHiveResync=False)
-                    return
+                    return self.cannon(fast=fast, allowHiveResync=False, allowRejoin=allowRejoin)
                 self.logger.webhook("", "Hive slot recheck failed; rejoining", "dark brown", "screen")
-                self.rejoin()
-                return
+                if allowRejoin and self.rejoin():
+                    return self.cannon(fast=fast, allowHiveResync=False, allowRejoin=False)
+                return False
 
-            # Reset between failed attempts until the configured limit is exhausted.
             if i < max_attempts - 1:
                 first_attempt_color = detected_color
                 if detected_color is not None:
                     retries_left = max_attempts - (i + 1)
                     retry_label = "time" if retries_left == 1 else "times"
-                    self.logger.webhook(
-                        "",
-                        f"Detected light/dark-mode screen while searching for cannon. Resetting and retrying cannon search ({retries_left} {retry_label} remaining).",
-                        "dark brown",
-                        "screen",
-                    )
+                    self.logger.webhook("", f"Detected light/dark-mode screen while searching for cannon. Resetting and retrying cannon search ({retries_left} {retry_label} remaining).", "dark brown", "screen")
                 self.reset(convert=False)
                 continue
 
-            # Final failure: rejoin. If the same color persists after reset, call it out.
             if detected_color is not None and first_attempt_color is not None and tuple(detected_color) == tuple(first_attempt_color):
                 self.logger.webhook("", "Detected the same light/dark-mode color again after reset while searching for cannon. Rejoining.", "dark brown", "screen")
             elif detected_color is not None:
                 self.logger.webhook("", "Detected light/dark-mode screen again while searching for cannon. Rejoining.", "dark brown", "screen")
             self.logger.webhook(
                 "Notice",
-                f"Failed to reach cannon after {max_attempts} attempts; rejoining",
+                f"Failed to reach cannon after {max_attempts} attempts" + ("; rejoining" if allowRejoin else "; aborting travel"),
                 "red",
                 ping_category="ping_critical_errors",
             )
-            self.rejoin()
-            return
-        else:
-            self.logger.webhook("Notice", f"Failed to reach cannon too many times", "red", ping_category="ping_critical_errors")
-            self.rejoin()
+            if allowRejoin and self.rejoin():
+                return self.cannon(fast=fast, allowHiveResync=False, allowRejoin=False)
+            return False
+        return False
+
+    def travelViaCannon(self, context="Travel", resetIfAway=True, convertOnReset=False):
+        if resetIfAway and self.location != "spawn":
+            self.logger.webhook("", f"Returning to hive before {context.lower()}", "dark brown")
+            if not self.reset(convert=convertOnReset):
+                return False
+        if self.cannon():
+            return True
+        self.logger.webhook(
+            f"{context}: aborted",
+            "Could not confirm cannon access before travel",
+            "red",
+            "screen",
+            ping_category="ping_critical_errors",
+        )
+        return False
     
+    def _getRejoinServerLinks(self, usePrivateServer):
+        """Return unique private-server links in their configured failover order."""
+        if not usePrivateServer:
+            return []
+
+        keys = (
+            "private_server_link",
+            "fallback_private_server_link_1",
+            "fallback_private_server_link_2",
+            "fallback_private_server_link_3",
+        )
+        links = []
+        seen = set()
+        for key in keys:
+            link = str(self.setdat.get(key, "") or "").strip()
+            normalized = link.casefold()
+            if link and normalized not in seen:
+                links.append((key, link))
+                seen.add(normalized)
+        return links
+
+    def _privateServerDeeplink(self, placeId, privateServerLink):
+        """Convert Roblox private and share links into a Roblox deeplink."""
+        from urllib.parse import parse_qs, urlparse
+
+        parsed = urlparse(privateServerLink)
+        query = {key.lower(): values for key, values in parse_qs(parsed.query).items()}
+        code = None
+        is_share_link = "share" in parsed.path.lower()
+        for key in ("code", "privateserverlinkcode", "privateserverlink", "linkcode"):
+            if query.get(key):
+                code = query[key][0]
+                is_share_link = is_share_link or key == "code"
+                break
+        if not code and "=" in privateServerLink:
+            code = privateServerLink.rsplit("=", 1)[-1].split("&", 1)[0]
+        if not code:
+            return None
+        if is_share_link:
+            link_type = query.get("type", ["Server"])[0]
+            return f"roblox://navigation/share_links?code={code}&type={link_type}"
+        return f"roblox://placeID={placeId}&linkCode={code}"
+
+    @staticmethod
+    def _joinErrorFromText(rawText):
+        """Classify OCR text from a Roblox join-error dialog."""
+        text = " ".join(str(rawText or "").lower().split())
+        codeMatch = re.search(r"error\s*code\s*[:;]?\s*([0-9s]+)", text)
+        code = codeMatch.group(1).replace("s", "5") if codeMatch else ""
+        if not code and re.search(r"\bid\s*=\s*17\b", text):
+            code = "279"
+
+        errors = {
+            "279": ("connection failure", "retry"),
+            "524": ("permission denied", "fallback"),
+            "267": ("banned from this experience", "abort"),
+            "256": ("server data failure or active ban", "retry"),
+            "429": ("too many requests", "cooldown"),
+        }
+        if code in errors:
+            reason, action = errors[code]
+            return {"code": code, "reason": reason, "action": action}
+        if "permission to join" in text or "do not have permission" in text:
+            return {"code": "524", "reason": "permission denied", "action": "fallback"}
+        if "join error" in text:
+            return {"code": code, "reason": "join error", "action": "retry"}
+        return None
+
+    def _detectJoinError(self):
+        """OCR the central Roblox dialog area for invalid-server errors."""
+        width = max(1, int(self.robloxWindow.mw * 0.7))
+        height = max(1, int(self.robloxWindow.mh * 0.55))
+        x = int(self.robloxWindow.mx + (self.robloxWindow.mw - width) / 2)
+        y = int(self.robloxWindow.my + (self.robloxWindow.mh - height) / 2)
+        dialog = mssScreenshot(x, y, width, height)
+        text = " ".join(result[1][0] for result in ocr.ocrRead(dialog))
+        return self._joinErrorFromText(text)
+
     def rejoin(self, rejoinMsg = "Rejoining", placeId = MAIN_GAME_PLACE_ID, claimHive = True, usePrivateServer = True):
+        if self.skipServer is not None:
+            self.skipServer.value = 0
         self.canDetectNight = False
+        self.location = "spawn"
+        self.cannonFromHive = False
         placeId = str(placeId or MAIN_GAME_PLACE_ID)
-        psLink = self.setdat.get("private_server_link", "")
+        privateServerLinks = self._getRejoinServerLinks(usePrivateServer)
         self.logger.webhook("",rejoinMsg, "dark brown")
         self.set_task_status("rejoining", activity="rejoining")
         mouse.mouseUp()
         keyboard.releaseMovement()
-        for i in range(3):
-            joinPS = bool(usePrivateServer and psLink and psLink.strip()) #join private server?
-            rejoinMethod = self.setdat.get("rejoin_method", "deeplink")
-            browserLink = f"https://www.roblox.com/games/{placeId}"
-            if i == 2 and joinPS: 
-                self.logger.webhook("", "Failed rejoining too many times, falling back to a public server", "red", "screen", ping_category="ping_disconnects")
-                joinPS = False
-            
-            time.sleep(8)
-            #execute rejoin method
-            if joinPS:
-                browserLink = psLink
-            if rejoinMethod == "deeplink":
-                try:
-                    appManager.forceCloseApp("Roblox")
-                except Exception:
-                    appManager.closeApp("Roblox")
-                appManager.openApp("Roblox")
-                time.sleep(2)
-                deeplink = f"roblox://placeID={placeId}"
-                if joinPS:
-                    # Parse the provided private server link robustly using url parsing
-                    from urllib.parse import urlparse, parse_qs
-                    try:
-                        parsed = urlparse(psLink)
-                        qs = {k.lower(): v for k, v in parse_qs(parsed.query).items()}
-                        code_val = None
-                        is_share = False
-                        if 'code' in qs and qs['code']:
-                            code_val = qs['code'][0]
-                            is_share = True
-                        elif 'privateserverlinkcode' in qs and qs['privateserverlinkcode']:
-                            code_val = qs['privateserverlinkcode'][0]
-                        elif 'privateserverlink' in qs and qs['privateserverlink']:
-                            code_val = qs['privateserverlink'][0]
-                        elif 'linkcode' in qs and qs['linkcode']:
-                            code_val = qs['linkcode'][0]
-                        else:
-                            # Fallback: try to extract a trailing query value after '='
-                            if '=' in psLink:
-                                code_val = psLink.split('=')[-1].split('&')[0]
+        if appManager.isAppOpen("roblox"):
+            self.logger.webhook("", "Closing Roblox before rejoining", "dark brown")
+            appManager.closeApp("Roblox")
+            time.sleep(3)
 
-                        if not code_val:
-                            self.logger.webhook("", "Invalid private server link format. Could not extract code. Falling back to public server.", "red", ping_category="ping_critical_errors")
-                            joinPS = False
-                        else:
-                            if is_share:
-                                type_val = qs.get('type', ['Server'])[0]
-                                deeplink = f"roblox://navigation/share_links?code={code_val}&type={type_val}"
-                            else:
-                                deeplink += f"&linkCode={code_val}"
-                    except Exception as e:
-                        self.logger.webhook("", f"Error parsing private server link: {e}. Falling back to public server.", "red", ping_category="ping_critical_errors")
-                        joinPS = False
-                appManager.openDeeplink(deeplink)
-            elif rejoinMethod == "new tab":
-                webbrowser.open(browserLink, new = 2)
-            elif rejoinMethod == "reload":
-                webbrowser.open(browserLink, new = 2)
-                time.sleep(2)
-                if sys.platform == "darwin":
-                    self.keyboard.keyDown("command")
-                else:
-                    self.keyboard.keyDown("ctrl")
-                self.keyboard.press("r")
-                if sys.platform == "darwin":
-                    self.keyboard.keyUp("command")
-                else:
-                    self.keyboard.keyUp("ctrl")
-            #wait for bss to load
-            #if sprinkler image is found, bss is loaded
-            #max 80s of waiting
+        # Retry each configured private server in failover order, then use a
+        # public server. Skipping one link invalidates only that link, allowing
+        # the next configured backup to begin immediately.
+        attempts = [server for server in privateServerLinks for _ in range(5)]
+        attempts.extend([("public", "")] * (5 if privateServerLinks else 10))
+        firstPublicAttempt = len(privateServerLinks) * 5
+        invalidServerLinks = set()
+        launchedAttempts = 0
+        for i, (serverKey, psLink) in enumerate(attempts):
+            joinPS = bool(psLink)
+            if joinPS and psLink in invalidServerLinks:
+                continue
+            if self.skipServer is not None:
+                # -1 advertises that /skipserver can currently be used; 1 is
+                # the one-shot request written by the Discord bot process.
+                self.skipServer.value = -1 if joinPS else 0
+            launchedAttempts += 1
+            if serverKey != "public":
+                serverName = "primary private server" if serverKey == "private_server_link" else serverKey.replace("_", " ")
+                self.logger.webhook("", f"Rejoin attempt {launchedAttempts}/{len(attempts)}: {serverName}", "dark brown")
+            elif privateServerLinks and i == firstPublicAttempt:
+                self.logger.webhook("", "Private-server reconnects failed; falling back to a public server", "red", "screen", ping_category="ping_disconnects")
+            
+            # A Roblox deeplink can teleport an already-running client and
+            # launches the client itself when Roblox is not open. Keeping
+            # the process alive avoids a full restart on every rejoin.
+            deeplink = f"roblox://placeID={placeId}"
+            if joinPS:
+                deeplink = self._privateServerDeeplink(placeId, psLink)
+                if not deeplink:
+                    if self.skipServer is not None:
+                        self.skipServer.value = 0
+                    invalidServerLinks.add(psLink)
+                    self.logger.webhook("", f"Invalid {serverKey.replace('_', ' ')}; trying the next server.", "red", "screen", ping_category="ping_critical_errors")
+                    continue
+            # If the client is already in Bee Swarm, the sprinkler UI can still
+            # be visible while the deeplink teleport finishes. Accepting that
+            # immediately starts the spawn→hive walk too early (inputs are
+            # ignored), so hive claiming falls through to pad alignment as if
+            # it were already on slot 1.
+            clientAlreadyOpen = appManager.isAppOpen("roblox")
+            appManager.openDeeplink(deeplink)
+            # The sprinkler prompt is Fuzzy's established indicator that the
+            # joined Bee Swarm session is ready for macro inputs.
             sprinklerImg = self.adjustImage("./images/menu", "sprinkler")
             loadStartTime = time.time()
+            # A deeplink is asynchronous, so ignore the old join-error dialog
+            # briefly while Roblox starts processing this new request.
+            joinErrorScanAfter = loadStartTime + 5
             signUpImage = self.adjustImage("./images/menu", "signup")
-            robloxHomeImage = self.adjustImage("./images/menu", "robloxhome")
+            disconnectImage = self.adjustImage("./images/menu", "disconnect")
             # prepare rejoin color-based detection
             try:
                 sample_colors = get_sample_colors()
@@ -2553,25 +4038,107 @@ class macro:
             sustained_start = 0
             rejoinSuccess = True
             robloxOpenTime = 0
-            while not locateImageOnScreen(sprinklerImg, self.robloxWindow.mx, self.robloxWindow.my+(self.robloxWindow.mh*3/4), self.robloxWindow.mw, self.robloxWindow.mh*1/4, 0.75) and time.time() - loadStartTime < 240:
+            gameLoaded = False
+            lastJoinErrorScan = 0
+            # Cold starts have no prior sprinkler. In-game deeplink retries must
+            # see it disappear (loading) before the post-rejoin appearance counts.
+            sawSprinklerGap = not clientAlreadyOpen
+            softRejoinReadyAt = loadStartTime + (2 if clientAlreadyOpen else 0)
+            while time.time() - loadStartTime < 36:
+                if joinPS and self.skipServer is not None and self.skipServer.value == 1:
+                    self.skipServer.value = 0
+                    invalidServerLinks.add(psLink)
+                    self.logger.webhook("", "Private-server join skipped by Discord command; trying the next configured server", "orange")
+                    rejoinSuccess = False
+                    break
+                # Roblox can recreate its window during launch, so refresh bounds
+                # before every round of visual checks.
                 if appManager.isAppOpen("roblox"):
-                    robloxOpenTime = time.time()
-                if self.setdat["rejoin_method"] == "deeplink":
-                    #check if the user is stuck on the sign up screen
-                    if robloxOpenTime and locateImageOnScreen(signUpImage, self.robloxWindow.mx+(self.robloxWindow.mw/4), self.robloxWindow.my+(self.robloxWindow.mh/3), self.robloxWindow.mw/2, self.robloxWindow.mh*2/3, 0.7):
-                        self.logger.webhook("","Not logged into the roblox app. Rejoining via the browser. For a smoother experience, please ensure you are logged into the Roblox app beforehand.","red","screen", ping_category="ping_disconnects")
-                        self.setdat["rejoin_method"] = "new tab"
-                        continue
-                    #check if home page is opened instead of the app
-                    # if locateImageOnScreen(robloxHomeImage, self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw/10, self.robloxWindow.mh/6, 0.7) and time.time() - loadStartTime > 10:
-                    if robloxOpenTime and time.time() - robloxOpenTime > 5:
-                        robloxScreen = mssScreenshot(self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw/2, self.robloxWindow.mh/2.5)
-                        robloxScreenText = '\n'.join([x[1][0].lower() for x in ocr.ocrRead(robloxScreen)])
-                        if "connect" in robloxScreenText:
-                            print(robloxScreenText)
-                            self.logger.webhook("","Roblox Home Page is open","brown","screen")
-                            rejoinSuccess = False
-                            break
+                    if not robloxOpenTime:
+                        robloxOpenTime = time.time()
+                    try:
+                        self.setRobloxWindowInfo(setYOffset=False)
+                    except Exception:
+                        pass
+                else:
+                    robloxOpenTime = 0
+                if (
+                    robloxOpenTime
+                    and time.time() >= joinErrorScanAfter
+                    and time.time() - lastJoinErrorScan >= 2
+                ):
+                    lastJoinErrorScan = time.time()
+                    try:
+                        joinError = self._detectJoinError()
+                    except Exception:
+                        joinError = None
+                    if joinError:
+                        code = joinError["code"] or "unknown"
+                        action = joinError["action"]
+                        if action == "fallback" and joinPS:
+                            invalidServerLinks.add(psLink)
+                            nextStep = "trying the next configured server"
+                        elif action == "cooldown":
+                            nextStep = "waiting 30 seconds before retrying"
+                        elif action == "abort":
+                            nextStep = "stopping rejoin attempts"
+                        else:
+                            nextStep = "retrying the connection"
+                        self.logger.webhook(
+                            f"Join error {code}",
+                            f"Detected {joinError['reason']}; {nextStep}.",
+                            "red",
+                            "screen",
+                            ping_category="ping_disconnects",
+                        )
+                        mouse.mouseUp()
+                        keyboard.releaseMovement()
+                        if action == "abort":
+                            if self.skipServer is not None:
+                                self.skipServer.value = 0
+                            self.clear_task_status()
+                            return False
+                        if action == "cooldown":
+                            time.sleep(30)
+                        rejoinSuccess = False
+                        break
+                sprinklerVisible = bool(locateImageOnScreen(
+                    sprinklerImg,
+                    self.robloxWindow.mx,
+                    self.robloxWindow.my + (self.robloxWindow.mh * 3 / 4),
+                    self.robloxWindow.mw,
+                    self.robloxWindow.mh / 4,
+                    0.75,
+                ))
+                if clientAlreadyOpen and not sprinklerVisible:
+                    sawSprinklerGap = True
+                if sprinklerVisible and (
+                    sawSprinklerGap
+                    # Soft rejoins sometimes keep the hotbar visible; once the
+                    # teleport has had time to finish, walk from spawn again.
+                    or time.time() >= softRejoinReadyAt
+                ):
+                    gameLoaded = True
+                    break
+                # Check if the user is stuck on the sign-up screen. Rejoining
+                # always uses the Roblox app deeplink, so prompt them to sign in.
+                if robloxOpenTime and locateImageOnScreen(signUpImage, self.robloxWindow.mx+(self.robloxWindow.mw/4), self.robloxWindow.my+(self.robloxWindow.mh/3), self.robloxWindow.mw/2, self.robloxWindow.mh*2/3, 0.7):
+                    self.logger.webhook("", "Not logged into the Roblox app. Please sign in to continue rejoining via deeplink.", "red", "screen", ping_category="ping_disconnects")
+                    rejoinSuccess = False
+                    break
+                if robloxOpenTime and time.time() - robloxOpenTime > 5:
+                    robloxScreen = mssScreenshot(self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw/2, self.robloxWindow.mh/2.5)
+                    robloxScreenText = '\n'.join([x[1][0].lower() for x in ocr.ocrRead(robloxScreen)])
+                    if "connect" in robloxScreenText:
+                        print(robloxScreenText)
+                        self.logger.webhook("","Roblox Home Page is open","brown","screen")
+                        rejoinSuccess = False
+                        break
+
+                if locateImageOnScreen(disconnectImage, self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw, self.robloxWindow.mh, 0.75):
+                    self.logger.webhook("", "Roblox disconnected while loading; retrying rejoin", "dark brown", "screen")
+                    rejoinSuccess = False
+                    break
 
                 # Check for sustained dominant color (light/dark) that indicates a stuck screen.
                 try:
@@ -2595,255 +4162,90 @@ class macro:
                         sustained_start = 0
                 except Exception:
                     sustained_start = 0
+                time.sleep(1)
 
-                    self.setRobloxWindowInfo(setYOffset=False)
+            if self.skipServer is not None:
+                self.skipServer.value = 0
 
-            appManager.openApp("Roblox")
+            if not gameLoaded and rejoinSuccess:
+                self.logger.webhook(
+                    "",
+                    f"Game load was not confirmed within 36 seconds; trying the next rejoin target ({launchedAttempts}/{len(attempts)}).",
+                    "red",
+                    "screen",
+                    ping_category="ping_disconnects",
+                )
+                rejoinSuccess = False
             if not rejoinSuccess:
                 continue
-            #run fullscreen check
-            # if self.isFullScreen(): #check if roblox can be found in menu bar
-            #     self.logger.webhook("","Roblox is already in fullscreen, not activating fullscreen", "dark brown")
-            # else:
-            #     self.logger.webhook("","Roblox is not in fullscreen, activating fullscreen", "dark brown")
-            #     self.toggleFullScreen()
+            appManager.openApp("Roblox")
+            # Match the normal-join path: detect the content offset after the
+            # client has loaded, then only toggle fullscreen when that offset
+            # shows Roblox is not already fullscreen.
+            self.setRobloxWindowInfo(setYOffset=True)
 
-            #if use browser to rejoin, close the browser
-            if self.setdat["rejoin_method"] != "deeplink":
-                time.sleep(2)
-                webbrowser.open("https://docs.python.org/3/library/webbrowser.html", autoraise=True)
-                time.sleep(0.5)
-                for _ in range(2):
-                    if sys.platform == "darwin":
-                        self.keyboard.keyDown("command")
-                    else:
-                        self.keyboard.keyDown("ctrl")
-                    self.keyboard.press("w")
-                    if sys.platform == "darwin":
-                        self.keyboard.keyUp("command")
-                    else:
-                        self.keyboard.keyUp("ctrl")
-                    time.sleep(0.5)
-                appManager.openApp("Roblox")
-            
             self.startDetect()
             if not claimHive:
-                time.sleep(7) #wait for the joined friend popup to disappear
                 mouse.click()
                 self.canDetectNight = True
                 self.clear_task_status()
                 return True
-            #find hive
-            time.sleep(7) #wait for the joined friend popup to disappear
+            # Every successful join lands at spawn. Always walk the hive route
+            # from there — do not treat the player as already on a hive pad.
+            self.location = "spawn"
             mouse.click()
-            # self.keyboard.press("space")
-            # time.sleep(0.5)
-            # self.keyboard.walk("w",5+(i*0.5),0)
-            # self.keyboard.walk("s",0.3,0)
-            # self.keyboard.walk("d",5,0)
-            # self.keyboard.walk("s",0.3,0)
-            hiveNumber = self.setdat["hive_number"]
-            excludedHiveSlotsRaw = self.setdat.get("hive_exclude_slot", [])
-            if not isinstance(excludedHiveSlotsRaw, (list, tuple, set)):
-                excludedHiveSlotsRaw = [] if excludedHiveSlotsRaw in (None, "", 0, "0") else [excludedHiveSlotsRaw]
-            excludedHiveSlots = set()
-            for slot in excludedHiveSlotsRaw:
-                try:
-                    slotNumber = int(slot)
-                except (TypeError, ValueError):
-                    continue
-                if 1 <= slotNumber <= 6:
-                    excludedHiveSlots.add(slotNumber)
-            rejoinSuccess = False
-            claimFirstAvailableHive = self.setdat.get("claim_first_available_hive", True)
-            claimFirstAvailableHive = claimFirstAvailableHive is not False
-            availableSlots = [] #store hive slots that are claimable when not claiming the first available hive
-            newHiveNumber = 0
-            hiveAlreadyClaimed = False
-        
-            # self.keyboard.keyDown("d", False)
-            # self.keyboard.tileWait(4)
-            # self.keyboard.keyDown("w", False)
-            # self.keyboard.tileWait(20)
-            # self.keyboard.keyUp("d", False)
-            # self.keyboard.keyUp("w", False)
+            time.sleep(0.35)
             self.setRobloxWindowInfo()
-            self.keyboard.keyDown("d", False)
-            self.keyboard.timeWaitNoHasteCompensation(0.548)
-            self.keyboard.keyDown("w", False)
-            self.keyboard.timeWaitNoHasteCompensation(2.9)
-            self.keyboard.keyUp("d", False)
-            self.keyboard.keyUp("w", False)
-            for _ in range(3):
-                time.sleep(0.4)
-                if self.isBesideE(["claim", "hive", "send", "trad", "has"]):
-                    break
-                self.stepBackOntoHivePad()
+            preferredHiveSlot = self.setdat.get("preferred_hive_slot", 1)
+            try:
+                preferredHiveSlot = max(1, min(6, int(preferredHiveSlot)))
+            except (TypeError, ValueError):
+                preferredHiveSlot = 1
 
-            def isHiveAvailable():
-                return self.isBesideE(["claim", "hive"], ["send", "trade"], log=True)
+            hiveClaimMethod = str(self.setdat.get("hive_claim_method", "check") or "check").strip().lower()
+            if hiveClaimMethod not in ("check", "detect"):
+                hiveClaimMethod = "check"
 
-            def isOtherHive():
-                return self.isBesideE(["send", "trad", "trade"], ["claim"], log=True)
+            excludedHiveSlots = set()
+            if joinPS:
+                excludedHiveSlotsRaw = self.setdat.get("hive_exclude_slot", [])
+                if not isinstance(excludedHiveSlotsRaw, (list, tuple, set)):
+                    excludedHiveSlotsRaw = [] if excludedHiveSlotsRaw in (None, "", 0, "0") else [excludedHiveSlotsRaw]
+                for slot in excludedHiveSlotsRaw:
+                    try:
+                        slot = int(slot)
+                    except (TypeError, ValueError):
+                        continue
+                    if 1 <= slot <= 6:
+                        excludedHiveSlots.add(slot)
 
-            def isExcludedSlot(slot):
-                return slot in excludedHiveSlots
+                # The preferred slot always takes priority over private-server
+                # exclusions.
+                excludedHiveSlots.discard(preferredHiveSlot)
 
-            def settleOnHivePad():
-                if not (
-                    self.isMakeHoneyPrompt(log=True)
-                    or self.isBesideE(["claim", "hive", "send", "trad", "trade", "has"], log=True)
-                ):
-                    self.stepBackOntoHivePad()
-
-            def boundedHiveSlot(slot):
-                return max(1, min(6, int(slot)))
-
-            currentHiveSlot = 1
-
-            def moveToHiveSlot(targetSlot):
-                nonlocal currentHiveSlot
-                targetSlot = boundedHiveSlot(targetSlot)
-                slotDelta = targetSlot - currentHiveSlot
-                if slotDelta > 0:
-                    self.walkHiveSlots("a", slotDelta)
-                elif slotDelta < 0:
-                    self.walkHiveSlots("d", abs(slotDelta))
-                currentHiveSlot = targetSlot
-                time.sleep(0.4)
-                settleOnHivePad()
-
-            hiveNumber = boundedHiveSlot(hiveNumber)
-
-            # Go directly to the selected hive first. If that fails, scan all hives as a fallback.
-            self.logger.webhook("", f'Claiming hive {hiveNumber}', "dark brown")
-            # Move directly to the selected hive (slot 1 is nearest cannon)
-            moveToHiveSlot(hiveNumber)
-            # Check selected hive first
-            if isExcludedSlot(hiveNumber):
-                self.logger.webhook("", f'Hive {hiveNumber} is excluded, scanning other hives', 'dark brown', "screen")
-            elif self.isMakeHoneyPrompt(log=True):
-                newHiveNumber = hiveNumber
-                rejoinSuccess = True
-                hiveAlreadyClaimed = True
-            elif isHiveAvailable():
-                newHiveNumber = hiveNumber
-                rejoinSuccess = True
+            # check: walk spawn→preferred hive, then scan pads if taken.
+            # detect: pitch up / zoom out, read open pads from spawn, then walk there.
+            if hiveClaimMethod == "detect":
+                newHiveNumber = self.claimHiveByDetectMethod(preferredHiveSlot, excludedHiveSlots)
             else:
-                # Selected hive unavailable — fallback to scanning all hive slots.
-                if isOtherHive():
-                    self.logger.webhook("", f'Hive {hiveNumber} belongs to another player, scanning hives for your slot','dark brown', "screen")
-                else:
-                    self.logger.webhook("", f'Hive {hiveNumber} is already claimed, scanning all hives','dark brown', "screen")
-                # Scan once and optionally use the first claimable slot reached.
-                forwardScanSlots = list(range(hiveNumber + 1, 7))
-                wrapScanSlots = list(range(1, hiveNumber))
-                for j in forwardScanSlots:
-                    moveToHiveSlot(j)
-                    if self.isMakeHoneyPrompt(log=True):
-                        newHiveNumber = j
-                        rejoinSuccess = True
-                        hiveAlreadyClaimed = True
-                        break
-                    if not isExcludedSlot(j) and isHiveAvailable():
-                        if claimFirstAvailableHive:
-                            newHiveNumber = j
-                            rejoinSuccess = True
-                            break
-                        availableSlots.append(j)
+                newHiveNumber = self.claimHiveByCheckMethod(preferredHiveSlot, excludedHiveSlots)
 
-                for j in wrapScanSlots:
-                    if rejoinSuccess:
-                        break
-                    moveToHiveSlot(j)
-                    if self.isMakeHoneyPrompt(log=True):
-                        newHiveNumber = j
-                        rejoinSuccess = True
-                        hiveAlreadyClaimed = True
-                        break
-                    if not isExcludedSlot(j) and isHiveAvailable():
-                        if claimFirstAvailableHive:
-                            newHiveNumber = j
-                            rejoinSuccess = True
-                            break
-                        availableSlots.append(j)
+            if not newHiveNumber:
+                self.logger.webhook("", f"Failed to claim hive ({hiveClaimMethod}); retrying rejoin", "dark brown", "screen")
+                continue
 
-                # If immediate claiming is disabled, preserve the old nearest-open-slot behavior.
-                if not rejoinSuccess and availableSlots:
-                    newHiveNumber = min(availableSlots, key=lambda slot: abs(slot - currentHiveSlot))
-                    moveToHiveSlot(newHiveNumber)
-                    rejoinSuccess = True
-
-            # #find the hive in hive number
-            # self.logger.webhook("",f'Claiming hive {hiveNumber} (guessing hive location)', "dark brown")
-            # steps = round(hiveNumber*2.5) if hiveNumber != 1 else 0
-            # for _ in range(steps):
-            #     self.keyboard.walk("a",0.4, 0)
-
-            # def findHive():
-            #     self.keyboard.walk("a",0.4)
-            #     #$time.sleep(0.15)
-            #     if self.isBesideEImage("claimhive"):
-            #         #check for overrun
-            #         for _ in range(7):
-            #             time.sleep(0.4)
-            #             if self.isBesideEImage("claimhive"): break
-            #             self.keyboard.walk("d",0.2)
-            #         self.keyboard.press("e")
-            #         return True
-            #     return False
-            
-            # for _ in range(3):
-            #     if findHive():
-            #         self.logger.webhook("",f'Claimed hive {hiveNumber}', "bright green", "screen")
-            #         rejoinSuccess = True
-            #         break 
-            # #find a new hive
-            # else:
-            #     self.logger.webhook("",f'Hive {hiveNumber} is already claimed, finding new hive','dark brown', "screen")
-            #     #walk closer to the hives so the player wont walk up the ramp
-            #     self.keyboard.walk("w",0.3,0)
-            #     self.keyboard.walk("d",0.9*(hiveNumber)+2,0)
-            #     self.keyboard.walk("s",0.3,0)
-            #     for j in range(40):
-
-            #         if findHive():
-            #             guessedSlot = max(1,min(6, round(j//2.5)))
-            #             hiveClaim = guessedSlot
-            #             #if 3 < guessedSlot < 6:
-            #                 #hiveClaim += 1
-            #             self.logger.webhook("",f"Claimed hive {hiveClaim}", "bright green", "screen")
-            #             rejoinSuccess = True
-            #             self.setdat["hive_number"] = hiveClaim
-            #             break
-            #claim hive and convert
-            if rejoinSuccess:
-                claimedHive = False
-                if hiveAlreadyClaimed:
-                    claimedHive = True
-                elif isHiveAvailable():
-                    self.keyboard.press("e")
-                    for _ in range(6):
-                        time.sleep(0.5)
-                        if self.isMakeHoneyPrompt(log=True):
-                            claimedHive = True
-                            break
-                if not claimedHive:
-                    self.logger.webhook("",f'Claimed hive {newHiveNumber} prompt not detected; retrying rejoin','dark brown', "screen")
-                    continue
-                self.logger.webhook("",f'Claimed hive {newHiveNumber}', "bright green", "screen", ping_category="ping_critical_errors")
-                self.setdat["hive_number"] = newHiveNumber
-                settingsManager.saveGeneralSetting("hive_number", newHiveNumber)
-                for _ in range(8):
-                    self.keyboard.press("o")
-                self.moveMouseToDefault()
-                time.sleep(1)
-                self.convert(bypass=True)
-                #no need to reset
-                self.canDetectNight = True
-                self.clear_task_status()
-                return True
-            self.logger.webhook("",f'Rejoin unsuccessful, attempt {i+2}','dark brown', "screen")
+            self.logger.webhook("", f"Claimed hive {newHiveNumber}", "bright green", "screen", ping_category="ping_critical_errors")
+            self.setdat["hive_number"] = newHiveNumber
+            settingsManager.saveGeneralSetting("hive_number", newHiveNumber)
+            for _ in range(8):
+                self.keyboard.press("o")
+            self.moveMouseToDefault()
+            time.sleep(1)
+            self.convert(bypass=True)
+            self.cannonFromHive = True
+            self.canDetectNight = True
+            self.clear_task_status()
+            return True
         self.clear_task_status()
         return False
     
@@ -2861,7 +4263,7 @@ class macro:
             self.died = True
 
     def gatherBackground(self):
-        field = self.status.value.split("_")[1]
+        field = self.get_task_status().get("field") or self.location
         while self.isGathering:
             self.gatherBackgroundOnce(field)
             time.sleep(1)
@@ -2881,9 +4283,23 @@ class macro:
         # Normalize field name to handle both space and underscore formats
         # Convert underscores to spaces for fieldSettings lookup
         normalized_field = field.replace('_', ' ')
+        altMode = self.setdat.get("macro_mode", "normal") == "alt"
         isHiveHubField = normalized_field == "hive hub"
         fieldSetting = {**self.fieldSettings[normalized_field], **settingsOverride}
+        isSproutGather = not altMode and bool(fieldSetting.get("plant_sprout", False))
+        skipTravel = bool(fieldSetting.get("skip_travel", False)) and self.location == normalized_field and not isHiveHubField
+        pattern = fieldSetting['shape']
+        aiPatternLabels = {
+            "fuzzy_ai_gather": "Fuzzy AI Gather",
+            "blooms_ai": "BloomsAI",
+        }
+        aiPatternStateKeys = {
+            "fuzzy_ai_gather": ("_FUZZY_AI_GATHER_STATE", "_fuzzy_ai_gather_state"),
+            "blooms_ai": ("_BLOOMS_AI_STATE", "_blooms_ai_state"),
+        }
         def shouldUseHoneyWreathReturn():
+            if altMode:
+                return False
             if not self.setdat.get("wreath", False):
                 return False
 
@@ -2906,40 +4322,111 @@ class macro:
                 backpack = self.getBackpack()
             return backpack >= fieldSetting["backpack"]
 
-        for i in range(3):
-            self.waitForBees()
-            #go to field
+        preloadedAIGatherNameSpace = None
+        if pattern == "fuzzy_ai_gather":
             try:
-                self.set_task_status(f"travelling_{field}", activity="travelling", field=field)
+                fuzzyAIRuntimeDefaults = settingsManager.FUZZY_AI_RUNTIME_DEFAULTS
+                pattern_ai_gather_model = str(fieldSetting.get("ai_gather_model", self.setdat.get("ai_gather_model", "Standard")))
+                fuzzyAITokenRanking = settingsManager.loadFuzzyAITokenRanking(field, pattern_ai_gather_model)
+                pattern_capture_backend = fuzzyAIRuntimeDefaults["fuzzy_ai_capture_backend"]
+                pattern_confidence_threshold = fuzzyAIRuntimeDefaults["fuzzy_ai_confidence_threshold"]
+                pattern_sprinkler_confidence_threshold = fuzzyAIRuntimeDefaults["fuzzy_ai_sprinkler_confidence_threshold"]
+                pattern_min_token_distance = fuzzyAIRuntimeDefaults["fuzzy_ai_min_token_distance"]
+                pattern_idle_return_interval = fuzzyAIRuntimeDefaults["fuzzy_ai_idle_return_interval"]
+                pattern_no_token_recalibration_timeout = fuzzyAIRuntimeDefaults["fuzzy_ai_no_token_recalibration_timeout"]
+                pattern_movements_before_recalibration = fuzzyAIRuntimeDefaults["fuzzy_ai_movements_before_recalibration"]
+                pattern_sprinkler_arrival_threshold = fuzzyAIRuntimeDefaults["fuzzy_ai_sprinkler_arrival_threshold"]
+                pattern_max_sprinkler_distance = fuzzyAIRuntimeDefaults["fuzzy_ai_max_sprinkler_distance"]
+                pattern_sprinkler_rescan_attempts = fuzzyAIRuntimeDefaults["fuzzy_ai_sprinkler_rescan_attempts"]
+                pattern_sprinkler_rescan_delay = fuzzyAIRuntimeDefaults["fuzzy_ai_sprinkler_rescan_delay"]
+                pattern_debug_mode = fuzzyAIRuntimeDefaults["fuzzy_ai_debug_mode"]
+                pattern_record_video = fuzzyAIRuntimeDefaults["fuzzy_ai_record_video"]
+                pattern_record_video_fps = fuzzyAIRuntimeDefaults["fuzzy_ai_record_video_fps"]
+                pattern_ai_gather_model_file = str(fieldSetting.get("ai_gather_model_file", ""))
+                pattern_field_drift_compensation = bool(fieldSetting.get("field_drift_compensation", False))
+                pattern_use_sprinkler_model_for_drift_compensation = bool(
+                    self.setdat.get("use_sprinkler_model_for_drift_compensation", False)
+                )
+                sprinklerLabelMap = {
+                    "basic": "Sprinkler",
+                    "silver": "Sprinkler",
+                    "golden": "Sprinkler",
+                    "gold": "Sprinkler",
+                    "diamond": "Sprinkler",
+                    "saturator": "Supreme",
+                    "supreme": "Supreme",
+                }
+                pattern_target_sprinkler_label = sprinklerLabelMap.get(
+                    str(self.setdat.get("sprinkler_type", "")).strip().lower(),
+                    "",
+                )
+                pattern_preferred_tokens = fieldSetting.get("fuzzy_ai_preferred_tokens", fuzzyAITokenRanking.get("preferred_tokens", ""))
+                pattern_ignored_tokens = fieldSetting.get("fuzzy_ai_ignored_tokens", fuzzyAITokenRanking.get("ignored_tokens", ""))
+                pattern_sprout_idle_square = isSproutGather
+                sizeData = {
+                    "xs": 0.25,
+                    "s": 0.5,
+                    "m": 1,
+                    "l": 1.5,
+                    "xl": 2
+                }
+                sizeword = fieldSetting["size"]
+                size = sizeData[sizeword]
+                width = fieldSetting["width"]
+                pattern_ai_warmup_only = True
+                if isSproutGather and pattern == "fuzzy_ai_gather":
+                    self._fuzzy_ai_gather_state = {}
+                preloadedAIGatherNameSpace = {**locals(), **globals()}
+                with open(f"../settings/patterns/{pattern}.py") as patternFile:
+                    exec(patternFile.read(), preloadedAIGatherNameSpace)
             except Exception:
-                pass
-            if not isHiveHubField:
-                self.cannon()
-            self.logger.webhook("",f"Travelling: {field.title()}, Attempt {i+1}", "dark brown")
-            self.goToField(field)
-            if isHiveHubField:
-                break
-            #go to start location (match natro's)
-            startLocation = fieldSetting["start_location"]
-            moveSpeedFactor = 18/self.setdat["movespeed"]
-            flen, fwid = [x*fieldSetting["distance"]/10 for x in startLocationDimensions[normalized_field]]
-            if "upper" in startLocation or "top" in startLocation:
-                self.sleepMSMove("w", flen*moveSpeedFactor)
-            elif "lower" in startLocation or "bottom" in startLocation:
-                 self.sleepMSMove("s", flen*moveSpeedFactor)
+                print(traceback.format_exc())
 
-            if "left" in startLocation:
-                 self.sleepMSMove("a", fwid*moveSpeedFactor)
-            elif "right" in startLocation:
-                 self.sleepMSMove("d", fwid*moveSpeedFactor)
+        landedInField = False
+        if skipTravel:
+            landedInField = True
+            self.logger.webhook("Sprouts", f"Planting next sprout from current position in {field.title()}", "light blue", "screen", route_category="activities")
+        else:
+            for i in range(3):
+                self.waitForBees()
+                #go to field
+                try:
+                    self.set_task_status(f"travelling_{field}", activity="travelling", field=field)
+                except Exception:
+                    pass
+                if not isHiveHubField:
+                    if not self.travelViaCannon("Gathering", resetIfAway=False):
+                        return
+                self.logger.webhook("",f"Travelling: {field.title()}, Attempt {i+1}", "dark brown")
+                self.goToField(
+                    field,
+                    startLocation=fieldSetting.get("start_location", "center"),
+                )
+                if isHiveHubField:
+                    landedInField = True
+                    break
+                #go to start location (match natro's)
+                startLocation = fieldSetting["start_location"]
+                moveSpeedFactor = 18/self.setdat["movespeed"]
+                flen, fwid = [x*fieldSetting["distance"]/10 for x in startLocationDimensions[normalized_field]]
+                if "upper" in startLocation or "top" in startLocation:
+                    self.sleepMSMove("w", flen*moveSpeedFactor)
+                elif "lower" in startLocation or "bottom" in startLocation:
+                     self.sleepMSMove("s", flen*moveSpeedFactor)
 
-            time.sleep(0.4)
-            #place sprinkler + check if in field
-            if self.placeSprinkler(): 
-                break
-            self.logger.webhook("", f"Failed to land in field", "red", "screen", ping_category="ping_critical_errors")
-            self.reset()
-        else: #failed too many times
+                if "left" in startLocation:
+                     self.sleepMSMove("a", fwid*moveSpeedFactor)
+                elif "right" in startLocation:
+                     self.sleepMSMove("d", fwid*moveSpeedFactor)
+
+                time.sleep(0.4)
+                #place sprinkler + check if in field
+                if self.placeSprinkler():
+                    landedInField = True
+                    break
+                self.logger.webhook("", f"Failed to land in field", "red", "screen", ping_category="ping_critical_errors")
+                self.reset()
+        if not landedInField: #failed too many times
             return
         pattern = fieldSetting['shape']
         #rotate camera
@@ -2949,15 +4436,32 @@ class macro:
         elif fieldSetting["turn"] == "right":
             for _ in range(fieldSetting["turn_times"]):
                 self.keyboard.press(".")
-        aiPatternLabels = {
-            "fuzzy_ai_gather": "Fuzzy AI Gather",
-            "blooms_ai": "BloomsAI",
-        }
-        aiPatternStateKeys = {
-            "fuzzy_ai_gather": ("_FUZZY_AI_GATHER_STATE", "_fuzzy_ai_gather_state"),
-            "blooms_ai": ("_BLOOMS_AI_STATE", "_blooms_ai_state"),
-        }
-        if pattern in aiPatternLabels:
+        try:
+            startingPatternYaw = int(fieldSetting.get("turn_times", 0) or 0)
+        except (TypeError, ValueError):
+            startingPatternYaw = 0
+        if fieldSetting.get("turn") == "left":
+            startingPatternYaw *= -1
+        elif fieldSetting.get("turn") != "right":
+            startingPatternYaw = 0
+        patternYawApplied = False
+
+        def setPatternYaw(targetYaw):
+            """Set a pattern's yaw once, relative to this gather's start."""
+            nonlocal patternYawApplied
+            if patternYawApplied:
+                return
+            try:
+                targetYaw = int(targetYaw)
+            except (TypeError, ValueError):
+                return
+            targetYaw = max(-8, min(8, targetYaw))
+            delta = targetYaw - startingPatternYaw
+            rotationKey = "." if delta > 0 else ","
+            for _ in range(abs(delta)):
+                self.keyboard.press(rotationKey)
+            patternYawApplied = True
+        def configureAIGatherCamera():
             for _ in range(11):
                 self.keyboard.keyDown("pageup", False)
                 sleep(0.01)
@@ -2968,6 +4472,62 @@ class macro:
                 sleep(0.01)
                 self.keyboard.keyUp("pagedown", False)
                 sleep(0.01)
+
+        aiCameraConfigured = False
+        if pattern in aiPatternLabels:
+            configureAIGatherCamera()
+            aiCameraConfigured = True
+        sproutFinalLootStart = None
+        sproutFinalLootSeconds = self._sproutFinalLootSeconds()
+        sproutLimitLogged = False
+        lastSproutPlantAttempt = 0
+        currentSproutRarity = None
+        sproutCompletionMessageSeen = False
+        sproutBeansUsedThisGather = 0
+        try:
+            sproutGatherBeanLimit = max(1, min(500, int(fieldSetting.get("sprout_max_beans_per_gather", self._sproutGatherBeanLimit()) or 500)))
+        except Exception:
+            sproutGatherBeanLimit = self._sproutGatherBeanLimit()
+        def plantSproutBean():
+            nonlocal lastSproutPlantAttempt, currentSproutRarity, sproutCompletionMessageSeen, sproutBeansUsedThisGather
+            sproutSlot = str(fieldSetting.get("sprout_magic_bean_slot", self.setdat.get("sprouts_magic_bean_slot", 1)))
+            if sproutBeansUsedThisGather >= sproutGatherBeanLimit:
+                return "gather_limit"
+            if not self.canUseSproutBeanSlot(sproutSlot):
+                return "limit"
+            lastSproutPlantAttempt = time.time()
+            previousSproutRarity = currentSproutRarity
+            currentSproutRarity = None
+            sproutCompletionMessageSeen = False
+            self.logger.webhook("Sprouts", f"Planting sprout in {field.title()} ({self.sproutBeansUsed + 1}/{self._sproutBeanLimit()})", "light blue", "screen", route_category="activities")
+            self.keyboard.press(sproutSlot)
+            self.markSproutBeanUsed()
+            sproutBeansUsedThisGather += 1
+            time.sleep(0.6)
+            for _ in range(5):
+                sproutInfo = self.blueSproutMessageInfo()
+                if sproutInfo and sproutInfo.get("rarity"):
+                    currentSproutRarity = sproutInfo["rarity"]
+                if sproutInfo and "already" in sproutInfo.get("text", "") and "field" in sproutInfo.get("text", ""):
+                    self.unmarkSproutBeanUsed()
+                    sproutBeansUsedThisGather = max(0, sproutBeansUsedThisGather - 1)
+                    currentSproutRarity = previousSproutRarity
+                    self.logger.webhook("Sprouts", "A sprout is already in this field; Magic Bean use was not counted. Continuing to collect.", "orange", "screen", route_category="activities")
+                    return "already"
+                time.sleep(0.4)
+            return "planted"
+
+        if not altMode and fieldSetting.get("plant_sprout", False):
+            self.ensure_shift_lock_off("sprouts")
+            if pattern in aiPatternLabels and not aiCameraConfigured:
+                configureAIGatherCamera()
+            initialSproutPlantResult = plantSproutBean()
+            if initialSproutPlantResult == "limit":
+                self.logger.webhook("", "Sprout bean limit reached before planting", "orange", route_category="activities")
+                return
+            if initialSproutPlantResult == "gather_limit":
+                self.logger.webhook("", "Sprout gather limit reached before planting", "orange", route_category="activities")
+                return
         #key variables
         #check invert L/R and invert B/R
         fwdkey = "w"
@@ -3002,12 +4562,14 @@ class macro:
         sizeword = fieldSetting["size"]
         size = sizeData[sizeword]
         width = fieldSetting["width"]
-        infiniteGather = bool(fieldSetting.get("infinite_gather", False))
+        infiniteGather = altMode or bool(fieldSetting.get("infinite_gather", False))
         maxGatherTime = fieldSetting["mins"]*60
         gatherTimeLimit = "Infinite" if infiniteGather else self.convertSecsToMinsAndSecs(maxGatherTime)
         returnType = "rejoin" if isHiveHubField else fieldSetting["return"]
         fuzzyAIRuntimeDefaults = settingsManager.FUZZY_AI_RUNTIME_DEFAULTS
-        fuzzyAITokenRanking = settingsManager.loadFuzzyAITokenRanking(field)
+        pattern_blooms_ai_model = str(fieldSetting.get("blooms_ai_model", "Standard"))
+        pattern_ai_gather_model = str(fieldSetting.get("ai_gather_model", self.setdat.get("ai_gather_model", "Standard")))
+        fuzzyAITokenRanking = settingsManager.loadFuzzyAITokenRanking(field, pattern_ai_gather_model)
         pattern_capture_backend = fuzzyAIRuntimeDefaults["fuzzy_ai_capture_backend"]
         pattern_confidence_threshold = fuzzyAIRuntimeDefaults["fuzzy_ai_confidence_threshold"]
         pattern_sprinkler_confidence_threshold = fuzzyAIRuntimeDefaults["fuzzy_ai_sprinkler_confidence_threshold"]
@@ -3022,10 +4584,13 @@ class macro:
         pattern_debug_mode = fuzzyAIRuntimeDefaults["fuzzy_ai_debug_mode"]
         pattern_record_video = fuzzyAIRuntimeDefaults["fuzzy_ai_record_video"]
         pattern_record_video_fps = fuzzyAIRuntimeDefaults["fuzzy_ai_record_video_fps"]
+        pattern_ai_gather_model_file = str(fieldSetting.get("ai_gather_model_file", ""))
         pattern_field_drift_compensation = bool(fieldSetting.get("field_drift_compensation", False))
         pattern_use_sprinkler_model_for_drift_compensation = bool(
             self.setdat.get("use_sprinkler_model_for_drift_compensation", False)
         )
+        pattern_ai_gather_model = str(fieldSetting.get("ai_gather_model", self.setdat.get("ai_gather_model", "Standard")))
+        pattern_ai_gather_model_file = str(fieldSetting.get("ai_gather_model_file", ""))
         sprinklerLabelMap = {
             "basic": "Sprinkler",
             "silver": "Sprinkler",
@@ -3039,18 +4604,76 @@ class macro:
             str(self.setdat.get("sprinkler_type", "")).strip().lower(),
             "",
         )
-        pattern_preferred_tokens = fuzzyAITokenRanking.get("preferred_tokens", "")
-        pattern_ignored_tokens = fuzzyAITokenRanking.get("ignored_tokens", "")
+        pattern_preferred_tokens = fieldSetting.get("fuzzy_ai_preferred_tokens", fuzzyAITokenRanking.get("preferred_tokens", ""))
+        pattern_ignored_tokens = fieldSetting.get("fuzzy_ai_ignored_tokens", fuzzyAITokenRanking.get("ignored_tokens", ""))
+        pattern_sprout_idle_square = isSproutGather
         st = time.time()
         keepGathering = True
         self.died = False
         #time to gather
-        gatherNameSpace = {**locals(), **globals()}
-        self.set_task_status(f"gather_{field}", task="gather", field=field)
+        if preloadedAIGatherNameSpace is not None:
+            preloadedAIGatherNameSpace.update({**locals(), **globals(), "pattern_ai_warmup_only": False})
+            preloadedAIGatherNameSpace["setPatternYaw"] = setPatternYaw
+            gatherNameSpace = preloadedAIGatherNameSpace
+        else:
+            gatherNameSpace = {**locals(), **globals()}
+            gatherNameSpace["setPatternYaw"] = setPatternYaw
+        if isSproutGather:
+            self.set_task_status("collect_sprouts", task="collect", field=field, activity="sprouts")
+        else:
+            self.set_task_status(f"gather_{field}", task="gather", field=field)
+
+        questMenuKeptOpen = False
+        questWatchGiver = None
+        questWatchObjective = None
+        lastQuestProgressCheck = 0
+        if self.setdat.get("quest_progress_watch", False) and not isSproutGather:
+            questWatchers = getattr(self, "questGatherWatchers", {}) or {}
+            watcherCandidates = list(questWatchers.get(normalized_field.lower(), []))
+            if normalized_field.lower() in {"blue flower", "bamboo", "pine tree", "stump"}:
+                watcherCandidates.extend(questWatchers.get("__blue__", []))
+            if normalized_field.lower() in {"mushroom", "strawberry", "rose", "pepper"}:
+                watcherCandidates.extend(questWatchers.get("__red__", []))
+            watcherCandidates.extend(questWatchers.get("__any__", []))
+
+            if watcherCandidates:
+                questWatchGiver, questWatchObjective = watcherCandidates[0]
+                try:
+                    # findQuest opens the menu before scanning. Mark it here so
+                    # an OCR exception still closes the overlay safely.
+                    questMenuKeptOpen = True
+                    visibleObjectives = self.findQuest(
+                        questWatchGiver,
+                        keepQuestMenuOpen=True,
+                        logDetection=False,
+                    )
+                    if visibleObjectives is not None and questWatchObjective in visibleObjectives:
+                        lastQuestProgressCheck = time.time()
+                        self.moveMouseToDefault()
+                        self.logger.webhook(
+                            "Live Quest Progress",
+                            f"Watching {questWatchGiver.title()}: {questWatchObjective.replace('_', ' ').title()}",
+                            "light blue",
+                        )
+                    elif visibleObjectives is not None:
+                        # The menu was deliberately left open by findQuest, but the
+                        # objective is no longer incomplete, so do not watch it.
+                        self.toggleQuest()
+                        self.moveMouseToDefault()
+                        questMenuKeptOpen = False
+                    else:
+                        # findQuest closes the menu itself when it cannot locate
+                        # the requested quest giver.
+                        questMenuKeptOpen = False
+                except Exception:
+                    print(traceback.format_exc())
+                    if questMenuKeptOpen:
+                        self.toggleQuest()
+                        self.moveMouseToDefault()
+                    questMenuKeptOpen = False
+
         self.isGathering = True
         firstPattern = True
-        fuzzyAIInitStartedLogged = False
-        fuzzyAIInitLogged = False
         fuzzyAILastError = ""
         fuzzyAIFallbackLogged = False
         lastGooTime = 0  # Track when goo was last used
@@ -3067,7 +4690,10 @@ class macro:
         # Add goo status to webhook message
         gooStatus = " - Goo Enabled" if fieldSetting.get("goo", False) else ""
         backpackLimitLabel = "Ignored" if infiniteGather else f"{fieldSetting['backpack']}%"
-        self.logger.webhook(f"Gathering: {field.title()}", f"Limit: {gatherTimeLimit} - {fieldSetting['shape']} - Backpack: {backpackLimitLabel}{gooStatus}", "light green")
+        if isSproutGather:
+            self.logger.webhook("Sprouts", f"Collecting drops in {field.title()} with AI Gathering", "light green", route_category="activities")
+        else:
+            self.logger.webhook(f"Gathering: {field.title()}", f"Limit: {gatherTimeLimit} - {fieldSetting['shape']} - Backpack: {backpackLimitLabel}{gooStatus}", "light green", route_category="gathering")
 
         # Goo timer thread: always 3s interval if goo quest, else field setting
         def gooTimerThread():
@@ -3145,37 +4771,44 @@ class macro:
             return now - st - pausedDuration
 
         liveGatherReport = None
-        if (
-            self.setdat.get("enable_webhook", False)
-            and self.setdat.get("live_gather_report", self.setdat.get("live_honey_report", False))
-            and not self.setdat.get("only_send_hourly_report", False)
-        ):
-            liveGatherReport = LiveGatherReport(
-                self.setdat.get("webhook_link", ""),
-                self.robloxWindow,
-                self.setdat.get("live_gather_report_interval", self.setdat.get("live_honey_report_interval", 15)),
-                self.setdat.get("webhook_time_format", 24),
-            )
+        if self.liveGatherReportEnabled() and not isSproutGather:
+            liveGatherReport = self.createLiveGatherReport()
             liveGatherReport.start(field, gatherTimeLimit, getGatherTime, isGatherPaused)
+
+        liveQuestProgressReport = None
+        if questMenuKeptOpen:
+            liveQuestProgressReport = self.createLiveQuestProgressReport()
+            liveQuestProgressReport.start(
+                questWatchGiver,
+                questWatchObjective,
+                getGatherTime,
+                isGatherPaused,
+                activity="Quest Progress",
+            )
         
         def stopGather():
-            nonlocal gooTimerActive, gumdropTimerActive, inactiveHoneyTimerActive
+            nonlocal gooTimerActive, gumdropTimerActive, inactiveHoneyTimerActive, questMenuKeptOpen
             gooTimerActive = False  # Stop the goo timer thread
             gumdropTimerActive = False  # Stop the gumdrop timer thread
             inactiveHoneyTimerActive = False
             if liveGatherReport:
                 liveGatherReport.stop()
+            if liveQuestProgressReport:
+                liveQuestProgressReport.stop()
             if fieldSetting["shift_lock"]: 
                 self.keyboard.press('shift')
+            if questMenuKeptOpen:
+                self.toggleQuest()
+                questMenuKeptOpen = False
             self.moveMouseToDefault()
             self.clear_task_status()
             self.isGathering = False
             if "onGatherEnd" in gatherNameSpace and callable(gatherNameSpace["onGatherEnd"]):
                 gatherNameSpace["onGatherEnd"]()
 
-        if fieldSetting["shift_lock"]: 
-            self.keyboard.press('shift')
-        
+        if fieldSetting["shift_lock"]:
+            self.enableShiftLock()
+
         while keepGathering:
             # Check if paused and wait
             if self.checkPauseAndWait():
@@ -3183,7 +4816,11 @@ class macro:
                 stopGather()
                 return
             
-            self.raiseIfInterrupted()
+            try:
+                self.raiseIfInterrupted()
+            except InterruptRequested:
+                stopGather()
+                raise
             
             # goo and gumdrop timers are now handled by background threads
 
@@ -3195,13 +4832,6 @@ class macro:
             #ensure that the pattern works
             try:
                 aiPatternLabel = aiPatternLabels.get(pattern, "AI Gather")
-                if pattern in aiPatternLabels and not fuzzyAIInitStartedLogged:
-                    self.logger.webhook(
-                        aiPatternLabel,
-                        "Initialization started.",
-                        "light blue",
-                    )
-                    fuzzyAIInitStartedLogged = True
                 exec(open(f"../settings/patterns/{pattern}.py").read(), gatherNameSpace)
                 if pattern in aiPatternLabels:
                     stateGlobalKey, stateAttributeKey = aiPatternStateKeys.get(
@@ -3212,15 +4842,8 @@ class macro:
                     if not isinstance(fuzzy_state, dict):
                         fuzzy_state = getattr(self, stateAttributeKey, {})
                     if isinstance(fuzzy_state, dict) and fuzzy_state.get("ready"):
-                        if not fuzzyAIInitLogged:
-                            self.logger.webhook(
-                                aiPatternLabel,
-                                "Initialization succeeded.",
-                                "bright green",
-                            )
-                            fuzzyAIInitLogged = True
-                            fuzzyAILastError = ""
-                            fuzzyAIFallbackLogged = False
+                        fuzzyAILastError = ""
+                        fuzzyAIFallbackLogged = False
                     else:
                         runtime_error = ""
                         if isinstance(fuzzy_state, dict):
@@ -3259,15 +4882,41 @@ class macro:
                     pattern = "e_lol"
             firstPattern = False
 
-            #field drift compensation
-            if fieldSetting["field_drift_compensation"]:
+            #field drift compensation — AI patterns already manage sprinkler
+            # anchoring / idle patrol themselves, so skip the post-cycle nudge
+            # that would fight a continuous square walk around the sprinkler.
+            if fieldSetting["field_drift_compensation"] and pattern not in aiPatternLabels:
                 self.fieldDriftCompensation.run()
 
             #cycle ends
             mouse.mouseUp()
             #add gather time stat
-            self.hourlyReport.addHourlyStat("gathering_time", time.time()-patternStartTime)
+            if not isSproutGather:
+                self.hourlyReport.addHourlyStat("gathering_time", time.time()-patternStartTime)
             gatherTime = self.convertSecsToMinsAndSecs(getGatherTime())
+
+            if questMenuKeptOpen and time.time() - lastQuestProgressCheck >= 2:
+                lastQuestProgressCheck = time.time()
+                try:
+                    visibleObjectives = self.findQuest(
+                        questWatchGiver,
+                        questScreens=[self.captureQuestWatchScreen()],
+                        logDetection=False,
+                    )
+                    if visibleObjectives is not None and questWatchObjective not in visibleObjectives:
+                        self.logger.webhook(
+                            "Gathering: Ended",
+                            f"{questWatchGiver.title()} objective completed: {questWatchObjective.replace('_', ' ').title()}",
+                            "light green",
+                            "screen",
+                            route_category="gathering",
+                        )
+                        keepGathering = False
+                        continue
+                except Exception:
+                    # A single bad OCR frame should never end a gather. The next
+                    # pattern cycle will try the visible objective again.
+                    print(traceback.format_exc())
 
             #check for AFB
             if inactiveHoneyEvent.is_set():
@@ -3275,23 +4924,77 @@ class macro:
                 self.logger.webhook("Gathering: interrupted", "Inactive Honey Reset (Beta)", "orange", "screen")
                 self.reset()
                 return
-            elif self.setdat["Auto_Field_Boost"] and not self.AFBLIMIT and self.AFB(gatherInterrupt=True, turnOffShiftLock = fieldSetting["shift_lock"]):
+            elif not altMode and fieldSetting.get("plant_sprout", False):
+                sproutGatherLimitReached = sproutBeansUsedThisGather >= sproutGatherBeanLimit
+                sproutSessionLimitReached = self.sproutBeansUsed >= self._sproutBeanLimit()
+                if sproutFinalLootStart is None and not sproutGatherLimitReached and not sproutSessionLimitReached:
+                    sproutInfo = self.blueSproutMessageInfo()
+                    if sproutInfo:
+                        if sproutInfo.get("rarity"):
+                            currentSproutRarity = sproutInfo["rarity"]
+                        if self.isSproutCompletionMessage(sproutInfo.get("text", "")):
+                            sproutCompletionMessageSeen = True
+                    if sproutCompletionMessageSeen and not self.blueSproutMessageVisible():
+                        self.logger.webhook("Sprouts", f"Detected sprout pop message; planting next sprout ({self.sproutBeansUsed + 1}/{self._sproutBeanLimit()}).", "light blue", "screen", route_category="activities")
+                        plantSproutBean()
+                    else:
+                        fallbackSeconds = self.sproutReplantFallbackSeconds(currentSproutRarity)
+                        if time.time() - lastSproutPlantAttempt >= fallbackSeconds:
+                            rarityLabel = currentSproutRarity.title() if currentSproutRarity else "unknown"
+                            self.logger.webhook("Sprouts", f"No sprout pop message detected for {fallbackSeconds} seconds ({rarityLabel}); trying next sprout ({self.sproutBeansUsed + 1}/{self._sproutBeanLimit()}).", "light blue", "screen", route_category="activities")
+                            plantSproutBean()
+                sproutGatherLimitReached = sproutBeansUsedThisGather >= sproutGatherBeanLimit
+                sproutSessionLimitReached = self.sproutBeansUsed >= self._sproutBeanLimit()
+                if sproutFinalLootStart is None and (sproutSessionLimitReached or sproutGatherLimitReached):
+                    sproutFinalLootStart = time.time()
+                    if not sproutLimitLogged:
+                        if sproutSessionLimitReached:
+                            self.logSproutBeanLimitReached(f"Sprout session limit reached. Collecting remaining drops for {sproutFinalLootSeconds} seconds before resetting.")
+                        else:
+                            self.logger.webhook("Sprouts", f"Sprout gather limit reached ({sproutBeansUsedThisGather}/{sproutGatherBeanLimit}). Collecting remaining drops for {sproutFinalLootSeconds} seconds before moving on.", "light blue", "screen", route_category="activities")
+                        sproutLimitLogged = True
+                if sproutFinalLootStart is not None and time.time() - sproutFinalLootStart >= sproutFinalLootSeconds:
+                    stopGather()
+                    self.logger.webhook("Sprouts", "Final sprout loot collection finished. Resetting to hive.", "light green", route_category="activities")
+                    self.reset()
+                    return
+            elif not altMode and self.setdat["Auto_Field_Boost"] and not self.AFBLIMIT and self.AFB(gatherInterrupt=True, turnOffShiftLock = fieldSetting["shift_lock"]):
                 stopGather()
                 return
             #check for gather interrupts
-            elif self.night and self.setdat["stinger_hunt"]:
+            elif (
+                self.setdat.get("macro_mode", "normal") not in ("quest", "alt")
+                and self.night
+                and self.setdat["stinger_hunt"]
+            ):
                 #rely on task function in main to execute the stinger hunt
                 stopGather()
                 self.logger.webhook("Gathering: interrupted","Stinger Hunt","dark brown")
                 self.reset(convert=False)
                 break
-            elif self.setdat["mondo_buff"] and self.hasMondoRespawned() and self.setdat["mondo_buff_interrupt_gathering"]:
+            elif (
+                self.setdat.get("macro_mode", "normal") not in ("quest", "alt")
+                and self.setdat["mondo_buff"]
+                and self.hasMondoRespawned()
+                and self.setdat["mondo_buff_interrupt_gathering"]
+            ):
                 stopGather()
                 self.logger.webhook("Gathering: interrupted","Mondo Buff","dark brown")
                 self.reset(convert=False)
                 self.collectMondoBuff()
                 break
-            else:
+            elif (
+                self.setdat.get("macro_mode", "normal") not in ("quest", "alt")
+                and self.setdat["sticker_stack"]
+                and self.setdat.get("sticker_stack_interrupt_gathering", False)
+                and self.hasStickerStackRespawned()
+            ):
+                stopGather()
+                self.logger.webhook("Gathering: interrupted", "Sticker Stack", "dark brown")
+                self.reset(convert=False)
+                self.collect("sticker_stack")
+                break
+            elif not altMode:
                 questMobsByGiver = getattr(self, "questGatherInterruptMobs", {})
                 questMobs = {
                     mob
@@ -3343,7 +5046,7 @@ class macro:
                         )
                         honeyWreathWaitLogged = True
                 else:
-                    self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Time Limit - Return: {returnType.title()}", "light green", "screen")
+                    self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Time Limit - Return: {returnType.title()}", "light green", "screen", route_category="gathering")
                     keepGathering = False
             #check backpack
             elif isHiveHubField or infiniteGather:
@@ -3370,7 +5073,7 @@ class macro:
                             )
                             honeyWreathWaitLogged = True
                     else:
-                        self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Backpack - Return: {returnType.title()}", "light green", "screen")
+                        self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Backpack - Return: {returnType.title()}", "light green", "screen", route_category="gathering")
                         keepGathering = False
 
         #gathering was interrupted
@@ -3469,6 +5172,7 @@ class macro:
             if not self.convert(forced_convert_balloon=(str(self.setdat.get("convert_balloon","")).lower().replace(" ","_")=="every_gather")):
                 self.logger.webhook("","Whirligigs failed, walking to hive", "dark brown", "screen")
                 walkToHive()
+                gooTimerActive = False
                 return
             #whirligig sucessful
             #goo timer continues via background thread after whirligig success
@@ -3498,26 +5202,9 @@ class macro:
 
     def antChallenge(self):
         self.logger.webhook("","Travelling: Ant Challenge","dark brown")
-        left = 15 / self.setdat["hive_number"]
-        self.keyboard.walk("w", 1, False)
-        self.keyboard.walk("a", left, False)
-        self.keyboard.keyDown("w")
-        time.sleep(2)
-        self.keyboard.press("space")
-        time.sleep(3.5)
-        self.keyboard.keyUp("w")
-        self.keyboard.walk("a", 0.45, False)
-        self.keyboard.keyDown("w")
-        self.keyboard.press("space")
-        time.sleep(1.5)
-        self.keyboard.press("space")
-        time.sleep(3)
-        self.keyboard.keyUp("w")
-        self.keyboard.walk("a", 2.5, False)
-        self.keyboard.keyDown("w")
-        time.sleep(6)
-        self.keyboard.keyUp("w")
-        self.keyboard.walk("s", 0.4)
+        if not self.travelViaCannon("Ant Challenge"):
+            return False
+        self.runPath("boss/ant_challenge")
         time.sleep(0.5)
 
         # If the red box (where E would be) says 'need', fetch a free ant pass
@@ -3527,7 +5214,6 @@ class macro:
             try:
                 self.reset(convert=False)
                 self.collect("ant_pass_dispenser")
-                self.reset(convert=False)
             except Exception:
                 self.logger.webhook("", "Failed to collect ant pass","red", "screen", ping_category="ping_critical_errors")
             time.sleep(1)
@@ -3592,12 +5278,18 @@ class macro:
         #mostly just to prevent the macro from going to mondo over and over again for the 10mins
         return minute <= 10 and self.hasRespawned("mondo", 20*60)
 
+    def hasStickerStackRespawned(self):
+        with open(settingsManager.ensureUserFile("sticker_stack.txt"), "r") as f:
+            stickerStackCD = int(f.read())
+        return self.hasRespawned("sticker_stack", stickerStackCD)
+
     def collectMondoBuff(self, gatherInterrupt = False):
         self.set_task_status("mondo_buff", activity="mondo")
         st = time.perf_counter()
         self.logger.webhook("","Travelling: Mondo Buff","dark brown")
         #go to mondo buff
-        self.cannon()
+        if not self.travelViaCannon("Mondo Buff"):
+            return False
         self.keyboard.press("e")
         sleep(2.5)
         self.logger.webhook("","Collecting: Mondo Buff","yellow", "screen")
@@ -3605,7 +5297,7 @@ class macro:
         self.keyboard.walk("d",3) 
         if self.setdat["mondo_buff_loot"]: # If looting is enabled, wait until mondo is defeated
             self.logger.webhook("", "Waiting for Mondo to be defeated", "light green")
-            self.keyboard.press("shift") #moves slightly up (or down) when hitting wall, so this reduces that
+            self.enableShiftLock() #moves slightly up (or down) when hitting wall, so this reduces that
             while True:
                 #defeat
                 if self.blueTextImageSearch("defeated") and self.blueTextImageSearch("mondo"): 
@@ -3665,12 +5357,14 @@ class macro:
                     self.keyboard.walk("s",0.20)
                     self.keyboard.walk("a",2.65)
         else: #if loot off, just idle
-            end_time = time.perf_counter() + self.setdat["mondo_buff_wait"] * 60  
-            self.logger.webhook("", f"Collecting for: {self.setdat['mondo_buff_wait']} minutes", "yellow")
+            mondo_buff_wait = self.setdat["mondo_buff_wait"]
+            mondo_buff_wait_label = f"{mondo_buff_wait:g}" if isinstance(mondo_buff_wait, float) else str(mondo_buff_wait)
+            end_time = time.perf_counter() + mondo_buff_wait * 60  
+            self.logger.webhook("", f"Collecting for: {mondo_buff_wait_label} minutes", "yellow")
             # if collecting tokens produced by bees
             if self.setdat["mondo_collect_token"]:
                 # enable shiftlock
-                self.keyboard.press("shift")
+                self.enableShiftLock()
                 while time.perf_counter() < end_time: 
                     self.keyboard.walk("a", 0.45)
                     for slowmove in range(9):
@@ -3678,7 +5372,7 @@ class macro:
                         time.sleep(0.035) 
                     time.sleep(3) #longer since we are not detecting anything
             else:
-                time.sleep(self.setdat['mondo_buff_wait'] * 60)
+                time.sleep(mondo_buff_wait * 60)
             self.saveTiming("mondo") 
             self.logger.webhook("","Collected: Mondo Buff","light green", ping_category="ping_mondo_buff")
         #done
@@ -3690,8 +5384,10 @@ class macro:
         reached = False
         for _ in range(2):
             self.logger.webhook("",f"Travelling: Sticker Printer","dark brown")
-            self.cannon()
+            if not self.travelViaCannon("Sticker Printer"):
+                return
             self.runPath("collect/sticker_printer")
+            self.location = "collect"
             for _ in range(6):
                 self.keyboard.walk("w", 0.2)
                 reached = self.isBesideE(["inspect", "stick", "print"])
@@ -3801,7 +5497,6 @@ class macro:
         reached = None
         objectiveData = mergedCollectData[objective]
         displayName = objective.replace("_"," ").title()
-        self.location = "collect"
         st = time.time()
         def updateHourlyTime():
             self.hourlyReport.addHourlyStat("misc_time", time.time()-st)
@@ -3811,7 +5506,10 @@ class macro:
             if objective in ["honey_dispenser", "gingerbread"]:
                 self.reset(convert=False)
             else:
-                self.cannon()
+                if not self.travelViaCannon(displayName):
+                    updateHourlyTime()
+                    return
+            self.location = "collect"
             # Special-case: run a bespoke sequence for Honey Storm instead of the
             # default path/walk system.
             if objective == "honeystorm":
@@ -3858,7 +5556,7 @@ class macro:
                     if reached: break
             if reached: break
             self.logger.webhook("", f"Failed to reach {displayName}", "dark brown", "screen")
-            if objective == "ant_pass_dispenser":
+            if objective in ("ant_pass_dispenser", "buy_ant_pass"):
                 self.logger.webhook("", "Maybe you have maxed out ant passes?", "dark brown")
             if i != 2: self.reset(convert=False)
         
@@ -3931,6 +5629,17 @@ class macro:
                 boostedField = detectedBoostedFields[-1] if detectedBoostedFields else ""
                 returnVal = boostedField
                 self.logger.webhook("", f"Collected: {displayName}, Boosted Field: {boostedField.title()}", "bright green", "screen")
+                if boostedField:
+                    extendFieldBooster = self.setdat.get("field_booster_glitter_extend_enabled", False)
+                    self.tadAltSync.sync_to_boost(
+                        boostedField,
+                        extend_with_glitter=False if extendFieldBooster else None,
+                        extension_duration=15 * 60 if extendFieldBooster else 0,
+                    )
+                    if extendFieldBooster:
+                        self.scheduleFieldBoosterGlitterExtension()
+                else:
+                    self.tadAltSync.initialize_alts()
                 self.saveTiming("last_booster")
             elif objective == "sticker_stack":
                 if "your" in reached or "activated" in reached:
@@ -3988,7 +5697,7 @@ class macro:
             if self.hasMobRespawned(m, field, timings[timingName]):
                 timings[timingName] = time.time()
                 self.hourlyReport.addHourlyStat("bugs", regularMobQuantitiesInFields[field][m])
-        settingsManager.saveDict("./data/user/timings.txt", timings)
+        settingsManager.saveDict(settingsManager.getUserDataPath("timings.txt"), timings)
 
     #background thread function to determine if player has defeated the mob
     #time limit of 20s
@@ -4031,7 +5740,8 @@ class macro:
         attackThread.daemon = True
         if walkPath is None:
             self.waitForBees()
-            self.cannon()
+            if not self.travelViaCannon(f"{mobName.title()}"):
+                return
             self.goToField(field, "north")
             #attack the mob
             attackThread.start()
@@ -4172,7 +5882,12 @@ class macro:
 
         for currField in self.vicFields:
             #go to field
-            self.cannon()
+            if not self.travelViaCannon("Stinger Hunt"):
+                self.stopVic = True
+                stingerHuntThread.join()
+                updateHourlyTime()
+                self.night = False
+                return
             self.logger.webhook("",f"Travelling to {currField} (stinger hunt)","dark brown")
             self.goToField(currField, "south")
             time.sleep(0.8)
@@ -4199,12 +5914,19 @@ class macro:
             if wait:
                 time.sleep(10)
             self.logger.webhook("",f"Travelling to {self.vicField} (vicious bee)","dark brown")
-            self.cannon()
+            if not self.travelViaCannon("Vicious Bee", resetIfAway=False):
+                return False
             self.goToField(self.vicField, "south")
+            return True
 
         #first, check if vic is found in the same field as the player
         if currField != self.vicField: 
-            goToVicField()
+            if not goToVicField():
+                self.night = False
+                self.stopVic = True
+                updateHourlyTime()
+                stingerHuntThread.join()
+                return
         
         #run the dodge pattern
         #similar to the search pattern, between each line of code, check if vic has been defeated/player died
@@ -4230,7 +5952,8 @@ class macro:
                 break
             elif self.died:
                 self.logger.webhook("","Player Died","dark brown", "screen", ping_category="ping_character_deaths")
-                goToVicField(wait=True)
+                if not goToVicField(wait=True):
+                    break
                 self.died = False
             elif time.time()-st > 180: #max 3 mins to kill vic
                 self.logger.webhook("","Took too long to kill Vicious Bee","red", "screen", ping_category="ping_critical_errors")
@@ -4242,27 +5965,73 @@ class macro:
         self.reset()
 
     def stumpSnail(self):
-        for _ in range(3):
-            self.cannon()
-            self.logger.webhook("","Travelling: Stump Snail", "dark brown")
-            self.goToField("stump")
-            if self.placeSprinkler():
-                break
-            self.logger.webhook("", "Failed to land in stump field", "red", "screen", ping_category="ping_critical_errors")
-            self.reset()
+        sideTaskIntervalMinutes = self.setdat.get("stump_snail_balloon_interval", 0)
+        try:
+            sideTaskInterval = max(0, int(sideTaskIntervalMinutes)) * 60
+        except (TypeError, ValueError):
+            sideTaskInterval = 0
+        patternDuration = 120
+
+        def goToStump():
+            for _ in range(3):
+                self.cannon()
+                self.logger.webhook("", "Travelling: Stump Snail", "dark brown")
+                self.goToField("stump")
+                if self.placeSprinkler():
+                    return True
+                self.logger.webhook("", "Failed to land in stump field", "red", "screen", ping_category="ping_critical_errors")
+                self.reset()
+            return False
+
+        def runGatherPattern(patternName, duration):
+            st = time.time()
+            mouse.moveBy(10, 5)
+            self.keyboard.releaseMovement()
+            nameSpace = {**locals(), **globals()}
+            while time.time() - st < duration:
+                if self.checkPauseAndWait():
+                    break
+                mouse.mouseDown()
+                try:
+                    exec(open(f"../settings/patterns/{patternName}.py").read(), nameSpace)
+                except Exception:
+                    print(traceback.format_exc())
+                    break
+                mouse.mouseUp()
+            mouse.mouseUp()
+
+        def runSideTask():
+            self.logger.webhook("", "Stump Snail: Running periodic side task", "dark brown")
+            self.reset(convert=False)
+            self.runPath("cannon_to_field/pine")
+            runGatherPattern("skillet", patternDuration)
+            self.reset(convert=True)
+            goToStump()
+
+        goToStump()
+
         # Set status to attacking for hotbar logic
         self.set_task_status("attacking", activity="stump_snail")
         try:
-            while True:
-                # Check if paused and wait
+            keepOldData = None
+            while keepOldData is None:
+                cycleStart = time.time()
                 if self.checkPauseAndWait():
-                    # Stop was requested while paused
                     return
-                mouse.click()
-                keepOldData = self.keepOldCheck()
-                if keepOldData is not None:
-                    mouse.mouseUp()
-                    break
+                while True:
+                    if self.checkPauseAndWait():
+                        return
+                    mouse.click()
+                    keepOldData = self.keepOldCheck()
+                    if keepOldData is not None:
+                        mouse.mouseUp()
+                        break
+                    if sideTaskInterval <= 0 or time.time() - cycleStart >= sideTaskInterval:
+                        mouse.mouseUp()
+                        break
+
+                if keepOldData is None and sideTaskInterval > 0:
+                    runSideTask()
         finally:
             self.set_task_status(None, update_presence=False)  # Reset status after attack
         #handle the other stump snail
@@ -4333,7 +6102,10 @@ class macro:
         cocoThread.start()
         st = time.time()
         for _ in range(2):
-            self.cannon()
+            if not self.travelViaCannon("Coconut Crab"):
+                self.bossStatus = "travel_failed"
+                cocoThread.join()
+                return
             self.logger.webhook("","Travelling: Coconut Crab","dark brown")
             self.goToField("coconut")
             self.keyboard.walk("s", 1)
@@ -4384,7 +6156,8 @@ class macro:
     def kingBeetle(self):
         st = time.time()
         for _ in range(2):
-            self.cannon()
+            if not self.travelViaCannon("King Beetle"):
+                return
             self.logger.webhook("","Travelling: King Beetle","dark brown")
             self.goToField("blue_flower")
             self.died = False
@@ -4431,7 +6204,8 @@ class macro:
     def tunnelBear(self):
         st = time.time()
         for _ in range(2):
-            self.cannon()
+            if not self.travelViaCannon("Tunnel Bear"):
+                return
             self.logger.webhook("","Travelling: Tunnel Bear","dark brown")
             self.goToField("pineapple")
             self.died = False
@@ -4471,7 +6245,8 @@ class macro:
     
     def goToPlanter(self, planter, field, method):
         global finalKey
-        self.cannon()
+        if not self.travelViaCannon("Planters"):
+            return False
         self.logger.webhook("", f"Travelling: {planter.title()} Planter ({field.title()}), {method.title()}", "dark brown")
         self.goToField(field, "north")
         #move from center of field to planter spot
@@ -4511,7 +6286,7 @@ class macro:
                 self.planterCoords = res
                 return
             else:
-                self.logger.webhook("", f"Could not find {name}planter in inventory (attempt {attempt+1}) - invalidating cache and retrying", "red")
+                self.logger.webhook("", f"Could not find {name}planter in inventory (attempt {attempt+1}) - retrying", "red")
                 self.planterCoords = None
                 time.sleep(1)
 
@@ -4521,13 +6296,14 @@ class macro:
             slot = int(self.setdat.get(f"planter_hotbar_{settingName}_slot", 0) or 0)
         except Exception:
             return 0
-        if slot < 1 or slot > 5:
+        if slot < 1 or slot > 7:
             return 0
         return slot
             
     #place the planter and return true if successfully placed
     def placePlanter(self, planter, field, glitter):
         st = time.time()
+        self.lastPlanterPlacementFailure = None
         name = planter.lower().replace(" ","").replace("-","")
         hotbarSlot = self.getPlanterHotbarSlot(planter)
 
@@ -4558,9 +6334,11 @@ class macro:
                 findPlanterInventoryThread.daemon = True
                 findPlanterInventoryThread.start()
 
-            self.goToPlanter(planter, field, "place")
+            if not self.goToPlanter(planter, field, "place"):
+                updateHourlyTime()
+                return False
             if hotbarSlot:
-                self.logger.webhook("", f"Using hotbar slot {hotbarSlot} for {planter.title()} planter", "dark brown")
+                self.logger.webhook("", f"Placing {planter.title()} (slot {hotbarSlot})", "dark brown")
                 self.keyboard.press(str(hotbarSlot))
             else:
                 #wait for thread to finish
@@ -4570,26 +6348,27 @@ class macro:
             if not hotbarSlot and self.planterCoords is None:
                 # If not found: retry only if we haven't exhausted attempts.
                 if attempt < max_attempts - 1:
-                    self.logger.webhook("", f"[Planter Placement] Could not find {planter.title()} in inventory (attempt {attempt+1}/{max_attempts}). Waiting {cooldown_seconds}s before retry.", "red", "screen", ping_category="ping_critical_errors")
+                    self.logger.webhook("", f"Couldn't find {planter.title()} in inventory, retrying", "red", "screen", ping_category="ping_critical_errors")
                     updateHourlyTime()
                     time.sleep(cooldown_seconds)
                     continue
                 else:
                     # Final attempt failed — give up immediately.
                     if recoverAlreadyPlacedPlanterState():
-                        self.logger.webhook("", f"[Planter Placement] Recovered planter state for {planter.title()} in {field.title()} after inventory desync.", "orange", "screen")
+                        self.logger.webhook("", f"{planter.title()} is already in {field.title()}", "orange", "screen")
                         updateHourlyTime()
                         return True
-                    self.logger.webhook("", f"[Planter Placement] Could not find {planter.title()} in inventory after {max_attempts} attempts. Giving up.", "red", "screen", ping_category="ping_critical_errors")
+                    self.logger.webhook("", f"Couldn't find {planter.title()} in inventory", "red", "screen", ping_category="ping_critical_errors")
                     # Do not auto-disable planter settings here.
                     # A temporary state desync (already placed / stale planter data)
                     # can also make the planter unavailable in inventory.
+                    self.lastPlanterPlacementFailure = "missing_inventory"
                     updateHourlyTime()
                     return False
             #place planter
             if not hotbarSlot:
                 self.useItemInInventory(x=self.planterCoords[0], y=self.planterCoords[1])
-            
+
             #check if planter is placed
             time.sleep(0.5)
             placedPlanter = True
@@ -4611,7 +6390,9 @@ class macro:
                 if self.planterCoords is None:
                     placedPlanter = False
                 else:
-                    self.goToPlanter(planter, field, "place")
+                    if not self.goToPlanter(planter, field, "place"):
+                        updateHourlyTime()
+                        return False
                     self.useItemInInventory(x=self.planterCoords[0], y=self.planterCoords[1])
                     time.sleep(0.5)
                     placementError = None
@@ -4628,17 +6409,24 @@ class macro:
                     if placedPlanter:
                         placedPlanter = recoverAlreadyPlacedPlanterState()
             if placedPlanter: 
-                self.logger.webhook("",f"Placed Planter: {planter.title()}", "dark brown", "screen")          
+                self.logger.webhook("",f"Placed {planter.title()} Planter", "dark brown", "screen")
                 #use glitter
                 if glitter: 
                     self.useItemInInventory("glitter")
                 updateHourlyTime()
                 return True
             if placementError == "maxplanters" and recoverAlreadyPlacedPlanterState():
-                self.logger.webhook("", f"[Planter Placement] Recovered planter state for {planter.title()} in {field.title()} after max-planters desync.", "orange", "screen")
+                self.logger.webhook("", f"{planter.title()} is already in {field.title()}", "orange", "screen")
                 updateHourlyTime()
                 return True
-            self.logger.webhook("",f"Failed to Place Planter: {planter.title()}", "red", "screen", ping_category="ping_critical_errors")
+            if placementError == "notinfield":
+                failMsg = f"Not in a field, couldn't place {planter.title()}"
+            elif placementError == "maxplanters":
+                failMsg = f"Already at max planters, couldn't place {planter.title()}"
+            else:
+                failMsg = f"Failed to place {planter.title()}"
+            self.logger.webhook("", failMsg, "red", "screen", ping_category="ping_critical_errors")
+            self.lastPlanterPlacementFailure = placementError or "placement_failed"
             self.reset()
             # If failed to place, wait before next attempt
             if attempt < max_attempts - 1:
@@ -4732,12 +6520,18 @@ class macro:
                     return
             i += 1
             
-    def collectPlanter(self, planter, field):
+    def collectPlanter(self, planter, field, returnToHive=True):
         field_key = field.replace(" ", "_")
         self.set_task_status(f"planter_{field_key}", task="planter", field=field)
         st = time.time()
         def updateHourlyTime():
             self.hourlyReport.addHourlyStat("misc_time", time.time()-st)
+
+        def finishCollected():
+            updateHourlyTime()
+            if returnToHive:
+                self.reset()
+            return True
         # Determine whether planter-check retry behavior is enabled for current mode
         try:
             mode = int(self.setdat.get("planters_mode", 0))
@@ -4765,8 +6559,7 @@ class macro:
                 self.findPlanterInInventory(name)
                 if self.planterCoords is not None:
                     self.logger.webhook("", f"{planter.title()} not found in field, but found in inventory. Marking as collected.", "orange", "screen")
-                    updateHourlyTime()
-                    return True
+                    return finishCollected()
                 self.logger.webhook("", f"Unable to find Planter: {planter.title()}", "dark brown", "screen")
                 self.reset()
                 # if this was the last attempt, update time and return False
@@ -4785,11 +6578,10 @@ class macro:
             else:
                 self.logger.webhook("", f"Skipping loot collection for {planter.title()} planter", "orange")
             self.setMobTimer(field)
-            updateHourlyTime()
 
             # If planter-check not enabled, we're done
             if not check_enabled:
-                return True
+                return finishCollected()
 
             # Planter-check enabled: verify the planter is now in inventory
             # findPlanterInInventory will set self.planterCoords if found
@@ -4798,7 +6590,7 @@ class macro:
             if self.planterCoords is not None:
                 # found the planter in inventory — success
                 self.logger.webhook("", f"Found {planter.title()} in inventory after collect", "bright green", "screen", ping_category="ping_conversion_events")
-                return True
+                return finishCollected()
 
             # Not found: log and retry (if attempts remain)
             self.logger.webhook("", f"Planter {planter.title()} not found in inventory after looting (attempt {attempt+1}/{attempts}), retrying.", "red", "screen")
@@ -4857,7 +6649,7 @@ class macro:
             self.hourlyReport.addHourlyStat("misc_time", time.time()-st)
 
         def saveBlenderData():
-            with open("./data/user/blender.txt", "w") as f:
+            with open(settingsManager.ensureUserFile("blender.txt"), "w") as f:
                 f.write(str(blenderData))
             f.close()
             updateHourlyTime()
@@ -4886,8 +6678,11 @@ class macro:
 
         for _ in range(2):
             self.logger.webhook("","Travelling: Blender","dark brown")
-            self.cannon()
+            if not self.travelViaCannon("Blender"):
+                updateHourlyTime()
+                return
             self.runPath("collect/blender")
+            self.location = "collect"
             for _ in range(6):
                 self.keyboard.walk("d", 0.2)
                 reached = self.isBesideE(["open"])
@@ -5089,15 +6884,14 @@ class macro:
                 mouse.moveBy(2,2)
                 mouse.click()
 
-        #click yes
+        #click yes (regular stickers have 2 confirms; cub/hive skins can have 4)
         yesPopup = False
-        #check if there are 4 yes/no popups
-        for _ in range(4): 
-            if not self.clickYes(detect=True, clickOnce=True): 
+        for _ in range(4):
+            if not self.clickYes(detect=True, clickOnce=True):
                 break
-            else:
-                yesPopup = True
-                time.sleep(0.4)
+            yesPopup = True
+            # Second confirm can take a beat to replace the first; wait before re-scanning
+            time.sleep(0.7)
         else: #4 yes/no popups, either cub/hive skin
             if not self.setdat["hive_skin"] and not self.setdat["cub_skin"]: #do not use cub and hive stickers
                 self.logger.webhook("", "A hive/cub sticker has been wrongly selected, aborting", "red", "screen", ping_category="ping_critical_errors")
@@ -5115,7 +6909,7 @@ class macro:
             if stickerUsed: finalTime += 10
             self.logger.webhook("", f"Activated Sticker Stack, Buff Duration: {timedelta(seconds=finalTime)}", "bright green")
         else:
-            with open("./data/user/sticker_stack.txt", "r") as f: #get the cooldown from the prev detection
+            with open(settingsManager.ensureUserFile("sticker_stack.txt"), "r") as f: #get the cooldown from the prev detection
                 stickerStackCD = int(f.read())
             f.close()
             if stickerStackCD > 15*60: #make sure the time is valid
@@ -5124,13 +6918,13 @@ class macro:
                 finalTime = 60*60 #default to 1hr
             self.logger.webhook("", f"Activated Sticker Stack, Buff Duration: {timedelta(seconds=finalTime)} (Defaulted to 1hr)", "bright green")
         self.keyboard.press("e")
-        with open("./data/user/sticker_stack.txt", "w") as f:
+        with open(settingsManager.ensureUserFile("sticker_stack.txt"), "w") as f:
             f.write(str(finalTime))
         f.close()
         return True
-    
+
     def backgroundOnce(self):
-        with open("./data/user/hotbar_timings.txt", "r") as f:
+        with open(settingsManager.ensureUserFile("hotbar_timings.txt"), "r") as f:
             hotbarSlotTimings = ast.literal_eval(f.read())
         f.close()
 
@@ -5138,6 +6932,9 @@ class macro:
         if self.enableNightDetection:
             self.detectNight()
         self.detectGuidingStarAnnouncement()
+        self.detectUnusualSproutAnnouncement()
+        self.detectWindyBeeAnnouncement()
+        self.detectStickerSproutAnnouncement()
 
         #hotbar
         for i in range(1,8):
@@ -5163,14 +6960,27 @@ class macro:
             if self.setdat[f"hotbar{i}_use_every_format"] == "mins": 
                 cdSecs *= 60
             if time.time() - hotbarSlotTimings[i] < cdSecs: continue
+            if not self.canUseSproutBeanSlot(i):
+                continue
+            sproutHotbarSlot = False
+            if self.setdat.get("sprouts_enable", False):
+                try:
+                    sproutHotbarSlot = int(self.setdat.get("sprouts_magic_bean_slot", 1) or 1) == i
+                except Exception:
+                    sproutHotbarSlot = False
+                if sproutHotbarSlot and self.sproutBeansUsed + 2 > self._sproutBeanLimit():
+                    continue
             print(f"pressed hotbar {i}")
             #press the key
             for _ in range(2):
                 keyboard.pagPress(str(i))
                 time.sleep(0.4)
+            if sproutHotbarSlot:
+                self.markSproutBeanUsed()
+                self.markSproutBeanUsed()
             #update the time pressed
             hotbarSlotTimings[i] = time.time()
-            with open("./data/user/hotbar_timings.txt", "w") as f:
+            with open(settingsManager.getUserDataPath("hotbar_timings.txt"), "w") as f:
                 f.write(str(hotbarSlotTimings))
             f.close()
     
@@ -5203,13 +7013,23 @@ class macro:
 
             #check if its time to send hourly report
             if currMin == 0 and time.time() - self.lastHourlyReport > 120:
+                itemSnapshot = self.itemMonitor.get_snapshot() if self.setdat.get("item_monitor", True) else None
                 hourlyReportData = self.hourlyReport.generateHourlyReport(self.setdat)
-                self.logger.hourlyReport("Hourly Report", "", "purple")
+                self.logger.hourlyReport("Hourly Report", "", "purple", fields=getattr(self.hourlyReport, "lastEmbedFields", None))
+
+                if itemSnapshot and itemSnapshot.get("collected_items"):
+                    try:
+                        from modules.submacros.itemMonitor import generate_item_report
+                        path, fields = generate_item_report(itemSnapshot, self.setdat, report_type="hourly")
+                        if path:
+                            self.logger.itemReport("Item Monitor", "", "purple", fields=fields, imagePath=path)
+                    except Exception:
+                        self.logger.webhook("Item Monitor Error", traceback.format_exc(), "red", ping_category="ping_critical_errors")
 
                 #add to history
-                with open("data/user/hourly_report_history.txt", "r") as f:
-                    history = ast.literal_eval(f.read())
-                f.close()
+                history = settingsManager.loadUserLiteral("hourly_report_history.txt")
+                if not isinstance(history, list):
+                    history = []
 
                 historyObj = {
                     "endHour": datetime.now().hour,
@@ -5221,13 +7041,12 @@ class macro:
                     history.pop(-1)
                 history.insert(0,historyObj)
 
-                with open("data/user/hourly_report_history.txt", "w") as f:
-                    f.write(str(history))
-                f.close()
+                settingsManager.saveUserLiteral("hourly_report_history.txt", history)
 
                 self.lastHourlyReport = time.time()
                 #reset stats
                 self.hourlyReport.resetHourlyStats()
+                self.itemMonitor.reset_hourly()
 
             #Hourly report
             if self.status.value != "rejoining":
@@ -5241,73 +7060,112 @@ class macro:
                     self.hourlyReport.addHourlyStat("honey_per_min", honey)
                     self.hourlyReport.addHourlyStat("backpack_per_min", backpack)
 
+            # Item monitor: loot toast detection
+            if (
+                self.setdat.get("item_monitor", True)
+                and self.status.value != "rejoining"
+                and currSec != getattr(self, "prevItemMonitorSec", -1)
+            ):
+                self.prevItemMonitorSec = currSec
+                try:
+                    self.itemMonitor.detect_once()
+                    self.hourlyReport.itemMonitorSnapshot = self.itemMonitor.get_snapshot()
+                except Exception:
+                    pass
+
             if self.status.value != "rejoining" and not currSec%6 and currSec != self.prevSec:
                 i = (60*currMin + currSec)//6
                 screen = cv2.cvtColor(self.buffDetector.screenshotBuffArea(), cv2.COLOR_BGRA2BGR)
                 height, width = screen.shape[:2]
                 uptimeBuffsColors = self.hourlyReport.uptimeBuffsColors
+                uptimeBuffsColorVariations = getattr(self.hourlyReport, "uptimeBuffsColorVariations", {})
                 uptimeBearBuffs = self.hourlyReport.uptimeBearBuffs
+                monitoredBuffs = set(self.hourlyReport.configuredUptimeBuffDataKeys(self.setdat))
+                selectedUptimeRows = set(self.hourlyReport.configuredUptimeBuffs)
 
                 sampleValues = {}
+                def parseOcrBuffValue(value, default=1):
+                    try:
+                        parsed = float(value)
+                        return parsed if parsed > 0 else default
+                    except (TypeError, ValueError):
+                        return default
 
-                for j in ["baby_love"]:
-                    if self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors[j][0], uptimeBuffsColors[j][1], y1=30*self.multi, searchDirection=7):
+                if "baby_love" in monitoredBuffs:
+                    j = "baby_love"
+                    if self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors[j][0], uptimeBuffsColors[j][1], y1=30*self.multi, variation=uptimeBuffsColorVariations.get(j, 0), searchDirection=7):
                         sampleValues[j] = 1
 
-                bearBuffRes = [int(x) for x in self.buffDetector.getBuffsWithImage(uptimeBearBuffs, screen=screen, threshold=0.78)]
-                if any(bearBuffRes):
-                    sampleValues["bear"] = 1
+                if "bear" in monitoredBuffs:
+                    bearBuffRes = [int(x) for x in self.buffDetector.getBuffsWithImage(uptimeBearBuffs, screen=screen, threshold=0.78)]
+                    if any(bearBuffRes):
+                        sampleValues["bear"] = 1
 
-                for j in ["focus", "bomb_combo", "balloon_aura", "inspire"]:
-                    res = self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors[j][0], uptimeBuffsColors[j][1], y1=30*self.multi, y2=50*self.multi, searchDirection=7)
+                for j in [key for key in selectedUptimeRows if key in uptimeBuffsColors and key not in {"baby_love", "haste", "melody", "boost", "bear"}]:
+                    res = self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors[j][0], uptimeBuffsColors[j][1], y1=30*self.multi, y2=50*self.multi, variation=uptimeBuffsColorVariations.get(j, 0), searchDirection=7)
                     if res:
-                        x = res[0]+res[2]
-                        x1 = max(0, int(x-25*self.multi))
-                        x2 = min(width, int(x+5*self.multi))
-                        buffImg = screen[15*self.multi:50*self.multi , x1:x2]
-                        sampleValues[j] = int(self.buffDetector.getBuffQuantityFromImgTight(buffImg))
+                        chartType = BUFF_RENDER_CONFIG.get(j, ("binary",))[0]
+                        if chartType == "binary":
+                            sampleValues[j] = 1
+                        elif j == "blessing":
+                            sampleValues[j] = min(100, parseOcrBuffValue(
+                                self.buffDetector.getBuffQuantityFromDetectedRect(screen, res, buff=j)
+                            ))
+                        else:
+                            sampleValues[j] = parseOcrBuffValue(
+                                self.buffDetector.getBuffQuantityFromDetectedRect(screen, res, buff=j)
+                            )
 
-                x = 0
-                for _ in range(3):
-                    res = self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["haste"][0], uptimeBuffsColors["haste"][1],x, 30*self.multi, searchDirection=6)
-                    if not res:
-                        break
-                    x = res[0]
-                    if self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["melody"][0], uptimeBuffsColors["melody"][1], x+2*self.multi, 30, x+34*self.multi, 40*self.multi, 12):
-                        sampleValues["melody"] = 1
-                    elif not sampleValues.get("haste", 0):
-                        x1 = max(0, int(x+6*self.multi))
-                        x2 = min(width, int(x+44*self.multi))
-                        buffImg = screen[15*self.multi:50*self.multi , x1:x2]
-                        sampleValues["haste"] = int(self.buffDetector.getBuffQuantityFromImgTight(buffImg))
-                    x += 44*self.multi
+                if "haste" in monitoredBuffs or "melody" in monitoredBuffs:
+                    x = 0
+                    for _ in range(3):
+                        res = self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["haste"][0], uptimeBuffsColors["haste"][1],x, 30*self.multi, variation=uptimeBuffsColorVariations.get("haste", 0), searchDirection=6)
+                        if not res:
+                            break
+                        x = res[0]
+                        if "melody" in monitoredBuffs and self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["melody"][0], uptimeBuffsColors["melody"][1], x+2*self.multi, 30, x+34*self.multi, 40*self.multi, max(12, uptimeBuffsColorVariations.get("melody", 0))):
+                            sampleValues["melody"] = 1
+                        elif "haste" in monitoredBuffs and not sampleValues.get("haste", 0):
+                            x1 = max(0, int(x+6*self.multi))
+                            x2 = min(width, int(x+44*self.multi))
+                            buffImg = screen[15*self.multi:50*self.multi , x1:x2]
+                            sampleValues["haste"] = parseOcrBuffValue(
+                                self.buffDetector.getBuffQuantityFromImgTight(buffImg)
+                            )
+                        x += 44*self.multi
                 #print(bd.detectBuffColorInImage(screen, 0xff242424, variation=12, minSize=(3*2,2*2), show=True))
 
-                x = screen.shape[1]
-                for _ in range(3):
-                    res = self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["boost"][0], uptimeBuffsColors["boost"][1], y1=30*self.multi, x2=x, searchDirection=7)
-                    if not res:
-                        break
-                    x = res[0]+res[2]
-                    y = res[1] + res[3]
+                if any(buff in monitoredBuffs for buff in ("blue_boost", "red_boost", "white_boost")):
+                    x = screen.shape[1]
+                    for _ in range(3):
+                        res = self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["boost"][0], uptimeBuffsColors["boost"][1], y1=30*self.multi, x2=x, variation=uptimeBuffsColorVariations.get("boost", 0), searchDirection=7)
+                        if not res:
+                            break
+                        x = res[0]+res[2]
+                        y = res[1] + res[3]
 
-                    if len(self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["red_boost"][0], uptimeBuffsColors["red_boost"][1], x-30*self.multi, 15*self.multi, x-4*self.multi, 34*self.multi, 20)):
-                        buffType = "red_boost"
-                    elif len(self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["blue_boost"][0], uptimeBuffsColors["blue_boost"][1], x-30*self.multi, 15*self.multi, x-4*self.multi, 34*self.multi, 20)):
-                        buffType = "blue_boost"
-                    else:
-                        buffType = "white_boost"
+                        if len(self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["red_boost"][0], uptimeBuffsColors["red_boost"][1], x-30*self.multi, 15*self.multi, x-4*self.multi, 34*self.multi, max(20, uptimeBuffsColorVariations.get("red_boost", 0)))):
+                            buffType = "red_boost"
+                        elif len(self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["blue_boost"][0], uptimeBuffsColors["blue_boost"][1], x-30*self.multi, 15*self.multi, x-4*self.multi, 34*self.multi, max(20, uptimeBuffsColorVariations.get("blue_boost", 0)))):
+                            buffType = "blue_boost"
+                        else:
+                            buffType = "white_boost"
 
-                    x1 = max(0, x-25*self.multi)
-                    buffImg = screen[15*self.multi: 50*self.multi, x1: x]
-                    sampleValues[buffType] = int(self.buffDetector.getBuffQuantityFromImgTight(buffImg))
+                        if buffType in monitoredBuffs:
+                            x1 = max(0, int(x-25*self.multi))
+                            y1 = int(15*self.multi)
+                            y2 = int(50*self.multi)
+                            buffImg = screen[y1:y2, x1: int(x)]
+                            sampleValues[buffType] = parseOcrBuffValue(
+                                self.buffDetector.getBuffQuantityFromImgTight(buffImg)
+                            )
 
-                    x -= 40*self.multi
+                        x -= 40*self.multi
                 
                 self.prevSec = currSec
 
                 isGathering = "gather_" in self.status.value
-                self.hourlyReport.recordUptimeSample(i, sampleValues, isGathering=isGathering)
+                self.hourlyReport.recordUptimeSample(i, sampleValues, isGathering=isGathering, monitoredBuffs=monitoredBuffs)
                 self.hourlyReport.saveHourlyReportData()
         except Exception:
             self.logger.webhook("Hourly Report Error", traceback.format_exc(), "red", ping_category="ping_critical_errors")
@@ -5379,7 +7237,17 @@ class macro:
         self.moveMouseToDefault()
         return screens
 
-    def findQuest(self, questGiver, questScreens=None):
+    def captureQuestWatchScreen(self):
+        """Capture the visible quest section without scrolling or toggling its UI."""
+        screenshotHeight = max(1, min(800, self.robloxWindow.mh - 150))
+        return mssScreenshotPillowRGBA(
+            self.robloxWindow.mx,
+            self.robloxWindow.my + 150,
+            300,
+            screenshotHeight,
+        )
+
+    def findQuest(self, questGiver, questScreens=None, keepQuestMenuOpen=False, logDetection=True):
         #map quest giver to a shorthand form for ocr searching
         questGiverShort = {
             "polar bear": "polar",
@@ -5851,7 +7719,8 @@ class macro:
                     questTitle = questTitleRaw
                 else:
                     questTitle, _ = fuzzywuzzy.process.extractOne(questTitleRaw, quest_data[questGiver].keys())
-                self.logger.webhook("", f"Quest Title: {questTitle}", "dark brown")
+                if logDetection:
+                    self.logger.webhook("", f"Quest Title: {questTitle}", "dark brown")
                 break
 
             res = None
@@ -5877,12 +7746,14 @@ class macro:
                         break
                 else:
                     questTitleYPos = ry
-                    print(questTitleYPos)
+                    if logDetection:
+                        print(questTitleYPos)
                     if questGiver == "brown bear":
                         questTitle = text
                     else:
                         questTitle, _ = fuzzywuzzy.process.extractOne(text, quest_data[questGiver].keys())
-                    self.logger.webhook("", f"Quest Title: {questTitle}", "dark brown")
+                    if logDetection:
+                        self.logger.webhook("", f"Quest Title: {questTitle}", "dark brown")
                     break
                 
             if manageQuestUi:
@@ -5894,7 +7765,8 @@ class macro:
                 prevHash = hash
 
         if questTitle is None:
-            self.logger.webhook("", f"Could not find {questGiver} quest", "dark brown")
+            if logDetection:
+                self.logger.webhook("", f"Could not find {questGiver} quest", "dark brown")
             if manageQuestUi:
                 self.toggleQuest()
                 self.moveMouseToDefault()
@@ -5925,6 +7797,27 @@ class macro:
                 # Brown Bear objectives are detected from title-like bitmaps in
                 # Natro. For OCR, remove status words before mapping the action.
                 return re.split(r'\bcomplete\b', textChunk, maxsplit=1, flags=re.IGNORECASE)[0].strip()
+
+            def brownObjectivesNamedInText(textChunk):
+                """Return title objectives explicitly identified by an OCR row.
+
+                Brown Bear quest titles encode the exact objectives in order. OCR
+                can miss an entire panel, so a shortened detection list must not
+                be used to shift later panels onto earlier title objectives.
+                """
+                import re
+
+                normalized = self.convertCyrillic(textChunk.lower())
+                words = set(re.sub(r"[^a-z]+", " ", normalized).split())
+                matches = []
+                for objective in titleObjectives:
+                    kind, target = objective.split("_", 1)
+                    if kind == "pollen":
+                        if target in words and "pollen" in words:
+                            matches.append(objective)
+                    elif kind == "gather" and all(word in words for word in target.replace("_", " ").split()):
+                        matches.append(objective)
+                return matches
 
             def getBrownPanelStatus(panel, textChunk):
                 if objectiveTextShowsIncompleteProgress(textChunk):
@@ -6002,12 +7895,19 @@ class macro:
                 if itemIndex >= len(titleObjectives) and isComplete and len(textChunk.split()) < 5:
                     continue
 
-                if itemIndex < len(titleObjectives):
+                # Identify the objective by the field/color named in its own
+                # panel.  Position is only a safe fallback when no panels were
+                # missed, otherwise a missing middle row shifts every later row.
+                mappedObjectives = brownObjectivesNamedInText(textChunk)
+                if not mappedObjectives and len(brownItems) == len(titleObjectives):
                     mappedObjectives = [titleObjectives[itemIndex]]
-                else:
+                elif not mappedObjectives and len(brownItems) != len(titleObjectives):
                     parseText = cleanBrownObjectiveText(textChunk)
                     parsedObjective = self.parseQuestObjective(parseText)
-                    mappedObjectives = self.mapObjectiveToMacroAction(parsedObjective, parseText)
+                    mappedObjectives = [
+                        objective for objective in self.mapObjectiveToMacroAction(parsedObjective, parseText)
+                        if objective in titleObjectives
+                    ]
 
                 if not isComplete:
                     for objective in mappedObjectives:
@@ -6023,7 +7923,10 @@ class macro:
                 cv2.rectangle(annotatedScreen, (x, y), (x+w, y+h), color, 2)
                 cv2.putText(annotatedScreen, label, (x, max(0, y-5)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
 
-            for objective in titleObjectives[len(brownItems):]:
+            # A title objective with no positively identified panel is treated as
+            # incomplete. This is conservative, but it prevents OCR loss from
+            # assigning another row's completion state to it.
+            for objective in titleObjectives:
                 if objective not in incompleteObjectives and objective not in completedObjectives:
                     incompleteObjectives.append(objective)
 
@@ -6031,17 +7934,17 @@ class macro:
             screenshotStack = annotatedScreen
             if titleScreen is not None and titleScreen.size:
                 screenshotStack = np.vstack([titleScreen, annotatedScreen])
-            cv2.imwrite(questImgPath, screenshotStack)
-
-            self.logger.webhook(
-                f"Detected Brown Bear Quest: {questTitle.title()}",
-                "**Completed Objectives:**\n{}\n\n**Incomplete Objectives:**\n{}".format(
-                    '\n'.join(completedObjectives) if completedObjectives else "None",
-                    '\n'.join(incompleteObjectives) if incompleteObjectives else "None"
-                ),
-                "light blue",
-                imagePath=questImgPath
-            )
+            if logDetection:
+                cv2.imwrite(questImgPath, screenshotStack)
+                self.logger.webhook(
+                    f"Detected Brown Bear Quest: {questTitle.title()}",
+                    "**Completed Objectives:**\n{}\n\n**Incomplete Objectives:**\n{}".format(
+                        '\n'.join(completedObjectives) if completedObjectives else "None",
+                        '\n'.join(incompleteObjectives) if incompleteObjectives else "None"
+                    ),
+                    "light blue",
+                    imagePath=questImgPath
+                )
             # record the detected quest title for external callers
             try:
                 if not hasattr(self, '_last_quest_title'):
@@ -6050,7 +7953,7 @@ class macro:
             except Exception:
                 pass
 
-            if manageQuestUi:
+            if manageQuestUi and not keepQuestMenuOpen:
                 self.toggleQuest()
                 self.moveMouseToDefault()
             return incompleteObjectives
@@ -6177,7 +8080,8 @@ class macro:
                 for line in ocr.ocrRead(textImg):
                     textChunk.append(self.convertCyrillic(line[1][0].strip().lower()))
                 textChunk = ''.join(textChunk)
-                print(textChunk)
+                if logDetection:
+                    print(textChunk)
 
                 objectiveData = objectives[i].split("_")
                 if objectiveData[0] == "feed":
@@ -6249,7 +8153,8 @@ class macro:
                 for line in ocr.ocrRead(textImg):
                     textChunk.append(self.convertCyrillic(line[1][0].strip().lower()))
                 textChunk = ''.join(textChunk)
-                print(textChunk)
+                if logDetection:
+                    print(textChunk)
 
                 #detect amount of items to feed
                 objectiveData = objectives[i].split("_")
@@ -6282,7 +8187,8 @@ class macro:
                 
                 #draw bounding boxes and add the quest text
                 drawY = y+endIndex
-                print(drawY)
+                if logDetection:
+                    print(drawY)
                 cv2.rectangle(screenOriginal, (x, drawY), (x+w, drawY+h), color, 2)
                 cv2.putText(screenOriginal, objectives[i], (x, drawY-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
 
@@ -6296,16 +8202,16 @@ class macro:
                 incompleteObjectives.append(objective)
         
         questImgPath = "latest-quest.png"
-        cv2.imwrite(questImgPath, screenOriginal)
-        
-        print(completedObjectives)
-        print(incompleteObjectives)
-        self.logger.webhook(f"Detected {questGiver.title()} Quest: {questTitle.title()}", 
-                            "**Completed Objectives:**\n{}\n\n**Incomplete Objectives:**\n{}".format(
-                                '\n'.join(completedObjectives) if completedObjectives else "None", 
-                                '\n'.join(incompleteObjectives) if incompleteObjectives else "None"), 
-                            "light blue", imagePath=questImgPath)
-        if manageQuestUi:
+        if logDetection:
+            cv2.imwrite(questImgPath, screenOriginal)
+            print(completedObjectives)
+            print(incompleteObjectives)
+            self.logger.webhook(f"Detected {questGiver.title()} Quest: {questTitle.title()}",
+                                "**Completed Objectives:**\n{}\n\n**Incomplete Objectives:**\n{}".format(
+                                    '\n'.join(completedObjectives) if completedObjectives else "None",
+                                    '\n'.join(incompleteObjectives) if incompleteObjectives else "None"),
+                                "light blue", imagePath=questImgPath)
+        if manageQuestUi and not keepQuestMenuOpen:
             self.toggleQuest()
             self.moveMouseToDefault()
         return incompleteObjectives
@@ -6701,6 +8607,7 @@ class macro:
                 'royal_jelly_dispenser': 'royal_jelly_dispenser',
                 'treat_dispenser': 'treat_dispenser',
                 'ant_pass_dispenser': 'ant_pass_dispenser',
+                'buy_ant_pass': 'buy_ant_pass',
                 'glue_dispenser': 'glue_dispenser',
                 'wealth_clock': 'wealth_clock',
                 'stockings': 'stockings',
@@ -6962,9 +8869,11 @@ class macro:
 
     def goToQuestGiver(self, questGiver, reason):
         for _ in range(3):
-            self.cannon()
+            if not self.travelViaCannon(questGiver.title()):
+                return False
             self.logger.webhook("",f"Travelling: {questGiver} ({reason}) ","brown")
             self.runPath(f"quests/{questGiver}")
+            self.location = "quest"
             time.sleep(0.5)
 
             #check if player reached the quest giver
@@ -7069,14 +8978,14 @@ class macro:
                 if submitQuest:
                     if questObjective is None:
                         self.saveTiming(timing_key)
-                        settingsManager.saveSettingFile(state_key, 1, "./data/user/timings.txt")
+                        settingsManager.saveSettingFile(state_key, 1, settingsManager.getUserDataPath("timings.txt"))
                     else:
                         # A new quest appeared immediately after submitting - remain in state 0
-                        settingsManager.saveSettingFile(state_key, 0, "./data/user/timings.txt")
+                        settingsManager.saveSettingFile(state_key, 0, settingsManager.getUserDataPath("timings.txt"))
                 else:
                     # When simply getting a new quest, ensure state is 0
                     if questObjective is not None:
-                        settingsManager.saveSettingFile(state_key, 0, "./data/user/timings.txt")
+                        settingsManager.saveSettingFile(state_key, 0, settingsManager.getUserDataPath("timings.txt"))
             except Exception:
                 pass
         return questObjective
@@ -7131,11 +9040,11 @@ class macro:
         self.moveMouseToDefault()
 
     def saveAFB(self, name):
-        return settingsManager.saveSettingFile(name, time.time(), "./data/user/AFB.txt")
+        return settingsManager.saveSettingFile(name, time.time(), settingsManager.getUserDataPath("AFB.txt"))
 
     def resetAFBSessionTimings(self):
         try:
-            data = settingsManager.readSettingsFile("./data/user/AFB.txt")
+            data = settingsManager.readSettingsFile(settingsManager.getUserDataPath("AFB.txt"))
         except Exception:
             data = {}
 
@@ -7149,11 +9058,11 @@ class macro:
         data["AFB_dice_cd"] = now - rebuffCooldown
         data["AFB_glitter_cd"] = now - rebuffCooldown
 
-        settingsManager.saveDict("./data/user/AFB.txt", data)
+        settingsManager.saveDict(settingsManager.getUserDataPath("AFB.txt"), data)
     
     def getAFBtiming(self,name = None):
         for _ in range(3):
-            data = settingsManager.readSettingsFile("./data/user/AFB.txt")
+            data = settingsManager.readSettingsFile(settingsManager.getUserDataPath("AFB.txt"))
             if data: break #most likely another process is writing to the file
             time.sleep(0.1)
         if name is not None:
@@ -7186,7 +9095,8 @@ class macro:
             except Exception:
                 glitterCoords = None
 
-        self.cannon()
+        if not self.travelViaCannon("Auto Field Boost"):
+            return False
 
         if glitterslot == 0 and glitterCoords:
             self.useItemInInventory(x=glitterCoords[0], y=glitterCoords[1], closeInventoryAfter=False)
@@ -7350,7 +9260,8 @@ class macro:
             self.failed = False
             if self.setdat["Auto_Field_Boost"]:
                 if self.AFBglitter and glitterReady:
-                    self._AFBApplyGlitter(targetFields[0], glitterslot)
+                    if self._AFBApplyGlitter(targetFields[0], glitterslot) is False:
+                        return
                     return targetFields
 
                 if self.cAFBDice or (diceReady and not self.AFBglitter):
@@ -7361,7 +9272,8 @@ class macro:
                     self.keyboard.press("pageup")
 
                     if "loaded" in dice:
-                        self.cannon()
+                        if not self.travelViaCannon("Auto Field Boost"):
+                            return
                         self.goToField(targetFields[0])
 
                     diceCoords = None
@@ -7446,7 +9358,8 @@ class macro:
 
                             if glitter and not self.failed and self.hasAFBRespawned("AFB_glitter_cd", rebuff*60):
                                 if self.AFBglitter:
-                                    self._AFBApplyGlitter(targetFields[0], glitterslot)
+                                    if self._AFBApplyGlitter(targetFields[0], glitterslot) is False:
+                                        return
                                     return targetFields
 
             if returnVal is None:
@@ -7525,11 +9438,17 @@ class macro:
         print("macro object started")
         self.resetAFBSessionTimings()
 
+        if self.setdat.get("macro_mode", "normal") != "alt":
+            self.tadAltSync.initialize_alts()
+
         #enable background threads
         self.nightDetectStreaks = 0
         self.hourlyReport.loadHourlyReportData()
+        if getattr(self.hourlyReport, "itemMonitorSnapshot", None):
+            self.itemMonitor.load_snapshot(self.hourlyReport.itemMonitorSnapshot)
         self.prevMin = -1  
         self.prevSec = -1
+        self.prevItemMonitorSec = -1
         self.multi = self.robloxWindow.multi
         self.lastHourlyReport = 0
 
@@ -7543,8 +9462,9 @@ class macro:
             hourlyReportBackgroundThread = threading.Thread(target=self.hourlyReportBackground, daemon=True)
             hourlyReportBackgroundThread.start()
         
-        #if roblox is not open, rejoin
-        if not appManager.openApp("Roblox"):
+        # Rejoin at startup unless Roblox is already open and the user has
+        # explicitly disabled Always Rejoin.
+        if self.setdat.get("always_rejoin", True) or not appManager.openApp("Roblox"):
             self.rejoin()
         else:
             #toggle fullscreen

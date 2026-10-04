@@ -29,6 +29,8 @@ async function switchConfigTab(target) {
 async function loadConfig() {
   const settings = await loadAllSettings();
   loadInputs(settings);
+  updateDiscordUniversalRouteText();
+  await loadModelStatus();
 
   // Restore active subtab
   switchConfigTab(
@@ -45,25 +47,218 @@ async function loadConfig() {
   initializeQuickActions();
 }
 
+function formatModelSize(sizeBytes) {
+  if (!sizeBytes) return "";
+  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const MODEL_PRESENTATION = {
+  "token_detection_standard.mlmodelc": { group: "Standard", label: "Token Detection" },
+  "sprinkler_detection_standard.mlmodelc": { group: "Standard", label: "Sprinkler Detection" },
+  "token_detection_small.mlmodelc": { group: "Small", label: "Token Detection" },
+  "loot_detection_small.mlmodelc": { group: "Small", label: "Loot Detection" },
+  "token_detection_mini.mlmodelc": { group: "Mini", label: "Token Detection" },
+  "loot_detection_mini.mlmodelc": { group: "Mini", label: "Loot Detection" },
+  "bloom_detection_standard.mlmodelc": { group: "Standard", label: "Bloom Detection" },
+  "bloom_detection_light.mlmodelc": { group: "Small", label: "Bloom Detection" },
+  "bloom_detection_mini.mlmodelc": { group: "Mini", label: "Bloom Detection" },
+  "token_detection_standard.onnx": { group: "Standard", label: "Token Detection" },
+  "sprinkler_detection_standard.onnx": { group: "Standard", label: "Sprinkler Detection" },
+  "bloom_detection_standard.onnx": { group: "Standard", label: "Bloom Detection" },
+  "bloom_detection_light.onnx": { group: "Small", label: "Bloom Detection" },
+  "bloom_detection_mini.onnx": { group: "Mini", label: "Bloom Detection" },
+};
+const MODEL_GROUP_ORDER = ["Standard", "Small", "Mini"];
+
+function getModelPresentation(model) {
+  return MODEL_PRESENTATION[model.name] || { group: "Other", label: "AI Model" };
+}
+
+function setModelDownloadStatus(message, isError = false) {
+  const status = document.getElementById("model-download-status");
+  if (!status) return;
+  status.textContent = message;
+  status.classList.toggle("error", isError);
+}
+
+function setModelDownloadSummary(message) {
+  const summary = document.getElementById("model-download-summary");
+  if (summary) summary.textContent = message;
+}
+
+function setModelDownloadButtonsDisabled(disabled) {
+  document.querySelectorAll("#download-missing-models-button, .download-model-button").forEach((button) => {
+    button.classList.toggle("disabled", disabled);
+    button.style.pointerEvents = disabled ? "none" : "";
+    button.setAttribute("aria-disabled", String(disabled));
+  });
+}
+
+async function loadModelStatus() {
+  const list = document.getElementById("model-download-list");
+  if (!list || !window.eel || typeof eel.getModelStatus !== "function") return;
+
+  try {
+    const result = await eel.getModelStatus()();
+    const models = result?.models || [];
+    const missingCount = models.filter((model) => !model.installed).length;
+    const statusMessage = missingCount
+      ? `${missingCount} model${missingCount === 1 ? "" : "s"} missing.`
+      : "All supported models are installed.";
+    setModelDownloadStatus(statusMessage);
+    setModelDownloadSummary(missingCount ? `${missingCount} missing` : "All installed");
+    list.replaceChildren();
+    const modelsByGroup = models.reduce((groups, model) => {
+      const presentation = getModelPresentation(model);
+      groups[presentation.group] ||= [];
+      groups[presentation.group].push({ ...model, presentation });
+      return groups;
+    }, {});
+    const groups = [...MODEL_GROUP_ORDER, ...Object.keys(modelsByGroup).filter((group) => !MODEL_GROUP_ORDER.includes(group))];
+
+    groups.forEach((group) => {
+      const groupModels = modelsByGroup[group];
+      if (!groupModels?.length) return;
+      const section = document.createElement("section");
+      section.className = "model-download-group";
+      const heading = document.createElement("h3");
+      heading.textContent = `${group} Models`;
+      section.appendChild(heading);
+
+      groupModels.forEach((model) => {
+        const row = document.createElement("div");
+        row.className = "model-download-row";
+
+        const details = document.createElement("div");
+        const name = document.createElement("strong");
+        name.textContent = model.presentation.label;
+        const availability = document.createElement("span");
+        availability.className = `model-availability ${model.installed ? "installed" : "missing"}`;
+        availability.textContent = model.installed
+          ? `Installed${formatModelSize(model.size_bytes) ? ` · ${formatModelSize(model.size_bytes)}` : ""}`
+          : "Missing";
+        details.append(name, availability);
+        row.appendChild(details);
+
+        if (!model.installed) {
+          const button = document.createElement("button");
+          button.className = "purple-button download-model-button";
+          button.type = "button";
+          button.textContent = "Download";
+          button.addEventListener("click", () => downloadMissingModels([model.name]));
+          row.appendChild(button);
+        }
+        section.appendChild(row);
+      });
+      list.appendChild(section);
+    });
+  } catch (error) {
+    console.error("Could not load model status:", error);
+    setModelDownloadStatus("Could not check installed models.", true);
+    setModelDownloadSummary("Unavailable");
+  }
+}
+
+async function downloadMissingModels(modelNames = null) {
+  if (!window.eel || typeof eel.downloadMissingModels !== "function") return;
+  setModelDownloadButtonsDisabled(true);
+  setModelDownloadStatus("Downloading models… This can take a few minutes.");
+
+  try {
+    const result = await eel.downloadMissingModels(modelNames)();
+    if (!result?.ok) {
+      setModelDownloadStatus(
+        result?.failures ? "Some models could not be downloaded. Check your internet connection and try again." : (result?.message || "Could not download models."),
+        true
+      );
+      return;
+    }
+    setModelDownloadStatus(result.message || "Model download complete.");
+    await loadModelStatus();
+  } catch (error) {
+    console.error("Could not download models:", error);
+    setModelDownloadStatus(`Could not download models: ${error}`, true);
+  } finally {
+    setModelDownloadButtonsDisabled(false);
+  }
+}
+
+const FALLBACK_PRIVATE_SERVER_KEYS = [
+  "fallback_private_server_link_1",
+  "fallback_private_server_link_2",
+  "fallback_private_server_link_3",
+];
+
+async function openFallbackPrivateServersPopup() {
+  const modal = document.getElementById("fallback-private-servers-modal");
+  if (!modal) return;
+
+  const settings = await loadAllSettings();
+  FALLBACK_PRIVATE_SERVER_KEYS.forEach((key) => {
+    const input = document.getElementById(key);
+    if (input) input.value = settings[key] || "";
+  });
+  modal.style.display = "flex";
+}
+
+function closeFallbackPrivateServersPopup() {
+  const modal = document.getElementById("fallback-private-servers-modal");
+  if (modal) modal.style.display = "none";
+}
+
+async function saveFallbackPrivateServersPopup() {
+  for (const key of FALLBACK_PRIVATE_SERVER_KEYS) {
+    const input = document.getElementById(key);
+    if (input) await saveSetting(input, "general");
+  }
+  closeFallbackPrivateServersPopup();
+}
+
+$(document)
+  .on("click", "#manage-fallback-private-servers-button", (event) => {
+    event.preventDefault();
+    openFallbackPrivateServersPopup();
+  })
+  .on("click", "#cancel-fallback-private-servers-button", (event) => {
+    event.preventDefault();
+    closeFallbackPrivateServersPopup();
+  })
+  .on("click", "#save-fallback-private-servers-button", async (event) => {
+    event.preventDefault();
+    await saveFallbackPrivateServersPopup();
+  })
+  .on("click", "#fallback-private-servers-modal", function (event) {
+    if (event.target === this) closeFallbackPrivateServersPopup();
+  });
+
 function initializeDragAndDrop() {
   const dragContainers = document.querySelectorAll(".drag-list-container");
 
   dragContainers.forEach((container) => {
+    if (container.dataset.dndInitialized === "true") return;
+    container.dataset.dndInitialized = "true";
+
     let draggedElement = null;
 
     container.addEventListener("dragstart", (e) => {
       draggedElement = e.target.closest(".drag-item");
-      if (draggedElement) {
-        draggedElement.classList.add("dragging");
-        e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("text/html", draggedElement.outerHTML);
+      if (!draggedElement || draggedElement.classList.contains("priority-locked")) {
+        e.preventDefault();
+        draggedElement = null;
+        return;
       }
+      draggedElement.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/html", draggedElement.outerHTML);
     });
 
     container.addEventListener("dragend", (e) => {
       if (draggedElement) {
         draggedElement.classList.remove("dragging");
         draggedElement = null;
+        if (typeof reapplyPriorityLockedPositions === "function") {
+          reapplyPriorityLockedPositions(container);
+        }
         saveDragOrder(container);
       }
     });
@@ -72,13 +267,17 @@ function initializeDragAndDrop() {
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
 
-      const afterElement = getDragAfterElement(container, e.clientY);
-      const draggable = document.querySelector(".dragging");
+      const draggable = container.querySelector(".drag-item.dragging");
+      if (!draggable) return;
 
+      const afterElement = getDragAfterElement(container, e.clientY);
       if (afterElement == null) {
         container.appendChild(draggable);
       } else {
         container.insertBefore(draggable, afterElement);
+      }
+      if (typeof reapplyPriorityLockedPositions === "function") {
+        reapplyPriorityLockedPositions(container);
       }
     });
 
@@ -94,7 +293,9 @@ function initializeDragAndDrop() {
 
 function getDragAfterElement(container, y) {
   const draggableElements = [
-    ...container.querySelectorAll(".drag-item:not(.dragging)"),
+    ...container.querySelectorAll(
+      ".drag-item:not(.dragging):not(.priority-locked)"
+    ),
   ];
 
   return draggableElements.reduce(
@@ -113,12 +314,25 @@ function getDragAfterElement(container, y) {
 }
 
 function saveDragOrder(container) {
-  const items = container.querySelectorAll(".drag-item:not(.hidden)");
-  const order = Array.from(items).map((item) => item.dataset.id);
+  const order =
+    typeof buildPriorityOrderFromContainer === "function"
+      ? buildPriorityOrderFromContainer(container)
+      : Array.from(container.querySelectorAll(".drag-item[data-id]")).map(
+          (item) => item.dataset.id
+        );
 
   // Save to settings
   const data = { task_priority_order: order };
   eel.saveDictProfileSettings(data);
+}
+
+function updatePriorityLockHeaderVisibility(container, searchTerm = "") {
+  if (!container) return;
+  const term = String(searchTerm || "").toLowerCase().trim();
+  container.querySelectorAll(".priority-lock-header").forEach((header) => {
+    const text = header.textContent.toLowerCase();
+    header.style.display = !term || text.includes(term) ? "" : "none";
+  });
 }
 
 function initializePrioritySearch() {
@@ -144,38 +358,98 @@ function initializePrioritySearch() {
           item.style.display = "none";
       }
     });
+    updatePriorityLockHeaderVisibility(container, searchTerm);
   });
 }
 
+let priorityQuickActionsInitialized = false;
+
 function initializeQuickActions() {
+  if (priorityQuickActionsInitialized) return;
+  priorityQuickActionsInitialized = true;
+
   // Handle move to top buttons
   document.addEventListener("click", (e) => {
     if (e.target.classList.contains("move-to-top")) {
       const item = e.target.closest(".drag-item");
       const container = item?.parentElement;
-      if (container && item) {
-        container.insertBefore(item, container.firstChild);
-        saveDragOrder(container);
+      if (!container || !item || item.classList.contains("priority-locked")) {
+        return;
       }
+      const unlocked = [
+        ...container.querySelectorAll(".drag-item:not(.priority-locked)"),
+      ];
+      const firstUnlocked = unlocked[0];
+      if (firstUnlocked) {
+        container.insertBefore(item, firstUnlocked);
+      }
+      if (typeof reapplyPriorityLockedPositions === "function") {
+        reapplyPriorityLockedPositions(container);
+      }
+      saveDragOrder(container);
     }
 
     // Handle move to bottom buttons
     if (e.target.classList.contains("move-to-bottom")) {
       const item = e.target.closest(".drag-item");
       const container = item?.parentElement;
-      if (container && item) {
-        container.appendChild(item);
-        saveDragOrder(container);
+      if (!container || !item || item.classList.contains("priority-locked")) {
+        return;
       }
+      const unlocked = [
+        ...container.querySelectorAll(".drag-item:not(.priority-locked)"),
+      ];
+      const lastUnlocked = unlocked[unlocked.length - 1];
+      if (lastUnlocked) {
+        if (lastUnlocked.nextSibling) {
+          container.insertBefore(item, lastUnlocked.nextSibling);
+        } else {
+          container.appendChild(item);
+        }
+      }
+      if (typeof reapplyPriorityLockedPositions === "function") {
+        reapplyPriorityLockedPositions(container);
+      }
+      saveDragOrder(container);
     }
   });
+}
+
+async function resetTaskPriorities() {
+  const confirmReset = confirm(
+    "Are you sure you want to reset task priorities to default values? This action cannot be undone."
+  );
+  if (!confirmReset) return;
+
+  try {
+    const success = await eel.resetTaskPrioritiesToDefault()();
+    if (!success) {
+      alert("Failed to reset task priorities. Default order may be missing.");
+      return;
+    }
+
+    const settings = await loadAllSettings();
+    loadInputs(settings);
+    if (typeof loadTasks === "function") {
+      await loadTasks();
+    }
+    initializePrioritySearch();
+    alert("Successfully reset task priorities to defaults.");
+  } catch (error) {
+    console.error("Error resetting task priorities:", error);
+    alert("An error occurred while resetting task priorities.");
+  }
 }
 
 $("#config-placeholder", loadConfig)
   .load("../htmlImports/tabs/config.html") //load config tab
   .on("click", ".config-tab-item", (event) =>
     switchConfigTab(event.currentTarget)
-  ); //navigate between fields
+  ) //navigate between fields
+  .on("click", "#reset-task-priorities-button", (event) => {
+    event.preventDefault();
+    resetTaskPriorities();
+  });
 
 /*
 =============================================
@@ -301,6 +575,7 @@ async function refreshAllSettings() {
 
     // Update all input elements with new settings
     loadInputs(settings);
+    updateDiscordUniversalRouteText();
 
     // Reload gather tab (field settings)
     const currentGatherTab = document.querySelector(".gather-tab-item.active");
@@ -351,6 +626,23 @@ async function refreshAllSettings() {
   } catch (error) {
     console.error("Error refreshing settings:", error);
   }
+}
+
+function updateDiscordUniversalRouteText() {
+  const modeElement = document.getElementById("discord_delivery_mode");
+  const webhookInput = document.getElementById("webhook_link");
+  const channelInput = document.getElementById("discord_channel_id");
+  const botTokenInput = document.getElementById("discord_bot_token");
+  if (!modeElement || !webhookInput || !channelInput) return;
+
+  const mode = getDropdownValue(modeElement) || "both";
+  const webhookForm = webhookInput.closest("form");
+  const channelForm = channelInput.closest("form");
+  const botTokenForm = botTokenInput?.closest("form");
+
+  if (botTokenForm) botTokenForm.style.display = mode === "webhook" ? "none" : "flex";
+  if (webhookForm) webhookForm.style.display = mode === "discord_bot" ? "none" : "flex";
+  if (channelForm) channelForm.style.display = mode === "discord_bot" ? "flex" : "none";
 }
 
 async function createNewProfile() {

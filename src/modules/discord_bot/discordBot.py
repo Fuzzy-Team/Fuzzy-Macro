@@ -1,9 +1,12 @@
 import discord
-try:
-    from discord import app_commands
-except ImportError:
-    print("discord bot not supported")
 from discord.ext import commands
+from modules.discord_bot import legacyCommands
+if legacyCommands.IS_LEGACY:
+    # discord.py 1.x (Python 3.7): run slash commands as prefix commands
+    legacyCommands.install()
+    app_commands = legacyCommands.app_commands
+else:
+    from discord import app_commands
 from modules.screen.screenshot import screenshotRobloxWindow
 import io
 from modules.misc.messageBox import msgBox
@@ -12,6 +15,7 @@ from modules.controls.keyboard import keyboard
 import subprocess
 import sys
 import os
+import re
 import signal
 import json
 import ast
@@ -20,11 +24,9 @@ import cv2
 import numpy as np
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Tuple
-from modules.controls.sleep import INTERRUPT_SKIP, INTERRUPT_RESET, INTERRUPT_AFB_REROLL
+from modules.controls.sleep import INTERRUPT_SKIP, INTERRUPT_RESET, INTERRUPT_AFB_REROLL, INTERRUPT_COLLECT_PLANTER
 
-# Import settings manager functions
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'misc'))
-import settingsManager
+from modules.misc import settingsManager
 
 # Hourly report dependencies
 try:
@@ -44,6 +46,173 @@ _cache_timestamp = 0
 _cache_duration = 5  # seconds
 _shift_lock_template_cache = None
 
+
+def parse_standby_duration(value: Optional[str]):
+    """Return a standby duration in seconds, or a human-readable error.
+
+    ``None`` means an indefinite standby. Accepted examples are ``30m``,
+    ``2h``, and ``1h 30m``. Keeping this parser independent of Discord makes
+    the command straightforward to test.
+    """
+    if value is None or not str(value).strip():
+        return None, None
+
+    text = str(value).strip().lower()
+    if not re.fullmatch(r"(?:[0-9]+\s*[smhd]\s*)+", text):
+        return None, "Use a duration such as `30m`, `2h`, or `1h 30m`."
+
+    matches = re.findall(r"([0-9]+)\s*([smhd])", text)
+    # Reject oversized numbers before int conversion, including on Python 3.7.
+    if any(len(amount.lstrip("0")) > 6 for amount, _ in matches):
+        return None, "Standby duration cannot exceed 7 days."
+
+    unit_seconds = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+    seconds = sum(int(amount.lstrip("0") or "0") * unit_seconds[unit] for amount, unit in matches)
+    if seconds <= 0:
+        return None, "Standby duration must be greater than zero."
+    if seconds > 7 * 86400:
+        return None, "Standby duration cannot exceed 7 days."
+    return seconds, None
+
+
+def format_standby_duration(seconds):
+    if seconds is None:
+        return "until you disable it"
+    parts = []
+    for label, size in (("day", 86400), ("hour", 3600), ("minute", 60), ("second", 1)):
+        amount, seconds = divmod(int(seconds), size)
+        if amount:
+            parts.append(f"{amount} {label}{'s' if amount != 1 else ''}")
+    return " ".join(parts) or "0 seconds"
+
+
+def response_footer():
+    return f"Fuzzy Macro - Version {settingsManager.getMacroVersion()}"
+
+
+def _content_with_footer(content):
+    footer = response_footer()
+    if content is None:
+        return footer
+
+    content = str(content)
+    if "Fuzzy Macro - Version" in content:
+        return content
+    return f"{content}\n\n{footer}"
+
+
+def _apply_embed_footer(embed):
+    if embed is None or not hasattr(embed, "set_footer"):
+        return embed
+
+    footer = response_footer()
+    existing_footer = getattr(getattr(embed, "footer", None), "text", None)
+    if existing_footer:
+        if "Fuzzy Macro - Version" not in existing_footer:
+            embed.set_footer(text=f"{existing_footer} | {footer}")
+    else:
+        embed.set_footer(text=footer)
+    return embed
+
+
+def _build_response_embed(content=None):
+    embed = discord.Embed(color=0x00ff00)
+    if content is not None:
+        embed.description = str(content)
+    else:
+        embed.title = "Fuzzy Macro"
+    return _apply_embed_footer(embed)
+
+
+def _pop_first_content_arg(args):
+    if not args:
+        return None
+    content = args.pop(0)
+    return content
+
+
+def _merge_content_into_embed(kwargs, content):
+    if content is None:
+        return
+
+    embed = kwargs.get("embed")
+    if embed is None and kwargs.get("embeds"):
+        embed = kwargs["embeds"][0]
+    if embed is None:
+        kwargs["embed"] = _build_response_embed(content)
+        return
+
+    content = str(content)
+    existing_description = getattr(embed, "description", None)
+    if existing_description:
+        embed.description = f"{content}\n\n{existing_description}"
+    else:
+        embed.description = content
+
+
+def _format_bot_response(args, kwargs, add_default_content=True):
+    args = list(args)
+
+    if "embed" in kwargs:
+        kwargs["embed"] = _apply_embed_footer(kwargs["embed"])
+    if "embeds" in kwargs and kwargs["embeds"]:
+        kwargs["embeds"] = [_apply_embed_footer(embed) for embed in kwargs["embeds"]]
+
+    has_embed = kwargs.get("embed") is not None or bool(kwargs.get("embeds"))
+    if not has_embed:
+        if args:
+            kwargs["embed"] = _build_response_embed(_pop_first_content_arg(args))
+        elif "content" in kwargs:
+            content = kwargs.pop("content")
+            kwargs["embed"] = _build_response_embed(content)
+        elif add_default_content:
+            kwargs["embed"] = _build_response_embed()
+    else:
+        if args:
+            _merge_content_into_embed(kwargs, _pop_first_content_arg(args))
+        if "content" in kwargs:
+            _merge_content_into_embed(kwargs, kwargs.pop("content"))
+
+    return tuple(args), kwargs
+
+
+def _patch_discord_response_footers():
+    if not getattr(discord.InteractionResponse, "_fuzzy_footer_patched", False):
+        original_send_message = discord.InteractionResponse.send_message
+        original_edit_message = discord.InteractionResponse.edit_message
+
+        async def send_message_with_footer(self, *args, **kwargs):
+            args, kwargs = _format_bot_response(args, kwargs)
+            return await original_send_message(self, *args, **kwargs)
+
+        async def edit_message_with_footer(self, *args, **kwargs):
+            args, kwargs = _format_bot_response(args, kwargs, add_default_content=False)
+            return await original_edit_message(self, *args, **kwargs)
+
+        discord.InteractionResponse.send_message = send_message_with_footer
+        discord.InteractionResponse.edit_message = edit_message_with_footer
+        discord.InteractionResponse._fuzzy_footer_patched = True
+
+    if not getattr(discord.Webhook, "_fuzzy_footer_patched", False):
+        original_webhook_send = discord.Webhook.send
+
+        async def webhook_send_with_footer(self, *args, **kwargs):
+            args, kwargs = _format_bot_response(args, kwargs)
+            return await original_webhook_send(self, *args, **kwargs)
+
+        discord.Webhook.send = webhook_send_with_footer
+        discord.Webhook._fuzzy_footer_patched = True
+
+    if not getattr(discord.Message, "_fuzzy_footer_patched", False):
+        original_message_edit = discord.Message.edit
+
+        async def message_edit_with_footer(self, *args, **kwargs):
+            args, kwargs = _format_bot_response(args, kwargs, add_default_content=False)
+            return await original_message_edit(self, *args, **kwargs)
+
+        discord.Message.edit = message_edit_with_footer
+        discord.Message._fuzzy_footer_patched = True
+
 def get_cached_settings():
     """Get settings with caching to improve performance"""
     global _settings_cache, _cache_timestamp
@@ -61,6 +230,73 @@ def clear_settings_cache():
     _settings_cache = {}
     _cache_timestamp = 0
 
+
+TAD_ALT_SYNC_HELP_TEXT = (
+    "`?stop` - Stop the alt macro before changing fields.\n"
+    "`?set FieldName1 <field>` - Set the alt's first configured field slot.\n"
+    "`?set AltGatherSettings <json>` - Apply the host's Default Alt Field gather preset.\n"
+    "`?start` - Start the alt macro after its field is updated.\n"
+    "`?help` - Show this TAD compatibility help.\n\n"
+    "These compatibility commands are accepted only from Discord webhook messages. "
+    "TAD Alt Sync sends them in the order `?stop`, `?set`, then `?start`; Fuzzy must receive the field authorization before starting. "
+    "The host sends that sequence with its default field at startup and whenever the boost field changes. "
+    "It also sends the default field when no boost is detected and when the host stops. "
+    "When Glitter Extending is enabled, the host uses Glitter five seconds before the boost expires and keeps the alt in the boost field for a second boost duration. "
+    "On each alt, select **Alt Mode**; it remains idle until a fresh host field command arrives, then gathers that field indefinitely."
+)
+
+
+def parse_tad_alt_sync_command(content: str):
+    """Parse the webhook commands emitted by the Slymi/Eli TAD Alt Sync tool."""
+    command = str(content or "").strip()
+    lowered = command.lower()
+    if lowered == "?help":
+        return "help", None
+    if lowered == "?start":
+        return "start", None
+    if lowered == "?stop":
+        return "stop", None
+
+    prefix = "?set fieldname1 "
+    if lowered.startswith(prefix):
+        field = " ".join(command[len(prefix):].strip().lower().replace("_", " ").split())
+        if field:
+            return "set_field_1", field
+    settings_prefix = "?set altgathersettings "
+    if lowered.startswith(settings_prefix):
+        payload = command[len(settings_prefix):].strip()
+        if payload:
+            return "set_alt_gather_settings", payload
+    return None, None
+
+
+def normalize_tad_alt_gather_settings(payload):
+    if not isinstance(payload, dict):
+        return {}
+    out = {}
+    bool_keys = ("shift_lock", "field_drift_compensation", "invert_lr", "invert_fb", "goo")
+    for key in bool_keys:
+        if isinstance(payload.get(key), bool):
+            out[key] = payload[key]
+    enums = {
+        "size": {"xs", "s", "m", "l", "xl"},
+        "turn": {"none", "left", "right"},
+        "start_location": {"center", "upper right", "right", "lower right", "bottom", "lower left", "left", "upper left", "top"},
+    }
+    for key, allowed in enums.items():
+        value = str(payload.get(key, "")).strip().lower()
+        if value in allowed:
+            out[key] = value
+    ranges = {"width": (1, 8), "turn_times": (1, 4), "distance": (1, 10), "goo_interval": (3, 300)}
+    for key, (minimum, maximum) in ranges.items():
+        value = payload.get(key)
+        if isinstance(value, int) and not isinstance(value, bool):
+            out[key] = max(minimum, min(maximum, value))
+    shape = str(payload.get("shape", "")).strip()
+    if shape and len(shape) <= 64:
+        out["shape"] = shape
+    return out
+
 AUTO_PLANTER_OPTIONS = [
     ("paper", "auto_planter_paper", "Paper"),
     ("ticket", "auto_planter_ticket", "Ticket"),
@@ -77,6 +313,64 @@ AUTO_PLANTER_OPTIONS = [
     ("petal", "auto_planter_petal", "Petal"),
     ("planter_of_plenty", "auto_planter_planter_of_plenty", "Planter Of Plenty"),
 ]
+
+DISCORD_COMMAND_PERMISSION_CATEGORIES = {
+    "public_info": {
+        "label": "Public Info",
+        "setting": "discord_permission_public_info_ids",
+        "commands": ["help", "ping"],
+    },
+    "observation": {
+        "label": "Observation",
+        "setting": "discord_permission_observation_ids",
+        "commands": ["battery", "logs", "nectar", "plantertimers", "screenshot", "status", "tasklist"],
+    },
+    "macro_control": {
+        "label": "Macro Control",
+        "setting": "discord_permission_macro_control_ids",
+        "commands": ["pause", "rejoin", "resume", "skipserver", "start", "stop"],
+    },
+    "task_interrupts": {
+        "label": "Task Interrupts",
+        "setting": "discord_permission_task_interrupt_ids",
+        "commands": ["amulet", "collectplanter", "planterreset", "reroll", "reset", "skip", "usehotbar"],
+    },
+    "configuration": {
+        "label": "Configuration",
+        "setting": "discord_permission_configuration_ids",
+        "commands": [
+            "collectible", "collectibles", "disablegoo", "enablegoo", "field", "fields",
+            "goostatus", "hiveslot", "macromode", "mob", "mobs", "planters", "quest",
+            "quests", "setmaxplanters", "setplantermode", "settings", "shiftlock", "swapfield",
+        ],
+    },
+    "system_actions": {
+        "label": "System Actions",
+        "setting": "discord_permission_system_action_ids",
+        "commands": ["close", "mute", "unmute"],
+    },
+    "profile_access": {
+        "label": "Profile Access",
+        "setting": "discord_permission_profile_access_ids",
+        "commands": ["privateserver", "swapprofile"],
+    },
+    "streaming": {
+        "label": "Streaming",
+        "setting": "discord_permission_streaming_ids",
+        "commands": ["stream", "streamurl"],
+    },
+    "reports": {
+        "label": "Reports",
+        "setting": "discord_permission_reports_ids",
+        "commands": ["hourlyreport", "session"],
+    },
+}
+
+DISCORD_COMMAND_TO_PERMISSION_CATEGORY = {
+    command: category
+    for category, data in DISCORD_COMMAND_PERMISSION_CATEGORIES.items()
+    for command in data["commands"]
+}
 
 
 def _canonicalize_planter_name(name: str) -> str:
@@ -111,10 +405,8 @@ def _format_planter_time(seconds_remaining: float) -> str:
 
 def _load_manual_planter_data() -> Dict:
     manual_data = {"planters": [], "fields": [], "harvestTimes": []}
-    manual_path = "./data/user/manualplanters.txt"
     try:
-        with open(manual_path, "r") as manual_file:
-            raw = manual_file.read().strip()
+        raw = settingsManager.loadUserText("manualplanters.txt").strip()
         if not raw:
             return manual_data
         parsed = ast.literal_eval(raw)
@@ -127,10 +419,8 @@ def _load_manual_planter_data() -> Dict:
 
 def _load_auto_planter_data() -> Dict:
     auto_data = {"planters": []}
-    auto_path = "./data/user/auto_planters.json"
     try:
-        with open(auto_path, "r") as auto_file:
-            parsed = json.load(auto_file)
+        parsed = settingsManager.loadUserJson("auto_planters.json")
         if isinstance(parsed, dict):
             auto_data.update(parsed)
     except Exception:
@@ -158,26 +448,43 @@ def _get_enabled_auto_planters(settings: Dict) -> List[str]:
 
 
 def _get_active_planter_choices(settings: Dict) -> List[Tuple[str, int]]:
+    return [(target["canonical"], target["index"]) for target in _get_active_planter_targets(settings)]
+
+
+def _get_active_planter_targets(settings: Dict) -> List[Dict]:
     mode = int(settings.get("planters_mode", 0) or 0)
-    choices = []
+    targets = []
 
     if mode == 1:
         enabled_manual = set(_get_enabled_manual_planters(settings))
         manual_data = _load_manual_planter_data()
+        fields = manual_data.get("fields", [])
         for index, planter in enumerate(manual_data.get("planters", [])):
             canonical = _canonicalize_planter_name(planter)
-            if canonical and canonical in enabled_manual and canonical not in [choice[0] for choice in choices]:
-                choices.append((canonical, index))
+            if canonical and canonical in enabled_manual and canonical not in [target["canonical"] for target in targets]:
+                targets.append({
+                    "canonical": canonical,
+                    "index": index,
+                    "mode": mode,
+                    "planter": planter,
+                    "field": fields[index] if index < len(fields) else "",
+                })
     elif mode == 2:
         enabled_auto = set(_get_enabled_auto_planters(settings))
         auto_data = _load_auto_planter_data()
         for index, planter_slot in enumerate(auto_data.get("planters", [])):
             planter_name = planter_slot.get("planter", "") if isinstance(planter_slot, dict) else ""
             canonical = _canonicalize_planter_name(planter_name)
-            if canonical and canonical in enabled_auto and canonical not in [choice[0] for choice in choices]:
-                choices.append((canonical, index))
+            if canonical and canonical in enabled_auto and canonical not in [target["canonical"] for target in targets]:
+                targets.append({
+                    "canonical": canonical,
+                    "index": index,
+                    "mode": mode,
+                    "planter": planter_name,
+                    "field": planter_slot.get("field", "") if isinstance(planter_slot, dict) else "",
+                })
 
-    return choices
+    return targets
 
 
 def _get_active_planter_timers(settings: Dict) -> Tuple[int, List[Dict]]:
@@ -239,8 +546,7 @@ def _reset_planter_timer_by_name(settings: Dict, planter_name: str) -> Tuple[boo
         if target_index < len(manual_data.get("harvestTimes", [])):
             manual_data["harvestTimes"][target_index] = 0
         try:
-            with open("./data/user/manualplanters.txt", "w") as manual_file:
-                manual_file.write(str(manual_data))
+            settingsManager.saveUserText("manualplanters.txt", str(manual_data))
         except Exception as error:
             return False, f"❌ Failed to reset planter timer: {error}"
     elif mode == 2:
@@ -259,8 +565,7 @@ def _reset_planter_timer_by_name(settings: Dict, planter_name: str) -> Tuple[boo
             "natural_grow_duration": 0,
         }
         try:
-            with open("./data/user/auto_planters.json", "w") as auto_file:
-                json.dump(auto_data, auto_file, indent=3)
+            settingsManager.saveUserJson("auto_planters.json", auto_data)
         except Exception as error:
             return False, f"❌ Failed to reset planter timer: {error}"
     else:
@@ -398,7 +703,8 @@ def _detect_shift_lock_state_with_retries(retries: int = 4, delay: float = 0.2):
     for attempt in range(retries):
         try:
             last_detection = _detect_shift_lock_button()
-        except Exception:
+        except Exception as error:
+            print(f"Shift lock detection attempt {attempt + 1} failed: {error}")
             last_detection = None
 
         if last_detection and last_detection.get("state") is not None:
@@ -527,12 +833,110 @@ def _set_shift_lock_mode(mode: str):
         return f"⚠️ Sent shift input, but shift lock still appears {state_text}."
     return "⚠️ Sent shift input, but I could not verify the shift lock state afterwards."
 
-def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None, updateGUI=None):
+def _format_logger_time(time_value, time_format=24):
+    if time_format == 12:
+        try:
+            return datetime.strptime(time_value, "%H:%M:%S").strftime("%I:%M:%S %p")
+        except Exception:
+            return time_value
+    return time_value
+
+
+def _build_logger_embed(data):
+    formatted_time = _format_logger_time(data.get("time", ""), data.get("time_format", 24))
+    title = data.get("title", "") or ""
+    desc = data.get("desc", "") or ""
+    color = int(str(data.get("color", "FFFFFF")).replace("#", ""), 16)
+    if title:
+        embed = discord.Embed(title=f"[{formatted_time}] {title}", description=desc, color=color)
+    else:
+        embed = discord.Embed(title="", description=f"[{formatted_time}] {desc}", color=color)
+    for field in data.get("fields") or []:
+        embed.add_field(name=field["name"], value=field["value"], inline=field.get("inline", False))
+    if data.get("imagePath"):
+        embed.set_image(url="attachment://screenshot.png")
+    return embed
+
+
+def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None, updateGUI=None, discord_message_queue=None, planter_command_queue=None, stream_control_queue=None, skipServer=None, standby_command_queue=None, standby_state=None):
     import modules.macro
+    _patch_discord_response_footers()
     bot = commands.Bot(command_prefix="fuzz!", intents=discord.Intents.all())
+    if legacyCommands.IS_LEGACY:
+        legacyCommands.attach(bot)
     
     # Store pin requests queue
     _pin_requests = pin_requests
+    _discord_message_queue = discord_message_queue
+    _planter_command_queue = planter_command_queue
+    _stream_control_queue = stream_control_queue
+
+    def _parse_allowed_discord_ids(value):
+        if value is None:
+            return set()
+        if isinstance(value, (list, tuple, set)):
+            raw_items = value
+        else:
+            raw_value = str(value).strip()
+            if not raw_value:
+                return set()
+            try:
+                parsed = ast.literal_eval(raw_value)
+                raw_items = parsed if isinstance(parsed, (list, tuple, set)) else [parsed]
+            except Exception:
+                raw_items = raw_value.split(",")
+
+        allowed_ids = set()
+        for item in raw_items:
+            item_text = str(item).strip()
+            if item_text.startswith("<@") and item_text.endswith(">"):
+                item_text = item_text.strip("<@!>")
+            if item_text:
+                allowed_ids.add(item_text)
+        return allowed_ids
+
+    def _permission_category_label(category_key):
+        return DISCORD_COMMAND_PERMISSION_CATEGORIES.get(category_key, {}).get("label", category_key)
+
+    async def _send_permission_denied(interaction, category_key):
+        label = _permission_category_label(category_key)
+        message = f"❌ You do not have permission to use this command. Required category: **{label}**."
+        if interaction.response.is_done():
+            await interaction.followup.send(message, ephemeral=True)
+        else:
+            await interaction.response.send_message(message, ephemeral=True)
+
+    def _user_can_use_permission_category(interaction, category_key):
+        category = DISCORD_COMMAND_PERMISSION_CATEGORIES.get(category_key)
+        if not category:
+            return False
+
+        settings = get_cached_settings()
+        allowed_ids = _parse_allowed_discord_ids(settings.get(category["setting"], ""))
+        if not allowed_ids:
+            return True
+        return str(interaction.user.id) in allowed_ids
+
+    def requires_discord_permission(category_key):
+        async def predicate(interaction):
+            if _user_can_use_permission_category(interaction, category_key):
+                return True
+            await _send_permission_denied(interaction, category_key)
+            return False
+        return app_commands.check(predicate)
+
+    @bot.tree.error
+    async def on_app_command_error(interaction, error):
+        if isinstance(error, app_commands.CheckFailure):
+            return
+        print(f"Discord command error: {error}")
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send(f"❌ Command failed: {str(error)}", ephemeral=True)
+            else:
+                await interaction.response.send_message(f"❌ Command failed: {str(error)}", ephemeral=True)
+        except Exception:
+            pass
 
     @bot.event
     async def on_ready():
@@ -565,6 +969,113 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         # Start background task to process pin requests
         if _pin_requests is not None:
             bot.loop.create_task(process_pin_requests())
+        if _discord_message_queue is not None:
+            bot.loop.create_task(process_discord_messages())
+
+    @bot.event
+    async def on_message(message):
+        action, value = parse_tad_alt_sync_command(message.content)
+
+        # Help is safe for normal users to request. The commands that mutate
+        # macro state remain restricted to Discord webhook messages.
+        if action == "help" and not message.author.bot:
+            embed = discord.Embed(
+                title="TAD Alt Sync Commands",
+                description=TAD_ALT_SYNC_HELP_TEXT,
+                color=0x0099ff,
+            )
+            await message.channel.send(embed=_apply_embed_footer(embed))
+            return
+
+        if message.webhook_id is not None:
+            if action == "help":
+                embed = discord.Embed(
+                    title="TAD Alt Sync Commands",
+                    description=TAD_ALT_SYNC_HELP_TEXT,
+                    color=0x0099ff,
+                )
+                await message.channel.send(embed=_apply_embed_footer(embed))
+                return
+            if action == "stop":
+                if run.value != 3:
+                    run.value = 0
+                return
+            if action == "start":
+                if run.value == 3:
+                    run.value = 1
+                return
+            if action == "set_field_1":
+                valid_fields = settingsManager.loadFields()
+                if value not in valid_fields:
+                    print(f"Ignored TAD Alt Sync field: {value}")
+                    return
+                settings = settingsManager.loadSettings()
+                fields = list(settings.get("fields", []))
+                while len(fields) < 5:
+                    fields.append("sunflower")
+                fields[0] = value
+                settingsManager.saveProfileSetting("fields", fields)
+                settingsManager.saveProfileSetting("alt_mode_field", value)
+                settingsManager.saveProfileSetting("alt_mode_field_pending", True)
+                clear_settings_cache()
+                return
+            if action == "set_alt_gather_settings":
+                try:
+                    payload = json.loads(value)
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    return
+                gather_settings = normalize_tad_alt_gather_settings(payload)
+                field = str(settingsManager.loadSettings().get("alt_mode_field", "") or "").strip()
+                valid_fields = settingsManager.loadFields()
+                if field not in valid_fields or not gather_settings:
+                    return
+                field_settings = dict(valid_fields[field])
+                field_settings.update(gather_settings)
+                field_settings["infinite_gather"] = True
+                settingsManager.saveField(field, field_settings)
+                return
+
+        await bot.process_commands(message)
+
+    async def process_discord_messages():
+        """Process outbound logger messages routed through the bot."""
+        while True:
+            try:
+                await discord.utils.sleep_until(datetime.now() + timedelta(seconds=1))
+                while _discord_message_queue and not _discord_message_queue.empty():
+                    try:
+                        data = _discord_message_queue.get_nowait()
+                        await send_logger_message(data)
+                    except Exception as e:
+                        print(f"Error processing Discord logger message: {e}")
+            except Exception as e:
+                print(f"Error in process_discord_messages loop: {e}")
+                await discord.utils.sleep_until(datetime.now() + timedelta(seconds=1))
+
+    async def send_logger_message(data):
+        channel_id = str(data.get("channel_id", "")).strip()
+        if not channel_id.isdigit():
+            print(f"Invalid Discord channel route: {channel_id}")
+            return
+        channel = bot.get_channel(int(channel_id))
+        if not channel:
+            channel = await bot.fetch_channel(int(channel_id))
+        if not channel:
+            print(f"Discord channel not found: {channel_id}")
+            return
+
+        content = None
+        if data.get("ping_user_id"):
+            content = f"<@{data.get('ping_user_id')}>"
+        embed = _build_logger_embed(data)
+        image_path = data.get("imagePath")
+        file_obj = None
+        try:
+            if image_path and os.path.exists(image_path):
+                file_obj = discord.File(image_path, filename="screenshot.png")
+            await channel.send(content=content, embed=embed, file=file_obj)
+        except Exception as e:
+            print(f"Discord logger send error: {e}")
     
     async def process_pin_requests():
         """Process pin requests from the queue"""
@@ -705,6 +1216,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         ("bucko_bee_quest", "Bucko Bee"),
         ("riley_bee_quest", "Riley Bee"),
         ("quest_use_gumdrops", "Use Gumdrops"),
+        ("quest_progress_watch", "Keep Quest Menu Open"),
     ]
 
     COLLECTIBLE_SETTINGS = [
@@ -714,6 +1226,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         ("coconut_dispenser", "Coconut Dispenser"),
         ("royal_jelly_dispenser", "Royal Jelly Dispenser"),
         ("ant_pass_dispenser", "Ant Pass Dispenser"),
+        ("buy_ant_pass", "Buy Ant Pass"),
         ("treat_dispenser", "Treat Dispenser"),
         ("glue_dispenser", "Glue Dispenser"),
         ("memory_match", "Memory Match"),
@@ -753,6 +1266,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
     MACRO_MODE_OPTIONS = [
         ("normal", "Normal"),
+        ("alt", "Alt"),
         ("quest", "Quests"),
         ("field", "Field"),
         ("bug", "Bug Runs"),
@@ -1272,6 +1786,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     def _is_task_enabled(task_id: str, settings: Dict) -> bool:
         macro_mode = settings.get("macro_mode", "normal")
 
+        if macro_mode == "alt":
+            return False
         if macro_mode == "field" and not task_id.startswith("gather_"):
             return False
         if macro_mode == "quest" and not task_id.startswith("quest_"):
@@ -1322,6 +1838,13 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         enabled_tasks = [task_id for task_id in task_list_order if _is_task_enabled(task_id, settings)]
 
         macro_mode = settings.get("macro_mode", "normal")
+
+        if macro_mode == "alt":
+            alt_field = str(
+                settings.get("alt_mode_field")
+                or settings.get("tad_alt_default_field", "pine tree")
+            ).replace(" ", "_")
+            return [f"gather_{alt_field}"]
 
         if macro_mode == "field" and not enabled_tasks:
             fields = settings.get("fields", [])
@@ -2226,10 +2749,12 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             self.add_item(BackButton())
 
     @bot.tree.command(name = "ping", description = "Check if the bot is online")
+    @requires_discord_permission("public_info")
     async def ping(interaction: discord.Interaction):
         await interaction.response.send_message("Pong!")
     
     @bot.tree.command(name = "screenshot", description = "Send a screenshot of your screen")
+    @requires_discord_permission("observation")
     async def screenshot(interaction: discord.Interaction):
         await interaction.response.defer()
         img = screenshotRobloxWindow()
@@ -2239,6 +2764,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.followup.send(file = discord.File(fp=imageBinary, filename="screenshot.png"))
 
     @bot.tree.command(name = "start", description = "Start")
+    @requires_discord_permission("macro_control")
     async def start(interaction: discord.Interaction):
         if run.value != 3:
             await interaction.response.send_message("Macro is not fully stopped yet")
@@ -2256,6 +2782,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"Starting Macro. Error: {str(e)}")
 
     @bot.tree.command(name = "stop", description = "Stop the macro")
+    @requires_discord_permission("macro_control")
     async def stop(interaction: discord.Interaction):
         if run.value == 3:
             await interaction.response.send_message("Macro is already stopped")
@@ -2272,7 +2799,32 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             run.value = 0
             await interaction.response.send_message(f"Stopping Macro. Error: {str(e)}")
 
+    @bot.tree.command(name="standby", description="Stop the macro, quit Roblox, and keep the Mac awake")
+    @app_commands.describe(duration="Optional: 30m, 2h, 1h 30m; omit to run until disabled")
+    @requires_discord_permission("macro_control")
+    async def standby(interaction: discord.Interaction, duration: Optional[str] = None):
+        if standby_command_queue is None or standby_state is None:
+            await interaction.response.send_message("Standby is unavailable in this version of the macro.", ephemeral=True)
+            return
+
+        if bool(getattr(standby_state, "active", False)):
+            standby_command_queue.put({"action": "disable"})
+            await interaction.response.send_message("Disabling Macro Standby. The macro will remain stopped.")
+            return
+
+        seconds, error = parse_standby_duration(duration)
+        if error:
+            await interaction.response.send_message(error, ephemeral=True)
+            return
+
+        standby_command_queue.put({"action": "enable", "duration_seconds": seconds})
+        await interaction.response.send_message(
+            f"Entering Macro Standby for {format_standby_duration(seconds)}. "
+            "The macro will stop, Roblox will quit, and this Mac will stay awake."
+        )
+
     @bot.tree.command(name = "pause", description = "Pause the macro")
+    @requires_discord_permission("macro_control")
     async def pause(interaction: discord.Interaction):
         if run.value == 6:
             await interaction.response.send_message("Macro is already paused")
@@ -2285,6 +2837,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         await interaction.response.send_message("Macro Paused")
 
     @bot.tree.command(name = "resume", description = "Resume the macro")
+    @requires_discord_permission("macro_control")
     async def resume(interaction: discord.Interaction):
         if run.value == 2:
             await interaction.response.send_message("Macro is already running")
@@ -2297,11 +2850,25 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         await interaction.response.send_message("Macro Resumed")
 
     @bot.tree.command(name = "rejoin", description = "Make the macro rejoin the game.")
+    @requires_discord_permission("macro_control")
     async def rejoin(interaction: discord.Interaction):
         run.value = 4
         await interaction.response.send_message("Macro is rejoining")
 
+    @bot.tree.command(name="skipserver", description="Skip the private server currently being joined")
+    @requires_discord_permission("macro_control")
+    async def skip_server(interaction: discord.Interaction):
+        if skipServer is None:
+            await interaction.response.send_message("Server skipping is unavailable.", ephemeral=True)
+            return
+        if skipServer.value != -1:
+            await interaction.response.send_message("The macro is not currently attempting to join a private server.")
+            return
+        skipServer.value = 1
+        await interaction.response.send_message("Skipping the current private server. The macro will try the next backup, or a public server if none is configured.")
+
     @bot.tree.command(name = "reset", description = "Reset the character and return to hive")
+    @requires_discord_permission("task_interrupts")
     async def reset(interaction: discord.Interaction):
         if run.value != 2:
             await interaction.response.send_message("Macro is not running")
@@ -2310,6 +2877,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         await interaction.response.send_message("Interrupting the current task. The macro will reset, convert, and retry it.")
 
     @bot.tree.command(name = "reroll", description = "Interrupt the current task and reroll Auto Field Boost")
+    @requires_discord_permission("task_interrupts")
     async def reroll(interaction: discord.Interaction):
         if run.value != 2:
             await interaction.response.send_message("Macro is not running")
@@ -2322,6 +2890,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         await interaction.response.send_message("Rerolling Auto Field Boost. The macro will reset, convert, and roll dice again.")
 
     @bot.tree.command(name = "skip", description = "Skip the current task and move to the next one")
+    @requires_discord_permission("task_interrupts")
     async def skip(interaction: discord.Interaction):
         if run.value != 2:
             await interaction.response.send_message("Macro is not running")
@@ -2330,6 +2899,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         await interaction.response.send_message("Interrupting the current task. The macro will reset, convert, and move to the next task.")
     
     @bot.tree.command(name = "logs", description = "Show recent macro actions (optionally specify count)")
+    @requires_discord_permission("observation")
     @app_commands.describe(count="Number of recent log entries to show (1-50)")
     async def show_logs(interaction: discord.Interaction, count: int = 10):
         """Show recent actions from the macro log (limit by `count`)"""
@@ -2399,6 +2969,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error retrieving logs: {str(e)}")
 
     @bot.tree.command(name = "status", description = "Get the current macro status")
+    @requires_discord_permission("observation")
     async def get_status(interaction: discord.Interaction):
         status_messages = {
             0: "⏹️ Stopping",
@@ -2409,24 +2980,35 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             6: "⏸️ Paused"
         }
 
-        macro_status = status_messages.get(run.value, "❓ Unknown")
+        is_standby = bool(getattr(standby_state, "active", False)) if standby_state is not None else False
+        macro_status = "🌙 Standby" if is_standby else status_messages.get(run.value, "❓ Unknown")
         current_task = status.value if hasattr(status, 'value') and status.value else "None"
 
         # Color: green for running, orange for paused, red for stopped/other
-        if run.value == 2:
+        if is_standby:
+            embed_color = 0x5865f2
+            deadline = float(getattr(standby_state, "deadline", 0) or 0)
+            until = "Until disabled" if not deadline else f"Until <t:{int(deadline)}:R>"
+        elif run.value == 2:
             embed_color = 0x00ff00  # Green
+            until = None
         elif run.value == 6:
             embed_color = 0xffa500  # Orange for paused
+            until = None
         else:
             embed_color = 0xff0000  # Red
+            until = None
 
         embed = discord.Embed(title="📊 Macro Status", color=embed_color)
         embed.add_field(name="State", value=macro_status, inline=True)
         embed.add_field(name="Current Task", value=current_task.replace('_', ' ').title(), inline=True)
+        if until:
+            embed.add_field(name="Standby", value=until, inline=True)
         
         await interaction.response.send_message(embed=embed)
 
     @bot.tree.command(name="tasklist", description="Show enabled task order with current and next task")
+    @requires_discord_permission("observation")
     async def tasklist(interaction: discord.Interaction):
         try:
             settings = get_cached_settings()
@@ -2446,6 +3028,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
             mode_label = {
                 "normal": "Normal",
+                "alt": "Alt",
                 "quest": "Quests",
                 "field": "Field",
             }.get(settings.get("macro_mode", "normal"), settings.get("macro_mode", "normal"))
@@ -2488,6 +3071,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error retrieving task list: {str(e)}")
 
     @bot.tree.command(name="nectar", description="Show current nectar percentages (current + estimated)")
+    @requires_discord_permission("observation")
     async def show_nectar(interaction: discord.Interaction):
         await interaction.response.defer()
         try:
@@ -2584,6 +3168,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error reading nectar: {str(e)}")
 
     @bot.tree.command(name = "amulet", description = "Choose to keep or replace an amulet")
+    @requires_discord_permission("task_interrupts")
     @app_commands.describe(option = "keep or replace an amulet")
     async def amulet(interaction: discord.Interaction, option: str):
         if run.value != 2:
@@ -2605,6 +3190,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message("Replacing amulet")
 
     @bot.tree.command(name = "battery", description = "Get your current battery status")
+    @requires_discord_permission("observation")
     async def battery(interaction: discord.Interaction):
         try:
             output = subprocess.check_output(["pmset", "-g", "batt"], text=True)
@@ -2621,6 +3207,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"An error occurred: {e}")
     
     @bot.tree.command(name = "close", description = "Close the macro and/or Roblox")
+    @requires_discord_permission("system_actions")
     @app_commands.describe(action="What to close: both, roblox, macro")
     @app_commands.choices(action=[
         app_commands.Choice(name="Both", value="both"),
@@ -2660,6 +3247,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             raise
 
     @bot.tree.command(name = "mute", description = "Mute system audio (macOS only)")
+    @requires_discord_permission("system_actions")
     async def mute_audio(interaction: discord.Interaction):
         try:
             if sys.platform != "darwin":
@@ -2671,6 +3259,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Failed to mute audio: {e}")
 
     @bot.tree.command(name = "unmute", description = "Unmute system audio (macOS only)")
+    @requires_discord_permission("system_actions")
     async def unmute_audio(interaction: discord.Interaction):
         try:
             if sys.platform != "darwin":
@@ -2682,6 +3271,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Failed to unmute audio: {e}")
     
     @bot.tree.command(name = "disablegoo", description = "Disable goo for a specific field")
+    @requires_discord_permission("configuration")
     async def disable_goo(interaction: discord.Interaction, field: str):
         print("disablegoo command called")
         try:
@@ -2711,6 +3301,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error disabling goo: {str(e)}")
     
     @bot.tree.command(name = "enablegoo", description = "Enable goo for a specific field")
+    @requires_discord_permission("configuration")
     async def enable_goo(interaction: discord.Interaction, field: str):
         print("enablegoo command called")
         try:
@@ -2740,6 +3331,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error enabling goo: {str(e)}")
     
     @bot.tree.command(name = "goostatus", description = "Check goo status for all fields")
+    @requires_discord_permission("configuration")
     async def goo_status(interaction: discord.Interaction):
         print("goostatus command called")
         try:
@@ -2783,6 +3375,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             return []
 
     @bot.tree.command(name="swapprofile", description="Swap to a different profile (macro must be stopped)")
+    @requires_discord_permission("profile_access")
     @app_commands.describe(profile="Profile name to switch to")
     @app_commands.autocomplete(profile=profile_autocomplete)
     async def swap_profile(interaction: discord.Interaction, profile: str):
@@ -2820,6 +3413,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error swapping profile: {str(e)}")
 
     @bot.tree.command(name = "streamurl", description = "Get the current stream URL")
+    @requires_discord_permission("streaming")
     async def stream_url(interaction: discord.Interaction):
         try:
             # Read stream URL from file (use absolute path for reliability)
@@ -2839,8 +3433,61 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         except Exception as e:
             await interaction.response.send_message(f"❌ Error getting stream URL: {str(e)}")
 
+    @bot.tree.command(name="stream", description="Enable, disable, or check the stream")
+    @requires_discord_permission("streaming")
+    @app_commands.describe(action="Choose whether to enable, disable, or check stream status")
+    @app_commands.choices(action=[
+        app_commands.Choice(name="Enable", value="enable"),
+        app_commands.Choice(name="Disable", value="disable"),
+        app_commands.Choice(name="Status", value="status"),
+    ])
+    async def stream_control(interaction: discord.Interaction, action: str):
+        try:
+            action = str(action).lower().strip()
+            settings = get_cached_settings()
+            currently_enabled = bool(settings.get("enable_stream", False))
+
+            if action == "status":
+                stream_url = ""
+                src_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+                stream_url_file = os.path.join(src_dir, "stream_url.txt")
+                if os.path.exists(stream_url_file):
+                    with open(stream_url_file, "r") as f:
+                        stream_url = f.read().strip()
+
+                if stream_url:
+                    await interaction.response.send_message(f"✅ Stream is enabled and active:\n{stream_url}")
+                elif currently_enabled:
+                    await interaction.response.send_message("✅ Stream is enabled, but no active URL is available yet.")
+                else:
+                    await interaction.response.send_message("⏹️ Stream is disabled.")
+                return
+
+            enabled = action == "enable"
+            if action not in ("enable", "disable"):
+                await interaction.response.send_message("❌ Unknown stream action. Use enable, disable, or status.")
+                return
+
+            settingsManager.saveGeneralSetting("enable_stream", enabled)
+            clear_settings_cache()
+
+            if _stream_control_queue is not None:
+                _stream_control_queue.put({"action": action, "requested_at": time.time()})
+
+            if updateGUI is not None:
+                updateGUI.value = 1
+
+            if enabled:
+                await interaction.response.send_message("✅ Stream enabled. If the macro is running, the stream will start now.")
+            else:
+                await interaction.response.send_message("⏹️ Stream disabled. Any active stream will stop now.")
+
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error controlling stream: {str(e)}")
+
 
     @bot.tree.command(name="privateserver", description="Get or set the configured private server link")
+    @requires_discord_permission("profile_access")
     @app_commands.describe(link="Private server link to save (optional)")
     async def private_server(interaction: discord.Interaction, link: Optional[str] = None):
         """Get the private server link or set it when `link` is provided."""
@@ -2868,6 +3515,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     # === COMPREHENSIVE SETTINGS MANAGEMENT COMMANDS ===
 
     @bot.tree.command(name="settings", description="Open the settings panel")
+    @requires_discord_permission("configuration")
     async def view_settings(interaction: discord.Interaction):
         """Open the interactive settings panel"""
         try:
@@ -2882,6 +3530,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     # === FIELD CONFIGURATION COMMANDS ===
 
     @bot.tree.command(name="fields", description="View field configuration")
+    @requires_discord_permission("configuration")
     async def view_fields(interaction: discord.Interaction):
         """View current field configuration"""
         await interaction.response.defer()
@@ -2958,7 +3607,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         """Auto-complete function for collectible names"""
         collectibles = [
             "wealth_clock", "blueberry", "strawberry", "coconut", "royal_jelly", "ant_pass",
-            "treat", "glue", "honeystorm"
+            "buy_ant_pass", "treat", "glue", "honeystorm"
         ]
         choices = []
 
@@ -3030,6 +3679,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         return booleans
 
     @bot.tree.command(name="field", description="Enable or disable a specific field")
+    @requires_discord_permission("configuration")
     @app_commands.describe(field="Field name", enabled="Enable or disable")
     @app_commands.autocomplete(field=field_autocomplete, enabled=boolean_autocomplete)
     async def set_field(interaction: discord.Interaction, field: str, enabled: str):
@@ -3063,6 +3713,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error updating field: {str(e)}")
 
     @bot.tree.command(name="swapfield", description="Swap one field for another")
+    @requires_discord_permission("configuration")
     @app_commands.describe(current="Current field to replace (e.g., pine_tree)", new="New field to use (e.g., rose)")
     @app_commands.autocomplete(current=field_autocomplete, new=all_fields_autocomplete)
     async def swap_field(interaction: discord.Interaction, current: str, new: str):
@@ -3104,6 +3755,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     # === QUEST MANAGEMENT COMMANDS ===
 
     @bot.tree.command(name="quests", description="View quest configuration")
+    @requires_discord_permission("configuration")
     async def view_quests(interaction: discord.Interaction):
         """View current quest configuration"""
         try:
@@ -3131,6 +3783,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error retrieving quest settings: {str(e)}")
 
     @bot.tree.command(name="quest", description="Enable or disable a specific quest")
+    @requires_discord_permission("configuration")
     @app_commands.describe(quest="Quest name (polar_bear, brown_bear, black_bear, honey_bee, bucko_bee, riley_bee)", enabled="Enable or disable")
     @app_commands.autocomplete(quest=quest_autocomplete, enabled=boolean_autocomplete)
     async def set_quest(interaction: discord.Interaction, quest: str, enabled: str):
@@ -3155,6 +3808,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     # === COLLECTIBLES MANAGEMENT COMMANDS ===
 
     @bot.tree.command(name="collectibles", description="View collectibles configuration")
+    @requires_discord_permission("configuration")
     async def view_collectibles(interaction: discord.Interaction):
         """View current collectibles configuration"""
         try:
@@ -3167,6 +3821,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 "🥥 **Coconut Dispenser**": settings.get("coconut_dispenser", False),
                 "👑 **Royal Jelly Dispenser**": settings.get("royal_jelly_dispenser", False),
                 "🎫 **Ant Pass Dispenser**": settings.get("ant_pass_dispenser", False),
+                "🎟️ **Buy Ant Pass**": settings.get("buy_ant_pass", False),
                 "🍬 **Treat Dispenser**": settings.get("treat_dispenser", False),
                 "🧪 **Glue Dispenser**": settings.get("glue_dispenser", False),
                 "🟧 **Honey Storm**": settings.get("honeystorm", False)
@@ -3194,6 +3849,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error retrieving collectible settings: {str(e)}")
 
     @bot.tree.command(name="collectible", description="Enable or disable a specific collectible")
+    @requires_discord_permission("configuration")
     @app_commands.describe(collectible="Collectible name", enabled="Enable or disable")
     @app_commands.autocomplete(collectible=collectible_autocomplete, enabled=boolean_autocomplete)
     async def set_collectible(interaction: discord.Interaction, collectible: str, enabled: str):
@@ -3205,6 +3861,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             "coconut": "coconut_dispenser",
             "royal_jelly": "royal_jelly_dispenser",
             "ant_pass": "ant_pass_dispenser",
+            "buy_ant_pass": "buy_ant_pass",
             "treat": "treat_dispenser",
             "glue": "glue_dispenser",
             "honeystorm": "honeystorm"
@@ -3277,6 +3934,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         await interaction.response.send_message(message)
     '''
     @bot.tree.command(name="planterreset", description="Reset the timer for one active planter")
+    @requires_discord_permission("task_interrupts")
     @app_commands.describe(planter="Choose one of the currently active enabled planters")
     @app_commands.autocomplete(planter=planter_reset_autocomplete)
     async def planter_reset(interaction: discord.Interaction, planter: str):
@@ -3288,7 +3946,46 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         except Exception as e:
             await interaction.response.send_message(f"❌ Error resetting planter timer: {str(e)}")
 
+    @bot.tree.command(name="collectplanter", description="Interrupt the macro and collect one active planter")
+    @requires_discord_permission("task_interrupts")
+    @app_commands.describe(planter="Choose one of the currently active enabled planters")
+    @app_commands.autocomplete(planter=planter_reset_autocomplete)
+    async def collect_planter(interaction: discord.Interaction, planter: str):
+        """Queue an immediate planter collection in the running macro."""
+        if run.value != 2:
+            await interaction.response.send_message("Macro is not running")
+            return
+        if _planter_command_queue is None:
+            await interaction.response.send_message("❌ Planter command queue is not available.")
+            return
+
+        try:
+            settings = get_cached_settings()
+            canonical = _canonicalize_planter_name(planter)
+            target = next((item for item in _get_active_planter_targets(settings) if item["canonical"] == canonical), None)
+            if target is None:
+                await interaction.response.send_message(f"❌ No active planter was found for {_format_planter_name(planter)}.")
+                return
+            if not target.get("field"):
+                await interaction.response.send_message(f"❌ {_format_planter_name(planter)} has no saved field to collect from.")
+                return
+
+            _planter_command_queue.put({
+                "action": "collect",
+                "mode": target["mode"],
+                "index": target["index"],
+                "planter": target["planter"],
+                "field": target["field"],
+            })
+            skipTask.value = INTERRUPT_COLLECT_PLANTER
+            await interaction.response.send_message(
+                f"Collecting {_format_planter_name(target['planter'])} from {str(target['field']).replace('_', ' ').title()}. The macro will interrupt its current task."
+            )
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error queueing planter collection: {str(e)}")
+
     @bot.tree.command(name="plantertimers", description="View active planter timers")
+    @requires_discord_permission("observation")
     async def planter_timers(interaction: discord.Interaction):
         """View active planter timers without generating an hourly report"""
         try:
@@ -3322,6 +4019,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     # === MOB RUN COMMANDS ===
 
     @bot.tree.command(name="mobs", description="View mob run configuration")
+    @requires_discord_permission("configuration")
     async def view_mobs(interaction: discord.Interaction):
         """View current mob run configuration"""
         try:
@@ -3362,6 +4060,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error retrieving mob settings: {str(e)}")
 
     @bot.tree.command(name="mob", description="Enable or disable a specific mob run")
+    @requires_discord_permission("configuration")
     @app_commands.describe(mob="Mob name", enabled="Enable or disable")
     @app_commands.autocomplete(mob=mob_autocomplete, enabled=boolean_autocomplete)
     async def set_mob(interaction: discord.Interaction, mob: str, enabled: str):
@@ -3387,31 +4086,33 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         success, message = update_setting(mob_key, enabled.lower() == "true")
         await interaction.response.send_message(message)
     
-    @bot.tree.command(name="hiveslot", description = "Change the hive slot number (1-6)")
-    @app_commands.describe(slot="Hive slot number (1-6, where 1 is closest to cannon)")
+    @bot.tree.command(name="hiveslot", description = "Change the preferred hive slot (1-6)")
+    @requires_discord_permission("configuration")
+    @app_commands.describe(slot="Preferred hive slot (1-6, where 1 is closest to cannon)")
     async def hive_slot(interaction: discord.Interaction, slot: int):
-        """Change the hive slot number"""
+        """Change the preferred hive slot."""
         try:
             # Validate slot range
             if slot < 1 or slot > 6:
-                await interaction.response.send_message("❌ Hive slot must be between 1 and 6")
+                await interaction.response.send_message("❌ Preferred hive slot must be between 1 and 6")
                 return
             
-            # Update the setting
-            success, message = update_setting("hive_number", slot)
+            # Update the preferred slot; hive_number tracks the slot currently claimed.
+            success, message = update_setting("preferred_hive_slot", slot)
             
             if success:
                 # Trigger GUI update if updateGUI is available
                 if updateGUI is not None:
                     updateGUI.value = 1
-                await interaction.response.send_message(f"✅ Hive slot changed to {slot}")
+                await interaction.response.send_message(f"✅ Preferred hive slot changed to {slot}")
             else:
                 await interaction.response.send_message(f"❌ {message}")
                 
         except Exception as e:
-            await interaction.response.send_message(f"❌ Error changing hive slot: {str(e)}")
+            await interaction.response.send_message(f"❌ Error changing preferred hive slot: {str(e)}")
 
     @bot.tree.command(name="usehotbar", description="Use a hotbar slot (1-7)")
+    @requires_discord_permission("task_interrupts")
     @app_commands.describe(slot="Hotbar slot number (1-7)")
     async def use_hotbar(interaction: discord.Interaction, slot: int):
         """Manually trigger a hotbar slot (updates timings and presses the key)"""
@@ -3452,6 +4153,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error using hotbar slot: {str(e)}")
 
     @bot.tree.command(name="shiftlock", description="Set or toggle shift lock")
+    @requires_discord_permission("configuration")
     @app_commands.describe(mode="Choose whether shift lock should be on, off, or toggled")
     @app_commands.choices(mode=[
         app_commands.Choice(name="on", value="on"),
@@ -3467,10 +4169,12 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         except Exception as e:
             await interaction.followup.send(f"❌ Error controlling shift lock: {str(e)}")
 
-    @bot.tree.command(name="macromode", description="Set macro mode (normal, quests, or field)")
+    @bot.tree.command(name="macromode", description="Set macro mode")
+    @requires_discord_permission("configuration")
     @app_commands.describe(mode="Macro mode to set")
     @app_commands.choices(mode=[
         app_commands.Choice(name="normal", value="normal"),
+        app_commands.Choice(name="alt", value="alt"),
         app_commands.Choice(name="quests", value="quest"),
         app_commands.Choice(name="field", value="field"),
     ])
@@ -3488,6 +4192,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
             mode_names = {
                 "normal": "Normal",
+                "alt": "Alt",
                 "quest": "Quest",
                 "field": "Field"
             }
@@ -3497,34 +4202,55 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message(f"❌ Error setting macro mode: {str(e)}")
 
     @bot.tree.command(name="help", description="Show available commands")
+    @requires_discord_permission("public_info")
     async def help_command(interaction: discord.Interaction):
         """Show available commands"""
         embed = discord.Embed(title="BSS Macro Discord Bot", description="Available Commands:", color=0x0099ff)
 
-        embed.add_field(name="**Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/stop` - Stop the macro\n`/pause` - Pause the macro\n`/resume` - Resume the macro\n`/status` - Get macro status and current task\n`/reroll` - Reroll Auto Field Boost\n`/rejoin` - Make macro rejoin game\n`/screenshot` - Get screenshot\n`/settings` - Open settings panel\n`/hiveslot <1-6>` - Change hive slot number\n`/shiftlock <on/off/toggle>` - Control shift lock", inline=False)
+        embed.add_field(name="**Basic Controls**", value="`/ping` - Check if bot is online\n`/start` - Start the macro\n`/stop` - Stop the macro\n`/standby [duration]` - Stop, quit Roblox, and keep the Mac awake. Use 30m or 1h 30m; repeat to disable\n`/pause` - Pause the macro\n`/resume` - Resume the macro\n`/status` - Get macro status and current task\n`/reroll` - Reroll Auto Field Boost\n`/rejoin` - Make macro rejoin game\n`/skipserver` - Skip the current private-server join\n`/screenshot` - Get screenshot\n`/settings` - Open settings panel\n`/hiveslot <1-6>` - Change hive slot number\n`/shiftlock <on/off/toggle>` - Control shift lock", inline=False)
 
         embed.add_field(name="**Field Management**", value="`/fields` - View field configuration\n`/field <field> <true/false>` - Enable or disable a field\n`/swapfield <current> <new>` - Swap one field for another (new can be any field)", inline=False)
 
         embed.add_field(name="**Quest Management**", value="`/quests` - View quest configuration\n`/quest <quest> <true/false>` - Enable or disable a quest", inline=False)
 
-        embed.add_field(name="**Macro Mode**", value="`/macromode <normal/quests/field>` - Set macro mode (normal = all tasks, quests = quests only, field = fields only)", inline=False)
+        embed.add_field(name="**Macro Mode**", value="`/macromode <normal/alt/quests/field>` - Set macro mode. Alt mode only gathers slot 1 and ignores the task list and automatic gather interrupts.", inline=False)
 
         embed.add_field(name="**Collectibles**", value="`/collectibles` - View collectibles\n`/collectible <item> <true/false>` - Enable or disable collectible", inline=False)
 
-        embed.add_field(name="**Planters**", value="`/plantertimers` - View active planter timers\n`/planterreset <planter>` - Reset the timer for one active enabled planter", inline=False)
+        embed.add_field(name="**Planters**", value="`/plantertimers` - View active planter timers\n`/planterreset <planter>` - Reset the timer for one active enabled planter\n`/collectplanter <planter>` - Interrupt the macro and collect one active planter", inline=False)
 
         embed.add_field(name="**Mob Runs**", value="`/mobs` - View mob configuration\n`/mob <mob> <true/false>` - Enable or disable mob run", inline=False)
 
         embed.add_field(name="**Profile Management**", value="`/swapprofile <name>` - Switch to a different profile (macro must be stopped)", inline=False)
 
-        embed.add_field(name="**Status & Monitoring**", value="`/status` - Get macro status and current task\n`/tasklist` - Show enabled task order, current task, and next task\n`/logs` - Show recent macro actions\n`/battery` - Check battery status\n`/streamurl` - Get stream URL\n`/hourlyreport` - Generate and send the hourly report\n`/session` - Generate and send the final session report", inline=False)
+        embed.add_field(name="**Status & Monitoring**", value="`/status` - Get macro status and current task\n`/tasklist` - Show enabled task order, current task, and next task\n`/logs` - Show recent macro actions\n`/battery` - Check battery status\n`/stream <enable/disable/status>` - Control stream\n`/streamurl` - Get stream URL\n`/hourlyreport` - Generate and send the hourly report\n`/session` - Generate and send the final session report", inline=False)
         
         embed.add_field(name="**Advanced**", value="`/amulet <keep/replace>` - Choose amulet action\n`/close <both/roblox/macro>` - Close both, Roblox only, or macro only", inline=False)
 
+        embed.add_field(
+            name="**TAD Alt Sync Compatibility**",
+            value=TAD_ALT_SYNC_HELP_TEXT,
+            inline=False,
+        )
+
+        permission_lines = [
+            f"**{data['label']}**: `{data['setting']}`"
+            for data in DISCORD_COMMAND_PERMISSION_CATEGORIES.values()
+        ]
+        embed.add_field(
+            name="**Permission Categories**",
+            value="\n".join(permission_lines) + "\nLeave a category blank to allow everyone, or add Discord user IDs to restrict it.",
+            inline=False,
+        )
+
+        if legacyCommands.IS_LEGACY:
+            for index, field in enumerate(embed.fields):
+                embed.set_field_at(index, name=field.name, value=field.value.replace("`/", f"`{legacyCommands.PREFIX}"), inline=field.inline)
         await interaction.response.send_message(embed=embed)
 
 
     @bot.tree.command(name = "hourlyreport", description = "Send the hourly report")
+    @requires_discord_permission("reports")
     async def hourlyReport(interaction: discord.Interaction):
         await interaction.response.defer()
         try:
@@ -3566,12 +4292,40 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
             # Generate the image (saves to hourlyReport.png)
             hr.generateHourlyReport(setdat)
-            await interaction.followup.send(file = discord.File("hourlyReport.png"))
+            embed_fields = getattr(hr, "lastEmbedFields", None)
+            if embed_fields:
+                from discord import Embed, File
+                embed = Embed(title="Hourly Report", color=0x9966FF)
+                for f in embed_fields:
+                    embed.add_field(name=f["name"], value=f["value"], inline=f.get("inline", False))
+                embed.set_image(url="attachment://hourlyReport.png")
+                await interaction.followup.send(embed=embed, file=discord.File("hourlyReport.png"))
+            else:
+                await interaction.followup.send(file=discord.File("hourlyReport.png"))
+
+            # Separate Item Monitor report when enabled
+            if setdat.get("item_monitor", True):
+                try:
+                    from modules.submacros.itemMonitor import generate_item_report
+                    snapshot = getattr(hr, "itemMonitorSnapshot", None)
+                    if snapshot and snapshot.get("collected_items"):
+                        path, item_fields = generate_item_report(snapshot, setdat, report_type="hourly")
+                        if path and os.path.exists(path):
+                            from discord import Embed
+                            embed = Embed(title="Item Monitor", color=0x9966FF)
+                            if item_fields:
+                                for f in item_fields:
+                                    embed.add_field(name=f["name"], value=f["value"], inline=f.get("inline", False))
+                            embed.set_image(url="attachment://itemReport.png")
+                            await interaction.followup.send(embed=embed, file=discord.File(path, filename="itemReport.png"))
+                except Exception as item_err:
+                    await interaction.followup.send(f"⚠️ Hourly report sent, but item report failed: {item_err}")
 
         except Exception as e:
             await interaction.followup.send(f"❌ Error generating hourly report: {str(e)}")
 
     @bot.tree.command(name = "session", description = "Generate and send the final session report")
+    @requires_discord_permission("reports")
     async def sessionReport(interaction: discord.Interaction):
         await interaction.response.defer()
         try:
@@ -3583,7 +4337,28 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             sessionStats = finalReportObj.generateFinalReport(setdat)
 
             if sessionStats and os.path.exists("finalReport.png"):
-                await interaction.followup.send(file=discord.File("finalReport.png"))
+                embed_fields = getattr(finalReportObj, "lastEmbedFields", None)
+                if embed_fields:
+                    from discord import Embed
+                    embed = Embed(title="Session Report", color=0x9966FF)
+                    for f in embed_fields:
+                        embed.add_field(name=f["name"], value=f["value"], inline=f.get("inline", False))
+                    embed.set_image(url="attachment://finalReport.png")
+                    await interaction.followup.send(embed=embed, file=discord.File("finalReport.png"))
+                else:
+                    await interaction.followup.send(file=discord.File("finalReport.png"))
+
+                # Separate Item Monitor report when enabled
+                item_path = getattr(finalReportObj, "lastItemReportPath", None)
+                if item_path and os.path.exists(item_path):
+                    from discord import Embed
+                    embed = Embed(title="Item Monitor", color=0x9966FF)
+                    item_fields = getattr(finalReportObj, "lastItemEmbedFields", None)
+                    if item_fields:
+                        for f in item_fields:
+                            embed.add_field(name=f["name"], value=f["value"], inline=f.get("inline", False))
+                    embed.set_image(url="attachment://itemReport.png")
+                    await interaction.followup.send(embed=embed, file=discord.File(item_path, filename="itemReport.png"))
             else:
                 await interaction.followup.send("❌ Failed to generate final session report - no data available.")
 
