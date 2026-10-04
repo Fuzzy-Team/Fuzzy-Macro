@@ -2169,7 +2169,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                         progress = min(int(state.get("progress", 0) or 0), len(drop["fields"]) - 1)
                         fieldName = drop["fields"][progress]
                         settingPlanter = planterName.replace(" ", "_")
-                        if planterName in occupiedPlanters or fieldName in occupiedFields:
+                        if planterName in occupiedPlanters or planterName in blockedPlanters or fieldName in occupiedFields:
                             return None
                         if not macro.setdat.get(f"auto_planter_{settingPlanter}", False):
                             return None
@@ -2532,7 +2532,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                                     runTask(macro.gather, args=(specialPlacement["field"],), resetAfter=False)
                                 specialPlacementMadeThisRun = True
                                 continue
-                            blockedPlacements.add((specialPlacement["planter"], specialPlacement["field"]))
+                            if getattr(macro, "lastPlanterPlacementFailure", None) == "missing_inventory":
+                                blockedPlanters.add(specialPlacement["planter"])
+                            else:
+                                blockedPlacements.add((specialPlacement["planter"], specialPlacement["field"]))
 
                         _, plannedPlacements = findBestPlacements(
                             min(len(openSlots), maxAllowedPlanters - plantersPlaced),
