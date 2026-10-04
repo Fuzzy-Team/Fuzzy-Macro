@@ -127,7 +127,13 @@ def setScreenData():
     screenData["y_length_multiplier"] = screenData["y_multiplier"]
 
     #save the data
+    os.makedirs(os.path.dirname(screenPath), exist_ok=True)
     settingsManager.saveDict(screenPath, screenData)
 
 def getScreenData():
+    # This module is imported before main.py gets a chance to refresh display
+    # information. Recreate the file here when it has been removed so imports
+    # such as modules.screen.screenshot do not fail at startup.
+    if not os.path.exists(screenPath):
+        setScreenData()
     return settingsManager.readSettingsFile(screenPath)

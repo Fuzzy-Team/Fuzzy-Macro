@@ -9,6 +9,7 @@ import time
 import pyautogui as pag
 from modules.screen.robloxWindow import RobloxWindowBounds
 import os
+import platform
 import shutil
 try:
     from PIL import Image
@@ -16,8 +17,19 @@ except Exception:
     Image = None
 
 try:
-    import coremltools as ct
-except Exception:
+    macos_version = tuple(int(part) for part in platform.mac_ver()[0].split(".")[:2])
+except (TypeError, ValueError):
+    macos_version = ()
+
+# Pre-Monterey systems use the ONNX sprinkler model. Importing a stale
+# coremltools wheel on those systems emits dyld errors before Python can fall
+# back, even though the Core ML backend is never usable there.
+if len(macos_version) >= 2 and macos_version >= (12, 0):
+    try:
+        import coremltools as ct
+    except Exception:
+        ct = None
+else:
     ct = None
 
 mw, mh = pag.size()
@@ -131,35 +143,46 @@ class fieldDriftCompensation():
         if self._sprinkler_model_failed:
             return False
 
-        model_path_coreml = settingsManager.getFuzzyAIModelPath("sprinkler.mlpackage")
+        model_path_coreml = settingsManager.getFuzzyAIModelPath("sprinkler_detection_standard.mlmodelc")
         has_coreml = bool(model_path_coreml and os.path.exists(model_path_coreml))
-        model_path_onnx = settingsManager.getFuzzyAIModelPath("sprinkler.onnx")
+        model_path_onnx = settingsManager.getFuzzyAIModelPath("sprinkler_detection_standard.onnx")
         has_onnx = bool(model_path_onnx and os.path.exists(model_path_onnx))
 
         if not has_onnx and not has_coreml:
             self._sprinkler_model_failed = True
-            self._warn_sprinkler_model("sprinkler.onnx and sprinkler.mlpackage are missing")
+            self._warn_sprinkler_model("sprinkler_detection_standard.mlmodelc and sprinkler_detection_standard.onnx are missing")
             return False
 
         try:
             if has_coreml and ct is not None:
-                model = ct.models.MLModel(str(model_path_coreml), compute_units=ct.ComputeUnit.ALL)
-                description = model.get_spec().description
-                input_description = description.input[0]
-                input_type = input_description.type.WhichOneof("Type")
+                if str(model_path_coreml).lower().endswith(".mlmodelc"):
+                    compiled_model_class = getattr(ct.models, "CompiledMLModel", None)
+                    if compiled_model_class is None:
+                        raise RuntimeError("This coremltools version cannot load compiled .mlmodelc bundles")
+                    model = compiled_model_class(str(model_path_coreml), compute_units=ct.ComputeUnit.ALL)
+                    input_name = "image"
+                    output_name = "var_1445"
+                    input_type = "imageType"
+                else:
+                    model = ct.models.MLModel(str(model_path_coreml), compute_units=ct.ComputeUnit.ALL)
+                    description = model.get_spec().description
+                    input_description = description.input[0]
+                    input_name = input_description.name
+                    output_name = description.output[0].name
+                    input_type = input_description.type.WhichOneof("Type")
+                    if input_type == "imageType":
+                        image_type = input_description.type.imageType
+                        if image_type.width > 0 and image_type.height > 0:
+                            self._sprinkler_input_size = int(min(image_type.width, image_type.height))
                 self._sprinkler_session = model
                 self._sprinkler_model_kind = "coreml"
-                self._sprinkler_input_name = input_description.name
-                self._sprinkler_output_name = description.output[0].name
+                self._sprinkler_input_name = input_name
+                self._sprinkler_output_name = output_name
                 self._sprinkler_input_is_image = input_type == "imageType"
                 self._sprinkler_use_float16 = False
                 if self._sprinkler_input_is_image:
                     if Image is None:
                         raise RuntimeError("Pillow is not installed")
-                    image_type = input_description.type.imageType
-                    if image_type.width > 0 and image_type.height > 0:
-                        self._sprinkler_input_size = int(min(image_type.width, image_type.height))
-                self._delete_model_path(model_path_onnx)
                 return True
             if has_coreml and ct is None and not has_onnx:
                 self._sprinkler_model_failed = True
@@ -173,7 +196,6 @@ class fieldDriftCompensation():
                 self._sprinkler_input_is_image = False
                 self._sprinkler_use_float16 = False
                 self._sprinkler_input_size = 736
-                self._delete_model_path(model_path_coreml)
                 return True
             self._sprinkler_model_failed = True
             self._warn_sprinkler_model("coremltools is not installed")

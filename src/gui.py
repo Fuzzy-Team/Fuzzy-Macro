@@ -3,6 +3,7 @@ import webbrowser
 import modules.misc.settingsManager as settingsManager
 import os
 import modules.misc.update as updateModule
+import modules.misc.modelManager as modelManager
 import modules.controls.mouse as mouseControl
 import sys
 import ast
@@ -10,10 +11,19 @@ import json
 import webbrowser
 import time
 import threading
+from bottle import route, static_file
 from modules.submacros.autoGiftedBasicBee import AutoGiftedBasicBeeRunner
 import modules.controls.keyboard as keyboardModule
+import modules.logging.log as logModule
 
 eel.init('webapp')
+HOURLY_REPORT_ASSET_ROOT = os.path.join(settingsManager.getProjectRoot(), "src", "hourly_report", "assets")
+
+
+@route("/hourly-report-assets/<filename:re:[A-Za-z0-9_\\-]+\\.png>")
+def serve_hourly_report_asset(filename):
+    return static_file(filename, root=HOURLY_REPORT_ASSET_ROOT)
+
 run = None
 _recent_logs = []
 _tool_logger = None
@@ -21,6 +31,7 @@ _tool_status = None
 _tool_presence = None
 _active_tool_presence_key = None
 _tool_session_id = None
+_model_download_lock = threading.Lock()
 
 
 def _refresh_tool_logger_settings():
@@ -31,10 +42,12 @@ def _refresh_tool_logger_settings():
         settings = settingsManager.loadAllSettings()
     except Exception:
         settings = {}
-    _tool_logger.enableWebhook = settings.get("enable_webhook", False)
-    _tool_logger.webhookURL = settings.get("webhook_link", "")
+    _tool_logger.enableWebhook = logModule.delivery_uses_webhook(settings)
+    _tool_logger.enableDiscordBot = logModule.delivery_uses_bot_messages(settings)
+    _tool_logger.webhookURL = logModule.get_default_delivery_route(settings)
+    _tool_logger.routeSettings = logModule.build_route_settings(settings)
     _tool_logger.sendScreenshots = settings.get("send_screenshot", True)
-    _tool_logger.enableDiscordPing = settings.get("enable_discord_ping", False)
+    _tool_logger.enableDiscordPing = True
     _tool_logger.discordUserID = settings.get("discord_user_id", "")
     _tool_logger.pingSettings = {
         key: value for key, value in settings.items() if str(key).startswith("ping_")
@@ -378,7 +391,9 @@ class HotbarBuffRunner:
         return timings
 
     def _save_timings(self, timings):
-        with open(self._timings_path(), "w") as f:
+        timings_path = self._timings_path()
+        os.makedirs(os.path.dirname(timings_path), exist_ok=True)
+        with open(timings_path, "w") as f:
             f.write(str(timings))
 
     def _slot_interval_seconds(self, settings, slot):
@@ -545,6 +560,26 @@ def getPatterns():
 
 
 @eel.expose
+def getDefaultPatterns():
+    """Return installed patterns that are also shipped in defaults/patterns."""
+    defaults_dir = os.path.join(settingsManager.getProjectRoot(), "settings", "defaults", "patterns")
+    try:
+        default_patterns = {
+            (os.path.splitext(filename)[0].lower(), os.path.splitext(filename)[1].lstrip(".").lower())
+            for filename in os.listdir(defaults_dir)
+            if os.path.splitext(filename)[1].lower() in (".py", ".ahk")
+        }
+    except OSError:
+        return []
+
+    return [
+        pattern
+        for pattern in getPatterns()
+        if (pattern["name"].lower(), pattern["type"].lower()) in default_patterns
+    ]
+
+
+@eel.expose
 def importPatterns(patterns):
     """Import pattern files sent from the frontend.
     `patterns` should be a list of dicts: {"name": "filename.py", "content": "..."}
@@ -586,12 +621,11 @@ def importPatterns(patterns):
 
 @eel.expose
 def clearManualPlanters():
-    settingsManager.clearFile("./data/user/manualplanters.txt")
+    settingsManager.clearFile(settingsManager.getUserDataPath("manualplanters.txt"))
 
 @eel.expose
 def getManualPlanterData():
-    with open("./data/user/manualplanters.txt", "r") as f:
-        planterDataRaw = f.read()
+    planterDataRaw = settingsManager.loadUserText("manualplanters.txt")
     if planterDataRaw.strip():
         return ast.literal_eval(planterDataRaw)
     else: 
@@ -695,16 +729,14 @@ def normalizeAutoPlanterData(data):
 @eel.expose
 def getAutoPlanterData():
     try:
-        with open("./data/user/auto_planters.json", "r") as f:
-            return normalizeAutoPlanterData(json.load(f))
+        return normalizeAutoPlanterData(settingsManager.loadUserJson("auto_planters.json"))
     except Exception:
         return defaultAutoPlanterData()
 
 @eel.expose
 def clearAutoPlanters():
     data = defaultAutoPlanterData()
-    with open("./data/user/auto_planters.json", "w") as f:
-        json.dump(data, f, indent=3)
+    settingsManager.saveUserJson("auto_planters.json", data)
 
 
 @eel.expose
@@ -712,8 +744,7 @@ def setAutoPlanterGather(val):
     """Set the global 'gather' flag in data/user/auto_planters.json"""
     try:
         try:
-            with open("./data/user/auto_planters.json", "r") as f:
-                current = normalizeAutoPlanterData(json.load(f))
+            current = normalizeAutoPlanterData(settingsManager.loadUserJson("auto_planters.json"))
         except Exception:
             current = None
 
@@ -722,8 +753,7 @@ def setAutoPlanterGather(val):
 
         current["gather"] = bool(val)
 
-        with open("./data/user/auto_planters.json", "w") as f:
-            json.dump(current, f, indent=3)
+        settingsManager.saveUserJson("auto_planters.json", current)
         return True
     except Exception:
         return False
@@ -732,8 +762,7 @@ def setAutoPlanterGather(val):
 def resetManualPlanterTimer(index):
     """Reset a specific manual planter timer by index (0-2)"""
     try:
-        with open("./data/user/manualplanters.txt", "r") as f:
-            planterDataRaw = f.read()
+        planterDataRaw = settingsManager.loadUserText("manualplanters.txt")
         
         if not planterDataRaw.strip():
             return False
@@ -754,8 +783,7 @@ def resetManualPlanterTimer(index):
         if "harvestTimes" in planterData and len(planterData["harvestTimes"]) > index:
             planterData["harvestTimes"][index] = 0
         
-        with open("./data/user/manualplanters.txt", "w") as f:
-            f.write(str(planterData))
+        settingsManager.saveUserText("manualplanters.txt", str(planterData))
         
         return True
     except Exception as e:
@@ -766,8 +794,7 @@ def resetManualPlanterTimer(index):
 def resetAutoPlanterTimer(index):
     """Reset a specific auto planter timer by index (0-2)"""
     try:
-        with open("./data/user/auto_planters.json", "r") as f:
-            data = normalizeAutoPlanterData(json.load(f))
+        data = normalizeAutoPlanterData(settingsManager.loadUserJson("auto_planters.json"))
         
         if index == "all":
             data["planters"] = [emptyAutoPlanterSlot(), emptyAutoPlanterSlot(), emptyAutoPlanterSlot()]
@@ -778,9 +805,8 @@ def resetAutoPlanterTimer(index):
                 return False
             data["planters"][index] = emptyAutoPlanterSlot()
         
-        with open("./data/user/auto_planters.json", "w") as f:
-            json.dump(data, f, indent=3)
-        
+        settingsManager.saveUserJson("auto_planters.json", data)
+
         return True
     except Exception as e:
         print(f"Error resetting auto planter {index}: {e}")
@@ -792,9 +818,7 @@ def clearBlender():
         "item": 1,
         "collectTime": 0
     }
-    with open("data/user/blender.txt", "w") as f:
-        f.write(str(blenderData))
-    f.close()
+    settingsManager.saveUserLiteral("blender.txt", blenderData)
 
 @eel.expose
 def clearAFB():
@@ -803,12 +827,7 @@ def clearAFB():
         "AFB_glitter_cd": 0,
         "AFB_limit": 0
     }
-
-    # convert to format like in timings.txt
-    data_str = "\n".join([f"{key}={value}" for key, value in AFBData.items()])
-
-    with open("data/user/AFB.txt", "w") as f:
-        f.write(data_str)
+    settingsManager.saveUserSettingsFile("AFB.txt", AFBData)
 
 @eel.expose
 def resetFieldToDefault(field_name):
@@ -827,6 +846,21 @@ def resetFieldToDefault(field_name):
             return False
     except Exception as e:
         print(f"Error resetting field to default: {e}")
+        return False
+
+@eel.expose
+def resetTaskPrioritiesToDefault():
+    """Reset task_priority_order to the default list from default settings"""
+    try:
+        defaults = settingsManager.getDefaultProfileSettings()
+        default_order = defaults.get("task_priority_order", []) or []
+        if not isinstance(default_order, list) or not default_order:
+            print("Warning: Default task_priority_order not found or empty")
+            return False
+        settingsManager.saveProfileSetting("task_priority_order", default_order)
+        return True
+    except Exception as e:
+        print(f"Error resetting task priorities to default: {e}")
         return False
 
 @eel.expose
@@ -937,12 +971,78 @@ def importFieldSettings(field_name, json_settings):
         return False
 
 @eel.expose
-def loadFuzzyAITokenRanking(field_name):
-    return settingsManager.loadFuzzyAITokenRanking(field_name)
+def loadFuzzyAITokenRanking(field_name, model="standard"):
+    return settingsManager.loadFuzzyAITokenRanking(field_name, model)
 
 @eel.expose
-def saveFuzzyAITokenRanking(field_name, ranking):
-    return settingsManager.saveFuzzyAITokenRanking(field_name, ranking)
+def saveFuzzyAITokenRanking(field_name, ranking, model="standard"):
+    return settingsManager.saveFuzzyAITokenRanking(field_name, ranking, model)
+
+
+@eel.expose
+def getModelStatus():
+    """Return the models this Mac can use, along with their local availability."""
+    models = []
+    for model_name in modelManager._supported_model_names():
+        model_path = os.path.join(modelManager.MODEL_DIR, model_name)
+        installed = os.path.exists(model_path)
+        size_bytes = 0
+        if installed:
+            try:
+                if os.path.isdir(model_path):
+                    size_bytes = sum(
+                        os.path.getsize(os.path.join(root, filename))
+                        for root, _, filenames in os.walk(model_path)
+                        for filename in filenames
+                    )
+                else:
+                    size_bytes = os.path.getsize(model_path)
+            except OSError:
+                pass
+        models.append({
+            "name": model_name,
+            "installed": installed,
+            "size_bytes": size_bytes,
+        })
+    return {"models": models, "model_dir": modelManager.MODEL_DIR}
+
+
+@eel.expose
+def downloadMissingModels(model_names=None):
+    """Download all missing supported models, or the named missing models."""
+    if not _model_download_lock.acquire(blocking=False):
+        return {"ok": False, "message": "A model download is already in progress."}
+
+    try:
+        if model_names is None:
+            result = modelManager.ensure_missing_supported_models()
+        else:
+            if not isinstance(model_names, (list, tuple)):
+                return {"ok": False, "message": "Invalid model download request."}
+            result = modelManager.ensure_missing_models(model_names)
+
+        failures = result.get("failures", {})
+        downloaded = result.get("downloaded", [])
+        skipped = result.get("skipped", [])
+        if failures:
+            return {
+                "ok": False,
+                "message": "Some models could not be downloaded.",
+                "downloaded": downloaded,
+                "skipped": skipped,
+                "failures": failures,
+            }
+        return {
+            "ok": True,
+            "message": "Downloaded missing models." if downloaded else "All supported models are already installed.",
+            "downloaded": downloaded,
+            "skipped": skipped,
+        }
+    except Exception as exc:
+        print(f"[models] Could not download missing models: {exc}")
+        return {"ok": False, "message": f"Could not download models: {exc}"}
+    finally:
+        _model_download_lock.release()
   
 @eel.expose
 def exportPlanterSettings():
@@ -966,6 +1066,11 @@ def importPlanterSettings(json_settings):
 def getMacroVersion():
     """Get the macro version from version.txt"""
     return settingsManager.getMacroVersion()
+
+@eel.expose
+def usesLegacyDiscordBot():
+    """True on macOS 10.12-10.14, where Python 3.7 can only install discord.py 1.x, so bot commands use the fuzz! prefix"""
+    return sys.version_info < (3, 8)
 
 @eel.expose
 def autoClickerClick():
@@ -1169,6 +1274,8 @@ def log(time = "", msg = "", color = ""):
 
 eel.expose(settingsManager.loadFields)
 eel.expose(settingsManager.saveField) 
+eel.expose(settingsManager.getDefaultFuzzyAIGatherPatternPreset)
+eel.expose(settingsManager.getDefaultBloomsAIPatternPreset)
 eel.expose(settingsManager.loadSettings)
 eel.expose(settingsManager.loadAllSettings)
 eel.expose(settingsManager.saveProfileSetting)
@@ -1194,8 +1301,7 @@ def updateGUI():
 
     # Ensure any missing default settings are present in the profile.
     try:
-        default_path = os.path.join(settingsManager.getDefaultSettingsPath(), "settings.txt")
-        defaults = settingsManager.readSettingsFile(default_path)
+        defaults = settingsManager.getDefaultProfileSettings()
 
         # Add any top-level default keys missing from the loaded settings
         for k, v in defaults.items():

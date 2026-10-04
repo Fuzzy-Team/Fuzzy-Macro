@@ -1,6 +1,11 @@
 import stat
 import os
 import re
+import hashlib
+import json
+import fnmatch
+import importlib
+import sys
 import requests
 import zipfile
 import shutil
@@ -8,7 +13,19 @@ from io import BytesIO
 from modules.misc.messageBox import msgBox
 
 
-PATTERN_OVERWRITE_EXCEPTIONS = {"fuzzy_ai_gather.py"}
+# These are shipped patterns whose implementation must stay in sync with the
+# bundled model manager.  They are not user-authored patterns, so always
+# replace them during an update instead of preserving an obsolete copy.
+PATTERN_OVERWRITE_EXCEPTIONS = {"blooms_ai.py", "fuzzy_ai_gather.py"}
+INSTALLED_FILES_MANIFEST = os.path.join("src", "data", "user", "installed_files.json")
+# Users add their own files next to the shipped ones in these folders. Only
+# remove a file here when a previous update installed it and it is unedited.
+USER_EXTENSIBLE_FOLDERS = {"paths"}
+
+# Preserve this flag across importlib.reload().  It prevents the freshly
+# loaded updater from handing off to itself a second time.
+if "_UPDATER_HANDOFF_ACTIVE" not in globals():
+    _UPDATER_HANDOFF_ACTIVE = False
 
 # Helper: parse version strings like 1.2.3 or 1.2.3a
 def _parse_version(v):
@@ -91,6 +108,361 @@ def _download_update_zip(zip_link, progress_callback, start_percent=35, end_perc
         req.close()
 
 
+def _git_blob_sha(path):
+    """Return the Git blob SHA-1 for the file at ``path``."""
+    digest = hashlib.sha1()
+    size = os.path.getsize(path)
+    digest.update(f"blob {size}\0".encode("utf-8"))
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _is_protected_path(relative_path, protected_folders):
+    """Return whether a relative path is unsafe or protected from updates."""
+    parts = relative_path.split("/")
+    if (
+        not relative_path
+        or os.path.isabs(relative_path)
+        or relative_path.startswith("/")
+        or "\\" in relative_path
+        or any(part in {"", ".", ".."} for part in parts)
+    ):
+        return True
+    if parts[0] == ".git" or relative_path in {"backup_macro.zip", ".backup_pending"}:
+        return True
+    for protected in protected_folders:
+        protected = protected.replace(os.sep, "/").strip("/")
+        if relative_path == protected or relative_path.startswith(protected + "/"):
+            return True
+    return False
+
+
+def _build_installed_files_manifest(
+    root_path, protected_folders, excluded_root=None, ignore_rule_sets=(),
+):
+    """Hash regular, unprotected, non-ignored files without following symlinks."""
+    manifest = {}
+    excluded_root = os.path.realpath(excluded_root) if excluded_root else None
+
+    def skipped(relative_path, is_directory=False):
+        return _is_protected_path(relative_path, protected_folders) or any(
+            _is_gitignored(relative_path, rules, is_directory) for rules in ignore_rule_sets
+        )
+
+    def raise_walk_error(exc):
+        raise exc
+
+    for root, dirs, files in os.walk(root_path, followlinks=False, onerror=raise_walk_error):
+        rel_root = os.path.relpath(root, root_path)
+        rel_root = "" if rel_root == "." else rel_root.replace(os.sep, "/")
+        dirs[:] = [
+            directory for directory in dirs
+            if not os.path.islink(os.path.join(root, directory))
+            and os.path.realpath(os.path.join(root, directory)) != excluded_root
+            and not skipped("/".join(filter(None, (rel_root, directory))), True)
+        ]
+        for filename in files:
+            relative_path = "/".join(filter(None, (rel_root, filename)))
+            source_path = os.path.join(root, filename)
+            try:
+                mode = os.lstat(source_path).st_mode
+                if skipped(relative_path) or not stat.S_ISREG(mode):
+                    continue
+                manifest[relative_path] = _git_blob_sha(source_path)
+            except OSError as exc:
+                raise OSError(f"Could not hash shipped file {relative_path}") from exc
+    return manifest
+
+
+def _metadata_path(destination, relative_path):
+    """Reject metadata paths whose parent directory leaves the install root."""
+    current = destination
+    for part in relative_path.split(os.sep)[:-1]:
+        current = os.path.join(current, part)
+        if os.path.islink(current):
+            raise ValueError(f"Metadata parent is a symlink: {current}")
+    root = os.path.realpath(destination)
+    if os.path.commonpath((root, os.path.realpath(current))) != root:
+        raise ValueError(f"Metadata parent is outside the install root: {current}")
+    path = os.path.join(destination, relative_path)
+    if os.path.islink(path):
+        raise ValueError(f"Metadata file is a symlink: {path}")
+    return path
+
+
+def _safe_regular_file(destination, relative_path, protected_folders):
+    """Return an in-root regular file path when it is safe to remove."""
+    if _is_protected_path(relative_path, protected_folders):
+        return None
+    root = os.path.realpath(destination)
+    candidate = os.path.join(destination, *relative_path.split("/"))
+    try:
+        current = destination
+        for part in relative_path.split("/")[:-1]:
+            current = os.path.join(current, part)
+            if os.path.islink(current):
+                return None
+        mode = os.lstat(candidate).st_mode
+    except OSError:
+        return None
+    resolved = os.path.realpath(candidate)
+    try:
+        inside_root = os.path.commonpath((root, resolved)) == root
+    except ValueError:
+        inside_root = False
+    if not inside_root or not stat.S_ISREG(mode):
+        return None
+    return candidate
+
+
+def _remove_empty_directories(start, destination, protected_folders):
+    """Remove empty parent directories up to the installation root."""
+    root = os.path.realpath(destination)
+    current = os.path.dirname(start)
+    while os.path.realpath(current) != root:
+        relative_path = os.path.relpath(current, destination).replace(os.sep, "/")
+        if _is_protected_path(relative_path, protected_folders) or os.path.islink(current):
+            break
+        try:
+            os.rmdir(current)
+        except OSError:
+            break
+        current = os.path.dirname(current)
+
+
+def _validate_installation_root(destination):
+    """Reject update targets that are not a Fuzzy-Macro installation."""
+    root = os.path.realpath(destination)
+    required = (
+        "src/main.py",
+        "src/modules/misc/update.py",
+    )
+    for relative_path in required:
+        current = root
+        for part in relative_path.split("/"):
+            current = os.path.join(current, part)
+            if os.path.islink(current):
+                raise OSError(f"Refusing to update through symlink {current}")
+        if not os.path.isfile(current):
+            raise OSError(f"Not a Fuzzy-Macro installation: missing {relative_path}")
+    return root
+
+
+def _installation_root():
+    """Find the install root from this updater file, independent of cwd."""
+    module_directory = os.path.dirname(os.path.realpath(__file__))
+    destination = os.path.abspath(os.path.join(module_directory, "..", "..", ".."))
+    return _validate_installation_root(destination)
+
+
+def _read_ignore_rules(extracted):
+    """Use both current origin rules and the release's own ignore rules."""
+    ignore_path = os.path.join(extracted, ".gitignore")
+    if os.path.islink(ignore_path):
+        raise ValueError("release .gitignore is a symlink")
+    with open(ignore_path, "r", encoding="utf-8") as fh:
+        release_lines = fh.readlines()
+    response = requests.get(
+        "https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/.gitignore",
+        timeout=20,
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+    )
+    response.raise_for_status()
+    origin_lines = response.text.splitlines()
+
+    def parse(lines):
+        rules = []
+        for line in lines:
+            line = line.rstrip("\r\n")
+            if not line.strip() or line.startswith("#"):
+                continue
+            if (
+                line != line.strip()
+                or line.startswith("!")
+                or "**" in line
+                or "\\" in line
+            ):
+                raise ValueError(f"unsupported .gitignore pattern: {line.rstrip()}")
+            rules.append(line)
+        return rules
+
+    release_rules = parse(release_lines)
+    origin_rules = parse(origin_lines)
+    return release_rules, origin_rules
+
+
+def _is_gitignored(relative_path, rules, is_directory=False):
+    """Match root .gitignore file and directory patterns."""
+    parts = relative_path.split("/")
+    for rule in rules:
+        directory_only = rule.endswith("/")
+        rule = rule.strip("/")
+        if not rule:
+            continue
+        candidates = ["/".join(parts[:i]) for i in range(1, len(parts) + 1)]
+        if directory_only and not is_directory:
+            candidates = candidates[:-1]
+        if "/" not in rule:
+            candidates = [candidate.rsplit("/", 1)[-1] for candidate in candidates]
+        if any(fnmatch.fnmatchcase(candidate, rule) for candidate in candidates):
+            return True
+    return False
+
+
+def _load_ignore_rules(extracted):
+    """Return the ignore rule sets, or None when cleanup must be skipped."""
+    try:
+        return _read_ignore_rules(extracted)
+    except Exception as exc:
+        print(f"[updater] Skipping obsolete-file cleanup: could not read .gitignore rules: {exc}")
+        return None
+
+
+def _remove_obsolete_files(
+    extracted, destination, protected_folders, old_manifest, new_manifest,
+    ignore_rule_sets, progress_callback=None,
+):
+    """Remove installed regular files that the incoming release does not ship.
+
+    ``old_manifest`` must already exclude gitignored files; ``ignore_rule_sets``
+    is None when the rules could not be read, which disables cleanup.
+    """
+    if ignore_rule_sets is None:
+        return
+    required = (
+        os.path.join(extracted, "src", "main.py"),
+        os.path.join(extracted, "src", "modules", "misc", "update.py"),
+    )
+    if not all(os.path.isfile(path) and not os.path.islink(path) for path in required):
+        print("[updater] Skipping obsolete-file cleanup: extracted release is incomplete")
+        return
+    if os.path.lexists(os.path.join(destination, ".git")):
+        print("[updater] Skipping obsolete-file cleanup in a git checkout")
+        return
+
+    previously_installed = _read_installed_files_manifest(destination)
+    _report_update_progress(progress_callback, 81, "Removing obsolete files")
+    stale = sorted(old_manifest.keys() - new_manifest.keys())
+    for index, relative_path in enumerate(stale, start=1):
+        if (
+            relative_path.split("/")[0] in USER_EXTENSIBLE_FOLDERS
+            and previously_installed.get(relative_path) != old_manifest[relative_path]
+        ):
+            print(f"[updater] Kept user file {relative_path}")
+            continue
+        current_path = _safe_regular_file(destination, relative_path, protected_folders)
+        if current_path is None:
+            continue
+        try:
+            # A file may have changed since the pre-copy scan. Leave it alone.
+            if _git_blob_sha(current_path) != old_manifest[relative_path]:
+                print(f"[updater] Kept file changed during update {relative_path}")
+                continue
+            os.remove(current_path)
+            print(f"[updater] Removed obsolete file {relative_path}")
+            _remove_empty_directories(current_path, destination, protected_folders)
+            _report_update_progress(
+                progress_callback,
+                81 + int(2 * index / len(stale)),
+                f"Removed obsolete file {index} of {len(stale)}",
+            )
+        except OSError as exc:
+            print(f"[updater] Could not remove obsolete file {relative_path}: {exc}")
+
+
+def _write_json_atomically(path, value):
+    """Serialize a value to JSON and atomically replace the destination file."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp_path = path + ".tmp"
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as fh:
+            json.dump(value, fh, indent=2, sort_keys=True)
+            fh.write("\n")
+        os.replace(tmp_path, path)
+    finally:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except OSError as exc:
+            print(f"[updater] Could not remove temporary file {tmp_path}: {exc}")
+
+
+def _read_installed_files_manifest(destination):
+    """Return the files recorded by the previous update, or {} if unavailable."""
+    try:
+        manifest_path = _metadata_path(destination, INSTALLED_FILES_MANIFEST)
+        with open(manifest_path, "r", encoding="utf-8") as fh:
+            manifest = json.load(fh)
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError) as exc:
+        print(f"[updater] Ignoring unreadable installed-files manifest: {exc}")
+        return {}
+    return manifest if isinstance(manifest, dict) else {}
+
+
+def _write_installed_files_manifest(destination, manifest):
+    """Atomically record the files shipped by the extracted release."""
+    manifest_path = _metadata_path(destination, INSTALLED_FILES_MANIFEST)
+    _write_json_atomically(manifest_path, manifest)
+
+
+def _finish_file_update(
+    extracted, destination, protected_folders, old_manifest, new_manifest,
+    ignore_rule_sets, progress_callback=None,
+):
+    """Run best-effort cleanup and record the installed release."""
+    try:
+        _remove_obsolete_files(
+            extracted, destination, protected_folders, old_manifest, new_manifest,
+            ignore_rule_sets, progress_callback,
+        )
+    except Exception as exc:
+        print(f"[updater] Obsolete-file cleanup failed; continuing update: {exc}")
+    try:
+        _write_installed_files_manifest(destination, new_manifest)
+    except Exception as exc:
+        print(f"[updater] Could not write installed-files manifest: {exc}")
+
+
+def _apply_update_files(
+    extracted, destination, protected_folders, protected_files, progress_callback=None
+):
+    """Compare installed and incoming files, then synchronize the install."""
+    destination = _validate_installation_root(destination)
+    ignore_rule_sets = _load_ignore_rules(extracted)
+    _report_update_progress(progress_callback, 78, "Hashing installed files")
+    # Gitignored files are never removed, so don't spend time hashing them.
+    old_manifest = _build_installed_files_manifest(
+        destination, protected_folders, excluded_root=extracted,
+        ignore_rule_sets=ignore_rule_sets or (),
+    )
+    _report_update_progress(progress_callback, 79, "Hashing update files")
+    new_manifest = _build_installed_files_manifest(extracted, protected_folders)
+    _report_update_progress(progress_callback, 80, "Copying changed files")
+    _merge_overwrite(extracted, destination, protected_files, old_manifest, new_manifest)
+    _finish_file_update(
+        extracted, destination, protected_folders, old_manifest, new_manifest,
+        ignore_rule_sets, progress_callback,
+    )
+
+
+def _check_ai_models():
+    """Use the model list from the release just copied into this install."""
+    from modules.misc import modelManager
+
+    cached_bytecode = getattr(modelManager, "__cached__", None)
+    if cached_bytecode and os.path.exists(cached_bytecode):
+        try:
+            os.remove(cached_bytecode)
+        except OSError as exc:
+            raise OSError("Could not refresh cached model manager") from exc
+    importlib.invalidate_caches()
+    importlib.reload(modelManager).ensure_supported_models()
+
+
 def _refresh_updater(destination, progress_callback=None):
     update_py_url = "https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/src/modules/misc/update.py"
     headers = {
@@ -117,30 +489,155 @@ def _refresh_updater(destination, progress_callback=None):
             pass
 
 
-# Recursively copy from src to dst, overwriting files. Skip protected names.
-def _merge_overwrite(src, dst, protected_folders, protected_files):
-    for root, dirs, files in os.walk(src):
-        rel_root = os.path.relpath(root, src)
-        # compute destination root
-        dest_root = os.path.join(dst, rel_root) if rel_root != "." else dst
-        if not os.path.exists(dest_root):
-            os.makedirs(dest_root, exist_ok=True)
-        # filter dirs in-place to avoid descending into protected dirs
-        # compare using relative paths so nested protected paths like
-        # 'src/data' or 'data/user' are honored
-        norm_protected = [os.path.normpath(p) for p in protected_folders]
-        filtered = []
-        for d in dirs:
-            candidate = os.path.normpath(os.path.join(rel_root, d)) if rel_root != "." else os.path.normpath(d)
-            if candidate not in norm_protected:
-                filtered.append(d)
-        dirs[:] = filtered
+def _run_refreshed_updater(destination, entry_point, *args, **kwargs):
+    """Refresh update.py and run its latest entry point in this update run.
+
+    Return ``None`` when the current updater should continue as a safe
+    fallback; otherwise return ``(True, result)`` from the refreshed updater.
+    """
+    global _UPDATER_HANDOFF_ACTIVE
+    if _UPDATER_HANDOFF_ACTIVE:
+        return None
+
+    try:
+        _refresh_updater(destination, kwargs.get("progress_callback"))
+    except Exception as exc:
+        print(f"[updater] Could not refresh updater; continuing with current version: {exc}")
+        return None
+
+    current_module = sys.modules.get(__name__)
+    if current_module is None:
+        return None
+
+    try:
+        _UPDATER_HANDOFF_ACTIVE = True
+        cached_bytecode = getattr(current_module, "__cached__", None)
+        if cached_bytecode and os.path.exists(cached_bytecode):
+            try:
+                os.remove(cached_bytecode)
+            except OSError:
+                # Reload can still validate the source itself; a read-only
+                # bytecode cache should not prevent a normal update.
+                pass
+        importlib.invalidate_caches()
+        refreshed_module = importlib.reload(current_module)
+
+        # The refreshed entry point begins with the same handoff check.  Make
+        # its refresh call a no-op so it proceeds directly with the newly
+        # loaded implementation instead of fetching/reloading recursively.
+        original_refresh = refreshed_module._refresh_updater
+        refreshed_module._refresh_updater = lambda *unused_args, **unused_kwargs: None
+        try:
+            print("[updater] Running refreshed updater")
+            return True, getattr(refreshed_module, entry_point)(*args, **kwargs)
+        finally:
+            refreshed_module._refresh_updater = original_refresh
+    except Exception as exc:
+        print(f"[updater] Could not reload refreshed updater; continuing with current version: {exc}")
+        return None
+    finally:
+        _UPDATER_HANDOFF_ACTIVE = False
+
+
+def _merge_overwrite(src, dst, protected_files, old_manifest, new_manifest):
+    """Copy only changed shipped files, never through a destination symlink.
+
+    Every file is checked before anything is copied, so an unsafe path fails
+    the update without leaving the install half-updated.
+    """
+    to_copy = []
+    for relative_path, shipped_hash in new_manifest.items():
+        if os.path.basename(relative_path) in protected_files:
+            continue
+        parts = relative_path.split("/")
+        src_file = os.path.join(src, *parts)
+        dest_file = os.path.join(dst, *parts)
+        source_parent = src
+        current = dst
+        for part in parts[:-1]:
+            source_parent = os.path.join(source_parent, part)
+            current = os.path.join(current, part)
+            if os.path.islink(source_parent):
+                raise OSError(f"Refusing to copy through symlink {source_parent}")
+            if os.path.islink(current):
+                raise OSError(f"Refusing to copy through symlink {current}")
+            if os.path.lexists(current) and not os.path.isdir(current):
+                raise OSError(f"Refusing to replace file with directory {current}")
+        if os.path.islink(dest_file):
+            raise OSError(f"Refusing to replace symlink {dest_file}")
+        if os.path.isdir(dest_file):
+            raise OSError(f"Refusing to replace directory {dest_file}")
+        if not stat.S_ISREG(os.lstat(src_file).st_mode):
+            raise OSError(f"Shipped file changed during update: {relative_path}")
+        if os.path.isfile(dest_file) and old_manifest.get(relative_path) == shipped_hash:
+            if _git_blob_sha(dest_file) == shipped_hash:
+                continue
+        to_copy.append((src_file, dest_file))
+    for src_file, dest_file in to_copy:
+        os.makedirs(os.path.dirname(dest_file), exist_ok=True)
+        shutil.copy2(src_file, dest_file)
+
+
+def _resolve_update_pattern_source(extracted):
+    """Prefer shipped defaults/patterns; fall back to settings/patterns for older zips."""
+    defaults_patterns = os.path.join(extracted, "settings", "defaults", "patterns")
+    active_patterns = os.path.join(extracted, "settings", "patterns")
+    if os.path.isdir(defaults_patterns):
+        return defaults_patterns
+    if os.path.isdir(active_patterns):
+        return active_patterns
+    return None
+
+
+def _merge_patterns(src_patterns, dst_patterns, overwrite_exceptions=None):
+    """
+    Copy shipped patterns into the user's patterns folder.
+
+    - New pattern files are added.
+    - Existing user patterns are left alone (manual edits preserved).
+    - Files in overwrite_exceptions are always replaced (built-in AI patterns).
+    - Conflicting updates are written as name.newN.ext as a non-destructive fallback.
+    """
+    if not src_patterns or not os.path.isdir(src_patterns):
+        return
+
+    if overwrite_exceptions is None:
+        overwrite_exceptions = PATTERN_OVERWRITE_EXCEPTIONS
+
+    os.makedirs(dst_patterns, exist_ok=True)
+    for root, dirs, files in os.walk(src_patterns):
+        rel_root = os.path.relpath(root, src_patterns)
+        dest_root = os.path.join(dst_patterns, rel_root) if rel_root != "." else dst_patterns
+        os.makedirs(dest_root, exist_ok=True)
         for f in files:
-            if f in protected_files:
+            if f.endswith(".pyc") or f == "__pycache__":
                 continue
             src_file = os.path.join(root, f)
             dest_file = os.path.join(dest_root, f)
-            shutil.copy2(src_file, dest_file)
+            if f in overwrite_exceptions:
+                try:
+                    shutil.copy2(src_file, dest_file)
+                except Exception:
+                    pass
+            elif not os.path.exists(dest_file):
+                try:
+                    shutil.copy2(src_file, dest_file)
+                except Exception:
+                    pass
+            else:
+                # create a non-destructive alternative name
+                base, ext = os.path.splitext(f)
+                suffix = 1
+                while True:
+                    new_name = f"{base}.new{suffix}{ext}"
+                    new_path = os.path.join(dest_root, new_name)
+                    if not os.path.exists(new_path):
+                        try:
+                            shutil.copy2(src_file, new_path)
+                        except Exception:
+                            pass
+                        break
+                    suffix += 1
 
 
 # Create a zip backup of `destination`, excluding protected folders/files.
@@ -153,6 +650,15 @@ def _create_backup(destination, backup_path, protected_folders, protected_files)
                 os.unlink(backup_path)
             except Exception:
                 pass
+    # Recordings are generated artifacts and can be many gigabytes. Including
+    # them makes the updater appear stuck at 30% while it compresses videos.
+    excluded_folders = set(protected_folders)
+    excluded_folders.update({
+        ".git",
+        os.path.join("src", "data", "user", "fuzzy_ai_recordings"),
+    })
+    backup_abs = os.path.abspath(backup_path)
+
     with zipfile.ZipFile(backup_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for root, dirs, files in os.walk(destination):
             # skip the backup file itself and src extraction folders
@@ -161,20 +667,21 @@ def _create_backup(destination, backup_path, protected_folders, protected_files)
                 rl = ""
             else:
                 rl = rel_root
-            # skip protected folders
-            skip_root = False
-            for p in protected_folders:
-                if rl == p or rl.startswith(p + os.sep):
-                    skip_root = True
-                    break
-            if skip_root:
-                continue
+            # Prune excluded trees before os.walk descends into them.
+            dirs[:] = [
+                d for d in dirs
+                if not any(
+                    (os.path.join(rl, d) if rl else d) == p
+                    or (os.path.join(rl, d) if rl else d).startswith(p + os.sep)
+                    for p in excluded_folders
+                )
+            ]
             for f in files:
                 if f in protected_files:
                     continue
                 absf = os.path.join(root, f)
                 arcname = os.path.join(rl, f) if rl else f
-                if arcname == os.path.basename(backup_path):
+                if os.path.abspath(absf) == backup_abs:
                     continue
                 try:
                     zf.write(absf, arcname)
@@ -282,6 +789,7 @@ def _discover_remote_version(remote_version_url, timeout=15):
 
 
 def update(t="main", update_channel="stable", progress_callback=None):
+    """Install the latest release from the selected update channel."""
     _report_update_progress(progress_callback, 0, "Starting update")
     # Don't show the blocking "Updating..." dialog while merely checking
     # for updates. Show it only after we've determined that a newer
@@ -298,13 +806,22 @@ def update(t="main", update_channel="stable", progress_callback=None):
     ]
     protected_files = [".git"]
     pattern_overwrite_exceptions = PATTERN_OVERWRITE_EXCEPTIONS
-    destination = os.getcwd().replace("/src", "")
-
     try:
-        _refresh_updater(destination, progress_callback)
-    except Exception:
-        # non-fatal: continue with current updater if fetch fails
-        pass
+        destination = _installation_root()
+    except OSError as exc:
+        print(f"[updater] Refusing update: {exc}")
+        _report_update_progress(progress_callback, 100, "Update failed: invalid installation folder")
+        return False
+
+    refreshed_result = _run_refreshed_updater(
+        destination,
+        "update",
+        t=t,
+        update_channel=update_channel,
+        progress_callback=progress_callback,
+    )
+    if refreshed_result is not None:
+        return refreshed_result[1]
 
     # remote version URL and zip link
     import time
@@ -415,7 +932,9 @@ def update(t="main", update_channel="stable", progress_callback=None):
     # merge files, overwriting existing, but skip protected folders
     try:
         _report_update_progress(progress_callback, 78, "Applying update files")
-        _merge_overwrite(extracted, destination, protected_folders, protected_files)
+        _apply_update_files(
+            extracted, destination, protected_folders, protected_files, progress_callback
+        )
     except Exception:
         _report_update_progress(progress_callback, 100, "Update failed: could not apply files")
         msgBox("Update failed", "Error while applying update files.")
@@ -423,52 +942,19 @@ def update(t="main", update_channel="stable", progress_callback=None):
 
     try:
         _report_update_progress(progress_callback, 84, "Checking AI models")
-        from modules.misc.modelManager import ensure_supported_models
-        ensure_supported_models()
+        _check_ai_models()
     except Exception as e:
         print(f"[models] Could not check/download AI models: {e}")
 
-    # Merge patterns: combine files from extracted/settings/patterns with
-    # existing settings/patterns in destination. We protected patterns above
-    # so the generic merge didn't overwrite them. Here we perform a union
-    # copy: copy new files, and if a filename collides, keep the existing
-    # file and write the incoming file with a suffix to avoid data loss.
+    # Merge patterns from shipped defaults into the user's patterns folder.
+    # settings/patterns is protected above so user edits survive the generic
+    # overwrite; defaults/patterns is updated normally and is the catalog of
+    # official patterns to add (without replacing existing user copies).
     try:
         _report_update_progress(progress_callback, 86, "Merging patterns")
-        src_patterns = os.path.join(extracted, "settings", "patterns")
+        src_patterns = _resolve_update_pattern_source(extracted)
         dst_patterns = os.path.join(destination, "settings", "patterns")
-        if os.path.exists(src_patterns):
-            for root, dirs, files in os.walk(src_patterns):
-                rel_root = os.path.relpath(root, src_patterns)
-                dest_root = os.path.join(dst_patterns, rel_root) if rel_root != "." else dst_patterns
-                os.makedirs(dest_root, exist_ok=True)
-                for f in files:
-                    src_file = os.path.join(root, f)
-                    dest_file = os.path.join(dest_root, f)
-                    if f in pattern_overwrite_exceptions:
-                        try:
-                            shutil.copy2(src_file, dest_file)
-                        except Exception:
-                            pass
-                    elif not os.path.exists(dest_file):
-                        try:
-                            shutil.copy2(src_file, dest_file)
-                        except Exception:
-                            pass
-                    else:
-                        # create a non-destructive alternative name
-                        base, ext = os.path.splitext(f)
-                        suffix = 1
-                        while True:
-                            new_name = f"{base}.new{suffix}{ext}"
-                            new_path = os.path.join(dest_root, new_name)
-                            if not os.path.exists(new_path):
-                                try:
-                                    shutil.copy2(src_file, new_path)
-                                except Exception:
-                                    pass
-                                break
-                            suffix += 1
+        _merge_patterns(src_patterns, dst_patterns, pattern_overwrite_exceptions)
     except Exception:
         # non-fatal: don't interrupt whole update for pattern merge issues
         pass
@@ -555,7 +1041,6 @@ def update(t="main", update_channel="stable", progress_callback=None):
 def update_from_commit(commit_hash, progress_callback=None):
     """Update the macro from a specific commit hash (zip at /archive/<hash>.zip)."""
     _report_update_progress(progress_callback, 0, f"Starting update to {commit_hash}")
-    msgBox("Update in progress", f"Updating to commit {commit_hash}... Do not close terminal")
     protected_folders = [
         os.path.join("src", "data", "user"),
         os.path.join("src", "data", "models"),
@@ -564,13 +1049,23 @@ def update_from_commit(commit_hash, progress_callback=None):
     ]
     protected_files = [".git"]
     pattern_overwrite_exceptions = PATTERN_OVERWRITE_EXCEPTIONS
-    destination = os.getcwd().replace("/src", "")
-
     try:
-        _refresh_updater(destination, progress_callback)
-    except Exception:
-        # non-fatal: continue with current updater if fetch fails
-        pass
+        destination = _installation_root()
+    except OSError as exc:
+        print(f"[updater] Refusing update: {exc}")
+        _report_update_progress(progress_callback, 100, "Update failed: invalid installation folder")
+        return False
+
+    refreshed_result = _run_refreshed_updater(
+        destination,
+        "update_from_commit",
+        commit_hash=commit_hash,
+        progress_callback=progress_callback,
+    )
+    if refreshed_result is not None:
+        return refreshed_result[1]
+
+    msgBox("Update in progress", f"Updating to commit {commit_hash}... Do not close terminal")
 
     remote_zip = f"https://github.com/Fuzzy-Team/Fuzzy-Macro/archive/{commit_hash}.zip"
     backup_path = os.path.join(destination, "backup_macro.zip")
@@ -613,7 +1108,9 @@ def update_from_commit(commit_hash, progress_callback=None):
 
     try:
         _report_update_progress(progress_callback, 78, "Applying update files")
-        _merge_overwrite(extracted, destination, protected_folders, protected_files)
+        _apply_update_files(
+            extracted, destination, protected_folders, protected_files, progress_callback
+        )
     except Exception:
         _report_update_progress(progress_callback, 100, "Update failed: could not apply files")
         msgBox("Update failed", "Error while applying update files.")
@@ -621,47 +1118,16 @@ def update_from_commit(commit_hash, progress_callback=None):
 
     try:
         _report_update_progress(progress_callback, 84, "Checking AI models")
-        from modules.misc.modelManager import ensure_supported_models
-        ensure_supported_models()
+        _check_ai_models()
     except Exception as e:
         print(f"[models] Could not check/download AI models: {e}")
 
     # merge patterns similar to update()
     try:
         _report_update_progress(progress_callback, 86, "Merging patterns")
-        src_patterns = os.path.join(extracted, "settings", "patterns")
+        src_patterns = _resolve_update_pattern_source(extracted)
         dst_patterns = os.path.join(destination, "settings", "patterns")
-        if os.path.exists(src_patterns):
-            for root, dirs, files in os.walk(src_patterns):
-                rel_root = os.path.relpath(root, src_patterns)
-                dest_root = os.path.join(dst_patterns, rel_root) if rel_root != "." else dst_patterns
-                os.makedirs(dest_root, exist_ok=True)
-                for f in files:
-                    src_file = os.path.join(root, f)
-                    dest_file = os.path.join(dest_root, f)
-                    if f in pattern_overwrite_exceptions:
-                        try:
-                            shutil.copy2(src_file, dest_file)
-                        except Exception:
-                            pass
-                    elif not os.path.exists(dest_file):
-                        try:
-                            shutil.copy2(src_file, dest_file)
-                        except Exception:
-                            pass
-                    else:
-                        base, ext = os.path.splitext(f)
-                        suffix = 1
-                        while True:
-                            new_name = f"{base}.new{suffix}{ext}"
-                            new_path = os.path.join(dest_root, new_name)
-                            if not os.path.exists(new_path):
-                                try:
-                                    shutil.copy2(src_file, new_path)
-                                except Exception:
-                                    pass
-                                break
-                            suffix += 1
+        _merge_patterns(src_patterns, dst_patterns, pattern_overwrite_exceptions)
     except Exception:
         pass
 
@@ -757,7 +1223,7 @@ def check_for_updates_silent(update_channel="stable"):
     Returns None on error.
     """
     try:
-        destination = os.getcwd().replace("/src", "")
+        destination = _installation_root()
         
         # Read local version
         local_version = "0.0.0"

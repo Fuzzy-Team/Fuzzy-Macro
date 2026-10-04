@@ -12,8 +12,26 @@ import requests
 MODELS_API_URL = "https://api.github.com/repos/Fuzzy-Team/fuzzymacroaimodels/contents"
 MODELS_ZIP_URL = "https://github.com/Fuzzy-Team/fuzzymacroaimodels/archive/refs/heads/main.zip"
 MODEL_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", "models"))
-COREML_MODELS = ("best.mlpackage", "sprinkler.mlpackage")
-ONNX_MODELS = ("tokens.onnx", "sprinkler.onnx")
+COREML_MODELS = (
+    "token_detection_standard.mlmodelc",
+    "bloom_detection_standard.mlmodelc",
+    "bloom_detection_light.mlmodelc",
+    "bloom_detection_mini.mlmodelc",
+    "sprinkler_detection_standard.mlmodelc",
+    "token_detection_small.mlmodelc",
+    "token_detection_mini.mlmodelc",
+    "loot_detection_small.mlmodelc",
+    "loot_detection_mini.mlmodelc",
+)
+ONNX_MODELS = (
+    "token_detection_standard.onnx",
+    "sprinkler_detection_standard.onnx",
+    "bloom_detection_standard.onnx",
+    "bloom_detection_light.onnx",
+    "bloom_detection_mini.onnx",
+)
+# Files macOS adds to folders it has opened; never part of a model.
+MACOS_METADATA_FILES = {".DS_Store"}
 
 
 def _macos_version():
@@ -30,20 +48,75 @@ def _macos_version():
 
 
 def _supported_model_names():
-    # .mlpackage is the preferred Core ML package format on macOS 12+.
+    # Core ML is the native model format on supported macOS versions. Download
+    # ONNX only as the cross-platform fallback; fetching both makes startup
+    # repeatedly restore ONNX models that the Core ML runtime later removes.
     if _macos_version() >= (12, 0):
         return COREML_MODELS
     return ONNX_MODELS
 
 
+def _delete_path(path):
+    try:
+        if os.path.islink(path):
+            print(f"[models] Kept symlink {path}")
+            return False
+        if os.path.isdir(path):
+            for name in os.listdir(path):
+                _delete_path(os.path.join(path, name))
+            if os.listdir(path):
+                return False
+            os.rmdir(path)
+        elif os.path.isfile(path):
+            if path.lower().endswith(".pt"):
+                print(f"[models] Kept .pt file {path}")
+                return False
+            os.remove(path)
+        else:
+            return False
+        return True
+    except Exception as exc:
+        print(f"[models] Could not delete obsolete model {path}: {exc}")
+        return False
+
+
+def cleanup_unused_models():
+    """Remove every local model not used by this release on this platform."""
+    if os.path.islink(MODEL_DIR):
+        print(f"[models] Skipping cleanup through symlinked model folder {MODEL_DIR}")
+        return []
+    try:
+        entries = list(os.scandir(MODEL_DIR))
+    except OSError as exc:
+        print(f"[models] Could not list model folder: {exc}")
+        return []
+    supported = set(_supported_model_names())
+    if not supported:
+        print("[models] Skipping cleanup: release has no supported model list")
+        return []
+    deleted = []
+    for entry in entries:
+        if entry.name not in supported and _delete_path(entry.path):
+            deleted.append(entry.name)
+    if deleted:
+        print(f"[models] Deleted unused models: {', '.join(deleted)}")
+    return deleted
+
+
 def _git_blob_sha(path):
-    h = hashlib.sha1()
+    """Return the Git blob SHA-1 that GitHub reports for the file at ``path``."""
+    # Kept separate from update.py, which is replaced from main mid-update.
+    digest = hashlib.sha1()
     size = os.path.getsize(path)
-    h.update(f"blob {size}\0".encode("utf-8"))
+    digest.update(f"blob {size}\0".encode("utf-8"))
     with open(path, "rb") as fh:
         for chunk in iter(lambda: fh.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _is_macos_metadata(filename):
+    return filename in MACOS_METADATA_FILES or filename.startswith("._")
 
 
 def _github_get(url, timeout=20):
@@ -76,17 +149,29 @@ def _remote_tree(api_url):
 
 
 def _local_matches_remote(local_root, remote_files, remote_root_path):
-    if not os.path.exists(local_root):
+    if not remote_files or not os.path.exists(local_root):
         return False
     if len(remote_files) == 1 and remote_files[0].get("path") == remote_root_path:
-        return os.path.isfile(local_root) and _git_blob_sha(local_root) == remote_files[0].get("sha")
+        return (os.path.isfile(local_root) and not os.path.islink(local_root)
+                and _git_blob_sha(local_root) == remote_files[0].get("sha"))
+    if not os.path.isdir(local_root) or os.path.islink(local_root):
+        return False
+    expected_paths = set()
     for remote_file in remote_files:
         rel_path = os.path.relpath(remote_file["path"], remote_root_path)
+        expected_paths.add(rel_path)
         local_path = os.path.join(local_root, rel_path)
-        if not os.path.isfile(local_path):
+        if not os.path.isfile(local_path) or os.path.islink(local_path):
             return False
         if _git_blob_sha(local_path) != remote_file.get("sha"):
             return False
+    for root, dirs, files in os.walk(local_root):
+        if any(os.path.islink(os.path.join(root, name)) for name in dirs):
+            return False
+        for filename in files:
+            path = os.path.relpath(os.path.join(root, filename), local_root)
+            if path not in expected_paths and not _is_macos_metadata(filename):
+                return False
     return True
 
 
@@ -106,6 +191,8 @@ def _download_remote_tree(remote_files, remote_root_path, destination_root):
         if len(remote_files) == 1 and remote_files[0].get("path") == remote_root_path:
             tmp_file = os.path.join(tmp_root, remote_root_path)
             _download_file(remote_files[0]["download_url"], tmp_file)
+            if not _local_matches_remote(tmp_file, remote_files, remote_root_path):
+                raise ValueError(f"Downloaded model failed hash check: {remote_root_path}")
             if os.path.exists(destination_root):
                 if os.path.isdir(destination_root):
                     shutil.rmtree(destination_root)
@@ -117,6 +204,8 @@ def _download_remote_tree(remote_files, remote_root_path, destination_root):
         for remote_file in remote_files:
             rel_path = os.path.relpath(remote_file["path"], remote_root_path)
             _download_file(remote_file["download_url"], os.path.join(tmp_root, rel_path))
+        if not _local_matches_remote(tmp_root, remote_files, remote_root_path):
+            raise ValueError(f"Downloaded model failed hash check: {remote_root_path}")
         if os.path.exists(destination_root):
             if os.path.isdir(destination_root):
                 shutil.rmtree(destination_root)
@@ -201,6 +290,7 @@ def ensure_supported_models():
         print(f"[models] Downloaded/updated: {', '.join(downloaded)}")
     elif skipped:
         print("[models] Models are up to date")
+    cleanup_unused_models()
     return {"downloaded": downloaded, "skipped": skipped, "model_dir": MODEL_DIR}
 
 
@@ -213,6 +303,57 @@ def ensure_missing_supported_models():
         if os.path.exists(local_path):
             skipped.append(model_name)
             continue
-        _copy_from_repo_zip(model_name, local_path)
+        try:
+            remote_files = _remote_tree(f"{MODELS_API_URL}/{model_name}")
+            print(f"[models] Downloading missing {model_name}...")
+            _download_remote_tree(remote_files, model_name, local_path)
+        except Exception as exc:
+            print(f"[models] Could not download {model_name} directly: {exc}")
+            print(f"[models] Checking repository zip for {model_name}...")
+            _copy_from_repo_zip(model_name, local_path)
         downloaded.append(model_name)
+    cleanup_unused_models()
     return {"downloaded": downloaded, "skipped": skipped, "model_dir": MODEL_DIR}
+
+
+def ensure_missing_models(model_names):
+    os.makedirs(MODEL_DIR, exist_ok=True)
+    downloaded = []
+    skipped = []
+    missing_remote = []
+    failures = {}
+    for model_name in model_names:
+        if model_name not in set(COREML_MODELS).union(ONNX_MODELS):
+            failures[model_name] = "unknown model name"
+            continue
+        local_path = os.path.join(MODEL_DIR, model_name)
+        if os.path.exists(local_path):
+            skipped.append(model_name)
+            continue
+        try:
+            remote_files = _remote_tree(f"{MODELS_API_URL}/{model_name}")
+            print(f"[models] Downloading missing {model_name}...")
+            _download_remote_tree(remote_files, model_name, local_path)
+            downloaded.append(model_name)
+        except Exception as exc:
+            print(f"[models] Remote check failed for {model_name}: {exc}")
+            try:
+                print(f"[models] Checking repository zip for {model_name}...")
+                _copy_from_repo_zip(model_name, local_path)
+                downloaded.append(model_name)
+            except Exception as zip_exc:
+                missing_remote.append(model_name)
+                failures[model_name] = (
+                    f"direct download failed: {exc}; repository zip fallback failed: {zip_exc}"
+                )
+
+    # Callers can explicitly request the ONNX fallback on macOS.  Do not run
+    # the platform cleanup here, as it would delete that fallback before the
+    # caller has a chance to load it.
+    return {
+        "downloaded": downloaded,
+        "skipped": skipped,
+        "missing_remote": missing_remote,
+        "failures": failures,
+        "model_dir": MODEL_DIR,
+    }
