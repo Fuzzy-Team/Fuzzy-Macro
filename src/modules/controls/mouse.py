@@ -11,12 +11,11 @@ def moveTo(x,y, delay = 0.1):
     pag.moveTo(int(x),int(y), delay)
     pynputMouse.position = (int(x), int(y))
 
+#send a single press/release; posting through both pynput and pyautogui doubled every event
 def mouseDown():
-    pynputMouse.press(Button.left)
     pag.mouseDown()
 
 def mouseUp():
-    pynputMouse.release(Button.left)
     pag.mouseUp()
 
 def moveBy(x = 0,y = 0, pause=True):

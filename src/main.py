@@ -3889,9 +3889,11 @@ if __name__ == "__main__":
                 macroProc.kill()
                 macroProc.join()
             logger.webhook("","Disconnected", "red", "screen", ping_category="ping_disconnects")
-            appManager.closeApp("Roblox")
+            #release held input before Roblox quits, otherwise WindowServer can hang on the orphaned gesture
             keyboardModule.releaseMovement()
             mouse.mouseUp()
+            time.sleep(0.2)
+            appManager.closeApp("Roblox")
             macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer), daemon=True)
             macroProc.start()
             run.value = 2
@@ -3921,9 +3923,10 @@ if __name__ == "__main__":
             print(f"Macro process exited{extra}")
             logger.webhook("","Macro Crashed{0}".format(extra), "red", "screen", ping_category="ping_critical_errors")
             macroProc.join()
-            appManager.openApp("Roblox")
             keyboardModule.releaseMovement()
             mouse.mouseUp()
+            time.sleep(0.2)
+            appManager.openApp("Roblox")
             # restart macro process
             macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer), daemon=True)
             macroProc.start()
