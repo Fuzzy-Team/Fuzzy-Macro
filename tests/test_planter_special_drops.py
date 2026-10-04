@@ -1,6 +1,7 @@
 """Exercise production route logic without launching Roblox or screen controls."""
 
 import ast
+import copy
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
@@ -116,6 +117,39 @@ class SpecialDropTests(unittest.TestCase):
         self.drop = next(drop for drop in DROPS if drop['id'] == 'red_clay_clover_spider_cactus_stingers')
         self.harvest(field='clover')
         self.assertEqual(self.placement()['field'], 'spider')
+
+    def save_placement(self, plan):
+        function = copy.deepcopy(next(node for node in ast.walk(SOURCE)
+                                      if isinstance(node, ast.FunctionDef)
+                                      and node.name == 'savePlacedPlanter'))
+        function.body = [node for node in function.body if not isinstance(node, ast.Nonlocal)]
+        slots = [{}]
+        self.ns.update(planterData=slots, nectarLastFields={},
+                       saveAutoPlanterData=Mock(), sendNectarPercentageWebhook=Mock())
+        self.ns['time'].strftime = lambda *args: '01:00:00'
+        self.ns['time'].gmtime = lambda seconds: seconds
+        exec(compile(ast.Module(body=[function], type_ignores=[]), '<save-placement>', 'exec'), self.ns)
+        self.ns['savePlacedPlanter'](0, 'stump', {'name': 'candy'}, 'comforting', plan)
+        self.ns['saveAutoPlanterData'].assert_called_once()
+        return slots[0]
+
+    def test_full_growth_starts_after_travel_and_successful_placement(self):
+        plan = self.placement()['plan']
+        selected_at = self.now
+        self.now += 120
+        saved = self.save_placement(plan)
+        self.assertEqual(saved['placed_time'], self.now)
+        self.assertEqual(saved['harvest_time'], self.now + 3600)
+        self.assertEqual(saved['special_drop_id'], self.drop['id'])
+        self.assertEqual(plan['placed_time'], selected_at)
+
+    def test_normal_planters_keep_their_synchronized_harvest_deadline(self):
+        plan = self.placement()['plan']
+        plan['special_drop_id'] = ''
+        self.now += 120
+        saved = self.save_placement(plan)
+        self.assertEqual(saved['placed_time'], plan['placed_time'])
+        self.assertEqual(saved['harvest_time'], plan['harvest_time'])
 
 
 if __name__ == '__main__':
