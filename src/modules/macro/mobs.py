@@ -102,7 +102,7 @@ class MobMixin:
             # if collecting tokens produced by bees
             if self.setdat["mondo_collect_token"]:
                 # enable shiftlock
-                self.keyboard.press("shift")
+                self.enableShiftLock()
                 while time.perf_counter() < end_time: 
                     self.keyboard.walk("a", 0.45)
                     for slowmove in range(9):
