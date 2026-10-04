@@ -2088,6 +2088,13 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
 
                     def savePlacedPlanter(slot, field, planterObj, nectar, placementPlan):
                         nonlocal planterData, nectarLastFields
+                        if placementPlan.get("special_drop_id"):
+                            # Route selection happens before travel and placement. Start
+                            # full-growth timing only once placement has succeeded.
+                            placementPlan = dict(placementPlan)
+                            placementPlan["placed_time"] = time.time()
+                            placementPlan["grow_duration"] = placementPlan["natural_grow_duration"]
+                            placementPlan["harvest_time"] = placementPlan["placed_time"] + placementPlan["grow_duration"]
                         planterData[slot] = {
                             "planter": planterObj["name"],
                             "nectar": nectar,
