@@ -70,6 +70,10 @@ def runApp(macroTarget):
     discordMessageQueue = manager.Queue()
     planterCommandQueue = manager.Queue()
     streamControlQueue = manager.Queue()
+    standbyCommandQueue = manager.Queue()
+    standbyState = manager.Namespace()
+    standbyState.active = False
+    standbyState.deadline = 0.0
     pin_requests = manager.Queue()  # Shared queue for pin requests
     start_keyboard_listener_fn = watch_for_hotkeys(run)
     logger = logModule.log(logQueue, False, None, False, blocking=False, discordMessageQueue=discordMessageQueue)
@@ -103,6 +107,40 @@ def runApp(macroTarget):
     
     #setup stream class
     stream = cloudflaredStream()
+    standbyCaffeinateProc = None
+
+    def stopStandbyKeepAwake():
+        """Stop only the caffeinate instance started by this macro."""
+        nonlocal standbyCaffeinateProc
+        if standbyCaffeinateProc is None:
+            return
+        if standbyCaffeinateProc.poll() is None:
+            try:
+                standbyCaffeinateProc.terminate()
+                standbyCaffeinateProc.wait(timeout=2)
+            except Exception:
+                try:
+                    standbyCaffeinateProc.kill()
+                    standbyCaffeinateProc.wait(timeout=2)
+                except Exception:
+                    pass
+        standbyCaffeinateProc = None
+
+    def startStandbyKeepAwake():
+        nonlocal standbyCaffeinateProc
+        if standbyCaffeinateProc is not None and standbyCaffeinateProc.poll() is None:
+            return True
+        try:
+            standbyCaffeinateProc = subprocess.Popen(
+                ["/usr/bin/caffeinate", "-di"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return True
+        except Exception as e:
+            print(f"Failed to start Macro Standby keep-awake process: {e}")
+            standbyCaffeinateProc = None
+            return False
 
     def releaseInputsSafely():
         try:
@@ -119,6 +157,7 @@ def runApp(macroTarget):
             print(f"Failed to release mouse during shutdown: {e}")
 
     def onExit():
+        stopStandbyKeepAwake()
         try:
             stopApp()
         except Exception as e:
@@ -317,11 +356,109 @@ def runApp(macroTarget):
                 else:
                     stream.stop()
 
+    def processStandbyCommands():
+        nonlocal richPresenceManager
+        while not standbyCommandQueue.empty():
+            try:
+                command = standbyCommandQueue.get_nowait()
+            except Exception:
+                break
+
+            action = str(command.get("action", "")).lower()
+            if action == "disable":
+                stopStandbyKeepAwake()
+                standbyState.active = False
+                standbyState.deadline = 0.0
+                if run.value in (0, 3):
+                    status.value = "idle_main_menu"
+                logger.webhook("Macro Standby Disabled", "The macro remains stopped.", "orange", route_category="macro_status")
+                continue
+
+            if action != "enable":
+                continue
+
+            duration_seconds = command.get("duration_seconds")
+            try:
+                duration_seconds = float(duration_seconds) if duration_seconds is not None else None
+            except (TypeError, ValueError):
+                duration_seconds = None
+
+            if not startStandbyKeepAwake():
+                standbyState.active = False
+                standbyState.deadline = 0.0
+                logger.webhook("Macro Standby Failed", "Could not start macOS keep-awake mode.", "red", route_category="macro_status")
+                continue
+
+            standbyState.active = True
+            standbyState.deadline = current_time + duration_seconds if duration_seconds else 0.0
+            status.value = "standby"
+            try:
+                if richPresenceManager is not None:
+                    richPresenceManager.stop()
+                    richPresenceManager = None
+            except NameError:
+                pass
+
+            # Standby owns the shutdown instead of leaving run == 0 for the
+            # normal supervisor path. That lets the main loop become a small
+            # command/timer loop rather than continuing GUI and macro work.
+            try:
+                gui.stopAllTools()
+            except Exception:
+                pass
+            if run.value != 3:
+                run.value = 0
+                stopApp()
+                run.value = 3
+                gui.setRunState(3)
+            appManager.closeApp("Roblox")
+            duration_text = "until disabled" if duration_seconds is None else f"for {duration_seconds / 60:g} minute(s)"
+            logger.webhook(
+                "Macro Standby Enabled",
+                f"Roblox was closed and this Mac will stay awake {duration_text}.",
+                "purple",
+                route_category="macro_status",
+            )
+
     while True:
-        eel.sleep(0.5)
-        
-        # Get cached settings
+        # Keep Eel responsive so GUI controls and hotkey recording checks can
+        # complete. Standby still skips settings refresh and macro supervision.
+        eel.sleep(1 if standbyState.active else 0.5)
+
         current_time = time.time()
+        processStandbyCommands()
+
+        # Standby has already stopped the macro. A stop hotkey can still assign
+        # 0; acknowledge it here so subsequent start requests are accepted.
+        if standbyState.active and run.value == 0:
+            run.value = 3
+            gui.setRunState(3)
+            try:
+                gui.toggleStartStop()
+            except Exception:
+                pass
+
+        if standbyState.active and standbyState.deadline and current_time >= standbyState.deadline:
+            stopStandbyKeepAwake()
+            standbyState.active = False
+            standbyState.deadline = 0.0
+            status.value = "idle_main_menu"
+            logger.webhook("Macro Standby Ended", "The requested standby duration has ended. The macro remains stopped.", "orange", route_category="macro_status")
+
+        # /start and the configured start hotkey both set run to 1. Let them
+        # wake the normal supervisor without requiring a separate standby
+        # toggle first.
+        if standbyState.active and run.value == 1:
+            stopStandbyKeepAwake()
+            standbyState.active = False
+            standbyState.deadline = 0.0
+            status.value = "idle_main_menu"
+            logger.webhook("Macro Standby Disabled", "Starting the macro.", "orange", route_category="macro_status")
+
+        if standbyState.active:
+            continue
+
+        # Get cached settings
         if current_time - last_gui_settings_load > gui_settings_cache_duration:
             gui_settings_cache = settingsManager.loadAllSettings()
             last_gui_settings_load = current_time
@@ -363,7 +500,7 @@ def runApp(macroTarget):
                 print("Detected change in discord bot token, killing previous bot process")
                 discordBotProc.terminate()
                 discordBotProc.join()
-            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI, discordMessageQueue, planterCommandQueue, streamControlQueue, skipServer), daemon=True)
+            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI, discordMessageQueue, planterCommandQueue, streamControlQueue, skipServer, standbyCommandQueue, standbyState), daemon=True)
             prevDiscordBotToken = currentDiscordBotToken
             discordBotProc.start()
         elif not shouldRunDiscordBot and discordBotProc is not None and discordBotProc.is_alive():
@@ -386,7 +523,10 @@ def runApp(macroTarget):
             richPresenceManager.set_enabled(discord_rp_enabled)
             
             # Update status based on macro run state
-            if run.value == 0 or run.value == 3:  # Stopped
+            if standbyState.active:
+                if status.value != "standby":
+                    status.value = "standby"
+            elif run.value == 0 or run.value == 3:  # Stopped
                 # Clear any presence override and show "On main menu" when not running
                 try:
                     if presence is not None:
@@ -419,6 +559,11 @@ def runApp(macroTarget):
             prevRunState = run.value
 
         if run.value == 1:
+            if standbyState.active:
+                stopStandbyKeepAwake()
+                standbyState.active = False
+                standbyState.deadline = 0.0
+                logger.webhook("Macro Standby Disabled", "Starting the macro.", "orange", route_category="macro_status")
             HourlyReport().resetAllStats()
             if setdat.get("enable_stream", False):
                 startStreamIfNeeded(setdat)
@@ -499,7 +644,9 @@ def runApp(macroTarget):
             run.value = 3
             showRunState(3)
 
-            if not had_macro_proc:
+            # Standby is an intentional low-power transition, not a completed
+            # farming session, so do not generate a final report for it.
+            if not had_macro_proc or standbyState.active:
                 continue
 
             # Generate and send final report AFTER stopping inputs
@@ -559,9 +706,11 @@ def runApp(macroTarget):
                 macroProc.kill()
                 macroProc.join()
             logger.webhook("","Disconnected", "red", "screen", ping_category="ping_disconnects")
-            appManager.closeApp("Roblox")
+            #release held input before Roblox quits, otherwise WindowServer can hang on the orphaned gesture
             keyboardModule.releaseMovement()
             mouse.mouseUp()
+            time.sleep(0.2)
+            appManager.closeApp("Roblox")
             macroProc = startMacroProcess()
             run.value = 2
             showRunState(2)
@@ -580,9 +729,10 @@ def runApp(macroTarget):
             print(f"Macro process exited{extra}")
             logger.webhook("","Macro Crashed{0}".format(extra), "red", "screen", ping_category="ping_critical_errors")
             macroProc.join()
-            appManager.openApp("Roblox")
             keyboardModule.releaseMovement()
             mouse.mouseUp()
+            time.sleep(0.2)
+            appManager.openApp("Roblox")
             # restart macro process
             macroProc = startMacroProcess()
             run.value = 2
