@@ -299,6 +299,7 @@ class macro(
         if timing is None: timing = self.getTiming(name)
         if not isinstance(timing, float) and not isinstance(timing, int):
             print(f"Timing is not a valid number? {timing}")
+            timing = 0 #treat a corrupted entry as never done
         mobRespawnBonus = 1
         if applyMobRespawnBonus:
             mobRespawnBonus -= 0.15 if self.setdat["gifted_vicious"] else 0
