@@ -266,6 +266,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 macro.setdat.get("macro_mode", "normal") not in ("quest", "alt")
                 and macro.night
                 and macro.setdat["stinger_hunt"]
+                and macro.confirmNight()
             ):
                 macro.stingerHunt()
             if (

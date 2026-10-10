@@ -105,7 +105,8 @@ class HiveMixin:
                     liveGatherReport.stop()
                 self.keyboard.press(".")
                 self.converting = False
-                self.stingerHunt()
+                if self.confirmNight():
+                    self.stingerHunt()
                 return
             
             #check if backpack is done
