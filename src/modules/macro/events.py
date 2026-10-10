@@ -87,9 +87,7 @@ class EventDetectionMixin:
             self.nightDetectStreaks = 0
 
     #ported from Natro's nm_confirmNight. Shaded grass beside a wall can look like night to detectNight,
-    #so before a night task, reset and look down at the open ground in front of the hive.
-    #Natro looks for night grass 0x17481F, but on macOS that is the daytime colour of the hive ground,
-    #so here it is night when that ground can't be seen
+    #so before a night task, reset and look down at the open ground in front of the hive
     def confirmNight(self):
         self.reset(convert=False)
         for _ in range(10):
@@ -102,16 +100,16 @@ class EventDetectionMixin:
         screen = mssScreenshotNP(win.mx+300, win.my+win.mh//2+50, win.mw-600, win.mh//2-50)
         bgr = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (10, 10))
-        isNight = not findColorObjectRGB(bgr, (0x17, 0x48, 0x1F), variance=2, kernel=kernel, mode="box")
+        #night grass, night snow. Natro matches these exactly; allow 2 for the small colour shift on macOS (shade by a wall matches from 3)
+        isNight = any(findColorObjectRGB(bgr, color, variance=2, kernel=kernel, mode="box") for color in [(0x17, 0x48, 0x1F), (0x56, 0x64, 0x6B)])
 
-        #screenshot the checked view before tilting back
+        for _ in range(4):
+            self.keyboard.press("pagedown")
         if isNight:
             self.logger.webhook("", "Confirmed night", "dark brown", "screen")
         else:
             self.logger.webhook("", "Not night, skipping the night tasks", "dark brown", "screen")
             self.night = False
-        for _ in range(4):
-            self.keyboard.press("pagedown")
         return isNight
 
     def scanBlueTextAnnouncements(self):
