@@ -156,7 +156,7 @@ class NavigationMixin:
             time.sleep(0.01)
         return target_zoom
 
-    def cannon(self, fast = False, allowHiveResync = True, allowRejoin = True):
+    def cannon(self, allowHiveResync = True, allowRejoin = True):
         def detect_rejoin_mode_color():
             try:
                 if not appManager.isAppFocused("Roblox"):
@@ -193,47 +193,45 @@ class NavigationMixin:
             hive_resync_attempts = max(0, max_attempts - 1)
         first_attempt_color = None
         for i in range(max_attempts):
+            #ported from Natro's nm_gotoRamp and nm_gotoCannon (walk distances in tiles)
             if self.cannonFromHive:
-                hiveNumber = self.setdat["hive_number"]
+                self.keyboard.tileWalk("w", 5)
+                self.keyboard.tileWalk("d", 9.2 * self.setdat["hive_number"] - 4)
             else:
-                hiveNumber = 3
-            self.keyboard.walk("d", 1.2 * hiveNumber + i)
-            self.keyboard.walk("w", 0.8 if self.cannonFromHive else 0.2)
-            self.keyboard.keyDown("d")
-            time.sleep(0.5)
-            self.keyboard.slowPress("space")
-            time.sleep(0.2)
-            self.keyboard.keyDown("d")
-            self.keyboard.walk("w", 0.2)
-
-            if fast:
-                self.keyboard.walk("d", 0.95)
-                time.sleep(0.1)
-                return True
-            self.keyboard.walk("d", 0.2)
-            self.keyboard.walk("s", 0.07)
-            startTime = time.time()
-            self.keyboard.keyDown("d")
+                #reset couldn't find the hive and left us in front of slot 3, already a little forward
+                self.keyboard.tileWalk("w", 1.4)
+                self.keyboard.tileWalk("d", 9.2 * 3 - 4)
+            #jump onto the ramp and keep walking right until the cannon prompt shows
+            self.keyboard.keyDown("d", False)
+            self.keyboard.keyDown("space", False)
+            time.sleep(0.1)
+            self.keyboard.keyUp("space", False)
+            self.keyboard.tileWait(2)
+            self.keyboard.keyDown("w", False)
+            self.keyboard.tileWait(1.5)
+            self.keyboard.keyUp("w", False)
             foundCannon = False
-            while time.time() - startTime < 0.9:
+            startTime = time.time()
+            while time.time() - startTime < 20:
                 if self.isBesideEImage("cannon"):
                     foundCannon = True
                     break
-            self.keyboard.keyUp("d")
+            self.keyboard.keyUp("d", False)
+            #check the cannon wasn't overrun
             if foundCannon:
-                for _ in range(3):
-                    time.sleep(0.4)
+                for _ in range(9):
+                    time.sleep(0.5)
                     if self.isBesideEImage("cannon"):
                         return True
-                    self.keyboard.walk("a", 0.2)
+                    self.keyboard.tileWalk("a", 1.5)
             self.logger.webhook("Notice", f"Could not find cannon (attempt {i + 1}/{max_attempts})", "dark brown", "screen")
             detected_color = detect_rejoin_mode_color()
             if allowHiveResync and hive_resync_attempts and i + 1 >= hive_resync_attempts:
                 if self.resyncHiveSlotFromHive():
-                    return self.cannon(fast=fast, allowHiveResync=False, allowRejoin=allowRejoin)
+                    return self.cannon(allowHiveResync=False, allowRejoin=allowRejoin)
                 self.logger.webhook("", "Hive slot recheck failed; rejoining", "dark brown", "screen")
                 if allowRejoin and self.rejoin():
-                    return self.cannon(fast=fast, allowHiveResync=False, allowRejoin=False)
+                    return self.cannon(allowHiveResync=False, allowRejoin=False)
                 return False
 
             if i < max_attempts - 1:
@@ -256,7 +254,7 @@ class NavigationMixin:
                 ping_category="ping_critical_errors",
             )
             if allowRejoin and self.rejoin():
-                return self.cannon(fast=fast, allowHiveResync=False, allowRejoin=False)
+                return self.cannon(allowHiveResync=False, allowRejoin=False)
             return False
         return False
 
