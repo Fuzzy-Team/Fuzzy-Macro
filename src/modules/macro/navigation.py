@@ -197,9 +197,8 @@ class NavigationMixin:
                 hiveNumber = self.setdat["hive_number"]
             else:
                 hiveNumber = 3
-            forwardTime = 0.8 if self.cannonFromHive else 0.2
-            self.keyboard.walk("w", forwardTime / 2)
-            self.keyboard.walk("d", 1.2 * hiveNumber + i + 1)
+            self.keyboard.walk("d", 1.2 * hiveNumber + i)
+            self.keyboard.walk("w", 0.8 if self.cannonFromHive else 0.2)
             self.keyboard.keyDown("d")
             time.sleep(0.5)
             self.keyboard.slowPress("space")
