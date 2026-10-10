@@ -150,31 +150,6 @@ class PlanterMixin:
                     placedPlanter = False
                     break
                 time.sleep(0.3)
-            if hotbarSlot and placedPlanter and not recoverAlreadyPlacedPlanterState():
-                self.logger.webhook("", f"[Planter Placement] Hotbar slot {hotbarSlot} did not confirm {planter.title()} placement. Trying inventory fallback.", "orange", "screen")
-                self.planterCoords = None
-                self.findPlanterInInventory(name)
-                if self.planterCoords is None:
-                    placedPlanter = False
-                else:
-                    if not self.goToPlanter(planter, field, "place"):
-                        updateHourlyTime()
-                        return False
-                    self.useItemInInventory(x=self.planterCoords[0], y=self.planterCoords[1])
-                    time.sleep(0.5)
-                    placementError = None
-                    for _ in range(7):
-                        if self.blueTextImageSearch("notinfield"):
-                            placementError = "notinfield"
-                            placedPlanter = False
-                            break
-                        if self.blueTextImageSearch("maxplanters"):
-                            placementError = "maxplanters"
-                            placedPlanter = False
-                            break
-                        time.sleep(0.3)
-                    if placedPlanter:
-                        placedPlanter = recoverAlreadyPlacedPlanterState()
             if placedPlanter: 
                 self.logger.webhook("",f"Placed {planter.title()} Planter", "dark brown", "screen")
                 #use glitter
