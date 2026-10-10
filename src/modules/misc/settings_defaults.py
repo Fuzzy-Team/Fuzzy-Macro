@@ -163,7 +163,6 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'gather_boosted': False,
  'boost_seperate': 20,
  'field_booster_glitter_extend_enabled': False,
- 'field_booster_glitter_slot': 1,
  'tad_alt_sync_enabled': False,
  'tad_alt_1_enabled': False,
  'tad_alt_1_webhook': '',
@@ -258,7 +257,6 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'mondo_buff_loot': True,
  'mondo_collect_token': False,
  'mondo_loot_times': 1,
- 'loot_reverse': True,
  'honeystorm': False,
  'guiding_star_announcements': False,
  'sprouts_enable': False,
@@ -299,7 +297,6 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'bucko_bee_quest': False,
  'riley_bee_quest': False,
  'quest_use_gumdrops': False,
- 'quest_gumdrop_slot': 2,
  'quest_progress_watch': False,
  'Auto_Field_Boost': False,
  'AFB_field': 'sunflower',
@@ -308,9 +305,7 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'AFB_limit': 0,
  'AFB_dice': 'field dice',
  'AFB_glitter': False,
- 'AFB_glitter_rebuff': False,
  'attempts': 10,
- 'AFB_dice_slot': 7,
  'AFB_attempts': 10,
  'AFB_slotD': 0,
  'AFB_slotG': 0,
@@ -711,7 +706,6 @@ DEFAULT_GENERAL_SETTINGS = {'hive_number': 1,
  'fallback_private_server_link_1': '',
  'fallback_private_server_link_2': '',
  'fallback_private_server_link_3': '',
- 'rejoin_wait': 30,
  'always_rejoin': True,
  'rejoin_schedule_type': 'hours',
  'rejoin_at_time': '00:00',
@@ -768,7 +762,6 @@ DEFAULT_GENERAL_SETTINGS = {'hive_number': 1,
  'discord_permission_profile_access_ids': '',
  'discord_permission_streaming_ids': '',
  'discord_permission_reports_ids': '',
- 'enable_discord_ping': True,
  'ping_critical_errors': False,
  'ping_disconnects': False,
  'ping_character_deaths': False,
@@ -793,7 +786,6 @@ DEFAULT_GENERAL_SETTINGS = {'hive_number': 1,
  'ping_crafting': False,
  'ping_stream': False,
  'stream_resolution': 0.75,
- 'stream_fps': 30,
  'enable_stream': False,
  'pin_stream_url': True,
  'low_performance': False,
@@ -812,6 +804,7 @@ DEFAULT_GENERAL_SETTINGS = {'hive_number': 1,
  'item_monitor': False,
  'bees': 50,
  'goo_slot': 3,
+ 'glitter_slot': 1,
  'start_keybind': 'F1',
  'stop_keybind': 'F3',
  'pause_keybind': 'F2',
@@ -819,7 +812,15 @@ DEFAULT_GENERAL_SETTINGS = {'hive_number': 1,
  'autoclicker_keybind': '',
  'auto_gifted_basic_bee_start_keybind': '',
  'macro_mode': 'normal',
- 'ignore_petal_quests': False}
+ 'ignore_petal_quests': False,
+ # values below match the fallbacks the macro already used for these settings
+ 'max_cannon_attempts': 3,
+ 'gui_theme': 'Brown',
+ 'update_channel': 'stable',
+ 'auto_update_check_disabled': False,
+ 'webhook_time_format': 24,
+ 'discord_rich_presence': False,
+ 'hourly_report_embed_text': True}
 
 DEFAULT_FIELDS = {'sunflower': {'shift_lock': False,
                'field_drift_compensation': False,
@@ -1617,6 +1618,15 @@ DEFAULT_FIELDS = {'sunflower': {'shift_lock': False,
                                                 'goo': False,
                                                 'goo_interval': '3'}}}}
 
+# Gather settings some fields don't list above, with the values the macro falls back to.
+for _field_defaults in DEFAULT_FIELDS.values():
+    _field_defaults.setdefault('infinite_gather', False)
+    _field_defaults.setdefault('use_whirlwig_fallback', False)
+    _field_defaults.setdefault('goo', False)
+    _field_defaults.setdefault('goo_interval', 3)
+    _field_defaults.setdefault('blooms_ai_model', 'Standard')
+del _field_defaults
+
 DEFAULT_FUZZY_AI_TOKEN_RANKINGS = {'sunflower': {'preferred_tokens': 'Token Link,Focus,Melody,Blue Boost,Honey Mark Station,Honey Mark Token,Pollen Mark '
                                    'Station,Pollen Mark Token,Haste',
                'ignored_tokens': 'Honey Token,Blueberry,Bloom,Duped Baby Love,Duped Beamstorm,Duped Beesmas Cheer '
@@ -1950,6 +1960,9 @@ DEFAULT_AFB = {'AFB_dice_cd': 0, 'AFB_glitter_cd': 0, 'AFB_limit': 0}
 
 DEFAULT_BLENDER = {'item': 1, 'collectTime': 0}
 
+# number of blender_item_N slots in DEFAULT_PROFILE_SETTINGS
+BLENDER_ITEM_SLOTS = 5
+
 DEFAULT_STICKER_STACK = 0
 
 DEFAULT_HOTBAR_TIMINGS = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0}
@@ -1959,7 +1972,8 @@ DEFAULT_MANUAL_PLANTERS = ''
 DEFAULT_AUTO_PLANTERS = {'planters': [{'planter': '', 'nectar': '', 'field': '', 'harvest_time': 0, 'nectar_est_percent': 0},
               {'planter': '', 'nectar': '', 'field': '', 'harvest_time': 0, 'nectar_est_percent': 0},
               {'planter': '', 'nectar': '', 'field': '', 'harvest_time': 0, 'nectar_est_percent': 0}],
- 'nectar_last_field': {'comforting': '', 'refreshing': '', 'satisfying': '', 'motivating': '', 'invigorating': ''}}
+ 'nectar_last_field': {'comforting': '', 'refreshing': '', 'satisfying': '', 'motivating': '', 'invigorating': ''},
+ 'gather': False}
 
 DEFAULT_CURRENT_PROFILE = 'default'
 
@@ -2039,3 +2053,16 @@ DEFAULT_AI_PATTERN_PRESETS = {
 
 def deepcopy_default(value):
     return copy.deepcopy(value)
+
+
+def glitter_slot(settings, key="glitter_slot"):
+    """Glitter's hotbar slot (1-7), or 0 to find Glitter in the inventory."""
+    try:
+        slot = int(settings.get(key, 1))
+    except (TypeError, ValueError):
+        return 1
+    return slot if 0 <= slot <= 7 else 1
+
+
+def glitter_slot_label(slot):
+    return "the inventory" if slot == 0 else f"hotbar slot {slot}"
