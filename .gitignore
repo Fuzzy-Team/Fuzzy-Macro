@@ -31,6 +31,9 @@ smoke_hourly_report.py
 .vscode/
 *.pt
 src/data/legacy_user_backups
-docs/
+docs/*
+!docs/adr/
+docs/adr/*
+!docs/adr/*.md
 tools/
 generate_theme_reports.py

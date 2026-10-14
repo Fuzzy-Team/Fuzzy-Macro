@@ -1,4 +1,3 @@
-import eel
 import webbrowser
 import modules.misc.settingsManager as settingsManager
 import os
@@ -8,21 +7,11 @@ import modules.controls.mouse as mouseControl
 import sys
 import ast
 import json
-import webbrowser
 import time
 import threading
-from bottle import route, static_file
 from modules.submacros.autoGiftedBasicBee import AutoGiftedBasicBeeRunner
 import modules.controls.keyboard as keyboardModule
 import modules.logging.log as logModule
-
-eel.init('webapp')
-HOURLY_REPORT_ASSET_ROOT = os.path.join(settingsManager.getProjectRoot(), "src", "hourly_report", "assets")
-
-
-@route("/hourly-report-assets/<filename:re:[A-Za-z0-9_\\-]+\\.png>")
-def serve_hourly_report_asset(filename):
-    return static_file(filename, root=HOURLY_REPORT_ASSET_ROOT)
 
 run = None
 _recent_logs = []
@@ -479,11 +468,9 @@ def configureToolRuntime(logger=None, status=None, presence=None):
     _tool_logger = logger
     _tool_status = status
     _tool_presence = presence
-@eel.expose
 def openLink(link):
     webbrowser.open(link, autoraise = True)
     
-@eel.expose
 def start():
     if run.value != 3:
         return {"ok": False, "message": "The macro is not fully stopped yet."}
@@ -492,7 +479,6 @@ def start():
     run.value = 1
     return {"ok": True}
     
-@eel.expose
 def stop():
     try:
         stopAllTools()
@@ -507,19 +493,16 @@ def stop():
     setRunState(0)
     return {"ok": True}
 
-@eel.expose
 def pause():
     if run.value != 2: return #only pause if running
     run.value = 6  # 6 = paused
     return {"ok": True}
 
-@eel.expose
 def resume():
     if run.value != 6: return #only resume if paused
     run.value = 2  # 2 = running (resume)
     return {"ok": True}
 
-@eel.expose
 def getPatterns():
     pattern_metadata = {
         "fuzzy_ai_gather": {
@@ -559,7 +542,6 @@ def getPatterns():
     return sorted(patterns, key=lambda pattern: pattern["name"].lower())
 
 
-@eel.expose
 def getDefaultPatterns():
     """Return installed patterns that are also shipped in defaults/patterns."""
     defaults_dir = os.path.join(settingsManager.getProjectRoot(), "settings", "defaults", "patterns")
@@ -579,7 +561,6 @@ def getDefaultPatterns():
     ]
 
 
-@eel.expose
 def importPatterns(patterns):
     """Import pattern files sent from the frontend.
     `patterns` should be a list of dicts: {"name": "filename.py", "content": "..."}
@@ -619,11 +600,9 @@ def importPatterns(patterns):
 
     return results
 
-@eel.expose
 def clearManualPlanters():
     settingsManager.clearFile(settingsManager.getUserDataPath("manualplanters.txt"))
 
-@eel.expose
 def getManualPlanterData():
     planterDataRaw = settingsManager.loadUserText("manualplanters.txt")
     if planterDataRaw.strip():
@@ -721,20 +700,17 @@ def normalizeAutoPlanterData(data):
 
     return normalized
     
-@eel.expose
 def getAutoPlanterData():
     try:
         return normalizeAutoPlanterData(settingsManager.loadUserJson("auto_planters.json"))
     except Exception:
         return defaultAutoPlanterData()
 
-@eel.expose
 def clearAutoPlanters():
     data = defaultAutoPlanterData()
     settingsManager.saveUserJson("auto_planters.json", data)
 
 
-@eel.expose
 def setAutoPlanterGather(val):
     """Set the global 'gather' flag in data/user/auto_planters.json"""
     try:
@@ -753,7 +729,6 @@ def setAutoPlanterGather(val):
     except Exception:
         return False
 
-@eel.expose
 def resetManualPlanterTimer(index):
     """Reset a specific manual planter timer by index (0-2)"""
     try:
@@ -785,18 +760,19 @@ def resetManualPlanterTimer(index):
         print(f"Error resetting manual planter {index}: {e}")
         return False
 
-@eel.expose
 def resetAutoPlanterTimer(index):
-    """Reset a specific auto planter timer by index (0-2)"""
+    """Reset one auto planter slot, or all slots, retaining nectar state."""
     try:
         data = normalizeAutoPlanterData(settingsManager.loadUserJson("auto_planters.json"))
         
         # Check if index is valid
-        if index < 0 or index >= len(data.get("planters", [])):
+        if index != "all" and (index < 0 or index >= len(data.get("planters", []))):
             return False
         
         # Clear the specific planter
-        data["planters"][index] = emptyAutoPlanterSlot()
+        indices = range(len(data["planters"])) if index == "all" else (index,)
+        for slot_index in indices:
+            data["planters"][slot_index] = emptyAutoPlanterSlot()
         
         settingsManager.saveUserJson("auto_planters.json", data)
 
@@ -805,7 +781,6 @@ def resetAutoPlanterTimer(index):
         print(f"Error resetting auto planter {index}: {e}")
         return False
     
-@eel.expose
 def clearBlender():
     blenderData = {
         "item": 1,
@@ -813,7 +788,6 @@ def clearBlender():
     }
     settingsManager.saveUserLiteral("blender.txt", blenderData)
 
-@eel.expose
 def clearAFB():
     AFBData = {
         "AFB_dice_cd": 0,
@@ -822,7 +796,6 @@ def clearAFB():
     }
     settingsManager.saveUserSettingsFile("AFB.txt", AFBData)
 
-@eel.expose
 def resetFieldToDefault(field_name):
     """Reset a field's settings to the default values"""
     try:
@@ -841,7 +814,6 @@ def resetFieldToDefault(field_name):
         print(f"Error resetting field to default: {e}")
         return False
 
-@eel.expose
 def resetTaskPrioritiesToDefault():
     """Reset task_priority_order to the default list from default settings"""
     try:
@@ -856,7 +828,6 @@ def resetTaskPrioritiesToDefault():
         print(f"Error resetting task priorities to default: {e}")
         return False
 
-@eel.expose
 def exportFieldSettings(field_name):
     """Export field settings as JSON string"""
     try:
@@ -866,7 +837,6 @@ def exportFieldSettings(field_name):
         return None
 
 
-@eel.expose
 def exportDebugZip(profile_name=None):
     """Create a zip containing the exported profile, recent logs, and system info. Returns (True, base64zip, filename) or (False, error)."""
     try:
@@ -954,7 +924,6 @@ def exportDebugZip(profile_name=None):
     except Exception as e:
         return False, str(e)
 
-@eel.expose
 def importFieldSettings(field_name, json_settings):
     """Import field settings from JSON string"""
     try:
@@ -963,16 +932,13 @@ def importFieldSettings(field_name, json_settings):
         print(f"Error importing field settings: {e}")
         return False
 
-@eel.expose
 def loadFuzzyAITokenRanking(field_name, model="standard"):
     return settingsManager.loadFuzzyAITokenRanking(field_name, model)
 
-@eel.expose
 def saveFuzzyAITokenRanking(field_name, ranking, model="standard"):
     return settingsManager.saveFuzzyAITokenRanking(field_name, ranking, model)
 
 
-@eel.expose
 def getModelStatus():
     """Return the models this Mac can use, along with their local availability."""
     models = []
@@ -1000,7 +966,6 @@ def getModelStatus():
     return {"models": models, "model_dir": modelManager.MODEL_DIR}
 
 
-@eel.expose
 def downloadMissingModels(model_names=None):
     """Download all missing supported models, or the named missing models."""
     if not _model_download_lock.acquire(blocking=False):
@@ -1037,7 +1002,6 @@ def downloadMissingModels(model_names=None):
     finally:
         _model_download_lock.release()
   
-@eel.expose
 def exportPlanterSettings():
     """Export planter settings as JSON string"""
     try:
@@ -1046,7 +1010,6 @@ def exportPlanterSettings():
         print(f"Error exporting planter settings: {e}")
         return None
 
-@eel.expose
 def importPlanterSettings(json_settings):
     """Import planter settings from JSON string"""
     try:
@@ -1055,17 +1018,14 @@ def importPlanterSettings(json_settings):
         print(f"Error importing planter settings: {e}")
         return False
         
-@eel.expose
 def getMacroVersion():
     """Get the macro version from version.txt"""
     return settingsManager.getMacroVersion()
 
-@eel.expose
 def usesLegacyDiscordBot():
     """True on macOS 10.12-10.14, where Python 3.7 can only install discord.py 1.x, so bot commands use the fuzz! prefix"""
     return sys.version_info < (3, 8)
 
-@eel.expose
 def autoClickerClick():
     """Perform a single fast left click for the tools tab auto clicker."""
     try:
@@ -1074,7 +1034,6 @@ def autoClickerClick():
     except Exception:
         return False
 
-@eel.expose
 def startAutoClickerTool(interval_ms=100, start_delay_seconds=3):
     result = _auto_clicker_runner.start(interval_ms, start_delay_seconds, getRunState())
     if result.get("ok"):
@@ -1082,7 +1041,6 @@ def startAutoClickerTool(interval_ms=100, start_delay_seconds=3):
         _send_tool_webhook("Tool Started", "Auto Clicker started.", "purple")
     return result
 
-@eel.expose
 def stopAutoClickerTool():
     was_active = _auto_clicker_runner.is_active()
     result = _auto_clicker_runner.stop()
@@ -1091,23 +1049,18 @@ def stopAutoClickerTool():
         _send_tool_webhook("Tool Stopped", "Auto Clicker stopped.", "orange")
     return result
 
-@eel.expose
 def getAutoClickerStatus():
     return _auto_clicker_runner.get_status()
 
-@eel.expose
 def startAutoGiftedBasicBeeTool(capture_delay_seconds=3, pause_settings=None):
     return _auto_gifted_basic_bee_runner.start(capture_delay_seconds, getRunState(), pause_settings)
 
-@eel.expose
 def stopAutoGiftedBasicBeeTool():
     return _auto_gifted_basic_bee_runner.stop()
 
-@eel.expose
 def getAutoGiftedBasicBeeStatus():
     return _auto_gifted_basic_bee_runner.get_status()
 
-@eel.expose
 def startHotbarBuffTool():
     result = _hotbar_buff_runner.start(getRunState())
     if result.get("ok"):
@@ -1115,7 +1068,6 @@ def startHotbarBuffTool():
         _send_tool_webhook("Tool Started", "Hotbar Buff started.", "purple")
     return result
 
-@eel.expose
 def stopHotbarBuffTool():
     was_active = _hotbar_buff_runner.is_active()
     result = _hotbar_buff_runner.stop()
@@ -1124,15 +1076,12 @@ def stopHotbarBuffTool():
         _send_tool_webhook("Tool Stopped", "Hotbar Buff stopped.", "orange")
     return result
 
-@eel.expose
 def getHotbarBuffStatus():
     return _hotbar_buff_runner.get_status()
 
-@eel.expose
 def isAnyToolRunning():
     return _auto_clicker_runner.is_active() or _auto_gifted_basic_bee_runner.is_active() or _hotbar_buff_runner.is_active()
 
-@eel.expose
 def stopAllTools():
     results = {
         "auto_clicker": stopAutoClickerTool(),
@@ -1141,7 +1090,6 @@ def stopAllTools():
     }
     return {"ok": True, "results": results}
 
-@eel.expose
 def syncToolSession(session_id):
     """Reset GUI-scoped manual tools when the frontend is reloaded."""
     global _tool_session_id
@@ -1177,11 +1125,10 @@ def syncToolSession(session_id):
         },
     }
 
-@eel.expose
 def update():
     def send_update_progress(percent, message):
         try:
-            eel.updateProgress(percent, message)()
+            _notify('update_progress', percent, message)
         except Exception:
             pass
 
@@ -1195,21 +1142,19 @@ def update():
     except Exception:
         updated = False
     if updated:
-        eel.closeWindow()
-        sys.exit()
+        _notify('close')
     else:
         try:
-            eel.updateButtonReset()()
+            _notify('reset_update')
         except Exception:
             pass
-    return
+    return updated
 
 
-@eel.expose
 def updateFromHash(commit_hash):
     def send_update_progress(percent, message):
         try:
-            eel.updateProgress(percent, message)()
+            _notify('update_progress', percent, message)
         except Exception:
             pass
 
@@ -1218,16 +1163,14 @@ def updateFromHash(commit_hash):
     except Exception:
         updated = False
     if updated:
-        eel.closeWindow()
-        sys.exit()
+        _notify('close')
     else:
         try:
-            eel.updateButtonReset()()
+            _notify('reset_update')
         except Exception:
             pass
-    return
+    return updated
 
-@eel.expose
 def checkForUpdates():
     """Check for updates silently and return update information"""
     try:
@@ -1242,7 +1185,6 @@ def checkForUpdates():
         print(f"Error checking for updates: {e}")
         return None
 
-@eel.expose
 def disableAutoUpdateCheck():
     """Disable automatic update checking by saving preference to generalsettings"""
     try:
@@ -1252,7 +1194,6 @@ def disableAutoUpdateCheck():
         print(f"Error disabling auto update check: {e}")
         return False
 
-@eel.expose
 def getAutoUpdateCheckDisabled():
     """Check if automatic update checking is disabled"""
     try:
@@ -1263,30 +1204,10 @@ def getAutoUpdateCheckDisabled():
         return False
 
 def log(time = "", msg = "", color = ""):
-    eel.log(time, msg, color)
+    _notify('add_log', time, msg, color)
 
-eel.expose(settingsManager.loadFields)
-eel.expose(settingsManager.saveField) 
-eel.expose(settingsManager.getDefaultFuzzyAIGatherPatternPreset)
-eel.expose(settingsManager.getDefaultBloomsAIPatternPreset)
-eel.expose(settingsManager.loadSettings)
-eel.expose(settingsManager.loadAllSettings)
-eel.expose(settingsManager.saveProfileSetting)
-eel.expose(settingsManager.saveGeneralSetting)
-eel.expose(settingsManager.saveDictProfileSettings)
-eel.expose(settingsManager.initializeFieldSync)
 
 # Profile management functions
-eel.expose(settingsManager.listProfiles)
-eel.expose(settingsManager.getCurrentProfile)
-eel.expose(settingsManager.switchProfile)
-eel.expose(settingsManager.createProfile)
-eel.expose(settingsManager.deleteProfile)
-eel.expose(settingsManager.renameProfile)
-eel.expose(settingsManager.duplicateProfile)
-eel.expose(settingsManager.exportProfile)
-eel.expose(settingsManager.importProfile)
-eel.expose(settingsManager.importProfileContent)
 
 def updateGUI():
     # Load settings, ensure Brown Bear keys exist, then load into frontend
@@ -1323,15 +1244,10 @@ def updateGUI():
     except Exception:
         pass
 
-    eel.loadInputs(settings)
-    eel.loadTasks()
-    try:
-        eel.refreshCurrentTabContent()()
-    except Exception:
-        pass
+    _notify('refresh')
 
 def toggleStartStop():
-    eel.toggleStartStop()
+    _notify('refresh_home')
 
 # Global variable to store run state
 # 0=stop request, 1=start request, 2=running, 3=stopped, 4=disconnected, 6=paused
@@ -1344,20 +1260,15 @@ def setRunState(state):
 def getRunState():
     return _run_state
 
-# Expose functions to eel
-eel.expose(getRunState)
-eel.expose(setRunState)
 
 def setRecentLogs(logs):
     global _recent_logs
     _recent_logs = logs
 
-@eel.expose
 def getRecentLogs():
     # Return as a list of dicts for the frontend
     return list(_recent_logs)
 
-@eel.expose
 def clearRecentLogs():
     global _recent_logs
     # Clear the shared list
@@ -1372,37 +1283,29 @@ def clearRecentLogs():
         # Fallback to re-initializing if clear fails
         _recent_logs = []
 
+_app = None
+
+
+def _notify(method, *args):
+    if _app is not None:
+        _app.enqueue(getattr(_app, method), *args)
+
+
+def isRecordingKeybind():
+    return _app is not None and _app.is_recording()
+
+
 def launch():
+    import tkinter as tk
+    from modules.gui.app import NativeApp
+    from modules.gui.widgets import register_fonts
+    global _app
+    register_fonts()
+    root = tk.Tk()
+    _app = NativeApp(root, sys.modules[__name__], settingsManager)
 
-    import socket
-    def get_free_port(start_port=8000, max_tries=100):
-        port = start_port
-        for _ in range(max_tries):
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                try:
-                    s.bind(("localhost", port))
-                    return port
-                except OSError:
-                    port += 1
-        raise RuntimeError(f"No free port found in range {start_port}-{port}")
 
-    port = get_free_port(8000, 100)
-    port_url = f"http://localhost:{port}"
-
-    # Ensure important functions are exposed to the frontend before eel starts
-    try:
-        eel.expose(getRecentLogs)
-    except Exception:
-        # ignore if already exposed or if exposure fails at import time
-        pass
-
-    try:
-        eel.start('index.html', mode = "chrome", app_mode = True, block = False, port=port, cmdline_args=["--incognito", f"--app={port_url}"])
-    except EnvironmentError:
-        try:
-            eel.start('index.html', mode = "chrome-app", app_mode = True, block = False, port=port, cmdline_args=["--incognito", f"--app={port_url}"])
-        except EnvironmentError:
-            print("Chrome/Chromium could not be found. Opening in default browser...")
-            eel.start('index.html', block=False, mode=None, port=port)
-            time.sleep(2)
-            webbrowser.open(f"{port_url}/", new=2)
+def runEventLoop(supervisor_tick, on_exit):
+    if _app is None:
+        raise RuntimeError('Launch the GUI before starting its event loop.')
+    _app.run_event_loop(supervisor_tick, on_exit)
