@@ -2642,12 +2642,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         async def callback(self, interaction: discord.Interaction):
             mode = self.values[0]
             success, message = update_setting("macro_mode", mode)
-            if success:
-                try:
-                    import eel
-                    eel.updateMacroMode()
-                except Exception:
-                    pass
+            if success and updateGUI is not None:
+                updateGUI.value = 1
             status_message = message if success else "Failed to update macro mode."
             await _update_category_message(interaction, "macro_mode", status_message=status_message)
 
@@ -4183,12 +4179,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         try:
             success, message = update_setting("macro_mode", mode)
 
-            # Update GUI if available
-            try:
-                import eel
-                eel.updateMacroMode()
-            except:
-                pass  # GUI not available, continue
+            if success and updateGUI is not None:
+                updateGUI.value = 1
 
             mode_names = {
                 "normal": "Normal",

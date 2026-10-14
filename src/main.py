@@ -16,7 +16,6 @@ from pynput import keyboard
 import multiprocessing
 import ctypes
 from threading import Thread
-import eel
 import time
 import sys
 import os
@@ -2747,6 +2746,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
 
 
 def watch_for_hotkeys(run):
+    import gui
     # Track currently pressed keys for combination detection
     pressed_keys = set()
     
@@ -2772,11 +2772,6 @@ def watch_for_hotkeys(run):
     last_settings_load = 0
     settings_cache_duration = 1.0  # Reload settings every 1 second max
     
-    # Cache Eel recording state to avoid repeated calls
-    recording_cache = {"start": False, "pause": False, "stop": False, "hotbar_buff_start": False, "autoclicker": False, "auto_gifted_basic_bee_start": False}
-    last_recording_check = 0
-    recording_cache_duration = 0.5  # Check recording state every 0.5 seconds max
-
     def release_inputs():
         try:
             keyboardModule.releaseMovement()
@@ -2824,23 +2819,6 @@ def watch_for_hotkeys(run):
             settings_cache = settingsManager.loadAllSettings()
             last_settings_load = current_time
         return settings_cache
-    
-    def is_recording_keybind():
-        nonlocal recording_cache, last_recording_check
-        current_time = time.time()
-        if current_time - last_recording_check > recording_cache_duration:
-            try:
-                import eel
-                recording_cache["start"] = eel.getElementProperty("start_keybind", "dataset.recording")() == "true"
-                recording_cache["pause"] = eel.getElementProperty("pause_keybind", "dataset.recording")() == "true"
-                recording_cache["stop"] = eel.getElementProperty("stop_keybind", "dataset.recording")() == "true"
-                recording_cache["hotbar_buff_start"] = eel.getElementProperty("hotbar_buff_start_keybind", "dataset.recording")() == "true"
-                recording_cache["autoclicker"] = eel.getElementProperty("autoclicker_keybind", "dataset.recording")() == "true"
-                recording_cache["auto_gifted_basic_bee_start"] = eel.getElementProperty("auto_gifted_basic_bee_start_keybind", "dataset.recording")() == "true"
-                last_recording_check = current_time
-            except:
-                recording_cache = {"start": False, "pause": False, "stop": False, "hotbar_buff_start": False, "autoclicker": False, "auto_gifted_basic_bee_start": False}
-            return any(recording_cache.values())
     
     def normalize_key_name(key_name):
         key_name = str(key_name or "").strip()
@@ -2941,7 +2919,7 @@ def watch_for_hotkeys(run):
                 pressed_keys.add(key_str)
                 
                 # Don't start/stop macro if we're recording a keybind
-                if is_recording_keybind():
+                if gui.isRecordingKeybind():
                     return  # Ignore keybind during recording
 
                 # Check for force stop (stop keybind held down)
@@ -2949,7 +2927,6 @@ def watch_for_hotkeys(run):
                     if not stop_key_held:
                         stop_key_held = True
                     try:
-                        import gui
                         gui.stopAllTools()
                     except Exception:
                         pass
@@ -2959,7 +2936,6 @@ def watch_for_hotkeys(run):
                         run.value = 0
                         # Update GUI immediately so the app shows cleanup in progress.
                         try:
-                            import gui
                             gui.setRunState(0)
                             gui.toggleStartStop()
                         except:
@@ -2974,7 +2950,6 @@ def watch_for_hotkeys(run):
                     if run.value != 3: #only start from fully stopped state
                         return
                     try:
-                        import gui
                         if gui.isAnyToolRunning():
                             messageBox.msgBox(title="Tool Running", text="Stop the running tool before starting the macro.")
                             return
@@ -2991,7 +2966,6 @@ def watch_for_hotkeys(run):
                     run.value = 1
                     # Update GUI immediately (optimistically show running state)
                     try:
-                        import gui
                         gui.setRunState(2)  # Update GUI state optimistically to running
                         gui.toggleStartStop()  # Update UI immediately
                     except:
@@ -3006,7 +2980,6 @@ def watch_for_hotkeys(run):
                         last_trigger_time["stop"] = 0.0
                     last_trigger_time["stop"] = current_time
                     try:
-                        import gui
                         gui.stopAllTools()
                     except Exception:
                         pass
@@ -3016,7 +2989,6 @@ def watch_for_hotkeys(run):
                     run.value = 0
                     # Update GUI immediately so the app shows cleanup in progress.
                     try:
-                        import gui
                         gui.setRunState(0)
                         gui.toggleStartStop()
                     except:
@@ -3031,7 +3003,6 @@ def watch_for_hotkeys(run):
                         last_trigger_time["hotbar_buff_start"] = 0.0
                     last_trigger_time["hotbar_buff_start"] = current_time
                     try:
-                        import gui
                         result = gui.startHotbarBuffTool()
                         if not result.get("ok") and not gui.isAnyToolRunning():
                             messageBox.msgBox(title="Hotbar Buff", text=result.get("message", "Could not start Hotbar Buff."))
@@ -3044,7 +3015,6 @@ def watch_for_hotkeys(run):
                         return
                     last_trigger_time["autoclicker_start"] = current_time
                     try:
-                        import gui
                         result = gui.startAutoClickerTool()
                         if not result.get("ok") and not gui.isAnyToolRunning():
                             messageBox.msgBox(title="Auto Clicker", text=result.get("message", "Could not start Auto Clicker."))
@@ -3057,7 +3027,6 @@ def watch_for_hotkeys(run):
                         return
                     last_trigger_time["auto_gifted_basic_bee_start"] = current_time
                     try:
-                        import gui
                         result = gui.startAutoGiftedBasicBeeTool()
                         if not result.get("ok") and not gui.isAnyToolRunning():
                             messageBox.msgBox(title="Auto Gifted Basic Bee", text=result.get("message", "Could not start Auto Gifted Basic Bee."))
@@ -3082,7 +3051,6 @@ def watch_for_hotkeys(run):
 
                         # Update GUI immediately (optimistically show paused state)
                         try:
-                            import gui
                             gui.setRunState(6)
                             gui.toggleStartStop()
                         except:
@@ -3305,8 +3273,27 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Failed to release mouse during shutdown: {e}")
 
+    runtimeClosing = False
+    keyboardListener = None
+
     def onExit():
+        global runtimeClosing
+        if runtimeClosing:
+            return
+        runtimeClosing = True
+        run.value = 0
+        try:
+            gui.stopAllTools()
+        except Exception as e:
+            print(f"Error stopping tools during shutdown: {e}")
         stopStandbyKeepAwake()
+        standbyState.active = False
+        standbyState.deadline = 0.0
+        if keyboardListener is not None:
+            try:
+                keyboardListener.stop()
+            except Exception as e:
+                print(f"Error stopping keyboard listener: {e}")
         try:
             stopApp()
         except Exception as e:
@@ -3324,13 +3311,13 @@ if __name__ == "__main__":
             if discordBotProc and discordBotProc.is_alive():
                 discordBotProc.terminate()
                 discordBotProc.join()
-        except NameError:
-            pass
+        except Exception as e:
+            print(f"Error stopping Discord bot: {e}")
         try:
             if richPresenceManager:
                 richPresenceManager.stop()
-        except NameError:
-            pass
+        except Exception as e:
+            print(f"Error stopping Discord Rich Presence: {e}")
         
     def stopApp(page= None, sockets = None):
         global stopThreads
@@ -3374,7 +3361,7 @@ if __name__ == "__main__":
     # This prevents TIS/TSM errors on macOS
     if start_keyboard_listener_fn:
         try:
-            start_keyboard_listener_fn()
+            keyboardListener = start_keyboard_listener_fn()
             print("Keyboard listener started successfully")
         except Exception as e:
             print(f"Failed to start keyboard listener after GUI launch: {e}")
@@ -3559,436 +3546,449 @@ if __name__ == "__main__":
                 route_category="macro_status",
             )
 
-    while True:
-        # Keep Eel responsive so GUI controls and hotkey recording checks can
-        # complete. Standby still skips settings refresh and macro supervision.
-        eel.sleep(1 if standbyState.active else 0.5)
+    def supervisorTick():
+        """Run one supervisor pass; return the next Tk timer interval in seconds."""
+        global current_time, gui_settings_cache, last_gui_settings_load
+        global autoStopStartTime, autoStopDeadline, autoStopHours
+        global discordBotProc, prevDiscordBotToken, richPresenceManager, prevRunState
+        global stopThreads, macroProc, disconnectCooldownUntil
+        try:
+            current_time = time.time()
+            processStandbyCommands()
 
-        current_time = time.time()
-        processStandbyCommands()
-
-        # Standby has already stopped the macro. A stop hotkey can still assign
-        # 0; acknowledge it here so subsequent start requests are accepted.
-        if standbyState.active and run.value == 0:
-            run.value = 3
-            gui.setRunState(3)
-            try:
-                gui.toggleStartStop()
-            except Exception:
-                pass
-
-        if standbyState.active and standbyState.deadline and current_time >= standbyState.deadline:
-            stopStandbyKeepAwake()
-            standbyState.active = False
-            standbyState.deadline = 0.0
-            status.value = "idle_main_menu"
-            logger.webhook("Macro Standby Ended", "The requested standby duration has ended. The macro remains stopped.", "orange", route_category="macro_status")
-
-        # /start and the configured start hotkey both set run to 1. Let them
-        # wake the normal supervisor without requiring a separate standby
-        # toggle first.
-        if standbyState.active and run.value == 1:
-            stopStandbyKeepAwake()
-            standbyState.active = False
-            standbyState.deadline = 0.0
-            status.value = "idle_main_menu"
-            logger.webhook("Macro Standby Disabled", "Starting the macro.", "orange", route_category="macro_status")
-
-        if standbyState.active:
-            continue
-
-        # Get cached settings
-        if current_time - last_gui_settings_load > gui_settings_cache_duration:
-            gui_settings_cache = settingsManager.loadAllSettings()
-            last_gui_settings_load = current_time
-        setdat = gui_settings_cache
-        logger.enableWebhook = logModule.delivery_uses_webhook(setdat)
-        logger.enableDiscordBot = logModule.delivery_uses_bot_messages(setdat)
-        logger.webhookURL = logModule.get_default_delivery_route(setdat)
-        logger.routeSettings = logModule.build_route_settings(setdat)
-        logger.sendScreenshots = setdat.get("send_screenshot", True)
-        logger.hourlyReportOnly = setdat.get("only_send_hourly_report", False)
-        logger.enableDiscordPing = True
-        logger.discordUserID = setdat.get("discord_user_id", "")
-        logger.pingSettings = {
-            key: value for key, value in setdat.items() if str(key).startswith("ping_")
-        }
-        processStreamControlCommands(setdat)
-
-        if autoStopStartTime is not None and run.value in (2, 4, 6):
-            latestAutoStopHours = parseAutoStopHours(setdat)
-            if latestAutoStopHours != autoStopHours:
-                autoStopHours = latestAutoStopHours
-                autoStopDeadline = autoStopStartTime + (autoStopHours * 3600) if autoStopHours > 0 else None
-
-        if autoStopDeadline is not None and run.value in (2, 4, 6) and current_time >= autoStopDeadline:
-            logger.webhook(
-                "Macro Auto Stopped",
-                f"Stopped after {autoStopHours:g} hour{'s' if autoStopHours != 1 else ''}.",
-                "orange",
-                route_category="macro_status",
-            )
-            run.value = 0
-
-        #discord bot. Look for changes in the bot token
-        # Coerce to str: settings parser may turn digit-only values into ints
-        currentDiscordBotToken = str(setdat.get("discord_bot_token") or "").strip()
-        shouldRunDiscordBot = logModule.delivery_uses_bot_commands(setdat) and bool(currentDiscordBotToken)
-        if shouldRunDiscordBot and currentDiscordBotToken != prevDiscordBotToken:
-            if discordBotProc is not None and discordBotProc.is_alive():
-                print("Detected change in discord bot token, killing previous bot process")
-                discordBotProc.terminate()
-                discordBotProc.join()
-            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI, discordMessageQueue, planterCommandQueue, streamControlQueue, skipServer, standbyCommandQueue, standbyState), daemon=True)
-            prevDiscordBotToken = currentDiscordBotToken
-            discordBotProc.start()
-        elif not shouldRunDiscordBot and discordBotProc is not None and discordBotProc.is_alive():
-            print("Discord bot mode disabled, stopping bot process")
-            discordBotProc.terminate()
-            discordBotProc.join()
-            discordBotProc = None
-            prevDiscordBotToken = None
-
-        # Discord Rich Presence - Initialize and always show status
-        discord_rp_enabled = setdat.get("discord_rich_presence", False)
-        
-        if richPresenceManager is None and discord_rp_enabled:
-            # Initialize Rich Presence Manager
-            richPresenceManager = RichPresenceManager(status, enabled=True, presence_value=presence)
-            richPresenceManager.start()
-            print("Discord Rich Presence started")
-        elif richPresenceManager is not None:
-            # Update settings if they changed
-            richPresenceManager.set_enabled(discord_rp_enabled)
-            
-            # Update status based on macro run state
-            if standbyState.active:
-                if status.value != "standby":
-                    status.value = "standby"
-            elif run.value == 0 or run.value == 3:  # Stopped
-                # Clear any presence override and show "On main menu" when not running
+            # Standby has already stopped the macro. A stop hotkey can still assign
+            # 0; acknowledge it here so subsequent start requests are accepted.
+            if standbyState.active and run.value == 0:
+                run.value = 3
+                gui.setRunState(3)
                 try:
-                    if presence is not None:
-                        presence.value = ""
+                    gui.toggleStartStop()
                 except Exception:
                     pass
-                if status.value != "idle_main_menu":
-                    status.value = "idle_main_menu"
-            elif run.value == 6:  # Paused
-                # Show "Paused" status
-                if status.value != "paused":
-                    status.value = "paused"
 
-        # Check if run state changed
-        if run.value != prevRunState:
-            # Check for resume (transition from paused to running)
-            if prevRunState == 6 and run.value == 2:
-                try:
-                    appManager.openApp("Roblox")
-                except Exception:
-                    pass
-                logger.webhook("Macro Resumed", "Fuzzy Macro", "bright green", route_category="macro_status")
-            # Check for pause (transition from running to paused)
-            elif prevRunState == 2 and run.value == 6:
-                keyboardModule.releaseMovement()
-                mouse.mouseUp()
-                logger.webhook("Macro Paused", "Use F2 or /resume to continue", "orange", route_category="macro_status")
-
-            gui.setRunState(run.value)
-            try:
-                gui.toggleStartStop()  # Update UI
-            except:
-                pass  # If eel is not ready, continue
-            prevRunState = run.value
-
-        if run.value == 1:
-            if standbyState.active:
+            if standbyState.active and standbyState.deadline and current_time >= standbyState.deadline:
                 stopStandbyKeepAwake()
                 standbyState.active = False
                 standbyState.deadline = 0.0
+                status.value = "idle_main_menu"
+                logger.webhook("Macro Standby Ended", "The requested standby duration has ended. The macro remains stopped.", "orange", route_category="macro_status")
+
+            # /start and the configured start hotkey both set run to 1. Let them
+            # wake the normal supervisor without requiring a separate standby
+            # toggle first.
+            if standbyState.active and run.value == 1:
+                stopStandbyKeepAwake()
+                standbyState.active = False
+                standbyState.deadline = 0.0
+                status.value = "idle_main_menu"
                 logger.webhook("Macro Standby Disabled", "Starting the macro.", "orange", route_category="macro_status")
-            #create and set webhook obj for the logger
+
+            if standbyState.active:
+                return 1.0
+
+            # Get cached settings
+            if current_time - last_gui_settings_load > gui_settings_cache_duration:
+                gui_settings_cache = settingsManager.loadAllSettings()
+                last_gui_settings_load = current_time
+            setdat = gui_settings_cache
             logger.enableWebhook = logModule.delivery_uses_webhook(setdat)
             logger.enableDiscordBot = logModule.delivery_uses_bot_messages(setdat)
             logger.webhookURL = logModule.get_default_delivery_route(setdat)
             logger.routeSettings = logModule.build_route_settings(setdat)
             logger.sendScreenshots = setdat.get("send_screenshot", True)
-            stopThreads = False
+            logger.hourlyReportOnly = setdat.get("only_send_hourly_report", False)
+            logger.enableDiscordPing = True
+            logger.discordUserID = setdat.get("discord_user_id", "")
+            logger.pingSettings = {
+                key: value for key, value in setdat.items() if str(key).startswith("ping_")
+            }
+            processStreamControlCommands(setdat)
 
-            #reset hourly report data
-            hourlyReport = HourlyReport()
-            hourlyReport.resetAllStats()
-            if setdat.get("enable_stream", False):
-                startStreamIfNeeded(setdat)
+            if autoStopStartTime is not None and run.value in (2, 4, 6):
+                latestAutoStopHours = parseAutoStopHours(setdat)
+                if latestAutoStopHours != autoStopHours:
+                    autoStopHours = latestAutoStopHours
+                    autoStopDeadline = autoStopStartTime + (autoStopHours * 3600) if autoStopHours > 0 else None
 
-            print("starting macro proc")
-            #check if user enabled color-based field drift compensation but sprinkler is not supreme saturator
-            #skip when using AI sprinkler model (works with any sprinkler)
-            fieldSettings = settingsManager.loadFields()
-            useAiDriftComp = setdat.get("use_sprinkler_model_for_drift_compensation", False)
-            if not useAiDriftComp:
-                for field in setdat.get("fields", []):
-                    fs = fieldSettings.get(field, {})
-                    if fs.get("field_drift_compensation", False) and setdat.get("sprinkler_type") != "saturator":
-                        messageBox.msgBox(title="Field Drift Compensation", text=f"You have Field Drift Compensation enabled for {field} field, \
+            if autoStopDeadline is not None and run.value in (2, 4, 6) and current_time >= autoStopDeadline:
+                logger.webhook(
+                    "Macro Auto Stopped",
+                    f"Stopped after {autoStopHours:g} hour{'s' if autoStopHours != 1 else ''}.",
+                    "orange",
+                    route_category="macro_status",
+                )
+                run.value = 0
+
+            #discord bot. Look for changes in the bot token
+            # Coerce to str: settings parser may turn digit-only values into ints
+            currentDiscordBotToken = str(setdat.get("discord_bot_token") or "").strip()
+            shouldRunDiscordBot = logModule.delivery_uses_bot_commands(setdat) and bool(currentDiscordBotToken)
+            if shouldRunDiscordBot and currentDiscordBotToken != prevDiscordBotToken:
+                if discordBotProc is not None and discordBotProc.is_alive():
+                    print("Detected change in discord bot token, killing previous bot process")
+                    discordBotProc.terminate()
+                    discordBotProc.join()
+                discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI, discordMessageQueue, planterCommandQueue, streamControlQueue, skipServer, standbyCommandQueue, standbyState), daemon=True)
+                prevDiscordBotToken = currentDiscordBotToken
+                discordBotProc.start()
+            elif not shouldRunDiscordBot and discordBotProc is not None and discordBotProc.is_alive():
+                print("Discord bot mode disabled, stopping bot process")
+                discordBotProc.terminate()
+                discordBotProc.join()
+                discordBotProc = None
+                prevDiscordBotToken = None
+
+            # Discord Rich Presence - Initialize and always show status
+            discord_rp_enabled = setdat.get("discord_rich_presence", False)
+
+            if richPresenceManager is None and discord_rp_enabled:
+                # Initialize Rich Presence Manager
+                richPresenceManager = RichPresenceManager(status, enabled=True, presence_value=presence)
+                richPresenceManager.start()
+                print("Discord Rich Presence started")
+            elif richPresenceManager is not None:
+                # Update settings if they changed
+                richPresenceManager.set_enabled(discord_rp_enabled)
+
+                # Update status based on macro run state
+                if standbyState.active:
+                    if status.value != "standby":
+                        status.value = "standby"
+                elif run.value == 0 or run.value == 3:  # Stopped
+                    # Clear any presence override and show "On main menu" when not running
+                    try:
+                        if presence is not None:
+                            presence.value = ""
+                    except Exception:
+                        pass
+                    if status.value != "idle_main_menu":
+                        status.value = "idle_main_menu"
+                elif run.value == 6:  # Paused
+                    # Show "Paused" status
+                    if status.value != "paused":
+                        status.value = "paused"
+
+            # Check if run state changed
+            if run.value != prevRunState:
+                # Check for resume (transition from paused to running)
+                if prevRunState == 6 and run.value == 2:
+                    try:
+                        appManager.openApp("Roblox")
+                    except Exception:
+                        pass
+                    logger.webhook("Macro Resumed", "Fuzzy Macro", "bright green", route_category="macro_status")
+                # Check for pause (transition from running to paused)
+                elif prevRunState == 2 and run.value == 6:
+                    keyboardModule.releaseMovement()
+                    mouse.mouseUp()
+                    logger.webhook("Macro Paused", "Use F2 or /resume to continue", "orange", route_category="macro_status")
+
+                gui.setRunState(run.value)
+                try:
+                    gui.toggleStartStop()  # Update UI
+                except:
+                    pass  # If gui is not ready, continue
+                prevRunState = run.value
+
+            if run.value == 1:
+                if standbyState.active:
+                    stopStandbyKeepAwake()
+                    standbyState.active = False
+                    standbyState.deadline = 0.0
+                    logger.webhook("Macro Standby Disabled", "Starting the macro.", "orange", route_category="macro_status")
+                #create and set webhook obj for the logger
+                logger.enableWebhook = logModule.delivery_uses_webhook(setdat)
+                logger.enableDiscordBot = logModule.delivery_uses_bot_messages(setdat)
+                logger.webhookURL = logModule.get_default_delivery_route(setdat)
+                logger.routeSettings = logModule.build_route_settings(setdat)
+                logger.sendScreenshots = setdat.get("send_screenshot", True)
+                stopThreads = False
+
+                #reset hourly report data
+                hourlyReport = HourlyReport()
+                hourlyReport.resetAllStats()
+                if setdat.get("enable_stream", False):
+                    startStreamIfNeeded(setdat)
+
+                print("starting macro proc")
+                #check if user enabled color-based field drift compensation but sprinkler is not supreme saturator
+                #skip when using AI sprinkler model (works with any sprinkler)
+                fieldSettings = settingsManager.loadFields()
+                useAiDriftComp = setdat.get("use_sprinkler_model_for_drift_compensation", False)
+                if not useAiDriftComp:
+                    for field in setdat.get("fields", []):
+                        fs = fieldSettings.get(field, {})
+                        if fs.get("field_drift_compensation", False) and setdat.get("sprinkler_type") != "saturator":
+                            messageBox.msgBox(title="Field Drift Compensation", text=f"You have Field Drift Compensation enabled for {field} field, \
                                         but you do not have Supreme Saturator as your sprinkler type in configs.\n\
                                         Color-based Field Drift Compensation requires the Supreme Saturator.\n\
                                         Enable 'Use Sprinkler Model For Field Drift Compensation' in Config to use AI detection with any sprinkler, \
                                         or disable field drift compensation if you do not have the Supreme Saturator.")
-                        break
-            #check if blender is enabled but there are no items to craft
-            validBlender = not setdat["blender_enable"] #valid blender set to false if blender is enabled, else its true since blender is disabled
-            for i in range(1, macroModule.BLENDER_ITEM_SLOTS + 1):
-                if setdat[f"blender_item_{i}"] != "none" and (setdat[f"blender_repeat_{i}"] or setdat[f"blender_repeat_inf_{i}"]):
-                    validBlender = True
-            if not validBlender:
-                messageBox.msgBox(title="Blender", text=f"You have blender enabled, \
+                            break
+                #check if blender is enabled but there are no items to craft
+                validBlender = not setdat["blender_enable"] #valid blender set to false if blender is enabled, else its true since blender is disabled
+                for i in range(1, macroModule.BLENDER_ITEM_SLOTS + 1):
+                    if setdat[f"blender_item_{i}"] != "none" and (setdat[f"blender_repeat_{i}"] or setdat[f"blender_repeat_inf_{i}"]):
+                        validBlender = True
+                if not validBlender:
+                    messageBox.msgBox(title="Blender", text=f"You have blender enabled, \
                                     but there are no more items left to craft.\n\
 				                    Check the 'repeat' setting on your blender items and reset blender data.")
-            #macro proc
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer), daemon=True)
-            macroProc.start()
+                #macro proc
+                macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer), daemon=True)
+                macroProc.start()
 
-            macro_version = settingsManager.getMacroVersion()
-            macro_mode = str(setdat.get("macro_mode", "normal") or "normal").strip().lower()
-            mode_names = {
-                "normal": "Normal Mode",
-                "alt": "Alt Mode",
-                "field": "Field Mode",
-                "quest": "Quest Mode",
-                "bug": "Bug Run Mode",
-            }
-            start_details = [
-                f"Fuzzy Macro v{macro_version}",
-                f"Mode: {mode_names.get(macro_mode, macro_mode.title())}",
-            ]
-            if macro_mode == "alt":
-                if setdat.get("alt_mode_field_pending", False):
-                    active_alt_field = str(setdat.get("alt_mode_field") or "").strip()
-                    start_details.append(f"Alt Field: {active_alt_field.title() or 'Waiting for Host'}")
-                else:
-                    start_details.append("Alt Field: Waiting for Host")
-            start_details.append(f'Display: {screenInfo["display_type"]}, {screenInfo["screen_width"]}x{screenInfo["screen_height"]}')
-            logger.webhook("Macro Started", "\n".join(start_details), "purple", route_category="macro_status")
-            run.value = 2
-            autoStopStartTime = time.time()
-            autoStopHours = parseAutoStopHours(setdat)
-            autoStopDeadline = autoStopStartTime + (autoStopHours * 3600) if autoStopHours > 0 else None
-            gui.setRunState(2)  # Update the global run state
-            try:
-                gui.toggleStartStop()  # Update UI
-            except:
-                pass  # If eel is not ready, continue
-            try:
-                gui.toggleStartStop()  # Update UI
-            except:
-                pass  # If eel is not ready, continue
-        elif run.value == 0:
-            had_macro_proc = bool(macroProc)
-            autoStopStartTime = None
-            autoStopDeadline = None
-            autoStopHours = 0.0
-
-            # Stop macro/tools and release all inputs first.
-            gui.setRunState(0)
-            try:
-                gui.toggleStartStop()
-            except:
-                pass
-
-            if had_macro_proc:
-                logger.webhook("Macro Stopped", "Fuzzy Macro", "red", route_category="macro_status")
-                if setdat.get("macro_mode", "normal") != "alt":
-                    TadAltSync(setdat, logger).initialize_alts()
-            try:
-                gui.stopAllTools()
-            except Exception:
-                pass
-
-            stopApp()
-
-            run.value = 3
-            gui.setRunState(3)
-            try:
-                gui.toggleStartStop()
-            except:
-                pass
-
-            # Standby is an intentional low-power transition, not a completed
-            # farming session, so do not generate a final report for it.
-            if not had_macro_proc or standbyState.active:
-                continue
-
-            # Generate and send final report AFTER stopping inputs
-            try:
-                print("Generating final report...")
-                from modules.submacros.finalReport import FinalReport
-                import os
-                
-                # Create final report object
-                finalReportObj = FinalReport()
-                sessionStats = finalReportObj.generateFinalReport(setdat, stop_time=time.time())
-                
-                # Check if report was generated successfully
-                if sessionStats and os.path.exists("finalReport.png"):
-                    # Format session summary for webhook
-                    sessionTime = sessionStats.get("total_session_time", 0)
-                    hours = int(sessionTime / 3600)
-                    minutes = int((sessionTime % 3600) / 60)
-                    seconds = int(sessionTime % 60)
-                    if hours > 0:
-                        timeStr = f"{hours}h {minutes}m {seconds}s"
-                    elif minutes > 0:
-                        timeStr = f"{minutes}m {seconds}s"
-                    else:
-                        timeStr = f"{seconds}s"
-                    
-                    totalHoney = sessionStats.get("total_honey", 0)
-                    avgHoneyPerHour = sessionStats.get("avg_honey_per_hour", 0)
-                    
-                    def millify(n):
-                        """Format large numbers with suffixes"""
-                        if n < 1000:
-                            return str(int(n))
-                        elif n < 1000000:
-                            return f"{n/1000:.1f}K"
-                        elif n < 1000000000:
-                            return f"{n/1000000:.1f}M"
-                        elif n < 1000000000000:
-                            return f"{n/1000000000:.1f}B"
-                        else:
-                            return f"{n/1000000000000:.1f}T"
-                    
-                    # Add "Estimated" label if session was less than 1 hour
-                    avgLabel = "Est. Avg/Hour" if sessionTime < 3600 else "Avg/Hour"
-                    description = f"Runtime: {timeStr}\nTotal Honey: {millify(totalHoney)}\n{avgLabel}: {millify(avgHoneyPerHour)}"
-                    
-                    # Send final report webhook
-                    logger.finalReport("Session Complete", description, "purple", fields=getattr(finalReportObj, "lastEmbedFields", None))
-                    print("Final report sent successfully")
-
-                    item_path = getattr(finalReportObj, "lastItemReportPath", None)
-                    if item_path and os.path.exists(item_path):
-                        logger.itemReport(
-                            "Item Monitor",
-                            "",
-                            "purple",
-                            fields=getattr(finalReportObj, "lastItemEmbedFields", None),
-                            imagePath=item_path,
-                        )
-                        print("Item monitor report sent successfully")
-                else:
-                    print("Failed to generate final report - no data available")
-                    
-            except Exception as e:
-                print(f"Error generating final report: {e}")
-                import traceback
-                traceback.print_exc()
-        elif run.value == 4: #disconnected
-            if macroProc and macroProc.is_alive():
-                macroProc.kill()
-                macroProc.join()
-            logger.webhook("","Disconnected", "red", "screen", ping_category="ping_disconnects")
-            #release held input before Roblox quits, otherwise WindowServer can hang on the orphaned gesture
-            keyboardModule.releaseMovement()
-            mouse.mouseUp()
-            time.sleep(0.2)
-            appManager.closeApp("Roblox")
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer), daemon=True)
-            macroProc.start()
-            run.value = 2
-            gui.setRunState(2)  # Update the global run state
-            try:
-                gui.toggleStartStop()  # Update UI
-            except:
-                pass  # If eel is not ready, continue
-        # Note: run.value == 6 (paused) is handled in the macro process loop - it waits for resume
-        
-        # Check for crash (non-zero exitcodes). Log signal name to aid diagnosis.
-        if macroProc and not macroProc.is_alive() and hasattr(macroProc, "exitcode") and macroProc.exitcode is not None and macroProc.exitcode != 0:
-            exitcode = macroProc.exitcode
-            try:
-                import signal
-                if exitcode < 0:
-                    signum = -exitcode
-                    try:
-                        signame = signal.Signals(signum).name
-                    except Exception:
-                        signame = str(signum)
-                    extra = f" (terminated by signal {signame})"
-                else:
-                    extra = ""
-            except Exception:
-                extra = ""
-            print(f"Macro process exited{extra}")
-            logger.webhook("","Macro Crashed{0}".format(extra), "red", "screen", ping_category="ping_critical_errors")
-            macroProc.join()
-            keyboardModule.releaseMovement()
-            mouse.mouseUp()
-            time.sleep(0.2)
-            appManager.openApp("Roblox")
-            # restart macro process
-            macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer), daemon=True)
-            macroProc.start()
-            run.value = 2
-            gui.setRunState(2)  # Update the global run state
-            try:
-                gui.toggleStartStop()  # Update UI
-            except:
-                pass  # If eel is not ready, continue
-
-        #detect a new log message
-        if not logQueue.empty():
-            logData = logQueue.get()
-            if logData["type"] == "webhook": #webhook
-                msg = f"{logData['title']}<br>{logData['desc']}"
-
-                # Add to recent logs list (keep last 100 entries)
-                log_entry = {
-                    'time': logData['time'],
-                    'title': logData['title'],
-                    'desc': logData['desc'],
-                    'color': logData['color']
+                macro_version = settingsManager.getMacroVersion()
+                macro_mode = str(setdat.get("macro_mode", "normal") or "normal").strip().lower()
+                mode_names = {
+                    "normal": "Normal Mode",
+                    "alt": "Alt Mode",
+                    "field": "Field Mode",
+                    "quest": "Quest Mode",
+                    "bug": "Bug Run Mode",
                 }
-                recentLogs.append(log_entry)
-                # Keep only the last 100 entries. Manager proxies can fail
-                # if the manager process closes; guard with fallbacks.
-                if len(recentLogs) > 100:
-                    try:
-                        # fast path: use slice operations on proxy
-                        recentLogs[:] = recentLogs[-100:]
-                    except Exception:
-                        # fallback: build a local snapshot and replace contents
-                        try:
-                            snapshot = list(recentLogs)
-                            snapshot = snapshot[-100:]
-                            # clear and extend the proxy list in-place
-                            try:
-                                del recentLogs[:]
-                                recentLogs.extend(snapshot)
-                            except Exception:
-                                # best-effort: if in-place replace fails, attempt to set by index
-                                for i, v in enumerate(snapshot):
-                                    if i < len(recentLogs):
-                                        recentLogs[i] = v
-                                    else:
-                                        recentLogs.append(v)
-                        except Exception:
-                            # give up silently to avoid crashing the main loop
-                            pass
+                start_details = [
+                    f"Fuzzy Macro v{macro_version}",
+                    f"Mode: {mode_names.get(macro_mode, macro_mode.title())}",
+                ]
+                if macro_mode == "alt":
+                    if setdat.get("alt_mode_field_pending", False):
+                        active_alt_field = str(setdat.get("alt_mode_field") or "").strip()
+                        start_details.append(f"Alt Field: {active_alt_field.title() or 'Waiting for Host'}")
+                    else:
+                        start_details.append("Alt Field: Waiting for Host")
+                start_details.append(f'Display: {screenInfo["display_type"]}, {screenInfo["screen_width"]}x{screenInfo["screen_height"]}')
+                logger.webhook("Macro Started", "\n".join(start_details), "purple", route_category="macro_status")
+                run.value = 2
+                autoStopStartTime = time.time()
+                autoStopHours = parseAutoStopHours(setdat)
+                autoStopDeadline = autoStopStartTime + (autoStopHours * 3600) if autoStopHours > 0 else None
+                gui.setRunState(2)  # Update the global run state
+                try:
+                    gui.toggleStartStop()  # Update UI
+                except:
+                    pass  # If gui is not ready, continue
+                try:
+                    gui.toggleStartStop()  # Update UI
+                except:
+                    pass  # If gui is not ready, continue
+            elif run.value == 0:
+                had_macro_proc = bool(macroProc)
+                autoStopStartTime = None
+                autoStopDeadline = None
+                autoStopHours = 0.0
 
-            #add it to gui
-            gui.log(logData["time"], msg, logData["color"])
-        
-        #detect if the gui needs to be updated
-        if updateGUI.value:
-            gui.updateGUI()
-            updateGUI.value = 0
-        
-        if run.value == 2 and time.time() > disconnectCooldownUntil:
-            img = adjustImage("./images/menu", "disconnect", screenInfo["display_type"])
-            wmx, wmy, wmw, wmh = getWindowSize("roblox roblox")
-            if locateImageOnScreen(img, wmx+wmw/3, wmy+wmh/2.8, wmw/2.3, wmh/5, 0.7):
-                print("disconnected")
-                run.value = 4
-                disconnectCooldownUntil = time.time() + 300  # 5 min cooldown
+                # Stop macro/tools and release all inputs first.
+                gui.setRunState(0)
+                try:
+                    gui.toggleStartStop()
+                except:
+                    pass
+
+                if had_macro_proc:
+                    logger.webhook("Macro Stopped", "Fuzzy Macro", "red", route_category="macro_status")
+                    if setdat.get("macro_mode", "normal") != "alt":
+                        TadAltSync(setdat, logger).initialize_alts()
+                try:
+                    gui.stopAllTools()
+                except Exception:
+                    pass
+
+                stopApp()
+
+                run.value = 3
+                gui.setRunState(3)
+                try:
+                    gui.toggleStartStop()
+                except:
+                    pass
+
+                # Standby is an intentional low-power transition, not a completed
+                # farming session, so do not generate a final report for it.
+                if not had_macro_proc or standbyState.active:
+                    return 0.5
+
+                # Generate and send final report AFTER stopping inputs
+                try:
+                    print("Generating final report...")
+                    from modules.submacros.finalReport import FinalReport
+                    import os
+
+                    # Create final report object
+                    finalReportObj = FinalReport()
+                    sessionStats = finalReportObj.generateFinalReport(setdat, stop_time=time.time())
+
+                    # Check if report was generated successfully
+                    if sessionStats and os.path.exists("finalReport.png"):
+                        # Format session summary for webhook
+                        sessionTime = sessionStats.get("total_session_time", 0)
+                        hours = int(sessionTime / 3600)
+                        minutes = int((sessionTime % 3600) / 60)
+                        seconds = int(sessionTime % 60)
+                        if hours > 0:
+                            timeStr = f"{hours}h {minutes}m {seconds}s"
+                        elif minutes > 0:
+                            timeStr = f"{minutes}m {seconds}s"
+                        else:
+                            timeStr = f"{seconds}s"
+
+                        totalHoney = sessionStats.get("total_honey", 0)
+                        avgHoneyPerHour = sessionStats.get("avg_honey_per_hour", 0)
+
+                        def millify(n):
+                            """Format large numbers with suffixes"""
+                            if n < 1000:
+                                return str(int(n))
+                            elif n < 1000000:
+                                return f"{n/1000:.1f}K"
+                            elif n < 1000000000:
+                                return f"{n/1000000:.1f}M"
+                            elif n < 1000000000000:
+                                return f"{n/1000000000:.1f}B"
+                            else:
+                                return f"{n/1000000000000:.1f}T"
+
+                        # Add "Estimated" label if session was less than 1 hour
+                        avgLabel = "Est. Avg/Hour" if sessionTime < 3600 else "Avg/Hour"
+                        description = f"Runtime: {timeStr}\nTotal Honey: {millify(totalHoney)}\n{avgLabel}: {millify(avgHoneyPerHour)}"
+
+                        # Send final report webhook
+                        logger.finalReport("Session Complete", description, "purple", fields=getattr(finalReportObj, "lastEmbedFields", None))
+                        print("Final report sent successfully")
+
+                        item_path = getattr(finalReportObj, "lastItemReportPath", None)
+                        if item_path and os.path.exists(item_path):
+                            logger.itemReport(
+                                "Item Monitor",
+                                "",
+                                "purple",
+                                fields=getattr(finalReportObj, "lastItemEmbedFields", None),
+                                imagePath=item_path,
+                            )
+                            print("Item monitor report sent successfully")
+                    else:
+                        print("Failed to generate final report - no data available")
+
+                except Exception as e:
+                    print(f"Error generating final report: {e}")
+                    traceback.print_exc()
+            elif run.value == 4: #disconnected
+                if macroProc and macroProc.is_alive():
+                    macroProc.kill()
+                    macroProc.join()
+                logger.webhook("","Disconnected", "red", "screen", ping_category="ping_disconnects")
+                #release held input before Roblox quits, otherwise WindowServer can hang on the orphaned gesture
+                keyboardModule.releaseMovement()
+                mouse.mouseUp()
+                time.sleep(0.2)
+                appManager.closeApp("Roblox")
+                macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer), daemon=True)
+                macroProc.start()
+                run.value = 2
+                gui.setRunState(2)  # Update the global run state
+                try:
+                    gui.toggleStartStop()  # Update UI
+                except:
+                    pass  # If gui is not ready, continue
+            # Note: run.value == 6 (paused) is handled in the macro process loop - it waits for resume
+
+            # Check for crash (non-zero exitcodes). Log signal name to aid diagnosis.
+            if macroProc and not macroProc.is_alive() and hasattr(macroProc, "exitcode") and macroProc.exitcode is not None and macroProc.exitcode != 0:
+                exitcode = macroProc.exitcode
+                try:
+                    import signal
+                    if exitcode < 0:
+                        signum = -exitcode
+                        try:
+                            signame = signal.Signals(signum).name
+                        except Exception:
+                            signame = str(signum)
+                        extra = f" (terminated by signal {signame})"
+                    else:
+                        extra = ""
+                except Exception:
+                    extra = ""
+                print(f"Macro process exited{extra}")
+                logger.webhook("","Macro Crashed{0}".format(extra), "red", "screen", ping_category="ping_critical_errors")
+                macroProc.join()
+                keyboardModule.releaseMovement()
+                mouse.mouseUp()
+                time.sleep(0.2)
+                appManager.openApp("Roblox")
+                # restart macro process
+                macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer), daemon=True)
+                macroProc.start()
+                run.value = 2
+                gui.setRunState(2)  # Update the global run state
+                try:
+                    gui.toggleStartStop()  # Update UI
+                except:
+                    pass  # If gui is not ready, continue
+
+            #detect a new log message
+            if not logQueue.empty():
+                logData = logQueue.get()
+                if logData["type"] == "webhook": #webhook
+                    msg = f"{logData['title']}<br>{logData['desc']}"
+
+                    # Add to recent logs list (keep last 100 entries)
+                    log_entry = {
+                        'time': logData['time'],
+                        'title': logData['title'],
+                        'desc': logData['desc'],
+                        'color': logData['color']
+                    }
+                    recentLogs.append(log_entry)
+                    # Keep only the last 100 entries. Manager proxies can fail
+                    # if the manager process closes; guard with fallbacks.
+                    if len(recentLogs) > 100:
+                        try:
+                            # fast path: use slice operations on proxy
+                            recentLogs[:] = recentLogs[-100:]
+                        except Exception:
+                            # fallback: build a local snapshot and replace contents
+                            try:
+                                snapshot = list(recentLogs)
+                                snapshot = snapshot[-100:]
+                                # clear and extend the proxy list in-place
+                                try:
+                                    del recentLogs[:]
+                                    recentLogs.extend(snapshot)
+                                except Exception:
+                                    # best-effort: if in-place replace fails, attempt to set by index
+                                    for i, v in enumerate(snapshot):
+                                        if i < len(recentLogs):
+                                            recentLogs[i] = v
+                                        else:
+                                            recentLogs.append(v)
+                            except Exception:
+                                # give up silently to avoid crashing the main loop
+                                pass
+
+                #add it to gui
+                gui.log(logData["time"], msg, logData["color"])
+
+            #detect if the gui needs to be updated
+            if updateGUI.value:
+                gui.updateGUI()
+                updateGUI.value = 0
+
+            if run.value == 2 and time.time() > disconnectCooldownUntil:
+                img = adjustImage("./images/menu", "disconnect", screenInfo["display_type"])
+                wmx, wmy, wmw, wmh = getWindowSize("roblox roblox")
+                if locateImageOnScreen(img, wmx+wmw/3, wmy+wmh/2.8, wmw/2.3, wmh/5, 0.7):
+                    print("disconnected")
+                    run.value = 4
+                    disconnectCooldownUntil = time.time() + 300  # 5 min cooldown
+            return 0.5
+        except Exception:
+            traceback.print_exc()
+            raise SystemExit(1)
+
+    def runRuntime():
+        try:
+            gui.runEventLoop(supervisorTick, onExit)
+        finally:
+            onExit()
+
+    runRuntime()
