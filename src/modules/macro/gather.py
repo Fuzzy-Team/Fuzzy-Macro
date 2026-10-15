@@ -429,7 +429,6 @@ class GatherMixin:
                         self.moveMouseToDefault()
                     questMenuKeptOpen = False
 
-        self.isGathering = True
         lastGooTime = 0  # Track when goo was last used
         gooTimerActive = True  # Flag to control goo timer thread
         honeyWreathReturnEnabled = shouldUseHoneyWreathReturn()
@@ -520,24 +519,41 @@ class GatherMixin:
             gatherStopped = True
             gooTimerActive = False  # Stop the goo timer thread
             inactiveHoneyTimerActive = False
-            # toggleQuest sleeps, which raises again while an interrupt is pending,
-            # so the session cleanup must not depend on it finishing
             try:
-                if fieldSetting["shift_lock"]:
-                    self.keyboard.press('shift')
+                # Inventory can be paused while holding its interaction lock. Only
+                # serialize input state here, never wait for the inventory operation.
+                with self._gatherInputLock:
+                    self.isGathering = False
+                    if isGatherPaused():
+                        return
+                    if self._gatherShiftLockEnabled:
+                        self.keyboard.press('shift')
+                        self._gatherShiftLockEnabled = False
                 if questMenuKeptOpen:
                     self.toggleQuest()
                     questMenuKeptOpen = False
                 self.moveMouseToDefault()
-                self.clear_task_status()
             finally:
-                self.isGathering = False
-                gatherSession.finish(gatherNameSpace)
-
-        if fieldSetting["shift_lock"]:
-            self.enableShiftLock()
+                try:
+                    self.clear_task_status()
+                finally:
+                    gatherSession.finish(gatherNameSpace)
 
         try:
+            if not self.acquireInventoryForGather():
+                stopGather()
+                return
+            try:
+                with self._gatherInputLock:
+                    if fieldSetting["shift_lock"] != self._gatherShiftLockEnabled:
+                        if fieldSetting["shift_lock"]:
+                            self.enableShiftLock()
+                        else:
+                            self.keyboard.press("shift")
+                        self._gatherShiftLockEnabled = bool(fieldSetting["shift_lock"])
+                    self.isGathering = True
+            finally:
+                self._inventoryInteractionLock.release()
             while keepGathering:
                 # Check if paused and wait
                 if self.checkPauseAndWait():
@@ -553,8 +569,13 @@ class GatherMixin:
 
                 patternStartTime = time.time()
                 # wait for any inventory interaction to finish before clicking again
-                with self._inventoryInteractionLock:
+                if not self.acquireInventoryForGather():
+                    stopGather()
+                    return
+                try:
                     mouse.mouseDown()
+                finally:
+                    self._inventoryInteractionLock.release()
 
                 try:
                     pattern = gatherSession.run_cycle(gatherNameSpace, owner=self)

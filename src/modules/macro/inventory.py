@@ -1,4 +1,5 @@
 import cv2
+import time as raw_time
 from contextlib import contextmanager
 from modules.misc.imageManipulation import average_hash
 from PIL import Image
@@ -15,20 +16,71 @@ class InventoryMixin:
     def inventoryInteraction(self):
         """Release the gather click and shift lock while the inventory is in use."""
         with self._inventoryInteractionLock:
-            wasGathering = self.isGathering
+            with self._gatherInputLock:
+                wasGathering = self.isGathering
+                if wasGathering:
+                    mouse.mouseUp()
             restoreShiftLock = False
-            if wasGathering:
-                mouse.mouseUp()
-                restoreShiftLock = self.ensure_shift_lock_off("inventory access")
             try:
+                if wasGathering:
+                    # Detection can sleep. Recheck gathering before changing Shift.
+                    try:
+                        detection = self._detect_shift_lock_state_with_retries()
+                    except Exception:
+                        detection = None
+                    with self._inventoryGatherInput() as active:
+                        if active and detection and detection.get("state") is not None:
+                            self._gatherShiftLockEnabled = bool(detection["state"])
+                            if self._gatherShiftLockEnabled:
+                                self.keyboard.press("shift")
+                                self._gatherShiftLockEnabled = False
+                                restoreShiftLock = True
+                    if restoreShiftLock:
+                        self.logger.webhook("", "Shift Lock detected during inventory access, turning it off", "dark brown")
+                        time.sleep(0.35)
                 yield
             finally:
-                if wasGathering and self.isGathering:
-                    if restoreShiftLock:
-                        self.keyboard.press("shift")
+                if wasGathering:
+                    with self._inventoryGatherInput() as active:
+                        if active and restoreShiftLock:
+                            self.enableShiftLock()
+                            self._gatherShiftLockEnabled = True
+                    if active and restoreShiftLock:
                         time.sleep(0.35)
-                    self.moveMouseToDefault()
-                    mouse.mouseDown()
+                    with self._inventoryGatherInput() as active:
+                        if active:
+                            self.moveMouseToDefault()
+                            mouse.mouseDown()
+
+    @contextmanager
+    def _inventoryGatherInput(self):
+        # Wait outside the state lock so shutdown can finish even during a pause.
+        while True:
+            self._gatherInputLock.acquire()
+            active = (self.isGathering
+                      and (self.run is None or self.run.value != 0))
+            if not active or self.run is None or self.run.value != 6:
+                break
+            self._gatherInputLock.release()
+            raw_time.sleep(0.1)
+        try:
+            yield active
+        finally:
+            self._gatherInputLock.release()
+
+    def acquireInventoryForGather(self):
+        """Acquire inventory access without hiding pause, stop, or skip requests."""
+        while not self._inventoryInteractionLock.acquire(timeout=0.1):
+            if self.checkPauseAndWait():
+                return False
+        try:
+            if not self.checkPauseAndWait():
+                return True
+        except BaseException:
+            self._inventoryInteractionLock.release()
+            raise
+        self._inventoryInteractionLock.release()
+        return False
 
     def toggleInventory(self, mode):
         def clickInv():

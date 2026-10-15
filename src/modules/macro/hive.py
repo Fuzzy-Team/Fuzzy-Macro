@@ -107,6 +107,8 @@ class HiveMixin:
                 self.converting = False
                 if self.confirmNight():
                     self.stingerHunt()
+                else:
+                    return self.convert(forced_convert_balloon=forced_convert_balloon)
                 return
             
             #check if backpack is done

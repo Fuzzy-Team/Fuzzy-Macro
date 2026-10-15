@@ -105,6 +105,7 @@ class GatherPatternRunner:
         self.active_pattern = self.selected_pattern
         self._alerted = False
         self._fallback_active = False
+        self._code_cache = {}
 
     def run_cycle(self, namespace, owner=None):
         """Run one pattern cycle, falling back to e_lol for this session on failure.
@@ -148,8 +149,16 @@ class GatherPatternRunner:
         # the fallback runs the shipped e_lol, so a broken edit of e_lol can't break it too
         directory = self._defaults_dir if pattern == FALLBACK_PATTERN and self._fallback_active else self._patterns_dir
         path = self._path(directory, pattern)
-        with open(path) as pattern_file:
-            exec(compile(pattern_file.read(), path, "exec"), namespace)
+        stat = os.stat(path)
+        signature = (stat.st_mtime_ns, stat.st_size)
+        cached = self._code_cache.get(path)
+        if cached is None or cached[0] != signature:
+            with open(path) as pattern_file:
+                code = compile(pattern_file.read(), path, "exec")
+            self._code_cache[path] = (signature, code)
+        else:
+            code = cached[1]
+        exec(code, namespace)
 
     def _activate_fallback(self, failed_pattern, error):
         self.active_pattern = FALLBACK_PATTERN

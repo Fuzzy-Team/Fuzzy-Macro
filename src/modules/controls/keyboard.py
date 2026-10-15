@@ -1,6 +1,11 @@
+from __future__ import annotations
+
 import pyautogui as pag
 import time
-from modules.submacros.hasteCompensation import HasteCompensationRevamped
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from modules.submacros.hasteCompensation import HasteCompensationRevamped
 
 
 class keyboard:
