@@ -102,10 +102,22 @@ class MacroProfileStore:
             profile_data, general_data, fields_data, errors, _, warnings = self._read_and_normalize(profile)
             return self._profile_dict(profile, profile_data, general_data, fields_data, errors, warnings)
 
+    def load_settings(self, profile):
+        """Return settings and read diagnostics without reading or normalizing fields."""
+        with self._lock:
+            profile_data, general_data, errors, _, warnings = self._read_settings(profile)
+            return {
+                "settings": {**profile_data, **general_data},
+                "profile_settings": profile_data,
+                "general_settings": general_data,
+                "errors": list(errors.values()),
+                "warnings": list(warnings),
+            }
+
     def apply_change(self, profile, scope, setting, value):
         """Validate and save one setting. Returns all settings (profile and general) after the change."""
         with self._lock, self._file_lock(profile):
-            profile_data, general_data, _, errors, _, _ = self._read_and_normalize(profile)
+            profile_data, general_data, errors, _, _ = self._read_settings(profile)
             owner = self._owner(setting, scope)
             filename = self.PROFILE_FILE if owner == "profile" else self.GENERAL_FILE
             self._refuse_overwrite(errors, filename)
@@ -122,7 +134,7 @@ class MacroProfileStore:
         if not isinstance(changes, dict):
             raise MacroProfileValidationError("changes", "expected an object")
         with self._lock, self._file_lock(profile):
-            profile_data, general_data, _, errors, _, _ = self._read_and_normalize(profile)
+            profile_data, general_data, errors, _, _ = self._read_settings(profile)
             self._refuse_overwrite(errors, self.PROFILE_FILE, self.GENERAL_FILE)
             next_profile = copy.deepcopy(profile_data)
             next_general = copy.deepcopy(general_data)
@@ -173,20 +185,21 @@ class MacroProfileStore:
 
     def _read_and_normalize(self, profile):
         """Read the profile and fill in defaults. Migrations run in initialize, not here."""
+        profile_data, general_data, errors, changed, warnings = self._read_settings(profile)
+        fields_data = self._safe_read_fields(os.path.join(self._profile_dir(profile), self.FIELDS_FILE), errors)
+        fields_data, changed[self.FIELDS_FILE] = self._normalize_fields(fields_data)
+        return profile_data, general_data, fields_data, errors, changed, warnings
+
+    def _read_settings(self, profile):
+        """Read and normalize only the two settings files."""
         warnings = []
         profile_dir = self._profile_dir(profile)
         errors = {}
-        changed = {}
         profile_data = self._safe_read(os.path.join(profile_dir, self.PROFILE_FILE), self._profile_defaults, errors, warnings)
         general_data = self._safe_read(os.path.join(profile_dir, self.GENERAL_FILE), self._general_defaults, errors, warnings)
-        fields_data = self._safe_read_fields(os.path.join(profile_dir, self.FIELDS_FILE), errors)
-
         profile_data, general_data, settings_changed = self._normalize_settings(profile_data, general_data)
-        fields_data, fields_changed = self._normalize_fields(fields_data)
-        changed[self.PROFILE_FILE] = settings_changed[0]
-        changed[self.GENERAL_FILE] = settings_changed[1]
-        changed[self.FIELDS_FILE] = fields_changed
-        return profile_data, general_data, fields_data, errors, changed, warnings
+        changed = {self.PROFILE_FILE: settings_changed[0], self.GENERAL_FILE: settings_changed[1]}
+        return profile_data, general_data, errors, changed, warnings
 
     def _safe_read(self, path, defaults, errors, warnings):
         if not os.path.exists(path):
@@ -250,7 +263,11 @@ class MacroProfileStore:
                 parsed = value
                 # Text where a number or true/false belongs would break the macro later, so use
                 # the default. Other settings keep text: the GUI saves some as plain text.
-                if isinstance(default, bool) and value.lower() in ("true", "false"):
+                if value.isdecimal():
+                    parsed = int(value)
+                elif value.replace(".", "", 1).isdecimal():
+                    parsed = float(value)
+                elif isinstance(default, bool) and value.lower() in ("true", "false"):
                     parsed = value.lower() == "true"
                 elif isinstance(default, (bool, int, float)):
                     warnings.append(f"{os.path.basename(path)}: {key}={value!r} is not a valid value; using the default ({default!r})")

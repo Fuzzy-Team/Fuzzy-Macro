@@ -2,6 +2,7 @@ import ast
 import copy
 import json
 import threading
+import time as raw_time
 from datetime import datetime
 import modules.controls.mouse as mouse
 import modules.logging.log as logModule
@@ -104,6 +105,8 @@ class macro(
         self._fieldBoosterGlitterGeneration = 0
         self._fieldBoosterGlitterLock = threading.Lock()
         self._inventoryInteractionLock = threading.RLock()
+        self._gatherInputLock = threading.RLock()
+        self._gatherShiftLockEnabled = False
         self.reportProfileProblems(profile)
         self.buffDetector = BuffDetector(self.robloxWindow)
         self.hourlyReport = HourlyReport(self.buffDetector, self.setdat.get("hourly_report_time_format", 24))
@@ -227,6 +230,11 @@ class macro(
             self.logger.webhook("", f"Detect Y Offset: {self.robloxWindow.contentYOffset}", "dark brown")
 
     def _redetect_y_offset_after_resume(self):
+        with self._gatherInputLock:
+            # A gather stopped during pause must defer its Shift toggle until resume.
+            if not self.isGathering and self._gatherShiftLockEnabled:
+                self.keyboard.press("shift")
+                self._gatherShiftLockEnabled = False
         self.setRobloxWindowInfo(setYOffset=True)
 
     def set_task_status(self, status_key=None, *, update_presence=True, **presence):
@@ -261,7 +269,7 @@ class macro(
             # Keep inputs released while paused
             self.keyboard.releaseMovement()
             mouse.mouseUp()
-            time.sleep(0.1)
+            raw_time.sleep(0.1)
             self.raiseIfInterrupted()
         if wasPaused:
             self._inactiveHoneyResetResumeBlockUntil = time.monotonic() + 2

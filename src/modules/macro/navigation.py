@@ -203,20 +203,30 @@ class NavigationMixin:
                 self.keyboard.tileWalk("d", 9.2 * 3 - 4)
             #jump onto the ramp and keep walking right until the cannon prompt shows
             self.keyboard.keyDown("d", False)
-            self.keyboard.keyDown("space", False)
-            time.sleep(0.1)
-            self.keyboard.keyUp("space", False)
-            self.keyboard.tileWait(2)
-            self.keyboard.keyDown("w", False)
-            self.keyboard.tileWait(1.5)
-            self.keyboard.keyUp("w", False)
-            foundCannon = False
-            startTime = time.time()
-            while time.time() - startTime < 20:
-                if self.isBesideEImage("cannon"):
-                    foundCannon = True
-                    break
-            self.keyboard.keyUp("d", False)
+            try:
+                self.keyboard.keyDown("space", False)
+                time.sleep(0.1)
+                self.keyboard.keyUp("space", False)
+                self.keyboard.tileWait(2)
+                self.keyboard.keyDown("w", False)
+                self.keyboard.tileWait(1.5)
+                self.keyboard.keyUp("w", False)
+                foundCannon = False
+                startTime = time.time()
+                while time.time() - startTime < 20:
+                    pauseStart = time.time()
+                    wasPaused = self.run is not None and self.run.value == 6
+                    if self.checkPauseAndWait():
+                        return False
+                    if wasPaused:
+                        startTime += time.time() - pauseStart
+                        self.keyboard.keyDown("d", False)
+                    if self.isBesideEImage("cannon"):
+                        foundCannon = True
+                        break
+            finally:
+                for key in ("space", "w", "d"):
+                    self.keyboard.keyUp(key, False)
             #check the cannon wasn't overrun
             if foundCannon:
                 for _ in range(9):

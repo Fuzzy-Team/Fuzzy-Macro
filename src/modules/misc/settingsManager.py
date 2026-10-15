@@ -1116,11 +1116,12 @@ def saveGeneralSetting(setting, value):
     _getMacroProfileStore().apply_change(profileName, "general", setting, value)
 
 def loadSettings():
-    return _getMacroProfileStore().load(profileName)["profile_settings"]
+    return _getMacroProfileStore().load_settings(profileName)["profile_settings"]
 
 #return a dict containing all settings except field (general, profile, planters)
 def loadAllSettings():
-    return loadMacroProfile()["settings"]
+    loadCurrentProfile()
+    return _getMacroProfileStore().load_settings(profileName)["settings"]
 
 def exportProfile(profile_name):
     """Export a profile to JSON content for browser download"""

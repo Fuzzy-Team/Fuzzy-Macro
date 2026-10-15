@@ -14,7 +14,6 @@ from PIL import Image
 import modules.controls.mouse as mouse
 import modules.misc.appManager as appManager
 from modules.misc import messageBox
-import modules.screen.ocr as ocr
 from modules.screen.imageSearch import templateMatch
 from modules.screen.robloxWindow import RobloxWindowBounds
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP
@@ -308,6 +307,8 @@ class AutoGiftedBasicBeeRunner:
         return crop_x, crop_y, crop_w, crop_h
 
     def _find_item_in_visible_inventory(self, item_name):
+        import modules.screen.ocr as ocr
+
         target_text = "basicegg" if item_name == "basicegg" else "royaljelly"
         crop_x, crop_y, crop_w, crop_h = self._get_inventory_search_region()
         inventory_image = mssScreenshot(crop_x, crop_y, crop_w, crop_h)
@@ -376,6 +377,8 @@ class AutoGiftedBasicBeeRunner:
         pag.mouseUp(button="left")
 
     def _get_confirm_prompt_ocr(self):
+        import modules.screen.ocr as ocr
+
         x = self._roblox_window.mx + self._roblox_window.mw // 2 - 270
         y = self._roblox_window.my + self._roblox_window.mh // 2 - 60
         prompt_image = mssScreenshot(x, y, 580, 265)
@@ -476,6 +479,8 @@ class AutoGiftedBasicBeeRunner:
         return False
 
     def _inspect_roll_result(self):
+        import modules.screen.ocr as ocr
+
         region_x = self._roblox_window.mx + self._roblox_window.mw // 2 - 155
         region_y = self._roblox_window.my + self._roblox_window.yOffset + ((4 * self._roblox_window.mh) // 10 - 135)
         result_image = mssScreenshot(region_x, region_y, 310, 205)

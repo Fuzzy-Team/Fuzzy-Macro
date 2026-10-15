@@ -18,7 +18,6 @@ from modules.misc.appManager import getWindowSize
 from modules.misc.imageManipulation import adjustImage
 from modules.misc.settings_defaults import BLENDER_ITEM_SLOTS
 from modules.screen.imageSearch import locateImageOnScreen
-from modules.reports.hourly import HourlyReport
 from modules.submacros.tadAltSync import TadAltSync
 
 
@@ -564,6 +563,7 @@ def runApp(macroTarget):
                 standbyState.active = False
                 standbyState.deadline = 0.0
                 logger.webhook("Macro Standby Disabled", "Starting the macro.", "orange", route_category="macro_status")
+            from modules.reports.hourly import HourlyReport
             HourlyReport().resetAllStats()
             if setdat.get("enable_stream", False):
                 startStreamIfNeeded(setdat)
