@@ -567,9 +567,7 @@ def importPatterns(patterns):
     Writes files into ../settings/patterns/ and returns a report dict.
     """
     results = {"saved": [], "errors": []}
-    target_dir = os.path.join(os.path.dirname(__file__), "..", "settings", "patterns")
-    # normalize path
-    target_dir = os.path.normpath(target_dir)
+    target_dir = settingsManager.getPatternsDir()
     try:
         os.makedirs(target_dir, exist_ok=True)
     except Exception as e:
@@ -1126,6 +1124,8 @@ def syncToolSession(session_id):
     }
 
 def update():
+    if getattr(sys, 'frozen', False):
+        raise RuntimeError('Replace Fuzzy Macro.app with a newer app build to update it.')
     def send_update_progress(percent, message):
         try:
             _notify('update_progress', percent, message)
@@ -1152,6 +1152,8 @@ def update():
 
 
 def updateFromHash(commit_hash):
+    if getattr(sys, 'frozen', False):
+        raise RuntimeError('Replace Fuzzy Macro.app with a newer app build to update it.')
     def send_update_progress(percent, message):
         try:
             _notify('update_progress', percent, message)
@@ -1173,6 +1175,8 @@ def updateFromHash(commit_hash):
 
 def checkForUpdates():
     """Check for updates silently and return update information"""
+    if getattr(sys, 'frozen', False):
+        raise RuntimeError('Replace Fuzzy Macro.app with a newer app build to update it.')
     try:
         # Get the update channel preference
         generalsettings_path = os.path.join(settingsManager.getProfilePath(), "generalsettings.txt")

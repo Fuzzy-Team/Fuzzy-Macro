@@ -9,7 +9,7 @@ from ..misc import settingsManager
 BASE_SCREEN_WIDTH = 2880
 BASE_SCREEN_HEIGHT = 1800
 
-screenPath = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../data/user/screen.txt'))
+screenPath = settingsManager.getUserDataPath('screen.txt')
 
 
 def _get_reference_scale(screen_data=None):

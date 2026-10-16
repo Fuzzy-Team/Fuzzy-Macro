@@ -1,5 +1,6 @@
 import ast
 import os
+import sys
 import shutil
 import json
 import zipfile
@@ -98,6 +99,8 @@ def saveCurrentProfile():
 # Get the project root directory (4 levels up from this file: src/modules/misc/settingsManager.py)
 def getProjectRoot():
     """Get the project root directory path"""
+    if getattr(sys, 'frozen', False):
+        return os.environ['FUZZY_APP_DATA_DIR']
     return os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 # File to store current profile persistence
@@ -540,8 +543,7 @@ def saveFuzzyAITokenRanking(field_name, ranking, model="standard"):
 def getMacroVersion():
     """Get the macro version from version.txt file"""
     try:
-        destination = os.getcwd().replace("/src", "")
-        version_file = os.path.join(destination, "src", "webapp", "version.txt")
+        version_file = os.path.join(getProjectRoot(), "src", "webapp", "version.txt")
         if os.path.exists(version_file):
             with open(version_file, "r") as f:
                 version = f.read().strip()

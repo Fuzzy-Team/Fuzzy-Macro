@@ -3389,7 +3389,8 @@ if __name__ == "__main__":
         cg = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
         cg.CGRequestScreenCaptureAccess.restype = ctypes.c_bool
         if not cg.CGRequestScreenCaptureAccess():
-            messageBox.msgBox(title="Screen Recording Permission", text='Terminal does not have the screen recording permission. The macro will not work properly.\n\nTo fix it, go to System Settings -> Privacy and Security -> Screen Recording -> add and enable Terminal. After that, restart the macro')
+            permission_app = 'Fuzzy Macro' if getattr(sys, 'frozen', False) else 'Terminal'
+            messageBox.msgBox(title="Screen Recording Permission", text=f'{permission_app} does not have the screen recording permission. The macro will not work properly.\n\nTo fix it, go to System Settings -> Privacy and Security -> Screen Recording -> add and enable {permission_app}. After that, restart the macro')
     except AttributeError:
         pass
     #check full keyboard access

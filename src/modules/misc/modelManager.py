@@ -1,6 +1,7 @@
 import hashlib
 import os
 import platform
+import sys
 import shutil
 import tempfile
 import zipfile
@@ -12,6 +13,9 @@ import requests
 MODELS_API_URL = "https://api.github.com/repos/Fuzzy-Team/fuzzymacroaimodels/contents"
 MODELS_ZIP_URL = "https://github.com/Fuzzy-Team/fuzzymacroaimodels/archive/refs/heads/main.zip"
 MODEL_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", "models"))
+if getattr(sys, 'frozen', False):
+    from .settingsManager import getProjectRoot
+    MODEL_DIR = os.path.join(getProjectRoot(), 'src', 'data', 'models')
 COREML_MODELS = (
     "token_detection_standard.mlmodelc",
     "bloom_detection_standard.mlmodelc",

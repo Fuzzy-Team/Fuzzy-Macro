@@ -88,7 +88,8 @@ def load_bitmap_matcher():
             f"\n\nTry building with: python{get_python_version()} build_universal.py"
         )
     
-    subprocess.run(["xattr", "-cr", so_path])
+    if not getattr(sys, 'frozen', False):
+        subprocess.run(["xattr", "-cr", so_path])
 
     #load the module from the .so file
     spec = importlib.util.spec_from_file_location("bitmap_matcher", so_path)

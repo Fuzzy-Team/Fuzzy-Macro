@@ -219,12 +219,16 @@ def fake_widget(*args, **kwargs):
     return widget
 
 
+def inline_control(app, parent, key, kind="checkbox", choices=(), width=184, onchange=None):
+    return app.add_control(parent, dict(id=key, kind=kind, choices=list(choices), scope="profile"), onchange=onchange)
+
+
 class HeadlessEditorTests(unittest.TestCase):
     """Exercise builder callbacks without a display, input, or real user files."""
 
     def setUp(self):
         self.app = Mock()
-        self.app.palette = {key: "#111111" for key in ("bg", "surface", "input", "text", "dim", "accent", "border")}
+        self.app.palette = {key: "#111111" for key in ("bg", "surface", "input", "text", "dim", "accent", "border", "selected", "hover")}
         self.app.settings = dict(DEFAULT_PROFILE_SETTINGS)
         self.app.card.side_effect = fake_widget
         self.controls = {}
@@ -234,6 +238,7 @@ class HeadlessEditorTests(unittest.TestCase):
             current = [self.app.settings.get(spec["id"]) if value is None else value]
             control = SimpleNamespace(get=lambda: current[0], set=lambda value: current.__setitem__(0, value),
                                       variable=Mock(), widget=Mock(), spec=spec, onchange=onchange)
+            control.widget.master.master.grid_slaves.return_value = []
             self.controls[spec["id"]] = control
             return control
 
@@ -246,9 +251,19 @@ class HeadlessEditorTests(unittest.TestCase):
         self.app.save.side_effect = lambda key, value, scope="profile": self.app.settings.__setitem__(key, value)
         self.app._tools_session_id = None
         self.app._token_ranking_window = None
-        self.frames = patch.object(editors.tk, "Frame", side_effect=fake_widget)
-        self.frames.start()
-        self.addCleanup(self.frames.stop)
+        self.app.controls, self.app.control_groups, self.app.subtab_selection = {}, {}, {}
+        for name, replacement in (("Frame", fake_widget), ("Canvas", fake_widget), ("Label", fake_widget)):
+            patcher = patch.object(editors.tk, name, side_effect=replacement)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        for name in ("rounded_image", "Card", "draw_hotbar_slot", "draw_hotbar_icon"):
+            patcher = patch.object(editors.widgets, name, side_effect=fake_widget)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        # Planter grid controls are bare widgets; route them through the fake add_control.
+        patcher = patch.object(editors, "_inline_control", side_effect=inline_control)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def test_manual_cycles_and_selected_hotbar_refresh(self):
         self.app.settings["planters_mode"] = 1
@@ -428,7 +443,7 @@ class HeadlessEditorTests(unittest.TestCase):
         self.app.action.side_effect = lambda name: dict(status)
         label = self.app.label.return_value
         editors._tool_status(self.app, body, "getAutoClickerStatus", Mock(), Mock(),
-                             [lambda data: data["message"]])
+                             [(label, lambda data: data["message"])], body)
         poll = body.after.call_args[0][1]
         for widget in (start_button, stop_button, label):
             widget.reset_mock()

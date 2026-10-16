@@ -24,6 +24,27 @@ from modules.gui import app as native
 from modules.gui import widgets
 
 
+class RoundedBackgroundTests(unittest.TestCase):
+    def test_background_matches_full_size_antialiasing(self):
+        from PIL import Image, ImageDraw
+
+        for width, height, radius, border in (
+                (911, 4163, 12, '#333333'), (100, 35, 6, None),
+                (20, 20, 5, '#333333'), (1, 1, 6, None),
+                (100, 20, 12, '#333333')):
+            with self.subTest(size=(width, height), border=border):
+                expected = Image.new('RGBA', (width * 2, height * 2))
+                ImageDraw.Draw(expected).rounded_rectangle(
+                    (0, 0, width * 2 - 1, height * 2 - 1),
+                    radius=radius * 2, fill='#1e1e1e', outline=border,
+                    width=2 if border else 1)
+                resampling = getattr(Image, 'Resampling', Image)
+                expected = expected.resize((width, height), resampling.LANCZOS)
+                with patch.object(widgets.ImageTk, 'PhotoImage', side_effect=lambda image: image):
+                    actual = widgets.rounded_image(width, height, '#1e1e1e', radius, border)
+                self.assertEqual(actual.tobytes(), expected.tobytes())
+
+
 class Variable(object):
     def __init__(self, master=None, value=""):
         self.value = value
@@ -49,6 +70,16 @@ class Widget(object):
         self.pack_forget = Mock()
         self.grid = Mock()
         self.grid_columnconfigure = Mock()
+        self.grid_configure = Mock()
+        self.grid_remove = Mock()
+        self.pack_configure = Mock()
+        self.unbind = Mock()
+        self.children = []
+        if isinstance(getattr(master, "children", None), list):
+            master.children.append(self)
+
+    def winfo_children(self):
+        return list(self.children)
 
     def cget(self, key):
         return self.options.get(key, "")

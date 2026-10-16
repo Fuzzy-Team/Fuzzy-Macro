@@ -252,6 +252,8 @@ def _validate_installation_root(destination):
 
 def _installation_root():
     """Find the install root from this updater file, independent of cwd."""
+    if getattr(sys, 'frozen', False):
+        raise OSError('Replace Fuzzy Macro.app with a newer app build to update it.')
     module_directory = os.path.dirname(os.path.realpath(__file__))
     destination = os.path.abspath(os.path.join(module_directory, "..", "..", ".."))
     return _validate_installation_root(destination)

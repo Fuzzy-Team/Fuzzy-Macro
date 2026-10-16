@@ -17,7 +17,7 @@ from tkinter import filedialog, messagebox
 from PIL import Image, ImageTk
 
 from .definitions import CONTROL_PRESENTATION, CUSTOM_DEFINITIONS
-from .widgets import Button, Choice, Scroll, rounded_image
+from .widgets import Button, Card, Choice, Scroll, draw_hotbar_icon, draw_hotbar_slot, mix, rounded_image
 
 
 TITLE = "Fuzzy Macro"
@@ -68,13 +68,6 @@ def _parse_int(value):
     return int(match.group(1)) if match else None
 
 
-def _mix(first, second, amount):
-    """Blend two #rrggbb colors; amount is the share of the first."""
-    a = [int(first[i:i + 2], 16) for i in (1, 3, 5)]
-    b = [int(second[i:i + 2], 16) for i in (1, 3, 5)]
-    return "#%02x%02x%02x" % tuple(round(x * amount + y * (1 - amount)) for x, y in zip(a, b))
-
-
 class CustomControl(object):
     """The Control interface for widgets that hold their own state."""
 
@@ -104,7 +97,7 @@ def _frame(app, parent):
 def _entry(app, parent, variable=None, width=28):
     palette = app.palette
     return tk.Entry(parent, textvariable=variable, width=width, bg=palette["input"], fg=palette["text"],
-                    insertbackground=palette["text"], relief="flat", font=("Poppins", -14),
+                    insertbackground=palette["text"], relief="flat", font=("Helvetica", -14),
                     highlightthickness=1, highlightbackground=palette["border"],
                     highlightcolor=palette["accent"])
 
@@ -119,8 +112,8 @@ def _secondary_button(app, parent, text, command):
 
 def _status_label(app, parent):
     label = tk.Label(parent, text="", bg=app.palette["surface"], anchor="w", justify="left",
-                     font=("Poppins", -13))
-    label.pack(fill="x", pady=(8, 0))
+                     font=("Helvetica", -13))
+    # Packed only while it shows a message, like the empty status div.
     return label
 
 
@@ -132,7 +125,13 @@ def _flash(label, text, kind):
     if previous:
         label.after_cancel(previous)
     label.configure(text=text, fg=STATUS_COLORS[kind])
-    label._clear_job = label.after(STATUS_SECONDS * 1000, lambda: label.winfo_exists() and label.configure(text=""))
+    label.pack(fill="x", pady=(8, 0))
+
+    def clear():
+        if label.winfo_exists():
+            label.configure(text="")
+            label.pack_forget()
+    label._clear_job = label.after(STATUS_SECONDS * 1000, clear)
 
 
 def _modal(app, title):
@@ -157,7 +156,7 @@ def _present(app, window, width):
 def _modal_label(app, window, text, width, dim=False):
     palette = app.palette
     label = tk.Label(window, text=text, bg=palette["surface"], fg=palette["dim" if dim else "text"],
-                     anchor="w", justify="left", wraplength=width - 48, font=("Poppins", -14))
+                     anchor="w", justify="left", wraplength=width - 48, font=("Helvetica", -14))
     label.pack(fill="x", pady=(0, 6))
     return label
 
@@ -335,11 +334,13 @@ class PriorityList(object):
         self.search = tk.StringVar(self.frame)
         self.placeholder = definition["search_placeholder"]
         self.showing_placeholder = False
-        self.entry = _entry(app, top, self.search, width=40)
-        self.entry.pack(side="left", ipady=4)
+        self.entry = _entry(app, top, self.search, width=66)
+        self.entry.configure(bg=palette["surface"], bd=6, font=("Helvetica", -13))
+        self.entry.pack(side="left")
         self.entry.bind("<FocusIn>", self._hide_placeholder)
         self.entry.bind("<FocusOut>", self._show_placeholder)
-        app.button(top, definition["reset_text"], self.reset).pack(side="left", padx=(12, 0))
+        Button(top, definition["reset_text"], self.reset, palette, fill=palette["selected"],
+               foreground=palette["text"], radius=8).pack(side="left", padx=(8, 0))
         self.list = tk.Frame(self.frame, bg=palette["surface"], highlightthickness=1,
                              highlightbackground=palette["border"])
         self.list.pack(fill="x")
@@ -399,17 +400,17 @@ class PriorityList(object):
     # rows --------------------------------------------------------------------
     def _make_header(self, group):
         palette = self.palette
-        accent = _mix(palette["accent"], palette["surface"], .3)
-        frame = tk.Frame(self.list, bg=_mix(palette["accent"], palette["surface"], .06),
+        accent = mix(palette["accent"], palette["surface"], .3)
+        frame = tk.Frame(self.list, bg=mix(palette["accent"], palette["surface"], .06),
                          highlightthickness=1, highlightbackground=accent)
-        badge = tk.Label(frame, text="LOCKED", font=("Poppins", -11, "bold"), fg=palette["text"],
-                         bg=_mix(palette["accent"], palette["surface"], .18), padx=6, pady=1)
+        badge = tk.Label(frame, text="LOCKED", font=("Helvetica", -11, "bold"), fg=palette["text"],
+                         bg=mix(palette["accent"], palette["surface"], .18), padx=6, pady=1)
         badge.pack(side="left", anchor="n", padx=(10, 10), pady=10)
         copy = tk.Frame(frame, bg=frame.cget("bg"))
         copy.pack(side="left", fill="x", pady=8)
-        tk.Label(copy, text=HEADERS[group], font=("Poppins", -14, "bold"), fg=palette["text"],
+        tk.Label(copy, text=HEADERS[group], font=("Helvetica", -14, "bold"), fg=palette["text"],
                  bg=frame.cget("bg"), anchor="w").pack(fill="x")
-        tk.Label(copy, text=LOCK_TEXT, font=("Poppins", -13), fg=palette["dim"], bg=frame.cget("bg"),
+        tk.Label(copy, text=LOCK_TEXT, font=("Helvetica", -13), fg=palette["dim"], bg=frame.cget("bg"),
                  anchor="w").pack(fill="x")
         frame.search_text = "locked\n{}\n{}".format(HEADERS[group], LOCK_TEXT).lower()
         return frame
@@ -419,20 +420,20 @@ class PriorityList(object):
         name = self.names.get(task_id, task_id)
         category = task_category(task_id)
         row = tk.Frame(self.list, highlightthickness=1, highlightbackground=palette["border"])
-        handle = tk.Label(row, text="⋮⋮", font=("Poppins", -14), cursor="fleur")
-        handle.pack(side="left", padx=(12, 12), pady=10)
+        handle = tk.Label(row, text="⋮⋮", font=("Helvetica", -14), cursor="fleur")
+        handle.pack(side="left", padx=(12, 12), pady=14)
         badge_bg, badge_fg = CATEGORY_COLORS[category]
         badge = tk.Label(row, text=self.definition["category_badges"][category], bg=badge_bg, fg=badge_fg,
-                         font=("Poppins", -11, "bold"), padx=6, pady=2)
+                         font=("Helvetica", -11, "bold"), padx=6, pady=2)
         badge.pack(side="left", padx=(0, 8))
-        label = tk.Label(row, text=name, font=("Poppins", -14), anchor="w")
+        label = tk.Label(row, text=name, font=("Helvetica", -14), anchor="w")
         label.pack(side="left")
         actions = tk.Frame(row)
         actions.pack(side="right", padx=(0, 10))
         for text, command in ((self.definition["move_to_top_text"], lambda: self.move(task_id, 0)),
                               (self.definition["move_to_bottom_text"], lambda: self.move(task_id, None))):
             button = tk.Label(actions, text=text, bg=palette["accent"], fg=palette["bg"], padx=8, pady=3,
-                              font=("Poppins", -12, "bold"), cursor="hand2")
+                              font=("Helvetica", -12, "bold"), cursor="hand2")
             button.pack(side="left", padx=(8, 0))
             button.bind("<ButtonRelease-1>", lambda event, command=command: command())
             button.bind("<Enter>", lambda event, b=button: b.configure(bg=palette["accent_hover"]))
@@ -604,27 +605,37 @@ def _blank(control):
     return dict(control, title="", desc="")
 
 
+def _bare(app, parent, spec):
+    """add_control() without its empty heading, row gap or right-hand inset."""
+    control = app.add_control(parent, _blank(spec))
+    right = control.widget.master
+    row = right.master
+    row.winfo_children()[0].grid_remove()
+    right.grid_configure(padx=0, pady=0)
+    row.unbind("<Configure>")
+    row.pack_configure(pady=0)
+    return control
+
+
 def _build_hotbar(app, parent, spec):
     definition = CUSTOM_DEFINITIONS["hotbar"]
     palette = app.palette
+    surface = palette["surface"]
     shell = _frame(app, parent)
     shell.pack(fill="x")
     strip = _frame(app, shell)
-    strip.pack(anchor="w", pady=(4, 24))
-    holder = _frame(app, shell)
-    holder.pack(fill="x")
+    strip.pack(anchor="w", pady=(0, 14))
+    # The web panel is white at 3% over the card.
+    fill = mix("#ffffff", surface, .03)
+    panel_palette = dict(palette, surface=fill)
     slots = []
     state = {"current": None}
 
     def draw(index):
-        number, canvas, selected = slots[index]
-        number.configure(fg=palette["accent"] if selected() else palette["dim"])
-        canvas.delete("all")
-        canvas.image = rounded_image(64, 64, "#262626", 16, palette["accent"] if selected() else "#3a3a3a")
-        canvas.create_image(0, 0, image=canvas.image, anchor="nw")
-        canvas.create_rectangle(16, 16, 48, 48, outline="#5a5a5a", dash=(3, 3), width=2)
-        canvas.create_line(26, 32, 38, 32, fill="#5a5a5a", width=2)
-        canvas.create_line(32, 26, 32, 38, fill="#5a5a5a", width=2)
+        number, canvas = slots[index]
+        active = state["current"] == index
+        number.configure(fg=palette["accent"] if active else palette["dim"])
+        draw_hotbar_slot(canvas, palette, active)
 
     def show(index):
         if state["current"] is not None:
@@ -634,48 +645,53 @@ def _build_hotbar(app, parent, spec):
         for n in range(len(slots)):
             draw(n)
 
+    def copy_row(panel, control, pady):
+        row = tk.Frame(panel.body, bg=fill)
+        row.pack(fill="x", pady=pady)
+        text = tk.Frame(row, bg=fill)
+        text.pack(side="left", anchor="n")
+        tk.Label(text, text=control["title"], bg=fill, fg=palette["text"], font=("Helvetica", -15),
+                 anchor="w").pack(fill="x")
+        tk.Label(text, text=control["desc"], bg=fill, fg=palette["dim"], font=("Helvetica", -13),
+                 anchor="w").pack(fill="x", pady=(4, 0))
+        return row
+
     panels = []
     for index, section in enumerate(definition["sections"]):
         column = _frame(app, strip)
-        column.pack(side="left", padx=(0, 12))
-        number = tk.Label(column, text=definition["slot_labels"][index], bg=palette["surface"],
-                          font=("Poppins", -13, "bold"))
+        column.pack(side="left")
+        number = tk.Label(column, text=definition["slot_labels"][index], bg=surface,
+                          font=("Helvetica", -13, "bold"))
         number.pack()
-        canvas = tk.Canvas(column, width=64, height=64, bg=palette["surface"], highlightthickness=0,
-                           bd=0, cursor="hand2")
-        canvas.pack(pady=(3, 0))
-        slots.append((number, canvas, lambda n=index: state["current"] == n))
+        canvas = tk.Canvas(column, width=80, height=82, bg=surface, highlightthickness=0, bd=0, cursor="hand2")
+        canvas.pack()
+        slots.append((number, canvas))
         canvas.bind("<ButtonRelease-1>", lambda event, n=index: show(n))
 
-        panel = tk.Frame(holder, bg=palette["surface"], highlightthickness=1,
-                         highlightbackground=palette["border"], padx=20, pady=19)
-        head = _frame(app, panel)
+        panel = Card(shell, panel_palette, radius=18, padding=20)
+        head = tk.Frame(panel.body, bg=fill)
         head.pack(fill="x", pady=(0, 16))
-        icon = tk.Canvas(head, width=52, height=52, bg=palette["surface"], highlightthickness=0, bd=0)
-        icon.image = rounded_image(52, 52, "#1f1f1f", 14, "#3a3a3a")
-        icon.create_image(0, 0, image=icon.image, anchor="nw")
-        icon.create_rectangle(10, 10, 42, 42, outline="#5a5a5a", dash=(3, 3), width=2)
+        icon = tk.Canvas(head, width=52, height=52, bg=fill, highlightthickness=0, bd=0)
+        draw_hotbar_icon(icon, fill)
         icon.pack(side="left", padx=(0, 16))
-        copy = _frame(app, head)
+        copy = tk.Frame(head, bg=fill)
         copy.pack(side="left")
-        tk.Label(copy, text=section["title"], bg=palette["surface"], fg=palette["text"],
-                 font=("Poppins", -18, "bold"), anchor="w").pack(fill="x")
-        tk.Label(copy, text=section["desc"], bg=palette["surface"], fg=palette["dim"],
-                 font=("Poppins", -14), anchor="w").pack(fill="x")
+        tk.Label(copy, text=section["title"], bg=fill, fg=palette["text"],
+                 font=("Helvetica", -15, "bold"), anchor="w").pack(fill="x")
+        tk.Label(copy, text=section["desc"], bg=fill, fg=palette["dim"],
+                 font=("Helvetica", -13), anchor="w").pack(fill="x", pady=(4, 0))
         when, value, unit = section["controls"]
-        app.add_control(panel, when)
-        row = _frame(app, panel)
-        row.pack(fill="x", pady=(16, 0))
-        text = _frame(app, row)
-        text.pack(side="left", fill="x", expand=True)
-        tk.Label(text, text=value["title"], bg=palette["surface"], fg=palette["text"],
-                 font=("Poppins", -14), anchor="w").pack(fill="x")
-        tk.Label(text, text=value["desc"], bg=palette["surface"], fg=palette["dim"],
-                 font=("Poppins", -13), anchor="w").pack(fill="x")
-        for control in (value, unit):
-            cell = _frame(app, row)
-            cell.pack(side="left", padx=(0, 8))
-            app.add_control(cell, _blank(control))
+        row = copy_row(panel, when, 0)
+        cell = tk.Frame(row, bg=fill)
+        cell.pack(side="right", anchor="n")
+        _bare(app, cell, when)
+        row = copy_row(panel, value, (16, 0))
+        frequency = tk.Frame(row, bg=fill)
+        frequency.pack(side="right", anchor="n")
+        for control, padx in ((value, (0, 8)), (unit, 0)):
+            cell = tk.Frame(frequency, bg=fill)
+            cell.pack(side="left", padx=padx)
+            _bare(app, cell, control)
         panels.append(panel)
     show(0)
     return CustomControl(shell, lambda: state["current"] + 1, lambda value: None)
@@ -689,16 +705,60 @@ def _build_quest_overrides(app, parent, spec):
     for column, weight in enumerate((4, 3, 3)):
         table.grid_columnconfigure(column, weight=weight, uniform="quest")
     for column, title in enumerate(definition["columns"]):
-        tk.Label(table, text=title, bg=palette["surface"], fg=palette["dim"], anchor="w",
-                 font=("Poppins", -14, "bold")).grid(row=0, column=column, sticky="w", pady=(0, 6))
+        tk.Label(table, text=title, bg=palette["surface"], fg=palette["text"], anchor="w",
+                 font=("Helvetica", -15, "bold")).grid(row=0, column=column, sticky="w", padx=4, pady=(8, 4))
     for number, row in enumerate(definition["rows"], 1):
         tk.Label(table, text=row["title"], bg=palette["surface"], fg=palette["text"], anchor="w",
-                 font=("Poppins", -14)).grid(row=number, column=0, sticky="w", pady=4)
+                 font=("Helvetica", -15)).grid(row=number, column=0, sticky="w", padx=4, pady=11)
         for column, control in enumerate(row["controls"], 1):
             cell = _frame(app, table)
-            cell.grid(row=number, column=column, sticky="w", pady=4)
-            app.add_control(cell, _blank(control))
+            cell.grid(row=number, column=column, sticky="w", padx=4, pady=11)
+            _bare(app, cell, control)
     return CustomControl(table)
+
+
+def _build_blender_items(app, parent, spec):
+    """The web Blender item rows: Item, Quantity + Max, Repeat + Inf on one line."""
+    palette = app.palette
+    surface = palette["surface"]
+    body = _frame(app, parent)
+    body.pack(fill="x")
+
+    def label(master, text, **options):
+        return tk.Label(master, text=text, bg=surface, fg=palette["text"], anchor="w", justify="left",
+                        font=("Helvetica", -14), padx=0, pady=0, **options)
+
+    def counted(row, field, check, side):
+        group = _frame(app, row)
+        group.pack(side=side, anchor="n", **({"expand": True} if side == "left" else {}))
+        label(group, field["title"]).pack(side="left", anchor="n", pady=(6, 0), padx=(0, 11))
+        column = _frame(app, group)
+        column.pack(side="left", anchor="n")
+        _bare(app, column, field)
+        below = _frame(app, column)
+        below.pack(fill="x", pady=(5, 0))
+        copy = _frame(app, below)
+        copy.pack(side="left", anchor="n")
+        label(copy, check["title"]).pack(fill="x", pady=(8, 0))
+        tk.Label(copy, text=check["desc"], bg=surface, fg="#adb4bc", anchor="w", justify="left",
+                 font=("Helvetica", -13), padx=0, pady=0).pack(fill="x")
+        box = _frame(app, below)
+        box.pack(side="right", anchor="n", pady=(6, 0))
+        _bare(app, box, check)
+
+    for index, item in enumerate(CUSTOM_DEFINITIONS["blender_items"]["items"]):
+        choice, quantity, maximum, repeat, infinite = item["controls"]
+        tk.Label(body, text=item["title"], bg=surface, fg=palette["text"], anchor="w",
+                 font=("Helvetica", -14, "bold"), padx=0, pady=0).pack(fill="x", pady=(8 if index else 0, 22))
+        row = _frame(app, body)
+        row.pack(fill="x")
+        first = _frame(app, row)
+        first.pack(side="left", anchor="n")
+        label(first, choice["title"]).pack(side="left", anchor="s", padx=(0, 11))
+        _bare(app, first, choice)
+        counted(row, repeat, infinite, "right")
+        counted(row, quantity, maximum, "left")
+    return CustomControl(body)
 
 
 # ---------------------------------------------------------------------------
@@ -717,7 +777,7 @@ def _build_guide(app, parent, spec):
     definition = CUSTOM_DEFINITIONS[spec["action"]]
     path = os.path.normpath(os.path.join(os.path.dirname(__file__), definition["image"]))
     label = tk.Label(parent, bg=app.palette["surface"], cursor="hand2", text=definition["alt"],
-                     fg=app.palette["dim"], font=("Poppins", -14))
+                     fg=app.palette["dim"], font=("Helvetica", -14))
     label.pack(pady=(8, 0))
     shown = {"width": 0}
 
@@ -771,13 +831,13 @@ def _build_model_downloads(app, parent, spec):
     header = tk.Frame(body, bg=palette["surface"], cursor="hand2", takefocus=True)
     header.pack(fill="x")
     title = tk.Label(header, text="AI Models", bg=palette["surface"], fg=palette["text"],
-                     font=("Poppins", -18, "bold"), cursor="hand2")
+                     font=("Helvetica", -18, "bold"), cursor="hand2")
     title.pack(side="left")
     arrow = tk.Label(header, text="⌄", bg=palette["surface"], fg=palette["dim"],
-                     font=("Poppins", -22), cursor="hand2")
+                     font=("Helvetica", -22), cursor="hand2")
     arrow.pack(side="right", padx=(12, 0))
     summary = tk.Label(header, text="Checking…", bg=palette["surface"], fg=palette["dim"],
-                       font=("Poppins", -13), cursor="hand2")
+                       font=("Helvetica", -13), cursor="hand2")
     summary.pack(side="right")
     content = _frame(app, body)
 
@@ -797,14 +857,14 @@ def _build_model_downloads(app, parent, spec):
     tk.Frame(content, bg=palette["border"], height=1).pack(fill="x", pady=(0, 8))
     description = tk.Label(content, text="Download only the AI models that are missing from this Mac.",
                            bg=palette["surface"], fg=palette["dim"], anchor="w", justify="left",
-                           font=("Poppins", -14))
+                           font=("Helvetica", -14))
     description.pack(fill="x", pady=(0, 8))
     description.bind("<Configure>", lambda event: description.configure(wraplength=max(1, event.width)))
     buttons = []
     download_all = _button(app, content, definition["download_missing_text"], lambda: download(None))
     download_all.pack(anchor="w", pady=(0, 8))
     status = tk.Label(content, text="Checking installed models…", bg=palette["surface"], fg=palette["dim"],
-                      anchor="w", font=("Poppins", -13))
+                      anchor="w", font=("Helvetica", -13))
     status.pack(fill="x", pady=(0, 8))
     listing = _frame(app, content)
     listing.pack(fill="x")
@@ -824,7 +884,7 @@ def _build_model_downloads(app, parent, spec):
             child.destroy()
         for group, items in model_groups(models, definition):
             tk.Label(listing, text="{} Models".format(group), bg=palette["surface"], fg=palette["text"],
-                     font=("Poppins", -14, "bold"), anchor="w").pack(fill="x", pady=(10, 4))
+                     font=("Helvetica", -14, "bold"), anchor="w").pack(fill="x", pady=(10, 4))
             for model, label in items:
                 row = tk.Frame(listing, bg=palette["surface"], highlightthickness=1,
                                highlightbackground=palette["border"])
@@ -832,13 +892,13 @@ def _build_model_downloads(app, parent, spec):
                 copy = _frame(app, row)
                 copy.pack(side="left", padx=12, pady=8)
                 tk.Label(copy, text=label, bg=palette["surface"], fg=palette["text"],
-                         font=("Poppins", -14, "bold"), anchor="w").pack(fill="x")
+                         font=("Helvetica", -14, "bold"), anchor="w").pack(fill="x")
                 if model["installed"]:
                     size = _format_model_size(model.get("size_bytes"))
                     text = "Installed" + (" · " + size if size else "")
                 else:
                     text = "Missing"
-                tk.Label(copy, text=text, bg=palette["surface"], anchor="w", font=("Poppins", -13),
+                tk.Label(copy, text=text, bg=palette["surface"], anchor="w", font=("Helvetica", -13),
                          fg=MODEL_COLORS["installed" if model["installed"] else "missing"]).pack(fill="x")
                 if not model["installed"]:
                     button = _button(app, row, definition["download_text"],
@@ -916,7 +976,7 @@ def _profile_names(app):
 def _build_current_profile(app, parent, spec):
     palette = app.palette
     label = tk.Label(parent, bg=palette["surface"], fg=palette["accent"], anchor="w",
-                     font=("Poppins", -20, "bold"))
+                     font=("Helvetica", -20, "bold"), bd=0, padx=0)
     label.pack(fill="x")
 
     def reload():
@@ -969,16 +1029,15 @@ def _build_switch_profile(app, parent, spec):
         profiles, current = _profile_names(app)
         for name in profiles:
             active = name == current
-            row = tk.Frame(listing, bg=_mix(palette["accent"], palette["surface"], .1) if active
-                           else palette["hover"], highlightthickness=1,
-                           highlightbackground=palette["accent"] if active else palette["hover"])
+            row = tk.Frame(listing, bg=palette["surface"] if active else palette["hover"], highlightthickness=1,
+                           highlightbackground=palette["accent_hover"] if active else palette["hover"])
             row.pack(fill="x", pady=3)
             left = tk.Frame(row, bg=row.cget("bg"))
             left.pack(side="left", padx=14, pady=10)
-            tk.Label(left, text=name, bg=row.cget("bg"), fg=palette["text"], font=("Poppins", -14)).pack(side="left")
+            tk.Label(left, text=name, bg=row.cget("bg"), fg=palette["text"], font=("Helvetica", -14)).pack(side="left")
             if active:
                 tk.Label(left, text=definition["active_text"], bg=palette["accent"], fg=palette["bg"],
-                         font=("Poppins", -11, "bold"), padx=5, pady=1).pack(side="left", padx=(8, 0))
+                         font=("Helvetica", -11, "bold"), padx=5, pady=1).pack(side="left", padx=(8, 0))
                 continue
             actions = tk.Frame(row, bg=row.cget("bg"))
             actions.pack(side="right", padx=10, pady=4)
@@ -1083,7 +1142,8 @@ def _build_create_profile(app, parent, spec):
     row = _frame(app, body)
     row.pack(fill="x")
     entry, value, clear = _name_row(app, row, definition)
-    entry.pack(side="left", ipady=5)
+    entry.configure(bd=6)
+    entry.pack(side="left", fill="x", expand=True)
     status = _status_label(app, body)
 
     def create():
@@ -1112,7 +1172,8 @@ def _build_duplicate_profile(app, parent, spec):
     source.pack(side="left")
     tk.Label(row, text="→", bg=palette["surface"], fg=palette["dim"]).pack(side="left", padx=10)
     entry, value, clear = _name_row(app, row, definition)
-    entry.pack(side="left", ipady=5)
+    entry.configure(bd=6)
+    entry.pack(side="left", fill="x", expand=True)
     status = _status_label(app, body)
 
     def duplicate():
@@ -1164,7 +1225,7 @@ def _import_dialog(app, definition, path, status):
     window = _modal(app, definition["title"])
     palette = app.palette
     tk.Label(window, text=definition["title"], bg=palette["surface"], fg=palette["text"],
-             font=("Poppins", -18, "bold"), anchor="w").pack(fill="x", pady=(0, 12))
+             font=("Helvetica", -18, "bold"), anchor="w").pack(fill="x", pady=(0, 12))
     _modal_label(app, window, "{} {}".format(definition["file_label"], os.path.basename(path)), width, dim=True)
     _modal_label(app, window, definition["input_label"], width, dim=True)
     entry = _entry(app, window, width=40)
@@ -1208,7 +1269,7 @@ def _build_import_profile(app, parent, spec):
             _import_dialog(app, definition, path, status)
     _secondary_button(app, row, definition["button_text"], choose).pack(side="left")
     tk.Label(row, text=definition["empty_file_text"], bg=palette["surface"], fg=palette["dim"],
-             font=("Poppins", -13)).pack(side="left", padx=12)
+             font=("Helvetica", -13)).pack(side="left", padx=12)
     return CustomControl(body)
 
 
@@ -1223,6 +1284,7 @@ _BUILDERS = {
     "task_priorities": _build_task_priorities,
     "hotbar": _build_hotbar,
     "quest_overrides": _build_quest_overrides,
+    "blender_items": _build_blender_items,
     "petals_guide": _build_guide,
     "sprout_guide": _build_guide,
 }
@@ -1250,7 +1312,7 @@ def _fallback_private_servers(app, spec, control):
     window = _modal(app, definition["title"])
     palette = app.palette
     tk.Label(window, text=definition["title"], bg=palette["surface"], fg=palette["text"],
-             font=("Poppins", -18, "bold"), anchor="w").pack(fill="x", pady=(0, 8))
+             font=("Helvetica", -18, "bold"), anchor="w").pack(fill="x", pady=(0, 8))
     _modal_label(app, window, definition["desc"], width, dim=True)
     settings = app.manager.loadAllSettings()
     entries = []
