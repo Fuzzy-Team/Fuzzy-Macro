@@ -8,6 +8,7 @@ import subprocess
 import threading
 import time
 import platform
+import sys
 from pathlib import Path
 
 try:
@@ -73,6 +74,9 @@ LABELS_SPRINKLER = {
 
 def src_root():
     """Return the macro `src/` directory (parent of `modules/`)."""
+    if getattr(sys, 'frozen', False):
+        from .settingsManager import getProjectRoot
+        return Path(getProjectRoot()) / 'src'
     try:
         return Path(__file__).resolve().parents[2]
     except Exception:

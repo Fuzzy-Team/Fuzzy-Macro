@@ -1,3 +1,4 @@
+from modules.misc import settingsManager
 from flask import Flask, Response, render_template_string
 import cv2
 import numpy as np
@@ -425,7 +426,7 @@ class cloudflaredStream:
                     # Write stream URL to file for Discord bot
                     try:
                         import os
-                        stream_url_file = os.path.join(os.path.dirname(__file__), '..', '..', 'stream_url.txt')
+                        stream_url_file = os.path.join(settingsManager.getProjectRoot(), 'src', 'stream_url.txt')
                         with open(stream_url_file, 'w') as f:
                             f.write(url)
                     except Exception as e:
@@ -455,7 +456,7 @@ class cloudflaredStream:
 
         # Clear stream URL file
         try:
-            stream_url_file = os.path.join(os.path.dirname(__file__), '..', '..', 'stream_url.txt')
+            stream_url_file = os.path.join(settingsManager.getProjectRoot(), 'src', 'stream_url.txt')
             if os.path.exists(stream_url_file):
                 os.remove(stream_url_file)
         except Exception as e:

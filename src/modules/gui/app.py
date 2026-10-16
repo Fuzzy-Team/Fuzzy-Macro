@@ -134,8 +134,8 @@ class NativeApp:
         style = ttk.Style(self.root)
         style.theme_use('clam')
         style.configure('Treeview', background=self.palette['input'], fieldbackground=self.palette['input'],
-                        foreground=self.palette['text'], borderwidth=0, rowheight=32, font=('Poppins', -14))
-        style.configure('Treeview.Heading', background=self.palette['surface'], foreground=self.palette['text'], font=('Poppins', -14, 'bold'))
+                        foreground=self.palette['text'], borderwidth=0, rowheight=32, font=('Helvetica', -14))
+        style.configure('Treeview.Heading', background=self.palette['surface'], foreground=self.palette['text'], font=('Helvetica', -14, 'bold'))
         style.map('Treeview', background=[('selected', self.palette['selected'])], foreground=[('selected', self.palette['text'])])
 
     def image(self, path, size=None):
@@ -164,11 +164,11 @@ class NativeApp:
         sidebar.pack(side='left', fill='y')
         sidebar.pack_propagate(False)
         tk.Frame(self.shell, width=1, bg=self.palette['border']).pack(side='left', fill='y')
-        tk.Label(sidebar, text='Fuzzy Macro', font=('Libre Franklin', -24, 'bold'), fg=self.palette['accent'], bg=self.palette['surface']).pack(pady=(16, 10))
+        tk.Label(sidebar, text='Fuzzy Macro', font=('Helvetica', -24, 'bold'), fg=self.palette['accent'], bg=self.palette['surface']).pack(pady=(16, 10))
         self.navigation = {}
         for tab in TABS:
             button = widgets.Button(sidebar, tab.title(), lambda tab=tab: self.show_tab(tab), self.palette,
-                                    width=208, font=('Poppins', -15), fill=self.palette['surface'], foreground=self.palette['dim'],
+                                    width=208, font=('Helvetica', -15), fill=self.palette['surface'], foreground=self.palette['dim'],
                                     image=self.image('assets/sidebar/%s.png' % tab, (20, 20)))
             button.configure(height=46)
             button.pack(padx=16, pady=4)
@@ -183,7 +183,7 @@ class NativeApp:
         self.content = tk.Frame(self.shell, bg=self.palette['bg'])
         self.content.pack(side='left', fill='both', expand=True)
         self.status_text = tk.StringVar(self.root)
-        self.status_label = tk.Label(self.content, textvariable=self.status_text, font=('Poppins', -12), fg=self.palette['dim'], bg=self.palette['bg'], anchor='w')
+        self.status_label = tk.Label(self.content, textvariable=self.status_text, font=('Helvetica', -12), fg=self.palette['dim'], bg=self.palette['bg'], anchor='w')
         self.show_tab(self.active_tab)
 
     def show_tab(self, tab):
@@ -194,6 +194,7 @@ class NativeApp:
         for name, button in self.navigation.items():
             button.fill = self.palette['selected'] if name == tab else self.palette['surface']
             button.foreground = self.palette['accent'] if name == tab else self.palette['dim']
+            button.font = ('Helvetica', -15, 'bold') if name == tab else ('Helvetica', -15)
             button.draw()
         if tab not in self.pages:
             page = widgets.Scroll(self.content, self.palette)
@@ -206,9 +207,13 @@ class NativeApp:
                 self.build_home(body)
             elif tab == 'gather':
                 self.build_gather(body)
-            elif tab in ('planters', 'tools'):
+            elif tab == 'planters':
                 from . import editors
-                getattr(editors, 'build_' + tab)(self, body)
+                editors.build_planters(self, body)
+            elif tab == 'tools':
+                from . import editors
+                body.configure(padx=32, pady=32)
+                editors.build_tools(self, body)
             else:
                 body.configure(padx=32, pady=32)
                 definitions = TAB_DEFINITIONS[tab]
@@ -220,19 +225,27 @@ class NativeApp:
         widgets.repaint(self.pages[tab])
 
     def label(self, parent, text, dim=False):
-        return tk.Label(parent, text=plain_text(text), font=('Poppins', -14), fg=self.palette['dim' if dim else 'text'], bg=parent.cget('bg'), justify='left', anchor='w', bd=0, padx=0, pady=0)
+        return tk.Label(parent, text=plain_text(text), font=('Helvetica', -14), fg=self.palette['dim' if dim else 'text'], bg=parent.cget('bg'), justify='left', anchor='w', bd=0, padx=0, pady=0)
 
     def button(self, parent, text, command):
         return widgets.Button(parent, text, command, self.palette)
 
-    def card(self, parent, title, desc=''):
-        card = widgets.Card(parent, self.palette, title, plain_text(desc))
+    def card(self, parent, title, desc='', compact=False):
+        # Compact cards are the web .profile-card: 8px corners, 16px padding and a tighter header.
+        card = widgets.Card(parent, self.palette, title, plain_text(desc), radius=8 if compact else 12,
+                            padding=16 if compact else 24)
         card.pack(fill='x', pady=(0, 16))
+        if compact and title:
+            card.header.pack_configure(pady=(0, 13))
+            card.rule.pack_configure(pady=(0, 8))
+        if compact and desc:
+            card.description.configure(font=('Helvetica', -14))
+            card.description.pack_configure(pady=(0, 16))
         return card.body
 
     def subtabs(self, parent, tabs, key):
         nav = tk.Frame(parent, bg=parent.cget('bg'))
-        nav.pack(fill='x', pady=(0, 16))
+        nav.pack(fill='x', pady=(0, 32 if key in ('collect', 'config') else 16))
         holder = tk.Frame(parent, bg=parent.cget('bg'))
         holder.pack(fill='both', expand=True)
         views, buttons = {}, {}
@@ -255,6 +268,7 @@ class NativeApp:
 
         for tab_id, title, builder in tabs:
             button = self.button(nav, title, lambda tab_id=tab_id: select(tab_id))
+            button.radius = 8
             button.configure(height=32)
             buttons[tab_id] = button
         widgets.wrap_buttons(nav, list(buttons.values()))
@@ -262,15 +276,30 @@ class NativeApp:
         select(selected if selected in buttons else tabs[0][0])
 
     def form(self, parent, sections):
+        # Each web subtab is a panel that holds its section cards. A panel heading section
+        # titles the panel itself, which then holds compact cards, like the web profiles page.
+        def presentation_of(section):
+            return SECTION_PRESENTATION.get((self.active_tab, self.subtab_selection.get(self.active_tab), section['title']), {})
+
+        heading = bool(sections) and presentation_of(sections[0]).get('panel_heading', False)
+        panel = widgets.Card(parent, self.palette, sections[0]['title'] if heading else '')
+        panel.pack(fill='x')
+        parent = panel.body
+        if heading:
+            intro = self.label(parent, sections[0].get('desc', ''), dim=True)
+            intro.configure(font=('Helvetica', -16))
+            intro.pack(fill='x', pady=(0, 10))
+            intro.bind('<Configure>', lambda event: intro.configure(wraplength=max(1, event.width)))
+            sections = sections[1:]
         body = None
         for section in sections:
-            presentation = SECTION_PRESENTATION.get((self.active_tab, self.subtab_selection.get(self.active_tab), section['title']), {})
+            presentation = presentation_of(section)
             if presentation.get('inline_separator'):
                 tk.Frame(body, bg=self.palette['border'], height=1).pack(fill='x', pady=(24, 16))
                 self.label(body, section['title']).pack(anchor='w', pady=(0, 8))
                 self.label(body, section.get('desc', ''), dim=True).pack(anchor='w', pady=(0, 16))
             else:
-                body = self.card(parent, section['title'], section.get('desc', ''))
+                body = self.card(parent, section['title'], section.get('desc', ''), heading)
             if presentation.get('image'):
                 body.master.heading.configure(image=self.image(presentation['image'], (20, 20)), compound='left')
             for spec in section['controls']:
@@ -299,14 +328,14 @@ class NativeApp:
         text = tk.Frame(row, bg=row.cget('bg'))
         text.grid(row=0, column=0, sticky='new', padx=(0, 24))
         title = self.label(text, spec.get('title', ''))
-        title.configure(font=('Poppins', -15))
+        title.configure(font=('Helvetica', -15))
         title.pack(fill='x')
         title.bind('<Configure>', lambda event: title.configure(wraplength=max(1, event.width)))
         desc = spec.get('desc', '')
         if identifier == 'discord_bot_token' and self.actions.usesLegacyDiscordBot():
             desc += LEGACY_DISCORD_BOT_DESCRIPTION
         description = self.label(text, desc, dim=True)
-        description.configure(font=('Poppins', -13))
+        description.configure(font=('Helvetica', -13))
         if desc:
             description.pack(fill='x')
             description.bind('<Configure>', lambda e: description.configure(wraplength=max(1, min(e.width, round(row.winfo_width() * .70)))))
@@ -328,7 +357,8 @@ class NativeApp:
         width = round((presentation.get('width_rem') or 10) * 16)
         if kind == 'checkbox':
             widget = widgets.Checkbox(right, value, changed, self.palette)
-            widget.pack()
+            # The web checkbox sits 0.6rem down and keeps 0.5rem below it.
+            widget.pack(pady=(3, 5))
             control = widgets.Control(widget, widget.variable)
         elif kind == 'dropdown':
             choices = spec.get('choices', [])
@@ -343,8 +373,10 @@ class NativeApp:
             control = widgets.Control(widget, widget.variable)
         elif kind in ('textbox', 'textbox_with_button'):
             variable = tk.StringVar(self.root, str(value))
-            widget = tk.Entry(right, textvariable=variable, font=('Poppins', -14), width=max(5, width // 9), fg=self.palette['text'], bg=self.palette['input'], insertbackground=self.palette['text'], bd=0, highlightthickness=1, highlightbackground=self.palette['border'], highlightcolor=self.palette['accent'])
-            widget.pack(side='left', ipady=7)
+            # A flat border drawn in the field color gives the web textbox padding. Entry
+            # widths count 8px '0' characters; the web width excludes its 16px padding and border.
+            widget = tk.Entry(right, textvariable=variable, font=('Helvetica', -14), width=max(5, round((width + 2) / 8)), fg=self.palette['text'], bg=self.palette['input'], insertbackground=self.palette['text'], bd=7, relief='flat', highlightthickness=1, highlightbackground=self.palette['border'], highlightcolor=self.palette['accent'])
+            widget.pack(side='left')
             control = widgets.Control(widget, variable, spec.get('numeric'))
             control.committed_value = control.get()
 
@@ -393,11 +425,11 @@ class NativeApp:
                 if identifier == 'memory_match_rewards':
                     types = MEMORY_MATCH_REWARD_TYPES[item['value']]
                     badge = self.label(tile, '/'.join(MEMORY_MATCH_TYPE_BADGES[kind] for kind in types), dim=True)
-                    badge.configure(font=('Poppins', -10, 'bold'))
+                    badge.configure(font=('Helvetica', -10, 'bold'))
                     badge.pack()
                     tooltip = item['label'] + ' - found in ' + ', '.join(MEMORY_MATCH_TYPE_LABELS[kind] for kind in types)
                     widgets.tooltip(tile, tooltip, self.palette)
-                label = tk.Checkbutton(tile, text=item['label'], variable=variable, bg=self.palette['input'], fg=self.palette['text'], selectcolor=self.palette['accent'], activebackground=self.palette['hover'], font=('Poppins', -12), wraplength=110)
+                label = tk.Checkbutton(tile, text=item['label'], variable=variable, bg=self.palette['input'], fg=self.palette['text'], selectcolor=self.palette['accent'], activebackground=self.palette['hover'], font=('Helvetica', -12), wraplength=110)
                 label.pack(fill='both', expand=True, padx=4, pady=4)
                 variables.append((item['value'], variable))
 
@@ -564,10 +596,14 @@ class NativeApp:
         self.field_buttons = []
         for index in range(5):
             button = self.button(nav, 'Field %d' % (index + 1), lambda index=index: self.select_field_slot(index))
+            button.radius = 8
             button.configure(height=32)
             button.pack(side='left', padx=(0, 8))
             self.field_buttons.append(button)
-        self.button(nav, 'Import Patterns', lambda: self.dispatch('import_patterns')).pack(side='right')
+        import_button = widgets.Button(nav, 'Import Patterns', lambda: self.dispatch('import_patterns'), self.palette,
+                                       fill=self.palette['selected'], foreground=self.palette['text'], radius=8)
+        import_button.configure(height=32)
+        import_button.pack(side='right')
         body = self.card(inner, '')
         self.field_name = self.settings['fields'][self.field_slot]
         self.field_data = copy.deepcopy(self.fields[self.field_name])
@@ -663,17 +699,21 @@ class NativeApp:
         control_card = widgets.Card(top, self.palette)
         control_card.grid(row=0, column=0, sticky='nsew', padx=(0, 8))
         heading = self.label(control_card.body, 'Macro Control')
-        heading.configure(font=('Poppins', -18, 'bold'))
+        heading.configure(font=('Helvetica', -18, 'bold'))
         heading.pack(side='left', pady=10)
         self.start_button = self.button(control_card.body, '', self.start_stop)
         self.start_button.pack(side='right')
         mode_card = widgets.Card(top, self.palette)
         mode_card.grid(row=0, column=1, sticky='nsew', padx=(8, 0))
         heading = self.label(mode_card.body, 'Macro Mode')
-        heading.configure(font=('Poppins', -18, 'bold'))
+        heading.configure(font=('Helvetica', -18, 'bold'))
         heading.pack(side='left', pady=10)
         modes = [dict(label=label, value=value) for label, value in [('Normal Mode', 'normal'), ('Alt Mode', 'alt'), ('Field Mode', 'field'), ('Quest Mode', 'quest'), ('Bug Run Mode', 'bug')]]
-        self.mode_choice = widgets.Choice(mode_card.body, modes, self.settings['macro_mode'], lambda: self.save('macro_mode', self.mode_choice.get(), 'general'), self.palette)
+        self.mode_choice = widgets.Choice(mode_card.body, modes, self.settings['macro_mode'], lambda: self.save('macro_mode', self.mode_choice.get(), 'general'), self.palette, width=157)
+        mode_button = self.mode_choice.button
+        mode_button.fill, mode_button.trailing, mode_button.radius = self.palette['dim_surface'], '▾', 8
+        mode_button.font = ('Helvetica', -15)
+        mode_button.configure(height=40)
         self.mode_choice.pack(side='right')
         def arrange_home(event):
             narrow = event.width < 595
@@ -704,16 +744,19 @@ class NativeApp:
             button.configure(height=26)
             button.pack(side='right', padx=(4, 0))
         self.log_filter = tk.StringVar(self.root)
-        search = tk.Entry(self.logs_body, textvariable=self.log_filter, font=('Poppins', -14), bg=self.palette['input'], fg=self.palette['text'], insertbackground=self.palette['text'], bd=0, relief='flat', highlightthickness=1, highlightbackground=self.palette['border'], highlightcolor=self.palette['accent'])
-        search.pack(fill='x', ipady=4, pady=(0, 8))
-        hint = tk.Label(search, text='Search logs (e.g. claimed Hive)', font=('Poppins', -13), bg=self.palette['input'], fg=self.palette['dim'], bd=0, padx=8)
-        hint.place(x=0, y=4)
+        search_row = tk.Frame(self.logs_body, bg=self.palette['surface'])
+        search_row.pack(fill='x', pady=(0, 8))
+        search = tk.Entry(search_row, textvariable=self.log_filter, font=('Helvetica', -13), bg=self.palette['input'], fg=self.palette['text'], insertbackground=self.palette['text'], bd=6, relief='flat', highlightthickness=1, highlightbackground=self.palette['border'], highlightcolor=self.palette['accent'])
+        self.log_count = self.label(search_row, '', dim=True)
+        self.log_count.configure(font=('Helvetica', -12), width=7, anchor='e')
+        self.log_count.pack(side='right', padx=(8, 0))
+        search.pack(side='left', fill='x', expand=True)
+        hint = tk.Label(search, text='Search logs (e.g. claimed Hive)', font=('Helvetica', -13), bg=self.palette['input'], fg=self.palette['dim'], bd=0, padx=0, pady=0)
+        hint.place(x=7, rely=.5, anchor='w')
         hint.bind('<Button-1>', lambda event: search.focus_set())
         search.bind('<FocusIn>', lambda event: hint.place_forget())
-        search.bind('<FocusOut>', lambda event: hint.place(x=0, y=4) if not self.log_filter.get() else None)
-        self.log_count = self.label(self.logs_body, '', dim=True)
-        self.log_count.pack(fill='x')
-        self.logs_text = tk.Text(self.logs_body, height=14, wrap='word', bg=self.palette['surface'], fg=self.palette['text'], font=('Poppins', -14), bd=0, highlightthickness=0, state='disabled')
+        search.bind('<FocusOut>', lambda event: hint.place(x=7, rely=.5, anchor='w') if not self.log_filter.get() else None)
+        self.logs_text = tk.Text(self.logs_body, height=14, wrap='word', bg=self.palette['surface'], fg=self.palette['text'], font=('Helvetica', -14), bd=0, highlightthickness=0, state='disabled')
         self.logs_text.pack(fill='both', expand=True)
         self.log_filter.trace_add('write', lambda *args: self.render_logs())
         self.timers_card = widgets.Card(right, self.palette, 'Planter Timers')
@@ -800,7 +843,7 @@ class NativeApp:
                 child.destroy()
             for title, description in tasks:
                 label = self.label(self.tasks_body, title)
-                label.configure(font=('Poppins', -17))
+                label.configure(font=('Helvetica', -17))
                 label.pack(fill='x', pady=(12, 3))
                 if title == 'Blender' or description == 'Sticker Stack':
                     for item in description.split('\n'):
@@ -1042,7 +1085,7 @@ class NativeApp:
         self.label(body, 'A new version of Fuzzy Macro is available!').pack(anchor='w')
         self.label(body, 'Current version: %s\nLatest version: %s' % (info['current_version'], info['latest_version'])).pack(anchor='w', pady=20)
         disabled = tk.BooleanVar(dialog, False)
-        tk.Checkbutton(body, text="Don't show this again", variable=disabled, bg=self.palette['surface'], fg=self.palette['text'], selectcolor=self.palette['input'], font=('Poppins', -14)).pack(anchor='w')
+        tk.Checkbutton(body, text="Don't show this again", variable=disabled, bg=self.palette['surface'], fg=self.palette['text'], selectcolor=self.palette['input'], font=('Helvetica', -14)).pack(anchor='w')
         buttons = tk.Frame(body, bg=self.palette['surface'])
         buttons.pack(fill='x', pady=(24, 0))
         def dismiss():

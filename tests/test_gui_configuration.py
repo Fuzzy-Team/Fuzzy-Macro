@@ -66,7 +66,7 @@ class Var(object):
         self.callbacks.append(lambda: callback("var", "", mode))
 
 
-TK_NOOPS = {"grid", "grid_configure", "grid_forget", "columnconfigure", "rowconfigure", "place", "lift",
+TK_NOOPS = {"grid", "grid_configure", "grid_forget", "grid_remove", "unbind", "columnconfigure", "rowconfigure", "place", "lift",
             "lower", "focus_set", "update_idletasks", "title", "geometry", "wait_visibility", "grab_set",
             "grab_release", "transient", "resizable", "protocol", "focus_force", "select_range", "icursor",
             "yview_scroll", "yview", "create_text", "create_line", "create_polygon", "create_rectangle", "create_image", "create_oval", "delete",
@@ -221,6 +221,12 @@ class Choice(Widget):
         self.choices = choices
 
 
+class Card(Widget):
+    def __init__(self, master, colors, *args, **kwargs):
+        Widget.__init__(self, master)
+        self.body = Widget(self, bg=colors["surface"])
+
+
 class Scroll(Widget):
     set_scroll = NativeScroll.set_scroll
     wheel = NativeScroll.wheel
@@ -314,7 +320,10 @@ class App(object):
 
     def add_control(self, parent, spec, value=None, onchange=None):
         self.added.append((parent, spec))
-        control = Control(value, parent)
+        # The NativeApp row layout: row > (heading, right > widget).
+        row = Widget(parent)
+        Widget(row)
+        control = Control(value, Widget(row))
         self.controls[spec["id"]] = control
         return control
 
@@ -329,8 +338,9 @@ class App(object):
 
 
 def widgets():
-    return patch.multiple(cfg, tk=FAKE_TK, Button=Button, Choice=Choice, Scroll=Scroll,
-                          rounded_image=lambda *args, **kwargs: object())
+    return patch.multiple(cfg, tk=FAKE_TK, Button=Button, Choice=Choice, Scroll=Scroll, Card=Card,
+                          rounded_image=lambda *args, **kwargs: object(),
+                          draw_hotbar_slot=lambda *args: None, draw_hotbar_icon=lambda *args: None)
 
 
 def descendants(widget):
@@ -866,7 +876,7 @@ class BuilderTests(unittest.TestCase):
         for widget in descendants(body):
             font = widget.options.get("font")
             if font:
-                self.assertEqual(font[0], "Poppins")
+                self.assertEqual(font[0], "Helvetica")
 
     def test_download_exception_and_failed_refresh_unlock_buttons(self):
         for refresh_failure in (False, True):

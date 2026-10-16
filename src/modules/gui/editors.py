@@ -5,11 +5,15 @@ explicit button click; status polling never starts automation.
 """
 
 import json
+import re
 import tkinter as tk
+from tkinter import font as tkfont
 from tkinter import ttk
+from types import SimpleNamespace
 import uuid
 
 from . import calculators as calc
+from . import widgets
 from .token_data import sprout_preset, token_model, token_ranking, token_state
 
 
@@ -33,6 +37,7 @@ FIELD_NECTAR_ICONS = {
     "coconut": "refreshing",
 }
 NECTARS = ("comforting", "motivating", "satisfying", "refreshing", "invigorating")
+WEB_DIM = "#adb4bc"  # the web's hard-coded planter description color
 
 
 def planter_preset(name):
@@ -348,12 +353,75 @@ def _timer_reset(app, auto=False):
         app.status("Planter timers reset.")
 
 
+def _inline_control(app, parent, key, kind="checkbox", choices=(), width=184, onchange=None):
+    """A bare checkbox or dropdown for the planter grids, saved like add_control."""
+    value = app.settings.get(key, "none" if kind == "dropdown" else False)
+
+    def changed():
+        if onchange:
+            onchange(control.get())
+        else:
+            app.save(key, control.get())
+
+    if kind == "checkbox":
+        widget = widgets.Checkbox(parent, value, changed, app.palette)
+    else:
+        widget = widgets.Choice(parent, list(choices), value, changed, app.palette, width=width, image_loader=app.image)
+    control = widgets.Control(widget, widget.variable)
+    app.controls[key] = control
+    app.control_groups.setdefault(key, []).append(control)
+    return control
+
+
+def _mode_slider(app, parent, command):
+    """The web Off / Manual / Auto range input; command receives the new mode."""
+    canvas = tk.Canvas(parent, width=178, height=40, bg=app.palette["bg"], highlightthickness=0, bd=0, cursor="hand2")
+    stops = (11, 90, 169)
+    value = [calc.parse_int(app.settings["planters_mode"])]
+
+    def draw():
+        canvas.delete("all")
+        x = stops[min(2, max(0, value[0]))]
+        canvas.create_line(4, 9, 176, 9, width=5, capstyle="round", fill=app.palette["text"])
+        canvas.create_line(4, 9, x, 9, width=5, capstyle="round", fill=app.palette["accent"])
+        canvas.create_oval(x - 8, 1, x + 8, 17, fill=app.palette["accent"], outline="")
+        for left, anchor, text in ((1, "w", "Off"), (82, "center", "Manual"), (177, "e", "Auto")):
+            canvas.create_text(left, 30, text=text, anchor=anchor, font=("Helvetica", -16), fill=app.palette["text"])
+
+    def set_value(mode):
+        value[0] = calc.parse_int(mode)
+        draw()
+
+    def drag(event):
+        mode = min(range(3), key=lambda index: abs(stops[index] - event.x))
+        if mode != value[0]:
+            set_value(mode)
+            command(mode)
+
+    canvas.bind("<Button-1>", drag)
+    canvas.bind("<B1-Motion>", drag)
+    draw()
+    return widgets.Control(canvas, SimpleNamespace(get=lambda: value[0], set=set_value))
+
+
+def _planter_card(app, parent, title, desc=""):
+    # Planter cards use the web's inline 1rem description instead of the card default.
+    body = app.card(parent, title)
+    if desc:
+        label = app.label(body, desc, dim=True)
+        label.configure(font=("Helvetica", -16))
+        label.pack(fill="x", pady=(0, 16))
+        label.bind("<Configure>", lambda event: label.configure(wraplength=max(1, event.width)))
+    return body
+
+
+def _icon(name):
+    return "../../webapp/assets/icons/{}.png".format(name)
+
+
 def build_planters(app, parent):
     page = _frame(app, parent)
     page.pack(fill="both", expand=True)
-    mode_body = app.card(page, "Planters")
-    content = _frame(app, page)
-    content.pack(fill="both", expand=True)
     hotbar = [None]
     hotbar_selection = [None]
     summaries = []
@@ -368,22 +436,52 @@ def build_planters(app, parent):
         for child in hotbar[0].winfo_children():
             child.destroy()
         if not selected:
-            app.label(hotbar[0], "No planters selected.", dim=True).pack(anchor="w")
-        for planter in selected:
-            _control(app, hotbar[0], "planter_hotbar_{}_slot".format(planter),
-                     planter.replace("_", " ").title(), "dropdown", numeric="int",
-                     choices=[dict(label="0 - Inventory" if slot == 0 else str(slot), value=slot) for slot in range(8)])
+            empty = app.label(hotbar[0], "No planters selected.", dim=True)
+            empty.configure(font=("Helvetica", -14))
+            empty.pack(anchor="w", pady=(8, 0))
+        for index, planter in enumerate(selected):
+            card = widgets.Card(hotbar[0], app.palette, radius=8, padding=12)
+            card.configure(width=136)
+            card.grid(row=index // 6, column=index % 6, sticky="nsew", padx=(0, 12), pady=(0, 12))
+            tile = card.body
+            if PLANTER_ICONS.get(planter):
+                icon = app.label(tile, "")
+                icon.configure(image=app.image(_icon(PLANTER_ICONS[planter]), (42, 42)))
+                icon.pack()
+            name = app.label(tile, planter.replace("_", " ").title())
+            name.configure(font=("Helvetica", -14), anchor="center")
+            name.pack(fill="x", pady=(6, 9))
+            _inline_control(app, tile, "planter_hotbar_{}_slot".format(planter), "dropdown", width=110,
+                            choices=[dict(label="0 - Inventory" if slot == 0 else str(slot), value=slot) for slot in range(8)]).widget.pack()
 
     def changed_planter(key, value, auto):
         app.save(key, value)
         render_hotbar(auto)
 
+    def reset_row(body, auto):
+        row = _frame(app, body, True)
+        row.pack(fill="x", pady=(0, 16))
+        button = app.button(row, "Reset", lambda: _timer_reset(app, auto))
+        button.configure(width=90, height=26)
+        button.pack(side="right", anchor="n", pady=6)
+        row.bind("<Configure>", lambda event: button.pack_configure(padx=(0, round(event.width * .05))))
+        text = _frame(app, row, True)
+        text.pack(side="left", fill="x", expand=True)
+        title = app.label(text, "Clear Planter Timers")
+        title.configure(font=("Helvetica", -15))
+        title.pack(anchor="w")
+        desc = app.label(text, "Resets the macro's tracking data for the planters", dim=True)
+        desc.configure(font=("Helvetica", -13))
+        desc.pack(anchor="w")
+
     def harvest_controls(body, auto):
         prefix = "auto" if auto else "manual"
         _control(app, body, prefix + "_planters_collect_every", "Harvest Every X Hours", "textbox",
-                 "Maximum grow time before harvest. 2-3 hours is recommended." if auto else "How often to collect each cycle. 2-3 hours is recommended.",
+                 "The maximum amount of time for planters to grow before being harvested. 2-3 is recommended" if auto
+                 else "How often the macro should collect each cycle of planters. 2-3 is recommended",
                  numeric="float", limit=4)
         full = prefix + "_planters_collect_full"
+        full_desc = "Collect the planters when they are fully grown. Overrides the 'Harvest Every X Hours' setting"
         if auto:
             automatic = "auto_planters_collect_auto"
             mutually_exclusive = {}
@@ -395,44 +493,98 @@ def build_planters(app, parent):
                 app.save(key, bool(value))
 
             mutually_exclusive[full] = _control(app, body, full, "Harvest When Full",
-                desc="Overrides Harvest Every X Hours.", onchange=lambda value: change(full, automatic, value))
+                desc=full_desc, onchange=lambda value: change(full, automatic, value))
         else:
-            _control(app, body, full, "Harvest When Full", desc="Overrides Harvest Every X Hours.")
+            _control(app, body, full, "Harvest When Full", desc=full_desc)
         _control(app, body, "planters_collect_loot", "Collect Planter Loot",
-                 desc="Collect tokens dropped after harvesting planters.")
-        _control(app, body, prefix + "_planters_check", "Planter Check",
-                 desc="Check inventory after looting to confirm the planter was collected.")
+                 desc="Collect tokens dropped after harvesting planters. Disable this to harvest planters without sweeping up loot.")
+        _control(app, body, prefix + "_planters_check", "Planter check",
+                 desc="Check inventory after looting planters and make sure that the planter was in fact collected.")
         if auto:
             mutually_exclusive[automatic] = _control(app, body, automatic, "Auto Harvest",
-                desc="Let the macro decide when to harvest for nectar maintenance.",
+                desc="Let the macro decide when to harvest planters for optimal nectar maintenance. Overrides the 'Harvest Every X Hours' setting",
                 onchange=lambda value: change(automatic, full, value))
-            _control(app, body, "auto_max_planters", "Max Planters", "textbox", numeric="int", limit=1)
-        _buttons(app, body, [("Clear Planter Timers", lambda: _timer_reset(app, auto))])
+            _control(app, body, "auto_max_planters", "Max Planters", "textbox",
+                     "Maximum number of planters that can be placed at any time", numeric="int", limit=1)
+        reset_row(body, auto)
+
+    def guide(body, name, width):
+        path = "../../webapp/assets/cheatsheet/" + name
+        image = app.label(body, "")
+        image.configure(image=app.image(path, (width, 2000)), cursor="hand2", anchor="center")
+        image.pack(pady=(16, 0))
+        image.bind("<Button-1>", lambda event: app.open_image(path))
+
+    def off():
+        body = app.card(content, "")
+        title = _frame(app, body, True)
+        title.pack(pady=(8, 16))
+        heading = app.label(title, "Planters are Off")
+        heading.configure(font=("Helvetica", -18, "bold"))
+        heading.pack()
+        rule = _frame(app, title, True)
+        rule.configure(bg=app.palette["border"], height=1)
+        rule.pack(fill="x", pady=(6, 0))
+        line = app.label(body, "The macro will not harvest or plant any planters.")
+        line.configure(font=("Helvetica", -17), fg=WEB_DIM)
+        line.pack()
+        line = _frame(app, body, True)
+        line.pack()
+        for text, bold in (("Move the slider above to ", False), ("Manual", True), (" or ", False),
+                           ("Auto", True), (" to enable planter management.", False)):
+            part = app.label(line, text)
+            part.configure(font=("Helvetica", -17, "bold") if bold else ("Helvetica", -17), fg=WEB_DIM)
+            part.pack(side="left")
+        # The web pause-circle icon: 64px, stroke 2/24, text color at 50% opacity.
+        icon = tk.Canvas(body, width=64, height=64, bg=app.palette["surface"], highlightthickness=0, bd=0)
+        icon.pack(pady=(32, 6))
+        icon.create_oval(5.3, 5.3, 58.7, 58.7, outline="#7f7f7f", width=5.3)
+        for x in (26.7, 37.3):
+            icon.create_line(x, 24, x, 40, fill="#7f7f7f", width=5.3, capstyle="round")
 
     def manual():
         body = app.card(content, "Manual Planters")
         harvest_controls(body, False)
+        body = _planter_card(app, content, "Planter Cycles",
+                             "The macro can place and collect up to 3 planters at once each cycle. "
+                             "Setting a field or planter as 'none' will make the macro ignore that slot")
+        labels = (("Planters:", ""), ("Fields:", ""),
+                  ("Gather in Planter Field:", "The field's gather settings match\nthose in the gather tab"),
+                  ("Glitter:", "Use Glitter when the placing a planter.\nSpeeds up planter growth by 25%"))
         for cycle in range(1, 6):
-            body = app.card(content, "Cycle {}".format(cycle),
-                            "Up to 3 planters per cycle. A field or planter set to None disables that slot.")
-            row = _frame(app, body, True)
-            row.pack(fill="x")
+            heading = app.label(body, "Cycle {}".format(cycle))
+            heading.configure(font=("Helvetica", -16))
+            heading.pack(anchor="w", pady=(20 if cycle > 1 else 8, 28))
+            grid = _frame(app, body, True)
+            grid.pack(fill="x")
+            grid.columnconfigure(0, minsize=284)
+            for row, (title, desc) in enumerate(labels):
+                cell = _frame(app, grid, True)
+                cell.grid(row=row, column=0, sticky="nw", padx=(3, 0))
+                label = app.label(cell, title)
+                label.configure(font=("Helvetica", -14))
+                label.pack(anchor="w", pady=(6, 0) if row < 2 else 0)
+                if desc:
+                    label = app.label(cell, desc)
+                    label.configure(font=("Helvetica", -14), fg=WEB_DIM)
+                    label.pack(anchor="w")
             for slot in range(1, 4):
-                column = _frame(app, row, True)
-                column.grid(row=0, column=slot - 1, sticky="nsew", padx=6)
-                row.columnconfigure(slot - 1, weight=1, uniform="slots")
-                app.label(column, "Slot {}".format(slot)).pack(anchor="w")
-                key = "cycle{}_{}_planter".format(cycle, slot)
-                _control(app, column, key, "Planter", "dropdown", choices=_choices(PLANTER_ICONS),
-                         onchange=lambda value, key=key: changed_planter(key, value, False))
-                _control(app, column, "cycle{}_{}_field".format(cycle, slot), "Field", "dropdown", choices=_choices(FIELD_NECTAR_ICONS))
-                _control(app, column, "cycle{}_{}_gather".format(cycle, slot), "Gather in Planter Field", desc="Uses this field's Gather settings.")
-                _control(app, column, "cycle{}_{}_glitter".format(cycle, slot), "Glitter", desc="Use on placement to speed growth by 25%.")
-        hotbar[0] = app.card(content, "Selected Planters", "Map selected planters to hotbar slots. Slot 0 uses inventory search.")
+                key = "cycle{}_{}_".format(cycle, slot)
+                controls = (
+                    _inline_control(app, grid, key + "planter", "dropdown", _choices(PLANTER_ICONS),
+                                    onchange=lambda value, key=key + "planter": changed_planter(key, value, False)),
+                    _inline_control(app, grid, key + "field", "dropdown", _choices(FIELD_NECTAR_ICONS)),
+                    _inline_control(app, grid, key + "gather"),
+                    _inline_control(app, grid, key + "glitter"))
+                for row, control in enumerate(controls):
+                    control.widget.grid(row=row, column=slot, sticky="nw", padx=(0, 30), pady=(0, 13 if row < 2 else 6))
+        body = _planter_card(app, content, "Selected Planters", "Map selected planters to hotbar slots. Slot 0 uses inventory search.")
+        hotbar[0] = _frame(app, body, True)
+        hotbar[0].pack(fill="x")
         render_hotbar(False)
 
     def auto():
-        body = app.card(content, "Auto Planters / Planter+")
+        body = app.card(content, "Auto Planters/Planter+")
         harvest_controls(body, True)
 
         def change_preset(value):
@@ -441,71 +593,115 @@ def build_planters(app, parent):
                 app.save(key, setting)
             app.refresh()
 
-        _control(app, body, "auto_preset", "Presets", "dropdown", choices=[dict(label=name.title(), value=name) for name in ("blue", "red", "white", "custom")],
-                 onchange=change_preset)
+        _control(app, body, "auto_preset", "Presets", "dropdown", "Recommended nectar priority and field settings based on hive color",
+                 choices=[dict(label=name.title(), value=name) for name in ("blue", "red", "white", "custom")], onchange=change_preset)
+
         def save_gather(value):
             if app.action("setAutoPlanterGather", bool(value)) is False:
                 app.status("Could not save Auto Planter gather flag.")
 
         data = app.action("getAutoPlanterData")
         _control(app, body, "auto_planters_gather", "Gather in Planter Fields",
-            desc="Gather immediately after placement while the planter grows.", scope="local",
-            value=bool(data.get("gather", False)) if isinstance(data, dict) else False,
+            desc="When enabled, the macro will gather the planter's field immediately after placement so it collects while the planter grows.",
+            scope="local", value=bool(data.get("gather", False)) if isinstance(data, dict) else False,
             onchange=save_gather)
-        body = app.card(content, "Nectar Priority", "Higher entries have greater priority. Maintain each nectar above its minimum percentage.")
+
+        body = _planter_card(app, content, "Nectar Priority",
+                             "The macro will aim to maintain nectars above the min%. The higher up a nectar is, the greater its priority")
         for index in range(5):
-            _control(app, body, "auto_priority_{}_nectar".format(index), "Priority {}".format(index + 1), "dropdown", choices=_choices({nectar: nectar for nectar in NECTARS}))
-            _control(app, body, "auto_priority_{}_min".format(index), "Minimum %", "textbox", numeric="int", limit=3)
-        _buttons(app, body, [("Nectar Guide", lambda: app.open_image("../../webapp/assets/cheatsheet/nectar.png"))])
-        restrictions = app.card(content, "Planters Allowed & Restrictions", "Restrict which fields each enabled planter can use.")
-        for planter in PLANTER_ICONS:
+            # The web row is a flex row with 5% right padding and the min% box flush right.
+            line = _frame(app, body, True)
+            line.pack(fill="x", pady=(30 if index else 18, 21 if index == 4 else 0))
+            _inline_control(app, line, "auto_priority_{}_nectar".format(index), "dropdown",
+                            _choices({nectar: nectar for nectar in NECTARS})).widget.pack(side="left", anchor="n")
+            row = _bare(_control(app, line, "auto_priority_{}_min".format(index), "", "textbox", numeric="int", limit=3))
+            row.pack_configure(side="right", fill="none", anchor="n")
+            line.bind("<Configure>", lambda event, row=row: row.pack_configure(padx=(0, round(event.width * .05))))
+        guide(body, "nectar.png", 500)
+
+        restrictions = _planter_card(app, content, "Planters Allowed & Restrictions",
+                                     "Restrict which fields each planter can be placed in when using Auto Planters.")
+        for planter, icon in PLANTER_ICONS.items():
             if planter == "none":
                 continue
-            section = _frame(app, restrictions, True)
-            section.pack(fill="x", pady=6)
-            _control(app, section, "auto_planter_" + planter, planter.replace("_", " ").title(),
-                     onchange=lambda value, key="auto_planter_" + planter: changed_planter(key, bool(value), True))
+            enable_key = "auto_planter_" + planter
+            outline = widgets.Card(restrictions, app.palette, radius=6, padding=3)
+            outline.pack(fill="x", pady=(0, 4))
+            section = outline.body
+            header = _frame(app, section, True)
+            header.configure(cursor="hand2")
+            header.pack(fill="x")
             fields = _frame(app, section, True)
-            controls = []
+            keys = []
             for field in FIELD_NECTAR_ICONS:
                 if field == "none":
                     continue
                 key = "auto_planter_{}_field_{}".format(planter, field)
                 if key not in app.settings:
                     app.save(key, True)
-                controls.append((key, field))
-            summary = app.label(section, "", dim=True)
-            summary.pack(anchor="w")
+                keys.append((key, field))
+            summary = app.label(header, "", dim=True)
+            summary.configure(font=("Helvetica", -14), fg="#6b7280")
+            summary.pack(side="right")
 
-            def update_summary(summary=summary, controls=controls):
-                count = sum(bool(app.settings.get(key)) for key, _ in controls)
+            def update_summary(outline=outline, summary=summary, keys=keys, enable_key=enable_key):
+                count = sum(bool(app.settings.get(key)) for key, _ in keys)
                 summary.configure(text="Allowed fields: {}".format(count))
+                # The web outlines enabled planters in rgba(96,165,250,.25).
+                outline.set_border("#2f4055" if app.settings.get(enable_key) else app.palette["surface"])
+
+            def change_planter(value, key=enable_key, update_summary=update_summary):
+                changed_planter(key, bool(value), True)
+                update_summary()
 
             def change_field(key, value, update_summary=update_summary):
                 app.save(key, bool(value))
                 update_summary()
 
-            for key, field in controls:
-                _control(app, fields, key, field.replace("_", " ").title(),
-                         onchange=lambda value, key=key, change_field=change_field: change_field(key, value))
+            _inline_control(app, header, enable_key, onchange=change_planter).widget.pack(side="left")
+            name = app.label(header, " " + planter.replace("_", " ").title())
+            name.configure(font=("Helvetica", -15), image=app.image(_icon(icon), (18, 18)), compound="left", padx=0)
+            name.pack(side="left", padx=(8, 0))
+            for column in range(4):
+                fields.columnconfigure(column, minsize=220)
+            for index, (key, field) in enumerate(keys):
+                cell = _frame(app, fields, True)
+                cell.grid(row=index // 4, column=index % 4, sticky="ew", padx=(0, 10), pady=(0, 10))
+                _inline_control(app, cell, key, onchange=lambda value, key=key, change_field=change_field: change_field(key, value)).widget.pack(side="right")
+                label = app.label(cell, field.replace("_", " ").title())
+                label.configure(font=("Helvetica", -15), image=app.image(_icon(FIELD_NECTAR_ICONS[field]), (18, 18)), compound="right")
+                label.pack(side="left")
 
-            def toggle(fields=fields):
+            def toggle(event=None, fields=fields):
                 if fields.winfo_manager():
                     fields.pack_forget()
                 else:
-                    fields.pack(fill="x", pady=6)
+                    fields.pack(fill="x", pady=(12, 0))
 
-            app.button(section, "Show / Hide Allowed Fields", toggle).pack(anchor="w")
+            for widget in (header, name, summary):
+                widget.bind("<Button-1>", toggle)
             summaries.append(update_summary)
             update_summary()
-        body = app.card(content, "Allowed Fields", "Fields the macro can plant in.")
-        for field in FIELD_NECTAR_ICONS:
-            if field != "none":
-                _control(app, body, "auto_field_" + field, field.replace("_", " ").title())
-        hotbar[0] = app.card(content, "Selected Planters", "Map enabled planters to hotbar slots. Slot 0 uses inventory search.")
+
+        body = _planter_card(app, content, "Allowed Fields", "Fields the macro can plant in")
+        for field, nectar in FIELD_NECTAR_ICONS.items():
+            if field == "none":
+                continue
+            row = _frame(app, body, True)
+            row.pack(fill="x", pady=(0, 24))
+            checkbox = _inline_control(app, row, "auto_field_" + field).widget
+            checkbox.pack(side="right", anchor="n", pady=(10, 0))
+            row.bind("<Configure>", lambda event, checkbox=checkbox: checkbox.pack_configure(padx=(0, round(event.width * .10))))
+            label = app.label(row, field.replace("_", " ").title())
+            label.configure(font=("Helvetica", -15), image=app.image(_icon(nectar), (18, 18)), compound="right")
+            label.pack(side="left", anchor="n")
+
+        body = _planter_card(app, content, "Selected Planters", "Map enabled planters to hotbar slots. Slot 0 uses inventory search.")
+        hotbar[0] = _frame(app, body, True)
+        hotbar[0].pack(fill="x")
         render_hotbar(True)
-        body = app.card(content, "Wax from Planters", "Reference guide for wax drops from different planters.")
-        _buttons(app, body, [("Wax Guide", lambda: app.open_image("../../webapp/assets/cheatsheet/planters.png"))])
+        body = _planter_card(app, content, "Wax from Planters", "Reference guide for wax drops from different planters")
+        guide(body, "planters.png", 600)
 
     rendered_mode = [None]
     def render(value):
@@ -528,51 +724,230 @@ def build_planters(app, parent):
         elif mode == 2:
             auto()
         else:
-            app.card(content, "Planters are Off", "The macro will not harvest or plant any planters. Select Manual or Auto to enable planter management.")
+            off()
 
     def change_mode(value):
         app.save("planters_mode", calc.parse_int(value))
         render(value)
 
-    _control(app, mode_body, "planters_mode", "Mode", "dropdown", numeric="int",
-             choices=[dict(label=label, value=value) for value, label in enumerate(("Off", "Manual", "Auto"))], onchange=change_mode)
+    mode = _mode_slider(app, page, change_mode)
+    mode.widget.pack(anchor="e", padx=(0, 14), pady=(25, 65))
+    app.controls["planters_mode"] = mode
+    app.control_groups.setdefault("planters_mode", []).append(mode)
+    content = _frame(app, page)
+    content.pack(fill="both", expand=True)
     render(app.settings["planters_mode"])
     app.refresh_planters = lambda: render(app.settings["planters_mode"])
-    _buttons(app, page, [("Export Settings", lambda: _export_planters(app)),
-                         ("Import Settings", lambda: _import_planters(app))])
+    actions = _frame(app, page)
+    actions.pack(pady=(5, 20))
+    for text, command in (("Export Settings", lambda: _export_planters(app)), ("Import Settings", lambda: _import_planters(app))):
+        # The web .import-export-button: tinted accent fill, main text color, radius 8.
+        button = app.button(actions, text, command)
+        button.fill, button.foreground, button.radius = app.palette["selected"], app.palette["text"], 8
+        button.configure(height=32)
+        button.pack(side="left", padx=5)
     return page
 
 
-def _tool_hotkeys(app, body, start_key, default_start="Not set"):
-    app.label(body, "Start hotkey: {}. Stop hotkey: {}. Change these in Config.".format(
-        app.settings.get(start_key) or default_start,
-        app.settings.get("stop_keybind") or "F3"), dim=True).pack(anchor="w", pady=8)
+# The web tools draw these boxes with translucent white over the surface color.
+TOOL_BOX = dict(surface="#272727", border="#2e2e2e")
+WARNING_BOX = dict(surface="#332424", border="#a94545")
 
 
-def _tool_status(app, body, getter, start_action, stop_action, rows):
-    """Poll an existing runner; cancel the Tk callback when its page is destroyed."""
-    labels = [(app.label(body, ""), formatter) for formatter in rows]
-    for label, _ in labels:
-        label.pack(anchor="w", pady=3)
-    buttons = _buttons(app, body, [])
+def _box(app, parent, colors, radius=10, padding=16):
+    """A rounded bordered box; its children go in .body."""
+    return widgets.Card(parent, dict(app.palette, **colors), radius=radius, padding=padding)
 
+
+def _text(app, parent, text, size=-15, dim=True, pady=0, **options):
+    label = app.label(parent, text, dim)
+    label.configure(font=("Helvetica", size), **options)
+    label.pack(fill="x", pady=pady)
+    label.bind("<Configure>", lambda event: label.configure(wraplength=max(1, event.width)))
+    return label
+
+
+def _rich(app, parent, parts, size=-15, dim=True, pady=0):
+    """Wrapped text whose odd-indexed parts are bold, like the web's hotkey spans."""
+    flow = tk.Frame(parent, bg=parent.cget("bg"), height=1)
+    flow.pack(fill="x", pady=pady)
+    tokens, space = [], False
+    for index, part in enumerate(parts):
+        for match in re.finditer(r"(\s*)(\S+)", part):
+            spaced = space or bool(match.group(1))
+            space = False
+            if tokens and not spaced:
+                # Punctuation joins the word before it, so no gap opens between labels.
+                tokens[-1][0] += match.group(2)
+            else:
+                tokens.append([match.group(2), index % 2, spaced])
+        space = space or part[-1:].isspace()
+    words = []
+    for text, bold, spaced in tokens:
+        label = app.label(flow, text, dim)
+        label.configure(font=("Helvetica", size, "bold") if bold else ("Helvetica", size))
+        words.append((label, spaced))
+
+    def arrange(event):
+        gap = tkfont.Font(font=("Helvetica", size)).measure(" ")
+        line = max(label.winfo_reqheight() for label, _ in words)
+        x = y = 0
+        for label, spaced in words:
+            width = label.winfo_reqwidth()
+            if spaced and x and x + gap + width > event.width:
+                x, y = 0, y + line
+            elif spaced and x:
+                x += gap
+            label.place(x=x, y=y)
+            x += width
+        if int(flow.cget("height")) != y + line:
+            flow.configure(height=y + line)
+
+    flow.bind("<Configure>", arrange)
+    return flow
+
+
+def _bare(control):
+    """Drop an add_control row's title column and right alignment, keeping the control."""
+    right = control.widget.master
+    row = right.master
+    row.unbind("<Configure>")
+    for widget in row.grid_slaves(column=0):
+        widget.grid_remove()
+    row.grid_columnconfigure(0, weight=0)
+    row.grid_columnconfigure(1, weight=1)
+    right.grid_configure(sticky="ew", padx=0, pady=0)
+    row.pack_configure(pady=0)
+    return row
+
+
+def _grid(app, parent, weights, pady=0, bg=None):
+    """Grid columns with the web's 0.75rem gap; cells go in even columns."""
+    grid = tk.Frame(parent, bg=bg or parent.cget("bg"))
+    grid.pack(fill="x", pady=pady)
+    for index, weight in enumerate(weights):
+        grid.grid_columnconfigure(index * 2, weight=weight, uniform="cells")
+        if index:
+            grid.grid_columnconfigure(index * 2 - 1, minsize=12)
+    return grid
+
+
+def _group(app, grid, column, title):
+    """A web .bond-calc-input-group: a label above a control that fills the column."""
+    cell = _frame(app, grid, True)
+    cell.grid(row=0, column=column * 2, sticky="ew")
+    label = app.label(cell, title)
+    label.configure(font=("Helvetica", -15))
+    label.pack(anchor="w", pady=(0, 6))
+    return cell
+
+
+def _filled(control):
+    _bare(control)
+    control.widget.pack_configure(fill="x", expand=True)
+    return control
+
+
+def _summary(app, grid, column, title):
+    box = _box(app, grid, dict(surface=app.palette["hover"]), 8, 11)
+    box.grid(row=0, column=column * 2, sticky="nsew")
+    name = app.label(box.body, title, dim=True)
+    name.configure(font=("Helvetica", -13))
+    name.pack(anchor="w")
+    value = app.label(box.body, "")
+    value.configure(font=("Helvetica", -16, "bold"))
+    value.pack(anchor="w", pady=(4, 0))
+    return name, value
+
+
+def _table(app, parent, headings):
+    """The web .bond-calc-table: a shaded header and a rule under every row."""
+    table = _frame(app, parent, True)
+    table.pack(fill="x", pady=(16, 0))
+    body = _frame(app, table, True)
+
+    def cell(row, column, text, header=False):
+        label = tk.Label(body, text=text, anchor="w", padx=8, pady=8, bd=0,
+                         font=("Helvetica", -14, "bold") if header else ("Helvetica", -14),
+                         bg=app.palette["hover" if header else "surface"],
+                         fg=app.palette["text" if header else "dim"])
+        label.grid(row=row * 2, column=column, sticky="nsew")
+        return label
+
+    def render(rows):
+        for widget in body.winfo_children():
+            if widget not in labels:
+                widget.destroy()
+        for index, values in enumerate(rows, 1):
+            for column, text in enumerate(values):
+                cell(index, column, text)
+        for index in range(len(rows) + 1):
+            tk.Frame(body, bg=app.palette["border"], height=1).grid(
+                row=index * 2 + 1, column=0, columnspan=len(headings), sticky="ew")
+        # Like an auto-layout HTML table, spare width follows each column's widest text.
+        for column in range(len(headings)):
+            body.grid_columnconfigure(column, weight=max(len(str(values[column])) for values in [headings, *rows]) + 2)
+
+    labels = [cell(0, column, title, True) for column, title in enumerate(headings)]
+    body.pack(fill="x")
+    return table, labels, render
+
+
+def _tool_panel(app, parent, title, desc=""):
+    """The outer tool panel holding its titled section card, like the web nesting."""
+    panel = app.card(parent, "")
+    return panel, app.card(panel, title, desc)
+
+
+def _action_row(app, parent, title, desc):
+    """A settings row whose right side holds tool buttons, aligned like textbox rows."""
+    row = _frame(app, parent, True)
+    row.pack(fill="x", pady=(0, 16))
+    right = _frame(app, row, True)
+    right.pack(side="right", anchor="n", pady=6)
+    copy = _frame(app, row, True)
+    copy.pack(side="left", fill="x", expand=True)
+    _text(app, copy, title, dim=False)
+    _text(app, copy, desc, -13)
+    row.bind("<Configure>", lambda event: right.pack_configure(padx=(24, round(event.width * .05))))
+    return right
+
+
+def _form_row(app, parent, title, desc, pady):
+    """A web .boost-hotbar-form-row: copy on the left, its control flush right."""
+    row = tk.Frame(parent, bg=parent.cget("bg"))
+    row.pack(fill="x", pady=pady)
+    right = tk.Frame(row, bg=parent.cget("bg"))
+    right.pack(side="right", anchor="n")
+    copy = tk.Frame(row, bg=parent.cget("bg"))
+    copy.pack(side="left", fill="x", expand=True)
+    _text(app, copy, title, dim=False)
+    _text(app, copy, desc, -13, pady=(4, 0))
+    return right
+
+
+def _tool_status(app, body, getter, start_action, stop_action, rows, start_parent, stop_parent=None):
+    """Poll an existing runner; cancel the Tk callback when its page is destroyed.
+
+    rows pairs each status label with the formatter that fills it.
+    """
     def invoke(action):
         result = action()
         if isinstance(result, dict) and result.get("message"):
             app.status(result["message"])
         refresh()
 
-    start = app.button(buttons, "Start", lambda: invoke(start_action))
-    stop = app.button(buttons, "Stop", lambda: invoke(stop_action))
+    start = app.button(start_parent, "Start", lambda: invoke(start_action))
+    stop = app.button(stop_parent or start_parent, "Stop", lambda: invoke(stop_action))
     timer = [None]
     running = [False]
-    texts = [None] * len(labels)
+    texts = [None] * len(rows)
 
     def refresh():
         status = app.action(getter)
         if not isinstance(status, dict):
             return
-        for index, (label, formatter) in enumerate(labels):
+        for index, (label, formatter) in enumerate(rows):
             text = formatter(status)
             if text != texts[index]:
                 label.configure(text=text)
@@ -602,13 +977,19 @@ def _tool_status(app, body, getter, start_action, stop_action, rows):
     poll()
 
 
+def _hotkey(app, key, default="Not set"):
+    return app.settings.get(key) or default
+
+
 def _build_autoclicker(app, parent):
-    body = app.card(parent, "Auto Clicker", "Repeatedly left-clicks at a configurable interval.")
+    panel, body = _tool_panel(app, parent, "Auto Clicker", "Repeatedly left-clicks at a configurable interval")
     interval = _control(app, body, "autoclicker_interval_ms", "Click Interval (ms)", "textbox",
-                        "Lower values click faster.", scope="local", numeric="int", limit=4, value=100,
+                        "Time between clicks in milliseconds. Lower values click faster.",
+                        scope="local", numeric="int", limit=4, value=100,
                         onchange=lambda value: interval.set(max(10, calc.parse_int(value, 100))))
     delay = _control(app, body, "autoclicker_start_delay_seconds", "Start Delay (seconds)", "textbox",
-                     "Wait before clicking begins.", scope="local", numeric="int", limit=2, value=3,
+                     "Wait time before the auto clicker begins. Default is 3 seconds.",
+                     scope="local", numeric="int", limit=2, value=3,
                      onchange=lambda value: delay.set(min(10, max(0, calc.parse_int(value, 3)))))
 
     def start():
@@ -618,49 +999,130 @@ def _build_autoclicker(app, parent):
         delay.set(seconds)
         return app.action("startAutoClickerTool", milliseconds, seconds)
 
-    _tool_hotkeys(app, body, "autoclicker_keybind")
+    start_row = _action_row(app, body, "Start Auto Clicker", "Begins clicking after the configured start delay.")
+    stop_row = _action_row(app, body, "Stop Auto Clicker", "Stops all automatic clicking.")
     _tool_status(app, body, "getAutoClickerStatus", start,
-                 lambda: app.action("stopAutoClickerTool"),
-                 [lambda status: status.get("message") or "Ready"])
+                 lambda: app.action("stopAutoClickerTool"), [], start_row, stop_row)
+    box = _box(app, panel, TOOL_BOX)
+    box.pack(fill="x")
+    box = box.body
+    title = app.label(box, "Hotkeys")
+    title.configure(bg=box.cget("bg"), font=("Helvetica", -14, "bold"))
+    title.pack(anchor="w", pady=(0, 5))
+    _rich(app, box, ["Start hotkey: ", _hotkey(app, "autoclicker_keybind"),
+                     ". This tool stops with the macro stop hotkey: ", _hotkey(app, "stop_keybind", "F3"),
+                     ". You can change this in Config."], -14, dim=False)
 
 
 def _build_hotbar_buff(app, parent):
-    body = app.card(parent, "Hotbar Buff", "Runs this tool's hotbar timers while you play.")
-    _tool_hotkeys(app, body, "hotbar_buff_start_keybind", "F4")
+    palette = app.palette
+    panel, body = _tool_panel(app, parent, "Hotbar Buff")
+    _text(app, body, "Runs this tool's hotbar timers while you play.")
+    _rich(app, body, ["Start hotkey: ", _hotkey(app, "hotbar_buff_start_keybind", "F4"),
+                      ". Stop hotkey: ", _hotkey(app, "stop_keybind", "F3"), "."], pady=(12, 0))
+    buttons = _frame(app, body, True)
+    buttons.pack(fill="x", pady=(16, 0))
+    grid = _grid(app, body, (1, 1), pady=(16, 0))
+    state = _summary(app, grid, 0, "Status")[1]
+    last = _summary(app, grid, 1, "Last Slot")[1]
+    message = _text(app, body, "", pady=(16, 0))
     _tool_status(app, body, "getHotbarBuffStatus", lambda: app.action("startHotbarBuffTool"),
                  lambda: app.action("stopHotbarBuffTool"), [
-                     lambda status: "Status: {}".format(status.get("state") or "idle"),
-                     lambda status: "Last Slot: {}".format("Slot {}".format(status["last_slot"]) if status.get("last_slot") else "None"),
-                     lambda status: status.get("message") or "Ready"])
+                     (state, lambda status: status.get("state") or "idle"),
+                     (last, lambda status: "Slot {}".format(status["last_slot"]) if status.get("last_slot") else "None"),
+                     (message, lambda status: status.get("message") or "Ready")], buttons)
 
-    def slot_builder(slot, parent):
-        body = app.card(parent, "Slot {}".format(slot), "Enable this slot and set how often it should be pressed.")
+    strip = _frame(app, body, True)
+    strip.pack(anchor="w", pady=(12, 14))
+    holder = _frame(app, body, True)
+    holder.pack(fill="x")
+    # The web panel is white at 3% over the card.
+    fill = widgets.mix("#ffffff", palette["surface"], .03)
+    tiles, panels = [], []
+
+    def show(slot):
+        app.subtab_selection["activeHotbarBuffToolSlot"] = "slot{}".format(slot)
+        for index, (number, canvas) in enumerate(tiles, 1):
+            number.configure(fg=palette["accent"] if index == slot else palette["dim"])
+            widgets.draw_hotbar_slot(canvas, palette, index == slot)
+            panels[index - 1].pack_forget()
+        panels[slot - 1].pack(fill="x")
+
+    for slot in range(1, 8):
+        column = _frame(app, strip, True)
+        column.pack(side="left")
+        number = tk.Label(column, text="[{}]".format(slot), bg=palette["surface"], font=("Helvetica", -13, "bold"))
+        number.pack()
+        canvas = tk.Canvas(column, width=80, height=82, bg=palette["surface"], highlightthickness=0,
+                           bd=0, cursor="hand2")
+        canvas.pack()
+        canvas.bind("<ButtonRelease-1>", lambda event, slot=slot: show(slot))
+        tiles.append((number, canvas))
+
+        slot_panel = widgets.Card(holder, dict(palette, surface=fill), radius=18, padding=20)
+        head = tk.Frame(slot_panel.body, bg=fill)
+        head.pack(fill="x", pady=(0, 16))
+        icon = tk.Canvas(head, width=52, height=52, bg=fill, highlightthickness=0, bd=0)
+        widgets.draw_hotbar_icon(icon, fill)
+        icon.pack(side="left", padx=(0, 16))
+        copy = tk.Frame(head, bg=fill)
+        copy.pack(side="left", fill="x", expand=True)
+        _text(app, copy, "Slot {}".format(slot), dim=False).configure(font=("Helvetica", -15, "bold"))
+        _text(app, copy, "Enable this slot and set how often it should be pressed.", -14, pady=(4, 0))
         prefix = "hotbar_buff_tool_slot{}_".format(slot)
-        _control(app, body, prefix + "enabled", "Enabled")
-        _control(app, body, prefix + "use_every_value", "Use Every", "textbox", numeric="float")
-        _control(app, body, prefix + "use_every_format", "Units", "dropdown",
-                 choices=[dict(label="Secs", value="secs"), dict(label="Mins", value="mins")])
-
-    app.subtabs(body, [("slot{}".format(slot), "[{}]".format(slot),
-                        lambda parent, slot=slot: slot_builder(slot, parent)) for slot in range(1, 8)],
-                "activeHotbarBuffToolSlot")
+        _bare(_control(app, _form_row(app, slot_panel.body, "Enabled", "Allow the tool to press this hotbar slot.", 0),
+                       prefix + "enabled", ""))
+        every = _control(app, _form_row(app, slot_panel.body, "Use Every", "Set the cooldown for repeated use of this slot.",
+                                        (16, 0)), prefix + "use_every_value", "", "textbox", numeric="float")
+        _bare(every)
+        every.widget.configure(width=16)
+        units = _control(app, every.widget.master, prefix + "use_every_format", "", "dropdown",
+                         choices=[dict(label="Secs", value="secs"), dict(label="Mins", value="mins")])
+        _bare(units).pack_configure(side="left", fill="none", padx=(8, 0))
+        units.widget.button.configure(width=96)
+        panels.append(slot_panel)
+    selected = str(app.subtab_selection.get("activeHotbarBuffToolSlot", "slot1"))[4:]
+    show(int(selected) if selected in [str(slot) for slot in range(1, 8)] else 1)
 
 
 def _build_auto_gifted(app, parent):
-    body = app.card(parent, "Auto Gifted Basic Bee Tool (BETA)",
-                    "Focuses Roblox, waits for the capture delay, captures your mouse position as the bee slot, "
-                    "then alternates Basic Egg and Royal Jelly until a Gifted Basic Bee or a paused result.")
-    app.label(body, "Stop the main macro first, keep Auto-Jelly disabled in-game, and keep Roblox visible. "
-                   "Watch this beta tool while it runs. OCR may misread results.", dim=True).pack(anchor="w", pady=8)
-    _tool_hotkeys(app, body, "auto_gifted_basic_bee_start_keybind")
-    delay = _control(app, body, "auto-gifted-basic-bee-delay", "Capture Delay (seconds)", "textbox",
+    palette = app.palette
+    panel, body = _tool_panel(app, parent, "Auto Gifted Basic Bee Tool (BETA)")
+    _text(app, body, "This tool is in early beta and may be buggy. It is recommended to watch the tool run to make sure "
+                     "it doesn't do anything unexpected. If you encounter any issues, please report them on the discord server.")
+    _text(app, body, "When you press start, the tool focuses Roblox, waits a short countdown (set below, default of 3 seconds), "
+                     "captures your current mouse position as the bee slot, then alternates Basic Egg, Royal Jelly, Basic Egg, "
+                     "and repeats until it finds a Gifted Basic Bee or a paused result.", pady=(28, 0))
+    _rich(app, body, ["Start this tool with its configured hotkey: ", _hotkey(app, "auto_gifted_basic_bee_start_keybind"),
+                      ". To stop this tool, use the macro stop hotkey: ", _hotkey(app, "stop_keybind", "F3"),
+                      ". You can change this in Config."], pady=(8, 0))
+    grid = _grid(app, body, (1, 1), pady=(16, 0))
+    cell = _frame(app, grid, True)
+    cell.grid(row=0, column=0, sticky="w")
+    label = app.label(cell, "Capture Delay (seconds)")
+    label.configure(font=("Helvetica", -15))
+    label.pack(side="left", padx=(0, 4))
+    delay = _control(app, cell, "auto-gifted-basic-bee-delay", "", "textbox",
                      scope="local", numeric="int", value=3,
                      onchange=lambda value: delay.set(min(10, max(1, calc.parse_int(value, 3)))))
+    _bare(delay).pack_configure(side="left", fill="none")
+    delay.widget.configure(width=16)
+    buttons = _frame(app, grid, True)
+    buttons.grid(row=0, column=2, sticky="w")
+
+    _text(app, body, "Pause On Result", dim=False, pady=(16, 8))
+    choices = _grid(app, body, (1, 1, 1))
     pause = {}
-    for name, title, default in (("gifted_other", "Gifted Non-Basic", True),
-                                 ("legendary", "Legendary", False), ("mythic", "Mythic", True)):
-        pause[name] = _control(app, body, "auto-gifted-basic-bee-pause-" + name.replace("_", "-"),
-                               "Pause On " + title, scope="local", value=default)
+    for column, (name, title, default) in enumerate((("gifted_other", "Gifted Non-Basic", True),
+                                                     ("legendary", "Legendary", False), ("mythic", "Mythic", True))):
+        cell = _frame(app, choices, True)
+        cell.grid(row=0, column=column * 2, sticky="w")
+        pause[name] = _control(app, cell, "auto-gifted-basic-bee-pause-" + name.replace("_", "-"),
+                               "", scope="local", value=default)
+        _bare(pause[name]).pack_configure(side="left", fill="none")
+        label = app.label(cell, title)
+        label.configure(font=("Helvetica", -15))
+        label.pack(side="left")
 
     def start():
         seconds = min(10, max(1, calc.parse_int(delay.get(), 3)))
@@ -669,16 +1131,41 @@ def _build_auto_gifted(app, parent):
         settings.update({"pause_on_" + name: bool(control.get()) for name, control in pause.items()})
         return app.action("startAutoGiftedBasicBeeTool", seconds, settings)
 
+    box = _box(app, body, TOOL_BOX)
+    box.pack(fill="x", pady=(16, 0))
+    box = box.body
+    stats = _grid(app, box, (1, 1, 1, 1), bg=box.cget("bg"))
+    values = []
+    for index, title in enumerate(("Status", "Bee Slot", "Basic Eggs", "Royal Jellies", "Total Rolls",
+                                   "Message", "Last OCR Read")):
+        cell = tk.Frame(stats if index < 5 else box, bg=box.cget("bg"))
+        if index < 5:
+            cell.grid(row=index // 4 * 2, column=index % 4 * 2, sticky="nw")
+            stats.grid_rowconfigure(1, minsize=12)
+        else:
+            cell.pack(fill="x", pady=(16, 0))
+        _text(app, cell, title, dim=False).configure(bg=box.cget("bg"))
+        value = _text(app, cell, "", -14, dim=index == 6, pady=(4, 0), bg=box.cget("bg"))
+        if index == 0:
+            value.configure(font=("Helvetica", -14, "bold"))
+        values.append(value)
     _tool_status(app, body, "getAutoGiftedBasicBeeStatus", start,
-                 lambda: app.action("stopAutoGiftedBasicBeeTool"), [
-                     lambda status: "Status: {}".format(status.get("state") or "idle"),
-                     lambda status: "Bee Slot: {}".format("{}, {}".format(status["bee_slot_x"], status["bee_slot_y"])
-                         if status.get("bee_slot_x") is not None and status.get("bee_slot_y") is not None else "Not captured"),
-                     lambda status: "Basic Eggs: {}".format(status.get("basic_eggs_used", 0)),
-                     lambda status: "Royal Jellies: {}".format(status.get("royal_jellies_used", 0)),
-                     lambda status: "Total Rolls: {}".format(status.get("rolls", 0)),
-                     lambda status: "Message: {}".format(status.get("message") or "Ready"),
-                     lambda status: "Last OCR Read: {}".format(status.get("last_detected_text") or "None")])
+                 lambda: app.action("stopAutoGiftedBasicBeeTool"), list(zip(values, [
+                     lambda status: status.get("state") or "idle",
+                     lambda status: "{}, {}".format(status["bee_slot_x"], status["bee_slot_y"])
+                         if status.get("bee_slot_x") is not None and status.get("bee_slot_y") is not None else "Not captured",
+                     lambda status: str(status.get("basic_eggs_used", 0)),
+                     lambda status: str(status.get("royal_jellies_used", 0)),
+                     lambda status: str(status.get("rolls", 0)),
+                     lambda status: status.get("message") or "Ready",
+                     lambda status: status.get("last_detected_text") or "None"])), buttons)
+    _text(app, body, "Requirements: stop the main macro first, keep Auto-Jelly disabled in-game, and make sure "
+                     "Roblox is visible before starting.", -14, pady=(16, 0))
+    _text(app, body, "Please note: this is beta, it may mess up, it is not garunteed to work, please watch it run and "
+                     "report any issues you see on the discord. The tool relies on OCR to read the result of each roll, "
+                     "so it may misread sometimes, especially if your game resolution is low or if you have a lot of "
+                     "screen clutter. If it misreads a result, it may do extra rolls or stop when it shouldn't, so it's "
+                     "important to keep an eye on it while it's running.", -14, pady=(16, 0), fg="#c75b74")
 
 
 def _watch_calculator(body, controls, update):
@@ -704,68 +1191,101 @@ def _watch_calculator(body, controls, update):
     changed()
 
 
+def _calculator_warning(app, body, before):
+    box = _box(app, body, WARNING_BOX, 8, 8)
+    warning = tk.Label(box.body, font=("Helvetica", -14), anchor="w", justify="left", padx=4, pady=0,
+                       bg=WARNING_BOX["surface"], fg="#ffb3b3")
+    warning.pack(fill="x")
+
+    def show(text):
+        warning.configure(text=text)
+        if text:
+            box.pack(fill="x", pady=(13, 0), before=before)
+        else:
+            box.pack_forget()
+    return show
+
+
 def _build_bond_calculator(app, parent):
-    body = app.card(parent, "Bond/Treat Calculator", "Calculate treat count and honey cost between bond levels. "
-                    "Find your Bond from Treats % in your character stats in BSS.")
-    start = _control(app, body, "bond-calc-start-level", "Initial Level", "dropdown", scope="local", value=1,
-                     choices=[dict(label=str(level), value=level) for level in range(1, 25)], numeric="int")
-    end = _control(app, body, "bond-calc-end-level", "Final Level", "dropdown", scope="local", value=25,
-                   choices=[dict(label=str(level), value=level) for level in range(2, 26)], numeric="int")
-    bonus = _control(app, body, "bond-calc-bonus", "Bond from Treats (%)", "textbox", scope="local", value=20, numeric="float")
-    bees = _control(app, body, "bond-calc-bee-count", "# of Bees", "textbox", scope="local", value=50, numeric="int")
-    warning = app.label(body, "")
-    warning.pack(anchor="w")
-    totals = [app.label(body, "") for _ in range(4)]
-    for label in totals:
-        label.pack(anchor="w", pady=3)
-    tree = _tree(app, body, [("level", "Level"), ("bond", "Bond Required"), ("treats", "Treats Needed"),
-                            ("one", "Cost per Bee"), ("bees", "Cost for 50 Bees")])
+    panel, body = _tool_panel(app, parent, "Bond/Treat Calculator")
+    _text(app, body, "Calculate treat count and honey cost between bond levels using your Bond from Treats stat.", -16, dim=False)
+    _text(app, body, "You can find your Bond from Treats % in your character stats in BSS.", pady=(8, 0))
+    grid = _grid(app, body, (1, 1, 1, 1), pady=(16, 0))
+    start = _filled(_control(app, _group(app, grid, 0, "Initial Level"), "bond-calc-start-level", "", "dropdown",
+                             scope="local", value=1, numeric="int",
+                             choices=[dict(label=str(level), value=level) for level in range(1, 25)]))
+    end = _filled(_control(app, _group(app, grid, 1, "Final Level"), "bond-calc-end-level", "", "dropdown",
+                           scope="local", value=25, numeric="int",
+                           choices=[dict(label=str(level), value=level) for level in range(2, 26)]))
+    bonus = _filled(_control(app, _group(app, grid, 2, "Bond from Treats (%)"), "bond-calc-bonus", "", "textbox",
+                             scope="local", value=20, numeric="float"))
+    bees = _filled(_control(app, _group(app, grid, 3, "# of Bees"), "bond-calc-bee-count", "", "textbox",
+                            scope="local", value=50, numeric="int"))
+    summary = _grid(app, body, (1, 1, 1, 1), pady=(16, 0))
+    totals = [_summary(app, summary, column, "") for column in range(4)]
+    warning = _calculator_warning(app, body, summary)
+    _, headings, render = _table(app, body, ("Level", "Bond Required", "Treats Needed", "Cost per Bee", "Cost for 50 Bees"))
 
     def update():
         result = calc.calculate_bond(start.get(), end.get(), bonus.get(), bees.get())
-        bonus.set(result["bonus_percent"])
+        value = result["bonus_percent"]
+        # JavaScript writes whole numbers back without a decimal point.
+        bonus.set(int(value) if value == int(value) else value)
         bees.set(result["bee_count"])
         count = result["bee_count"]
         bee_label = "{} Bee{}".format(count, "" if count == 1 else "s")
-        warning.configure(text=result["warning"])
+        warning(result["warning"])
         labels = ("Total Bond", "Treats Needed ({})".format(bee_label), "Cost (1 Bee)", "Cost ({})".format(bee_label))
-        for label, title, key in zip(totals, labels, ("total_bond", "total_treats", "cost_one", "cost_bees")):
-            label.configure(text="{}: {}".format(title, calc.format_compact_honey(result[key])))
-        tree.heading("bees", text="Cost for " + bee_label)
-        tree.delete(*tree.get_children())
-        for row in result["rows"]:
-            tree.insert("", "end", values=(row["label"], calc.format_whole_number(row["bond"]),
-                calc.format_whole_number(row["treats"]), calc.format_compact_honey(row["costPerBee"]),
-                calc.format_compact_honey(row["costForBees"])))
+        for (name, total), title, key in zip(totals, labels, ("total_bond", "total_treats", "cost_one", "cost_bees")):
+            name.configure(text=title)
+            total.configure(text=calc.format_compact_honey(result[key]))
+        headings[-1].configure(text="Cost for " + bee_label)
+        render([(row["label"], calc.format_whole_number(row["bond"]), calc.format_whole_number(row["treats"]),
+                 calc.format_compact_honey(row["costPerBee"]), calc.format_compact_honey(row["costForBees"]))
+                for row in result["rows"]])
 
     _watch_calculator(body, [start, end, bonus, bees], update)
 
 
 def _build_ticket_calculator(app, parent):
-    body = app.card(parent, "Ticket Price Calculator", "Calculate honey costs for the Bee Swarm Simulator ticket shop. "
-                    "Enter the price of your next ticket to see common bundles.")
+    panel, body = _tool_panel(app, parent, "Ticket Price Calculator")
+    _text(app, body, "Calculate the honey cost of buying tickets from the Bee Swarm Simulator ticket shop.", -16, dim=False)
+    _text(app, body, "Enter the current price of your next ticket to see the cost for common ticket bundles.", pady=(8, 0))
     units = [dict(label=label, value=unit) for unit, label in calc.HONEY_UNITS]
-    price = _control(app, body, "ticket-calc-next-price", "Price of Next Ticket", "textbox", scope="local", value=100, numeric="float")
-    price_unit = _control(app, body, "ticket-calc-next-price-unit", "Price Units", "dropdown", scope="local", value=1000000, numeric="int", choices=units)
-    custom = _control(app, body, "ticket-calc-custom-amount", "Custom Amount", "textbox", scope="local", value=1, numeric="int")
-    budget = _control(app, body, "ticket-calc-budget", "Budget", "textbox", scope="local", value=0, numeric="float")
-    budget_unit = _control(app, body, "ticket-calc-budget-unit", "Budget Units", "dropdown", scope="local", value=1000000, numeric="int", choices=units)
-    warning = app.label(body, "")
-    warning.pack(anchor="w")
-    tree = _tree(app, body, [("tickets", "Tickets"), ("cost", "Cost")], height=6)
+    # The web grid settles at 284/220/284px; its number inputs keep their 168px default width.
+    grid = _grid(app, body, (284, 220, 284), pady=(16, 0))
+
+    def priced(column, title, key, value, unit_key):
+        line = _frame(app, _group(app, grid, column, title), True)
+        line.pack(fill="x")
+        amount = _control(app, line, key, "", "textbox", scope="local", value=value, numeric="float")
+        _bare(amount).pack_configure(side="left", fill="none")
+        amount.widget.configure(width=19)
+        unit = _control(app, line, unit_key, "", "dropdown", scope="local", value=1000000, numeric="int", choices=units)
+        _bare(unit).pack_configure(side="left", fill="none", padx=(8, 0))
+        unit.widget.button.configure(width=88)
+        return amount, unit
+
+    price, price_unit = priced(0, "Price of Next Ticket", "ticket-calc-next-price", 100, "ticket-calc-next-price-unit")
+    custom = _filled(_control(app, _group(app, grid, 1, "Custom Amount"), "ticket-calc-custom-amount", "", "textbox",
+                              scope="local", value=1, numeric="int"))
+    budget, budget_unit = priced(2, "Budget", "ticket-calc-budget", 0, "ticket-calc-budget-unit")
+    table, _, render = _table(app, body, ("Tickets", "Cost"))
+    warning = _calculator_warning(app, body, table)
 
     def update():
         result = calc.calculate_tickets(price.get(), price_unit.get(), custom.get(), budget.get(), budget_unit.get())
         custom.set(result["custom_amount"])
-        warning.configure(text=result["warning"])
-        tree.delete(*tree.get_children())
+        warning(result["warning"])
+        rows = []
         for amount, purchase in result["rows"]:
             label = "{} Tickets".format(calc.format_whole_number(amount))
             if amount == result["custom_amount"] and amount not in calc.TICKET_CALC_PRESETS:
                 label += " (Custom)"
-            tree.insert("", "end", values=(label, calc.format_compact_honey(purchase["totalCost"])))
-        tree.insert("", "end", values=("Max ({} Tickets)".format(calc.format_whole_number(result["budget"]["tickets"])),
-                                       calc.format_compact_honey(result["budget"]["totalCost"])))
+            rows.append((label, calc.format_compact_honey(purchase["totalCost"])))
+        rows.append(("Max ({} Tickets)".format(calc.format_whole_number(result["budget"]["tickets"])),
+                     calc.format_compact_honey(result["budget"]["totalCost"])))
+        render(rows)
 
     _watch_calculator(body, [price, price_unit, custom, budget, budget_unit], update)
 

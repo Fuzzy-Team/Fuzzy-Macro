@@ -36,7 +36,8 @@ CONTROLS.update({c["id"]: c for c in controls_in(CUSTOM)})
 
 
 def text_content(text):
-    text = re.sub(r"<br\s*/?>", "\n", text, flags=re.I)
+    # HTML drops the spaces around a line break.
+    text = re.sub(r"\s*<br\s*/?>\s*", "\n", text, flags=re.I)
     return html.unescape(re.sub(r"<[^>]*>", "", text))
 
 

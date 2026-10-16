@@ -3414,7 +3414,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         try:
             # Read stream URL from file (use absolute path for reliability)
             import sys
-            src_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+            src_dir = os.path.join(settingsManager.getProjectRoot(), 'src')
             stream_url_file = os.path.join(src_dir, 'stream_url.txt')
             if os.path.exists(stream_url_file):
                 with open(stream_url_file, 'r') as f:
@@ -3445,7 +3445,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
             if action == "status":
                 stream_url = ""
-                src_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+                src_dir = os.path.join(settingsManager.getProjectRoot(), 'src')
                 stream_url_file = os.path.join(src_dir, "stream_url.txt")
                 if os.path.exists(stream_url_file):
                     with open(stream_url_file, "r") as f:
@@ -4118,7 +4118,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 return
 
             # Determine path to src and hotbar timings file (same as macro)
-            src_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+            src_dir = os.path.join(settingsManager.getProjectRoot(), 'src')
             timings_path = os.path.join(src_dir, 'data', 'user', 'hotbar_timings.txt')
 
             # Read existing timings or initialize

@@ -1,6 +1,7 @@
 """Home source parity and refresh contracts, without Tk or user settings I/O."""
 
 import ast
+import contextlib
 import copy
 import json
 from pathlib import Path
@@ -19,7 +20,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from modules.gui import app as native
 from modules.gui import configuration, editors, widgets
 from test_gui_app import Checkbox, Choice, FAKE_TK
-from test_gui_configuration import FAKE_TK as CONFIG_TK, Widget as ConfigWidget
+from test_gui_configuration import FAKE_TK as CONFIG_TK, Button as ConfigButton, Card as ConfigCard, Widget as ConfigWidget
 
 
 DEFAULTS = runpy.run_path(str(ROOT / "src/modules/misc/settings_defaults.py"))
@@ -88,6 +89,14 @@ class MemoryWidget(object):
     def columnconfigure(self, *args, **options):
         pass
 
+    grid_columnconfigure = grid_configure = pack_configure = columnconfigure
+
+    def unbind(self, event):
+        self.bindings.pop(event, None)
+
+    def grid_slaves(self, **options):
+        return []
+
 
 def control(parent, value):
     current = [value]
@@ -130,6 +139,33 @@ def make_app():
 
     app.add_control, app.save = add_control, save
     return app, stored
+
+
+class Drawing(MemoryWidget):
+    """A canvas stand-in that ignores drawing calls."""
+
+    def __getattr__(self, name):
+        return lambda *args, **options: None
+
+
+class MemoryCard(MemoryWidget):
+    """A rounded box stand-in whose children go in body."""
+
+    def __init__(self, master, colors, **options):
+        MemoryWidget.__init__(self, master)
+        self.body = MemoryWidget(self)
+
+    def set_border(self, color):
+        pass
+
+
+@contextlib.contextmanager
+def planter_widgets(app):
+    from test_gui_calculators import inline_control
+    app.image = Mock()
+    with patch.object(editors.tk, "Frame", MemoryWidget), patch.object(editors.tk, "Canvas", Drawing), \
+            patch.object(editors.widgets, "Card", MemoryCard), patch.object(editors, "_inline_control", inline_control):
+        yield
 
 
 def descendants(widget):
@@ -321,6 +357,8 @@ class RefreshTests(unittest.TestCase):
         app.active_tab, app.subtab_selection = "setting", {}
         app.card = lambda parent, title, *args: ConfigWidget(parent, text=title)
         app.add_control = native.NativeApp.add_control.__get__(app)
+        panel = ConfigWidget(ConfigWidget())
+        panel.body = panel
         specs = [spec for tabs in native.TAB_DEFINITIONS.values() for tab in tabs
                  for section in tab["sections"] for spec in section["controls"]
                  if spec.get("action") in ("quest_overrides", "hotbar", "task_priorities")]
@@ -328,7 +366,9 @@ class RefreshTests(unittest.TestCase):
                          {"quest_overrides", "hotbar", "task_priorities"})
         with patch.object(native, "tk", FAKE_TK), patch.object(configuration, "tk", CONFIG_TK), \
                 patch.object(configuration, "rounded_image", return_value=None), \
-                patch.object(widgets, "Choice", Choice):
+                patch.object(configuration, "draw_hotbar_slot"), patch.object(configuration, "draw_hotbar_icon"), \
+                patch.object(configuration, "Card", ConfigCard), patch.object(configuration, "Button", ConfigButton), \
+                patch.object(widgets, "Choice", Choice), patch.object(widgets, "Card", lambda *args, **kwargs: panel):
             app.form(ConfigWidget(), [dict(title=spec["title"], controls=[spec]) for spec in specs])
             self.assertIn("quest_overrides", app.controls)
             self.assertIn("hotbar", app.controls)
@@ -452,7 +492,7 @@ class RefreshTests(unittest.TestCase):
         parent = MemoryWidget()
         app.pages = {"planters": parent}
         app.action.return_value = dict(gather=False)
-        with patch.object(editors.tk, "Frame", MemoryWidget):
+        with planter_widgets(app):
             editors.build_planters(app, parent)
             off = next(item for item in descendants(parent) if item.options.get("text") == "Planters are Off")
             mode = app.controls["planters_mode"]
@@ -476,7 +516,7 @@ class RefreshTests(unittest.TestCase):
             app.manager.importPlanterSettings.assert_called_once_with(payload)
             self.assertFalse(dialog.winfo_exists())
             self.assertFalse(off.winfo_exists())
-            self.assertTrue(any(item.options.get("text") == "Auto Planters / Planter+" for item in descendants(parent)))
+            self.assertTrue(any(item.options.get("text") == "Auto Planters/Planter+" for item in descendants(parent)))
             self.assertIs(app.controls["planters_mode"], mode)
             self.assertEqual(int(mode.get()), 2)
             maximum = app.controls["auto_max_planters"]
@@ -503,7 +543,7 @@ class RefreshTests(unittest.TestCase):
         app.action = native.NativeApp.action.__get__(app)
         parent = MemoryWidget()
         app.pages = {"planters": parent}
-        with patch.object(editors.tk, "Frame", MemoryWidget):
+        with planter_widgets(app):
             editors.build_planters(app, parent)
             gather = app.controls["auto_planters_gather"]
             maximum = app.controls["auto_max_planters"]
