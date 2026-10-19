@@ -2,7 +2,6 @@
 
 import AppKit
 import ColorSync
-import os
 import CoreFoundation
 import urllib.parse
 

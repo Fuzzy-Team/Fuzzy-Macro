@@ -1,10 +1,11 @@
-import sys
-import os
+from __future__ import annotations
+
 import pyautogui as pag
 import time
-from modules.submacros.hasteCompensation import HasteCompensationRevamped
-import threading
-from collections import deque
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from modules.submacros.hasteCompensation import HasteCompensationRevamped
 
 
 class keyboard:
@@ -120,9 +121,6 @@ class keyboard:
         movespeed = self.hasteCompensation.getHaste()
         return movespeed
     
-    def timeWaitNoHasteCompensation(self, duration):
-        time.sleep(duration* 28 / self.ws)
-
     def timeWait(self, duration):
 
         baseSpeed = 28

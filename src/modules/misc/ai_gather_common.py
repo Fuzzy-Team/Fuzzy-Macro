@@ -7,8 +7,9 @@ import shutil
 import subprocess
 import threading
 import time
-import platform
 from pathlib import Path
+
+from modules.misc.modelManager import import_coremltools
 
 try:
     import cv2
@@ -20,22 +21,8 @@ try:
 except Exception:
     np = None
 
-_macos_parts = platform.mac_ver()[0].split(".")
-try:
-    _macos_version = tuple(int(part) for part in _macos_parts[:2])
-except ValueError:
-    _macos_version = ()
-
-# CoreML is not the AI Gather backend on pre-Monterey systems.  Avoid even
-# importing a stale coremltools installation there; its native extension can
-# emit dyld errors before Python gets a chance to use the ONNX fallback.
-if len(_macos_version) >= 2 and _macos_version >= (12, 0):
-    try:
-        import coremltools as ct
-    except Exception:
-        ct = None
-else:
-    ct = None
+# None before macOS 12, where AI Gather uses the ONNX models instead
+ct = import_coremltools()
 
 try:
     import mss
@@ -408,16 +395,6 @@ def grab_frame(runtime):
     image = ImageGrab.grab(bbox=runtime["capture"].get("bbox"))
     return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
 
-
-def grab_region_frame(runtime, monitor_key, bbox_key):
-    monitor = runtime.get(monitor_key)
-    if runtime["capture"]["backend"] == "mss" and monitor:
-        return mss_grab_to_array(runtime["capture"]["session"], monitor)
-    bbox = runtime.get(bbox_key)
-    if bbox and ImageGrab is not None:
-        image = ImageGrab.grab(bbox=bbox)
-        return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-    return None
 
 
 def crop_rect(frame, rect):
@@ -998,29 +975,25 @@ def find_sprinkler(
     return best
 
 
-def start_sprinkler_find(runtime, frame=None, **kwargs):
-    holder = {"result": None, "error": None}
-
-    def _worker():
-        try:
-            holder["result"] = find_sprinkler(runtime, frame=frame, **kwargs)
-        except Exception as exc:
-            holder["error"] = exc
-
-    thread = threading.Thread(target=_worker, daemon=True)
-    thread.start()
-    return thread, holder
-
-
-def finish_sprinkler_find(thread, holder):
-    thread.join()
-    if holder["error"] is not None:
-        raise holder["error"]
-    return holder["result"]
 
 
 def sprinkler_anchor_enabled(field_drift_compensation, use_sprinkler_model):
     return bool(field_drift_compensation and use_sprinkler_model)
+
+
+def field_safe_radius(field_dimensions, fallback=None):
+    """Convert the narrow field axis to a conservative center-to-edge tile radius."""
+    try:
+        narrow_axis = min(float(value) for value in field_dimensions if float(value) > 0)
+    except (TypeError, ValueError):
+        return fallback
+    if narrow_axis <= 0:
+        return fallback
+
+    # Field dimensions are reference-speed milliseconds. At 18 studs/second
+    # and roughly four studs per flower tile, 800 ms is about 3.6 tiles. Keep
+    # twenty percent in reserve for imperfect movement and field geometry.
+    return round(narrow_axis * 18.0 / 4000.0 * 0.8, 3)
 
 
 def sprinkler_detect_should_run(runtime):

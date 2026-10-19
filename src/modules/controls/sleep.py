@@ -1,5 +1,6 @@
 #custom sleep function with pause support
 import time
+import threading
 
 # Module-level reference to the run state (multiprocessing.Value)
 _run_state = None
@@ -44,15 +45,6 @@ def get_interrupt_action():
         return int(_interrupt_action.value)
     except Exception:
         return INTERRUPT_NONE
-
-
-def clear_interrupt_action():
-    if _interrupt_action is None:
-        return
-    try:
-        _interrupt_action.value = INTERRUPT_NONE
-    except Exception:
-        pass
 
 
 def raise_if_interrupted():
@@ -111,52 +103,30 @@ def sleep(duration, get_now=time.perf_counter):
             time.sleep(chunk)
         now = get_now()
 
-def high_precision_sleep(duration):
-    """Pause-aware high precision sleep"""
-    raise_if_interrupted()
+# Kept for custom patterns that import it by name
+pauseable_sleep = sleep
 
-    # Check for pause before sleeping
-    if wait_while_paused():
-        return  # Stop was requested
-    
-    start_time = time.perf_counter()
-    while True:
-        elapsed_time = time.perf_counter() - start_time
-        remaining_time = duration - elapsed_time
-        if remaining_time <= 0:
-            break
-        raise_if_interrupted()
-        if remaining_time > 0.02:  # Sleep for 5ms if remaining time is greater
-            time.sleep(max(remaining_time/2, 0.0001))  # Sleep for the remaining time or minimum sleep interval
-        else:
-            pass
-        # Check for pause during sleep
-        if is_paused():
-            if wait_while_paused():
-                return  # Stop was requested
 
-def pauseable_sleep(duration):
-    """A time.sleep replacement that respects pause state"""
-    if duration <= 0:
-        return
+class _PauseAwareTimeModule:
+    """The time module, but sleep() respects pause and interrupt state."""
 
-    raise_if_interrupted()
+    def __init__(self, time_module):
+        self._time = time_module
 
-    # Check for pause before sleeping
-    if wait_while_paused():
-        return  # Stop was requested
+    def sleep(self, duration):
+        if threading.current_thread() is not threading.main_thread():
+            end = time.perf_counter() + max(0, duration)
+            while True:
+                while is_paused():
+                    time.sleep(0.1)
+                remaining = end - time.perf_counter()
+                if remaining <= 0 or is_stopped():
+                    return
+                time.sleep(min(0.05, remaining))
+        return sleep(duration)
 
-    # Sleep in short chunks so pause interrupts quickly
-    start = time.perf_counter()
-    while time.perf_counter() - start < duration:
-        raise_if_interrupted()
-        if is_stopped():
-            return
-        if is_paused() and wait_while_paused():
-            return
+    def __getattr__(self, name):
+        return getattr(self._time, name)
 
-        # Sleep in small chunks
-        remaining = duration - (time.perf_counter() - start)
-        chunk = min(0.05, remaining)
-        if chunk > 0:
-            time.sleep(chunk)
+
+pause_aware_time = _PauseAwareTimeModule(time)

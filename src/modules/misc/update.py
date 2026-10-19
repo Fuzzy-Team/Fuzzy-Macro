@@ -257,20 +257,34 @@ def _installation_root():
     return _validate_installation_root(destination)
 
 
-def _read_ignore_rules(extracted):
-    """Use both current origin rules and the release's own ignore rules."""
-    ignore_path = os.path.join(extracted, ".gitignore")
+def _read_gitignore_lines(root, label):
+    ignore_path = os.path.join(root, ".gitignore")
     if os.path.islink(ignore_path):
-        raise ValueError("release .gitignore is a symlink")
+        raise ValueError(f"{label} .gitignore is a symlink")
     with open(ignore_path, "r", encoding="utf-8") as fh:
-        release_lines = fh.readlines()
-    response = requests.get(
-        "https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/.gitignore",
-        timeout=20,
-        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
-    )
-    response.raise_for_status()
-    origin_lines = response.text.splitlines()
+        return fh.readlines()
+
+
+def _read_ignore_rules(extracted, destination=None):
+    """Use the release's own ignore rules and origin's current ones.
+
+    If origin can't be downloaded, the installed copy's .gitignore stands in for it: it
+    describes the files the installed version creates, which is what origin's rules protect.
+    """
+    release_lines = _read_gitignore_lines(extracted, "release")
+    try:
+        response = requests.get(
+            "https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/.gitignore",
+            timeout=20,
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        )
+        response.raise_for_status()
+        origin_lines = response.text.splitlines()
+    except Exception as exc:
+        if destination is None:
+            raise
+        print(f"[updater] Could not download origin .gitignore ({exc}); using the installed one")
+        origin_lines = _read_gitignore_lines(destination, "installed")
 
     def parse(lines):
         rules = []
@@ -311,10 +325,10 @@ def _is_gitignored(relative_path, rules, is_directory=False):
     return False
 
 
-def _load_ignore_rules(extracted):
+def _load_ignore_rules(extracted, destination=None):
     """Return the ignore rule sets, or None when cleanup must be skipped."""
     try:
-        return _read_ignore_rules(extracted)
+        return _read_ignore_rules(extracted, destination)
     except Exception as exc:
         print(f"[updater] Skipping obsolete-file cleanup: could not read .gitignore rules: {exc}")
         return None
@@ -432,7 +446,7 @@ def _apply_update_files(
 ):
     """Compare installed and incoming files, then synchronize the install."""
     destination = _validate_installation_root(destination)
-    ignore_rule_sets = _load_ignore_rules(extracted)
+    ignore_rule_sets = _load_ignore_rules(extracted, destination)
     _report_update_progress(progress_callback, 78, "Hashing installed files")
     # Gitignored files are never removed, so don't spend time hashing them.
     old_manifest = _build_installed_files_manifest(
@@ -743,49 +757,7 @@ def delete_backup_if_pending(destination=None):
                 break
         except Exception as e:
             print(f"[delete_backup_if_pending] Error: {e}", file=sys.stderr)
-            pass
 
-
-def _discover_remote_version(remote_version_url, timeout=15):
-    """Discover the latest non-prerelease tag from GitHub, falling back to
-    the tags endpoint and finally to `remote_version_url` if all else fails.
-    Returns the version string (without a leading 'v') or None on failure.
-    """
-    github_releases_api = "https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/releases?per_page=100"
-    github_tags_api = "https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/tags?per_page=100"
-    try:
-        headers = {
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0",
-            "Accept": "application/vnd.github.v3+json",
-        }
-        r = requests.get(github_releases_api, timeout=timeout, headers=headers)
-        r.raise_for_status()
-        releases = r.json()
-        for rel in releases:
-            if not rel.get("prerelease") and rel.get("tag_name"):
-                return rel.get("tag_name").lstrip("v")
-        # fallback to tags endpoint
-        rt = requests.get(github_tags_api, timeout=timeout, headers=headers)
-        rt.raise_for_status()
-        tags = rt.json()
-        if tags:
-            return tags[0].get("name", "").lstrip("v")
-    except Exception:
-        pass
-    # final fallback: read provided remote_version_url
-    try:
-        r = requests.get(remote_version_url, timeout=timeout, headers={
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0",
-        })
-        r.raise_for_status()
-        rv = r.text.strip()
-        return rv
-    except Exception:
-        return None
 
 
 def update(t="main", update_channel="stable", progress_callback=None):
@@ -824,7 +796,6 @@ def update(t="main", update_channel="stable", progress_callback=None):
         return refreshed_result[1]
 
     # remote version URL and zip link
-    import time
     # Use GitHub releases API with channel filtering
     github_releases_api = "https://api.github.com/repos/Fuzzy-Team/Fuzzy-Macro/releases?per_page=100"
     backup_path = os.path.join(destination, "backup_macro.zip")

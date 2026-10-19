@@ -17,6 +17,12 @@ activate_virtual_env() {
     source "$VENV_PATH/bin/activate"
 }
 
+# Run the venv's pip directly. A venv moved from where it was created still points
+# `activate` at the old path, so a bare `pip` would fall through to another Python.
+venv_pip() {
+    "$VENV_PATH/bin/python" -m pip "$@"
+}
+
 install_pip_package() {
 	local packages="$1"
 	local extra_args="$2"
@@ -31,10 +37,10 @@ install_pip_package() {
 	fi
 
 	if [ "$chip" = "arm64" ]; then
-		arch -arm64 pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 $extra_args $packages $constraint_arg
+		arch -arm64 "$VENV_PATH/bin/python" -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 $extra_args $packages $constraint_arg
 	else
 		#fallback for other architectures
-		pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 $extra_args $packages $constraint_arg
+		venv_pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 $extra_args $packages $constraint_arg
 	fi
 
 	if [ -n "$tmp_constraint" ] && [ -f "$tmp_constraint" ]; then
@@ -179,7 +185,7 @@ while [ "$attempt" -le 3 ]; do
 	fi
 done
 
-pip install --upgrade pip setuptools wheel
+venv_pip install --upgrade pip setuptools wheel
 install_pip_package "numpy<2"
 printf "\033[1;35mInstalling libraries\033[0m\n\n"
 
@@ -187,12 +193,14 @@ if [ "$python_ver" = '3.9' ] || { [ "$python_ver" = '3.8' ] && version_at_least 
 	# Use pip --force-reinstall to ensure a compatible opencv and numpy
 	# This installs the latest opencv-headless below 4.11 and enforces numpy<2
 	install_pip_package "opencv-python-headless<4.11 numpy<2" "--force-reinstall"
-	# Keep torch aligned with the version tested by coremltools.
-	install_pip_package "torch==2.7.0 torchvision==0.22.0" "--force-reinstall"
+	# coremltools only needs torch to convert PyTorch models, not to run the macro's models
 	install_pip_package "coremltools"
 	install_pip_package "ocrmac"
 	install_pip_package "pyobjc-framework-ColorSync<12.0"
 	install_pip_package "pyobjc-framework-ApplicationServices"
+	# torch was installed here before coremltools stopped needing it, and scipy/PyWavelets
+	# only came with ImageHash. Nothing on this path uses them anymore.
+	venv_pip uninstall -y torch torchvision scipy PyWavelets
 
 elif version_at_least "$os_ver" "10.15.0"; then
 	printf "\033[1;35mInstalling rust\n\n\033[0m"
@@ -202,8 +210,8 @@ elif version_at_least "$os_ver" "10.15.0"; then
 	# OpenCV 4.4 and 4.6 cannot load the current AI Gather ONNX models.
 	# OpenCV 4.10 has a compatible macOS 10.15 Intel wheel. Keep exactly one
 	# OpenCV package installed because all variants share the cv2 namespace.
-	pip uninstall -y opencv-python opencv-contrib-python opencv-python-headless opencv-contrib-python-headless
-	install_pip_package "opencv-python==4.10.0.84 numpy==1.19.1 Polygon3" "--force-reinstall"
+	venv_pip uninstall -y opencv-python opencv-contrib-python opencv-python-headless opencv-contrib-python-headless
+	install_pip_package "opencv-python==4.10.0.84 numpy==1.19.1" "--force-reinstall"
 	install_pip_package "easyocr" "--no-deps"
 	install_pip_package "torch"
 	install_pip_package "torchvision>=0.5"
@@ -216,18 +224,19 @@ else
 	install_pip_package "pyobjc-framework-Cocoa<11.0"
 	install_pip_package "pyobjc-framework-ColorSync<11.0" "--no-deps"
 	install_pip_package "pyobjc-framework-ApplicationServices<11.0" "--no-deps"
-	# OpenCV builds from source here. BUILD_JAVA=OFF skips its Java detection, which runs
-	# `java` and makes macOS show a "you need to install a JDK" dialog when no JDK is installed.
+	# No 4.6 wheel exists below macOS 10.15, so pip builds it from source here (slow, but known
+	# to work down to 10.12, unlike the older wheels, which bundle libraries built for 10.13).
+	# BUILD_JAVA=OFF skips OpenCV's Java detection, which runs `java` and makes macOS show a
+	# "you need to install a JDK" dialog when no JDK is installed.
 	export CMAKE_ARGS="-DBUILD_JAVA=OFF"
 	install_pip_package "opencv-python==4.6.0.66"
 	unset CMAKE_ARGS
-	#python"${python_ver}" -m pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org paddlepaddle==2.4.2 -i https://pypi.tuna.tsinghua.edu.cn/simple
-	#python"${python_ver}" -m pip install --no-deps --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org paddleocr==2.6.1.3
-	#printf "\033[31;1mInstalling lxml, this can take a while \033[0m\n"
-	#python"${python_ver}" -m pip install --default-timeout=100 --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org attrdict beautifulsoup4 cython fire fonttools imgaug lanms-neo==1.0.2 lmdb lxml opencv-contrib-python==4.6.0.66 opencv-python==4.6.0.66 openpyxl Polygon3 premailer pyclipper pymupdf python-docx rapidfuzz scikit-image shapely tqdm visualdl
-	#pip"${python_ver}" install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org protobuf==3.20.0
-	#pip"${python_ver}" install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org orjson==3.9.6
-	install_pip_package "ocrmac"
+	# Apple Vision OCR needs macOS 10.15, so use easyocr. 1.7.1 is the last release that
+	# works with python-bidi 0.4.2 (the newest for Python 3.7), and torch 1.13.1 is the last
+	# for Python 3.7. --no-deps keeps easyocr from adding a second OpenCV package and
+	# scikit-image (its wheels need macOS 10.15; ocr.py stands in for it).
+	install_pip_package "easyocr==1.7.1" "--no-deps"
+	install_pip_package "torch==1.13.1 torchvision==0.14.1 scipy shapely pyclipper python-bidi==0.4.2 PyYAML ninja packaging"
 fi
 install_pip_package "pyautogui"
 install_pip_package "mss"
@@ -243,19 +252,17 @@ else
 	install_pip_package "aiohttp==3.10.5"
 fi
 install_pip_package "pypresence"
-install_pip_package "matplotlib"
 install_pip_package "fuzzywuzzy"
 install_pip_package "python-Levenshtein"
 install_pip_package "pyscreeze<0.1.29"
-install_pip_package "html2image"
 install_pip_package "gevent"
 install_pip_package "eel"
-install_pip_package "ImageHash"
-install_pip_package "httpx"
 install_pip_package "flask"
 install_pip_package "pygetwindow"
 install_pip_package "requests" #used to check if this script was ran, should be installed by discord-webhooks
 install_pip_package "pynput"
+# no longer used; ocrmac imports matplotlib whenever it is installed, slowing startup
+venv_pip uninstall -y matplotlib html2image httpx ImageHash
 install_pip_package "numpy<2" "--force-reinstall"
 
 "$VENV_PATH/bin/python" << "EOF"
@@ -303,35 +310,5 @@ def main():
 
 if __name__ == '__main__':
     main()
-EOF
-"$VENV_PATH/bin/python" << "EOF"
-
-# remove self-documented expressions from chrome_cdp.py for python 3.7 compatibility
-import os
-import importlib.util
-
-spec = importlib.util.find_spec('html2image')
-if spec and spec.origin:
-    path = os.path.join(os.path.dirname(spec.origin), "browsers", "chrome_cdp.py")
-    if os.path.exists(path):
-        print(f"html2image found at {path}")
-        linesToRemove = ["print(f'{r.json()=}')", "print(f'cdp_send: {method=} {params=}')", "print(f'{method=}')", "print(f'{message=}')"]
-        with open(path, "r") as f:
-            data = f.read()
-        
-        original_data = data
-        for i in linesToRemove:
-            data = data.replace(i, "")
-        
-        if data != original_data:
-            with open(path, "w") as f:
-                f.write(data)
-            print("Fixed html2image")
-        else:
-            print("html2image already fixed or lines not found")
-    else:
-        print(f"chrome_cdp.py not found at {path}")
-else:
-    print("html2image package not found")
 EOF
 printf "\n\n\n\033[32;1mInstallation complete!\033[0m\n"
