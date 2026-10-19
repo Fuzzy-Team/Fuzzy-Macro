@@ -1,13 +1,17 @@
 import pyautogui as pag
 import time
 from pynput.mouse import Button, Controller
+from modules.screen import macroDisplay
 
 pynputMouse = Controller()
+#positions are relative to the display the macro runs on
 #move the mouse instantly
 def teleport(x,y):
+    x, y = macroDisplay.toGlobal(x, y)
     pag.moveTo(int(x),int(y))
 
 def moveTo(x,y, delay = 0.1):
+    x, y = macroDisplay.toGlobal(x, y)
     pag.moveTo(int(x),int(y), delay)
     pynputMouse.position = (int(x), int(y))
 
@@ -34,4 +38,5 @@ def scroll(clicks, pause = False):
     pag.scroll(clicks, _pause = pause)
 
 def getPos():
-    return pag.position()
+    x, y = pag.position()
+    return macroDisplay.toLocal(x, y)

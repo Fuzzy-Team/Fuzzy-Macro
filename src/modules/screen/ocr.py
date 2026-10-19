@@ -1,4 +1,5 @@
-from modules.screen.screenshot import mssScreenshot
+from modules.screen.screenshot import mssScreenshot, pillowGrab
+from modules.screen import macroDisplay
 import pyautogui as pag
 import numpy as np
 from PIL import Image
@@ -41,7 +42,7 @@ if ocrLib is None:
         easyocrReader = easyocr.Reader(['en'])
         ocrLib = "easyocr"
 
-mw, mh = pag.size()
+mw, mh = macroDisplay.size()
 screenInfo = getScreenData()
 ww = screenInfo["screen_width"]
 wh = screenInfo["screen_height"]
@@ -90,9 +91,9 @@ def screenshot(**kwargs):
     for _ in range(4):
         try: 
             if "region" in kwargs:
-                out = pag.screenshot(region=[int(x) for x in kwargs['region']])
+                out = pillowGrab(*[int(x) for x in kwargs['region']])
             else:
-                out = pag.screenshot()
+                out = pillowGrab()
             break
         except FileNotFoundError as e:
             print(e)

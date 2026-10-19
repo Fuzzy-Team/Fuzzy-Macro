@@ -266,7 +266,10 @@ class cloudflaredStream:
                 pass
         
         with mss.mss(with_cursor=True) as sct:
-            monitor = sct.monitors[1]
+            # Stream the display Roblox runs on (the virtual display when enabled)
+            from modules.screen import macroDisplay
+            left, top, width, height = macroDisplay.bounds()
+            monitor = {"left": left, "top": top, "width": width, "height": height}
             
             while self.streaming:
                 try:
