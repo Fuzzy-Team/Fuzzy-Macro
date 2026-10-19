@@ -3442,7 +3442,7 @@ if __name__ == "__main__":
                 except Exception as e:
                     messageBox.msgBox(title="Failed to change color profile", text=e)
         except Exception as e:
-            pass
+            print(f"Failed to check display color profile: {e}")
     
     #check screen recording permissions
     try:
