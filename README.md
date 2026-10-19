@@ -93,6 +93,7 @@ Follow our [installation guide](https://fuzzy-team.gitbook.io/fuzzy-macro) to ge
 - Hourly reports with statistics
 - Death detection and recovery
 - Screen resolution detection (See [Display Settings](https://fuzzy-team.gitbook.io/fuzzy-macro/system-settings/display-settings))
+- Virtual display (off by default): Roblox runs on its own 1920x1080 sRGB display, shown in a preview window, so the macro behaves the same on any screen and your own display stays free. Requires the Xcode Command Line Tools (installed by `install_dependencies.command`). Enable it in Config > Other > Virtual Display.
 
 ## Credits
 ### Macro Inspiration:
@@ -102,6 +103,7 @@ Follow our [installation guide](https://fuzzy-team.gitbook.io/fuzzy-macro) to ge
 - Developers: [Logan](https://github.com/LaganYT)
   - Based off code written by: [Existance](https://github.com/existancepy/bss-macro-py)
 - Pattern Makers: Existance, NatroTeam, tvojamamkajenic, sev, dully176, chillketchup, Electro
+- Virtual display based on [DeskPad](https://github.com/Stengo/DeskPad) by Bastian Andelefski (MIT)
 
 ## Preview
 <img width="1312" height="1022" alt="image" src="https://github.com/user-attachments/assets/1cfc3c25-f51e-4ec9-9470-35636af1583e" />
