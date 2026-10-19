@@ -3242,6 +3242,23 @@ if __name__ == "__main__":
             except:
                 messageBox.msgBox(title="Failed to convert pattern", text=f"There was an error converting {pattern}. The pattern will not be used.")
     
+    def checkMainDisplayColorProfile():
+        try:
+            colorProfileManager = DisplayColorProfile()
+            currentProfileColor = colorProfileManager.getCurrentColorProfile()
+            if not "sRGB" in currentProfileColor:
+                try:
+                    if messageBox.msgBoxOkCancel(title="Incorrect Color Profile", text=f"You current display's color profile is {currentProfileColor} but sRGB is required for the macro.\nPress 'Ok' to change color profiles"):
+                        colorProfileManager.resetDisplayProfile()
+                        colorProfileManager.setCustomProfile("/System/Library/ColorSync/Profiles/sRGB Profile.icc")
+                        messageBox.msgBox(title="Color Profile Success", text="Successfully changed the current color profile to sRGB")
+
+                except Exception as e:
+                    messageBox.msgBox(title="Failed to change color profile", text=e)
+        except Exception as e:
+            print(f"Failed to check display color profile: {e}")
+
+
     def syncVirtualDisplay(setdat):
         """Create or remove the virtual display Roblox runs on to match the
         settings. Must run before the macro process starts so it reads the
@@ -3251,6 +3268,7 @@ if __name__ == "__main__":
         displayID = virtualDisplay.sync(enabled)
         if enabled and not displayID:
             logger.webhook("", "Could not create the virtual display, Roblox will run on the main display", "red")
+            checkMainDisplayColorProfile()
         if displayID != screenInfo.get("display_id", 0):
             screenData.setScreenData(displayID)
             screenInfo = screenData.getScreenData()
@@ -3277,6 +3295,9 @@ if __name__ == "__main__":
                     except Exception as e:
                         print(f"Failed to keep Roblox on the virtual display: {e}")
                 time.sleep(2)
+            if screenInfo.get("display_id", 0) and run.value in (2, 6):
+                run.value = 0
+                logger.webhook("", "Virtual display was removed; stopping the macro", "red")
 
         virtualDisplayWatcher = Thread(target=watch, daemon=True)
         virtualDisplayWatcher.start()
@@ -3429,20 +3450,7 @@ if __name__ == "__main__":
     except Exception:
         useVirtualDisplay = False
     if not useVirtualDisplay:
-        try:
-            colorProfileManager = DisplayColorProfile()
-            currentProfileColor = colorProfileManager.getCurrentColorProfile()
-            if not "sRGB" in currentProfileColor:
-                try:
-                    if messageBox.msgBoxOkCancel(title="Incorrect Color Profile", text=f"You current display's color profile is {currentProfileColor} but sRGB is required for the macro.\nPress 'Ok' to change color profiles"):
-                        colorProfileManager.resetDisplayProfile()
-                        colorProfileManager.setCustomProfile("/System/Library/ColorSync/Profiles/sRGB Profile.icc")
-                        messageBox.msgBox(title="Color Profile Success", text="Successfully changed the current color profile to sRGB")
-
-                except Exception as e:
-                    messageBox.msgBox(title="Failed to change color profile", text=e)
-        except Exception as e:
-            print(f"Failed to check display color profile: {e}")
+        checkMainDisplayColorProfile()
     
     #check screen recording permissions
     try:

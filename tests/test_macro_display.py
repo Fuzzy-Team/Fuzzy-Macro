@@ -1,12 +1,13 @@
 """Test macro display coordinate translation without creating a real display."""
 
+import ast
 import importlib.util
 from pathlib import Path
 import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -78,6 +79,52 @@ class MacroDisplayTests(unittest.TestCase):
     def test_missing_screen_file_uses_main_display(self):
         self.macroDisplay.refresh()
         self.assertEqual(self.macroDisplay.bounds(), (0, 0, 1440, 900))
+
+
+
+class DisplayLifecycleTests(unittest.TestCase):
+    def setUp(self):
+        source = ast.parse((ROOT / "src/main.py").read_text())
+        main = next(n for n in source.body if isinstance(n, ast.If) and
+                    ast.unparse(n.test) == "__name__ == '__main__'")
+        functions = [n for n in main.body if isinstance(n, ast.FunctionDef) and
+                     n.name in {"syncVirtualDisplay", "startVirtualDisplayWatcher", "checkMainDisplayColorProfile"}]
+        self.ns = dict(virtualDisplay=Mock(), screenInfo={"display_id": 7},
+                       screenData=Mock(), macroDisplay=Mock(), logger=Mock(),
+                       run=SimpleNamespace(value=2), Thread=Mock(),
+                       virtualDisplayWatcher=None, time=Mock())
+        exec(compile(ast.Module(body=functions, type_ignores=[]), "src/main.py", "exec"), self.ns)
+
+    def test_display_loss_stops_running_and_paused_macro(self):
+        for state in (2, 6):
+            with self.subTest(state=state):
+                self.ns["virtualDisplayWatcher"] = None
+                self.ns["run"].value = state
+                self.ns["virtualDisplay"].isRunning.return_value = False
+                self.ns["startVirtualDisplayWatcher"]()
+                self.ns["Thread"].call_args.kwargs["target"]()
+                self.assertEqual(self.ns["run"].value, 0)
+        self.ns["logger"].webhook.assert_called()
+
+    def test_intentional_disable_does_not_stop_macro(self):
+        self.ns["screenInfo"] = {"display_id": 0}
+        self.ns["virtualDisplay"].isRunning.return_value = False
+        self.ns["startVirtualDisplayWatcher"]()
+        self.ns["Thread"].call_args.kwargs["target"]()
+        self.assertEqual(self.ns["run"].value, 2)
+        self.ns["logger"].webhook.assert_not_called()
+
+    def test_failed_creation_checks_main_display_color(self):
+        check = self.ns["checkMainDisplayColorProfile"] = Mock()
+        self.ns["virtualDisplay"].sync.return_value = 0
+        self.ns["syncVirtualDisplay"]({"use_virtual_display": True})
+        check.assert_called_once_with()
+
+    def test_successful_creation_skips_main_display_color(self):
+        check = self.ns["checkMainDisplayColorProfile"] = Mock()
+        self.ns["virtualDisplay"].sync.return_value = 7
+        self.ns["syncVirtualDisplay"]({"use_virtual_display": True})
+        check.assert_not_called()
 
 
 if __name__ == "__main__":
