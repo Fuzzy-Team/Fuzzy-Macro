@@ -1,4 +1,5 @@
 import eel
+import eel.chrome
 import webbrowser
 import modules.misc.settingsManager as settingsManager
 import os
@@ -11,6 +12,8 @@ import json
 import webbrowser
 import time
 import threading
+import plistlib
+import platform
 from bottle import route, static_file
 from modules.submacros.autoGiftedBasicBee import AutoGiftedBasicBeeRunner
 import modules.controls.keyboard as keyboardModule
@@ -1396,6 +1399,29 @@ def launch():
         # ignore if already exposed or if exposure fails at import time
         pass
 
+    def openInDefaultBrowser():
+        eel.start('index.html', block=False, mode=None, port=port)
+        time.sleep(2)
+        webbrowser.open(f"{port_url}/", new=2)
+
+    # Chrome that needs a newer macOS crashes on launch without eel noticing, so check its minimum first
+    def chromeNeedsNewerMacOS():
+        path = eel.chrome.find_path()
+        if not path or ".app/" not in path:
+            return False
+        try:
+            with open(os.path.join(path.split(".app/")[0] + ".app", "Contents", "Info.plist"), "rb") as f:
+                minimum = plistlib.load(f).get("LSMinimumSystemVersion", "0")
+        except Exception:
+            return False
+        version = lambda s: tuple(int(part) for part in s.split(".")[:2] if part.isdigit())
+        return version(platform.mac_ver()[0]) < version(minimum)
+
+    if sys.platform == "darwin" and chromeNeedsNewerMacOS():
+        print(f"The installed Google Chrome needs a newer version of macOS than {platform.mac_ver()[0]}. Opening in default browser...")
+        openInDefaultBrowser()
+        return
+
     try:
         eel.start('index.html', mode = "chrome", app_mode = True, block = False, port=port, cmdline_args=["--incognito", f"--app={port_url}"])
     except EnvironmentError:
@@ -1403,6 +1429,4 @@ def launch():
             eel.start('index.html', mode = "chrome-app", app_mode = True, block = False, port=port, cmdline_args=["--incognito", f"--app={port_url}"])
         except EnvironmentError:
             print("Chrome/Chromium could not be found. Opening in default browser...")
-            eel.start('index.html', block=False, mode=None, port=port)
-            time.sleep(2)
-            webbrowser.open(f"{port_url}/", new=2)
+            openInDefaultBrowser()
