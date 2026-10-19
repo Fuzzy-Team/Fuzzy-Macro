@@ -3153,6 +3153,8 @@ if __name__ == "__main__":
     global stopThreads, macroProc
     import gui
     import modules.screen.screenData as screenData
+    import modules.screen.virtualDisplay as virtualDisplay
+    from modules.screen import macroDisplay
     from modules.controls.keyboard import keyboard as keyboardModule
     import modules.logging.log as logModule
     import modules.misc.appManager as appManager
@@ -3240,6 +3242,45 @@ if __name__ == "__main__":
             except:
                 messageBox.msgBox(title="Failed to convert pattern", text=f"There was an error converting {pattern}. The pattern will not be used.")
     
+    def syncVirtualDisplay(setdat):
+        """Create or remove the virtual display Roblox runs on to match the
+        settings. Must run before the macro process starts so it reads the
+        right screen data."""
+        global screenInfo
+        enabled = setdat.get("use_virtual_display", False)
+        displayID = virtualDisplay.sync(enabled)
+        if enabled and not displayID:
+            logger.webhook("", "Could not create the virtual display, Roblox will run on the main display", "red")
+        if displayID != screenInfo.get("display_id", 0):
+            screenData.setScreenData(displayID)
+            screenInfo = screenData.getScreenData()
+            macroDisplay.refresh()
+        if displayID:
+            startVirtualDisplayWatcher()
+
+    virtualDisplayWatcher = None
+
+    def startVirtualDisplayWatcher():
+        """Roblox can leave the virtual display on its own, e.g. when it
+        restores its saved window after leaving fullscreen. While the macro
+        runs, keep moving it back."""
+        global virtualDisplayWatcher
+        if virtualDisplayWatcher is not None and virtualDisplayWatcher.is_alive():
+            return
+
+        def watch():
+            while virtualDisplay.isRunning():
+                if run.value == 2:
+                    try:
+                        if appManager.moveAppToMacroDisplay("Roblox"):
+                            print("Moved Roblox back onto the virtual display")
+                    except Exception as e:
+                        print(f"Failed to keep Roblox on the virtual display: {e}")
+                time.sleep(2)
+
+        virtualDisplayWatcher = Thread(target=watch, daemon=True)
+        virtualDisplayWatcher.start()
+
     #setup stream class
     stream = cloudflaredStream()
     standbyCaffeinateProc = None
@@ -3307,6 +3348,7 @@ if __name__ == "__main__":
 
     def onExit():
         stopStandbyKeepAwake()
+        virtualDisplay.stop()
         try:
             stopApp()
         except Exception as e:
@@ -3381,21 +3423,26 @@ if __name__ == "__main__":
     
     #use run.value to control the macro loop
 
-    #check color profile
+    #check color profile. Not needed when Roblox runs on the virtual display, which uses sRGB
     try:
-        colorProfileManager = DisplayColorProfile()
-        currentProfileColor = colorProfileManager.getCurrentColorProfile()
-        if not "sRGB" in currentProfileColor:
-            try:
-                if messageBox.msgBoxOkCancel(title="Incorrect Color Profile", text=f"You current display's color profile is {currentProfileColor} but sRGB is required for the macro.\nPress 'Ok' to change color profiles"):
-                    colorProfileManager.resetDisplayProfile()
-                    colorProfileManager.setCustomProfile("/System/Library/ColorSync/Profiles/sRGB Profile.icc")
-                    messageBox.msgBox(title="Color Profile Success", text="Successfully changed the current color profile to sRGB")
+        useVirtualDisplay = settingsManager.loadAllSettings().get("use_virtual_display", False)
+    except Exception:
+        useVirtualDisplay = False
+    if not useVirtualDisplay:
+        try:
+            colorProfileManager = DisplayColorProfile()
+            currentProfileColor = colorProfileManager.getCurrentColorProfile()
+            if not "sRGB" in currentProfileColor:
+                try:
+                    if messageBox.msgBoxOkCancel(title="Incorrect Color Profile", text=f"You current display's color profile is {currentProfileColor} but sRGB is required for the macro.\nPress 'Ok' to change color profiles"):
+                        colorProfileManager.resetDisplayProfile()
+                        colorProfileManager.setCustomProfile("/System/Library/ColorSync/Profiles/sRGB Profile.icc")
+                        messageBox.msgBox(title="Color Profile Success", text="Successfully changed the current color profile to sRGB")
 
-            except Exception as e:
-                messageBox.msgBox(title="Failed to change color profile", text=e)
-    except Exception as e:
-        pass
+                except Exception as e:
+                    messageBox.msgBox(title="Failed to change color profile", text=e)
+        except Exception as e:
+            pass
     
     #check screen recording permissions
     try:
@@ -3745,6 +3792,7 @@ if __name__ == "__main__":
                 messageBox.msgBox(title="Blender", text=f"You have blender enabled, \
                                     but there are no more items left to craft.\n\
 				                    Check the 'repeat' setting on your blender items and reset blender data.")
+            syncVirtualDisplay(setdat)
             #macro proc
             macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer), daemon=True)
             macroProc.start()
@@ -3768,7 +3816,7 @@ if __name__ == "__main__":
                     start_details.append(f"Alt Field: {active_alt_field.title() or 'Waiting for Host'}")
                 else:
                     start_details.append("Alt Field: Waiting for Host")
-            start_details.append(f'Display: {screenInfo["display_type"]}, {screenInfo["screen_width"]}x{screenInfo["screen_height"]}')
+            start_details.append(f'Display: {"virtual, " if screenInfo.get("display_id") else ""}{screenInfo["display_type"]}, {screenInfo["screen_width"]}x{screenInfo["screen_height"]}')
             logger.webhook("Macro Started", "\n".join(start_details), "purple", route_category="macro_status")
             run.value = 2
             autoStopStartTime = time.time()
@@ -3894,6 +3942,7 @@ if __name__ == "__main__":
             mouse.mouseUp()
             time.sleep(0.2)
             appManager.closeApp("Roblox")
+            syncVirtualDisplay(setdat)
             macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer), daemon=True)
             macroProc.start()
             run.value = 2
@@ -3927,6 +3976,7 @@ if __name__ == "__main__":
             mouse.mouseUp()
             time.sleep(0.2)
             appManager.openApp("Roblox")
+            syncVirtualDisplay(setdat)
             # restart macro process
             macroProc = multiprocessing.Process(target=macro, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer), daemon=True)
             macroProc.start()

@@ -8,6 +8,7 @@ import cv2
 import time
 import pyautogui as pag
 from modules.screen.robloxWindow import RobloxWindowBounds
+from modules.screen import macroDisplay
 import os
 import platform
 import shutil
@@ -32,7 +33,7 @@ if len(macos_version) >= 2 and macos_version >= (12, 0):
 else:
     ct = None
 
-mw, mh = pag.size()
+mw, mh = macroDisplay.size()
 
 class fieldDriftCompensation():
     def __init__(self, robloxWindow: RobloxWindowBounds):

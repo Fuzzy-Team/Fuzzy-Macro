@@ -245,6 +245,7 @@ fi
 install_pip_package "pypresence"
 install_pip_package "matplotlib"
 install_pip_package "fuzzywuzzy"
+install_pip_package "imagehash"
 install_pip_package "python-Levenshtein"
 install_pip_package "pyscreeze<0.1.29"
 install_pip_package "html2image"

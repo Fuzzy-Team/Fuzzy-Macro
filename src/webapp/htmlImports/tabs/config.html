@@ -625,6 +625,18 @@
         },
       ]);
 
+      buildStandardContainer(parentOther, "Virtual Display", "", [
+        {
+          id: "use_virtual_display",
+          title: "Run Roblox on a Virtual Display",
+          desc: "Move Roblox to a separate 1920x1080 virtual display (sRGB, non-retina, 100% scaling) so the macro works the same on every screen and your own display stays free. A preview window shows the virtual display. Applies when the macro starts.",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+      ]);
+
       buildStandardContainer(parentOther, "Low Performance", "", [
         {
           id: "low_performance",

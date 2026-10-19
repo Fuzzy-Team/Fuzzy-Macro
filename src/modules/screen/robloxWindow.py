@@ -2,7 +2,8 @@ import pyautogui as pag
 import time
 from modules.screen import screenData
 from operator import itemgetter
-from modules.misc.appManager import getWindowSize
+from modules.misc.appManager import getWindowSize, moveAppToMacroDisplay
+from modules.screen import macroDisplay
 from PIL import Image
 from modules.screen.screenshot import mssScreenshotPillowRGBA
 from modules import bitmap_matcher
@@ -13,7 +14,7 @@ class RobloxWindowBounds:
     '''
 
     def __init__(self):
-        self.screenw, self.screenh = pag.size()
+        self.screenw, self.screenh = macroDisplay.size()
         self.mx = 0
         self.my = 0
         self.mw = self.screenw
@@ -27,6 +28,8 @@ class RobloxWindowBounds:
         self.multi = 2 if self.isRetina else 1 #used for pixel calculation compatibility between retina and non-retina displays
     
     def setRobloxWindowBounds(self, setYOffset = True):
+        #when using the virtual display, make sure roblox is on it
+        moveAppToMacroDisplay("Roblox")
         self.mx, self.my, self.mw, self.mh = getWindowSize("roblox roblox")
 
         #calculate y offset and the actual roblox content bounds
@@ -36,7 +39,12 @@ class RobloxWindowBounds:
             if res:
                 self.contentYOffset = max((res[1]//self.multi)-15-self.yOffset, 0)
                 if self.contentYOffset != 0:
-                    pag.hotkey("ctrl", "command", "f")
+                    if macroDisplay.isMainDisplay():
+                        pag.hotkey("ctrl", "command", "f")
+                    else:
+                        #toggling with the hotkey makes roblox restore its old
+                        #window on the main display, so set fullscreen directly
+                        moveAppToMacroDisplay("Roblox")
                     time.sleep(0.5)
                     self.mx, self.my, self.mw, self.mh = getWindowSize("roblox roblox")
                     res = self._detectContentYOffset(honeyImg)

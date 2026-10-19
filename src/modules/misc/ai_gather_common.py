@@ -351,26 +351,22 @@ def decode_detections(runtime, prefix, output, confidence_threshold):
 
 
 def build_capture(viewport, capture_backend="auto"):
+    from modules.screen import macroDisplay
+
+    # The viewport is relative to the macro display; capture needs global coordinates.
     if viewport is not None:
-        left = int(getattr(viewport, "mx", 0))
-        top = int(getattr(viewport, "my", 0))
+        left, top = macroDisplay.toGlobal(int(getattr(viewport, "mx", 0)), int(getattr(viewport, "my", 0)))
         width_px = int(getattr(viewport, "mw", 0))
         height_px = int(getattr(viewport, "mh", 0))
     else:
-        left = 0
-        top = 0
         width_px = 0
         height_px = 0
+    if width_px <= 0 or height_px <= 0:
+        left, top, width_px, height_px = macroDisplay.bounds()
 
     backend = (capture_backend or "auto").lower()
     if backend in ("auto", "mss") and mss is not None:
         session = mss.mss()
-        if width_px <= 0 or height_px <= 0:
-            monitor = session.monitors[1]
-            left = int(monitor["left"])
-            top = int(monitor["top"])
-            width_px = int(monitor["width"])
-            height_px = int(monitor["height"])
         monitor = {"left": left, "top": top, "width": width_px, "height": height_px}
         return {
             "backend": "mss",
@@ -381,10 +377,6 @@ def build_capture(viewport, capture_backend="auto"):
         }
 
     if backend in ("auto", "pil", "pillow") and ImageGrab is not None:
-        if width_px <= 0 or height_px <= 0:
-            width_px, height_px = ImageGrab.grab().size
-            left = 0
-            top = 0
         return {
             "backend": "pil",
             "bbox": (left, top, left + width_px, top + height_px),

@@ -25,8 +25,8 @@ class DisplayColorProfile:
             return uuid_ref
         return None
     
-    def resetDisplayProfile(self):
-        display_id = self.getMainDisplayId()
+    def resetDisplayProfile(self, display_id=None):
+        display_id = display_id or self.getMainDisplayId()
         
         uuid = self.getDisplayUUID(display_id)
         if not uuid:
@@ -41,8 +41,8 @@ class DisplayColorProfile:
         except Exception as e:
             raise Exception(f"Failed to reset display profile: {e}")
     
-    def setCustomProfile(self, profile_path):
-        display_id = self.getMainDisplayId()
+    def setCustomProfile(self, profile_path, display_id=None):
+        display_id = display_id or self.getMainDisplayId()
         
         uuid = self.getDisplayUUID(display_id)
         if not uuid:
@@ -72,8 +72,8 @@ class DisplayColorProfile:
         except Exception as e:
             raise Exception(f"Failed to set custom profile: {e}")
     
-    def getCurrentColorProfile(self):
-        display_id = self.getMainDisplayId()
+    def getCurrentColorProfile(self, display_id=None):
+        display_id = display_id or self.getMainDisplayId()
         uuid = self.getDisplayUUID(display_id)
         
         try:

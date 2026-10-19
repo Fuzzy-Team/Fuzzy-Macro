@@ -72,7 +72,28 @@ def scaleRegion(left, top, width, height, anchor_x="left", anchor_y="top", scree
     return (scaled_left, scaled_top, scaled_width, scaled_height)
 
 
-def setScreenData():
+def _virtualDisplayScreenData(displayID):
+    # Quartz reports the display in points; the current mode gives its pixels.
+    import Quartz
+    rect = Quartz.CGDisplayBounds(displayID)
+    pointsWidth, pointsHeight = int(rect.size.width), int(rect.size.height)
+    mode = Quartz.CGDisplayCopyDisplayMode(displayID)
+    pixelWidth = Quartz.CGDisplayModeGetPixelWidth(mode) if mode else pointsWidth
+    if not pointsWidth or not pointsHeight:
+        return None
+    return {
+        "display_type": "retina" if pixelWidth > pointsWidth else "built-in",
+        "screen_width": pointsWidth,
+        "screen_height": pointsHeight,
+    }
+
+
+def setScreenData(displayID=0):
+    '''Save information about the display Roblox runs on.
+    displayID is the Fuzzy Macro virtual display, or 0 for the main display.'''
+    displayInfo = _virtualDisplayScreenData(displayID) if displayID else None
+    if displayInfo is None:
+        displayID = 0
     wwd, whd = pag.size()
     screenData = {
         "display_type": "built-in",
@@ -112,7 +133,9 @@ def setScreenData():
     detected_resolution = f"{physical_w}x{physical_h}"
 
     # Normal retina detection for everything else
-    if physical_w != wwd or physical_h != whd:
+    if displayInfo is not None:
+        screenData.update(displayInfo)
+    elif physical_w != wwd or physical_h != whd:
         screenData["screen_width"] = physical_w
         screenData["screen_height"] = physical_h
         screenData["display_type"] = "retina"
@@ -125,6 +148,7 @@ def setScreenData():
     screenData["y_multiplier"] = BASE_SCREEN_HEIGHT / screenData["screen_height"]
     screenData["x_length_multiplier"] = screenData["x_multiplier"]
     screenData["y_length_multiplier"] = screenData["y_multiplier"]
+    screenData["display_id"] = int(displayID)
 
     #save the data
     os.makedirs(os.path.dirname(screenPath), exist_ok=True)

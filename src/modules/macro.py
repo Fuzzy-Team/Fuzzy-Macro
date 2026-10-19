@@ -23,6 +23,7 @@ import modules.controls.mouse as mouse
 import modules.logging.log as logModule
 from modules.submacros.fieldDriftCompensation import fieldDriftCompensation as fieldDriftCompensationClass
 from modules.screen.robloxWindow import RobloxWindowBounds
+from modules.screen import macroDisplay
 import sys
 import platform
 import os
@@ -8979,7 +8980,7 @@ class macro:
             # start slightly lower to avoid being barely too high
             mouse.moveTo(self.robloxWindow.mx+(x), self.robloxWindow.my+(y+25))
             time.sleep(0.3)
-            pag.dragTo(self.robloxWindow.mx + self.robloxWindow.mw//2, self.robloxWindow.my + self.robloxWindow.mh//2-80, 0.6, button='left')
+            pag.dragTo(*macroDisplay.toGlobal(self.robloxWindow.mx + self.robloxWindow.mw//2, self.robloxWindow.my + self.robloxWindow.mh//2-80), 0.6, button='left')
 
         #interact with feed menu
         time.sleep(1)

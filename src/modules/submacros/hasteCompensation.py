@@ -15,6 +15,7 @@ import mss
 import mss.darwin
 mss.darwin.IMAGE_OPTIONS = 0
 from modules.screen.robloxWindow import RobloxWindowBounds
+from modules.screen import macroDisplay
 from modules.submacros.hourlyReport import NATRO_BUFF_CHARACTER_TEMPLATES
 
 class HasteCompensation():
@@ -111,7 +112,7 @@ class HasteCompensation():
         return out
 
 class HasteCompensationOptimized():
-    mw, mh = pag.size() 
+    mw, mh = macroDisplay.size() 
     BUFF_REGION = (0, 30, int(mw / 1.8), 70)
 
     def __init__(self, isRetina, baseMoveSpeed):
@@ -240,7 +241,7 @@ class HasteCompensationOptimized():
         return final_speed
     
 class HasteCompensationFastest():
-    mw, mh = pag.size() 
+    mw, mh = macroDisplay.size() 
     BUFF_REGION = (0, 30, int(mw / 1.8), 70)
 
     def __init__(self, isRetina, baseMoveSpeed):
@@ -443,7 +444,8 @@ class HasteCompensationRevamped():
 
     def screenshotBuff(self):   
         with mss.mss() as sct:
-            monitor = {"left": int(self.robloxWindow.mx), "top": int(self.robloxWindow.my+self.robloxWindow.yOffset+33), "width": int(self.robloxWindow.mw), "height": int(48)}
+            left, top = macroDisplay.toGlobal(self.robloxWindow.mx, self.robloxWindow.my+self.robloxWindow.yOffset+33)
+            monitor = {"left": int(left), "top": int(top), "width": int(self.robloxWindow.mw), "height": int(48)}
             sct_img = sct.grab(monitor)
             img = Image.frombytes("RGBA", sct_img.size, sct_img.bgra, "raw", "BGRA")
             #img.save(f"buff_area.png")

@@ -3,6 +3,7 @@ import pyautogui as pag
 from modules.screen.imageSearch import templateMatch
 from modules.screen.screenshot import mssScreenshot
 from modules.screen.screenData import getScreenData
+from modules.screen import macroDisplay
 import numpy as np
 import time
 from PIL import Image
@@ -24,7 +25,7 @@ class Walk():
             self.bearMorphs.append(self.adjustBuffImage(f"./images/buffs/bearmorph{i+1}.png"))
 
         self.hastePlus = self.adjustBuffImage(f"./images/buffs/haste+.png")         
-        self.mw, self.mh = pag.size()                 
+        self.mw, self.mh = macroDisplay.size()                 
         self.prevHaste = 0         
         self.prevHaste368 = 0 #tracking the previous haste to accurately determine if the haste stack is 3,6 or 8
         self.hasteEnds = 0
