@@ -47,6 +47,7 @@ class RuntimeTests(unittest.TestCase):
         self.process = Mock()
         self.process.poll.return_value = None
         self.ns = {
+            "planterRuntimeClock": Mock(), "macroProc": Mock(),
             "standbyCommandQueue": Queue(),
             "standbyState": SimpleNamespace(active=False, deadline=0.0),
             "standbyCaffeinateProc": None,

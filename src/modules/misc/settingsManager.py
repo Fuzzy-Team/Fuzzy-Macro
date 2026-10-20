@@ -1031,6 +1031,9 @@ def _isPlanterSettingKey(key):
         "auto_planters_collect_auto",
         "auto_planters_check",
         "auto_max_planters",
+        "auto_planters_special_drops",
+        "auto_planters_special_drop",
+        "auto_planters_special_drop_queue",
         "auto_preset",
     }:
         return True
@@ -1254,6 +1257,11 @@ def _moveMisplacedSettings(settings_path, generalsettings_path):
             moved_value,
             default_general_settings.get(key),
         )
+        changed = True
+
+    if "auto_planters_special_drop_queue" not in settings_data:
+        legacy_drop = settings_data.get("auto_planters_special_drop", "")
+        settings_data["auto_planters_special_drop_queue"] = [legacy_drop] if legacy_drop else []
         changed = True
 
     for key, value in default_profile_settings.items():
