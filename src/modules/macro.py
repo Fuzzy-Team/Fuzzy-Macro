@@ -1034,6 +1034,12 @@ class macro:
         # jump is applied as mouse movement and swings the camera, so centre the cursor first.
         mouse.moveTo(self.robloxWindow.mx + self.robloxWindow.mw // 2, self.robloxWindow.my + self.robloxWindow.mh // 2)
         self.keyboard.press("shift")
+
+    def disableShiftLock(self):
+        # While Shift Lock is still on, cursor movement turns the camera. Give Roblox time to
+        # release it before anything moves the cursor away from the window centre.
+        self.keyboard.press("shift")
+        time.sleep(0.3)
     
     def _set_presence_payload(self, payload: dict):
         if self.presence is None:
@@ -4768,8 +4774,8 @@ class macro:
                 liveGatherReport.stop()
             if liveQuestProgressReport:
                 liveQuestProgressReport.stop()
-            if fieldSetting["shift_lock"]: 
-                self.keyboard.press('shift')
+            if fieldSetting["shift_lock"]:
+                self.disableShiftLock()
             if questMenuKeptOpen:
                 self.toggleQuest()
                 questMenuKeptOpen = False
@@ -9222,7 +9228,7 @@ class macro:
                 self.clear_task_status()
                 self.afb = True
                 if turnOffShiftLock:
-                    self.keyboard.press("shift")
+                    self.disableShiftLock()
                 self.logger.webhook("Gathering: interrupted", "Automatic Field Boost", "brown")
                 if self.AFBglitter:
                     self.reset(convert=False)
