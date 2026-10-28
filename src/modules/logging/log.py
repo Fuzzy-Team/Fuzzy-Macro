@@ -255,14 +255,13 @@ class webhookQueue:
         self.queue.put(data)
 
 class log:
-    def __init__(self, logQueue, enableWebhook, webhookURL, sendScreenshots, hourlyReportOnly=False, blocking=False, robloxWindow: RobloxWindowBounds = None, enableDiscordPing=False, discordUserID=None, pingSettings=None, webhookTimeFormat=24, enableDiscordBot=False, discordMessageQueue=None, routeSettings=None):
+    def __init__(self, logQueue, enableWebhook, webhookURL, sendScreenshots, hourlyReportOnly=False, robloxWindow: RobloxWindowBounds = None, enableDiscordPing=False, discordUserID=None, pingSettings=None, webhookTimeFormat=24, enableDiscordBot=False, discordMessageQueue=None, routeSettings=None):
         self.logQueue = logQueue
         self.webhookURL = webhookURL
         self.enableWebhook = enableWebhook
         self.enableDiscordBot = enableDiscordBot
         self.discordMessageQueue = discordMessageQueue
         self.routeSettings = routeSettings or {}
-        self.blocking = blocking
         self.hourlyReportOnly = hourlyReportOnly
         self.robloxWindow = robloxWindow
         self.sendScreenshots = sendScreenshots
@@ -271,8 +270,7 @@ class log:
         self.pingSettings = pingSettings or {}
         self.webhookTimeFormat = webhookTimeFormat
 
-        if not self.blocking:
-            self.webhookQueue = webhookQueue()
+        self.webhookQueue = webhookQueue()
 
     def log(self, msg):
         # Display in GUI or macro logs (to be implemented)
@@ -385,10 +383,7 @@ class log:
                 "time_format": time_format,
                 "fields": fields,
             }
-            if self.blocking:
-                logWebhook.webhook(**webhookData)
-            else:
-                self.webhookQueue.add_to_queue(webhookData)
+            self.webhookQueue.add_to_queue(webhookData)
             return
         if resolved_type == "bot":
             self._send_discord_bot(route, title, desc, time, colors[color], imagePath, ping_user_id, time_format, fields)
