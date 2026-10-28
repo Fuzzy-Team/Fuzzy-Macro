@@ -75,10 +75,10 @@ def runApp(macroTarget):
     standbyState.deadline = 0.0
     pin_requests = manager.Queue()  # Shared queue for pin requests
     start_keyboard_listener_fn = watch_for_hotkeys(run)
-    logger = logModule.log(logQueue, False, None, False, blocking=False, discordMessageQueue=discordMessageQueue)
+    logger = logModule.log(logQueue, False, None, False, discordMessageQueue=discordMessageQueue)
     gui.configureToolRuntime(logger=logger, status=status, presence=presence)
 
-    disconnectCooldownUntil = 0 #only for running disconnect check on low performance
+    disconnectCooldownUntil = 0
 
     #add missing defaults to the current profile's files and apply migrations
     settingsManager.ensureRuntimeData()

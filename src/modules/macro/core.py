@@ -96,7 +96,7 @@ class macro(
         self.keyboard = keyboard(self.setdat["movespeed"], self.setdat["haste_compensation"], self.hasteCompensation)
         pingSettings = {key: self.setdat.get(key, False) for key in PING_SETTING_KEYS}
         
-        self.logger = logModule.log(logQueue, logModule.delivery_uses_webhook(self.setdat), logModule.get_default_delivery_route(self.setdat), self.setdat.get("send_screenshot", True), blocking=self.setdat.get("low_performance", False), hourlyReportOnly=self.setdat.get("only_send_hourly_report", False), robloxWindow=self.robloxWindow, enableDiscordPing=True, discordUserID=self.setdat.get("discord_user_id", ""), pingSettings=pingSettings, webhookTimeFormat=self.setdat.get("webhook_time_format", 24), enableDiscordBot=logModule.delivery_uses_bot_messages(self.setdat), discordMessageQueue=discordMessageQueue, routeSettings=logModule.build_route_settings(self.setdat))
+        self.logger = logModule.log(logQueue, logModule.delivery_uses_webhook(self.setdat), logModule.get_default_delivery_route(self.setdat), self.setdat.get("send_screenshot", True), hourlyReportOnly=self.setdat.get("only_send_hourly_report", False), robloxWindow=self.robloxWindow, enableDiscordPing=True, discordUserID=self.setdat.get("discord_user_id", ""), pingSettings=pingSettings, webhookTimeFormat=self.setdat.get("webhook_time_format", 24), enableDiscordBot=logModule.delivery_uses_bot_messages(self.setdat), discordMessageQueue=discordMessageQueue, routeSettings=logModule.build_route_settings(self.setdat))
         self.tadAltSync = TadAltSync(
             self.setdat,
             self.logger,
@@ -381,12 +381,6 @@ class macro(
             self.backgroundOnce()
             time.sleep(1)
 
-    def mergedBackgrounds(self):
-        while True:
-            self.backgroundOnce()
-            self.hourlyReportBackgroundOnce()
-            time.sleep(1)
-
     def startDetect(self):
         #disable game mode
         self.moveMouseToDefault()
@@ -430,15 +424,11 @@ class macro(
         self.multi = self.robloxWindow.multi
         self.lastHourlyReport = 0
 
-        if self.setdat["low_performance"]:
-            mergedBackgroundThread = threading.Thread(target=self.mergedBackgrounds, daemon=True)
-            mergedBackgroundThread.start()
-        else:
-            backgroundThread = threading.Thread(target=self.background, daemon=True)
-            backgroundThread.start()
+        backgroundThread = threading.Thread(target=self.background, daemon=True)
+        backgroundThread.start()
 
-            hourlyReportBackgroundThread = threading.Thread(target=self.hourlyReportBackground, daemon=True)
-            hourlyReportBackgroundThread.start()
+        hourlyReportBackgroundThread = threading.Thread(target=self.hourlyReportBackground, daemon=True)
+        hourlyReportBackgroundThread.start()
         
         # Rejoin at startup unless Roblox is already open and the user has
         # explicitly disabled Always Rejoin.
