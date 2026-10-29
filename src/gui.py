@@ -11,6 +11,7 @@ import ast
 import json
 import webbrowser
 import time
+from modules.misc.planterRuntime import route_remaining
 import threading
 import plistlib
 import platform
@@ -29,6 +30,12 @@ def serve_hourly_report_asset(filename):
 
 run = None
 _recent_logs = []
+_planter_runtime = None
+
+def setPlanterRuntime(runtime):
+    global _planter_runtime
+    _planter_runtime = runtime
+
 _tool_logger = None
 _tool_status = None
 _tool_presence = None
@@ -643,7 +650,10 @@ def emptyAutoPlanterSlot():
         "nectar_est_percent": 0,
         "placed_time": 0,
         "grow_duration": 0,
-        "natural_grow_duration": 0
+        "natural_grow_duration": 0,
+        "runtime_baseline": None,
+        "growth_runtime": 0.0,
+        "special_drop_id": ""
     }
 
 def emptyAutoPlanterFieldDegradation():
@@ -688,7 +698,8 @@ def defaultAutoPlanterData():
             "invigorating": ""
         },
         "gather": False,
-        "field_degradation": emptyAutoPlanterFieldDegradation()
+        "field_degradation": emptyAutoPlanterFieldDegradation(),
+        "special_drops": {}
     }
 
 def normalizeAutoPlanterData(data):
@@ -711,6 +722,9 @@ def normalizeAutoPlanterData(data):
                 normalized["field_degradation"][field]["hours"] = value.get("hours", value.get("value", 0.0) or 0.0)
                 normalized["field_degradation"][field]["updated_at"] = value.get("updated_at", 0.0) or 0.0
 
+    if isinstance(data.get("special_drops"), dict):
+        normalized["special_drops"] = data["special_drops"]
+
     if isinstance(data.get("planters"), list):
         normalized["planters"] = []
         for planter in data["planters"][:3]:
@@ -727,7 +741,12 @@ def normalizeAutoPlanterData(data):
 @eel.expose
 def getAutoPlanterData():
     try:
-        return normalizeAutoPlanterData(settingsManager.loadUserJson("auto_planters.json"))
+        data = normalizeAutoPlanterData(settingsManager.loadUserJson("auto_planters.json"))
+        runtime = _planter_runtime.value if _planter_runtime is not None else 0.0
+        for planter in data["planters"]:
+            if planter.get("special_drop_id"):
+                planter["runtime_remaining"] = route_remaining(planter, runtime)
+        return data
     except Exception:
         return defaultAutoPlanterData()
 
@@ -794,12 +813,14 @@ def resetAutoPlanterTimer(index):
     try:
         data = normalizeAutoPlanterData(settingsManager.loadUserJson("auto_planters.json"))
         
-        # Check if index is valid
-        if index < 0 or index >= len(data.get("planters", [])):
-            return False
-        
-        # Clear the specific planter
-        data["planters"][index] = emptyAutoPlanterSlot()
+        if index == "all":
+            data["planters"] = [emptyAutoPlanterSlot(), emptyAutoPlanterSlot(), emptyAutoPlanterSlot()]
+            data["special_drops"] = {}
+        else:
+            index = int(index)
+            if index < 0 or index >= len(data.get("planters", [])):
+                return False
+            data["planters"][index] = emptyAutoPlanterSlot()
         
         settingsManager.saveUserJson("auto_planters.json", data)
 
