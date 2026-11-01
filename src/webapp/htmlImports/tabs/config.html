@@ -622,6 +622,21 @@
         },
       ]);
 
+      buildStandardContainer(parentOther, "Gather Patterns", "", [
+        {
+          id: "hidden_patterns",
+          title: "Hidden Patterns",
+          desc: "Patterns selected here are hidden from the pattern selector in the Gather tab. A field that already uses a hidden pattern keeps showing it.",
+          type: {
+            name: "dropdown",
+            multiple: true,
+            data: [],
+            length: 16,
+            triggerFunction: "saveHiddenPatterns(this)",
+          },
+        },
+      ]);
+
       buildStandardContainer(parentOther, "Update Settings", "", [
         {
           id: "update_channel",
