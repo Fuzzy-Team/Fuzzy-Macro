@@ -473,8 +473,23 @@ function updateGatherPatternUI() {
 async function saveEnabled() {
   const fields = (await loadSettings()).fields;
   fields[fieldNo - 1] = ele.value;
-  eel.saveProfileSetting("fields", fields);
+  await saveSettingValue("profile", "fields", fields);
 }
+
+//save the selected field's settings; if that fails, tell the user and show the saved ones again
+async function persistGatherField(fieldData) {
+  const field = getInputValue("field");
+  try {
+    await eel.saveField(field, fieldData)();
+  } catch (error) {
+    alert(`${field} settings were not saved: ${error?.errorText || error}`);
+    const saved = normalizeGatherFieldData((await eel.loadFields()())[field]);
+    setActiveGatherFieldData(saved);
+    loadInputs(saved);
+    updateGatherPatternUI();
+  }
+}
+
 function saveField() {
   // Validate goo_interval minimum value
   const gooIntervalElement = document.getElementById("goo_interval");
@@ -488,8 +503,8 @@ function saveField() {
   let fieldData = getGatherFieldDataFromInputs();
   fieldData = rememberGatherPatternPreset(fieldData, fieldData.shape);
   setActiveGatherFieldData(fieldData);
-  eel.saveField(getInputValue("field"), fieldData);
   updateGatherPatternUI();
+  persistGatherField(fieldData);
 }
 
 function saveFieldPatternChange() {
@@ -519,15 +534,15 @@ function saveFieldPatternChange() {
   fieldData = rememberGatherPatternPreset(fieldData, selectedPattern);
   setActiveGatherFieldData(fieldData);
   loadInputs(fieldData);
-  eel.saveField(getInputValue("field"), fieldData);
   updateGatherPatternUI();
+  persistGatherField(fieldData);
 }
 //save the fields_enabled
 async function updateFieldEnable(ele) {
   //save
   const fields_enabled = (await loadSettings()).fields_enabled;
   fields_enabled[fieldNo - 1] = ele.checked;
-  eel.saveProfileSetting("fields_enabled", fields_enabled);
+  await saveSettingValue("profile", "fields_enabled", fields_enabled);
 }
 
 //load the field selected in the dropdown
@@ -540,7 +555,7 @@ async function loadAndSaveField(ele) {
   //save
   const fields = (await loadSettings()).fields;
   fields[fieldNo - 1] = getDropdownValue(ele);
-  eel.saveProfileSetting("fields", fields);
+  await saveSettingValue("profile", "fields", fields);
 }
 
 async function switchGatherTab(target) {
