@@ -86,8 +86,8 @@ def make_quest_objectives(giver, title, actions, statuses):
         elif kind == "fieldtoken":
             color = {"blueberry": "blue", "strawberry": "red"}.get(target, "any")
         elif kind == "token" and target != "honey":
-            color = {"blueability": "blue", "blueboost": "blue",
-                     "redability": "red", "redboost": "red"}.get(target, "any")
+            color = {"blueability": "blue", "blueboost": "blue", "bomb": "blue",
+                     "redability": "red", "redboost": "red", "rage": "red"}.get(target, "any")
         objectives.append({"id": (giver, identity_title, row), "giver": giver, "title": title,
                            "row": row, "action": action, "kind": kind, "field": field,
                            "color": color, "status": status})
@@ -174,7 +174,8 @@ def choose_quest_gather(objectives, settings, field_settings, current_field=None
     if not pending:
         return None
     enabled = [field for field, active in zip(settings.get("fields", []), settings.get("fields_enabled", [])) if active]
-    required = [obj["field"] for obj in pending if obj["field"]]
+    required = [fields[0] for obj in pending
+                if len(fields := allowed_fields(obj, settings, field_settings)) == 1]
     candidates = []
     for objective in pending:
         fields = allowed_fields(objective, settings, field_settings)

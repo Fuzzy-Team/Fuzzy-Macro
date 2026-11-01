@@ -23,10 +23,17 @@ function switchQuestsTab(target){
 }
 
 let questObjectiveTypes = [];
+let questPatterns = [];
 
 async function showQuestObjectiveSettings(key, settings) {
     const objective = questObjectiveTypes.find(item => item.value === key);
     if (!objective) return;
+    settings = settings || await loadAllSettings();
+    const prefix = `quest_objective_${key}_`;
+    const currentPattern = String(settings[prefix + "pattern"] || "").toLowerCase();
+    const hiddenPatterns = settings.hidden_patterns || [];
+    setDropdownData("quest_mapping_pattern", [{label: "Auto", value: "auto"}, ...questPatterns.filter(pattern =>
+        !hiddenPatterns.includes(pattern.value.toLowerCase()) || pattern.value.toLowerCase() === currentPattern)]);
     const fieldOptions = objective.fields.map(field => ({
         label: `${fieldEmojis[field.replaceAll(" ", "_")]} ${toTitleCase(field)}`,
         value: field,
@@ -34,9 +41,9 @@ async function showQuestObjectiveSettings(key, settings) {
     setDropdownData("quest_mapping_field", [{label: "Auto", value: "auto"}, ...fieldOptions]);
     document.getElementById("quest_mapping_field").closest("form").style.display = objective.field ? "none" : "flex";
     for (const property of ["field", "pattern", "mins", "backpack", "return"]) {
-        document.getElementById(`quest_mapping_${property}`).dataset.settingId = `quest_objective_${key}_${property}`;
+        document.getElementById(`quest_mapping_${property}`).dataset.settingId = prefix + property;
     }
-    loadInputs(settings || await loadAllSettings());
+    loadInputs(settings);
 }
 
 // Progress check rows only matter while the quest menu stays open.
@@ -55,10 +62,10 @@ async function loadQuests(){
         eel.getPatterns()(), eel.getQuestObjectiveTypes()(), loadAllSettings(),
     ]);
     questObjectiveTypes = objectives;
+    questPatterns = patterns;
     const selector = document.getElementById("quest_mapping_objective");
     const current = getDropdownValue(selector);
     setDropdownData("quest_mapping_objective", objectives);
-    setDropdownData("quest_mapping_pattern", [{label: "Auto", value: "auto"}, ...patterns]);
     const key = objectives.some(item => item.value === current) ? current : (objectives.find(item => item.value === "pollen_red") || objectives[0])?.value;
     if (key) {
         setDropdownValue(selector, key);

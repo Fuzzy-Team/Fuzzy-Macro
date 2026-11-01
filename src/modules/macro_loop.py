@@ -205,9 +205,9 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                     macro.questGatherOutcome = "skipped"
                     macro.deferredQuestObjectives.add(args[3]["id"])
                 else:
-                    for giver, action in macro.questTaskWatchers.get(watchedTaskKey(), []):
+                    for giver, watchedAction in macro.questTaskWatchers.get(watchedTaskKey(), []):
                         objective = next((row for row in (macro.questObservations.get(giver) or [])
-                                          if row["action"] == action and row["status"] != "complete"
+                                          if row["action"] == watchedAction and row["status"] != "complete"
                                           and row["id"] not in macro.deferredQuestObjectives), None)
                         if objective:
                             macro.deferredQuestObjectives.add(objective["id"])
@@ -302,6 +302,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 if macro.hasAFBRespawned("AFB_dice_cd", macro.setdat["AFB_rebuff"]*60) or macro.hasAFBRespawned("AFB_glitter_cd", macro.setdat["AFB_rebuff"]*60-30):
                     macro.AFB(gatherInterrupt=False)
         except InterruptRequested as interrupt:
+            skipTask.value = INTERRUPT_NONE
             if questWatchContext:
                 macro.finishQuestTaskWatch(questWatchContext, checkCompletion=False)
                 questWatchContext = None
@@ -484,9 +485,12 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         questCache.clear()
         questScanScreens = None
         taskCompleted = False
-        for giver in quest_giver_order(macro.setdat):
-            if canClaimTimedBearQuest(giver):
-                handleQuest(giver, executeQuest=False)
+        def scanQuestProgress():
+            for giver in quest_giver_order(macro.setdat):
+                if canClaimTimedBearQuest(giver):
+                    handleQuest(giver, executeQuest=False)
+
+        runTask(scanQuestProgress, resetAfter=False, allowAFB=False)
         while run.value != 0:
             pending = [obj for obj in gatherObjectives() if obj["id"] not in attempted]
             selected = choose_quest_gather(pending, macro.setdat, macro.fieldSettings, currentField)
@@ -513,18 +517,25 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 attempted.update(obj["id"] for obj in selected["objectives"])
             affected = {obj["giver"] for obj in pending
                         if field in allowed_fields(obj, macro.setdat, macro.fieldSettings)}
-            if affected:
+
+            def refreshQuestProgress():
                 screens = macro.captureQuestScreenshots()
                 for giver in affected:
                     previous = macro.questObservations.get(giver) or beforeGather.get(giver, [])
-                    found = macro.findQuest(giver, questScreens=screens, logDetection=False)
-                    if found is None:
-                        found = macro.findQuest(giver, logDetection=False)
-                    if found is None:
-                        macro.questObservations[giver] = [{**obj, "status": "unknown"} for obj in previous]
-                        macro.logger.webhook("Quest progress unreadable",
-                            f"Could not refresh {giver.title()}. Remaining objectives will retry before gathering.",
-                            "orange", route_category="quests")
+                    found = None
+                    try:
+                        found = macro.findQuest(giver, questScreens=screens, logDetection=False)
+                        if found is None:
+                            found = macro.findQuest(giver, logDetection=False)
+                    finally:
+                        if found is None:
+                            macro.questObservations[giver] = [{**obj, "status": "unknown"} for obj in previous]
+                            macro.logger.webhook("Quest progress unreadable",
+                                f"Could not refresh {giver.title()}. Remaining objectives will retry before gathering.",
+                                "orange", route_category="quests")
+
+            if affected:
+                runTask(refreshQuestProgress, resetAfter=False, allowAFB=False)
             questCache.clear()
             questScanScreens = None
         return gathered
