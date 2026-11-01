@@ -22,24 +22,36 @@ function switchQuestsTab(target){
     tab.scrollTo(0,0); 
 }
 
-function showQuestGiverSettings(key) {
-    document.querySelectorAll(".quest-giver-settings").forEach(section => {
-        section.hidden = section.id !== `${key}-quest-settings`;
+const questGivers = ["polar bear", "brown bear", "black bear", "honey bee", "bucko bee", "riley bee"];
+
+// Show only the chosen giver's rows in the Quest Giver Overrides card.
+function showQuestGiverSettings(giver) {
+    const key = giver.replaceAll(" ", "_");
+    const card = document.getElementById("quest-giver-overrides").parentElement;
+    card.querySelectorAll("form").forEach(form => {
+        const id = form.querySelector("[id]").id;
+        if (id !== "quest_override_giver") form.style.display = id.startsWith(`${key}_`) ? "flex" : "none";
     });
+}
+
+// Progress check rows only matter while the quest menu stays open.
+function updateQuestProgressFields() {
+    const watch = document.getElementById("quest_progress_watch");
+    if (!watch) return;
+    const mode = document.getElementById("quest_progress_check_mode");
+    const interval = getDropdownValue(mode) === "interval";
+    mode.closest("form").style.display = watch.checked ? "flex" : "none";
+    document.getElementById("quest_progress_check_seconds").closest("form").style.display = watch.checked && interval ? "flex" : "none";
 }
 
 async function loadQuests(){
     switchQuestsTab(document.getElementById(getActiveSubtab("activeQuestsSubtab", "quests-quests")));
     const [patterns, settings] = await Promise.all([eel.getPatterns()(), loadAllSettings()]);
-    document.querySelectorAll('select[id$="_quest_gather_pattern"]').forEach(select => {
-        select.length = 1;
-        patterns.forEach(pattern => select.add(new Option(pattern.label || pattern.name, pattern.value || pattern.name)));
-        const saved = settings[select.id];
-        if (saved && !Array.from(select.options).some(option => option.value === saved)) {
-            select.add(new Option(`${saved} (not found)`, saved));
-        }
+    questGivers.forEach(giver => {
+        setDropdownData(`${giver.replaceAll(" ", "_")}_quest_gather_pattern`, [{ label: "Auto", value: "auto" }, ...patterns]);
     });
     loadInputs(settings);
+    setDropdownValue(document.getElementById("quest_override_giver"), "polar bear");
 }
 
 $("#quests-placeholder")

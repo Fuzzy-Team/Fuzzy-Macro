@@ -6,45 +6,62 @@
   <div id="quests-settings-tab" class="standard-container sub-tab-panel">
     <script>
       const questsSettingsParent = document.getElementById("quests-settings-tab");
-      questsSettingsParent.innerHTML += `<div class="poppins-medium standard-container quest-overrides">
-        <h2>Quest scheduling</h2><p>Choose how the macro shares work between quest givers.</p>
-        <label class="quest-setting-label" for="quest_scheduling">Scheduling mode
-          <select id="quest_scheduling" class="textbox quest-native-select" onchange="saveSetting(this, 'profile')">
-            <option value="quest giver priority">Quest giver priority</option>
-            <option value="optimize quest completion">Optimize quest completion</option>
-          </select>
-        </label><p>Follow giver priority, or finish shared field work and favor fields that advance more objectives.</p>
-      </div>`;
+      const questReturnOptions = ["No Override", "💀 Reset", "👟 Walk", "🔄 Rejoin", "🌱 Whirligig"];
 
-      (function buildQuestOverrides(parent) {
-        const givers = ["polar bear", "brown bear", "black bear", "honey bee", "bucko bee", "riley bee"];
+      buildStandardContainer(questsSettingsParent, "Quest Scheduling", "Decide which quest objective the macro works on next", [
+        {
+          id: "quest_scheduling",
+          title: "Scheduling Mode",
+          desc: "Quest Giver Priority follows your quest order. Optimize Quest Completion finishes shared field work first.",
+          type: {
+            name: "dropdown",
+            data: ["Quest Giver Priority", "Optimize Quest Completion"],
+            triggerFunction: saveProfileTriggerFunction,
+            length: 16,
+          },
+        },
+      ]);
+
+      // One giver's rows are shown at a time; showQuestGiverSettings (quests.js) switches them.
+      (function buildQuestGiverOverrides(parent) {
         const fields = Object.keys(fieldEmojis).filter(field => field !== "hive_hub").map(field => field.replaceAll("_", " "));
-        const colors = {
-          red: ["mushroom", "strawberry", "rose", "pepper"],
-          blue: ["blue flower", "bamboo", "pine tree", "stump"],
-          white: fields.filter(field => field !== "mountain top"),
-          any: fields,
-        };
-        function select(id, label, options) {
-          return `<label class="quest-setting-label" for="${id}">${label}<select id="${id}" class="textbox quest-native-select" onchange="saveSetting(this, 'profile')">${options.map(([value, text]) => `<option value="${value}">${text}</option>`).join("")}</select></label>`;
-        }
-        let html = `<div class="poppins-medium standard-container quest-overrides"><h2>Gather overrides</h2>
-          <p>Use field settings for pollen and tokens, add gumdrops for goo when enabled, and use BloomsAI for petals. Giver overrides take priority, including the pattern for petal objectives.</p>
-          <label class="quest-setting-label" for="quest-settings-giver">Quest giver<select id="quest-settings-giver" class="textbox quest-native-select" onchange="showQuestGiverSettings(this.value)">${givers.map(giver => `<option value="${giver.replaceAll(' ', '_')}">${toTitleCase(giver)}</option>`).join("")}</select></label>`;
-        givers.forEach((giver, index) => {
+        const fieldOptions = list => [{ label: "Auto", value: "auto" }, ...list.map(field => ({ label: `${fieldEmojis[field.replaceAll(" ", "_")]} ${toTitleCase(field)}`, value: field }))];
+        const fieldRows = [
+          ["red", "Red Field", ["mushroom", "strawberry", "rose", "pepper"]],
+          ["blue", "Blue Field", ["blue flower", "bamboo", "pine tree", "stump"]],
+          ["white", "White Field", fields.filter(field => field !== "mountain top")],
+          ["any", "Any Color Field", fields],
+        ];
+        const backpackOptions = [{ label: "Auto", value: "auto" }, ...Array.from({ length: 20 }, (_, i) => ({ label: `${(i + 1) * 5}%`, value: String((i + 1) * 5) }))];
+
+        const rows = [{
+          id: "quest_override_giver",
+          title: "Quest Giver",
+          desc: "Choose whose overrides to edit",
+          type: {
+            name: "dropdown",
+            data: ["Polar Bear", "Brown Bear", "Black Bear", "Honey Bee", "Bucko Bee", "Riley Bee"],
+            triggerFunction: "showQuestGiverSettings(getDropdownValue(this))",
+            length: 12,
+          },
+        }];
+        questGivers.forEach(giver => {
           const key = giver.replaceAll(" ", "_");
-          html += `<section class="quest-giver-settings" id="${key}-quest-settings" ${index ? 'hidden' : ''} aria-label="${toTitleCase(giver)} gather overrides"><div class="quest-settings-grid">`;
-          html += select(`${key}_quest_gather_pattern`, "Pattern", [["auto", "Auto"]]);
-          html += `<label class="quest-setting-label" for="${key}_quest_gather_mins">Gather minutes, 0 uses default<input id="${key}_quest_gather_mins" class="textbox" type="text" inputmode="decimal" data-input-type="float" autocomplete="off" onchange="saveSetting(this, 'profile')"></label>`;
-          html += select(`${key}_quest_gather_backpack`, "Backpack limit", [["auto", "Auto"], ...Array.from({length: 100}, (_, index) => [String(index + 1), `${index + 1}%`])]);
-          html += select(`${key}_quest_gather_return`, "Return to hive", [["no override", "No Override"], ["reset", "Reset"], ["walk", "Walk"], ["rejoin", "Rejoin"], ["whirligig", "Whirligig"]]);
-          html += `</div><h3>Preferred fields</h3><p>Auto shares a suitable quest field, then uses an enabled Gather field or the default. A quest's required field always wins.</p><div class="quest-settings-grid">`;
-          for (const [color, options] of Object.entries(colors)) {
-            html += select(`${key}_quest_field_${color}`, color === "any" ? "Unrestricted objectives" : `${toTitleCase(color)} objectives`, [["auto", "Auto"], ...options.map(field => [field, toTitleCase(field)])]);
-          }
-          html += `</div></section>`;
+          rows.push(
+            { id: `${key}_quest_gather_pattern`, title: "Pattern", desc: "Auto uses the field's pattern, or BloomsAI for petals", type: { name: "dropdown", data: [{ label: "Auto", value: "auto" }], triggerFunction: saveProfileTriggerFunction, length: 12 } },
+            { id: `${key}_quest_gather_mins`, title: "Gather Until Mins", desc: "Set to 0 to use the field or petal time", type: { name: "textbox", inputType: "float", inputLimit: 4, triggerFunction: saveProfileTriggerFunction, length: 12 } },
+            { id: `${key}_quest_gather_backpack`, title: "Backpack%", desc: "Auto uses the field's backpack limit", type: { name: "dropdown", data: backpackOptions, triggerFunction: saveProfileTriggerFunction, length: 12 } },
+            { id: `${key}_quest_gather_return`, title: "Return To Hive", desc: "How to get back to the hive after gathering", type: { name: "dropdown", data: questReturnOptions, triggerFunction: saveProfileTriggerFunction, length: 12 } },
+            ...fieldRows.map(([color, title, list]) => ({
+              id: `${key}_quest_field_${color}`,
+              title,
+              desc: `Used for ${color === "any" ? "objectives with no color" : `${color} objectives`}`,
+              type: { name: "dropdown", data: fieldOptions(list), triggerFunction: saveProfileTriggerFunction, length: 12 },
+            })),
+          );
         });
-        parent.innerHTML += html + `</div>`;
+        buildStandardContainer(parent, "Quest Giver Overrides", "Change how a quest giver's objectives are gathered. Auto keeps the normal behavior, and a field named by the quest always wins.", rows);
+        showQuestGiverSettings("polar bear");
       })(questsSettingsParent);
 
       buildStandardContainer(questsSettingsParent, "Goo Settings", "Decide how the macro wants to handle gathering goo", [
@@ -63,27 +80,36 @@
         {
           id: "quest_progress_watch",
           title: "Keep Quest Menu Open",
-          desc: "Check the active objective between pattern iterations and stop early when it completes. Time and backpack limits still apply.",
+          desc: "Stop gathering early once the objective is complete. Time and backpack limits still apply.",
           type: {
             name: "checkbox",
+            triggerFunction: `${saveProfileTriggerFunction}; updateQuestProgressFields()`,
+          },
+        },
+        {
+          id: "quest_progress_check_mode",
+          title: "Check Progress",
+          desc: "Checks happen between pattern loops, so a long pattern finishes first",
+          type: {
+            name: "dropdown",
+            data: [{ label: "On an Interval", value: "interval" }, { label: "Every Pattern Loop", value: "every iteration" }],
+            triggerFunction: `${saveProfileTriggerFunction}; updateQuestProgressFields()`,
+            length: 12,
+          },
+        },
+        {
+          id: "quest_progress_check_seconds",
+          title: "Check Interval (secs)",
+          desc: "Seconds between quest menu checks",
+          type: {
+            name: "textbox",
+            inputType: "float",
+            inputLimit: 4,
             triggerFunction: saveProfileTriggerFunction,
+            length: 12,
           },
         },
       ]);
-
-      questsSettingsParent.innerHTML += `<div class="poppins-medium standard-container quest-overrides">
-        <h2>Progress checks</h2><p>Used while Keep Quest Menu Open is enabled. Long patterns finish before checking.</p>
-        <div class="quest-settings-grid">
-          <label class="quest-setting-label" for="quest_progress_check_mode">Check progress
-            <select id="quest_progress_check_mode" class="textbox quest-native-select" onchange="saveSetting(this, 'profile')">
-              <option value="interval">Time interval</option><option value="every iteration">Every iteration</option>
-            </select>
-          </label>
-          <label class="quest-setting-label" for="quest_progress_check_seconds">Check interval, seconds
-            <input id="quest_progress_check_seconds" class="textbox" type="text" inputmode="decimal" data-input-type="float" autocomplete="off" onchange="saveSetting(this, 'profile')">
-          </label>
-        </div><p>Default 10 seconds. The interval is only used for time interval checks.</p>
-      </div>`;
 
       buildStandardContainer(questsSettingsParent, "Quest Gather Interrupt", "Choose which quest givers may interrupt gathering when a required mob respawns.", [
         ...[
@@ -104,11 +130,11 @@
         })),
       ]);
 
-      buildStandardContainer(questsSettingsParent, "Petal Gather", "Petal defaults apply before explicit quest giver overrides.", [
+      buildStandardContainer(questsSettingsParent, "Petal Gather", "Petal quest objectives use BloomsAI. Quest giver overrides take priority over these.", [
         {
           id: "petal_quest_gather_mins",
           title: "Gather Until Mins",
-          desc: "Default time for petal objectives. Set to 0 to use the field time. A giver override takes priority.",
+          desc: "Gather time for petal objectives. Set to 0 to use the field time.",
           type: {
             name: "textbox",
             inputType: "float",
@@ -119,10 +145,10 @@
         {
           id: "petal_quest_gather_return",
           title: "Return To Hive",
-          desc: "Default return method for petal objectives. A giver override takes priority.",
+          desc: "Return behavior for petal objectives",
           type: {
             name: "dropdown",
-            data: ["No Override", "💀 Reset", "👟 Walk", "🔄 Rejoin", "🌱 Whirligig"],
+            data: questReturnOptions,
             triggerFunction: saveProfileTriggerFunction,
           },
         },
