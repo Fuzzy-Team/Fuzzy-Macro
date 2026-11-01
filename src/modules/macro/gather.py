@@ -4,6 +4,7 @@ import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
 from modules.controls.sleep import InterruptRequested, pause_aware_time as time, sleep
 from modules.gather_session import field_pattern_variables, GatherPatternRunner, GatherSession
+from modules.quest_planning import quest_check_due
 import modules.macro.pattern_environment as patternEnvironment
 from modules.macro.game_data import (
     collectData,
@@ -62,7 +63,8 @@ class GatherMixin:
         s = n % 60
         return f"{int(m)}m {int(s):02d}s"
 
-    def gather(self, field, settingsOverride = {}, questGumdrops=False):
+    def gather(self, field, settingsOverride = {}, questGumdrops=False, questObjective=None):
+        self.robloxWindow.questMenuVisibleForAI = False
         # Normalize field name to handle both space and underscore formats
         # Convert underscores to spaces for fieldSettings lookup
         normalized_field = field.replace('_', ' ')
@@ -381,53 +383,38 @@ class GatherMixin:
             self.set_task_status(f"gather_{field}", task="gather", field=field)
 
         questMenuKeptOpen = False
-        questWatchGiver = None
-        questWatchObjective = None
-        lastQuestProgressCheck = 0
-        if self.setdat.get("quest_progress_watch", False) and not isSproutGather:
-            questWatchers = getattr(self, "questGatherWatchers", {}) or {}
-            watcherCandidates = list(questWatchers.get(normalized_field.lower(), []))
-            if normalized_field.lower() in {"blue flower", "bamboo", "pine tree", "stump"}:
-                watcherCandidates.extend(questWatchers.get("__blue__", []))
-            if normalized_field.lower() in {"mushroom", "strawberry", "rose", "pepper"}:
-                watcherCandidates.extend(questWatchers.get("__red__", []))
-            watcherCandidates.extend(questWatchers.get("__any__", []))
-
-            if watcherCandidates:
-                questWatchGiver, questWatchObjective = watcherCandidates[0]
-                try:
-                    # findQuest opens the menu before scanning. Mark it here so
-                    # an OCR exception still closes the overlay safely.
-                    questMenuKeptOpen = True
-                    visibleObjectives = self.findQuest(
-                        questWatchGiver,
-                        keepQuestMenuOpen=True,
-                        logDetection=False,
-                    )
-                    if visibleObjectives is not None and questWatchObjective in visibleObjectives:
-                        lastQuestProgressCheck = time.time()
-                        self.moveMouseToDefault()
-                        self.logger.webhook(
-                            "Live Quest Progress",
-                            f"Watching {questWatchGiver.title()}: {questWatchObjective.replace('_', ' ').title()}",
-                            "light blue",
-                        )
-                    elif visibleObjectives is not None:
-                        # The menu was deliberately left open by findQuest, but the
-                        # objective is no longer incomplete, so do not watch it.
-                        self.toggleQuest()
-                        self.moveMouseToDefault()
-                        questMenuKeptOpen = False
-                    else:
-                        # findQuest closes the menu itself when it cannot locate
-                        # the requested quest giver.
-                        questMenuKeptOpen = False
-                except Exception:
-                    print(traceback.format_exc())
-                    if questMenuKeptOpen:
-                        self.toggleQuest()
-                        self.moveMouseToDefault()
+        questWatchGiver = questObjective["giver"] if questObjective else None
+        questWatchObjective = questObjective["action"] if questObjective else None
+        lastQuestProgressCheck = time.time()
+        questWatchFailures = 0
+        if questObjective and self.setdat.get("quest_progress_watch", False) and not isSproutGather:
+            try:
+                questMenuKeptOpen = True
+                found = self.findQuest(questWatchGiver, keepQuestMenuOpen=True, logDetection=False)
+                if found is None:
+                    found = self.findQuest(questWatchGiver, keepQuestMenuOpen=True, logDetection=False)
+                if found is None:
                     questMenuKeptOpen = False
+                    self.questGatherOutcome = "unreadable"
+                    self.logger.webhook("Quest progress unreadable", f"Deferring {questWatchGiver.title()} until the next pass.",
+                                        "orange", route_category="quests")
+                    keepGathering = False
+                else:
+                    observed = next((obj for obj in (self.questObservations.get(questWatchGiver) or [])
+                                     if obj["id"] == questObjective["id"]), None)
+                    if observed and observed["status"] == "complete":
+                        self.questGatherOutcome = "complete"
+                        keepGathering = False
+                    self.moveMouseToDefault()
+            except InterruptRequested:
+                gatherSession.finish(gatherNameSpace)
+                raise
+            except Exception:
+                print(traceback.format_exc())
+                self.questGatherOutcome = "unreadable"
+                keepGathering = False
+
+        self.robloxWindow.questMenuVisibleForAI = questMenuKeptOpen
 
         lastGooTime = 0  # Track when goo was last used
         gooTimerActive = True  # Flag to control goo timer thread
@@ -534,6 +521,7 @@ class GatherMixin:
                     questMenuKeptOpen = False
                 self.moveMouseToDefault()
             finally:
+                self.robloxWindow.questMenuVisibleForAI = False
                 try:
                     self.clear_task_status()
                 finally:
@@ -599,28 +587,32 @@ class GatherMixin:
                     self.hourlyReport.addHourlyStat("gathering_time", time.time()-patternStartTime)
                 gatherTime = self.convertSecsToMinsAndSecs(getGatherTime())
 
-                if questMenuKeptOpen and time.time() - lastQuestProgressCheck >= 2:
+                if questMenuKeptOpen and quest_check_due(self.setdat, time.time() - lastQuestProgressCheck):
                     lastQuestProgressCheck = time.time()
                     try:
-                        visibleObjectives = self.findQuest(
-                            questWatchGiver,
-                            questScreens=[self.captureQuestWatchScreen()],
-                            logDetection=False,
-                        )
-                        if visibleObjectives is not None and questWatchObjective not in visibleObjectives:
-                            self.logger.webhook(
-                                "Gathering: Ended",
-                                f"{questWatchGiver.title()} objective completed: {questWatchObjective.replace('_', ' ').title()}",
-                                "light green",
-                                "screen",
-                                route_category="gathering",
-                            )
+                        objectiveStatus = self.readWatchedQuestObjective(questObjective)
+                        if objectiveStatus == "unknown":
+                            objectiveStatus = self.readWatchedQuestObjective(questObjective, reposition=True)
+                        if objectiveStatus == "complete":
+                            self.questGatherOutcome = "complete"
+                            self.logger.webhook("Quest objective complete",
+                                f"{questWatchGiver.title()}: {questWatchObjective.replace('_', ' ')}",
+                                "light green", route_category="quests")
                             keepGathering = False
                             continue
+                        questWatchFailures = questWatchFailures + 1 if objectiveStatus == "unknown" else 0
+                    except InterruptRequested:
+                        raise
                     except Exception:
-                        # A single bad OCR frame should never end a gather. The next
-                        # pattern cycle will try the visible objective again.
+                        questWatchFailures += 1
                         print(traceback.format_exc())
+                    if questWatchFailures >= 3:
+                        self.questGatherOutcome = "unreadable"
+                        self.logger.webhook("Quest progress unreadable",
+                            f"Deferring {questWatchGiver.title()}: {questWatchObjective.replace('_', ' ')} until the next pass.",
+                            "orange", route_category="quests")
+                        keepGathering = False
+                        continue
 
                 #check for AFB
                 if inactiveHoneyEvent.is_set():

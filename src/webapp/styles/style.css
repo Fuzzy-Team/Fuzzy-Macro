@@ -2012,3 +2012,36 @@ select:focus {
 .sprout-ai-token-row.dragging {
   opacity: 0.45;
 }
+
+/* Quest overrides use one giver at a time to keep the settings compact. */
+.quest-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+.quest-setting-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+}
+.quest-setting-label .textbox {
+  width: 100%;
+  box-sizing: border-box;
+}
+.quest-native-select {
+  color: var(--text-main);
+  background-color: var(--textbox-bg);
+  min-height: 2.5rem;
+}
+.quest-setting-label .textbox:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.quest-overrides > .quest-setting-label {
+  max-width: 20rem;
+}
+@media (max-width: 600px) {
+  .quest-settings-grid { grid-template-columns: minmax(0, 1fr); }
+}

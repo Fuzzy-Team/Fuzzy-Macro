@@ -298,6 +298,9 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'riley_bee_quest': False,
  'quest_use_gumdrops': False,
  'quest_progress_watch': False,
+ 'quest_progress_check_mode': 'interval',
+ 'quest_progress_check_seconds': 10,
+ 'quest_scheduling': 'quest giver priority',
  'Auto_Field_Boost': False,
  'AFB_field': 'sunflower',
  'AFB_rebuff': 0,
@@ -820,6 +823,13 @@ DEFAULT_GENERAL_SETTINGS = {'hive_number': 1,
  'webhook_time_format': 24,
  'discord_rich_presence': False,
  'hourly_report_embed_text': True}
+
+for _giver in ("polar_bear", "brown_bear", "black_bear", "honey_bee", "bucko_bee", "riley_bee"):
+    DEFAULT_PROFILE_SETTINGS[f"{_giver}_quest_gather_pattern"] = "auto"
+    DEFAULT_PROFILE_SETTINGS[f"{_giver}_quest_gather_backpack"] = "auto"
+    for _color in ("red", "blue", "white", "any"):
+        DEFAULT_PROFILE_SETTINGS[f"{_giver}_quest_field_{_color}"] = "auto"
+
 
 DEFAULT_FIELDS = {'sunflower': {'shift_lock': False,
                'field_drift_compensation': False,

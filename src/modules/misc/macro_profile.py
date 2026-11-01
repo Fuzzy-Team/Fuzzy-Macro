@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ast
 import copy
+import math
 import os
 import re
 import tempfile
@@ -395,6 +396,31 @@ class MacroProfileStore:
     def _validate(self, setting, value, defaults, combined):
         """Reject values that break a constraint. Types are not enforced: readers accept
         the formats the GUI saves (numeric strings, comma-separated lists, ...)."""
+        from modules.quest_planning import COLOR_FIELDS, QUEST_GIVERS
+
+        choices = {"quest_scheduling": ("quest giver priority", "optimize quest completion"),
+                   "quest_progress_check_mode": ("interval", "every iteration")}
+        if setting in choices and value not in choices[setting]:
+            raise MacroProfileValidationError(setting, "choose one of the listed options")
+        if setting == "quest_progress_check_seconds" or setting.endswith(("_quest_gather_mins", "_quest_gather_backpack")):
+            if setting.endswith("_quest_gather_backpack") and value == "auto":
+                return
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                raise MacroProfileValidationError(setting, "enter a number")
+            minimum = 0 if setting.endswith("_quest_gather_mins") else 1
+            if not math.isfinite(number) or number < minimum:
+                raise MacroProfileValidationError(setting, f"must be at least {minimum}")
+            if setting.endswith("_quest_gather_backpack") and number > 100:
+                raise MacroProfileValidationError(setting, "must be between 1 and 100, or Auto")
+        for giver in QUEST_GIVERS:
+            prefix = giver.replace(" ", "_") + "_quest_field_"
+            if setting.startswith(prefix):
+                color = setting[len(prefix):]
+                if value != "auto" and value not in COLOR_FIELDS.get(color, ()):
+                    raise MacroProfileValidationError(setting, "choose a field that supports this objective color")
+
         if setting in ("max_cannon_attempts", "cannon_hive_resync_attempts"):
             if not isinstance(value, int) or isinstance(value, bool):
                 raise MacroProfileValidationError(setting, "expected int")

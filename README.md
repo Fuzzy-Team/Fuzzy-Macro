@@ -62,7 +62,11 @@ Follow our [installation guide](https://fuzzy-team.gitbook.io/fuzzy-macro) to ge
 ### Quest System
 - **Supported NPCs**: Polar Bear, Honey Bee, Bucko Bee, Riley Bee, Brown Bear, Black Bear (More to come)
 - Automatic quest detection and completion
-- Quest gathering with override settings
+- Automatic gather settings for pollen, goo, and petal objectives, with per-giver pattern, time, backpack, and return overrides
+- Optional per-giver field preferences for red, blue, white, and unrestricted objectives
+- Choose quest-giver priority or share field work across quests to reduce repeat visits
+- Keep the quest menu open and check completion at a chosen interval or after each pattern iteration
+- Unreadable progress stays unfinished, and time or backpack limits still end a gather session
 - Gumdrop support for goo gathering
 - Smart field selection for quest requirements
 - Quest feed bee automation (Fix in progress)

@@ -22,8 +22,23 @@ function switchQuestsTab(target){
     tab.scrollTo(0,0); 
 }
 
-function loadQuests(){
-    switchQuestsTab(document.getElementById(getActiveSubtab("activeQuestsSubtab", "quests-quests")))
+function showQuestGiverSettings(key) {
+    document.querySelectorAll(".quest-giver-settings").forEach(section => {
+        section.hidden = section.id !== `${key}-quest-settings`;
+    });
+}
+
+async function loadQuests(){
+    switchQuestsTab(document.getElementById(getActiveSubtab("activeQuestsSubtab", "quests-quests")));
+    const [patterns, settings] = await Promise.all([eel.getPatterns()(), loadAllSettings()]);
+    document.querySelectorAll('select[id$="_quest_gather_pattern"]').forEach(select => {
+        patterns.forEach(pattern => select.add(new Option(pattern.label || pattern.name, pattern.value || pattern.name)));
+        const saved = settings[select.id];
+        if (saved && !Array.from(select.options).some(option => option.value === saved)) {
+            select.add(new Option(`${saved} (not found)`, saved));
+        }
+    });
+    loadInputs(settings);
 }
 
 $("#quests-placeholder")
