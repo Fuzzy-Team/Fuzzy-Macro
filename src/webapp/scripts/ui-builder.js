@@ -4,6 +4,17 @@
 //commonly used
 const slotArray = [1, 2, 3, 4, 5, 6, 7];
 
+function toTitleCase(str) {
+  return str.replace(
+    /\w\S*/g,
+    text => text.charAt(0).toUpperCase() + text.substring(1).toLowerCase()
+  );
+}
+
+const stripHTMLTags = str => str.replace(/<[^>]*(?:>|$)/g, '');
+const saveGeneralTriggerFunction = "saveSetting(this, 'general')";
+const saveProfileTriggerFunction = "saveSetting(this, 'profile')";
+
 //id: id of input element
 /*
     type property: the type of input element
@@ -106,7 +117,7 @@ function buildInput(id, type) {
     const defaultDataValue = type.multiple ? "[]" : "none";
     let html = `
         <div data-onchange="${type.triggerFunction
-      }" id = ${id} class="custom-select poppins-regular" data-multiple="${type.multiple ? "true" : "false"}" data-max-selections="${type.maxSelections ? type.maxSelections : 0}" style="width: ${type.length ? type.length : 10
+      }" id = ${id} class="custom-select poppins-regular" data-default="${type.default ?? ""}" data-multiple="${type.multiple ? "true" : "false"}" data-max-selections="${type.maxSelections ? type.maxSelections : 0}" style="width: ${type.length ? type.length : 10
       }rem; margin-top: 0.6rem;">
             <div class="select-area">
                 <div class = "value" data-value='${defaultDataValue}'>${defaultValue}</div>
