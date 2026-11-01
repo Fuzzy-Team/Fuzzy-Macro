@@ -28,6 +28,7 @@ async function switchConfigTab(target) {
 
 async function loadConfig() {
   const settings = await loadAllSettings();
+  setDropdownData("hidden_patterns", await eel.getPatterns()());
   loadInputs(settings);
   updateDiscordUniversalRouteText();
   await loadModelStatus();
@@ -45,6 +46,12 @@ async function loadConfig() {
 
   // Initialize quick action buttons
   initializeQuickActions();
+}
+
+async function saveHiddenPatterns(ele) {
+  await saveSetting(ele, "general");
+  await loadGatherPatterns();
+  await showGatherPatternOptions(getSelectedGatherPattern());
 }
 
 function formatModelSize(sizeBytes) {
