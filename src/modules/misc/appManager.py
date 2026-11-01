@@ -147,12 +147,11 @@ if _IS_WINDOWS:
             return False
 
     def openApp(app="Roblox"):
-        # Match macOS semantics: only focus an already-running app.
-        # Returning False when Roblox is closed lets callers trigger rejoin.
         try:
             if _is_roblox_app(app):
                 if not isAppOpen("roblox"):
-                    return False
+                    openDeeplink("roblox://")
+                    return True
                 return _focus_window_by_app("Roblox")
 
             if not isAppOpen(app):
