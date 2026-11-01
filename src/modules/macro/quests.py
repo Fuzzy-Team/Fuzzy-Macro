@@ -557,7 +557,7 @@ class QuestMixin:
                 textChunk = []
                 for line in ocr.ocrRead(textImg):
                     textChunk.append(self.convertCyrillic(line[1][0].strip().lower()))
-                textChunk = ''.join(textChunk).strip()
+                textChunk = ' '.join(textChunk).strip()
                 if textChunk:
                     chunks.append({"y": y, "text": textChunk, "bbox": (x, y, w, h)})
 
@@ -799,7 +799,7 @@ class QuestMixin:
                     textChunk = []
                     for line in ocr.ocrRead(textImg):
                         textChunk.append(self.convertCyrillic(line[1][0].strip().lower()))
-                    textChunk = ''.join(textChunk).strip()
+                    textChunk = ' '.join(textChunk).strip()
                     brownItems.append({
                         "text": textChunk,
                         "bbox": panel["bbox"],
@@ -1025,6 +1025,7 @@ class QuestMixin:
                 textChunk = []
                 for line in ocr.ocrRead(textImg):
                     textChunk.append(self.convertCyrillic(line[1][0].strip().lower()))
+                completionText = ' '.join(textChunk)
                 textChunk = ''.join(textChunk)
                 if logDetection:
                     print(textChunk)
@@ -1045,12 +1046,12 @@ class QuestMixin:
                         objectiveData[1] = str(min(int(amount), 50))
                         objectives[i] = "_".join(objectiveData)
 
-                if re.search(r"\bcomplete(?:d)?\b", textChunk, re.IGNORECASE):
+                if re.search(r"\bcomplete(?:d)?\b", completionText, re.IGNORECASE):
                     panel["status"] = "complete"
                 if objectiveTextShowsIncompleteProgress(textChunk):
                     panel["status"] = "incomplete"
 
-                observeRow(i, textChunk, panel["status"], y + h < screen.shape[0])
+                observeRow(i, completionText, panel["status"], y + h < screen.shape[0])
                 if panel["status"] == "complete":
                     completedObjectives.append(objectives[i])
                     color = (0, 255, 0)
@@ -1075,6 +1076,7 @@ class QuestMixin:
                 textChunk = []
                 for line in ocr.ocrRead(textImg):
                     textChunk.append(self.convertCyrillic(line[1][0].strip().lower()))
+                completionText = ' '.join(textChunk)
                 textChunk = ''.join(textChunk)
                 if logDetection:
                     print(textChunk)
@@ -1098,12 +1100,12 @@ class QuestMixin:
                         objectiveData[1] = str(min(int(amount), 50))
                         objectives[i] = "_".join(objectiveData)
 
-                if not objectiveTextShowsIncompleteProgress(textChunk) and re.search(r"\bcomplete(?:d)?\b", textChunk, re.IGNORECASE):
-                    observeRow(i, textChunk, "complete", y + h < screen.shape[0])
+                if not objectiveTextShowsIncompleteProgress(textChunk) and re.search(r"\bcomplete(?:d)?\b", completionText, re.IGNORECASE):
+                    observeRow(i, completionText, "complete", y + h < screen.shape[0])
                     completedObjectives.append(objectives[i])
                     color = (0, 255, 0)  #green
                 elif objectiveTextShowsIncompleteProgress(textChunk):
-                    observeRow(i, textChunk, "incomplete")
+                    observeRow(i, completionText, "incomplete")
                     incompleteObjectives.append(objectives[i])
                     color = (0, 0, 255)  #red
                 else:

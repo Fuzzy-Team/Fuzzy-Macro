@@ -36,6 +36,7 @@
         { id: "quest_mapping_return", title: "Return To Hive", desc: "How to return after gathering",
           type: { name: "dropdown", data: questReturnOptions, triggerFunction: saveProfileTriggerFunction, length: 12 } },
       ]);
+      document.getElementById("objective-gather-settings").parentElement.style.display = "none";
 
       buildStandardContainer(questsSettingsParent, "Goo Settings", "Decide how the macro wants to handle gathering goo", [
         {

@@ -44,6 +44,7 @@ async function showQuestObjectiveSettings(key, settings) {
         document.getElementById(`quest_mapping_${property}`).dataset.settingId = prefix + property;
     }
     loadInputs(settings);
+    document.getElementById("objective-gather-settings").parentElement.style.display = "block";
 }
 
 // Progress check rows only matter while the quest menu stays open.
@@ -58,6 +59,7 @@ function updateQuestProgressFields() {
 
 async function loadQuests(){
     switchQuestsTab(document.getElementById(getActiveSubtab("activeQuestsSubtab", "quests-quests")));
+    document.getElementById("objective-gather-settings").parentElement.style.display = "none";
     const [patterns, objectives, settings] = await Promise.all([
         eel.getPatterns()(), eel.getQuestObjectiveTypes()(), loadAllSettings(),
     ]);
