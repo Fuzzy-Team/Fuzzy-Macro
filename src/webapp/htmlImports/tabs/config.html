@@ -176,9 +176,21 @@
           desc: "How often the macro should convert the balloon",
           type: {
             name: "dropdown",
-            data: ["Always", "Every", "Every Gather", "Never"],
+            data: ["Always", "Every", "Every Gather", "Balloon Blessing", "Never"],
             triggerFunction: saveProfileTriggerFunction,
           },
+        },
+        {
+          id: "convert_balloon_min_blessing",
+          title: "Min Blessing: x",
+          desc: "Minimum Balloon Blessing stack for Balloon Blessing conversion mode",
+          type: { name: "textbox", inputType: "int", triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "convert_balloon_always_after",
+          title: "Always Convert After (m)",
+          desc: "In Balloon Blessing mode, convert at the next hive visit after this many minutes, even below the minimum stack",
+          type: { name: "textbox", inputType: "int", triggerFunction: saveProfileTriggerFunction },
         },
         {
           id: "convert_balloon_every",
