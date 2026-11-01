@@ -3,9 +3,40 @@ from __future__ import annotations
 import pyautogui as pag
 import time
 from typing import TYPE_CHECKING
+from modules.controls.sleep import is_paused, is_stopped, wait_while_paused
 
 if TYPE_CHECKING:
     from modules.submacros.hasteCompensation import HasteCompensationRevamped
+
+#keys currently held down through keyboard.keyDown, so a pause can let go of them and press them again
+_held = []
+
+
+def _pausePoint():
+    """If paused, release the held keys, wait for resume, then press them again.
+    Returns the seconds spent paused so the caller can push its deadline back by that much."""
+    if not is_paused():
+        return 0
+    start = time.perf_counter()
+    held = list(_held)
+    for k in held:
+        pag.keyUp(k, _pause=False)
+    wait_while_paused()
+    if not is_stopped():
+        for k in held:
+            pag.keyDown(k, _pause=False)
+    return time.perf_counter() - start
+
+
+def _holdFor(duration):
+    """Sleep while the keys stay held, pausing and stopping promptly. Time spent paused doesn't count."""
+    end = time.perf_counter() + duration
+    while not is_stopped():
+        end += _pausePoint()
+        remaining = end - time.perf_counter()
+        if remaining <= 0:
+            return
+        time.sleep(min(0.05, remaining))
 
 
 class keyboard:
@@ -35,7 +66,10 @@ class keyboard:
 
         #sleep_interval = 0.01  # Or even 0.02 would probably work fine
         
-        while traveled_distance < corrected_target:
+        while traveled_distance < corrected_target and not is_stopped():
+            paused = _pausePoint()
+            start_time += paused
+            last_time += paused
             current_time = time.perf_counter()
             elapsed = current_time - start_time
             
@@ -74,7 +108,7 @@ class keyboard:
     def multiWalk(self, keys, t, applyHaste=True, method='predictive'):
         try:
             for k in keys:
-                pag.keyDown(k, _pause=False)
+                keyboard.keyDown(k, False)
 
             if applyHaste and self.enableHasteCompensation:
                 if method == 'predictive':
@@ -82,10 +116,10 @@ class keyboard:
                 else:
                     self.timeWait(t)
             else:
-                time.sleep(t * 28 / self.ws)
+                _holdFor(t * 28 / self.ws)
         finally:
             for k in keys:
-                pag.keyUp(k, _pause=False)
+                keyboard.keyUp(k, False)
 
     @staticmethod
     #call the press function of the pag library
@@ -95,17 +129,21 @@ class keyboard:
     def keyDown(k, pause = True):
         #for some reason, the function key is sometimes held down, causing it to open the dock or enable dictation
         keyboard.keyUp('fn', False)
+        if k not in _held:
+            _held.append(k)
         pag.keyDown(k, _pause = pause)
 
     @staticmethod
     def keyUp(k, pause = True):
+        if k in _held:
+            _held.remove(k)
         pag.keyUp(k, _pause = pause)
 
     #pyautogui without the pause
     def press(self,key, delay = 0.02):
         keyboard.keyDown(key, False)
         try:
-            time.sleep(delay)
+            _holdFor(delay)
         finally:
             keyboard.keyUp(key, False)
 
@@ -132,7 +170,10 @@ class keyboard:
         prevTime = st
         prevSpeed = self.getMoveSpeed()
 
-        while traveledDistance < target_distance and prevTime-st < maxTime:
+        while traveledDistance < target_distance and prevTime-st < maxTime and not is_stopped():
+            paused = _pausePoint()
+            st += paused
+            prevTime += paused
             currentTime = time.perf_counter()
             speed = self.getMoveSpeed()
 
@@ -164,7 +205,8 @@ class keyboard:
         d += v * (f - s) 
 
         st = time.time()
-        while d < l:
+        while d < l and not is_stopped():
+            _pausePoint()
             prev_v = v
             s, f, v = a()
             d += ((prev_v + v) / 2) * (f - s) 
@@ -176,7 +218,7 @@ class keyboard:
             self.tileWait(tiles)
             self.keyUp(key, False)
         else:
-            self.press(key,(tiles/8.3)*28/self.haste.value)
+            self.press(key,(tiles/8.3)*28/self.ws)
 
     def multiTileWalk(self, keys, tiles, applyHaste = True):
         key_list = list(keys)
@@ -189,7 +231,7 @@ class keyboard:
             if applyHaste:
                 self.tileWait(tiles)
             else:
-                time.sleep((tiles / 8.3) * 28 / self.ws)
+                _holdFor((tiles / 8.3) * 28 / self.ws)
         finally:
             for key in reversed(key_list):
                 keyboard.keyUp(key, False)
