@@ -244,7 +244,7 @@ class AFBMixin:
                 self.clear_task_status()
                 self.afb = True
                 if turnOffShiftLock:
-                    self.keyboard.press("shift")
+                    self.disableShiftLock()
                 self.logger.webhook("Gathering: interrupted", "Automatic Field Boost", "brown")
                 if self.AFBglitter:
                     self.reset(convert=False)
