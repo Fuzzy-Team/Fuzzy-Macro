@@ -1,11 +1,14 @@
 import os
 import subprocess
-from modules.misc.appleScript import runAppleScript
 import pyautogui as pag
 from AppKit import NSWorkspace
 from ApplicationServices import AXUIElementCreateApplication, AXUIElementSetAttributeValue, AXUIElementCopyAttributeValue, AXValueCreate, kAXValueCGPointType, kAXValueCGSizeType, AXUIElementCopyAttributeNames
 from Quartz import CGPoint, CGSize
 mw,mh = pag.size()
+
+def runAppleScript(code):
+    cmd = ''' osascript -e '{}' '''.format(code)
+    os.system(cmd)
 
 def isAppOpenMac(app="roblox"):
     tmp = os.popen("ps -Af").read()

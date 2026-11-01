@@ -4,6 +4,17 @@
 //commonly used
 const slotArray = [1, 2, 3, 4, 5, 6, 7];
 
+function toTitleCase(str) {
+  return str.replace(
+    /\w\S*/g,
+    text => text.charAt(0).toUpperCase() + text.substring(1).toLowerCase()
+  );
+}
+
+const stripHTMLTags = str => str.replace(/<[^>]*(?:>|$)/g, '');
+const saveGeneralTriggerFunction = "saveSetting(this, 'general')";
+const saveProfileTriggerFunction = "saveSetting(this, 'profile')";
+
 //id: id of input element
 /*
     type property: the type of input element
