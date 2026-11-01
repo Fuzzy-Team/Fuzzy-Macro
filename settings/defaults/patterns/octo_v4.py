@@ -1,5 +1,4 @@
 # Octo v4
-# Original AHK pattern by EliTheLegoGuy, via Zenith Macro. Converted for Fuzzy Macro's Python pattern runner.
 
 def key_down(*keys):
     for key in keys:
