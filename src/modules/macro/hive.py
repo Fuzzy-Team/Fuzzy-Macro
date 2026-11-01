@@ -42,6 +42,18 @@ class HiveMixin:
                 (conv_setting == "every" and self.hasRespawned("convert_balloon", int(self.setdat.get("convert_balloon_every", 30))*60)) or \
                 (conv_setting == "every_gather" and forced_convert_balloon is True)
         
+        if conv_setting == "balloon_blessing":
+            convertBalloon = self.hasRespawned(
+                "convert_balloon", int(self.setdat.get("convert_balloon_always_after", 50)) * 60
+            )
+            if not convertBalloon:
+                blessing = self.buffDetector.getBuffsWithImage({"blessing": ["top", True, True]})[0]
+                try:
+                    convertBalloon = float(blessing) >= float(self.setdat.get("convert_balloon_min_blessing", 0))
+                except (TypeError, ValueError):
+                    # An unreadable stack leaves conversion to the timer.
+                    convertBalloon = False
+
         convertedBackpack = False
         inactiveHoneyChecks = 0
 

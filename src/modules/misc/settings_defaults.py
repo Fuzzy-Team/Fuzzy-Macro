@@ -237,6 +237,8 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'hotbar_buff_tool_slot7_use_every_value': 30,
  'hotbar_buff_tool_slot7_use_every_format': 'secs',
  'convert_balloon_every': 30,
+ 'convert_balloon_min_blessing': 0,
+ 'convert_balloon_always_after': 50,
  'convert_balloon': 'always',
  'polar_bear_quest': False,
  'brown_bear_quest': False,
