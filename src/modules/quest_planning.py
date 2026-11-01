@@ -54,7 +54,7 @@ def gather_objective_types(catalog):
                 kind, _, target = objective["action"].partition("_")
                 name = target.replace("_", " ").title()
                 if kind in ("gather", "gathergoo", "gatherpetal"):
-                    label = {"gather": "Gather Pollen", "gathergoo": "Collect Goo", "gatherpetal": "Catch Bloom Petals"}[kind] + " in " + name
+                    label = {"gather": "Pollen", "gathergoo": "Goo", "gatherpetal": "Bloom Petals"}[kind] + " in " + name
                 elif kind in ("pollen", "pollengoo"):
                     label = "Collect " + name + (" Pollen" if kind == "pollen" else " Goo")
                 else:

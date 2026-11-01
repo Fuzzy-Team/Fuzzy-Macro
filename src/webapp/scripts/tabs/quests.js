@@ -24,6 +24,26 @@ function switchQuestsTab(target){
 
 let questObjectiveTypes = [];
 let questPatterns = [];
+// Objective Type dropdown options. The catalog has 44 objectives, too many for one list.
+const questObjectiveGroups = [
+    {label: "Pollen by Color", value: "pollen", kinds: ["pollen"]},
+    {label: "Pollen in a Field", value: "gather", kinds: ["gather"]},
+    {label: "Tokens", value: "token", kinds: ["token", "fieldtoken"]},
+    {label: "Goo", value: "goo", kinds: ["pollengoo", "gathergoo"]},
+    {label: "Bloom Petals", value: "petal", kinds: ["gatherpetal"]},
+];
+
+function questObjectiveGroup(key) {
+    return questObjectiveGroups.find(group => group.kinds.includes(key.split("_")[0]));
+}
+
+function showQuestObjectiveGroup(value, key, settings) {
+    const options = questObjectiveTypes.filter(item => questObjectiveGroup(item.value).value === value);
+    setDropdownData("quest_mapping_objective", options);
+    key = key || options[0].value;
+    setDropdownValue(document.getElementById("quest_mapping_objective"), key);
+    return showQuestObjectiveSettings(key, settings);
+}
 
 async function showQuestObjectiveSettings(key, settings) {
     const objective = questObjectiveTypes.find(item => item.value === key);
@@ -67,11 +87,11 @@ async function loadQuests(){
     questPatterns = patterns;
     const selector = document.getElementById("quest_mapping_objective");
     const current = getDropdownValue(selector);
-    setDropdownData("quest_mapping_objective", objectives);
     const key = objectives.some(item => item.value === current) ? current : (objectives.find(item => item.value === "pollen_red") || objectives[0])?.value;
     if (key) {
-        setDropdownValue(selector, key);
-        await showQuestObjectiveSettings(key, settings);
+        const group = questObjectiveGroup(key).value;
+        setDropdownValue(document.getElementById("quest_mapping_group"), group);
+        await showQuestObjectiveGroup(group, key, settings);
     } else {
         loadInputs(settings);
     }

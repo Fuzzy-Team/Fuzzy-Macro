@@ -23,18 +23,20 @@
       ]);
 
       buildStandardContainer(questsSettingsParent, "Objective Gather Settings", "Each objective uses the same mapping for every quest giver. A field named by the quest always wins.", [
-        { id: "quest_mapping_objective", title: "Objective", desc: "Shared across all quest givers",
-          type: { name: "dropdown", data: [], triggerFunction: "showQuestObjectiveSettings(getDropdownValue(this))", length: 22 } },
+        { id: "quest_mapping_group", title: "Objective Type", desc: "Narrows the objective list",
+          type: { name: "dropdown", data: questObjectiveGroups, triggerFunction: "showQuestObjectiveGroup(getDropdownValue(this))", length: 16 } },
+        { id: "quest_mapping_objective", title: "Objective", desc: "The settings below apply to this objective",
+          type: { name: "dropdown", data: [], triggerFunction: "showQuestObjectiveSettings(getDropdownValue(this))", length: 16 } },
         { id: "quest_mapping_field", title: "Field", desc: "Auto chooses a suitable field",
-          type: { name: "dropdown", data: [{ label: "Auto", value: "auto" }], triggerFunction: saveProfileTriggerFunction, length: 12 } },
+          type: { name: "dropdown", data: [{ label: "Auto", value: "auto" }], triggerFunction: saveProfileTriggerFunction, length: 16 } },
         { id: "quest_mapping_pattern", title: "Pattern", desc: "Auto uses field defaults",
-          type: { name: "dropdown", data: [{ label: "Auto", value: "auto" }], triggerFunction: saveProfileTriggerFunction, length: 12 } },
+          type: { name: "dropdown", data: [{ label: "Auto", value: "auto" }], triggerFunction: saveProfileTriggerFunction, length: 16 } },
         { id: "quest_mapping_mins", title: "Gather Until Mins", desc: "0 uses the field or petal time",
-          type: { name: "textbox", inputType: "float", inputLimit: 4, triggerFunction: saveProfileTriggerFunction, length: 12 } },
+          type: { name: "textbox", inputType: "float", inputLimit: 4, triggerFunction: saveProfileTriggerFunction, length: 16 } },
         { id: "quest_mapping_backpack", title: "Backpack%", desc: "Auto uses the field limit",
-          type: { name: "dropdown", data: [{ label: "Auto", value: "auto" }, ...Array.from({length: 20}, (_, index) => ({label: `${(index + 1) * 5}%`, value: String((index + 1) * 5)}))], triggerFunction: saveProfileTriggerFunction, length: 12 } },
+          type: { name: "dropdown", data: [{ label: "Auto", value: "auto" }, ...Array.from({length: 20}, (_, index) => ({label: `${(index + 1) * 5}%`, value: String((index + 1) * 5)}))], triggerFunction: saveProfileTriggerFunction, length: 16 } },
         { id: "quest_mapping_return", title: "Return To Hive", desc: "How to return after gathering",
-          type: { name: "dropdown", data: questReturnOptions, triggerFunction: saveProfileTriggerFunction, length: 12 } },
+          type: { name: "dropdown", data: questReturnOptions, triggerFunction: saveProfileTriggerFunction, length: 16 } },
       ]);
       document.getElementById("objective-gather-settings").parentElement.style.display = "none";
 
@@ -68,7 +70,7 @@
             name: "dropdown",
             data: [{ label: "On an Interval", value: "interval" }, { label: "Every Pattern Loop", value: "every iteration" }],
             triggerFunction: `${saveProfileTriggerFunction}; updateQuestProgressFields()`,
-            length: 12,
+            length: 16,
           },
         },
         {
@@ -80,7 +82,7 @@
             inputType: "float",
             inputLimit: 4,
             triggerFunction: saveProfileTriggerFunction,
-            length: 12,
+            length: 16,
           },
         },
       ]);
@@ -114,6 +116,7 @@
             inputType: "float",
             inputLimit: 4,
             triggerFunction: saveProfileTriggerFunction,
+            length: 16,
           },
         },
         {
@@ -124,6 +127,7 @@
             name: "dropdown",
             data: questReturnOptions,
             triggerFunction: saveProfileTriggerFunction,
+            length: 16,
           },
         },
         {
