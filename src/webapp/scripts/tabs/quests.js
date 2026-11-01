@@ -22,16 +22,21 @@ function switchQuestsTab(target){
     tab.scrollTo(0,0); 
 }
 
-const questGivers = ["polar bear", "brown bear", "black bear", "honey bee", "bucko bee", "riley bee"];
+let questObjectiveTypes = [];
 
-// Show only the chosen giver's rows in the Quest Giver Overrides card.
-function showQuestGiverSettings(giver) {
-    const key = giver.replaceAll(" ", "_");
-    const card = document.getElementById("quest-giver-overrides").parentElement;
-    card.querySelectorAll("form").forEach(form => {
-        const id = form.querySelector("[id]").id;
-        if (id !== "quest_override_giver") form.style.display = id.startsWith(`${key}_`) ? "flex" : "none";
-    });
+async function showQuestObjectiveSettings(key, settings) {
+    const objective = questObjectiveTypes.find(item => item.value === key);
+    if (!objective) return;
+    const fieldOptions = objective.fields.map(field => ({
+        label: `${fieldEmojis[field.replaceAll(" ", "_")]} ${toTitleCase(field)}`,
+        value: field,
+    }));
+    setDropdownData("quest_mapping_field", [{label: "Auto", value: "auto"}, ...fieldOptions]);
+    document.getElementById("quest_mapping_field").closest("form").style.display = objective.field ? "none" : "flex";
+    for (const property of ["field", "pattern", "mins", "backpack", "return"]) {
+        document.getElementById(`quest_mapping_${property}`).dataset.settingId = `quest_objective_${key}_${property}`;
+    }
+    loadInputs(settings || await loadAllSettings());
 }
 
 // Progress check rows only matter while the quest menu stays open.
@@ -46,12 +51,21 @@ function updateQuestProgressFields() {
 
 async function loadQuests(){
     switchQuestsTab(document.getElementById(getActiveSubtab("activeQuestsSubtab", "quests-quests")));
-    const [patterns, settings] = await Promise.all([eel.getPatterns()(), loadAllSettings()]);
-    questGivers.forEach(giver => {
-        setDropdownData(`${giver.replaceAll(" ", "_")}_quest_gather_pattern`, [{ label: "Auto", value: "auto" }, ...patterns]);
-    });
-    loadInputs(settings);
-    setDropdownValue(document.getElementById("quest_override_giver"), "polar bear");
+    const [patterns, objectives, settings] = await Promise.all([
+        eel.getPatterns()(), eel.getQuestObjectiveTypes()(), loadAllSettings(),
+    ]);
+    questObjectiveTypes = objectives;
+    const selector = document.getElementById("quest_mapping_objective");
+    const current = getDropdownValue(selector);
+    setDropdownData("quest_mapping_objective", objectives);
+    setDropdownData("quest_mapping_pattern", [{label: "Auto", value: "auto"}, ...patterns]);
+    const key = objectives.some(item => item.value === current) ? current : (objectives.find(item => item.value === "pollen_red") || objectives[0])?.value;
+    if (key) {
+        setDropdownValue(selector, key);
+        await showQuestObjectiveSettings(key, settings);
+    } else {
+        loadInputs(settings);
+    }
 }
 
 $("#quests-placeholder")

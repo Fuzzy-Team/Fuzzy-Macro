@@ -1,6 +1,7 @@
 """Hardcoded default settings used to seed missing runtime/profile files."""
 
 import copy
+from modules.quest_planning import gather_objective_types, load_quest_catalog
 
 
 DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False],
@@ -241,18 +242,6 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'polar_bear_quest': False,
  'brown_bear_quest': False,
  'black_bear_quest': False,
- 'polar_bear_quest_gather_mins': 0,
- 'polar_bear_quest_gather_return': 'no override',
- 'brown_bear_quest_gather_mins': 0,
- 'brown_bear_quest_gather_return': 'no override',
- 'black_bear_quest_gather_mins': 0,
- 'black_bear_quest_gather_return': 'no override',
- 'honey_bee_quest_gather_mins': 0,
- 'honey_bee_quest_gather_return': 'no override',
- 'bucko_bee_quest_gather_mins': 0,
- 'bucko_bee_quest_gather_return': 'no override',
- 'riley_bee_quest_gather_mins': 0,
- 'riley_bee_quest_gather_return': 'no override',
  'honey_bee_quest': False,
  'coconut_dispenser': False,
  'mondo_buff_loot': True,
@@ -451,8 +440,6 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'max_convert_time': 5,
  'coconut_crab_max_kill_time': 15,
  'convert_timeout_behavior': 'move on',
- 'quest_gather_mins': 0,
- 'quest_gather_return': 'no override',
  'petal_quest_gather_mins': 0,
  'petal_quest_gather_return': 'no override',
  'auto_planter_paper_field_sunflower': True,
@@ -826,11 +813,10 @@ DEFAULT_GENERAL_SETTINGS = {'hive_number': 1,
  'discord_rich_presence': False,
  'hourly_report_embed_text': True}
 
-for _giver in ("polar_bear", "brown_bear", "black_bear", "honey_bee", "bucko_bee", "riley_bee"):
-    DEFAULT_PROFILE_SETTINGS[f"{_giver}_quest_gather_pattern"] = "auto"
-    DEFAULT_PROFILE_SETTINGS[f"{_giver}_quest_gather_backpack"] = "auto"
-    for _color in ("red", "blue", "white", "any"):
-        DEFAULT_PROFILE_SETTINGS[f"{_giver}_quest_field_{_color}"] = "auto"
+for _objective in gather_objective_types(load_quest_catalog()):
+    for _key, _value in {"field": "auto", "pattern": "auto", "mins": 0,
+                         "backpack": "auto", "return": "no override"}.items():
+        DEFAULT_PROFILE_SETTINGS[f"quest_objective_{_objective['value']}_{_key}"] = _value
 
 
 DEFAULT_FIELDS = {'sunflower': {'shift_lock': False,

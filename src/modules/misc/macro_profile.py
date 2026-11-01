@@ -315,18 +315,6 @@ class MacroProfileStore:
                 if slot != 1 and slot in range(0, 8):
                     general_data["glitter_slot"] = slot
 
-        # The old global quest gather override becomes per-quest settings, but only
-        # when the user changed it; a default value must not overwrite per-quest ones.
-        legacy = {key: profile_data[key] for key in ("quest_gather_mins", "quest_gather_return") if key in profile_data}
-        if any(value != self._profile_defaults.get(key) for key, value in legacy.items()):
-            for quest in ("polar_bear", "brown_bear", "black_bear", "honey_bee", "bucko_bee", "riley_bee"):
-                if "quest_gather_mins" in legacy:
-                    profile_data[f"{quest}_quest_gather_mins"] = legacy["quest_gather_mins"]
-                if "quest_gather_return" in legacy:
-                    profile_data[f"{quest}_quest_gather_return"] = legacy["quest_gather_return"]
-            for key in legacy:
-                profile_data.pop(key)
-
         order = profile_data.get("task_priority_order")
         if isinstance(order, list):
             for item, after in (("collect_sprouts", "collect_sticker_printer"), ("collect_sticker_sprout", "collect_sprouts")):
@@ -396,30 +384,37 @@ class MacroProfileStore:
     def _validate(self, setting, value, defaults, combined):
         """Reject values that break a constraint. Types are not enforced: readers accept
         the formats the GUI saves (numeric strings, comma-separated lists, ...)."""
-        from modules.quest_planning import COLOR_FIELDS, QUEST_GIVERS
+        from modules.quest_planning import gather_objective_types, load_quest_catalog
 
         choices = {"quest_scheduling": ("quest giver priority", "optimize quest completion"),
                    "quest_progress_check_mode": ("interval", "every iteration")}
         if setting in choices and value not in choices[setting]:
             raise MacroProfileValidationError(setting, "choose one of the listed options")
-        if setting == "quest_progress_check_seconds" or setting.endswith(("_quest_gather_mins", "_quest_gather_backpack")):
-            if setting.endswith("_quest_gather_backpack") and value == "auto":
+        property_name = None
+        if setting.startswith("quest_objective_"):
+            objective_type, _, property_name = setting[len("quest_objective_"):].rpartition("_")
+            objective = next((item for item in gather_objective_types(load_quest_catalog())
+                              if item["value"] == objective_type), None)
+            if objective is None or property_name not in ("field", "pattern", "mins", "backpack", "return"):
+                raise MacroProfileValidationError(setting, "choose a gathering objective from the quest catalog")
+            if property_name == "field" and value != "auto" and value not in objective["fields"]:
+                raise MacroProfileValidationError(setting, "choose a field that supports this objective")
+            if property_name == "return" and value not in ("no override", "reset", "walk", "rejoin", "whirligig"):
+                raise MacroProfileValidationError(setting, "choose one of the listed return methods")
+            if property_name == "pattern" and (not isinstance(value, str) or not value or os.path.basename(value) != value):
+                raise MacroProfileValidationError(setting, "choose a gather pattern")
+        if setting in ("quest_progress_check_seconds", "petal_quest_gather_mins") or property_name in ("mins", "backpack"):
+            if property_name == "backpack" and value == "auto":
                 return
             try:
                 number = float(value)
             except (TypeError, ValueError):
                 raise MacroProfileValidationError(setting, "enter a number")
-            minimum = 0 if setting.endswith("_quest_gather_mins") else 1
+            minimum = 0 if property_name == "mins" or setting == "petal_quest_gather_mins" else 1
             if not math.isfinite(number) or number < minimum:
                 raise MacroProfileValidationError(setting, f"must be at least {minimum}")
-            if setting.endswith("_quest_gather_backpack") and number > 100:
+            if property_name == "backpack" and number > 100:
                 raise MacroProfileValidationError(setting, "must be between 1 and 100, or Auto")
-        for giver in QUEST_GIVERS:
-            prefix = giver.replace(" ", "_") + "_quest_field_"
-            if setting.startswith(prefix):
-                color = setting[len(prefix):]
-                if value != "auto" and value not in COLOR_FIELDS.get(color, ()):
-                    raise MacroProfileValidationError(setting, "choose a field that supports this objective color")
 
         if setting in ("max_cannon_attempts", "cannon_hive_resync_attempts"):
             if not isinstance(value, int) or isinstance(value, bool):

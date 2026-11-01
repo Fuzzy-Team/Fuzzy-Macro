@@ -25,4 +25,7 @@ A scheduling policy that chooses ready quest work in the user's quest-giver orde
 A scheduling policy that shares compatible work in the current field, then favors fields that advance more unfinished objectives. Quest-giver order breaks ties.
 
 **Preferred quest field**:
-A user's chosen field for a giver's objectives that do not require a specific field. The preference must satisfy the objective's color requirements.
+A user's chosen field for an objective that does not require a specific field. The preference must satisfy the objective's color requirements.
+
+**Objective mapping**:
+A choice of field and gather settings shared by every occurrence of the same gathering objective, regardless of quest giver.

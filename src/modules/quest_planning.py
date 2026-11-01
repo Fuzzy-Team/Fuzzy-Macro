@@ -1,6 +1,7 @@
 """Quest objective identity, gather settings, and field scheduling."""
 
 import re
+from pathlib import Path
 
 
 QUEST_GIVERS = ("polar bear", "brown bear", "black bear", "honey bee", "bucko bee", "riley bee")
@@ -11,6 +12,58 @@ FIELDS = ("sunflower", "dandelion", "mushroom", "blue flower", "clover", "strawb
           "rose", "mountain top", "pepper", "coconut")
 COLOR_FIELDS = {"blue": BLUE_FIELDS, "red": RED_FIELDS,
                 "white": tuple(field for field in FIELDS if field != "mountain top"), "any": FIELDS}
+QUEST_DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "bss" / "quest_data.txt"
+
+
+def load_quest_catalog(path=QUEST_DATA_PATH):
+    """Read the shared quest catalog used by detection and the settings editor."""
+    catalog = {}
+    giver, title = None, None
+    with open(path, encoding="utf-8") as source:
+        for line in (line.strip() for line in source):
+            if not line:
+                continue
+            if line.startswith("==") and line.endswith("=="):
+                giver, title = line.strip("="), None
+                catalog[giver] = {}
+            elif line.startswith("-"):
+                title = line.lstrip("-").strip()
+                catalog[giver][title] = []
+            else:
+                catalog[giver][title].append(line)
+    return catalog
+
+
+def objective_type(action):
+    return re.sub(r"^(kill|feed)_(?:\d+|\*)_", r"\1_", action.replace(" ", "_"))
+
+
+def objective_setting_prefix(objective):
+    return "quest_objective_" + objective_type(objective["action"]) + "_"
+
+
+def gather_objective_types(catalog):
+    """Describe each catalog gathering objective once, independent of giver."""
+    types = {}
+    for quests in catalog.values():
+        for actions in quests.values():
+            for objective in make_quest_objectives("", "", actions, ["unknown"] * len(actions)):
+                if not is_gather_objective(objective):
+                    continue
+                key = objective_type(objective["action"])
+                kind, _, target = objective["action"].partition("_")
+                name = target.replace("_", " ").title()
+                if kind in ("gather", "gathergoo", "gatherpetal"):
+                    label = {"gather": "Gather Pollen", "gathergoo": "Collect Goo", "gatherpetal": "Catch Bloom Petals"}[kind] + " in " + name
+                elif kind in ("pollen", "pollengoo"):
+                    label = "Collect " + name + (" Pollen" if kind == "pollen" else " Goo")
+                else:
+                    name = {"redability": "Red Ability", "blueability": "Blue Ability",
+                            "redboost": "Red Boost", "blueboost": "Blue Boost"}.get(target, name)
+                    label = "Collect " + name + " Tokens"
+                types[key] = {"value": key, "label": label, "field": objective["field"],
+                              "fields": [objective["field"]] if objective["field"] else list(COLOR_FIELDS[objective["color"]])}
+    return [types[key] for key in sorted(types)]
 
 
 def quest_giver_order(settings):
@@ -33,7 +86,8 @@ def make_quest_objectives(giver, title, actions, statuses):
         elif kind == "fieldtoken":
             color = {"blueberry": "blue", "strawberry": "red"}.get(target, "any")
         elif kind == "token" and target != "honey":
-            color = {"bucko bee": "blue", "riley bee": "red"}.get(giver, "any")
+            color = {"blueability": "blue", "blueboost": "blue",
+                     "redability": "red", "redboost": "red"}.get(target, "any")
         objectives.append({"id": (giver, identity_title, row), "giver": giver, "title": title,
                            "row": row, "action": action, "kind": kind, "field": field,
                            "color": color, "status": status})
@@ -82,7 +136,7 @@ def allowed_fields(objective, settings, field_settings):
     if objective["field"]:
         return [objective["field"]] if objective["field"] in field_settings else []
     fields = [field for field in COLOR_FIELDS.get(objective["color"], ()) if field in field_settings]
-    key = objective["giver"].replace(" ", "_") + "_quest_field_" + objective["color"]
+    key = objective_setting_prefix(objective) + "field"
     preferred = settings.get(key, "auto")
     return [preferred] if preferred in fields else fields
 
@@ -95,7 +149,7 @@ def quest_gather_settings(objective, field, settings, field_settings):
             resolved["mins"] = settings["petal_quest_gather_mins"]
         if settings.get("petal_quest_gather_return", "no override") != "no override":
             resolved["return"] = settings["petal_quest_gather_return"]
-    prefix = objective["giver"].replace(" ", "_") + "_quest_gather_"
+    prefix = objective_setting_prefix(objective)
     for setting, key in (("mins", "mins"), ("return", "return"), ("pattern", "shape"), ("backpack", "backpack")):
         value = settings.get(prefix + setting, 0 if setting == "mins" else "auto")
         if value not in (None, "auto", "no override", 0, ""):

@@ -22,47 +22,20 @@
         },
       ]);
 
-      // One giver's rows are shown at a time; showQuestGiverSettings (quests.js) switches them.
-      (function buildQuestGiverOverrides(parent) {
-        const fields = Object.keys(fieldEmojis).filter(field => field !== "hive_hub").map(field => field.replaceAll("_", " "));
-        const fieldOptions = list => [{ label: "Auto", value: "auto" }, ...list.map(field => ({ label: `${fieldEmojis[field.replaceAll(" ", "_")]} ${toTitleCase(field)}`, value: field }))];
-        const fieldRows = [
-          ["red", "Red Field", ["mushroom", "strawberry", "rose", "pepper"]],
-          ["blue", "Blue Field", ["blue flower", "bamboo", "pine tree", "stump"]],
-          ["white", "White Field", fields.filter(field => field !== "mountain top")],
-          ["any", "Any Color Field", fields],
-        ];
-        const backpackOptions = [{ label: "Auto", value: "auto" }, ...Array.from({ length: 20 }, (_, i) => ({ label: `${(i + 1) * 5}%`, value: String((i + 1) * 5) }))];
-
-        const rows = [{
-          id: "quest_override_giver",
-          title: "Quest Giver",
-          desc: "Choose whose overrides to edit",
-          type: {
-            name: "dropdown",
-            data: ["Polar Bear", "Brown Bear", "Black Bear", "Honey Bee", "Bucko Bee", "Riley Bee"],
-            triggerFunction: "showQuestGiverSettings(getDropdownValue(this))",
-            length: 12,
-          },
-        }];
-        questGivers.forEach(giver => {
-          const key = giver.replaceAll(" ", "_");
-          rows.push(
-            { id: `${key}_quest_gather_pattern`, title: "Pattern", desc: "Auto uses the field's pattern, or BloomsAI for petals", type: { name: "dropdown", data: [{ label: "Auto", value: "auto" }], triggerFunction: saveProfileTriggerFunction, length: 12 } },
-            { id: `${key}_quest_gather_mins`, title: "Gather Until Mins", desc: "Set to 0 to use the field or petal time", type: { name: "textbox", inputType: "float", inputLimit: 4, triggerFunction: saveProfileTriggerFunction, length: 12 } },
-            { id: `${key}_quest_gather_backpack`, title: "Backpack%", desc: "Auto uses the field's backpack limit", type: { name: "dropdown", data: backpackOptions, triggerFunction: saveProfileTriggerFunction, length: 12 } },
-            { id: `${key}_quest_gather_return`, title: "Return To Hive", desc: "How to get back to the hive after gathering", type: { name: "dropdown", data: questReturnOptions, triggerFunction: saveProfileTriggerFunction, length: 12 } },
-            ...fieldRows.map(([color, title, list]) => ({
-              id: `${key}_quest_field_${color}`,
-              title,
-              desc: `Used for ${color === "any" ? "objectives with no color" : `${color} objectives`}`,
-              type: { name: "dropdown", data: fieldOptions(list), triggerFunction: saveProfileTriggerFunction, length: 12 },
-            })),
-          );
-        });
-        buildStandardContainer(parent, "Quest Giver Overrides", "Change how a quest giver's objectives are gathered. Auto keeps the normal behavior, and a field named by the quest always wins.", rows);
-        showQuestGiverSettings("polar bear");
-      })(questsSettingsParent);
+      buildStandardContainer(questsSettingsParent, "Objective Gather Settings", "Each objective uses the same mapping for every quest giver. A field named by the quest always wins.", [
+        { id: "quest_mapping_objective", title: "Objective", desc: "Shared across all quest givers",
+          type: { name: "dropdown", data: [], triggerFunction: "showQuestObjectiveSettings(getDropdownValue(this))", length: 22 } },
+        { id: "quest_mapping_field", title: "Field", desc: "Auto chooses a suitable field",
+          type: { name: "dropdown", data: [{ label: "Auto", value: "auto" }], triggerFunction: saveProfileTriggerFunction, length: 12 } },
+        { id: "quest_mapping_pattern", title: "Pattern", desc: "Auto uses field settings or BloomsAI",
+          type: { name: "dropdown", data: [{ label: "Auto", value: "auto" }], triggerFunction: saveProfileTriggerFunction, length: 12 } },
+        { id: "quest_mapping_mins", title: "Gather Until Mins", desc: "0 uses the field or petal time",
+          type: { name: "textbox", inputType: "float", inputLimit: 4, triggerFunction: saveProfileTriggerFunction, length: 12 } },
+        { id: "quest_mapping_backpack", title: "Backpack%", desc: "Auto uses the field limit",
+          type: { name: "dropdown", data: [{ label: "Auto", value: "auto" }, ...Array.from({length: 20}, (_, index) => ({label: `${(index + 1) * 5}%`, value: String((index + 1) * 5)}))], triggerFunction: saveProfileTriggerFunction, length: 12 } },
+        { id: "quest_mapping_return", title: "Return To Hive", desc: "How to return after gathering",
+          type: { name: "dropdown", data: questReturnOptions, triggerFunction: saveProfileTriggerFunction, length: 12 } },
+      ]);
 
       buildStandardContainer(questsSettingsParent, "Goo Settings", "Decide how the macro wants to handle gathering goo", [
         {
@@ -130,7 +103,7 @@
         })),
       ]);
 
-      buildStandardContainer(questsSettingsParent, "Petal Gather", "Petal quest objectives use BloomsAI. Quest giver overrides take priority over these.", [
+      buildStandardContainer(questsSettingsParent, "Petal Gather", "Petal objectives use BloomsAI by default. Individual objective settings take priority.", [
         {
           id: "petal_quest_gather_mins",
           title: "Gather Until Mins",

@@ -530,6 +530,12 @@ def resume():
     return {"ok": True}
 
 @eel.expose
+def getQuestObjectiveTypes():
+    from modules.quest_planning import gather_objective_types, load_quest_catalog
+    return gather_objective_types(load_quest_catalog())
+
+
+@eel.expose
 def getPatterns():
     pattern_metadata = {
         "fuzzy_ai_gather": {
