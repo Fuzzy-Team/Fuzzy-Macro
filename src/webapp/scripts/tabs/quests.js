@@ -24,6 +24,7 @@ function switchQuestsTab(target){
 
 let questObjectiveTypes = [];
 let questPatterns = [];
+let questObjectiveSettingsRequest = 0;
 // Objective Type dropdown options. The catalog has 44 objectives, too many for one list.
 const questObjectiveGroups = [
     {label: "Pollen by Color", value: "pollen", kinds: ["pollen"]},
@@ -45,15 +46,23 @@ function showQuestObjectiveGroup(value, key, settings) {
     return showQuestObjectiveSettings(key, settings);
 }
 
+function setQuestMappingLoading(loading) {
+    for (const id of ["quest_mapping_field", "quest_mapping_pattern", "open-quest-gather-button"]) {
+        document.getElementById(id).style.pointerEvents = loading ? "none" : "";
+    }
+}
+
 async function showQuestObjectiveSettings(key, settings) {
     const objective = questObjectiveTypes.find(item => item.value === key);
     if (!objective) return;
+    const request = ++questObjectiveSettingsRequest;
+    setQuestMappingLoading(true);
     const prefix = `quest_objective_${key}_`;
     for (const input of [document.getElementById("quest_mapping_field"), document.getElementById("quest_mapping_pattern"), ...questGatherInputs()]) {
         input.dataset.settingId = prefix + input.id.slice("quest_mapping_".length);
     }
     settings = settings || await loadAllSettings();
-    if (getDropdownValue(document.getElementById("quest_mapping_objective")) !== key) return;
+    if (request !== questObjectiveSettingsRequest || getDropdownValue(document.getElementById("quest_mapping_objective")) !== key) return;
     const currentPattern = String(settings[prefix + "pattern"] || "").toLowerCase();
     const hiddenPatterns = settings.hidden_patterns || [];
     setDropdownData("quest_mapping_pattern", [{label: "Auto", value: "auto"}, ...questPatterns.filter(pattern =>
@@ -65,6 +74,7 @@ async function showQuestObjectiveSettings(key, settings) {
     setDropdownData("quest_mapping_field", [{label: "Auto", value: "auto"}, ...fieldOptions]);
     document.getElementById("quest_mapping_field").closest("form").style.display = objective.field ? "none" : "flex";
     loadInputs(settings);
+    setQuestMappingLoading(false);
     document.getElementById("objective-gather-settings").parentElement.style.display = "block";
 }
 
@@ -73,11 +83,14 @@ function questGatherInputs() {
 }
 
 async function openQuestGatherSettings() {
+    const request = ++questObjectiveSettingsRequest;
+    setQuestMappingLoading(true);
     const key = getDropdownValue(document.getElementById("quest_mapping_objective"));
     document.getElementById("quest-gather-objective").textContent = questObjectiveTypes.find(item => item.value === key).label;
     const settings = await loadAllSettings();
-    if (getDropdownValue(document.getElementById("quest_mapping_objective")) !== key) return;
+    if (request !== questObjectiveSettingsRequest || getDropdownValue(document.getElementById("quest_mapping_objective")) !== key) return;
     loadInputs(settings);
+    setQuestMappingLoading(false);
     document.getElementById("quest-gather-modal").style.display = "flex";
 }
 
@@ -108,11 +121,13 @@ function updateQuestProgressFields() {
 }
 
 async function loadQuests(){
+    const request = ++questObjectiveSettingsRequest;
     switchQuestsTab(document.getElementById(getActiveSubtab("activeQuestsSubtab", "quests-quests")));
     document.getElementById("objective-gather-settings").parentElement.style.display = "none";
     const [patterns, objectives, settings] = await Promise.all([
         eel.getPatterns()(), eel.getQuestObjectiveTypes()(), loadAllSettings(),
     ]);
+    if (request !== questObjectiveSettingsRequest) return;
     questObjectiveTypes = objectives;
     questPatterns = patterns;
     const selector = document.getElementById("quest_mapping_objective");
