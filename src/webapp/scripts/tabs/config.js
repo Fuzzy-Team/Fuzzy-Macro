@@ -51,7 +51,7 @@ async function loadConfig() {
 async function saveHiddenPatterns(ele) {
   await saveSetting(ele, "general");
   await loadGatherPatterns();
-  await showGatherPatternOptions(getSelectedGatherPattern());
+  showGatherPatternOptions(getSelectedGatherPattern());
 }
 
 function formatModelSize(sizeBytes) {
