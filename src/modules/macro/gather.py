@@ -514,7 +514,7 @@ class GatherMixin:
                     if isGatherPaused():
                         return
                     if self._gatherShiftLockEnabled:
-                        self.keyboard.press('shift')
+                        self.disableShiftLock()
                         self._gatherShiftLockEnabled = False
                 if questMenuKeptOpen:
                     self.toggleQuest()

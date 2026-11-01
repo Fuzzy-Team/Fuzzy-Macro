@@ -34,3 +34,8 @@ class ShiftLockMixin:
         # jump is applied as mouse movement and swings the camera, so centre the cursor first.
         mouse.moveTo(self.robloxWindow.mx + self.robloxWindow.mw // 2, self.robloxWindow.my + self.robloxWindow.mh // 2)
         self.keyboard.press("shift")
+
+    def disableShiftLock(self):
+        # Wait for Roblox to release Shift Lock before cursor movement can turn the camera.
+        self.keyboard.press("shift")
+        time.sleep(0.3)

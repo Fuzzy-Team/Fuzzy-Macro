@@ -409,6 +409,26 @@ function getSelectedGatherPattern() {
   return getDropdownValue(shapeDropdown);
 }
 
+let gatherPatterns = [];
+let hiddenGatherPatterns = [];
+
+async function loadGatherPatterns() {
+  gatherPatterns = await eel.getPatterns()();
+  hiddenGatherPatterns = (await loadAllSettings()).hidden_patterns || [];
+  gatherPatternMetadata = {};
+  gatherPatterns.forEach((pattern) => {
+    gatherPatternMetadata[pattern.value || pattern.name || pattern] = pattern;
+  });
+}
+
+// Hidden patterns (Config > Other Settings) are left out, except the one the field already uses.
+function showGatherPatternOptions(currentShape) {
+  const current = String(currentShape || "").toLowerCase();
+  const isHidden = (pattern) =>
+    hiddenGatherPatterns.includes(pattern.value.toLowerCase()) && pattern.value.toLowerCase() !== current;
+  setDropdownData("shape", gatherPatterns.filter((pattern) => !isHidden(pattern)));
+}
+
 function getSelectedGatherField() {
   const fieldDropdown = document.getElementById("field");
   if (!fieldDropdown) return "";
@@ -514,6 +534,7 @@ function saveFieldPatternChange() {
 
   fieldData = rememberGatherPatternPreset(fieldData, selectedPattern);
   setActiveGatherFieldData(fieldData);
+  showGatherPatternOptions(selectedPattern);
   loadInputs(fieldData);
   updateGatherPatternUI();
   persistGatherField(fieldData);
@@ -530,6 +551,7 @@ async function updateFieldEnable(ele) {
 async function loadAndSaveField(ele) {
   const data = normalizeGatherFieldData((await eel.loadFields()())[getDropdownValue(ele)]);
   setActiveGatherFieldData(data);
+  showGatherPatternOptions(data.shape);
   loadInputs(data);
   updateGatherPatternUI();
   //save
@@ -561,13 +583,7 @@ async function switchGatherTab(target) {
   setDropdownValue(fieldDropdown, settings.fields[fieldNo - 1]);
   document.getElementById("field_enable").checked =
     settings.fields_enabled[fieldNo - 1];
-  //get the pattern list
-  const patterns = await eel.getPatterns()();
-  gatherPatternMetadata = {};
-  patterns.forEach((pattern) => {
-    gatherPatternMetadata[pattern.value || pattern.name || pattern] = pattern;
-  });
-  setDropdownData("shape", patterns);
+  await loadGatherPatterns();
   //load the inputs
   loadAndSaveField(fieldDropdown);
 }
@@ -610,12 +626,14 @@ $("#gather-placeholder")
         if (!msg) msg = 'No files were processed.';
         alert(msg);
         // refresh pattern dropdown
-        const patternsList = await eel.getPatterns()();
-        gatherPatternMetadata = {};
-        patternsList.forEach((pattern) => {
-          gatherPatternMetadata[pattern.value || pattern.name || pattern] = pattern;
-        });
-        setDropdownData('shape', patternsList);
+        await loadGatherPatterns();
+        showGatherPatternOptions(getSelectedGatherPattern());
+        const hiddenDropdown = document.getElementById("hidden_patterns");
+        if (hiddenDropdown) {
+          const hidden = getDropdownValue(hiddenDropdown);
+          setDropdownData("hidden_patterns", gatherPatterns);
+          setDropdownValue(hiddenDropdown, hidden);
+        }
         updateGatherPatternUI();
       } catch (err) {
         console.error(err);
