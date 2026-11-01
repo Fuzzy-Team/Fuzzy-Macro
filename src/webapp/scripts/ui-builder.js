@@ -11,7 +11,7 @@ function toTitleCase(str) {
   );
 }
 
-const stripHTMLTags = str => str.replace(/<[^>]*>/g, '');
+const stripHTMLTags = str => str.replace(/<[^>]*(?:>|$)/g, '');
 const saveGeneralTriggerFunction = "saveSetting(this, 'general')";
 const saveProfileTriggerFunction = "saveSetting(this, 'profile')";
 

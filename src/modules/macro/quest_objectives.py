@@ -144,8 +144,7 @@ class QuestObjectiveMixin:
             'pineappl': 'pineapple',
             'pumpkirpatch': 'pumpkin',
             'coconucrab': 'coconut_crab',
-            'coconutcrab': 'coconut_crab',
-            'coconut_crabs': 'coconut_crab'
+            'coconutcrab': 'coconut_crab'
         }
 
         target = plural_to_singular.get(target, target)
