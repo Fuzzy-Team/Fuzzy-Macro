@@ -28,7 +28,6 @@ OBJECTIVE_SETTING_CHOICES = {
     "distance": tuple(str(number) for number in range(1, 11)),
     "goo": ("on", "off"),
     "goo_interval": ("3", "5", "10", "15", "30", "60"),
-    "blooms_ai_model": ("standard", "light", "mini"),
 }
 QUEST_DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "bss" / "quest_data.txt"
 

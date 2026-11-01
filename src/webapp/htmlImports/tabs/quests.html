@@ -71,8 +71,6 @@
         { title: "Goo", type: { name: "separator" } },
         questGatherToggle("goo", "Use Goo", "Use goo while gathering"),
         questGatherRow("goo_interval", "Goo Interval (secs)", "How often to use goo", ["Auto", 3, 5, 10, 15, 30, 60]),
-        { title: "BloomsAI", type: { name: "separator" } },
-        questGatherRow("blooms_ai_model", "Detection Model", "Only used by the BloomsAI pattern", ["Auto", "Standard", { label: "Light (Faster)", value: "Light" }, { label: "Mini (Fastest)", value: "Mini" }]),
       ]);
       questGatherDialog.insertAdjacentHTML("beforeend", `
         <div class="modal-actions">
