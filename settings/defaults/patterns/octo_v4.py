@@ -112,7 +112,7 @@ def octo_moves():
 
 # Setup runs once per gather: four PgUp rotations, then for width != 1 walk back 12 tiles and forward 4.
 if not globals().get("octo_started"):
-    octo_started = True
+    globals()["octo_started"] = True
     for _ in range(4):
         self.keyboard.press(rotup)
     if width != 1:
