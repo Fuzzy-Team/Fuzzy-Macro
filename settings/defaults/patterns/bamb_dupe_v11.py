@@ -1,4 +1,4 @@
-# BambDupe v11 by EliTheLegoGuy, ported from Zenith Macro's macro_patterns.py.
+# BambDupe v11
 # Width is the source's reps; size and inverted movement keys are not used.
 
 def move(distance, *keys):
@@ -78,7 +78,7 @@ if not globals().get("bamb_started"):
     for _ in range(4):
         if self.checkPauseAndWait():
             break
-        self.keyboard.press(rotup, 0.017)  # Zenith's default setting_key_delay: 17 ms.
+        self.keyboard.press(rotup, 0.017)  # Camera tap hold: 17 ms.
     bamb_started = True
 
 for kind, distance, *keys in bamb_moves(width):

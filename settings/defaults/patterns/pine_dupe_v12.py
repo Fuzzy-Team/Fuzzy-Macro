@@ -1,4 +1,4 @@
-# PineDupe v12 by EliTheLegoGuy, ported from Zenith Macro's macro_patterns.py.
+# PineDupe v12
 # Width is the source's reps; size and inverted movement keys are not used.
 
 def move(distance, *keys):
@@ -133,7 +133,7 @@ if not globals().get("pine_started"):
     for _ in range(4):
         if self.checkPauseAndWait():
             break
-        self.keyboard.press(rotup, 0.017)  # Zenith's default setting_key_delay: 17 ms.
+        self.keyboard.press(rotup, 0.017)  # Camera tap hold: 17 ms.
     pine_started = True
 
 for step in pine_steps(width):
