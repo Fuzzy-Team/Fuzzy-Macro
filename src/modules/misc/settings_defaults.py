@@ -18,6 +18,7 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'buy_ant_pass': False,
  'robo_pass_dispenser': False,
  'mondo_buff_interrupt_gathering': True,
+ 'mondo_buff_damage': False,
  'polar_bear_quest_gather_interrupt': False,
  'brown_bear_quest_gather_interrupt': False,
  'black_bear_quest_gather_interrupt': False,
