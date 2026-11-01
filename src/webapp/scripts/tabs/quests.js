@@ -48,8 +48,12 @@ function showQuestObjectiveGroup(value, key, settings) {
 async function showQuestObjectiveSettings(key, settings) {
     const objective = questObjectiveTypes.find(item => item.value === key);
     if (!objective) return;
-    settings = settings || await loadAllSettings();
     const prefix = `quest_objective_${key}_`;
+    for (const input of [document.getElementById("quest_mapping_field"), document.getElementById("quest_mapping_pattern"), ...questGatherInputs()]) {
+        input.dataset.settingId = prefix + input.id.slice("quest_mapping_".length);
+    }
+    settings = settings || await loadAllSettings();
+    if (getDropdownValue(document.getElementById("quest_mapping_objective")) !== key) return;
     const currentPattern = String(settings[prefix + "pattern"] || "").toLowerCase();
     const hiddenPatterns = settings.hidden_patterns || [];
     setDropdownData("quest_mapping_pattern", [{label: "Auto", value: "auto"}, ...questPatterns.filter(pattern =>
@@ -60,9 +64,6 @@ async function showQuestObjectiveSettings(key, settings) {
     }));
     setDropdownData("quest_mapping_field", [{label: "Auto", value: "auto"}, ...fieldOptions]);
     document.getElementById("quest_mapping_field").closest("form").style.display = objective.field ? "none" : "flex";
-    for (const input of [document.getElementById("quest_mapping_field"), document.getElementById("quest_mapping_pattern"), ...questGatherInputs()]) {
-        input.dataset.settingId = prefix + input.id.slice("quest_mapping_".length);
-    }
     loadInputs(settings);
     document.getElementById("objective-gather-settings").parentElement.style.display = "block";
 }
@@ -74,7 +75,9 @@ function questGatherInputs() {
 async function openQuestGatherSettings() {
     const key = getDropdownValue(document.getElementById("quest_mapping_objective"));
     document.getElementById("quest-gather-objective").textContent = questObjectiveTypes.find(item => item.value === key).label;
-    loadInputs(await loadAllSettings());
+    const settings = await loadAllSettings();
+    if (getDropdownValue(document.getElementById("quest_mapping_objective")) !== key) return;
+    loadInputs(settings);
     document.getElementById("quest-gather-modal").style.display = "flex";
 }
 
@@ -83,8 +86,13 @@ function closeQuestGatherSettings() {
 }
 
 async function saveQuestGatherSettings() {
-    for (const input of questGatherInputs()) {
-        if (!(await saveSetting(input, "profile"))) return;
+    const changes = Object.fromEntries(Array.from(questGatherInputs(), input =>
+        [input.dataset.settingId, getInputValueFromElement(input)]));
+    try {
+        await eel.saveDictProfileSettings(changes)();
+    } catch (error) {
+        alert(`Gather settings were not saved: ${error?.errorText || error}`);
+        return;
     }
     closeQuestGatherSettings();
 }
