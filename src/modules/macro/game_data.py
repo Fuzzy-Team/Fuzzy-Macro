@@ -557,6 +557,7 @@ PING_SETTING_KEYS = [
     "ping_guiding_star",
     "ping_unusual_sprouts",
     "ping_windy_bee",
+    "ping_gummyball",
     "ping_macro_status",
     "ping_gathering",
     "ping_live_gather_report",

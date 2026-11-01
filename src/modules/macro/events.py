@@ -3,8 +3,15 @@ import numpy as np
 import re
 from modules.controls.sleep import pause_aware_time as time
 from modules.macro.game_data import startLocationDimensions
-from modules.screen.imageSearch import findColorObjectRGB
+from modules.screen.imageSearch import captureRegionBGR, findColorObjectRGB, locateImageInScreen
 from modules.screen.screenshot import mssScreenshotNP
+
+
+# The Gummyball stack count sits in the buff row, inside the top 100px of the window.
+# 16 is the original's cooldown: the buff must stay unseen this long (one background tick per second) before it can ping again.
+GUMMYBALL_BAND_HEIGHT = 100
+GUMMYBALL_HOLD_SECONDS = 16
+GUMMYBALL_THRESHOLD = 0.8
 
 
 class EventDetectionMixin:
@@ -135,6 +142,30 @@ class EventDetectionMixin:
         text = self.readBlueText()
         for detect, _ in detectors:
             detect(text, now)
+
+    def scanGummyballBuff(self):
+        """Ping once when the 8x or 9x Gummyball buff shows up, and again if it changes between 8x and 9x."""
+        if not self.setdat.get("ping_gummyball", False) or self.status.value == "rejoining":
+            return
+        w = self.robloxWindow
+        screen = captureRegionBGR(w.mx, w.my, w.mw, GUMMYBALL_BAND_HEIGHT)
+        level = self.detectGummyballLevel(screen)
+        now = time.time()
+        if level:
+            self.gummyballLastSeen = now
+            if level != self.gummyballLevel:
+                self.gummyballLevel = level
+                self.logger.webhook("Gummyball", f"{level} Gummyball buff detected", "purple", "screen", ping_category="ping_gummyball")
+        elif self.gummyballLevel and now - self.gummyballLastSeen >= GUMMYBALL_HOLD_SECONDS:
+            self.gummyballLevel = None
+
+    def detectGummyballLevel(self, screen):
+        """Returns "9x", "8x" or None. 9x is checked first, like the original."""
+        for level in ("9x", "8x"):
+            template = self.adjustImage("./images/buffs", f"gummy{level}")
+            if locateImageInScreen(template, screen, GUMMYBALL_THRESHOLD, scales=[1.0]):
+                return level
+        return None
 
     def detectGuidingStarAnnouncement(self, text, now):
         if "guiding" not in text or "star" not in text:
