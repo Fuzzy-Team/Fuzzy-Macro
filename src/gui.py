@@ -545,6 +545,8 @@ def getQuestGatherDefaults(objective, settings):
 @eel.expose
 def getPatterns():
     pattern_metadata = {
+        "bamb_dupe_v11": {"label": "BambDupe v11"},
+        "pine_dupe_v12": {"label": "PineDupe v12"},
         "fuzzy_ai_gather": {
             "ai_backed": True,
             "requires_models": True,
