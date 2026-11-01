@@ -410,9 +410,11 @@ function getSelectedGatherPattern() {
 }
 
 let gatherPatterns = [];
+let hiddenGatherPatterns = [];
 
 async function loadGatherPatterns() {
   gatherPatterns = await eel.getPatterns()();
+  hiddenGatherPatterns = (await loadAllSettings()).hidden_patterns || [];
   gatherPatternMetadata = {};
   gatherPatterns.forEach((pattern) => {
     gatherPatternMetadata[pattern.value || pattern.name || pattern] = pattern;
@@ -420,11 +422,10 @@ async function loadGatherPatterns() {
 }
 
 // Hidden patterns (Config > Other Settings) are left out, except the one the field already uses.
-async function showGatherPatternOptions(currentShape) {
-  const hidden = (await loadAllSettings()).hidden_patterns || [];
+function showGatherPatternOptions(currentShape) {
   const current = String(currentShape || "").toLowerCase();
   const isHidden = (pattern) =>
-    hidden.includes(pattern.value.toLowerCase()) && pattern.value.toLowerCase() !== current;
+    hiddenGatherPatterns.includes(pattern.value.toLowerCase()) && pattern.value.toLowerCase() !== current;
   setDropdownData("shape", gatherPatterns.filter((pattern) => !isHidden(pattern)));
 }
 
@@ -533,6 +534,7 @@ function saveFieldPatternChange() {
 
   fieldData = rememberGatherPatternPreset(fieldData, selectedPattern);
   setActiveGatherFieldData(fieldData);
+  showGatherPatternOptions(selectedPattern);
   loadInputs(fieldData);
   updateGatherPatternUI();
   persistGatherField(fieldData);
@@ -549,7 +551,7 @@ async function updateFieldEnable(ele) {
 async function loadAndSaveField(ele) {
   const data = normalizeGatherFieldData((await eel.loadFields()())[getDropdownValue(ele)]);
   setActiveGatherFieldData(data);
-  await showGatherPatternOptions(data.shape);
+  showGatherPatternOptions(data.shape);
   loadInputs(data);
   updateGatherPatternUI();
   //save
@@ -625,7 +627,13 @@ $("#gather-placeholder")
         alert(msg);
         // refresh pattern dropdown
         await loadGatherPatterns();
-        await showGatherPatternOptions(getSelectedGatherPattern());
+        showGatherPatternOptions(getSelectedGatherPattern());
+        const hiddenDropdown = document.getElementById("hidden_patterns");
+        if (hiddenDropdown) {
+          const hidden = getDropdownValue(hiddenDropdown);
+          setDropdownData("hidden_patterns", gatherPatterns);
+          setDropdownValue(hiddenDropdown, hidden);
+        }
         updateGatherPatternUI();
       } catch (err) {
         console.error(err);
