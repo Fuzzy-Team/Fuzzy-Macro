@@ -23,7 +23,6 @@ const gatherFieldProperties = [
   "distance",
   "goo",
   "goo_interval",
-  "blooms_ai_model",
 ];
 let gatherPatternMetadata = {};
 let activeGatherFieldData = {};
@@ -450,17 +449,12 @@ function updateGatherPatternUI() {
   const pattern = getSelectedGatherPattern();
   const field = getSelectedGatherField();
   const fuzzySection = document.getElementById("fuzzy-ai-gather-section");
-  const bloomsSection = document.getElementById("blooms-ai-section");
   const description = document.getElementById("gather-pattern-metadata");
   const isFuzzyAI = pattern === "fuzzy_ai_gather";
-  const isBloomsAI = pattern === "blooms_ai";
   const isHiveHubGather = pattern === "hive_hub" || field === "hive hub";
 
   if (fuzzySection) {
     fuzzySection.style.display = isFuzzyAI ? "block" : "none";
-  }
-  if (bloomsSection) {
-    bloomsSection.style.display = isBloomsAI ? "block" : "none";
   }
   if (description) {
     description.innerText = isHiveHubGather

@@ -694,6 +694,7 @@ DEFAULT_GENERAL_SETTINGS = {'hive_number': 1,
  'sprinkler_type': 'saturator',
  'use_sprinkler_model_for_drift_compensation': True,
  'ai_gather_model': 'Standard',
+ 'blooms_ai_model': 'Standard',
  'convert_wait': 5,
  'private_server_link': '',
  'hive_hub_private_server': False,
@@ -1624,7 +1625,6 @@ for _field_defaults in DEFAULT_FIELDS.values():
     _field_defaults.setdefault('use_whirlwig_fallback', False)
     _field_defaults.setdefault('goo', False)
     _field_defaults.setdefault('goo_interval', 3)
-    _field_defaults.setdefault('blooms_ai_model', 'Standard')
 del _field_defaults
 
 DEFAULT_FUZZY_AI_TOKEN_RANKINGS = {'sunflower': {'preferred_tokens': 'Token Link,Focus,Melody,Blue Boost,Honey Mark Station,Honey Mark Token,Pollen Mark '
