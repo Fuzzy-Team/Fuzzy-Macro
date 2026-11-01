@@ -7,11 +7,9 @@ import time
 import pyautogui as pag
 import numpy as np
 import cv2
-import time
 import os
 import tempfile
 import subprocess
-import Quartz.CoreGraphics as CG
 from modules.screen.screenData import getScreenData
 from modules.misc.appManager import getWindowSize
 
@@ -36,43 +34,8 @@ def pillowGrab(x,y,w,h):
     im.close()
     return im_cropped
 
-def cgGrab(region=None):
-    # Set up the screen capture rectangle
-    if region:
-        left, top, width, height = region
-    else:
-        main_display_id = CG.CGMainDisplayID()
-        width = CG.CGDisplayPixelsWide(main_display_id)
-        height = CG.CGDisplayPixelsHigh(main_display_id)
-        left, top = 0, 0
-
-    rect = CG.CGRectMake(left, top, width, height)
-
-    # Capture the screen region as an image
-    image_ref = CG.CGWindowListCreateImage(
-        rect,
-        CG.kCGWindowListOptionOnScreenOnly,
-        CG.kCGNullWindowID,
-        CG.kCGWindowImageDefault
-    )
-
-    # Get image width/height and raw pixel data
-    width = CG.CGImageGetWidth(image_ref)
-    height = CG.CGImageGetHeight(image_ref)
-    bytes_per_row = CG.CGImageGetBytesPerRow(image_ref)
-    data_provider = CG.CGImageGetDataProvider(image_ref)
-    data = CG.CGDataProviderCopyData(data_provider)
-
-    # Convert to NumPy array
-    img = np.frombuffer(data, dtype=np.uint8).reshape((height, bytes_per_row // 4, 4))
-    img = img[:, :width, :]  # Trim padding if needed
-
-    # Convert to PIL Image (in BGRA format)
-    return img
- 
 #returns an NP array, useful for cv2
 def mssScreenshotNP(x,y,w,h, save = False):
-    #return cgGrab((x,y,w,h))
     if usePillow:
         screen = pillowGrab(int(x*multi),int(y*multi),int(w*multi),int(h*multi))
         screen = np.array(screen)
@@ -90,10 +53,6 @@ def mssScreenshotNP(x,y,w,h, save = False):
 
 
 def mssScreenshot(x=0,y=0,w=mw,h=mh, save = False, filename=None):
-    # img = cgGrab((x,y,w,h))
-    # img = img[:, :, [2, 1, 0]]
-    # img = Image.fromarray(img, 'RGB')
-    # return img
     if usePillow:
         return pillowGrab(int(x*multi),int(y*multi),int(w*multi),int(h*multi))
     else:
