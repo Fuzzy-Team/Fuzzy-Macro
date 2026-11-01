@@ -32,7 +32,25 @@ class MobMixin:
         self.logger.webhook("","Collecting: Mondo Buff","yellow", "screen")
         self.keyboard.walk("w",1)
         self.keyboard.walk("d",3) 
-        if self.setdat["mondo_buff_loot"]: # If looting is enabled, wait until mondo is defeated
+        if self.setdat["mondo_buff_damage"]:
+            mondo_buff_wait = self.setdat["mondo_buff_wait"]
+            end_time = time.perf_counter() + mondo_buff_wait * 60
+            self.logger.webhook("", f"Damaging Mondo for {mondo_buff_wait:g} minutes", "yellow")
+            self.enableShiftLock()
+            while time.perf_counter() < end_time and self.getCurrentMinute() < 15:
+                screen = self.blueTextScreen()
+                if self.blueTextImageSearch("defeated", screen=screen) and self.blueTextImageSearch("mondo", screen=screen):
+                    break
+                if self.setdat["mondo_collect_token"]:
+                    self.keyboard.walk("a", 0.45)
+                    for slowmove in range(9):
+                        self.keyboard.walk("d", 0.048, False)
+                        time.sleep(0.035)
+                mouse.click()
+                time.sleep(1.5)
+            self.saveTiming("mondo")
+            self.logger.webhook("","Collected: Mondo Buff","light green", ping_category="ping_mondo_buff")
+        elif self.setdat["mondo_buff_loot"]: # If looting is enabled, wait until mondo is defeated
             self.logger.webhook("", "Waiting for Mondo to be defeated", "light green")
             self.enableShiftLock() #moves slightly up (or down) when hitting wall, so this reduces that
             while True:
