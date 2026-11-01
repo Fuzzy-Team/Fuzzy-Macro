@@ -935,7 +935,7 @@ def importFieldSettings(field_name, json_settings):
                         "bloom_detection_mini.onnx",
                     ),
                 }
-                selected_blooms_model = str(settings.get("blooms_ai_model", "Standard")).strip().lower()
+                selected_blooms_model = str(loadAllSettings().get("blooms_ai_model", "Standard")).strip().lower()
                 blooms_coreml, blooms_onnx = blooms_model_names.get(
                     selected_blooms_model, blooms_model_names["standard"]
                 )

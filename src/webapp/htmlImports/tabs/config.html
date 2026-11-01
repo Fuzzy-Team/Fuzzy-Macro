@@ -141,6 +141,20 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
+          {
+            id: "blooms_ai_model",
+            title: "BloomsAI Model",
+            desc: "Choose the bloom and petal detector. Standard is most accurate; Light and Mini trade accuracy for faster inference.",
+            type: {
+              name: "dropdown",
+              data: [
+                "Standard",
+                { label: "Light (Faster)", value: "Light" },
+                { label: "Mini (Fastest)", value: "Mini" },
+              ],
+              triggerFunction: saveGeneralTriggerFunction,
+            },
+          },
       ]);
 
       buildStandardContainer(parentBSS, "Gumdrops", "", [
