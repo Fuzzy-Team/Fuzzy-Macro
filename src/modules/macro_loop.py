@@ -338,7 +338,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
 
     def handleQuest(questGiver, executeQuest=True):
         nonlocal questCache, questScanScreens, taskCompleted
-        cached = questGiver in questCache and not taskCompleted
+        cached = questGiver in questCache and questCache[questGiver] is not None and not taskCompleted
         if cached:
             objectives = questCache[questGiver]
         elif not executeQuest:
@@ -494,6 +494,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 break
             objective = selected["objective"]
             field = selected["field"]
+            beforeGather = {giver: list(rows or []) for giver, rows in macro.questObservations.items()}
             macro.questGatherOutcome = None
             macro.logger.webhook("Quest gathering",
                 f"{objective['giver'].title()}: {objective['action'].replace('_', ' ')} in {field.title()} "
@@ -510,12 +511,20 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             else:
                 # A time/backpack limit finishes this shared attempt, never its objectives.
                 attempted.update(obj["id"] for obj in selected["objectives"])
-            affected = {obj["giver"] for obj in gatherObjectives()
+            affected = {obj["giver"] for obj in pending
                         if field in allowed_fields(obj, macro.setdat, macro.fieldSettings)}
             if affected:
                 screens = macro.captureQuestScreenshots()
                 for giver in affected:
-                    macro.findQuest(giver, questScreens=screens, logDetection=False)
+                    previous = macro.questObservations.get(giver) or beforeGather.get(giver, [])
+                    found = macro.findQuest(giver, questScreens=screens, logDetection=False)
+                    if found is None:
+                        found = macro.findQuest(giver, logDetection=False)
+                    if found is None:
+                        macro.questObservations[giver] = [{**obj, "status": "unknown"} for obj in previous]
+                        macro.logger.webhook("Quest progress unreadable",
+                            f"Could not refresh {giver.title()}. Remaining objectives will retry before gathering.",
+                            "orange", route_category="quests")
             questCache.clear()
             questScanScreens = None
         return gathered

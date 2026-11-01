@@ -23,6 +23,7 @@ def quest_giver_order(settings):
 
 def make_quest_objectives(giver, title, actions, statuses):
     objectives = []
+    identity_title = tuple(actions) if giver == "brown bear" else title
     for row, (action, status) in enumerate(zip(actions, statuses)):
         kind, _, target = action.partition("_")
         field = target.replace("_", " ") if kind in ("gather", "gathergoo", "gatherpetal") else None
@@ -33,7 +34,7 @@ def make_quest_objectives(giver, title, actions, statuses):
             color = {"blueberry": "blue", "strawberry": "red"}.get(target, "any")
         elif kind == "token" and target != "honey":
             color = {"bucko bee": "blue", "riley bee": "red"}.get(giver, "any")
-        objectives.append({"id": (giver, title, row), "giver": giver, "title": title,
+        objectives.append({"id": (giver, identity_title, row), "giver": giver, "title": title,
                            "row": row, "action": action, "kind": kind, "field": field,
                            "color": color, "status": status})
     return objectives
@@ -45,16 +46,35 @@ def is_gather_objective(objective):
 
 def objective_matches_text(action, text):
     """Identify a row by its requirement when some rows are missing."""
-    words = set(re.findall(r"[a-z]+", text.lower()))
+    def singular(word):
+        if word in ("werewolves", "mantises"):
+            return {"werewolves": "werewolf", "mantises": "mantis"}[word]
+        word = re.sub(r"ies$", "y", word)
+        return word[:-1] if word.endswith("s") and word != "mantis" else word
+
+    tokens = [singular(word) for word in re.findall(r"[a-z]+", text.lower())]
+    words = set(tokens)
     kind, _, target = action.partition("_")
     if kind in ("gather", "gathergoo", "gatherpetal"):
-        return set(target.replace("_", " ").split()).issubset(words)
+        return {singular(word) for word in target.replace("_", " ").split()}.issubset(words)
     if kind in ("pollen", "pollengoo"):
         return target in words and ("pollen" in words or "goo" in words)
     if kind == "token":
         names = {"blueboost": ("blue", "boost"), "redboost": ("red", "boost"),
                  "blueability": ("blue", "ability"), "redability": ("red", "ability")}
         return set(names.get(target, (target,))).issubset(words)
+    if kind == "kill":
+        target = re.sub(r"^\d+_", "", target)
+        name = "".join(singular(word) for word in re.findall(r"[a-z]+", target))
+        nouns = {"".join(tokens[index:index + length]) for index in range(len(tokens)) for length in (1, 2)}
+        return name in nouns and bool(words.intersection(("defeat", "kill", "slay", "destroy")))
+    if kind == "feed":
+        item = target.split("_", 1)[-1]
+        return set(item.split("_")).issubset(words) and bool(words.intersection(("feed", "give")))
+    if kind == "collect":
+        return set(re.findall(r"[a-z]+", target)).issubset(words)
+    if kind == "fieldtoken":
+        return target in words and bool(words.intersection(("collect", "token")))
     return False
 
 

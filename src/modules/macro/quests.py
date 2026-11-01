@@ -26,14 +26,19 @@ class QuestMixin:
         return [action for action, status in zip(actions, statuses) if status != "complete"]
 
     def readWatchedQuestObjective(self, objective, reposition=False):
+        previous = self.questObservations.get(objective["giver"]) or []
         if reposition:
             # Close the known-open panel before findQuest opens and positions it.
             self.toggleQuest()
             found = self.findQuest(objective["giver"], keepQuestMenuOpen=True, logDetection=False)
             if found is None:
                 self.toggleQuest()
+            self.moveMouseToDefault()
         else:
-            self.findQuest(objective["giver"], questScreens=[self.captureQuestWatchScreen()], logDetection=False)
+            found = self.findQuest(objective["giver"], questScreens=[self.captureQuestWatchScreen()], logDetection=False)
+        if found is None:
+            self.questObservations[objective["giver"]] = [{**row, "status": "unknown"} for row in previous]
+            return "unknown"
         observed = next((row for row in (self.questObservations.get(objective["giver"]) or [])
                          if row["id"] == objective["id"]), None)
         return observed["status"] if observed else "unknown"

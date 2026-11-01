@@ -32,6 +32,7 @@ async function loadQuests(){
     switchQuestsTab(document.getElementById(getActiveSubtab("activeQuestsSubtab", "quests-quests")));
     const [patterns, settings] = await Promise.all([eel.getPatterns()(), loadAllSettings()]);
     document.querySelectorAll('select[id$="_quest_gather_pattern"]').forEach(select => {
+        select.length = 1;
         patterns.forEach(pattern => select.add(new Option(pattern.label || pattern.name, pattern.value || pattern.name)));
         const saved = settings[select.id];
         if (saved && !Array.from(select.options).some(option => option.value === saved)) {
