@@ -174,7 +174,16 @@
         {
           id: "mondo_buff",
           title: "Enable Task",
-          desc: "Collect the mondo buff by doing some damage to mondo chick. Will not wait for it to die or collect its drops.<br>Note: The macro will only go to mondo in the first 10mins of the hour",
+          desc: "Collect the Mondo Chick buff. The macro will only go to Mondo in the first 10 minutes of the hour.",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "mondo_buff_damage",
+          title: "Damage Mondo instead of waiting",
+          desc: "Attack Mondo Chick for the duration below, then leave without waiting for it to be defeated or collecting its loot.",
           type: {
             name: "checkbox",
             triggerFunction: saveProfileTriggerFunction,
@@ -182,8 +191,8 @@
         },
         {
           id: "mondo_buff_wait",
-          title: "Damage Mondo for X minutes",
-          desc: "The duration to attack mondo chick for. Decimals are allowed, e.g. 1.5 minutes = 90 seconds.",
+          title: "Damage / wait time (minutes)",
+          desc: "Duration for damage mode, or idle time when looting is disabled. Decimals are allowed, e.g. 1.5 minutes = 90 seconds.",
           type: {
             name: "textbox",
             inputType: "float",
