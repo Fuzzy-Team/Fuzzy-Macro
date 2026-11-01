@@ -1038,6 +1038,15 @@ select:focus {
   box-shadow: 0 10px 30px rgba(0,0,0,0.6);
 }
 
+/* A settings list inside a popup: the dialog is already the card */
+#quest-gather-modal .standard-container {
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  margin: 0;
+}
+
 .modal-dialog h3 {
   margin: 0 0 0.5rem 0;
   font-size: 1.2rem;

@@ -31,14 +31,55 @@
           type: { name: "dropdown", data: [{ label: "Auto", value: "auto" }], triggerFunction: saveProfileTriggerFunction, length: 16 } },
         { id: "quest_mapping_pattern", title: "Pattern", desc: "Auto uses field defaults",
           type: { name: "dropdown", data: [{ label: "Auto", value: "auto" }], triggerFunction: saveProfileTriggerFunction, length: 16 } },
-        { id: "quest_mapping_mins", title: "Gather Until Mins", desc: "0 uses the field or petal time",
-          type: { name: "textbox", inputType: "float", inputLimit: 4, triggerFunction: saveProfileTriggerFunction, length: 16 } },
-        { id: "quest_mapping_backpack", title: "Backpack%", desc: "Auto uses the field limit",
-          type: { name: "dropdown", data: [{ label: "Auto", value: "auto" }, ...Array.from({length: 20}, (_, index) => ({label: `${(index + 1) * 5}%`, value: String((index + 1) * 5)}))], triggerFunction: saveProfileTriggerFunction, length: 16 } },
-        { id: "quest_mapping_return", title: "Return To Hive", desc: "How to return after gathering",
-          type: { name: "dropdown", data: questReturnOptions, triggerFunction: saveProfileTriggerFunction, length: 16 } },
+        { id: "open-quest-gather-button", title: "Gather Settings", desc: "Size, camera, time limits, start location, goo and more",
+          type: { name: "button", text: "Edit Gather Settings", length: 16, triggerFunction: "openQuestGatherSettings()" } },
       ]);
       document.getElementById("objective-gather-settings").parentElement.style.display = "none";
+
+      // Saved by the popup's Save button, so these rows have no trigger of their own.
+      const questGatherRow = (property, title, desc, data) => ({
+        id: `quest_mapping_${property}`, title, desc,
+        type: { name: "dropdown", data, triggerFunction: "", length: 12 },
+      });
+      const questGatherToggle = (property, title, desc) => questGatherRow(property, title, desc, ["Auto", "On", "Off"]);
+      const questGatherModal = document.createElement("div");
+      questGatherModal.id = "quest-gather-modal";
+      questGatherModal.className = "modal-overlay";
+      questGatherModal.innerHTML = `<div class="modal-dialog poppins-regular" style="max-width:42rem;"></div>`;
+      questGatherModal.setAttribute("onclick", "if (event.target === this) closeQuestGatherSettings()");
+      questsSettingsParent.appendChild(questGatherModal);
+      const questGatherDialog = questGatherModal.firstElementChild;
+      buildStandardContainer(questGatherDialog, "Gather Settings", `<span id="quest-gather-objective"></span>. Used only for this quest objective. Auto keeps the field's setting.`, [
+        questGatherRow("size", "Size", "Overall area the pattern covers", ["Auto", "XS", "S", "M", "L", "XL"]),
+        questGatherRow("width", "Width", "Repetitions of each pattern loop", ["Auto", 1, 2, 3, 4, 5, 6, 7, 8]),
+        questGatherToggle("invert_lr", "Invert Left/Right", "Swap left and right in the pattern"),
+        questGatherToggle("invert_fb", "Invert Forward/Back", "Swap forward and back in the pattern"),
+        questGatherToggle("shift_lock", "Use Shift Lock", "Shift lock while gathering"),
+        questGatherToggle("field_drift_compensation", "Field Drift Compensation", "Recenter between pattern loops"),
+        { title: "Rotate Camera", type: { name: "separator" } },
+        questGatherRow("turn", "Direction", "Camera turn before gathering", ["Auto", "None", "Left", "Right"]),
+        questGatherRow("turn_times", "Turn X Times", "Number of camera turns", ["Auto", 1, 2, 3, 4]),
+        { title: "Gather Until", type: { name: "separator" } },
+        { id: "quest_mapping_mins", title: "Mins", desc: "0 uses the field or petal time",
+          type: { name: "textbox", inputType: "float", inputLimit: 4, triggerFunction: "", length: 12 } },
+        questGatherRow("backpack", "Backpack%", "Backpack limit", [{ label: "Auto", value: "auto" }, ...Array.from({length: 20}, (_, index) => ({label: `${(index + 1) * 5}%`, value: String((index + 1) * 5)}))]),
+        questGatherRow("return", "Return To Hive", "How to return after gathering", [{ label: "Auto", value: "no override" }, ...questReturnOptions.slice(1)]),
+        questGatherToggle("use_whirlwig_fallback", "Use Whirlwig Fallback", "Try a whirligig if walking back fails"),
+        { title: "Start Location", type: { name: "separator" } },
+        questGatherRow("start_location", "Start Location", "Area of the field to start in", ["Auto", "Center", "Upper Right", "Right", "Lower Right", "Bottom", "Lower Left", "Left", "Upper Left", "Top"]),
+        questGatherRow("distance", "Distance", "How far to travel toward that area", ["Auto", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        { title: "Goo", type: { name: "separator" } },
+        questGatherToggle("goo", "Use Goo", "Use goo while gathering"),
+        questGatherRow("goo_interval", "Goo Interval (secs)", "How often to use goo", ["Auto", 3, 5, 10, 15, 30, 60]),
+        { title: "BloomsAI", type: { name: "separator" } },
+        questGatherRow("blooms_ai_model", "Detection Model", "Only used by the BloomsAI pattern", ["Auto", "Standard", { label: "Light (Faster)", value: "Light" }, { label: "Mini (Fastest)", value: "Mini" }]),
+      ]);
+      questGatherDialog.insertAdjacentHTML("beforeend", `
+        <div class="modal-actions">
+          <button type="button" class="btn-cancel" onclick="closeQuestGatherSettings()">Cancel</button>
+          <button type="button" class="btn-confirm" onclick="saveQuestGatherSettings()">Save Settings</button>
+        </div>
+      `);
 
       buildStandardContainer(questsSettingsParent, "Goo Settings", "Decide how the macro wants to handle gathering goo", [
         {

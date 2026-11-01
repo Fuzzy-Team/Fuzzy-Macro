@@ -12,6 +12,24 @@ FIELDS = ("sunflower", "dandelion", "mushroom", "blue flower", "clover", "strawb
           "rose", "mountain top", "pepper", "coconut")
 COLOR_FIELDS = {"blue": BLUE_FIELDS, "red": RED_FIELDS,
                 "white": tuple(field for field in FIELDS if field != "mountain top"), "any": FIELDS}
+# Quest-only gather settings per objective: allowed values besides "auto", which keeps the field's value.
+OBJECTIVE_SETTING_CHOICES = {
+    "size": ("xs", "s", "m", "l", "xl"),
+    "width": tuple(str(number) for number in range(1, 9)),
+    "invert_lr": ("on", "off"),
+    "invert_fb": ("on", "off"),
+    "shift_lock": ("on", "off"),
+    "field_drift_compensation": ("on", "off"),
+    "turn": ("none", "left", "right"),
+    "turn_times": ("1", "2", "3", "4"),
+    "use_whirlwig_fallback": ("on", "off"),
+    "start_location": ("center", "upper right", "right", "lower right", "bottom",
+                       "lower left", "left", "upper left", "top"),
+    "distance": tuple(str(number) for number in range(1, 11)),
+    "goo": ("on", "off"),
+    "goo_interval": ("3", "5", "10", "15", "30", "60"),
+    "blooms_ai_model": ("standard", "light", "mini"),
+}
 QUEST_DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "bss" / "quest_data.txt"
 
 
@@ -154,6 +172,12 @@ def quest_gather_settings(objective, field, settings, field_settings):
         value = settings.get(prefix + setting, 0 if setting == "mins" else "auto")
         if value not in (None, "auto", "no override", 0, ""):
             resolved[key] = float(value) if key in ("mins", "backpack") else value
+    for setting in OBJECTIVE_SETTING_CHOICES:
+        value = str(settings.get(prefix + setting, "auto"))
+        if value in ("on", "off"):
+            resolved[setting] = value == "on"
+        elif value != "auto":
+            resolved[setting] = int(value) if value.isdigit() else value
     resolved["infinite_gather"] = False
     resolved["plant_sprout"] = False
     if resolved["shape"] in ("fuzzy_ai_gather", "blooms_ai"):

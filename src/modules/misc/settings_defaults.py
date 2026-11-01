@@ -1,7 +1,7 @@
 """Hardcoded default settings used to seed missing runtime/profile files."""
 
 import copy
-from modules.quest_planning import gather_objective_types, load_quest_catalog
+from modules.quest_planning import OBJECTIVE_SETTING_CHOICES, gather_objective_types, load_quest_catalog
 
 
 DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False],
@@ -817,7 +817,8 @@ DEFAULT_GENERAL_SETTINGS = {'hive_number': 1,
 
 for _objective in gather_objective_types(load_quest_catalog()):
     for _key, _value in {"field": "auto", "pattern": "auto", "mins": 0,
-                         "backpack": "auto", "return": "no override"}.items():
+                         "backpack": "auto", "return": "no override",
+                         **dict.fromkeys(OBJECTIVE_SETTING_CHOICES, "auto")}.items():
         DEFAULT_PROFILE_SETTINGS[f"quest_objective_{_objective['value']}_{_key}"] = _value
 
 

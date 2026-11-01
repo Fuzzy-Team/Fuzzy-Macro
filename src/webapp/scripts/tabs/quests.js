@@ -60,11 +60,33 @@ async function showQuestObjectiveSettings(key, settings) {
     }));
     setDropdownData("quest_mapping_field", [{label: "Auto", value: "auto"}, ...fieldOptions]);
     document.getElementById("quest_mapping_field").closest("form").style.display = objective.field ? "none" : "flex";
-    for (const property of ["field", "pattern", "mins", "backpack", "return"]) {
-        document.getElementById(`quest_mapping_${property}`).dataset.settingId = prefix + property;
+    for (const input of [document.getElementById("quest_mapping_field"), document.getElementById("quest_mapping_pattern"), ...questGatherInputs()]) {
+        input.dataset.settingId = prefix + input.id.slice("quest_mapping_".length);
     }
     loadInputs(settings);
     document.getElementById("objective-gather-settings").parentElement.style.display = "block";
+}
+
+function questGatherInputs() {
+    return document.querySelectorAll('#quest-gather-modal [id^="quest_mapping_"]');
+}
+
+async function openQuestGatherSettings() {
+    const key = getDropdownValue(document.getElementById("quest_mapping_objective"));
+    document.getElementById("quest-gather-objective").textContent = questObjectiveTypes.find(item => item.value === key).label;
+    loadInputs(await loadAllSettings());
+    document.getElementById("quest-gather-modal").style.display = "flex";
+}
+
+function closeQuestGatherSettings() {
+    document.getElementById("quest-gather-modal").style.display = "none";
+}
+
+async function saveQuestGatherSettings() {
+    for (const input of questGatherInputs()) {
+        if (!(await saveSetting(input, "profile"))) return;
+    }
+    closeQuestGatherSettings();
 }
 
 // Progress check rows only matter while the quest menu stays open.

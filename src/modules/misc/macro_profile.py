@@ -384,7 +384,7 @@ class MacroProfileStore:
     def _validate(self, setting, value, defaults, combined):
         """Reject values that break a constraint. Types are not enforced: readers accept
         the formats the GUI saves (numeric strings, comma-separated lists, ...)."""
-        from modules.quest_planning import gather_objective_types, load_quest_catalog
+        from modules.quest_planning import OBJECTIVE_SETTING_CHOICES, gather_objective_types, load_quest_catalog
 
         choices = {"quest_scheduling": ("quest giver priority", "optimize quest completion"),
                    "quest_progress_check_mode": ("interval", "every iteration")}
@@ -392,11 +392,15 @@ class MacroProfileStore:
             raise MacroProfileValidationError(setting, "choose one of the listed options")
         property_name = None
         if setting.startswith("quest_objective_"):
-            objective_type, _, property_name = setting[len("quest_objective_"):].rpartition("_")
+            name = setting[len("quest_objective_"):]
             objective = next((item for item in gather_objective_types(load_quest_catalog())
-                              if item["value"] == objective_type), None)
-            if objective is None or property_name not in ("field", "pattern", "mins", "backpack", "return"):
+                              if name.startswith(item["value"] + "_")), None)
+            property_name = name[len(objective["value"]) + 1:] if objective else None
+            if objective is None or (property_name not in ("field", "pattern", "mins", "backpack", "return")
+                                     and property_name not in OBJECTIVE_SETTING_CHOICES):
                 raise MacroProfileValidationError(setting, "choose a gathering objective from the quest catalog")
+            if property_name in OBJECTIVE_SETTING_CHOICES and str(value) not in ("auto", *OBJECTIVE_SETTING_CHOICES[property_name]):
+                raise MacroProfileValidationError(setting, "choose one of the listed options")
             if property_name == "field" and value != "auto" and value not in objective["fields"]:
                 raise MacroProfileValidationError(setting, "choose a field that supports this objective")
             if property_name == "return" and value not in ("no override", "reset", "walk", "rejoin", "whirligig"):
