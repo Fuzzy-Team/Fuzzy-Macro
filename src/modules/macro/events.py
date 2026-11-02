@@ -218,7 +218,7 @@ class EventDetectionMixin:
             detectors.append((self.detectUnusualSproutAnnouncement, 10))
         if self.setdat.get("ping_windy_bee", False):
             detectors.append((self.detectWindyBeeAnnouncement, 5))
-        if self.setdat.get("sticker_sprout_watch", False) and self.setdat.get("macro_mode", "normal") != "alt":
+        if self.setdat.get("sticker_sprout_watch", False) and self.setdat.get("macro_mode", "normal") not in ("alt", "vic"):
             detectors.append((self.detectStickerSproutAnnouncement, 5))
         if not detectors:
             return

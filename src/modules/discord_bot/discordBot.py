@@ -1587,6 +1587,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             return f"Feed Bee: {task_id.replace('feed_bee_', '').replace('_', ' ').title()}"
 
         special_names = {
+            "vic_hop": "Vic Hop",
             "blender": "Blender",
             "planters": "Planters",
             "ant_challenge": "Ant Challenge",
@@ -1601,6 +1602,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         if macro_mode == "alt":
             return False
+        if macro_mode == "vic":
+            return task_id == "vic_hop"
         if macro_mode == "field" and not task_id.startswith("gather_"):
             return False
         if macro_mode == "quest" and not task_id.startswith("quest_"):
@@ -1651,6 +1654,9 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         enabled_tasks = [task_id for task_id in task_list_order if _is_task_enabled(task_id, settings)]
 
         macro_mode = settings.get("macro_mode", "normal")
+
+        if macro_mode == "vic":
+            return ["vic_hop"]
 
         if macro_mode == "alt":
             alt_field = str(
@@ -3988,6 +3994,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         app_commands.Choice(name="alt", value="alt"),
         app_commands.Choice(name="quests", value="quest"),
         app_commands.Choice(name="field", value="field"),
+        app_commands.Choice(name="vic hop", value="vic"),
     ])
     async def macro_mode(interaction: discord.Interaction, mode: str):
         """Set macro mode"""
@@ -4005,7 +4012,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 "normal": "Normal",
                 "alt": "Alt",
                 "quest": "Quest",
-                "field": "Field"
+                "field": "Field",
+                "vic": "Vic Hop"
             }
 
             await interaction.response.send_message(f"🔄 Macro mode set to {mode_names[mode]}!\n{message}")

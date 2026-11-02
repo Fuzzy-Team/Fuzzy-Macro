@@ -48,6 +48,14 @@ class ViciousMixin:
                 return False
 
 
+    def viciousResetCamera(self):
+        """Restore the pitch expected by hive reset and normal travel."""
+        for _ in range(10):
+            self.keyboard.press("pageup")
+        for _ in range(4):
+            self.keyboard.press("pagedown")
+
+
     def viciousReturnToField(self):
         """After dying mid fight, walk back to the same field on this server."""
         field = self.viciousField
@@ -57,6 +65,7 @@ class ViciousMixin:
             return False
         self.set_task_status("stinger_hunt", activity=field.title())
         # cannon(allowRejoin=False): a failed cannon must not hop to another server.
+        self.viciousResetCamera()
         if not (self.reset(convert=False) and self.cannon(allowHiveResync=False, allowRejoin=False)):
             self.logger.webhook("Vic Hop", f"Could not return to {field.title()} after dying, ending the hunt", "orange", "screen", ping_category="ping_vicious_bee")
             return False
@@ -182,6 +191,7 @@ class ViciousMixin:
         if any("Fire" in item[1][0] for item in ocrRead(frame)):
             return True
         self.disableShiftLock()
+        self.viciousResetCamera()
         if not self.reset(convert=False):
             return False
         for _ in range(6):
@@ -257,8 +267,10 @@ class ViciousMixin:
                         sleep(1)
                         return True
                     self.viciousWalk("a", 1.5)
-            if attempt + 1 < attempts and not self.reset(convert=False):
-                return False
+            if attempt + 1 < attempts:
+                self.viciousResetCamera()
+                if not self.reset(convert=False):
+                    return False
         return False
 
 
@@ -278,20 +290,32 @@ class ViciousMixin:
         readable = cv2.resize(region, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
         image = Image.fromarray(cv2.cvtColor(readable, cv2.COLOR_BGR2RGB))
         counts = {"vicsummon": 0, "vicdead": 0}
+        defeat_lines = reward_lines = 0
+        field = getattr(self, "viciousField", None)
         for item in ocrRead(image):
             text = " ".join(item[1][0].lower().split())
-            if re.match(r"^(?:\W|a )*vicious bee is attacking .+ in the .+ field\b", text):
-                counts["vicsummon"] += 1
-            if (re.fullmatch(r"(?:\W|a )*vicious bee (?:has been )?defeated(?:\W| a)*", text)
-                    or re.match(r"^\W*\+\s*\d+\s+stingers?\s*\(from vicious bee\b", text)):
-                counts["vicdead"] += 1
+            # Warning icons can OCR as L, TA, or other short prefixes.
+            # Colons identify player chat rather than a system announcement.
+            if re.match(r"^(?!.*:).{0,3}vicious bee is attacking\b", text):
+                if field is None or re.search(r"\bin the " + re.escape(field) + r"\b", text):
+                    counts["vicsummon"] += 1
+            if re.match(r"^(?!.*:).{0,3}vicious bee (?:has been )?defeated\b", text):
+                defeat_lines += 1
+            if re.match(r"^\W*\+\s*\d+\s+stingers?\s*\(from vicious bee\b", text):
+                reward_lines += 1
+        counts["vicdead"] = max(defeat_lines, reward_lines)
         return counts
 
     def viciousNotification(self, name, frame=None):
         if name not in ("vicsummon", "vicdead"):
             raise ValueError("Unknown Vicious notification")
+        count = self._viciousAnnouncementCounts(frame)[name]
+        if name == "vicsummon":
+            # The model has already found a bee; accept this field's attack
+            # even if it started before the approach snapshot.
+            return count > 0
         baseline = getattr(self, "_viciousAnnouncementBaseline", {})
-        return self._viciousAnnouncementCounts(frame)[name] > baseline.get(name, 0)
+        return count > baseline.get(name, 0)
 
 
     def checkIfVicSummoned(self, frame=None):
@@ -345,6 +369,16 @@ class ViciousMixin:
         """Run one server search; the main loop reloads settings between hops."""
         if self.checkPauseAndWait():
             return
+        try:
+            self._loadViciousModel()
+        except Exception as exc:
+            from modules.controls.sleep import InterruptRequested
+            if isinstance(exc, InterruptRequested):
+                raise
+            self.logger.webhook("Vic Hop", f"Could not load Vicious Bee detection model: {exc}", "red", "screen")
+            if self.run is not None:
+                self.run.value = 0
+            return
         if not self.rejoin(rejoinMsg="Vic Hop", usePrivateServer=False, nightOnly=True):
             return
         if self.checkPauseAndWait():
@@ -373,23 +407,22 @@ class ViciousMixin:
                     raise
                 self.logger.webhook("Stinger Hunt", f"Could not load Vicious Bee detection model: {exc}", "orange", "screen")
                 return False
-            if self.location != "spawn" and not self.reset(convert=False):
-                return False
+            if self.location != "spawn":
+                self.viciousResetCamera()
+                if not self.reset(convert=False):
+                    return False
             result = self.viciousSearchRoute()
-            self.night = False
-            self.ensure_shift_lock_off(reason="Stinger Hunt cleanup")
-            for _ in range(10):
-                self.keyboard.press("pageup")
-            for _ in range(4):
-                self.keyboard.press("pagedown")
-            self.reset()
-            return result
         finally:
             self.night = False
-            self.ensure_shift_lock_off(reason="Stinger Hunt cleanup")
+            self.viciousResetCamera()
             point = self._viciousOpenedChat
             if point is not None:
                 mouse.moveTo(*point)
                 mouse.click()
                 self._viciousOpenedChat = None
             self.hourlyReport.addHourlyStat("bug_run_time", time.time() - started)
+            # This can re-raise a pending interrupt during its pause-aware wait.
+            # All other cleanup must already be complete.
+            self.ensure_shift_lock_off(reason="Stinger Hunt cleanup")
+        self.reset()
+        return result
