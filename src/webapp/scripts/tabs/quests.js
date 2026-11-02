@@ -99,6 +99,12 @@ async function showQuestObjectiveSettings(key, settings) {
     }));
     setDropdownData("quest_mapping_field", [{label: "Auto", value: "auto"}, ...fieldOptions]);
     document.getElementById("quest_mapping_field").closest("form").style.display = objective.field ? "none" : "flex";
+    const useAntChallenge = key === "token_rage" && settings[prefix + "field"] === "auto";
+    document.getElementById("quest_mapping_field").closest("form").querySelector("p").textContent = key === "token_rage"
+        ? "Auto uses Ant Challenge; choose a field to gather instead" : "Auto may change with active quests";
+    for (const id of ["quest_mapping_pattern", "open-quest-gather-button"]) {
+        document.getElementById(id).closest("form").style.display = useAntChallenge ? "none" : "flex";
+    }
     updateQuestAutoLabels(defaults);
     loadInputs(settings);
     setQuestMappingLoading(false);

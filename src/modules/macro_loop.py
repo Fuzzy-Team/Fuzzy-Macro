@@ -3,7 +3,7 @@ import json
 import time
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
-from modules.quest_planning import quest_giver_order, choose_quest_gather, is_gather_objective, allowed_fields
+from modules.quest_planning import quest_giver_order, choose_quest_gather, is_gather_objective, allowed_fields, quest_uses_ant_challenge
 from modules.controls.sleep import (
     InterruptRequested,
     INTERRUPT_NONE,
@@ -105,6 +105,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
     macro.completedQuestWatchObjectives = set()
     
     macro.start()
+    lastIdleClick = time.time()
     #macro.useItemInInventory("blueclayplanter")
 
     def emptyAutoPlanterSlot():
@@ -287,20 +288,24 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 and macro.confirmNight()
             ):
                 macro.stingerHunt()
+                taskCompleted = True
             if (
                 macro.setdat.get("macro_mode", "normal") not in ("quest", "alt")
                 and macro.setdat["mondo_buff"]
                 and macro.hasMondoRespawned()
             ):
                 macro.collectMondoBuff()
+                taskCompleted = True
             if macro.setdat.get("macro_mode", "normal") != "alt" and macro.hasScheduledRejoinArrived():
                 macro.rejoin("Rejoining (Scheduled)")
                 macro.saveTiming("rejoin_every")
+                taskCompleted = True
             
             #auto field boost (can be disabled per-call via allowAFB)
             if allowAFB and macro.setdat["Auto_Field_Boost"] and not macro.AFBLIMIT:
                 if macro.hasAFBRespawned("AFB_dice_cd", macro.setdat["AFB_rebuff"]*60) or macro.hasAFBRespawned("AFB_glitter_cd", macro.setdat["AFB_rebuff"]*60-30):
                     macro.AFB(gatherInterrupt=False)
+                    taskCompleted = True
         except InterruptRequested as interrupt:
             skipTask.value = INTERRUPT_NONE
             if questWatchContext:
@@ -355,6 +360,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             return [], []
         if executeQuest and (objectives is None or not objectives) and canClaimTimedBearQuest(questGiver):
             submitting = objectives == []
+            taskCompleted = True
             objectives = macro.getNewQuest(questGiver, submitting)
             if submitting:
                 macro.hourlyReport.addHourlyStat("quests_completed", 1)
@@ -384,6 +390,9 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 amount, item = target.split("_", 1)
                 feeds.append((item, 25 if amount == "*" else int(amount)))
                 watchTask = "feed_" + item
+            elif quest_uses_ant_challenge(objective, macro.setdat):
+                tasks = ["ant_challenge", "ant_pass_dispenser"]
+                watchTask = objective
             elif kind == "token" and target == "honey":
                 tasks = ["honeytoken"]
                 watchTask = None
@@ -473,11 +482,13 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
     def gatherObjectives():
         return [objective for giver in quest_giver_order(macro.setdat)
                 for objective in (getattr(macro, "questObservations", {}).get(giver) or [])
-                if is_gather_objective(objective) and objective["status"] != "complete"
+                if is_gather_objective(objective, macro.setdat) and objective["status"] != "complete"
                 and objective["id"] not in macro.deferredQuestObjectives]
 
     def runQuestGathers():
         nonlocal questScanScreens, taskCompleted
+        if not gatherObjectives():
+            return []
         attempted = set()
         gathered = []
         currentField = None
@@ -540,6 +551,18 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             questScanScreens = None
         return gathered
 
+    def waitForReadyTask():
+        nonlocal lastIdleClick
+        if taskCompleted:
+            lastIdleClick = time.time()
+            return
+        macro.set_task_status("waiting_for_task", activity="Waiting for next task")
+        # Keep Roblox active during long cooldowns without reopening the quest menu.
+        if time.time() - lastIdleClick >= 60:
+            mouse.click()
+            lastIdleClick = time.time()
+        time.sleep(1)
+
     while True:
         # Check for pause - wait while paused
         while run.value == 6:  # 6 = paused
@@ -548,19 +571,18 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         if run.value == 0:
             break  # Exit macro loop if stop requested
 
-        # Quest scans should be cached only within a single outer loop pass.
-        # Clearing here guarantees the board is re-read after the task list recycles.
-        questCache.clear()
+        # Idle passes reuse the board until work or a settings change can affect it.
+        settingsChanged = macro.checkAndReloadSettings()
+        if taskCompleted or settingsChanged:
+            questCache.clear()
+            macro.questObservations = {}
         questScanScreens = None
-        macro.questObservations = {}
+        taskCompleted = False
         macro.questGatherInterruptMobs.clear()
         macro.questTaskWatchers.clear()
         macro.completedQuestWatchTasks.clear()
         macro.completedQuestWatchObjectives.clear()
         macro.deferredQuestObjectives.clear()
-
-        # Reload settings and fields from one profile snapshot.
-        macro.checkAndReloadSettings()
 
         # Migration from old boolean flags to macro_mode is now handled in settings loader
 
@@ -635,6 +657,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 for item, quantity in feeds:
                     runTask(macro.feedBee, args=(item, quantity), resetAfter=False)
             runQuestGathers()
+            waitForReadyTask()
             continue
 
         # Check if bug-run-only mode is enabled
@@ -719,7 +742,6 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 requiredTasks, _ = handleQuest(giver, executeQuest=False)
                 for task in requiredTasks:
                     macro.setdat[task] = True
-        taskCompleted = False
         runReadyQuestInterruptMobs()
 
         # Helper function for manual planters
@@ -1689,4 +1711,6 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         
         # Old code removed - all tasks now execute via priority order
         
-        mouse.click()
+        if taskCompleted:
+            mouse.click()
+        waitForReadyTask()

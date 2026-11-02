@@ -111,8 +111,13 @@ def make_quest_objectives(giver, title, actions, statuses):
     return objectives
 
 
-def is_gather_objective(objective):
-    return objective["kind"] in ("gather", "gathergoo", "gatherpetal", "pollen", "pollengoo", "token", "fieldtoken")
+def quest_uses_ant_challenge(action, settings):
+    return action == "token_rage" and settings.get("quest_objective_token_rage_field", "auto") == "auto"
+
+
+def is_gather_objective(objective, settings=None):
+    return (objective["kind"] in ("gather", "gathergoo", "gatherpetal", "pollen", "pollengoo", "token", "fieldtoken")
+            and (settings is None or not quest_uses_ant_challenge(objective["action"], settings)))
 
 
 def objective_matches_text(action, text):
@@ -201,6 +206,8 @@ def quest_gather_defaults(action, settings, field_settings):
     prefix = objective_setting_prefix(objective)
     field = preferred_quest_field(objective, settings, field_settings)
     defaults = {"field": preferred_quest_field(objective, {**settings, prefix + "field": "auto"}, field_settings)}
+    if action == "token_rage":
+        defaults["field"] = "ant challenge"
     properties = {"pattern": "shape", "mins": "mins", "backpack": "backpack", "return": "return",
                   **{key: key for key in OBJECTIVE_SETTING_CHOICES}}
     for property_name, key in properties.items():
@@ -212,7 +219,7 @@ def quest_gather_defaults(action, settings, field_settings):
 def choose_quest_gather(objectives, settings, field_settings, current_field=None):
     """Return one gather and the objectives that can share its settings."""
     order = quest_giver_order(settings)
-    pending = sorted((obj for obj in objectives if is_gather_objective(obj) and obj["status"] != "complete" and obj["giver"] in order),
+    pending = sorted((obj for obj in objectives if is_gather_objective(obj, settings) and obj["status"] != "complete" and obj["giver"] in order),
                      key=lambda obj: (order.index(obj["giver"]), obj["row"]))
     if not pending:
         return None
