@@ -327,6 +327,12 @@ async function loadTasks() {
   }
 
   // Check if bug-run-only mode is enabled
+  if (setdat.macro_mode === "vic") {
+    out += taskHTML("Vic Hop Mode", "Search public servers for night and hunt Vicious Bee");
+    document.getElementById("task-list").innerHTML = out;
+    return;
+  }
+
   if (setdat.macro_mode === "bug") {
     out += taskHTML("Bug Run Mode", "🐞 Doing bug runs only (including bosses)");
 

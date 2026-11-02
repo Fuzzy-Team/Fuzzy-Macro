@@ -14,6 +14,739 @@ from modules.screen.imageSearch import locateImageOnScreen
 
 
 class MobMixin:
+    def viciousWalk(self, keys, tiles):
+        try:
+            for key in keys:
+                self.keyboard.keyDown(key, False)
+            self.keyboard.tileWait(tiles)
+        finally:
+            for key in keys:
+                self.keyboard.keyUp(key, False)
+
+    def viciousKillPattern(self):
+        """Fight for 12 cycles (~40s) in self.viciousField.
+
+        Dying means the bee is still alive, so after returning to the same
+        field a fresh 12 cycles start. A full window without a death or a
+        defeat means the bee is gone, as before.
+        """
+        while True:
+            died = False
+            for _ in range(12):
+                for key in "wasd":
+                    if self.checkPauseAndWait():
+                        return False
+                    self.viciousWalk(key, 4)
+                    sleep(0.8)
+                    # Same blue-text "died" check as the other fights; chat is
+                    # never read for deaths, so old "You died" lines can't retrigger.
+                    if self.blueTextImageSearch("died", screen=self.blueTextScreen()):
+                        died = True
+                        break
+                if died:
+                    break
+                if self.checkIfViciousDied():
+                    self.hourlyReport.addHourlyStat("vicious_bees", 1)
+                    return True
+            if not died:
+                return False
+            # A kill announced right before the death still counts.
+            if self.checkIfViciousDied():
+                self.hourlyReport.addHourlyStat("vicious_bees", 1)
+                return True
+            if not self.viciousReturnToField():
+                return False
+
+    def viciousReturnToField(self):
+        """After dying mid fight, walk back to the same field on this server."""
+        field = self.viciousField
+        self.keyboard.releaseMovement()
+        self.logger.webhook("Vic Hop", f"Died fighting the Vicious Bee in {field.title()}, returning to the same field", "red", "screen", ping_category="ping_character_deaths")
+        if self.checkPauseAndWait():
+            return False
+        self.set_task_status("stinger_hunt", activity=field.title())
+        # cannon(allowRejoin=False): a failed cannon must not hop to another server.
+        if not (self.reset(convert=False) and self.cannon(allowHiveResync=False, allowRejoin=False)):
+            self.logger.webhook("Vic Hop", f"Could not return to {field.title()} after dying, ending the hunt", "orange", "screen", ping_category="ping_vicious_bee")
+            return False
+        self.goToField(field, "north")
+        self.location = field
+        self.logger.webhook("Vic Hop", f"Back in {field.title()}, fighting the Vicious Bee again", "yellow", "screen", ping_category="ping_vicious_bee")
+        return True
+
+    def viciousSearchRoute(self):
+        # Shipped BSSAI settings.ini: ingame_camera_sens=1, keydelay=20.
+        self.setdat.setdefault("vicious_camera_sensitivity", 1)
+        self.setdat.setdefault("vicious_key_delay_ms", 20)
+        def search(field, approach):
+            self.set_task_status("stinger_hunt", activity=field)
+            self.viciousField = field.replace(" back", "").lower()
+            if not self.detectViciousBee():
+                self.logger.webhook("Vic Hop", f"{field}: no Vicious Bee detected", "dark brown", "screen")
+                return None
+            self.logger.webhook("Vic Hop", f"Vicious Bee detected in {field}, approaching", "yellow", "screen", ping_category="ping_vicious_bee")
+            result = approach()
+            self.logger.webhook("Vic Hop", "Vicious Bee defeated" if result else "Vicious Bee hunt ended without a confirmed defeat", "light green" if result else "orange", "screen", ping_category="ping_vicious_bee")
+            return result
+        self.logger.webhook("Vic Hop", "Hive ready, checking fields starting with Pepper", "dark brown", "screen")
+        self.Vichop_Hive_to_Pepper()
+        result = search("Pepper", self.PepperMainKillVic)
+        if result is not None:
+            return result
+        if not self.Vichop_Pepper_to_Mountaintop():
+            return False
+        # Detect before rotating, as in BSSAI's TotalPath.
+        found = self.detectViciousBee()
+        self.viciousRotate("right", 1)
+        if found:
+            self.viciousField = "mountain top"
+            self.logger.webhook("Vic Hop", "Vicious Bee detected in Mountain Top, approaching", "yellow", "screen", ping_category="ping_vicious_bee")
+            result = self.MountainTopKillVic()
+            self.logger.webhook("Vic Hop", "Vicious Bee defeated" if result else "Vicious Bee hunt ended without a confirmed defeat", "light green" if result else "orange", "screen", ping_category="ping_vicious_bee")
+            return result
+        self.logger.webhook("Vic Hop", "Mountain Top: no Vicious Bee detected", "dark brown", "screen")
+        self.Vichop_Mountaintop_to_edge()
+        self.Vichop_edge_to_Spider()
+        result = search("Spider", self.SpiderKillVic)
+        if result is not None:
+            return result
+        self.Vichopspider_to_cactus()
+        for key, count in (("pagedown", 10), ("pageup", 2)):
+            for _ in range(count):
+                self.keyboard.press(key)
+                sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        result = search("Cactus", self.CactusKillVic)
+        if result is not None:
+            return result
+        for _ in range(5):
+            self.keyboard.keyDown("pagedown", False)
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+            self.keyboard.keyUp("pagedown", False)
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        result = search("Cactus back", self.CactusKillVic)
+        if result is not None:
+            return result
+        self.Vichop_Cactus_To_rose()
+        result = search("Rose", self.RoseKillVic)
+        if result is None:
+            self.disableShiftLock()
+            self.logger.webhook("Vic Hop", "Finished checking fields, no Vicious Bee found", "dark brown", "screen")
+        return result or False
+
+    def viciousRotate(self, direction, amount):
+        """BSSAI Rotate: discrete camera steps separated by 50 ms."""
+        key = {"left": ",", "right": ".", "up": "pageup", "down": "pagedown"}[direction]
+        for _ in range(amount):
+            self.keyboard.press(key)
+            sleep(0.05)
+
+    def viciousJump(self):
+        self.keyboard.keyDown("space", False)
+        try:
+            sleep(0.05)
+        finally:
+            self.keyboard.keyUp("space", False)
+
+    def viciousActivateGlider(self):
+        self.viciousJump()
+        sleep(0.3)
+        self.viciousJump()
+
+    def viciousRotateCamera(self, direction, amount, sensitivity):
+        """BSSAI mouse camera rotation. Pass the actual in-game sensitivity."""
+        import math
+        if sensitivity <= 0:
+            raise ValueError("Camera sensitivity must be positive")
+        delta = math.floor(amount / sensitivity + 0.5)
+        dx, dy = {"down": (0, -delta), "left": (-delta, 0)}[direction]
+        win = self.robloxWindow
+        mouse.moveTo(win.mx + win.mw / 2, win.my + win.mh / 2)
+        mouse.pynputMouse.press(mouse.Button.right)
+        try:
+            sleep(0.1)
+            mouse.rightDragBy(dx, dy)
+            sleep(0.1)
+        finally:
+            mouse.pynputMouse.release(mouse.Button.right)
+
+    def viciousRecoverCannon(self, frame=None):
+        """Check the reference Fire prompt before recovering through the hive."""
+        from modules.screen.ocr import ocrRead
+        from modules.screen.screenshot import mssScreenshot
+        if frame is None:
+            win = self.robloxWindow
+            frame = mssScreenshot(win.mx, win.my, win.mw, win.mh)
+        if any("Fire" in item[1][0] for item in ocrRead(frame)):
+            return True
+        self.disableShiftLock()
+        if not self.reset(convert=False):
+            return False
+        for _ in range(6):
+            self.keyboard.press("o")
+            sleep((10 + self.setdat.get("vicious_key_delay_ms", 20)) / 1000)
+        if not self.viciousHiveToCannon():
+            return False
+        self.enableShiftLock()
+        for _ in range(2):
+            self.keyboard.press(",")
+            sleep((10 + self.setdat.get("vicious_key_delay_ms", 20)) / 1000)
+        return True
+
+    def viciousBitmapPosition(self, name, region, tolerance):
+        import cv2
+        from modules.macro.events import vicious_bitmap_position
+        from modules.screen.screenshot import mssScreenshotNP
+        frame = mssScreenshotNP(*region)[:, :, :3]
+        frame = cv2.resize(frame, (region[2], region[3]), interpolation=cv2.INTER_AREA)
+        return vicious_bitmap_position(frame, name, tolerance)
+
+    def viciousActivateChat(self):
+        win = self.robloxWindow
+        point = self.viciousBitmapPosition("chatclosed", (win.mx, win.my, 200, 100), 25)
+        if point is not None:
+            mouse.moveTo(win.mx + point[0], win.my + point[1])
+            sleep(0.05)
+            mouse.mouseDown()
+            sleep(0.06)
+            mouse.mouseUp()
+            sleep(0.2)
+        mouse.moveTo(win.mx + 350, win.my + 100)
+        if point is not None:
+            sleep(0.1)
+            mouse.click()
+        width, height = mouse.pag.size()
+        for x, y in ((1465, 162), (1467, 165)):
+            mouse.moveTo(int(x * width / 1920 + 0.5), int(y * height / 1080 + 0.5))
+            sleep(0.05)
+
+    def viciousHiveToRamp(self):
+        self.viciousWalk("w", 5)
+        self.viciousWalk("d", 9.2 * self.setdat["hive_number"] - 4)
+
+    def viciousHiveToCannon(self):
+        self.viciousHiveToRamp()
+        self.viciousJump()
+        self.viciousWalk("d", 3)
+        self.viciousWalk("wd", 1.7)
+        win = self.robloxWindow
+        region = (win.mx + win.mw // 2 - 200, win.my, 400, 125)
+        for _ in range(10):
+            self.viciousWalk("d", 1.5)
+            if self.viciousBitmapPosition("redcannon", region, 2) is None:
+                continue
+            for correction in range(1, 11):
+                if correction == 10:
+                    break
+                sleep(0.5)
+                if self.viciousBitmapPosition("redcannon", region, 2) is not None:
+                    sleep(1)
+                    return True
+                self.viciousWalk("a", 1.5)
+        if not self.reset():
+            return False
+        return self.viciousHiveToCannon()
+
+    def viciousNotification(self, name, frame=None):
+        """Reference top-right bitmap search with per-channel tolerance 25.
+
+        The caller must expose the chat, as BSSAI does before these checks.
+        Frames are BGR or BGRA client captures at native resolution.
+        """
+        import cv2
+        from modules.macro.events import vicious_bitmap_matches
+        from modules.screen.screenshot import mssScreenshotNP
+        if name not in ("vicsummon", "vicdead"):
+            raise ValueError("Unknown Vicious notification")
+        if frame is None:
+            win = self.robloxWindow
+            frame = mssScreenshotNP(win.mx, win.my, win.mw, win.mh)
+            frame = cv2.resize(frame, (win.mw, win.mh), interpolation=cv2.INTER_AREA)
+        height, width = frame.shape[:2]
+        region = frame[:height // 2, width // 2:, :3]
+        if vicious_bitmap_matches(region, name, 25):
+            return True
+        # Roblox's current chat font differs from BSSAI's bitmap glyphs.
+        # Read the same announcement region when the source bitmap misses.
+        from PIL import Image
+        from modules.screen.ocr import ocrRead
+        readable = cv2.resize(region, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+        image = Image.fromarray(cv2.cvtColor(readable, cv2.COLOR_BGR2RGB))
+        for item in ocrRead(image):
+            text = " ".join(item[1][0].lower().split())
+            if name == "vicsummon" and "vicious bee is attacking" in text:
+                return True
+            if name == "vicdead":
+                if "vicious bee" in text and "defeated" in text:
+                    return True
+                # The highlighted defeat line can be unreadable to OCR, but
+                # its adjacent stinger reward explicitly identifies the kill.
+                import re
+                if re.search(r"\+\s*\d+\s+stingers?\s*\(from vicious bee\b", text):
+                    return True
+        return False
+
+    def checkIfVicSummoned(self, frame=None):
+        if frame is None:
+            self.viciousActivateChat()
+        return self.viciousNotification("vicsummon", frame)
+
+    def checkIfViciousDied(self, frame=None):
+        if frame is None:
+            self.viciousActivateChat()
+        return self.viciousNotification("vicdead", frame)
+
+    def detectViciousBee(self, frame=None):
+        """Run BSSAI vic.onnx on a BGRA frame, or capture the Roblox client."""
+        import cv2
+        import numpy as np
+        from pathlib import Path
+        from modules.screen.screenshot import mssScreenshotNP
+
+        if not hasattr(self, "_viciousModel"):
+            self._viciousModel = cv2.dnn.readNetFromONNX(
+                str(Path(__file__).resolve().parents[2] / "models" / "bssai-vic.onnx")
+            )
+        if frame is None:
+            win = self.robloxWindow
+            frame = mssScreenshotNP(win.mx, win.my, win.mw, win.mh)
+        resized = cv2.resize(frame, (736, 736), interpolation=cv2.INTER_LINEAR)
+        rgb = cv2.cvtColor(resized, cv2.COLOR_BGRA2RGB)
+        tensor = np.expand_dims(np.transpose(rgb.astype(np.float16) / 255.0, (2, 0, 1)), 0)
+        model = self._viciousModel
+        model.setInput(tensor.astype(np.float32))
+        output = np.squeeze(model.forward())
+        scores = np.max(output[4:, :], axis=0)
+        mask = scores > 0.4
+        if not np.any(mask):
+            return False
+        cx, cy, width, height = output[:4, mask]
+        boxes = np.stack((cx - width / 2, cy - height / 2, width, height), axis=1)
+        return len(cv2.dnn.NMSBoxes(boxes.tolist(), scores[mask].tolist(), 0.4, 0.5)) > 0
+
+    def viciousHop(self, searchAndKill=None):
+        """Hop public servers until stopped; searchAndKill handles the night route.
+
+        The callback takes no arguments and runs synchronously on this macro.
+        Exceptions propagate so inference or navigation failures stop the run.
+        """
+        if searchAndKill is None:
+            searchAndKill = self.viciousSearchRoute
+        while not self.checkPauseAndWait():
+            if not self.rejoin(rejoinMsg="Vic Hop", usePrivateServer=False, nightOnly=True):
+                continue
+            if self.checkPauseAndWait():
+                return
+            searchAndKill()
+
+    def Vichop_Hive_to_Pepper(self):
+        self.viciousHiveToRamp()
+        self.viciousJump()
+        self.viciousWalk('d', 3)
+        self.viciousWalk('wd', 1.5)
+        self.viciousWalk('d', 25.29)
+        self.viciousJump()
+        sleep(0.303)
+        self.viciousWalk('d', 0.91)
+        self.viciousWalk('wd', 9.83)
+        self.viciousJump()
+        sleep(0.27)
+        self.viciousWalk('w', 16)
+        self.viciousJump()
+        sleep(0.219)
+        self.viciousWalk('w', 4.18)
+        sleep(0.1)
+        self.viciousJump()
+        sleep(0.235)
+        self.viciousWalk('w', 2.95)
+        sleep(0.1)
+        self.viciousJump()
+        sleep(0.237)
+        self.viciousWalk('w', 3)
+        self.viciousWalk('wd', 11)
+        self.viciousWalk('w', 3)
+        self.viciousJump()
+        sleep(0.267)
+        self.viciousWalk('w', 2.66)
+        self.viciousWalk('wd', 13)
+        self.viciousJump()
+        sleep(0.23)
+        self.viciousWalk('d', 10)
+        self.viciousWalk('sd', 5)
+        self.enableShiftLock()
+        for _ in range(13):
+            self.keyboard.press('pagedown')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        for _ in range(5):
+            self.keyboard.press('pageup')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        for _ in range(5):
+            self.keyboard.press('o')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        return True
+
+    def Vichop_Pepper_to_Mountaintop(self):
+        for _ in range(4):
+            self.keyboard.press('.')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        for _ in range(2):
+            self.keyboard.press('pageup')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousJump()
+        sleep(0.3)
+        self.keyboard.keyDown('a', False)
+        sleep(0.3)
+        self.keyboard.keyUp('a', False)
+        sleep(0.3)
+        for _ in range(1):
+            self.keyboard.press('.')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousActivateGlider()
+        sleep(3.01)
+        for _ in range(1):
+            self.keyboard.press('.')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        sleep(0.6)
+        self.viciousJump()
+        sleep(1.2)
+        if not self.viciousRecoverCannon():
+            return False
+        self.keyboard.keyDown('e', False)
+        sleep((50 + self.setdat['vicious_key_delay_ms']) / 1000)
+        self.keyboard.keyUp('e', False)
+        sleep(1.8)
+        self.viciousJump()
+        sleep(0.05)
+        self.viciousJump()
+        sleep(1.3)
+        for _ in range(2):
+            self.keyboard.press(',')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        sleep(0.44)
+        self.viciousJump()
+        sleep(0.7)
+        self.viciousWalk('a', 5.5)
+        self.viciousWalk('w', 9)
+        for _ in range(4):
+            self.keyboard.press('.')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousWalk('w', 6)
+        for _ in range(13):
+            self.keyboard.press('pageup')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        for _ in range(5):
+            self.keyboard.press('pagedown')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousWalk('d', 1.2)
+        for _ in range(7):
+            self.keyboard.press('o')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.disableShiftLock()
+        sleep(0.05)
+        self.viciousRotateCamera("down", 25, self.setdat["vicious_camera_sensitivity"])
+        sleep(0.05)
+        self.viciousRotateCamera("left", 40, self.setdat["vicious_camera_sensitivity"])
+        sleep(0.05)
+        self.enableShiftLock()
+        for _ in range(7):
+            self.keyboard.press("o")
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        return True
+
+    def Vichop_Mountaintop_to_edge(self):
+        for _ in range(4):
+            self.keyboard.press('o')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousWalk('w', 9)
+        return True
+
+    def Vichop_Edge_to_Cactus(self):
+        self.viciousActivateGlider()
+        sleep(1.8)
+        for _ in range(2):
+            self.keyboard.press('.')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        sleep(4.0)
+        self.viciousJump()
+        sleep(0.75)
+        self.viciousWalk('sd', 1)
+        self.viciousWalk('d', 13)
+        return True
+
+    def Vichop_edge_to_Spider(self):
+        self.viciousActivateGlider()
+        sleep(2.8)
+        for _ in range(1):
+            self.keyboard.press('.')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        sleep(1.0)
+        for _ in range(1):
+            self.keyboard.press('.')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        sleep(0.3)
+        self.viciousJump()
+        sleep(1.5)
+        self.viciousWalk('w', 7)
+        self.viciousWalk('d', 16)
+        return True
+
+    def Vichopspider_to_cactus(self):
+        self.viciousJump()
+        sleep(0.2)
+        self.keyboard.keyDown('w', False)
+        sleep(0.5)
+        self.keyboard.keyUp('w', False)
+        for _ in range(1):
+            self.keyboard.press('.')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousWalk('w', 13)
+        for _ in range(1):
+            self.keyboard.press(',')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousActivateGlider()
+        sleep(1.0)
+        self.viciousWalk('w', 9)
+        for _ in range(1):
+            self.keyboard.press('.')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousActivateGlider()
+        sleep(1.0)
+        self.viciousWalk('w', 2)
+        for _ in range(1):
+            self.keyboard.press('.')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousActivateGlider()
+        sleep(1.0)
+        for _ in range(2):
+            self.keyboard.press(',')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousWalk('d', 6)
+        self.viciousWalk('w', 3)
+        return True
+
+    def Vichop_Cactus_To_rose(self):
+        for _ in range(1):
+            self.keyboard.press(',')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        for _ in range(6):
+            self.keyboard.press('pageup')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousActivateGlider()
+        sleep(1.0)
+        for _ in range(1):
+            self.keyboard.press(',')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousActivateGlider()
+        sleep(1.0)
+        self.viciousWalk('wd', 9)
+        self.viciousWalk('w', 1.5)
+        self.viciousJump()
+        sleep(0.3)
+        self.keyboard.keyDown('w', False)
+        sleep(0.4)
+        self.keyboard.keyUp('w', False)
+        self.viciousWalk('wd', 17)
+        self.viciousWalk('w', 2)
+        sleep(0.6)
+        self.viciousWalk('s', 10)
+        self.viciousWalk('sd', 1.5)
+        for _ in range(10):
+            self.keyboard.press('pagedown')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        for _ in range(6):
+            self.keyboard.press('pageup')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        for _ in range(7):
+            self.keyboard.press('o')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousWalk('sd', 1.5)
+        return True
+
+    def PepperMainKillVic(self):
+        self.viciousJump()
+        sleep(0.3)
+        self.viciousWalk('d', 7)
+        self.viciousActivateGlider()
+        sleep(1.0)
+        self.viciousWalk('w', 7)
+        self.viciousWalk('d', 6)
+        for _ in range(4):
+            self.keyboard.press('.')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousActivateGlider()
+        sleep(1.0)
+        self.viciousWalk('w', 8)
+        self.viciousWalk('a', 6)
+        for _ in range(4):
+            self.keyboard.press('.')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousActivateGlider()
+        sleep(1.0)
+        self.viciousWalk('w', 9)
+        self.disableShiftLock()
+        if not self.checkIfVicSummoned():
+            return False
+        self.viciousWalk('as', 7)
+        self.viciousWalk('s', 6)
+        return self.viciousKillPattern()
+
+    def MountainTopKillVic(self):
+        self.viciousJump()
+        sleep(0.25)
+        self.viciousWalk('sd', 8)
+        self.viciousActivateGlider()
+        sleep(1.0)
+        self.viciousWalk('w', 7)
+        self.viciousWalk('d', 5.5)
+        for _ in range(4):
+            self.keyboard.press('.')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousActivateGlider()
+        sleep(1.0)
+        self.viciousWalk('w', 9)
+        self.viciousWalk('a', 5.5)
+        for _ in range(4):
+            self.keyboard.press('.')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousActivateGlider()
+        sleep(1.0)
+        self.viciousWalk('w', 9)
+        self.viciousWalk('d', 5.5)
+        for _ in range(4):
+            self.keyboard.press('.')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousActivateGlider()
+        sleep(1.0)
+        self.viciousWalk('w', 5)
+        self.disableShiftLock()
+        if not self.checkIfVicSummoned():
+            return False
+        self.viciousWalk('sd', 8)
+        self.viciousWalk('d', 2)
+        return self.viciousKillPattern()
+
+    def SpiderKillVic(self):
+        self.viciousJump()
+        sleep(0.2)
+        self.keyboard.keyDown('w', False)
+        sleep(0.5)
+        self.keyboard.keyUp('w', False)
+        for _ in range(1):
+            self.keyboard.press('.')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousWalk('w', 6)
+        for _ in range(1):
+            self.keyboard.press('.')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousWalk('w', 8)
+        self.viciousActivateGlider()
+        sleep(1.0)
+        self.viciousWalk('w', 6)
+        self.viciousWalk('a', 5)
+        for _ in range(4):
+            self.keyboard.press('.')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousActivateGlider()
+        sleep(1.0)
+        self.viciousWalk('w', 8)
+        self.viciousWalk('d', 5)
+        for _ in range(4):
+            self.keyboard.press('.')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousActivateGlider()
+        sleep(1.0)
+        self.viciousWalk('w', 8)
+        self.viciousWalk('a', 5)
+        for _ in range(4):
+            self.keyboard.press('.')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousActivateGlider()
+        sleep(1.0)
+        self.viciousWalk('w', 8)
+        self.disableShiftLock()
+        if not self.checkIfVicSummoned():
+            return False
+        self.viciousWalk('sa', 15)
+        return self.viciousKillPattern()
+
+    def CactusKillVic(self):
+        for _ in range(9):
+            self.keyboard.press('pageup')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        for _ in range(1):
+            self.keyboard.press(',')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousActivateGlider()
+        sleep(1.0)
+        for _ in range(1):
+            self.keyboard.press(',')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousActivateGlider()
+        sleep(1.0)
+        for _ in range(1):
+            self.keyboard.press('.')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousWalk('w', 10)
+        self.viciousJump()
+        sleep(0.3)
+        self.viciousWalk('w', 3.5)
+        for _ in range(3):
+            self.keyboard.press('.')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousWalk('w', 41.5)
+        for _ in range(2):
+            self.keyboard.press('.')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousActivateGlider()
+        sleep(1.0)
+        self.viciousActivateGlider()
+        sleep(1.0)
+        self.viciousWalk('a', 6.5)
+        for _ in range(4):
+            self.keyboard.press('.')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousActivateGlider()
+        sleep(1.0)
+        self.viciousActivateGlider()
+        sleep(1.0)
+        self.disableShiftLock()
+        if not self.checkIfVicSummoned():
+            return False
+        self.viciousWalk('s', 10)
+        return self.viciousKillPattern()
+
+    def RoseKillVic(self):
+        self.viciousWalk('w', 24)
+        for _ in range(2):
+            self.keyboard.press('.')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousJump()
+        sleep(0.34)
+        self.viciousWalk('w', 4)
+        self.viciousWalk('wd', 6.5)
+        self.viciousActivateGlider()
+        sleep(1.0)
+        self.viciousWalk('w', 7)
+        self.viciousWalk('d', 6)
+        for _ in range(4):
+            self.keyboard.press('.')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousActivateGlider()
+        sleep(1.0)
+        self.viciousWalk('w', 10)
+        self.viciousWalk('a', 6)
+        for _ in range(4):
+            self.keyboard.press('.')
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        self.viciousActivateGlider()
+        sleep(1.0)
+        self.viciousWalk('w', 10)
+        self.disableShiftLock()
+        if not self.checkIfVicSummoned():
+            return False
+        self.viciousWalk('s', 8)
+        self.viciousWalk('sa', 8)
+        return self.viciousKillPattern()
+
     def hasMondoRespawned(self):
         #check if mondo can be collected (first 10mins)
         minute = self.getCurrentMinute()
@@ -332,112 +1065,15 @@ class MobMixin:
                 self.vicStatus = "defeated"
 
     def stingerHunt(self):
-        self.set_task_status("stinger_hunt", activity="vicious")
-
-        class VicStopPathException(Exception):
-            pass
-
-        def vicSearchWalk(key, t):
-            if self.vicField and currField != self.vicField:
-                raise VicStopPathException()
-            self.keyboard.walk(key, t)
-
-        self.vicStatus = None
-        self.vicField = None
-        self.stopVic = False
-        currField = None
-        self.clear_task_status()
-
-        stingerHuntThread = threading.Thread(target=self.stingerHuntBackground)
-        stingerHuntThread.daemon = True
-        stingerHuntThread.start()
-        vicStartTime = time.time()
-        def updateHourlyTime():
-            self.hourlyReport.addHourlyStat("bug_run_time", time.time()-vicStartTime)
-
-        for currField in self.vicFields:
-            #go to field
-            if not self.travelViaCannon("Stinger Hunt"):
-                self.stopVic = True
-                stingerHuntThread.join()
-                updateHourlyTime()
-                self.night = False
-                return
-            self.logger.webhook("",f"Travelling to {currField} (stinger hunt)","dark brown")
-            self.goToField(currField, "south")
-            time.sleep(0.8)
-            try:
-                exec(open(f"../paths/vic/find_vic/{currField}.py").read())
-            except VicStopPathException:
-                pass
-            if self.vicField:
-                self.logger.webhook("",f"Vicious Bee detected ({self.vicField})", "light blue", "screen") 
-                break
-            print(self.vicField)
-            self.reset(convert=False)
-        else: #unable to find vic
-            self.stopVic = True
-            stingerHuntThread.join()
-            self.convert()
-            updateHourlyTime()
+        self.set_task_status("stinger_hunt", activity="stinger_hunt")
+        try:
+            result = self.viciousSearchRoute()
+            if result:
+                self.logger.webhook("", "Defeated Vicious Bee", "light green", "screen", ping_category="ping_vicious_bee")
+            self.reset()
+            return result
+        finally:
             self.night = False
-            return
-        
-        #kill vic
-        def goToVicField(wait=False):
-            self.reset(convert=False)
-            if wait:
-                time.sleep(10)
-            self.logger.webhook("",f"Travelling to {self.vicField} (vicious bee)","dark brown")
-            if not self.travelViaCannon("Vicious Bee", resetIfAway=False):
-                return False
-            self.goToField(self.vicField, "south")
-            return True
-
-        #first, check if vic is found in the same field as the player
-        if currField != self.vicField: 
-            if not goToVicField():
-                self.night = False
-                self.stopVic = True
-                updateHourlyTime()
-                stingerHuntThread.join()
-                return
-        
-        #run the dodge pattern
-        #similar to the search pattern, between each line of code, check if vic has been defeated/player died
-        pathLines = open(f"../paths/vic/kill_vic/{self.vicField}.py").read().split("\n")
-        loop = True
-        self.died = False
-        st = time.time() 
-        while loop:
-            # Check if paused and wait
-            if self.checkPauseAndWait():
-                # Stop was requested while paused
-                self.night = False
-                self.stopVic = True
-                updateHourlyTime()
-                return
-            for code in pathLines:
-                exec(code)
-                #run checks
-                if self.died or self.vicStatus is not None: break
-            if self.vicStatus == "defeated":
-                self.logger.webhook("","Vicious Bee Defeated","light green", "screen", ping_category="ping_vicious_bee")
-                self.hourlyReport.addHourlyStat("vicious_bees", 1)
-                break
-            elif self.died:
-                self.logger.webhook("","Player Died","dark brown", "screen", ping_category="ping_character_deaths")
-                if not goToVicField(wait=True):
-                    break
-                self.died = False
-            elif time.time()-st > 180: #max 3 mins to kill vic
-                self.logger.webhook("","Took too long to kill Vicious Bee","red", "screen", ping_category="ping_critical_errors")
-                break
-        self.night = False
-        updateHourlyTime()
-        self.stopVic = True
-        stingerHuntThread.join()
-        self.reset()
 
     def stumpSnail(self):
         sideTaskIntervalMinutes = self.setdat.get("stump_snail_balloon_interval", 0)

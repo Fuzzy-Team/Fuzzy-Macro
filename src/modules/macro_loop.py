@@ -263,14 +263,14 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             #do priority tasks
             # Quest and Alt modes stay isolated from priority tasks.
             if (
-                macro.setdat.get("macro_mode", "normal") not in ("quest", "alt")
+                macro.setdat.get("macro_mode", "normal") not in ("quest", "alt", "vic")
                 and macro.night
                 and macro.setdat["stinger_hunt"]
                 and macro.confirmNight()
             ):
                 macro.stingerHunt()
             if (
-                macro.setdat.get("macro_mode", "normal") not in ("quest", "alt")
+                macro.setdat.get("macro_mode", "normal") not in ("quest", "alt", "vic")
                 and macro.setdat["mondo_buff"]
                 and macro.hasMondoRespawned()
             ):
@@ -654,6 +654,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         macro.checkAndReloadSettings()
 
         # Migration from old boolean flags to macro_mode is now handled in settings loader
+
+        if macro.setdat.get("macro_mode", "normal") == "vic":
+            runTask(macro.viciousHop, resetAfter=False, allowAFB=False)
+            continue
 
         if macro.setdat.get("macro_mode", "normal") == "alt":
             if not altHostAuthorized:

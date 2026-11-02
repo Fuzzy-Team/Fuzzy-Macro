@@ -1,4 +1,6 @@
 import re
+import random
+import requests
 from datetime import datetime, timezone
 import modules.controls.mouse as mouse
 import modules.misc.appManager as appManager
@@ -75,6 +77,47 @@ class RejoinMixin:
                 seen.add(normalized)
         return links
 
+    def _publicServerDeeplink(self, placeId):
+        """Consume random Bee Swarm instance IDs, keeping the last five out."""
+        plainLink = f"roblox://placeID={placeId}"
+        if str(placeId) != str(MAIN_GAME_PLACE_ID):
+            return plainLink
+        if not hasattr(self, "_publicServerIds"):
+            self._publicServerIds = []
+            self._publicRecentServers = []
+            self._publicJoinAttempts = 0
+            self._publicFetchFailures = 0
+        if not self._publicServerIds or self._publicJoinAttempts >= 15:
+            self._publicServerIds = []
+            try:
+                response = requests.get(
+                    f"https://games.roblox.com/v1/games/{placeId}/servers/0?sortOrder=1&excludeFullGames=true&limit=100",
+                    timeout=10,
+                )
+                response.raise_for_status()
+                rows = response.json()["data"]
+                self._publicServerIds = list(dict.fromkeys(
+                    row["id"] for row in rows
+                    if isinstance(row, dict) and isinstance(row.get("id"), str)
+                    and row["id"] and row["id"] not in self._publicRecentServers
+                ))
+                if not self._publicServerIds:
+                    raise ValueError("No unused public servers returned")
+                self._publicJoinAttempts = 0
+            except (requests.RequestException, ValueError, KeyError, TypeError):
+                self._publicFetchFailures += 1
+                delay = (15, 30, 60)[min(self._publicFetchFailures - 1, 2)]
+                self.logger.webhook("Vic Hop", f"Could not fetch public servers; waiting {delay}s before a normal public join", "orange")
+                time.sleep(delay)
+                return plainLink
+        serverId = random.choice(self._publicServerIds)
+        self._publicServerIds.remove(serverId)
+        self._publicRecentServers.append(serverId)
+        self._publicRecentServers = self._publicRecentServers[-5:]
+        self._publicJoinAttempts += 1
+        self._publicFetchFailures = 0
+        return f"roblox://placeId={placeId}&gameInstanceId={serverId}"
+
     def _privateServerDeeplink(self, placeId, privateServerLink):
         """Convert Roblox private and share links into a Roblox deeplink."""
         from urllib.parse import parse_qs, urlparse
@@ -132,7 +175,7 @@ class RejoinMixin:
         text = " ".join(result[1][0] for result in ocr.ocrRead(dialog))
         return self._joinErrorFromText(text)
 
-    def rejoin(self, rejoinMsg = "Rejoining", placeId = MAIN_GAME_PLACE_ID, claimHive = True, usePrivateServer = True):
+    def rejoin(self, rejoinMsg = "Rejoining", placeId = MAIN_GAME_PLACE_ID, claimHive = True, usePrivateServer = True, nightOnly = False):
         if self.skipServer is not None:
             self.skipServer.value = 0
         self.canDetectNight = False
@@ -144,7 +187,7 @@ class RejoinMixin:
         self.set_task_status("rejoining", activity="rejoining")
         mouse.mouseUp()
         keyboard.releaseMovement()
-        if appManager.isAppOpen("roblox"):
+        if not nightOnly and appManager.isAppOpen("roblox"):
             self.logger.webhook("", "Closing Roblox before rejoining", "dark brown")
             appManager.closeApp("Roblox")
             time.sleep(3)
@@ -184,6 +227,8 @@ class RejoinMixin:
                     invalidServerLinks.add(psLink)
                     self.logger.webhook("", f"Invalid {serverKey.replace('_', ' ')}; trying the next server.", "red", "screen", ping_category="ping_critical_errors")
                     continue
+            elif not usePrivateServer:
+                deeplink = self._publicServerDeeplink(placeId)
             # If the client is already in Bee Swarm, the sprinkler UI can still
             # be visible while the deeplink teleport finishes. Accepting that
             # immediately starts the spawn→hive walk too early (inputs are
@@ -287,9 +332,10 @@ class RejoinMixin:
                     sawSprinklerGap = True
                 if sprinklerVisible and (
                     sawSprinklerGap
-                    # Soft rejoins sometimes keep the hotbar visible; once the
-                    # teleport has had time to finish, walk from spawn again.
-                    or time.time() >= softRejoinReadyAt
+                    # Vic Hop must see loading before trusting the hotbar;
+                    # the previous server can still be visible after launch.
+                    # Other rejoins retain their existing readiness rule.
+                    or (not nightOnly and time.time() >= softRejoinReadyAt)
                 ):
                     gameLoaded = True
                     break
@@ -358,6 +404,15 @@ class RejoinMixin:
             self.setRobloxWindowInfo(setYOffset=True)
 
             self.startDetect()
+            if nightOnly:
+                if self.checkPauseAndWait():
+                    self.clear_task_status()
+                    return False
+                if not self.viciousSkyIsNight():
+                    self.logger.webhook("Vic Hop", "Daytime, moving to the next server", "dark brown", "screen")
+                    self.clear_task_status()
+                    return False
+                self.logger.webhook("Vic Hop", "Night detected, claiming a hive", "dark brown", "screen")
             if not claimHive:
                 mouse.click()
                 self.canDetectNight = True
@@ -416,7 +471,13 @@ class RejoinMixin:
                 self.keyboard.press("o")
             self.moveMouseToDefault()
             time.sleep(1)
-            self.convert(bypass=True)
+            if nightOnly:
+                # Start the reference field route at the hive, without running
+                # conversion's normal-mode night tasks before the hop callback.
+                if not self.reset(convert=False):
+                    return False
+            else:
+                self.convert(bypass=True)
             self.cannonFromHive = True
             self.canDetectNight = True
             self.clear_task_status()

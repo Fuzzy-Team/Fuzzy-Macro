@@ -1,6 +1,68 @@
 import cv2
 import numpy as np
 import re
+from pathlib import Path
+from functools import lru_cache
+
+
+@lru_cache(maxsize=9)
+def _vicious_bitmap(name):
+    path = Path(__file__).resolve().parents[2] / "images" / "vicious" / (name + ".png")
+    bitmap = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+    if bitmap is None:
+        raise FileNotFoundError(path)
+    return bitmap
+
+
+def vicious_bitmap_position(bgr, name, tolerance):
+    """Match opaque source pixels with per-channel colour tolerance."""
+    bitmap = _vicious_bitmap(name)
+    h, w = bitmap.shape[:2]
+    if bgr.shape[0] < h or bgr.shape[1] < w:
+        return None
+    mask = bitmap[:, :, 3] == 255 if bitmap.shape[2] == 4 else np.ones((h, w), bool)
+    colors = bitmap[:, :, :3]
+    if mask.all() and np.all(colors == colors[0, 0]):
+        color = colors[0, 0].astype(np.int16)
+        pixels = cv2.inRange(bgr[:, :, :3], np.maximum(color - tolerance, 0).astype(np.uint8),
+                             np.minimum(color + tolerance, 255).astype(np.uint8))
+        candidates = cv2.erode(pixels, np.ones((h, w), np.uint8), anchor=(0, 0),
+                               borderType=cv2.BORDER_CONSTANT, borderValue=0)
+        matches = np.argwhere(candidates[:bgr.shape[0] - h + 1, :bgr.shape[1] - w + 1])
+    else:
+        ys, xs = np.nonzero(mask)
+        if not len(ys):
+            return None
+        ch, cw = bgr.shape[0] - h + 1, bgr.shape[1] - w + 1
+        y, x = ys[0], xs[0]
+        color = colors[y, x].astype(np.int16)
+        seed = cv2.inRange(bgr[y:y + ch, x:x + cw, :3],
+                           np.maximum(color - tolerance, 0).astype(np.uint8),
+                           np.minimum(color + tolerance, 255).astype(np.uint8))
+        matches = np.argwhere(seed)
+        for y, x in zip(ys[1:], xs[1:]):
+            if not len(matches):
+                return None
+            pixels = bgr[matches[:, 0] + y, matches[:, 1] + x, :3].astype(np.int16)
+            matches = matches[np.all(np.abs(pixels - colors[y, x].astype(np.int16)) <= tolerance, axis=1)]
+    if not len(matches):
+        return None
+    y, x = matches[0]
+    return int(x + w // 2), int(y + h // 2)
+
+
+def vicious_bitmap_matches(bgr, name, tolerance):
+    return vicious_bitmap_position(bgr, name, tolerance) is not None
+
+
+def vicious_ground_is_night(bgr, beesmas=False):
+    if beesmas:
+        return vicious_bitmap_matches(bgr, "nightground", 6) or vicious_bitmap_matches(bgr, "nightground2", 6)
+    return (vicious_bitmap_matches(bgr, "nightground", 6)
+            and not vicious_bitmap_matches(bgr, "ground", 6)
+            and not vicious_bitmap_matches(bgr, "ground2", 6))
+
+
 from modules.controls.sleep import pause_aware_time as time
 from modules.macro.game_data import startLocationDimensions
 from modules.screen.imageSearch import findColorObjectRGB
@@ -86,6 +148,22 @@ class EventDetectionMixin:
             self.night = False
             self.nightDetectStreaks = 0
 
+    def viciousSkyIsNight(self):
+        """Check the sky at spawn without resetting or claiming a hive."""
+        win = self.robloxWindow
+        self.ensure_shift_lock_off(reason="Vic Hop sky check")
+        # BSSAI's sky branch uses one PageDown and five zoom-out taps.
+        self.keyboard.press("pagedown")
+        for _ in range(5):
+            self.keyboard.press("o")
+            time.sleep(0.03)
+        sky = mssScreenshotNP(win.mx + win.mw // 2 - 15, win.my, 30, 20)
+        sky = cv2.resize(sky[:, :, :3], (30, 20), interpolation=cv2.INTER_AREA)
+        isNight = vicious_bitmap_matches(sky, "nightvic", 25)
+        if isNight:
+            self.keyboard.press("pageup")
+        return isNight
+
     #ported from Natro's nm_confirmNight. Shaded grass beside a wall can look like night to detectNight,
     #so before a night task, reset and look down at the open ground in front of the hive
     def confirmNight(self):
@@ -97,11 +175,24 @@ class EventDetectionMixin:
             time.sleep(0.025)
 
         win = self.robloxWindow
-        screen = mssScreenshotNP(win.mx+300, win.my+win.mh//2+50, win.mw-600, win.mh//2-50)
+        # BSSAI searches the central 400 client pixels for ground bitmaps.
+        width = min(400, win.mw)
+        screen = mssScreenshotNP(win.mx + win.mw // 2 - width // 2,
+                                 win.my, width, win.mh)
         bgr = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (10, 10))
-        #night grass, night snow. Natro matches these exactly; allow 2 for the small colour shift on macOS (shade by a wall matches from 3)
-        isNight = any(findColorObjectRGB(bgr, color, variance=2, kernel=kernel, mode="box") for color in [(0x17, 0x48, 0x1F), (0x56, 0x64, 0x6B)])
+        bgr = cv2.resize(bgr, (width, win.mh), interpolation=cv2.INTER_AREA)
+        isNight = vicious_ground_is_night(bgr, self.setdat.get("beesmas", False))
+
+        if not isNight:
+            self.keyboard.press("pagedown")
+            for _ in range(5):
+                self.keyboard.press("o")
+                time.sleep(0.03)
+            sky = mssScreenshotNP(win.mx + win.mw // 2 - 15, win.my, 30, 20)
+            sky = cv2.resize(sky[:, :, :3], (30, 20), interpolation=cv2.INTER_AREA)
+            isNight = vicious_bitmap_matches(sky, "nightvic", 25)
+            if isNight:
+                self.keyboard.press("pageup")
 
         for _ in range(4):
             self.keyboard.press("pagedown")

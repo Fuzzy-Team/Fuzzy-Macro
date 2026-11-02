@@ -430,13 +430,16 @@ class macro(
         hourlyReportBackgroundThread = threading.Thread(target=self.hourlyReportBackground, daemon=True)
         hourlyReportBackgroundThread.start()
         
+        # Vic Hop owns joining and checks the sky before acquiring a hive.
+        vicHop = self.setdat.get("macro_mode", "normal") == "vic"
         # Rejoin at startup unless Roblox is already open and the user has
         # explicitly disabled Always Rejoin.
-        if self.setdat.get("always_rejoin", True) or not appManager.openApp("Roblox"):
-            self.rejoin()
-        else:
-            self.startDetect()
-            self.setRobloxWindowInfo()
+        if not vicHop:
+            if self.setdat.get("always_rejoin", True) or not appManager.openApp("Roblox"):
+                self.rejoin()
+            else:
+                self.startDetect()
+                self.setRobloxWindowInfo()
     
         if not benchmarkMSS():
             self.logger.webhook("", "MSS is too slow, switching to pillow", "dark brown")
@@ -444,5 +447,6 @@ class macro(
         if not self.hourlyReport.hourlyReportStats["start_time"] or not self.hourlyReport.hourlyReportStats["start_honey"]:
             self.hourlyReport.setSessionStats(self.getHoney(), time.time())
 
-        self.reset(convert=True)
+        if not vicHop:
+            self.reset(convert=True)
         self.saveTiming("rejoin_every")

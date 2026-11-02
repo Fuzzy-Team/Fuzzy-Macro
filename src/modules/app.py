@@ -603,6 +603,7 @@ def runApp(macroTarget):
                 "field": "Field Mode",
                 "quest": "Quest Mode",
                 "bug": "Bug Run Mode",
+                "vic": "Vic Hop Mode",
             }
             start_details = [
                 f"Fuzzy Macro v{macro_version}",
