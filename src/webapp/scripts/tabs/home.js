@@ -326,7 +326,7 @@ async function loadTasks() {
     return;
   }
 
-  // Check if bug-run-only mode is enabled
+  // Show the dedicated server-hopping mode.
   if (setdat.macro_mode === "vic") {
     out += taskHTML("Vic Hop Mode", "Search public servers for night and hunt Vicious Bee");
     document.getElementById("task-list").innerHTML = out;

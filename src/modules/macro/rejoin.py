@@ -312,6 +312,8 @@ class RejoinMixin:
                         mouse.mouseUp()
                         keyboard.releaseMovement()
                         if action == "abort":
+                            if nightOnly and self.run is not None:
+                                self.run.value = 0
                             if self.skipServer is not None:
                                 self.skipServer.value = 0
                             self.clear_task_status()

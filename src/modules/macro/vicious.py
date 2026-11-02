@@ -1,0 +1,396 @@
+import modules.controls.mouse as mouse
+from modules.controls.sleep import pause_aware_time as time, sleep
+from modules.macro.vicious_paths import ViciousPathsMixin
+
+
+class ViciousMixin(ViciousPathsMixin):
+    def viciousWalk(self, keys, tiles):
+        try:
+            for key in keys:
+                self.keyboard.keyDown(key, False)
+            self.keyboard.tileWait(tiles)
+        finally:
+            for key in keys:
+                self.keyboard.keyUp(key, False)
+
+
+    def viciousKillPattern(self):
+        """Fight for 12 cycles (~40s) in self.viciousField.
+
+        Dying means the bee is still alive, so after returning to the same
+        field a fresh 12 cycles start. A full window without a death or a
+        defeat means the bee is gone, as before.
+        """
+        while True:
+            died = False
+            for _ in range(12):
+                for key in "wasd":
+                    if self.checkPauseAndWait():
+                        return False
+                    self.viciousWalk(key, 4)
+                    sleep(0.8)
+                    # Same blue-text "died" check as the other fights; chat is
+                    # never read for deaths, so old "You died" lines can't retrigger.
+                    if self.blueTextImageSearch("died", screen=self.blueTextScreen()):
+                        died = True
+                        break
+                if died:
+                    break
+                if self.checkIfViciousDied():
+                    self.hourlyReport.addHourlyStat("vicious_bees", 1)
+                    return True
+            if not died:
+                return False
+            # A kill announced right before the death still counts.
+            if self.checkIfViciousDied():
+                self.hourlyReport.addHourlyStat("vicious_bees", 1)
+                return True
+            if not self.viciousReturnToField():
+                return False
+
+
+    def viciousReturnToField(self):
+        """After dying mid fight, walk back to the same field on this server."""
+        field = self.viciousField
+        self.keyboard.releaseMovement()
+        self.logger.webhook("Vic Hop", f"Died fighting the Vicious Bee in {field.title()}, returning to the same field", "red", "screen", ping_category="ping_character_deaths")
+        if self.checkPauseAndWait():
+            return False
+        self.set_task_status("stinger_hunt", activity=field.title())
+        # cannon(allowRejoin=False): a failed cannon must not hop to another server.
+        if not (self.reset(convert=False) and self.cannon(allowHiveResync=False, allowRejoin=False)):
+            self.logger.webhook("Vic Hop", f"Could not return to {field.title()} after dying, ending the hunt", "orange", "screen", ping_category="ping_vicious_bee")
+            return False
+        self.goToField(field, "north")
+        self.logger.webhook("Vic Hop", f"Back in {field.title()}, fighting the Vicious Bee again", "yellow", "screen", ping_category="ping_vicious_bee")
+        return True
+
+
+    def viciousSearchRoute(self):
+        # Camera sensitivity and key-delay defaults for the Vicious route.
+        self.setdat.setdefault("vicious_camera_sensitivity", 1)
+        self.setdat.setdefault("vicious_key_delay_ms", 20)
+        def search(field, approach):
+            self.set_task_status("stinger_hunt", activity=field)
+            self.viciousField = field.replace(" back", "").lower()
+            if self.setdat.get("macro_mode", "normal") != "vic" and self.viciousField not in self.vicFields:
+                return None
+            if not self.detectViciousBee():
+                self.logger.webhook("Vic Hop", f"{field}: no Vicious Bee detected", "dark brown", "screen")
+                return None
+            self.logger.webhook("Vic Hop", f"Vicious Bee detected in {field}, approaching", "yellow", "screen", ping_category="ping_vicious_bee")
+            self.viciousActivateChat()
+            self._viciousAnnouncementBaseline = self._viciousAnnouncementCounts()
+            result = approach()
+            self.logger.webhook("Vic Hop", "Vicious Bee defeated" if result else "Vicious Bee hunt ended without a confirmed defeat", "light green" if result else "orange", "screen", ping_category="ping_vicious_bee")
+            return result
+        self.logger.webhook("Vic Hop", "Hive ready, checking fields starting with Pepper", "dark brown", "screen")
+        self.Vichop_Hive_to_Pepper()
+        result = search("Pepper", self.PepperMainKillVic)
+        if result is not None:
+            return result
+        if not self.Vichop_Pepper_to_Mountaintop():
+            return False
+        # Detect before rotating toward the next field.
+        enabled = self.setdat.get("macro_mode", "normal") == "vic" or "mountain top" in self.vicFields
+        found = enabled and self.detectViciousBee()
+        self.viciousRotate("right", 1)
+        if found:
+            self.viciousField = "mountain top"
+            self.logger.webhook("Vic Hop", "Vicious Bee detected in Mountain Top, approaching", "yellow", "screen", ping_category="ping_vicious_bee")
+            self.viciousActivateChat()
+            self._viciousAnnouncementBaseline = self._viciousAnnouncementCounts()
+            result = self.MountainTopKillVic()
+            self.logger.webhook("Vic Hop", "Vicious Bee defeated" if result else "Vicious Bee hunt ended without a confirmed defeat", "light green" if result else "orange", "screen", ping_category="ping_vicious_bee")
+            return result
+        self.logger.webhook("Vic Hop", "Mountain Top: no Vicious Bee detected", "dark brown", "screen")
+        self.Vichop_Mountaintop_to_edge()
+        self.Vichop_edge_to_Spider()
+        result = search("Spider", self.SpiderKillVic)
+        if result is not None:
+            return result
+        self.Vichopspider_to_cactus()
+        for key, count in (("pagedown", 10), ("pageup", 2)):
+            for _ in range(count):
+                self.keyboard.press(key)
+                sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        result = search("Cactus", self.CactusKillVic)
+        if result is not None:
+            return result
+        for _ in range(5):
+            self.keyboard.keyDown("pagedown", False)
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+            self.keyboard.keyUp("pagedown", False)
+            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
+        result = search("Cactus back", self.CactusKillVic)
+        if result is not None:
+            return result
+        self.Vichop_Cactus_To_rose()
+        result = search("Rose", self.RoseKillVic)
+        if result is None:
+            self.disableShiftLock()
+            self.logger.webhook("Vic Hop", "Finished checking fields, no Vicious Bee found", "dark brown", "screen")
+        return result or False
+
+
+    def viciousRotate(self, direction, amount):
+        """Rotate the camera in discrete steps separated by 50 ms."""
+        key = {"left": ",", "right": ".", "up": "pageup", "down": "pagedown"}[direction]
+        for _ in range(amount):
+            self.keyboard.press(key)
+            sleep(0.05)
+
+
+    def viciousJump(self):
+        self.keyboard.keyDown("space", False)
+        try:
+            sleep(0.05)
+        finally:
+            self.keyboard.keyUp("space", False)
+
+
+    def viciousActivateGlider(self):
+        self.viciousJump()
+        sleep(0.3)
+        self.viciousJump()
+
+
+    def viciousRotateCamera(self, direction, amount, sensitivity):
+        """Rotate the mouse camera using the actual in-game sensitivity."""
+        import math
+        if sensitivity <= 0:
+            raise ValueError("Camera sensitivity must be positive")
+        delta = math.floor(amount / sensitivity + 0.5)
+        dx, dy = {"down": (0, -delta), "left": (-delta, 0)}[direction]
+        win = self.robloxWindow
+        mouse.moveTo(win.mx + win.mw / 2, win.my + win.mh / 2)
+        mouse.pynputMouse.press(mouse.Button.right)
+        try:
+            sleep(0.1)
+            mouse.rightDragBy(dx, dy)
+            sleep(0.1)
+        finally:
+            mouse.pynputMouse.release(mouse.Button.right)
+
+
+    def viciousRecoverCannon(self, frame=None):
+        """Check the reference Fire prompt before recovering through the hive."""
+        from modules.screen.ocr import ocrRead
+        from modules.screen.screenshot import mssScreenshot
+        if frame is None:
+            win = self.robloxWindow
+            frame = mssScreenshot(win.mx, win.my, win.mw, win.mh)
+        if any("Fire" in item[1][0] for item in ocrRead(frame)):
+            return True
+        self.disableShiftLock()
+        if not self.reset(convert=False):
+            return False
+        for _ in range(6):
+            self.keyboard.press("o")
+            sleep((10 + self.setdat.get("vicious_key_delay_ms", 20)) / 1000)
+        if not self.viciousHiveToCannon():
+            return False
+        self.enableShiftLock()
+        for _ in range(2):
+            self.keyboard.press(",")
+            sleep((10 + self.setdat.get("vicious_key_delay_ms", 20)) / 1000)
+        return True
+
+
+    def viciousBitmapPosition(self, name, region, tolerance):
+        import cv2
+        from modules.macro.events import vicious_bitmap_position
+        from modules.screen.screenshot import mssScreenshotNP
+        frame = mssScreenshotNP(*region)[:, :, :3]
+        frame = cv2.resize(frame, (region[2], region[3]), interpolation=cv2.INTER_AREA)
+        return vicious_bitmap_position(frame, name, tolerance)
+
+
+    def viciousActivateChat(self):
+        win = self.robloxWindow
+        point = self.viciousBitmapPosition("chatclosed", (win.mx, win.my, 200, 100), 25)
+        if point is not None:
+            self._viciousOpenedChat = (win.mx + point[0], win.my + point[1])
+            mouse.moveTo(*self._viciousOpenedChat)
+            sleep(0.05)
+            mouse.mouseDown()
+            sleep(0.06)
+            mouse.mouseUp()
+            sleep(0.2)
+        mouse.moveTo(win.mx + 350, win.my + 100)
+        if point is not None:
+            sleep(0.1)
+            mouse.click()
+        width, height = mouse.pag.size()
+        for x, y in ((1465, 162), (1467, 165)):
+            mouse.moveTo(int(x * width / 1920 + 0.5), int(y * height / 1080 + 0.5))
+            sleep(0.05)
+
+
+    def viciousHiveToRamp(self):
+        self.viciousWalk("w", 5)
+        self.viciousWalk("d", 9.2 * self.setdat["hive_number"] - 4)
+
+
+    def viciousHiveToCannon(self):
+        try:
+            attempts = max(1, int(self.setdat.get("max_cannon_attempts", 3)))
+        except (TypeError, ValueError):
+            attempts = 3
+        for attempt in range(attempts):
+            if self.checkPauseAndWait():
+                return False
+            self.viciousHiveToRamp()
+            self.viciousJump()
+            self.viciousWalk("d", 3)
+            self.viciousWalk("wd", 1.7)
+            win = self.robloxWindow
+            region = (win.mx + win.mw // 2 - 200, win.my, 400, 125)
+            for _ in range(10):
+                self.viciousWalk("d", 1.5)
+                if self.viciousBitmapPosition("redcannon", region, 2) is None:
+                    continue
+                for correction in range(1, 11):
+                    if correction == 10:
+                        break
+                    sleep(0.5)
+                    if self.viciousBitmapPosition("redcannon", region, 2) is not None:
+                        sleep(1)
+                        return True
+                    self.viciousWalk("a", 1.5)
+            if attempt + 1 < attempts and not self.reset(convert=False):
+                return False
+        return False
+
+
+    def _viciousAnnouncementCounts(self, frame=None):
+        """Count system announcements so old chat cannot confirm a new fight."""
+        import cv2
+        import re
+        from PIL import Image
+        from modules.screen.ocr import ocrRead
+        from modules.screen.screenshot import mssScreenshotNP
+        if frame is None:
+            win = self.robloxWindow
+            frame = mssScreenshotNP(win.mx, win.my, win.mw, win.mh)
+            frame = cv2.resize(frame, (win.mw, win.mh), interpolation=cv2.INTER_AREA)
+        height, width = frame.shape[:2]
+        region = frame[:height // 2, width // 2:, :3]
+        readable = cv2.resize(region, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+        image = Image.fromarray(cv2.cvtColor(readable, cv2.COLOR_BGR2RGB))
+        counts = {"vicsummon": 0, "vicdead": 0}
+        for item in ocrRead(image):
+            text = " ".join(item[1][0].lower().split())
+            if re.match(r"^(?:\W|a )*vicious bee is attacking .+ in the .+ field\b", text):
+                counts["vicsummon"] += 1
+            if (re.fullmatch(r"(?:\W|a )*vicious bee (?:has been )?defeated(?:\W| a)*", text)
+                    or re.match(r"^\W*\+\s*\d+\s+stingers?\s*\(from vicious bee\b", text)):
+                counts["vicdead"] += 1
+        return counts
+
+    def viciousNotification(self, name, frame=None):
+        if name not in ("vicsummon", "vicdead"):
+            raise ValueError("Unknown Vicious notification")
+        baseline = getattr(self, "_viciousAnnouncementBaseline", {})
+        return self._viciousAnnouncementCounts(frame)[name] > baseline.get(name, 0)
+
+
+    def checkIfVicSummoned(self, frame=None):
+        if frame is None:
+            self.viciousActivateChat()
+        return self.viciousNotification("vicsummon", frame)
+
+
+    def checkIfViciousDied(self, frame=None):
+        if frame is None:
+            self.viciousActivateChat()
+        return self.viciousNotification("vicdead", frame)
+
+
+    def _loadViciousModel(self):
+        import cv2
+        from modules.misc.modelManager import MODEL_DIR, VICIOUS_MODEL, ensure_missing_models
+        import os
+
+        if not hasattr(self, "_viciousModel"):
+            result = ensure_missing_models((VICIOUS_MODEL,))
+            if result["failures"]:
+                raise RuntimeError(f"Could not download Vicious Bee model: {result['failures']}")
+            self._viciousModel = cv2.dnn.readNetFromONNX(os.path.join(MODEL_DIR, VICIOUS_MODEL))
+
+    def detectViciousBee(self, frame=None):
+        """Detect Vicious Bee in a BGRA frame, or capture the Roblox client."""
+        import cv2
+        import numpy as np
+        from modules.screen.screenshot import mssScreenshotNP
+        self._loadViciousModel()
+        if frame is None:
+            win = self.robloxWindow
+            frame = mssScreenshotNP(win.mx, win.my, win.mw, win.mh)
+        resized = cv2.resize(frame, (736, 736), interpolation=cv2.INTER_LINEAR)
+        rgb = cv2.cvtColor(resized, cv2.COLOR_BGRA2RGB)
+        tensor = np.expand_dims(np.transpose(rgb.astype(np.float16) / 255.0, (2, 0, 1)), 0)
+        model = self._viciousModel
+        model.setInput(tensor.astype(np.float32))
+        output = np.squeeze(model.forward())
+        scores = np.max(output[4:, :], axis=0)
+        mask = scores > 0.4
+        if not np.any(mask):
+            return False
+        cx, cy, width, height = output[:4, mask]
+        boxes = np.stack((cx - width / 2, cy - height / 2, width, height), axis=1)
+        return len(cv2.dnn.NMSBoxes(boxes.tolist(), scores[mask].tolist(), 0.4, 0.5)) > 0
+
+
+    def viciousHop(self):
+        """Run one server search; the main loop reloads settings between hops."""
+        if self.checkPauseAndWait():
+            return
+        if not self.rejoin(rejoinMsg="Vic Hop", usePrivateServer=False, nightOnly=True):
+            return
+        if self.checkPauseAndWait():
+            return
+        stats = self.hourlyReport.hourlyReportStats
+        if not stats["start_time"] or not stats["start_honey"]:
+            honey = self.getHoney()
+            if honey > 0:
+                self.hourlyReport.setSessionStats(honey, time.time())
+        self.viciousSearchRoute()
+
+
+    def stingerHunt(self):
+        if not self.vicFields:
+            self.night = False
+            return False
+        started = time.time()
+        self._viciousOpenedChat = None
+        self.set_task_status("stinger_hunt", activity="stinger_hunt")
+        try:
+            try:
+                self._loadViciousModel()
+            except Exception as exc:
+                from modules.controls.sleep import InterruptRequested
+                if isinstance(exc, InterruptRequested):
+                    raise
+                self.logger.webhook("Stinger Hunt", f"Could not load Vicious Bee detection model: {exc}", "orange", "screen")
+                return False
+            if self.location != "spawn" and not self.reset(convert=False):
+                return False
+            result = self.viciousSearchRoute()
+            self.night = False
+            self.ensure_shift_lock_off(reason="Stinger Hunt cleanup")
+            for _ in range(10):
+                self.keyboard.press("pageup")
+            for _ in range(4):
+                self.keyboard.press("pagedown")
+            self.reset()
+            return result
+        finally:
+            self.night = False
+            self.ensure_shift_lock_off(reason="Stinger Hunt cleanup")
+            point = self._viciousOpenedChat
+            if point is not None:
+                mouse.moveTo(*point)
+                mouse.click()
+                self._viciousOpenedChat = None
+            self.hourlyReport.addHourlyStat("bug_run_time", time.time() - started)

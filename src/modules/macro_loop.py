@@ -298,7 +298,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             ):
                 macro.collectMondoBuff()
                 taskCompleted = True
-            if macro.setdat.get("macro_mode", "normal") != "alt" and macro.hasScheduledRejoinArrived():
+            if macro.setdat.get("macro_mode", "normal") not in ("alt", "vic") and macro.hasScheduledRejoinArrived():
                 macro.rejoin("Rejoining (Scheduled)")
                 macro.saveTiming("rejoin_every")
                 taskCompleted = True

@@ -1082,6 +1082,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         ("quest", "Quests"),
         ("field", "Field"),
         ("bug", "Bug Runs"),
+        ("vic", "Vic Hop"),
     ]
 
     SETTINGS_CATEGORIES = {
@@ -2843,6 +2844,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 "alt": "Alt",
                 "quest": "Quests",
                 "field": "Field",
+                "vic": "Vic Hop",
             }.get(settings.get("macro_mode", "normal"), settings.get("macro_mode", "normal"))
 
             if not enabled_tasks:

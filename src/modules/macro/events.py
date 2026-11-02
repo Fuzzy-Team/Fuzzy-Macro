@@ -55,9 +55,7 @@ def vicious_bitmap_matches(bgr, name, tolerance):
     return vicious_bitmap_position(bgr, name, tolerance) is not None
 
 
-def vicious_ground_is_night(bgr, beesmas=False):
-    if beesmas:
-        return vicious_bitmap_matches(bgr, "nightground", 6) or vicious_bitmap_matches(bgr, "nightground2", 6)
+def vicious_ground_is_night(bgr):
     return (vicious_bitmap_matches(bgr, "nightground", 6)
             and not vicious_bitmap_matches(bgr, "ground", 6)
             and not vicious_bitmap_matches(bgr, "ground2", 6))
@@ -188,7 +186,7 @@ class EventDetectionMixin:
                                  win.my, width, win.mh)
         bgr = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
         bgr = cv2.resize(bgr, (width, win.mh), interpolation=cv2.INTER_AREA)
-        isNight = vicious_ground_is_night(bgr, self.setdat.get("beesmas", False))
+        isNight = vicious_ground_is_night(bgr)
 
         if not isNight:
             self.keyboard.press("pagedown")
@@ -198,8 +196,7 @@ class EventDetectionMixin:
             sky = mssScreenshotNP(win.mx + win.mw // 2 - 15, win.my, 30, 20)
             sky = cv2.resize(sky[:, :, :3], (30, 20), interpolation=cv2.INTER_AREA)
             isNight = vicious_bitmap_matches(sky, "nightvic", 25)
-            if isNight:
-                self.keyboard.press("pageup")
+            self.keyboard.press("pageup")
 
         for _ in range(4):
             self.keyboard.press("pagedown")
