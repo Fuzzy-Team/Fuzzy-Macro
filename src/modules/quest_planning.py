@@ -189,6 +189,29 @@ def uses_quest_gumdrops(objective, settings):
     return objective["kind"] in ("gathergoo", "pollengoo") and settings.get("quest_use_gumdrops", False)
 
 
+def preferred_quest_field(objective, settings, field_settings, required=()):
+    fields = allowed_fields(objective, settings, field_settings)
+    enabled = [field for field, active in zip(settings.get("fields", []), settings.get("fields_enabled", [])) if active]
+    default = "rose" if objective["color"] == "red" else "pine tree"
+    return next((field for field in list(required) + enabled + [default] + fields if field in fields), None)
+
+
+def quest_gather_defaults(action, settings, field_settings):
+    """Preview each Auto choice using the same field and setting rules as gathering."""
+    objective = make_quest_objectives("", "", [action], ["unknown"])[0]
+    prefix = objective_setting_prefix(objective)
+    field = preferred_quest_field(objective, settings, field_settings)
+    defaults = {"field": preferred_quest_field(objective, {**settings, prefix + "field": "auto"}, field_settings)}
+    properties = {"pattern": "shape", "mins": "mins", "backpack": "backpack", "return": "return",
+                  **{key: key for key in OBJECTIVE_SETTING_CHOICES}}
+    for property_name, key in properties.items():
+        inherited = {**settings, prefix + property_name: "auto"}
+        defaults[property_name] = quest_gather_settings(objective, field, inherited, field_settings)[key]
+    if uses_quest_gumdrops(objective, settings):
+        defaults.update(goo=True, goo_interval=3)
+    return defaults
+
+
 def choose_quest_gather(objectives, settings, field_settings, current_field=None):
     """Return one gather and the objectives that can share its settings."""
     order = quest_giver_order(settings)
@@ -196,14 +219,12 @@ def choose_quest_gather(objectives, settings, field_settings, current_field=None
                      key=lambda obj: (order.index(obj["giver"]), obj["row"]))
     if not pending:
         return None
-    enabled = [field for field, active in zip(settings.get("fields", []), settings.get("fields_enabled", [])) if active]
     required = [fields[0] for obj in pending
                 if len(fields := allowed_fields(obj, settings, field_settings)) == 1]
     candidates = []
     for objective in pending:
         fields = allowed_fields(objective, settings, field_settings)
-        default = "rose" if objective["color"] == "red" else "pine tree"
-        preferred = next((field for field in required + enabled + [default] + fields if field in fields), None)
+        preferred = preferred_quest_field(objective, settings, field_settings, required)
         for field in fields:
             resolved = quest_gather_settings(objective, field, settings, field_settings)
             gumdrops = uses_quest_gumdrops(objective, settings)

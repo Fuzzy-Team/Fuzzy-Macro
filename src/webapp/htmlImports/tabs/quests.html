@@ -27,10 +27,10 @@
           type: { name: "dropdown", data: questObjectiveGroups, triggerFunction: "showQuestObjectiveGroup(getDropdownValue(this))", length: 16 } },
         { id: "quest_mapping_objective", title: "Objective", desc: "The settings below apply to this objective",
           type: { name: "dropdown", data: [], triggerFunction: "showQuestObjectiveSettings(getDropdownValue(this))", length: 16 } },
-        { id: "quest_mapping_field", title: "Field", desc: "Auto chooses a suitable field",
-          type: { name: "dropdown", data: [{ label: "Auto", value: "auto" }], triggerFunction: saveProfileTriggerFunction, length: 16 } },
+        { id: "quest_mapping_field", title: "Field", desc: "Auto may change with active quests",
+          type: { name: "dropdown", data: [{ label: "Auto", value: "auto" }], triggerFunction: "saveQuestMappingSetting(this)", length: 16 } },
         { id: "quest_mapping_pattern", title: "Pattern", desc: "Auto uses field defaults",
-          type: { name: "dropdown", data: [{ label: "Auto", value: "auto" }], triggerFunction: saveProfileTriggerFunction, length: 16 } },
+          type: { name: "dropdown", data: [{ label: "Auto", value: "auto" }], triggerFunction: "saveQuestMappingSetting(this)", length: 16 } },
         { id: "open-quest-gather-button", title: "Gather Settings", desc: "Size, camera, time limits, start location, goo and more",
           type: { name: "button", text: "Edit Gather Settings", length: 16, triggerFunction: "openQuestGatherSettings()" } },
       ]);

@@ -536,6 +536,12 @@ def getQuestObjectiveTypes():
 
 
 @eel.expose
+def getQuestGatherDefaults(objective, settings):
+    from modules.quest_planning import quest_gather_defaults
+    return quest_gather_defaults(objective, settings, settingsManager.loadFields())
+
+
+@eel.expose
 def getPatterns():
     pattern_metadata = {
         "fuzzy_ai_gather": {
