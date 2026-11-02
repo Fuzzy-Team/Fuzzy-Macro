@@ -23,6 +23,7 @@ const gatherFieldProperties = [
   "distance",
   "goo",
   "goo_interval",
+  "pine_dupe_detection",
 ];
 let gatherPatternMetadata = {};
 let activeGatherFieldData = {};
@@ -464,6 +465,10 @@ function updateGatherPatternUI() {
 
   if (fuzzySection) {
     fuzzySection.style.display = isFuzzyAI ? "block" : "none";
+  }
+  const pineDupeSection = document.getElementById("pine-dupe-section");
+  if (pineDupeSection) {
+    pineDupeSection.style.display = pattern === "pine_dupe_v12" ? "block" : "none";
   }
   if (description) {
     description.innerText = isHiveHubGather
