@@ -3,7 +3,7 @@ import traceback
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
 from modules.controls.sleep import INTERRUPT_NONE, InterruptRequested, pause_aware_time as time, sleep
-from modules.gather_session import field_pattern_variables, GatherPatternRunner, GatherSession
+from modules.gather_session import pattern_supports_field, field_pattern_variables, GatherPatternRunner, GatherSession
 from modules.quest_planning import quest_check_due
 import modules.macro.pattern_environment as patternEnvironment
 from modules.macro.game_data import (
@@ -76,6 +76,10 @@ class GatherMixin:
         isSproutGather = not altMode and bool(fieldSetting.get("plant_sprout", False))
         skipTravel = bool(fieldSetting.get("skip_travel", False)) and self.location == normalized_field and not isHiveHubField
         pattern = fieldSetting['shape']
+        if not pattern_supports_field(pattern, normalized_field):
+            self.logger.webhook("Gather Pattern Unavailable", f"{pattern} cannot run in {normalized_field}. Using e_lol.", "red")
+            pattern = "e_lol"
+            fieldSetting["shape"] = pattern
         patternRunner = GatherPatternRunner(
             settingsManager.getProjectRoot(),
             pattern,

@@ -5,6 +5,28 @@ import os
 
 AI_PATTERNS = {"fuzzy_ai_gather", "blooms_ai"}
 FALLBACK_PATTERN = "e_lol"
+# Keys are lowercase filenames without extensions. Unlisted patterns work everywhere.
+PATTERN_FIELDS = {
+    "pineskirt": {"pine tree"},
+    "bamb_dupe_v11": {"bamboo"},
+    "bambe": {"bamboo"},
+    "bambootiquev2": {"bamboo"},
+    "hive_hub": {"hive hub"},
+    "pine_dupe_v12": {"pine tree"},
+    "target_sense": {"pepper", "rose", "strawberry"},
+    "general_booster": {
+        "sunflower", "dandelion", "mushroom", "blue flower", "clover",
+        "strawberry", "spider", "bamboo", "pineapple", "stump", "cactus",
+        "pumpkin", "pine tree", "rose", "mountain top", "pepper", "coconut",
+    },
+}
+
+
+def pattern_supports_field(pattern, field):
+    fields = PATTERN_FIELDS.get(str(pattern).lower())
+    return fields is None or str(field).lower().replace("_", " ") in fields
+
+
 PATTERN_SIZES = {"xs": 0.25, "s": 0.5, "m": 1, "l": 1.5, "xl": 2}
 
 

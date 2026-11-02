@@ -425,7 +425,10 @@ function showGatherPatternOptions(currentShape) {
   const current = String(currentShape || "").toLowerCase();
   const isHidden = (pattern) =>
     hiddenGatherPatterns.includes(pattern.value.toLowerCase()) && pattern.value.toLowerCase() !== current;
-  setDropdownData("shape", gatherPatterns.filter((pattern) => !isHidden(pattern)));
+  setDropdownData("shape", gatherPatterns.filter((pattern) =>
+    !isHidden(pattern) && (pattern.supported_fields == null ||
+      pattern.supported_fields.includes(String(getSelectedGatherField()).toLowerCase().replaceAll("_", " ")))
+  ));
 }
 
 function getSelectedGatherField() {
