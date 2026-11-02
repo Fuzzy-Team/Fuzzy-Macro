@@ -165,6 +165,10 @@ async function loadQuests(){
     if (request !== questObjectiveSettingsRequest) return;
     questObjectiveTypes = objectives;
     questPatterns = patterns;
+    setDropdownData("cooldown_field", [{label: "None - Wait at Hive", value: "none"},
+        ...Array.from(new Set(objectives.flatMap(objective => objective.fields))).sort().map(field => ({
+            label: `${fieldEmojis[field.replaceAll(" ", "_")]} ${toTitleCase(field)}`, value: field,
+        }))]);
     const selector = document.getElementById("quest_mapping_objective");
     const current = getDropdownValue(selector);
     const key = objectives.some(item => item.value === current) ? current : (objectives.find(item => item.value === "pollen_red") || objectives[0])?.value;

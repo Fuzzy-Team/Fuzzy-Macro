@@ -292,6 +292,7 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'quest_progress_check_mode': 'interval',
  'quest_progress_check_seconds': 10,
  'quest_scheduling': 'quest giver priority',
+ 'cooldown_field': 'none',
  'Auto_Field_Boost': False,
  'AFB_field': 'sunflower',
  'AFB_rebuff': 0,

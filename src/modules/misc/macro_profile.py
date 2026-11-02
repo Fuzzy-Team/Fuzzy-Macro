@@ -384,12 +384,14 @@ class MacroProfileStore:
     def _validate(self, setting, value, defaults, combined):
         """Reject values that break a constraint. Types are not enforced: readers accept
         the formats the GUI saves (numeric strings, comma-separated lists, ...)."""
-        from modules.quest_planning import OBJECTIVE_SETTING_CHOICES, gather_objective_types, load_quest_catalog
+        from modules.quest_planning import FIELDS, OBJECTIVE_SETTING_CHOICES, gather_objective_types, load_quest_catalog
 
         choices = {"quest_scheduling": ("quest giver priority", "optimize quest completion"),
                    "quest_progress_check_mode": ("interval", "every iteration")}
         if setting in choices and value not in choices[setting]:
             raise MacroProfileValidationError(setting, "choose one of the listed options")
+        if setting == "cooldown_field" and value not in ("none", *FIELDS):
+            raise MacroProfileValidationError(setting, "choose a field or None")
         property_name = None
         if setting.startswith("quest_objective_"):
             name = setting[len("quest_objective_"):]

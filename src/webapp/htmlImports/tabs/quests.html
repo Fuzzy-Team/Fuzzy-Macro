@@ -20,6 +20,12 @@
             length: 16,
           },
         },
+        {
+          id: "cooldown_field", title: "Cooldown Field",
+          desc: "Gather here while waiting, using the field's Gather settings",
+          type: { name: "dropdown", data: [{ label: "None - Wait at Hive", value: "none" }],
+            triggerFunction: saveProfileTriggerFunction, length: 16 },
+        },
       ]);
 
       buildStandardContainer(questsSettingsParent, "Objective Gather Settings", "Each objective uses the same mapping for every quest giver. A field named by the quest always wins.", [

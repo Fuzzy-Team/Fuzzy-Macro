@@ -91,6 +91,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 regularMobData[x] = [k]
     #Limit werewolf to just pumpkin 
     regularMobData["werewolf"] = ["pumpkin"]
+    bossCooldowns = {"coconut_crab": 36*60*60, "king_beetle": 24*60*60,
+                     "tunnel_bear": 48*60*60, "stump_snail": 96*60*60}
     
     private_server_link = macro.setdat.get("private_server_link", "")
     # Accept share links — the rejoin deeplink handler now supports the newer share link format.
@@ -551,11 +553,73 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             questScanScreens = None
         return gathered
 
+    def cooldownTaskReady():
+        profile = settingsManager.loadMacroProfile()
+        if (profile["profile"] != macro._loadedProfile["profile"]
+                or profile["settings"] != macro._loadedProfile["settings"]
+                or profile["fields"] != macro._loadedProfile["fields"]):
+            return True
+        if macro.hasScheduledRejoinArrived():
+            return True
+        mode = macro.setdat.get("macro_mode", "normal")
+        if mode == "normal" and macro.setdat.get("mondo_buff", False) and macro.hasMondoRespawned():
+            return True
+        if mode != "bug" and any(giver not in questCache and canClaimTimedBearQuest(giver)
+                                 for giver in quest_giver_order(macro.setdat)):
+            return True
+        tasks = macro.questTaskWatchers if mode == "quest" else get_task_list_order(macro.setdat)
+        for task in tasks:
+            if task.startswith("kill_"):
+                mob = task[5:]
+                if not macro.setdat.get(mob, False):
+                    continue
+                if mob in regularMobData:
+                    if any(macro.hasMobRespawned(mob, field) for field in regularMobData[mob]):
+                        return True
+                elif mob in bossCooldowns and macro.hasRespawned(mob, bossCooldowns[mob], applyMobRespawnBonus=True):
+                    return True
+            elif task.startswith("collect_") and mode != "bug":
+                item = task[8:]
+                if not macro.setdat.get(item, False):
+                    continue
+                if item == "sticker_stack":
+                    if macro.hasStickerStackRespawned():
+                        return True
+                elif item in macro.collectCooldowns and macro.hasRespawned(item, macro.collectCooldowns[item]):
+                    if item in macroModule.fieldBoosterData and not macro.hasRespawned("last_booster", macro.setdat["boost_seperate"]*60):
+                        continue
+                    if item != "wreath" or isBackpackReadyForWreath():
+                        return True
+            elif task == "blender" and mode == "normal" and macro.setdat.get("blender_enable", False):
+                blender = ast.literal_eval(settingsManager.loadUserText("blender.txt"))
+                if blender["collectTime"] != -1 and time.time() > blender["collectTime"]:
+                    return True
+            elif task == "planters" and mode == "normal" and macro.setdat.get("planters_mode", 0):
+                if macro.setdat["planters_mode"] == 1:
+                    planters = ast.literal_eval(settingsManager.loadUserText("manualplanters.txt"))
+                    if any(planter and time.time() > harvest for planter, harvest
+                           in zip(planters["planters"], planters["harvestTimes"])):
+                        return True
+                else:
+                    planters = settingsManager.loadUserJson("auto_planters.json")["planters"]
+                    if any(planter["planter"] and time.time() > planter["harvest_time"] for planter in planters):
+                        return True
+        return False
+
     def waitForReadyTask():
         nonlocal lastIdleClick
-        if taskCompleted:
+        if taskCompleted or run.value == 0:
             lastIdleClick = time.time()
             return
+        field = macro.setdat.get("cooldown_field", "none")
+        if field in macro.fieldSettings:
+            macro.logger.webhook("Cooldown gathering", f"Waiting for tasks in {field.title()}.", "light blue", route_category="gathering")
+            runTask(macro.gather, args=(field, {"infinite_gather": False, "plant_sprout": False}, None, cooldownTaskReady),
+                    resetAfter=False, allowAFB=False)
+            lastIdleClick = time.time()
+            return
+        if macro.location != "spawn":
+            runTask(macro.reset, resetAfter=False, allowAFB=False)
         macro.set_task_status("waiting_for_task", activity="Waiting for next task")
         # Keep Roblox active during long cooldowns without reopening the quest menu.
         if time.time() - lastIdleClick >= 60:
@@ -701,25 +765,25 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 mob = taskId.replace("kill_", "")
 
                 if mob == "coconut_crab":
-                    if macro.setdat["coconut_crab"] and macro.hasRespawned("coconut_crab", 36*60*60, applyMobRespawnBonus=True):
+                    if macro.setdat["coconut_crab"] and macro.hasRespawned(mob, bossCooldowns[mob], applyMobRespawnBonus=True):
                         runTask(macro.coconutCrab)
                         executedTasks.add(taskId)
                     continue
 
                 if mob == "king_beetle":
-                    if macro.setdat["king_beetle"] and macro.hasRespawned("king_beetle", 24*60*60, applyMobRespawnBonus=True):
+                    if macro.setdat["king_beetle"] and macro.hasRespawned(mob, bossCooldowns[mob], applyMobRespawnBonus=True):
                         runTask(macro.kingBeetle)
                         executedTasks.add(taskId)
                     continue
 
                 if mob == "tunnel_bear":
-                    if macro.setdat["tunnel_bear"] and macro.hasRespawned("tunnel_bear", 48*60*60, applyMobRespawnBonus=True):
+                    if macro.setdat["tunnel_bear"] and macro.hasRespawned(mob, bossCooldowns[mob], applyMobRespawnBonus=True):
                         runTask(macro.tunnelBear)
                         executedTasks.add(taskId)
                     continue
 
                 if mob == "stump_snail":
-                    if macro.setdat["stump_snail"] and macro.hasRespawned("stump_snail", 96*60*60, applyMobRespawnBonus=True):
+                    if macro.setdat["stump_snail"] and macro.hasRespawned(mob, bossCooldowns[mob], applyMobRespawnBonus=True):
                         runTask(macro.stumpSnail)
                         executedTasks.add(taskId)
                     continue
@@ -733,6 +797,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                     if killedInAnyField:
                         executedTasks.add(taskId)
 
+            waitForReadyTask()
             # Skip to next iteration
             continue
 
@@ -903,7 +968,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 
                 # Special cases: coconut_crab, king_beetle, tunnel_bear, and stump_snail
                 if mob == "coconut_crab":
-                    if macro.setdat["coconut_crab"] and macro.hasRespawned("coconut_crab", 36*60*60, applyMobRespawnBonus=True):
+                    if macro.setdat["coconut_crab"] and macro.hasRespawned(mob, bossCooldowns[mob], applyMobRespawnBonus=True):
                         runTask(macro.coconutCrab)
                         executedTasks.add(taskId)
                         return True
@@ -912,7 +977,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
 
                 # King Beetle respawns every 24 hours (20 hours 24 minutes with Gifted Vicious Bee)
                 if mob == "king_beetle":
-                    if macro.setdat["king_beetle"] and macro.hasRespawned("king_beetle", 24*60*60, applyMobRespawnBonus=True):
+                    if macro.setdat["king_beetle"] and macro.hasRespawned(mob, bossCooldowns[mob], applyMobRespawnBonus=True):
                         runTask(macro.kingBeetle)
                         executedTasks.add(taskId)
                         return True
@@ -920,14 +985,14 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
 
                 # Tunnel Bear respawns every 48 hours (40 hours 48 minutes with Gifted Vicious Bee)
                 if mob == "tunnel_bear":
-                    if macro.setdat["tunnel_bear"] and macro.hasRespawned("tunnel_bear", 48*60*60, applyMobRespawnBonus=True):
+                    if macro.setdat["tunnel_bear"] and macro.hasRespawned(mob, bossCooldowns[mob], applyMobRespawnBonus=True):
                         runTask(macro.tunnelBear)
                         executedTasks.add(taskId)
                         return True
                     return False
                 
                 if mob == "stump_snail":
-                    if macro.setdat["stump_snail"] and macro.hasRespawned("stump_snail", 96*60*60, applyMobRespawnBonus=True):
+                    if macro.setdat["stump_snail"] and macro.hasRespawned(mob, bossCooldowns[mob], applyMobRespawnBonus=True):
                         runTask(macro.stumpSnail)
                         executedTasks.add(taskId)
                         return True

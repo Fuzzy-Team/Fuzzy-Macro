@@ -63,8 +63,10 @@ class GatherMixin:
         s = n % 60
         return f"{int(m)}m {int(s):02d}s"
 
-    def gather(self, field, settingsOverride = {}, questObjective=None):
+    def gather(self, field, settingsOverride = {}, questObjective=None, stopWhen=None):
         self.robloxWindow.questMenuVisibleForAI = False
+        if stopWhen and stopWhen():
+            return
         # Normalize field name to handle both space and underscore formats
         # Convert underscores to spaces for fieldSettings lookup
         normalized_field = field.replace('_', ' ')
@@ -320,7 +322,7 @@ class GatherMixin:
                 return
         infiniteGather = altMode or bool(fieldSetting.get("infinite_gather", False))
         maxGatherTime = fieldSetting["mins"]*60
-        gatherTimeLimit = "Infinite" if infiniteGather else self.convertSecsToMinsAndSecs(maxGatherTime)
+        gatherTimeLimit = "Until next task" if stopWhen else "Infinite" if infiniteGather else self.convertSecsToMinsAndSecs(maxGatherTime)
         returnType = "rejoin" if isHiveHubField else fieldSetting["return"]
         fuzzyAIRuntimeDefaults = settingsManager.FUZZY_AI_RUNTIME_DEFAULTS
         pattern_blooms_ai_model = str(self.setdat.get("blooms_ai_model", "Standard"))
@@ -564,6 +566,12 @@ class GatherMixin:
                     stopGather()
                     raise
 
+                if stopWhen and stopWhen():
+                    keepGathering = False
+                    self.logger.webhook("Cooldown gathering finished", "A task is ready or settings changed. Returning to the task queue.",
+                                        "light blue", route_category="gathering")
+                    break
+
                 patternStartTime = time.time()
                 # wait for any inventory interaction to finish before clicking again
                 if not self.acquireInventoryForGather():
@@ -732,7 +740,7 @@ class GatherMixin:
                     time.sleep(0.4)
                     self.reset()
                     break
-                elif not infiniteGather and getGatherTime() > maxGatherTime:
+                elif not infiniteGather and not stopWhen and getGatherTime() > maxGatherTime:
                     if honeyWreathReturnEnabled and isHoneyWreathReady():
                         backpack = self.getBackpack()
                         if isHoneyWreathBackpackReady(backpack):
