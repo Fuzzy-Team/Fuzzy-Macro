@@ -137,6 +137,11 @@ class macro(
         self.lastSproutBeanLimitLog = 0
 
         self.isGathering = False
+        # The quest menu can stay open between a scan and the work it chose. The step counts
+        # scroll notches from the top, and each giver's step is where its quest was last seen.
+        self.questMenuOpen = False
+        self.questMenuStep = None
+        self.questGiverSteps = {}
         self.converting = False
         self.alreadyConverted = False
         self.cannonFromHive = False

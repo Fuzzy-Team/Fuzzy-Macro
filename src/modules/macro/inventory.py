@@ -83,6 +83,7 @@ class InventoryMixin:
         return False
 
     def toggleInventory(self, mode):
+        self.questMenuOpen = False
         def clickInv():
             mouse.moveTo(self.robloxWindow.mx+30, self.robloxWindow.my+113)
             time.sleep(0.1)

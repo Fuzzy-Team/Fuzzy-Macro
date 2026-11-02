@@ -345,14 +345,14 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         except Exception:
             return False
 
-    def handleQuest(questGiver, executeQuest=True):
+    def handleQuest(questGiver, executeQuest=True, keepMenuOpen=False):
         nonlocal questCache, questScanScreens, taskCompleted
         cached = questGiver in questCache and questCache[questGiver] is not None and not taskCompleted
         if cached:
             objectives = questCache[questGiver]
         elif not executeQuest:
             if questScanScreens is None:
-                questScanScreens = macro.captureQuestScreenshots()
+                questScanScreens = macro.captureQuestScreenshots(keepOpen=keepMenuOpen)
             objectives = macro.findQuest(questGiver, questScreens=questScanScreens)
         else:
             objectives = macro.findQuest(questGiver)
@@ -501,6 +501,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         attempted = set()
         gathered = []
         currentField = None
+        # With the quest menu kept open, a scan leaves it open for the gather it picks.
+        keepMenuOpen = macro.setdat.get("quest_progress_watch", False)
         # Support tasks and quest claims may have changed progress since the first scan.
         questCache.clear()
         questScanScreens = None
@@ -508,7 +510,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         def scanQuestProgress():
             for giver in quest_giver_order(macro.setdat):
                 if canClaimTimedBearQuest(giver):
-                    handleQuest(giver, executeQuest=False)
+                    handleQuest(giver, executeQuest=False, keepMenuOpen=keepMenuOpen)
 
         runTask(scanQuestProgress, resetAfter=False, allowAFB=False)
         turnedIn = set()
@@ -550,7 +552,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                         if field in allowed_fields(obj, macro.setdat, macro.fieldSettings)}
 
             def refreshQuestProgress():
-                screens = macro.captureQuestScreenshots()
+                screens = macro.captureQuestScreenshots(keepOpen=keepMenuOpen)
                 for giver in affected:
                     previous = macro.questObservations.get(giver) or beforeGather.get(giver, [])
                     found = None
@@ -569,6 +571,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 runTask(refreshQuestProgress, resetAfter=False, allowAFB=False)
             questCache.clear()
             questScanScreens = None
+        # Nothing was picked to use the menu a scan left open.
+        macro.closeQuestMenu()
         return gathered
 
     def cooldownTaskReady():
