@@ -361,6 +361,7 @@ def build_capture(viewport, capture_backend="auto"):
         monitor = {"left": left, "top": top, "width": width_px, "height": height_px}
         return {
             "backend": "mss",
+            "viewport": viewport,
             "session": session,
             "monitor": monitor,
             "width": width_px,
@@ -374,6 +375,7 @@ def build_capture(viewport, capture_backend="auto"):
             top = 0
         return {
             "backend": "pil",
+            "viewport": viewport,
             "bbox": (left, top, left + width_px, top + height_px),
             "width": width_px,
             "height": height_px,
@@ -413,6 +415,14 @@ def init_frame_mailbox(runtime):
 
 
 def publish_frame(runtime, frame):
+    viewport = runtime.get("capture", {}).get("viewport")
+    if getattr(viewport, "questMenuVisibleForAI", False):
+        # The quest panel uses logical screen coordinates; capture pixels may be Retina-scaled.
+        capture = runtime["capture"]
+        right = min(frame.shape[1], round(300 * frame.shape[1] / capture["width"]))
+        top = round(150 * frame.shape[0] / capture["height"])
+        frame = frame.copy()
+        frame[top:, :right] = 0
     lock = runtime.get("frame_lock")
     if lock is None:
         init_frame_mailbox(runtime)

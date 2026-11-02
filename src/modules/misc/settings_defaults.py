@@ -1,6 +1,7 @@
 """Hardcoded default settings used to seed missing runtime/profile files."""
 
 import copy
+from modules.quest_planning import OBJECTIVE_SETTING_CHOICES, gather_objective_types, load_quest_catalog
 
 
 DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False],
@@ -243,18 +244,6 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'polar_bear_quest': False,
  'brown_bear_quest': False,
  'black_bear_quest': False,
- 'polar_bear_quest_gather_mins': 2,
- 'polar_bear_quest_gather_return': 'no override',
- 'brown_bear_quest_gather_mins': 2,
- 'brown_bear_quest_gather_return': 'no override',
- 'black_bear_quest_gather_mins': 2,
- 'black_bear_quest_gather_return': 'no override',
- 'honey_bee_quest_gather_mins': 2,
- 'honey_bee_quest_gather_return': 'no override',
- 'bucko_bee_quest_gather_mins': 2,
- 'bucko_bee_quest_gather_return': 'no override',
- 'riley_bee_quest_gather_mins': 2,
- 'riley_bee_quest_gather_return': 'no override',
  'honey_bee_quest': False,
  'coconut_dispenser': False,
  'mondo_buff_loot': True,
@@ -299,8 +288,11 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'sticker_sprout_gather_minutes': 8,
  'bucko_bee_quest': False,
  'riley_bee_quest': False,
- 'quest_use_gumdrops': False,
  'quest_progress_watch': False,
+ 'quest_progress_check_mode': 'interval',
+ 'quest_progress_check_seconds': 10,
+ 'quest_scheduling': 'quest giver priority',
+ 'cooldown_field': 'none',
  'Auto_Field_Boost': False,
  'AFB_field': 'sunflower',
  'AFB_rebuff': 0,
@@ -450,8 +442,6 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'max_convert_time': 5,
  'coconut_crab_max_kill_time': 15,
  'convert_timeout_behavior': 'move on',
- 'quest_gather_mins': 0,
- 'quest_gather_return': 'no override',
  'petal_quest_gather_mins': 0,
  'petal_quest_gather_return': 'no override',
  'auto_planter_paper_field_sunflower': True,
@@ -825,6 +815,13 @@ DEFAULT_GENERAL_SETTINGS = {'hive_number': 1,
  'webhook_time_format': 24,
  'discord_rich_presence': False,
  'hourly_report_embed_text': True}
+
+for _objective in gather_objective_types(load_quest_catalog()):
+    for _key, _value in {"field": "auto", "pattern": "auto", "mins": 0,
+                         "backpack": "auto", "return": "no override",
+                         **dict.fromkeys(OBJECTIVE_SETTING_CHOICES, "auto")}.items():
+        DEFAULT_PROFILE_SETTINGS[f"quest_objective_{_objective['value']}_{_key}"] = _value
+
 
 DEFAULT_FIELDS = {'sunflower': {'shift_lock': False,
                'field_drift_compensation': False,
