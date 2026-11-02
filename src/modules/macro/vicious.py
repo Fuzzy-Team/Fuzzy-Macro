@@ -1,9 +1,8 @@
 import modules.controls.mouse as mouse
 from modules.controls.sleep import pause_aware_time as time, sleep
-from modules.macro.vicious_paths import ViciousPathsMixin
 
 
-class ViciousMixin(ViciousPathsMixin):
+class ViciousMixin:
     def viciousWalk(self, keys, tiles):
         try:
             for key in keys:
@@ -81,15 +80,15 @@ class ViciousMixin(ViciousPathsMixin):
             self.logger.webhook("Vic Hop", f"Vicious Bee detected in {field}, approaching", "yellow", "screen", ping_category="ping_vicious_bee")
             self.viciousActivateChat()
             self._viciousAnnouncementBaseline = self._viciousAnnouncementCounts()
-            result = approach()
+            result = self.runPath(approach)
             self.logger.webhook("Vic Hop", "Vicious Bee defeated" if result else "Vicious Bee hunt ended without a confirmed defeat", "light green" if result else "orange", "screen", ping_category="ping_vicious_bee")
             return result
         self.logger.webhook("Vic Hop", "Hive ready, checking fields starting with Pepper", "dark brown", "screen")
-        self.Vichop_Hive_to_Pepper()
-        result = search("Pepper", self.PepperMainKillVic)
+        self.runPath("vic/travel/hive_to_pepper")
+        result = search("Pepper", "vic/kill_vic/pepper")
         if result is not None:
             return result
-        if not self.Vichop_Pepper_to_Mountaintop():
+        if not self.runPath("vic/travel/pepper_to_mountain_top"):
             return False
         # Detect before rotating toward the next field.
         enabled = self.setdat.get("macro_mode", "normal") == "vic" or "mountain top" in self.vicFields
@@ -100,21 +99,21 @@ class ViciousMixin(ViciousPathsMixin):
             self.logger.webhook("Vic Hop", "Vicious Bee detected in Mountain Top, approaching", "yellow", "screen", ping_category="ping_vicious_bee")
             self.viciousActivateChat()
             self._viciousAnnouncementBaseline = self._viciousAnnouncementCounts()
-            result = self.MountainTopKillVic()
+            result = self.runPath("vic/kill_vic/mountain top")
             self.logger.webhook("Vic Hop", "Vicious Bee defeated" if result else "Vicious Bee hunt ended without a confirmed defeat", "light green" if result else "orange", "screen", ping_category="ping_vicious_bee")
             return result
         self.logger.webhook("Vic Hop", "Mountain Top: no Vicious Bee detected", "dark brown", "screen")
-        self.Vichop_Mountaintop_to_edge()
-        self.Vichop_edge_to_Spider()
-        result = search("Spider", self.SpiderKillVic)
+        self.runPath("vic/travel/mountain_top_to_edge")
+        self.runPath("vic/travel/edge_to_spider")
+        result = search("Spider", "vic/kill_vic/spider")
         if result is not None:
             return result
-        self.Vichopspider_to_cactus()
+        self.runPath("vic/travel/spider_to_cactus")
         for key, count in (("pagedown", 10), ("pageup", 2)):
             for _ in range(count):
                 self.keyboard.press(key)
                 sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
-        result = search("Cactus", self.CactusKillVic)
+        result = search("Cactus", "vic/kill_vic/cactus")
         if result is not None:
             return result
         for _ in range(5):
@@ -122,11 +121,11 @@ class ViciousMixin(ViciousPathsMixin):
             sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
             self.keyboard.keyUp("pagedown", False)
             sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
-        result = search("Cactus back", self.CactusKillVic)
+        result = search("Cactus back", "vic/kill_vic/cactus")
         if result is not None:
             return result
-        self.Vichop_Cactus_To_rose()
-        result = search("Rose", self.RoseKillVic)
+        self.runPath("vic/travel/cactus_to_rose")
+        result = search("Rose", "vic/kill_vic/rose")
         if result is None:
             self.disableShiftLock()
             self.logger.webhook("Vic Hop", "Finished checking fields, no Vicious Bee found", "dark brown", "screen")
