@@ -63,7 +63,7 @@ class GatherMixin:
         s = n % 60
         return f"{int(m)}m {int(s):02d}s"
 
-    def gather(self, field, settingsOverride = {}, questGumdrops=False, questObjective=None):
+    def gather(self, field, settingsOverride = {}, questObjective=None):
         self.robloxWindow.questMenuVisibleForAI = False
         # Normalize field name to handle both space and underscore formats
         # Convert underscores to spaces for fieldSettings lookup
@@ -433,12 +433,11 @@ class GatherMixin:
         else:
             self.logger.webhook(f"Gathering: {field.title()}", f"Limit: {gatherTimeLimit} - {fieldSetting['shape']} - Backpack: {backpackLimitLabel}{gooStatus}", "light green", route_category="gathering")
 
-        # Goo timer thread: use gumdrops (which make goo) every 3s for goo quests,
-        # otherwise at the field's goo interval when the field has goo enabled
+        # Quest defaults and overrides are already resolved in fieldSetting.
         def gooTimerThread():
             nonlocal lastGooTime
-            useGoo = questGumdrops or fieldSetting.get("goo", False)
-            gooInterval = 3 if questGumdrops else int(fieldSetting.get("goo_interval", 3))
+            useGoo = fieldSetting.get("goo", False)
+            gooInterval = int(fieldSetting.get("goo_interval", 3))
             while gooTimerActive:
                 currentTime = time.time()
                 if useGoo and (currentTime - lastGooTime) >= gooInterval:

@@ -63,6 +63,7 @@ Follow our [installation guide](https://fuzzy-team.gitbook.io/fuzzy-macro) to ge
 - **Supported NPCs**: Polar Bear, Honey Bee, Bucko Bee, Riley Bee, Brown Bear, Black Bear (More to come)
 - Automatic quest detection and completion
 - Separate gather settings for each pollen, goo, petal, or token objective, shared across all quest givers
+- Auto enables goo for goo objectives and BloomsAI for petal objectives; per-objective choices override those defaults
 - Choose a field, pattern, and any gather setting per objective without changing the Gather tab; required quest fields stay fixed
 - Choose quest-giver priority or share field work across quests to reduce repeat visits
 - Keep the quest menu open and check completion at a chosen interval or after each pattern iteration

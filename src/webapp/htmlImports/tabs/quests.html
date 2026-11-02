@@ -29,7 +29,7 @@
           type: { name: "dropdown", data: [], triggerFunction: "showQuestObjectiveSettings(getDropdownValue(this))", length: 16 } },
         { id: "quest_mapping_field", title: "Field", desc: "Auto may change with active quests",
           type: { name: "dropdown", data: [{ label: "Auto", value: "auto" }], triggerFunction: "saveQuestMappingSetting(this)", length: 16 } },
-        { id: "quest_mapping_pattern", title: "Pattern", desc: "Auto uses field defaults",
+        { id: "quest_mapping_pattern", title: "Pattern", desc: "Auto follows the objective and field",
           type: { name: "dropdown", data: [{ label: "Auto", value: "auto" }], triggerFunction: "saveQuestMappingSetting(this)", length: 16 } },
         { id: "open-quest-gather-button", title: "Gather Settings", desc: "Size, camera, time limits, start location, goo and more",
           type: { name: "button", text: "Edit Gather Settings", length: 16, triggerFunction: "openQuestGatherSettings()" } },
@@ -49,7 +49,7 @@
       questGatherModal.setAttribute("onclick", "if (event.target === this) closeQuestGatherSettings()");
       questsSettingsParent.appendChild(questGatherModal);
       const questGatherDialog = questGatherModal.firstElementChild;
-      buildStandardContainer(questGatherDialog, "Gather Settings", `<span id="quest-gather-objective"></span>. Used only for this quest objective. Auto keeps the field's setting.`, [
+      buildStandardContainer(questGatherDialog, "Gather Settings", `<span id="quest-gather-objective"></span>. Used only for this quest objective. Auto uses objective and field defaults.`, [
         questGatherRow("size", "Size", "Overall area the pattern covers", ["Auto", "XS", "S", "M", "L", "XL"]),
         questGatherRow("width", "Width", "Repetitions of each pattern loop", ["Auto", 1, 2, 3, 4, 5, 6, 7, 8]),
         questGatherToggle("invert_lr", "Invert Left/Right", "Swap left and right in the pattern"),
@@ -69,7 +69,7 @@
         questGatherRow("start_location", "Start Location", "Area of the field to start in", ["Auto", "Center", "Upper Right", "Right", "Lower Right", "Bottom", "Lower Left", "Left", "Upper Left", "Top"]),
         questGatherRow("distance", "Distance", "How far to travel toward that area", ["Auto", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
         { title: "Goo", type: { name: "separator" } },
-        questGatherToggle("goo", "Use Goo", "Use goo while gathering"),
+        questGatherToggle("goo", "Use Goo", "Auto enables goo for goo objectives"),
         questGatherRow("goo_interval", "Goo Interval (secs)", "How often to use goo", ["Auto", 3, 5, 10, 15, 30, 60]),
       ]);
       questGatherDialog.insertAdjacentHTML("beforeend", `
@@ -78,18 +78,6 @@
           <button type="button" class="btn-confirm" onclick="saveQuestGatherSettings()">Save Settings</button>
         </div>
       `);
-
-      buildStandardContainer(questsSettingsParent, "Goo Settings", "Decide how the macro wants to handle gathering goo", [
-        {
-          id: "quest_use_gumdrops",
-          title: "Use Gumdrops",
-          desc: "Use gumdrops when gathering for goo quests (uses the Gumdrop Slot in Config)",
-          type: {
-            name: "checkbox",
-            triggerFunction: saveProfileTriggerFunction,
-          },
-        },
-      ]);
 
       buildStandardContainer(questsSettingsParent, "Live Quest Progress", "Watch the open quest menu while gathering for quests.", [
         {

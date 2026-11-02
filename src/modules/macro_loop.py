@@ -201,9 +201,9 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             macro.clear_task_status()
             taskCompleted = True
             if action == INTERRUPT_SKIP:
-                if func == macro.gather and len(args) > 3 and args[3]:
+                if func == macro.gather and len(args) > 2 and args[2]:
                     macro.questGatherOutcome = "skipped"
-                    macro.deferredQuestObjectives.add(args[3]["id"])
+                    macro.deferredQuestObjectives.add(args[2]["id"])
                 else:
                     for giver, watchedAction in macro.questTaskWatchers.get(watchedTaskKey(), []):
                         objective = next((row for row in (macro.questObservations.get(giver) or [])
@@ -504,7 +504,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 f"{objective['giver'].title()}: {objective['action'].replace('_', ' ')} in {field.title()} "
                 f"with {selected['settings']['shape']} ({macro.setdat.get('quest_scheduling', 'quest giver priority')})",
                 "light blue", route_category="quests")
-            runTask(macro.gather, args=(field, selected["settings"], selected["gumdrops"], objective), resetAfter=False)
+            runTask(macro.gather, args=(field, selected["settings"], objective), resetAfter=False)
             if run.value == 0:
                 break
             currentField = field

@@ -160,6 +160,9 @@ def allowed_fields(objective, settings, field_settings):
 
 def quest_gather_settings(objective, field, settings, field_settings):
     resolved = dict(field_settings[field])
+    if objective["kind"] in ("gathergoo", "pollengoo"):
+        resolved["goo"] = True
+        resolved["goo_interval"] = 3
     if objective["kind"] == "gatherpetal":
         resolved["shape"] = "blooms_ai"
         if settings.get("petal_quest_gather_mins", 0):
@@ -185,10 +188,6 @@ def quest_gather_settings(objective, field, settings, field_settings):
     return resolved
 
 
-def uses_quest_gumdrops(objective, settings):
-    return objective["kind"] in ("gathergoo", "pollengoo") and settings.get("quest_use_gumdrops", False)
-
-
 def preferred_quest_field(objective, settings, field_settings, required=()):
     fields = allowed_fields(objective, settings, field_settings)
     enabled = [field for field, active in zip(settings.get("fields", []), settings.get("fields_enabled", [])) if active]
@@ -207,8 +206,6 @@ def quest_gather_defaults(action, settings, field_settings):
     for property_name, key in properties.items():
         inherited = {**settings, prefix + property_name: "auto"}
         defaults[property_name] = quest_gather_settings(objective, field, inherited, field_settings)[key]
-    if uses_quest_gumdrops(objective, settings):
-        defaults.update(goo=True, goo_interval=3)
     return defaults
 
 
@@ -227,12 +224,10 @@ def choose_quest_gather(objectives, settings, field_settings, current_field=None
         preferred = preferred_quest_field(objective, settings, field_settings, required)
         for field in fields:
             resolved = quest_gather_settings(objective, field, settings, field_settings)
-            gumdrops = uses_quest_gumdrops(objective, settings)
             shared = [obj for obj in pending if field in allowed_fields(obj, settings, field_settings)
-                      and quest_gather_settings(obj, field, settings, field_settings) == resolved
-                      and uses_quest_gumdrops(obj, settings) == gumdrops]
+                      and quest_gather_settings(obj, field, settings, field_settings) == resolved]
             candidates.append({"objective": objective, "field": field, "settings": resolved,
-                               "gumdrops": gumdrops, "objectives": shared, "preferred": field == preferred})
+                               "objectives": shared, "preferred": field == preferred})
     if not candidates:
         return None
     if settings.get("quest_scheduling", "quest giver priority") == "optimize quest completion":

@@ -288,7 +288,6 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'sticker_sprout_gather_minutes': 8,
  'bucko_bee_quest': False,
  'riley_bee_quest': False,
- 'quest_use_gumdrops': False,
  'quest_progress_watch': False,
  'quest_progress_check_mode': 'interval',
  'quest_progress_check_seconds': 10,

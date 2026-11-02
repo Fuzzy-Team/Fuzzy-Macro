@@ -1028,7 +1028,6 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         ("honey_bee_quest", "Honey Bee"),
         ("bucko_bee_quest", "Bucko Bee"),
         ("riley_bee_quest", "Riley Bee"),
-        ("quest_use_gumdrops", "Use Gumdrops"),
         ("quest_progress_watch", "Keep Quest Menu Open"),
     ]
 
@@ -3578,8 +3577,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 "🐻 **Black Bear**": settings.get("black_bear_quest", False),
                 "🍯 **Honey Bee**": settings.get("honey_bee_quest", False),
                 "🐝 **Bucko Bee**": settings.get("bucko_bee_quest", False),
-                "🎯 **Riley Bee**": settings.get("riley_bee_quest", False),
-                "💧 **Use Gumdrops**": settings.get("quest_use_gumdrops", False)
+                "🎯 **Riley Bee**": settings.get("riley_bee_quest", False)
             }
 
             embed = discord.Embed(title="📜 Quest Configuration", color=0x00ff00)
