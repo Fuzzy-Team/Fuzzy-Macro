@@ -126,6 +126,8 @@ class macro(
         self.guidingStarLastAnnounced = {}
         self.unusualSproutLastAnnounced = {}
         self.windyBeeLastAnnounced = {}
+        self.gummyballLevel = None
+        self.gummyballLastSeen = 0
         self.stickerSproutDetectedAt = 0
         self.stickerSproutLastAnnounced = 0
         self.stickerSproutInterruptRequested = False
@@ -213,6 +215,7 @@ class macro(
                     f"Switched to profile: {profile['profile']}",
                     "blue",
                 )
+        return settingsChanged
 
     def _applySettingsState(self):
         """State derived from settings, rebuilt whenever settings reload."""
@@ -327,6 +330,7 @@ class macro(
         if self.enableNightDetection:
             self.detectNight()
         self.scanBlueTextAnnouncements()
+        self.scanGummyballBuff()
 
         #hotbar
         for i in range(1,8):

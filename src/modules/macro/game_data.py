@@ -1,6 +1,7 @@
 """Static Bee Swarm Simulator data used by the macro."""
 import json
 from modules.misc.settings_defaults import BLENDER_ITEM_SLOTS
+from modules.quest_planning import load_quest_catalog
 
 import cv2
 import numpy as np
@@ -352,30 +353,7 @@ cyrillicToLatin = {
     'х': 'x'
 }
 
-def _loadQuestData(path="./data/bss/quest_data.txt"):
-    """Parse quest_data.txt into {bear: {quest title: [objectives]}}."""
-    questData = {}
-    bear, title, objectives = "", "", []
-    with open(path, "r") as f:
-        for line in (x for x in f.read().split("\n") if x):
-            if line.startswith("==") and line.endswith("=="):
-                if title:
-                    questData[bear][title] = objectives
-                bear = line.strip("=")
-                questData[bear] = {}
-                title, objectives = "", []
-            elif line.startswith("-"):
-                if title:
-                    questData[bear][title] = objectives
-                title = line.lstrip("-").strip()
-                objectives = []
-            else:
-                objectives.append(line)
-    questData[bear][title] = objectives
-    return questData
-
-
-quest_data = _loadQuestData()
+quest_data = load_quest_catalog()
 
 #planter-related info
 nectarNames=["comforting", "refreshing", "satisfying", "motivating", "invigorating"]
@@ -557,6 +535,7 @@ PING_SETTING_KEYS = [
     "ping_guiding_star",
     "ping_unusual_sprouts",
     "ping_windy_bee",
+    "ping_gummyball",
     "ping_macro_status",
     "ping_gathering",
     "ping_live_gather_report",

@@ -2,6 +2,8 @@ import hashlib
 import os
 import platform
 import shutil
+import sys
+from contextlib import contextmanager
 import tempfile
 import threading
 import zipfile
@@ -134,8 +136,9 @@ def cleanup_unused_models():
     for entry in entries:
         if entry.name not in supported and _delete_path(entry.path):
             deleted.append(entry.name)
-    if deleted:
-        print(f"[models] Deleted unused models: {', '.join(deleted)}")
+    deleted_models = [name for name in deleted if not _is_macos_metadata(name)]
+    if deleted_models:
+        print(f"[models] Deleted unused models: {', '.join(deleted_models)}")
     return deleted
 
 
@@ -330,24 +333,45 @@ def ensure_supported_models():
     return {"downloaded": downloaded, "skipped": skipped, "model_dir": MODEL_DIR}
 
 
+@contextmanager
+def _model_download_progress(total):
+    width = 0
+
+    def update(completed, message):
+        nonlocal width
+        filled = 24 * completed // total if total else 24
+        line = f"[models] [{'#' * filled}{'-' * (24 - filled)}] {completed}/{total} {message}"
+        sys.stdout.write("\r" + line.ljust(width))
+        sys.stdout.flush()
+        width = len(line)
+
+    try:
+        yield update
+    finally:
+        if width:
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+
+
 def ensure_missing_supported_models():
     os.makedirs(MODEL_DIR, exist_ok=True)
     downloaded = []
     skipped = []
-    for model_name in _supported_model_names():
-        local_path = os.path.join(MODEL_DIR, model_name)
-        if os.path.exists(local_path):
-            skipped.append(model_name)
-            continue
-        try:
-            remote_files = _remote_tree(f"{MODELS_API_URL}/{model_name}")
-            print(f"[models] Downloading missing {model_name}...")
-            _download_remote_tree(remote_files, model_name, local_path)
-        except Exception as exc:
-            print(f"[models] Could not download {model_name} directly: {exc}")
-            print(f"[models] Checking repository zip for {model_name}...")
-            _copy_from_repo_zip(model_name, local_path)
-        downloaded.append(model_name)
+    model_names = _supported_model_names()
+    skipped = [name for name in model_names if os.path.exists(os.path.join(MODEL_DIR, name))]
+    missing = [name for name in model_names if name not in skipped]
+    with _model_download_progress(len(missing)) as progress:
+        for model_name in missing:
+            local_path = os.path.join(MODEL_DIR, model_name)
+            progress(len(downloaded), f"Downloading {model_name}...")
+            try:
+                remote_files = _remote_tree(f"{MODELS_API_URL}/{model_name}")
+                _download_remote_tree(remote_files, model_name, local_path)
+            except Exception:
+                progress(len(downloaded), f"Downloading {model_name} from repository zip...")
+                _copy_from_repo_zip(model_name, local_path)
+            downloaded.append(model_name)
+            progress(len(downloaded), "Models downloaded" if len(downloaded) == len(missing) else f"Downloaded {model_name}")
     cleanup_unused_models()
     return {"downloaded": downloaded, "skipped": skipped, "model_dir": MODEL_DIR}
 

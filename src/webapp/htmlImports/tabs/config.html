@@ -141,6 +141,20 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
+          {
+            id: "blooms_ai_model",
+            title: "BloomsAI Model",
+            desc: "Choose the bloom and petal detector. Standard is most accurate; Light and Mini trade accuracy for faster inference.",
+            type: {
+              name: "dropdown",
+              data: [
+                "Standard",
+                { label: "Light (Faster)", value: "Light" },
+                { label: "Mini (Fastest)", value: "Mini" },
+              ],
+              triggerFunction: saveGeneralTriggerFunction,
+            },
+          },
       ]);
 
       buildStandardContainer(parentBSS, "Gumdrops", "", [
@@ -1025,6 +1039,15 @@
           id: "ping_windy_bee",
           title: "Windy Bee Spawn",
           desc: "Ping when a Windy Bee spawn announcement is detected",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "ping_gummyball",
+          title: "Gummyball Buff",
+          desc: "Ping when the 8x or 9x Gummyball buff appears",
           type: {
             name: "checkbox",
             triggerFunction: saveGeneralTriggerFunction,

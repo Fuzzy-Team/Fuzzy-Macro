@@ -1,4 +1,5 @@
 import cv2
+import re
 import fuzzywuzzy
 import fuzzywuzzy.process
 from modules.misc.imageManipulation import average_hash
@@ -12,11 +13,36 @@ import modules.screen.ocr as ocr
 from modules import bitmap_matcher
 from modules.controls.sleep import pause_aware_time as time, sleep
 from modules.macro.game_data import quest_data
+from modules.quest_planning import make_quest_objectives, objective_matches_text
 from modules.screen.imageSearch import locateImageOnScreen
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP, mssScreenshotPillowRGBA
 
 
 class QuestMixin:
+    def recordQuestObjectives(self, giver, title, actions, statuses):
+        if not hasattr(self, "questObservations"):
+            self.questObservations = {}
+        self.questObservations[giver] = make_quest_objectives(giver, title, actions, statuses)
+        return [action for action, status in zip(actions, statuses) if status != "complete"]
+
+    def readWatchedQuestObjective(self, objective, reposition=False):
+        previous = self.questObservations.get(objective["giver"]) or []
+        if reposition:
+            # Close the known-open panel before findQuest opens and positions it.
+            self.toggleQuest()
+            found = self.findQuest(objective["giver"], keepQuestMenuOpen=True, logDetection=False)
+            if found is None:
+                self.toggleQuest()
+            self.moveMouseToDefault()
+        else:
+            found = self.findQuest(objective["giver"], questScreens=[self.captureQuestWatchScreen()], logDetection=False)
+        if found is None:
+            self.questObservations[objective["giver"]] = [{**row, "status": "unknown"} for row in previous]
+            return "unknown"
+        observed = next((row for row in (self.questObservations.get(objective["giver"]) or [])
+                         if row["id"] == objective["id"]), None)
+        return observed["status"] if observed else "unknown"
+
     def startQuestTaskWatch(self, taskKey):
         """Open and publish the quest tied to a non-gather quest task."""
         if not self.setdat.get("quest_progress_watch", False):
@@ -44,10 +70,17 @@ class QuestMixin:
                 if visibleObjectives is None:
                     # findQuest closes the menu when the quest cannot be located.
                     return None
-                if objective not in visibleObjectives:
+                rows = [row for row in (self.questObservations.get(questGiver) or []) if row["action"] == objective]
+                if rows and all(row["status"] == "complete" for row in rows):
                     self.toggleQuest()
                     self.moveMouseToDefault()
                     completedObjectives.add(identity)
+                    continue
+                watchedObjective = next((row for row in rows if row["status"] != "complete"
+                                         and row["id"] not in self.deferredQuestObjectives), None)
+                if watchedObjective is None:
+                    self.toggleQuest()
+                    self.moveMouseToDefault()
                     continue
 
                 startedAt = time.time()
@@ -69,6 +102,7 @@ class QuestMixin:
                     "task": normalizedTask,
                     "quest_giver": questGiver,
                     "objective": objective,
+                    "watched_objective": watchedObjective,
                     "report": report,
                     "menu_open": True,
                 }
@@ -122,15 +156,7 @@ class QuestMixin:
         try:
             if checkCompletion and context.get("menu_open"):
                 time.sleep(0.5)
-                visibleObjectives = self.findQuest(
-                    context["quest_giver"],
-                    questScreens=[self.captureQuestWatchScreen()],
-                    logDetection=False,
-                )
-                completed = (
-                    visibleObjectives is not None
-                    and context["objective"] not in visibleObjectives
-                )
+                completed = self.readWatchedQuestObjective(context["watched_objective"]) == "complete"
         except Exception:
             print(traceback.format_exc())
         finally:
@@ -207,6 +233,9 @@ class QuestMixin:
         )
 
     def findQuest(self, questGiver, questScreens=None, keepQuestMenuOpen=False, logDetection=True):
+        if not hasattr(self, "questObservations"):
+            self.questObservations = {}
+        self.questObservations[questGiver] = None
         #map quest giver to a shorthand form for ocr searching
         questGiverShort = {
             "polar bear": "polar",
@@ -528,7 +557,7 @@ class QuestMixin:
                 textChunk = []
                 for line in ocr.ocrRead(textImg):
                     textChunk.append(self.convertCyrillic(line[1][0].strip().lower()))
-                textChunk = ''.join(textChunk).strip()
+                textChunk = ' '.join(textChunk).strip()
                 if textChunk:
                     chunks.append({"y": y, "text": textChunk, "bbox": (x, y, w, h)})
 
@@ -706,6 +735,7 @@ class QuestMixin:
             titleScreen, objectiveScreen, parseScreen, objectiveChunks = extractQuestObjectiveChunks(screen, questTitleYPos)
             incompleteObjectives = []
             completedObjectives = []
+            observedStatuses = {}
 
             annotatedScreen = np.copy(objectiveScreen)
 
@@ -753,7 +783,7 @@ class QuestMixin:
                     if greenScore > 0.25:
                         return "complete"
 
-                if "complete" in textChunk.lower():
+                if re.search(r"\bcomplete(?:d)?\b", textChunk, re.IGNORECASE):
                     return "complete"
                 return panel["status"]
 
@@ -769,7 +799,7 @@ class QuestMixin:
                     textChunk = []
                     for line in ocr.ocrRead(textImg):
                         textChunk.append(self.convertCyrillic(line[1][0].strip().lower()))
-                    textChunk = ''.join(textChunk).strip()
+                    textChunk = ' '.join(textChunk).strip()
                     brownItems.append({
                         "text": textChunk,
                         "bbox": panel["bbox"],
@@ -795,7 +825,7 @@ class QuestMixin:
                             rows = region.astype(np.int16)
                             blue, green, red = rows[:, :, 0], rows[:, :, 1], rows[:, :, 2]
                             greenMask = (green > 120) & (green > red + 20) & (green > blue + 20)
-                            if float(np.mean(greenMask)) > 0.25 or "complete" in textChunk.lower():
+                            if float(np.mean(greenMask)) > 0.25 or re.search(r"\bcomplete(?:d)?\b", textChunk, re.IGNORECASE):
                                 status = "complete"
                     brownItems.append({
                         "text": textChunk,
@@ -827,6 +857,8 @@ class QuestMixin:
                         if objective in titleObjectives
                     ]
 
+                if len(mappedObjectives) == 1 and y + h < parseScreen.shape[0]:
+                    observedStatuses[mappedObjectives[0]] = item["status"]
                 if not isComplete:
                     for objective in mappedObjectives:
                         if objective not in incompleteObjectives:
@@ -874,7 +906,12 @@ class QuestMixin:
             if manageQuestUi and not keepQuestMenuOpen:
                 self.toggleQuest()
                 self.moveMouseToDefault()
-            return incompleteObjectives
+            if not titleObjectives:
+                if manageQuestUi and keepQuestMenuOpen:
+                    self.toggleQuest()
+                return None
+            return self.recordQuestObjectives(questGiver, questTitle, titleObjectives,
+                [observedStatuses.get(objective, "unknown") for objective in titleObjectives])
 
         #quest title found, now find the objectives
         # record the detected quest title for external callers
@@ -970,25 +1007,16 @@ class QuestMixin:
         completedObjectives = []
         incompleteObjectives = []
         objectivePanels = detectObjectivePanels(screen)
+        observedStatuses = ["unknown"] * len(objectives)
 
-        def getPanelStatusFromRegion(y1, y2):
-            y1 = max(0, min(int(y1), screen.shape[0]))
-            y2 = max(y1, min(int(y2), screen.shape[0]))
-            if y2 <= y1:
-                return None
-
-            region = screen[y1:y2, :]
-            rows = region[:, :, :3].astype(np.int16)
-            if rows.size == 0:
-                return None
-            if regionHasIncompleteRed(region):
-                return "incomplete"
-            blue, green, red = rows[:, :, 0], rows[:, :, 1], rows[:, :, 2]
-            greenMask = (green > 120) & (green > red + 20) & (green > blue + 20)
-            greenScore = float(np.mean(greenMask))
-            if greenScore > 0.25:
-                return "complete"
-            return None
+        def observeRow(index, text, status, fullRow=True):
+            if not fullRow:
+                return
+            matches = [row for row, action in enumerate(objectives) if objective_matches_text(action, text)]
+            if len(matches) == 1:
+                observedStatuses[matches[0]] = status
+            elif len(objectivePanels) == len(objectives):
+                observedStatuses[index] = status
 
         if objectivePanels:
             for i, panel in enumerate(objectivePanels[:len(objectives)]):
@@ -997,6 +1025,7 @@ class QuestMixin:
                 textChunk = []
                 for line in ocr.ocrRead(textImg):
                     textChunk.append(self.convertCyrillic(line[1][0].strip().lower()))
+                completionText = ' '.join(textChunk)
                 textChunk = ''.join(textChunk)
                 if logDetection:
                     print(textChunk)
@@ -1017,11 +1046,12 @@ class QuestMixin:
                         objectiveData[1] = str(min(int(amount), 50))
                         objectives[i] = "_".join(objectiveData)
 
-                if "complete" in textChunk:
+                if re.search(r"\bcomplete(?:d)?\b", completionText, re.IGNORECASE):
                     panel["status"] = "complete"
                 if objectiveTextShowsIncompleteProgress(textChunk):
                     panel["status"] = "incomplete"
 
+                observeRow(i, completionText, panel["status"], y + h < screen.shape[0])
                 if panel["status"] == "complete":
                     completedObjectives.append(objectives[i])
                     color = (0, 255, 0)
@@ -1033,30 +1063,6 @@ class QuestMixin:
                 cv2.rectangle(screenOriginal, (x, drawY), (x+w, drawY+h), color, 2)
                 cv2.putText(screenOriginal, objectives[i], (x, max(0, drawY-10)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
 
-            # If the bottom row is clipped or visually missed, still preserve the
-            # known quest objective instead of dropping it from the task list.
-            for missingIndex, missingObjective in enumerate(objectives[len(objectivePanels):], start=len(objectivePanels)):
-                if missingObjective not in completedObjectives and missingObjective not in incompleteObjectives:
-                    if missingIndex < len(objectiveTextChunks) and "complete" in objectiveTextChunks[missingIndex]:
-                        completedObjectives.append(missingObjective)
-                    else:
-                        status = None
-                        if objectivePanels:
-                            panelHeights = [panel["bbox"][3] for panel in objectivePanels]
-                            estimatedHeight = int(np.median(panelHeights))
-                            if len(objectivePanels) >= 2:
-                                panelStarts = [panel["bbox"][1] for panel in objectivePanels]
-                                estimatedSpacing = int(np.median(np.diff(panelStarts)))
-                                estimatedY = objectivePanels[-1]["bbox"][1] + estimatedSpacing * (missingIndex - len(objectivePanels) + 1)
-                            else:
-                                estimatedGap = max(8, int(14*self.robloxWindow.multi))
-                                estimatedY = objectivePanels[-1]["bbox"][1] + objectivePanels[-1]["bbox"][3] + estimatedGap
-                            status = getPanelStatusFromRegion(estimatedY, estimatedY + estimatedHeight)
-
-                        if status == "complete":
-                            completedObjectives.append(missingObjective)
-                        else:
-                            incompleteObjectives.append(missingObjective)
         else:
             i = 0
             for _, contour in indexedContours:
@@ -1070,6 +1076,7 @@ class QuestMixin:
                 textChunk = []
                 for line in ocr.ocrRead(textImg):
                     textChunk.append(self.convertCyrillic(line[1][0].strip().lower()))
+                completionText = ' '.join(textChunk)
                 textChunk = ''.join(textChunk)
                 if logDetection:
                     print(textChunk)
@@ -1093,10 +1100,12 @@ class QuestMixin:
                         objectiveData[1] = str(min(int(amount), 50))
                         objectives[i] = "_".join(objectiveData)
 
-                if "complete" in textChunk:
+                if not objectiveTextShowsIncompleteProgress(textChunk) and re.search(r"\bcomplete(?:d)?\b", completionText, re.IGNORECASE):
+                    observeRow(i, completionText, "complete", y + h < screen.shape[0])
                     completedObjectives.append(objectives[i])
                     color = (0, 255, 0)  #green
                 elif objectiveTextShowsIncompleteProgress(textChunk):
+                    observeRow(i, completionText, "incomplete")
                     incompleteObjectives.append(objectives[i])
                     color = (0, 0, 255)  #red
                 else:
@@ -1115,10 +1124,9 @@ class QuestMixin:
                 if i == len(objectives):
                     break
 
-        for objective in objectives:
-            if objective not in completedObjectives and objective not in incompleteObjectives:
-                incompleteObjectives.append(objective)
-        
+        completedObjectives = [action for action, status in zip(objectives, observedStatuses) if status == "complete"]
+        incompleteObjectives = [action for action, status in zip(objectives, observedStatuses) if status != "complete"]
+
         questImgPath = "latest-quest.png"
         if logDetection:
             cv2.imwrite(questImgPath, screenOriginal)
@@ -1132,7 +1140,7 @@ class QuestMixin:
         if manageQuestUi and not keepQuestMenuOpen:
             self.toggleQuest()
             self.moveMouseToDefault()
-        return incompleteObjectives
+        return self.recordQuestObjectives(questGiver, questTitle, objectives, observedStatuses)
 
     def goToQuestGiver(self, questGiver, reason):
         for _ in range(3):

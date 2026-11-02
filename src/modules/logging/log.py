@@ -36,6 +36,7 @@ PING_CATEGORY_ROUTES = {
     "ping_guiding_star": "activities",
     "ping_unusual_sprouts": "activities",
     "ping_windy_bee": "activities",
+    "ping_gummyball": "activities",
 }
 
 ALLOWED_PING_KEYS = {
@@ -45,6 +46,7 @@ ALLOWED_PING_KEYS = {
     "ping_hourly_reports",
     "ping_unusual_sprouts",
     "ping_windy_bee",
+    "ping_gummyball",
 }
 
 ROUTE_FALLBACKS = {
