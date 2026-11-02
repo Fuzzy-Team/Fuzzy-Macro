@@ -75,7 +75,7 @@ class MobMixin:
         return True
 
     def viciousSearchRoute(self):
-        # Shipped BSSAI settings.ini: ingame_camera_sens=1, keydelay=20.
+        # Camera sensitivity and key-delay defaults for the Vicious route.
         self.setdat.setdefault("vicious_camera_sensitivity", 1)
         self.setdat.setdefault("vicious_key_delay_ms", 20)
         def search(field, approach):
@@ -95,7 +95,7 @@ class MobMixin:
             return result
         if not self.Vichop_Pepper_to_Mountaintop():
             return False
-        # Detect before rotating, as in BSSAI's TotalPath.
+        # Detect before rotating toward the next field.
         found = self.detectViciousBee()
         self.viciousRotate("right", 1)
         if found:
@@ -134,7 +134,7 @@ class MobMixin:
         return result or False
 
     def viciousRotate(self, direction, amount):
-        """BSSAI Rotate: discrete camera steps separated by 50 ms."""
+        """Rotate the camera in discrete steps separated by 50 ms."""
         key = {"left": ",", "right": ".", "up": "pageup", "down": "pagedown"}[direction]
         for _ in range(amount):
             self.keyboard.press(key)
@@ -153,7 +153,7 @@ class MobMixin:
         self.viciousJump()
 
     def viciousRotateCamera(self, direction, amount, sensitivity):
-        """BSSAI mouse camera rotation. Pass the actual in-game sensitivity."""
+        """Rotate the mouse camera using the actual in-game sensitivity."""
         import math
         if sensitivity <= 0:
             raise ValueError("Camera sensitivity must be positive")
@@ -249,7 +249,7 @@ class MobMixin:
     def viciousNotification(self, name, frame=None):
         """Reference top-right bitmap search with per-channel tolerance 25.
 
-        The caller must expose the chat, as BSSAI does before these checks.
+        The caller must expose the chat before these checks.
         Frames are BGR or BGRA client captures at native resolution.
         """
         import cv2
@@ -265,7 +265,7 @@ class MobMixin:
         region = frame[:height // 2, width // 2:, :3]
         if vicious_bitmap_matches(region, name, 25):
             return True
-        # Roblox's current chat font differs from BSSAI's bitmap glyphs.
+        # Roblox's current chat font can differ from the bitmap glyphs.
         # Read the same announcement region when the source bitmap misses.
         from PIL import Image
         from modules.screen.ocr import ocrRead
@@ -296,16 +296,18 @@ class MobMixin:
         return self.viciousNotification("vicdead", frame)
 
     def detectViciousBee(self, frame=None):
-        """Run BSSAI vic.onnx on a BGRA frame, or capture the Roblox client."""
+        """Detect Vicious Bee in a BGRA frame, or capture the Roblox client."""
         import cv2
         import numpy as np
-        from pathlib import Path
+        from modules.misc.modelManager import MODEL_DIR, VICIOUS_MODEL, ensure_missing_models
         from modules.screen.screenshot import mssScreenshotNP
+        import os
 
         if not hasattr(self, "_viciousModel"):
-            self._viciousModel = cv2.dnn.readNetFromONNX(
-                str(Path(__file__).resolve().parents[2] / "models" / "bssai-vic.onnx")
-            )
+            result = ensure_missing_models((VICIOUS_MODEL,))
+            if result["failures"]:
+                raise RuntimeError(f"Could not download Vicious Bee model: {result['failures']}")
+            self._viciousModel = cv2.dnn.readNetFromONNX(os.path.join(MODEL_DIR, VICIOUS_MODEL))
         if frame is None:
             win = self.robloxWindow
             frame = mssScreenshotNP(win.mx, win.my, win.mw, win.mh)

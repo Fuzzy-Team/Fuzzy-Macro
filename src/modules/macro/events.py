@@ -159,7 +159,7 @@ class EventDetectionMixin:
         """Check the sky at spawn without resetting or claiming a hive."""
         win = self.robloxWindow
         self.ensure_shift_lock_off(reason="Vic Hop sky check")
-        # BSSAI's sky branch uses one PageDown and five zoom-out taps.
+        # Check the sky with one PageDown and five zoom-out taps.
         self.keyboard.press("pagedown")
         for _ in range(5):
             self.keyboard.press("o")
@@ -182,7 +182,7 @@ class EventDetectionMixin:
             time.sleep(0.025)
 
         win = self.robloxWindow
-        # BSSAI searches the central 400 client pixels for ground bitmaps.
+        # Search the central 400 client pixels for ground bitmaps.
         width = min(400, win.mw)
         screen = mssScreenshotNP(win.mx + win.mw // 2 - width // 2,
                                  win.my, width, win.mh)
