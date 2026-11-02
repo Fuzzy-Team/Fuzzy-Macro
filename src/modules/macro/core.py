@@ -448,7 +448,7 @@ class macro(
         if not benchmarkMSS():
             self.logger.webhook("", "MSS is too slow, switching to pillow", "dark brown")
         
-        if not self.hourlyReport.hourlyReportStats["start_time"] or not self.hourlyReport.hourlyReportStats["start_honey"]:
+        if not vicHop and (not self.hourlyReport.hourlyReportStats["start_time"] or not self.hourlyReport.hourlyReportStats["start_honey"]):
             self.hourlyReport.setSessionStats(self.getHoney(), time.time())
 
         if not vicHop:

@@ -81,6 +81,8 @@ class MobMixin:
         def search(field, approach):
             self.set_task_status("stinger_hunt", activity=field)
             self.viciousField = field.replace(" back", "").lower()
+            if self.setdat.get("macro_mode", "normal") != "vic" and self.viciousField not in self.vicFields:
+                return None
             if not self.detectViciousBee():
                 self.logger.webhook("Vic Hop", f"{field}: no Vicious Bee detected", "dark brown", "screen")
                 return None
@@ -96,7 +98,8 @@ class MobMixin:
         if not self.Vichop_Pepper_to_Mountaintop():
             return False
         # Detect before rotating toward the next field.
-        found = self.detectViciousBee()
+        enabled = self.setdat.get("macro_mode", "normal") == "vic" or "mountain top" in self.vicFields
+        found = enabled and self.detectViciousBee()
         self.viciousRotate("right", 1)
         if found:
             self.viciousField = "mountain top"
@@ -224,27 +227,34 @@ class MobMixin:
         self.viciousWalk("d", 9.2 * self.setdat["hive_number"] - 4)
 
     def viciousHiveToCannon(self):
-        self.viciousHiveToRamp()
-        self.viciousJump()
-        self.viciousWalk("d", 3)
-        self.viciousWalk("wd", 1.7)
-        win = self.robloxWindow
-        region = (win.mx + win.mw // 2 - 200, win.my, 400, 125)
-        for _ in range(10):
-            self.viciousWalk("d", 1.5)
-            if self.viciousBitmapPosition("redcannon", region, 2) is None:
-                continue
-            for correction in range(1, 11):
-                if correction == 10:
-                    break
-                sleep(0.5)
-                if self.viciousBitmapPosition("redcannon", region, 2) is not None:
-                    sleep(1)
-                    return True
-                self.viciousWalk("a", 1.5)
-        if not self.reset():
-            return False
-        return self.viciousHiveToCannon()
+        try:
+            attempts = max(1, int(self.setdat.get("max_cannon_attempts", 3)))
+        except (TypeError, ValueError):
+            attempts = 3
+        for attempt in range(attempts):
+            if self.checkPauseAndWait():
+                return False
+            self.viciousHiveToRamp()
+            self.viciousJump()
+            self.viciousWalk("d", 3)
+            self.viciousWalk("wd", 1.7)
+            win = self.robloxWindow
+            region = (win.mx + win.mw // 2 - 200, win.my, 400, 125)
+            for _ in range(10):
+                self.viciousWalk("d", 1.5)
+                if self.viciousBitmapPosition("redcannon", region, 2) is None:
+                    continue
+                for correction in range(1, 11):
+                    if correction == 10:
+                        break
+                    sleep(0.5)
+                    if self.viciousBitmapPosition("redcannon", region, 2) is not None:
+                        sleep(1)
+                        return True
+                    self.viciousWalk("a", 1.5)
+            if attempt + 1 < attempts and not self.reset(convert=False):
+                return False
+        return False
 
     def viciousNotification(self, name, frame=None):
         """Reference top-right bitmap search with per-channel tolerance 25.
@@ -338,6 +348,11 @@ class MobMixin:
                 continue
             if self.checkPauseAndWait():
                 return
+            stats = self.hourlyReport.hourlyReportStats
+            if not stats["start_time"] or not stats["start_honey"]:
+                honey = self.getHoney()
+                if honey > 0:
+                    self.hourlyReport.setSessionStats(honey, time.time())
             searchAndKill()
 
     def Vichop_Hive_to_Pepper(self):
