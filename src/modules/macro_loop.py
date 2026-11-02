@@ -3,6 +3,7 @@ import json
 import time
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
+from modules.quest_planning import quest_giver_order, choose_quest_gather, is_gather_objective, allowed_fields, quest_uses_ant_challenge
 from modules.controls.sleep import (
     InterruptRequested,
     INTERRUPT_NONE,
@@ -90,6 +91,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 regularMobData[x] = [k]
     #Limit werewolf to just pumpkin 
     regularMobData["werewolf"] = ["pumpkin"]
+    bossCooldowns = {"coconut_crab": 36*60*60, "king_beetle": 24*60*60,
+                     "tunnel_bear": 48*60*60, "stump_snail": 96*60*60}
     
     private_server_link = macro.setdat.get("private_server_link", "")
     # Accept share links — the rejoin deeplink handler now supports the newer share link format.
@@ -98,12 +101,13 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
     questCache = {}
     questScanScreens = None
     macro.questGatherInterruptMobs = {}
-    macro.questGatherWatchers = {}
     macro.questTaskWatchers = {}
+    macro.deferredQuestObjectives = set()
     macro.completedQuestWatchTasks = set()
     macro.completedQuestWatchObjectives = set()
     
     macro.start()
+    lastIdleClick = time.time()
     #macro.useItemInInventory("blueclayplanter")
 
     def emptyAutoPlanterSlot():
@@ -200,6 +204,17 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             macro.clear_task_status()
             taskCompleted = True
             if action == INTERRUPT_SKIP:
+                if func == macro.gather and len(args) > 2 and args[2]:
+                    macro.questGatherOutcome = "skipped"
+                    macro.deferredQuestObjectives.add(args[2]["id"])
+                else:
+                    for giver, watchedAction in macro.questTaskWatchers.get(watchedTaskKey(), []):
+                        objective = next((row for row in (macro.questObservations.get(giver) or [])
+                                          if row["action"] == watchedAction and row["status"] != "complete"
+                                          and row["id"] not in macro.deferredQuestObjectives), None)
+                        if objective:
+                            macro.deferredQuestObjectives.add(objective["id"])
+                            break
                 macro.logger.webhook("Task Skipped", f"Skipped: {interrupted_status}", "orange")
             elif action == INTERRUPT_RESET:
                 macro.logger.webhook("Task Reset", f"Resetting and retrying: {interrupted_status}", "orange")
@@ -239,6 +254,12 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         taskWatchKey = watchedTaskKey()
         if taskWatchKey and taskWatchKey in macro.completedQuestWatchTasks:
             return None
+        watchers = macro.questTaskWatchers.get(taskWatchKey, [])
+        if watchers:
+            watchedRows = [row for giver, action in watchers for row in (macro.questObservations.get(giver) or [])
+                           if row["action"] == action and row["status"] != "complete"]
+            if watchedRows and all(row["id"] in macro.deferredQuestObjectives for row in watchedRows):
+                return None
 
         try:
             if taskWatchKey:
@@ -269,21 +290,26 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 and macro.confirmNight()
             ):
                 macro.stingerHunt()
+                taskCompleted = True
             if (
                 macro.setdat.get("macro_mode", "normal") not in ("quest", "alt")
                 and macro.setdat["mondo_buff"]
                 and macro.hasMondoRespawned()
             ):
                 macro.collectMondoBuff()
+                taskCompleted = True
             if macro.setdat.get("macro_mode", "normal") != "alt" and macro.hasScheduledRejoinArrived():
                 macro.rejoin("Rejoining (Scheduled)")
                 macro.saveTiming("rejoin_every")
+                taskCompleted = True
             
             #auto field boost (can be disabled per-call via allowAFB)
             if allowAFB and macro.setdat["Auto_Field_Boost"] and not macro.AFBLIMIT:
                 if macro.hasAFBRespawned("AFB_dice_cd", macro.setdat["AFB_rebuff"]*60) or macro.hasAFBRespawned("AFB_glitter_cd", macro.setdat["AFB_rebuff"]*60-30):
                     macro.AFB(gatherInterrupt=False)
+                    taskCompleted = True
         except InterruptRequested as interrupt:
+            skipTask.value = INTERRUPT_NONE
             if questWatchContext:
                 macro.finishQuestTaskWatch(questWatchContext, checkCompletion=False)
                 questWatchContext = None
@@ -320,202 +346,67 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
 
     def handleQuest(questGiver, executeQuest=True):
         nonlocal questCache, questScanScreens, taskCompleted
-        
-        
-        
-        gatherFieldsList = []
-        gumdropGatherFieldsList = []
-        petalGatherFieldsList = []
-        requireRedField = False
-        requireBlueField = False
-        requireField = False
-        requireBlueGumdropField = False
-        requireRedGumdropField = False
-        feedBees = []
-        setdatEnable = []
-
-        def registerGatherWatcher(field, objective):
-            """Remember which quest objective a field gather is intended to advance."""
-            normalizedField = str(field).replace("_", " ").strip().lower()
-            watcher = (questGiver, objective)
-            watchers = macro.questGatherWatchers.setdefault(normalizedField, [])
-            if watcher not in watchers:
-                watchers.append(watcher)
-
-        def registerTaskWatcher(task, objective):
-            normalizedTask = str(task).replace("-", "_").replace(" ", "_").strip().lower()
-            watcher = (questGiver, objective)
-            watchers = macro.questTaskWatchers.setdefault(normalizedTask, [])
-            if watcher not in watchers:
-                watchers.append(watcher)
-
-        def emptyQuestResult():
-            return setdatEnable, gatherFieldsList, gumdropGatherFieldsList, petalGatherFieldsList, requireRedField, requireBlueField, feedBees, requireRedGumdropField, requireBlueGumdropField, requireField
-
-        def shouldIgnoreDetectedPetalQuest():
-            if not macro.setdat.get("ignore_petal_quests", False):
-                return False
-            title = ((getattr(macro, "_last_quest_title", {}) or {}).get(questGiver, "") or "").strip()
-            if title.lower() not in HARDCODED_PETAL_IGNORE_TITLES:
-                return False
-            try:
-                macro.logger.webhook("Skipping ignored petal quest", f"Quest: {title}", "orange")
-            except Exception:
-                pass
-            return True
-
-        # Refresh quest detection only when cache is stale to avoid duplicate scans in one cycle
-        cacheFresh = questGiver in questCache and not taskCompleted
-        if cacheFresh and questCache[questGiver] is not None:
-            questObjective = questCache[questGiver]
+        cached = questGiver in questCache and questCache[questGiver] is not None and not taskCompleted
+        if cached:
+            objectives = questCache[questGiver]
+        elif not executeQuest:
+            if questScanScreens is None:
+                questScanScreens = macro.captureQuestScreenshots()
+            objectives = macro.findQuest(questGiver, questScreens=questScanScreens)
         else:
-            if not executeQuest:
-                if questScanScreens is None:
-                    questScanScreens = macro.captureQuestScreenshots()
-                questObjective = macro.findQuest(questGiver, questScreens=questScanScreens)
-            else:
-                questObjective = macro.findQuest(questGiver)
-            questCache[questGiver] = questObjective
-            if not executeQuest:
-                taskCompleted = False
-
-        if shouldIgnoreDetectedPetalQuest():
-            return emptyQuestResult()
-
-        # Only submit/get quests if executeQuest is True (when quest appears in priority queue)
-        if executeQuest:
-            if questObjective is None:  # Quest does not exist -> try to claim a new quest
-                if not canClaimTimedBearQuest(questGiver):
-                    return emptyQuestResult()
-                questObjective = macro.getNewQuest(questGiver, False)
-                # Clear cached entry for this quest giver so subsequent checks re-read the UI
-                if questGiver in questCache:
-                    del questCache[questGiver]
-            elif not len(questObjective):  # No incomplete objectives reported -> submit and get a new quest
-                questObjective = macro.getNewQuest(questGiver, True)
+            objectives = macro.findQuest(questGiver)
+        questCache[questGiver] = objectives
+        title = (getattr(macro, "_last_quest_title", {}) or {}).get(questGiver, "")
+        if macro.setdat.get("ignore_petal_quests", False) and title in HARDCODED_PETAL_IGNORE_TITLES:
+            macro.questObservations[questGiver] = None
+            return [], []
+        if executeQuest and (objectives is None or not objectives) and canClaimTimedBearQuest(questGiver):
+            submitting = objectives == []
+            taskCompleted = True
+            objectives = macro.getNewQuest(questGiver, submitting)
+            if submitting:
                 macro.hourlyReport.addHourlyStat("quests_completed", 1)
-                # Clear cached entry for this quest giver so we don't reuse stale data
-                if questGiver in questCache:
-                    del questCache[questGiver]
-        else:
-            # If not executing, use cached quest or return empty if no quest exists or is completed
-            if questObjective is None or not len(questObjective):
-                # No quest found or quest completed - we're not executing, so we can't determine requirements
-                # Return empty requirements (will be determined when quest executes in priority order)
-                return emptyQuestResult()
-
-        if questObjective is None: #still not able to find quest
-            return emptyQuestResult()
-
-        for obj in questObjective:
-            objData = obj.split("_")
-            if objData[0] == "gather":
-                field_name = "_".join(objData[1:]).replace("_", " ").strip()
-                if field_name:
-                    gatherFieldsList.append(field_name)
-                    registerGatherWatcher(field_name, obj)
-            elif objData[0] == "gathergoo":
-                field_name = "_".join(objData[1:]).replace("_", " ").strip()
-                if macro.setdat["quest_use_gumdrops"]:
-                    if field_name:
-                        gumdropGatherFieldsList.append(field_name)
-                        registerGatherWatcher(field_name, obj)
+            questCache.pop(questGiver, None)
+            macro.completedQuestWatchTasks.clear()
+            macro.completedQuestWatchObjectives.clear()
+        requiredTasks, feeds = [], []
+        macro.questGatherInterruptMobs.pop(questGiver, None)
+        for task, watchers in macro.questTaskWatchers.items():
+            macro.questTaskWatchers[task] = [watcher for watcher in watchers if watcher[0] != questGiver]
+        for objective in objectives or []:
+            kind, _, target = objective.partition("_")
+            tasks = []
+            if kind == "kill":
+                mob = target.split("_", 1)[1] if target.split("_", 1)[0].isdigit() else target
+                if "ant" in mob and mob != "mantis":
+                    tasks = ["ant_challenge", "ant_pass_dispenser"]
                 else:
-                    if field_name:
-                        gatherFieldsList.append(field_name)
-                        registerGatherWatcher(field_name, obj)
-            elif objData[0] == "gatherpetal":
-                field_name = "_".join(objData[1:]).replace("_", " ").strip()
-                if field_name:
-                    petalGatherFieldsList.append(field_name)
-                    registerGatherWatcher(field_name, obj)
-            elif objData[0] == "kill":
-                # kill objectives can be in the form "kill_<num>_<mob>" or "kill_<mob>"
-                # determine the mob name robustly
-                if len(objData) >= 3 and objData[1].isdigit():
-                    mob_name = "_".join(objData[2:])
-                elif len(objData) >= 2:
-                    mob_name = "_".join(objData[1:])
-                else:
-                    continue
-
-                registerTaskWatcher(f"kill_{mob_name}", obj)
-
-                # ants are handled via the ant challenge flow
-                if "ant" in mob_name and mob_name != "mantis":
-                    registerTaskWatcher("ant_challenge", obj)
-                    registerTaskWatcher("collect_ant_pass_dispenser", obj)
-                    if "ant_challenge" not in setdatEnable:
-                        setdatEnable.append("ant_challenge")
-                    if "ant_pass_dispenser" not in setdatEnable:
-                        setdatEnable.append("ant_pass_dispenser")
-                else:
-                    # enable the mob setting (e.g. "rhinobeetle", "werewolf", etc.)
-                    if mob_name not in setdatEnable:
-                        setdatEnable.append(mob_name)
-                    if mob_name in regularMobData:
-                        macro.questGatherInterruptMobs.setdefault(questGiver, set()).add(mob_name)
-            elif objData[0] == "token" and len(objData) > 1 and objData[1] == "honey":
-                if "honeytoken" not in setdatEnable:
-                    setdatEnable.append("honeytoken")
-                registerGatherWatcher("__any__", obj)
-            elif objData[0] == "token":
-                if questGiver == "riley bee":
-                    requireRedField = True
-                    registerGatherWatcher("__red__", obj)
-                elif questGiver == "bucko bee":
-                    requireBlueField = True
-                    registerGatherWatcher("__blue__", obj)
-                else:
-                    requireField = True
-                    registerGatherWatcher("__any__", obj)
-
-            elif objData[0] == "fieldtoken" and objData[1] == "blueberry":
-                requireBlueField = True
-                registerGatherWatcher("__blue__", obj)
-            elif objData[0] == "fieldtoken" and objData[1] == "strawberry":
-                requireRedField = True
-                registerGatherWatcher("__red__", obj)
-            elif objData[0] == "feed":
-                if objData[1] == "*":
-                    amount = 25
-                else:
-                    amount = int(objData[1])
-                feedBees.append((objData[2], amount))
-                registerTaskWatcher(f"feed_{objData[2]}", obj)
-            elif objData[0] == "pollen" and objData[1] == "blue":
-                requireBlueField = True
-                registerGatherWatcher("__blue__", obj)
-            elif objData[0] == "pollen" and objData[1] == "red":
-                requireRedField = True
-                registerGatherWatcher("__red__", obj)
-            elif objData[0] == "pollen" and objData[1] == "white":
-                requireField = True
-                registerGatherWatcher("__any__", obj)
-            elif objData[0] == "pollengoo" and objData[1] == "blue":
-                if macro.setdat["quest_use_gumdrops"]:
-                    requireBlueGumdropField = True
-                else:
-                    requireBlueField = True
-                registerGatherWatcher("__blue__", obj)
-            elif objData[0] == "pollengoo" and objData[1] == "red":
-                if macro.setdat["quest_use_gumdrops"]:
-                    requireRedGumdropField = True
-                else:
-                    requireRedField = True
-                registerGatherWatcher("__red__", obj)
-            elif objData[0] == "pollengoo" and objData[1] == "white":
-                if macro.setdat["quest_use_gumdrops"]:
-                    requireBlueGumdropField = True
-                else:
-                    requireField = True
-                registerGatherWatcher("__any__", obj)
-            elif objData[0] == "collect":
-                collectTask = objData[1].replace("-", "_")
-                setdatEnable.append(collectTask)
-                registerTaskWatcher(f"collect_{collectTask}", obj)
-
-        return setdatEnable, gatherFieldsList, gumdropGatherFieldsList, petalGatherFieldsList, requireRedField, requireBlueField, feedBees, requireRedGumdropField, requireBlueGumdropField, requireField
+                    tasks = [mob]
+                    if mob in regularMobData:
+                        macro.questGatherInterruptMobs.setdefault(questGiver, set()).add(mob)
+                watchTask = "kill_" + mob
+            elif kind == "collect":
+                tasks = [target.replace("-", "_")]
+                watchTask = "collect_" + tasks[0]
+            elif kind == "feed":
+                amount, item = target.split("_", 1)
+                feeds.append((item, 25 if amount == "*" else int(amount)))
+                watchTask = "feed_" + item
+            elif quest_uses_ant_challenge(objective, macro.setdat):
+                tasks = ["ant_challenge", "ant_pass_dispenser"]
+                watchTask = objective
+            elif kind == "token" and target == "honey":
+                tasks = ["honeytoken"]
+                watchTask = None
+            else:
+                continue
+            requiredTasks.extend(tasks)
+            if watchTask:
+                macro.questTaskWatchers.setdefault(watchTask, []).append((questGiver, objective))
+            if "ant_challenge" in tasks:
+                for task in ("ant_challenge", "collect_ant_pass_dispenser"):
+                    macro.questTaskWatchers.setdefault(task, []).append((questGiver, objective))
+        return list(dict.fromkeys(requiredTasks)), feeds
 
     def runQuestSupportTasks(requiredTasks):
         """
@@ -580,22 +471,6 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 runTask(macro.killMob, args=(mob, field), convertAfter=False)
         return True
 
-    def bloomsAIQuestOverride(baseOverride=None):
-        override = dict(baseOverride or {})
-        override["shape"] = "blooms_ai"
-        override["start_location"] = "center"
-        override["shift_lock"] = False
-        return override
-
-    def questAIFieldCenterOverride(field, baseOverride=None):
-        override = dict(baseOverride or {})
-        normalized_field = field.replace("_", " ")
-        fieldSetting = {**macro.fieldSettings.get(normalized_field, {}), **override}
-        if fieldSetting.get("shape") in ("blooms_ai", "fuzzy_ai_gather"):
-            override["start_location"] = "center"
-            override["shift_lock"] = False
-        return override
-
     #macro.rejoin()
     def get_task_list_order(settings):
         task_list = settings.get("task_list", None)
@@ -606,32 +481,152 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             return task_queue
         return settings.get("task_priority_order", [])
 
-    def getQuestGatherOverrides(questName):
-        questKeyPrefix = questName.replace(" ", "_")
-        questMinsKey = f"{questKeyPrefix}_quest_gather_mins"
-        questReturnKey = f"{questKeyPrefix}_quest_gather_return"
+    def gatherObjectives():
+        return [objective for giver in quest_giver_order(macro.setdat)
+                for objective in (getattr(macro, "questObservations", {}).get(giver) or [])
+                if is_gather_objective(objective, macro.setdat) and objective["status"] != "complete"
+                and objective["id"] not in macro.deferredQuestObjectives]
 
-        overrides = {}
-        mins = macro.setdat.get(questMinsKey, macro.setdat.get("quest_gather_mins", 0))
-        returnToHive = macro.setdat.get(questReturnKey, macro.setdat.get("quest_gather_return", "no override"))
+    def runQuestGathers():
+        nonlocal questScanScreens, taskCompleted
+        if not gatherObjectives():
+            return []
+        attempted = set()
+        gathered = []
+        currentField = None
+        # Support tasks and quest claims may have changed progress since the first scan.
+        questCache.clear()
+        questScanScreens = None
+        taskCompleted = False
+        def scanQuestProgress():
+            for giver in quest_giver_order(macro.setdat):
+                if canClaimTimedBearQuest(giver):
+                    handleQuest(giver, executeQuest=False)
 
-        if mins:
-            overrides["mins"] = mins
-        if returnToHive != "no override":
-            overrides["return"] = returnToHive
-        return overrides
+        runTask(scanQuestProgress, resetAfter=False, allowAFB=False)
+        while run.value != 0:
+            pending = [obj for obj in gatherObjectives() if obj["id"] not in attempted]
+            selected = choose_quest_gather(pending, macro.setdat, macro.fieldSettings, currentField)
+            if selected is None:
+                break
+            objective = selected["objective"]
+            field = selected["field"]
+            beforeGather = {giver: list(rows or []) for giver, rows in macro.questObservations.items()}
+            macro.questGatherOutcome = None
+            macro.logger.webhook("Quest gathering",
+                f"{objective['giver'].title()}: {objective['action'].replace('_', ' ')} in {field.title()} "
+                f"with {selected['settings']['shape']} ({macro.setdat.get('quest_scheduling', 'quest giver priority')})",
+                "light blue", route_category="quests")
+            runTask(macro.gather, args=(field, selected["settings"], objective), resetAfter=False)
+            if run.value == 0:
+                break
+            currentField = field
+            if field not in gathered:
+                gathered.append(field)
+            if macro.questGatherOutcome in ("complete", "skipped", "unreadable"):
+                attempted.add(objective["id"])
+            else:
+                # A time/backpack limit finishes this shared attempt, never its objectives.
+                attempted.update(obj["id"] for obj in selected["objectives"])
+            affected = {obj["giver"] for obj in pending
+                        if field in allowed_fields(obj, macro.setdat, macro.fieldSettings)}
 
-    def getPetalQuestGatherOverrides(questName):
-        overrides = getQuestGatherOverrides(questName)
-        mins = macro.setdat.get("petal_quest_gather_mins", 0)
-        returnToHive = macro.setdat.get("petal_quest_gather_return", "no override")
+            def refreshQuestProgress():
+                screens = macro.captureQuestScreenshots()
+                for giver in affected:
+                    previous = macro.questObservations.get(giver) or beforeGather.get(giver, [])
+                    found = None
+                    try:
+                        found = macro.findQuest(giver, questScreens=screens, logDetection=False)
+                        if found is None:
+                            found = macro.findQuest(giver, logDetection=False)
+                    finally:
+                        if found is None:
+                            macro.questObservations[giver] = [{**obj, "status": "unknown"} for obj in previous]
+                            macro.logger.webhook("Quest progress unreadable",
+                                f"Could not refresh {giver.title()}. Remaining objectives will retry before gathering.",
+                                "orange", route_category="quests")
 
-        if mins:
-            overrides["mins"] = mins
-        if returnToHive != "no override":
-            overrides["return"] = returnToHive
-        return overrides
-    
+            if affected:
+                runTask(refreshQuestProgress, resetAfter=False, allowAFB=False)
+            questCache.clear()
+            questScanScreens = None
+        return gathered
+
+    def cooldownTaskReady():
+        profile = settingsManager.loadMacroProfile()
+        if (profile["profile"] != macro._loadedProfile["profile"]
+                or profile["settings"] != macro._loadedProfile["settings"]
+                or profile["fields"] != macro._loadedProfile["fields"]):
+            return True
+        if macro.hasScheduledRejoinArrived():
+            return True
+        mode = macro.setdat.get("macro_mode", "normal")
+        if mode not in ("quest", "alt") and macro.setdat.get("mondo_buff", False) and macro.hasMondoRespawned():
+            return True
+        if mode != "bug" and any(giver not in questCache and canClaimTimedBearQuest(giver)
+                                 for giver in quest_giver_order(macro.setdat)):
+            return True
+        tasks = macro.questTaskWatchers if mode == "quest" else get_task_list_order(macro.setdat)
+        for task in tasks:
+            if task.startswith("kill_"):
+                mob = task[5:]
+                if not macro.setdat.get(mob, False):
+                    continue
+                if mob in regularMobData:
+                    if any(macro.hasMobRespawned(mob, field) for field in regularMobData[mob]):
+                        return True
+                elif mob in bossCooldowns and macro.hasRespawned(mob, bossCooldowns[mob], applyMobRespawnBonus=True):
+                    return True
+            elif task.startswith("collect_") and mode != "bug":
+                item = task[8:]
+                if not macro.setdat.get(item, False):
+                    continue
+                if item == "sticker_stack":
+                    if macro.hasStickerStackRespawned():
+                        return True
+                elif item in macro.collectCooldowns and macro.hasRespawned(item, macro.collectCooldowns[item]):
+                    if item in macroModule.fieldBoosterData and not macro.hasRespawned("last_booster", macro.setdat["boost_seperate"]*60):
+                        continue
+                    if item != "wreath" or isBackpackReadyForWreath():
+                        return True
+            elif task == "blender" and mode == "normal" and macro.setdat.get("blender_enable", False):
+                blender = ast.literal_eval(settingsManager.loadUserText("blender.txt"))
+                if blender["collectTime"] != -1 and time.time() > blender["collectTime"]:
+                    return True
+            elif task == "planters" and mode == "normal" and macro.setdat.get("planters_mode", 0):
+                if macro.setdat["planters_mode"] == 1:
+                    planters = settingsManager.loadUserLiteral("manualplanters.txt") or {"planters": [], "harvestTimes": []}
+                    if any(planter and time.time() > harvest for planter, harvest
+                           in zip(planters["planters"], planters["harvestTimes"])):
+                        return True
+                else:
+                    planters = settingsManager.loadUserJson("auto_planters.json")["planters"]
+                    if any(planter["planter"] and time.time() > planter["harvest_time"] for planter in planters):
+                        return True
+        return False
+
+    def waitForReadyTask():
+        nonlocal lastIdleClick
+        if taskCompleted or run.value == 0:
+            lastIdleClick = time.time()
+            return
+        field = macro.setdat.get("cooldown_field", "none")
+        if field in macro.fieldSettings:
+            macro.logger.webhook("Cooldown gathering", f"Waiting for tasks in {field.title()}.", "light blue", route_category="gathering")
+            runTask(macro.gather, args=(field, {"infinite_gather": False, "plant_sprout": False}, None, cooldownTaskReady),
+                    resetAfter=False, allowAFB=False)
+            lastIdleClick = time.time()
+            return
+        if macro.location != "spawn":
+            runTask(macro.reset, resetAfter=False, allowAFB=False)
+        macro.set_task_status("waiting_for_task", activity="Waiting for next task")
+        # Keep Roblox active during long cooldowns without reopening the quest menu.
+        if time.time() - lastIdleClick >= 60:
+            mouse.click()
+            lastIdleClick = time.time()
+        time.sleep(1)
+
     while True:
         # Check for pause - wait while paused
         while run.value == 6:  # 6 = paused
@@ -640,18 +635,18 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         if run.value == 0:
             break  # Exit macro loop if stop requested
 
-        # Quest scans should be cached only within a single outer loop pass.
-        # Clearing here guarantees the board is re-read after the task list recycles.
-        questCache.clear()
+        # Idle passes reuse the board until work or a settings change can affect it.
+        settingsChanged = macro.checkAndReloadSettings()
+        if taskCompleted or settingsChanged:
+            questCache.clear()
+            macro.questObservations = {}
         questScanScreens = None
+        taskCompleted = False
         macro.questGatherInterruptMobs.clear()
-        macro.questGatherWatchers.clear()
         macro.questTaskWatchers.clear()
         macro.completedQuestWatchTasks.clear()
         macro.completedQuestWatchObjectives.clear()
-        
-        # Reload settings and fields from one profile snapshot.
-        macro.checkAndReloadSettings()
+        macro.deferredQuestObjectives.clear()
 
         # Migration from old boolean flags to macro_mode is now handled in settings loader
 
@@ -715,194 +710,18 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             # Skip to next iteration
             continue
 
-        # Check if quest-only mode is enabled
         if macro.setdat.get("macro_mode", "normal") == "quest":
-            # Quest-only mode: skip all tasks except quest-related tasks
-            # Initialize quest-related variables
-            questGatherFields = []
-            questGumdropGatherFields = []
-            questPetalGatherFields = []
-            questGatherFieldOverrides = {}
-            questGumdropFieldOverrides = {}
-            questPetalGatherFieldOverrides = {}
-            redFieldNeeded = False
-            blueFieldNeeded = False
-            fieldNeeded = False
-            itemsToFeedBees = []
-            redGumdropFieldNeeded = False
-            blueGumdropFieldNeeded = False
-            redFieldOverride = {}
-            blueFieldOverride = {}
-            redGumdropFieldOverride = {}
-            blueGumdropFieldOverride = {}
-            defaultQuestFieldOverride = {}
-
-            # Get priority order and filter to only include quest tasks
-            priorityOrder = get_task_list_order(macro.setdat)
-            executedTasks = set()
-
-            # Filter priority order to only include quest tasks
-            questOnlyTasks = []
-            for taskId in priorityOrder:
-                if taskId.startswith("quest_"):
-                    questOnlyTasks.append(taskId)
-
-            # If no quest tasks are in priority order, add all enabled quests
-            if not questOnlyTasks:
-                questMappings = [
-                    ("polar bear", "polar_bear_quest"),
-                    ("brown bear", "brown_bear_quest"),
-                    ("black bear", "black_bear_quest"),
-                    ("honey bee", "honey_bee_quest"),
-                    ("bucko bee", "bucko_bee_quest"),
-                    ("riley bee", "riley_bee_quest")
-                ]
-                for questName, questKey in questMappings:
-                    if macro.setdat.get(questKey):
-                        questOnlyTasks.append(f"quest_{questName.replace(' ', '_')}")
-
-            # Execute quest tasks in priority order
-            for taskId in questOnlyTasks:
-                if taskId.startswith("quest_"):
-                    questName = taskId.replace("quest_", "").replace("_", " ")
-                    questKey = f"{questName.replace(' ', '_')}_quest"
-                    if macro.setdat.get(questKey):
-                        # If this is a timed bear quest, skip checking while on cooldown
-                        if questName in ["brown bear", "black bear"]:
-                            if not canClaimTimedBearQuest(questName):
-                                executedTasks.add(taskId)
-                                continue
-
-                        # Handle quest feeding and gathering requirements
-                        questMappings = {
-                            "polar bear": "polar_bear_quest",
-                            "brown bear": "brown_bear_quest",
-                            "black bear": "black_bear_quest",
-                            "honey bee": "honey_bee_quest",
-                            "bucko bee": "bucko_bee_quest",
-                            "riley bee": "riley_bee_quest"
-                        }
-
-                        if questName in questMappings:
-                            enabledKey = questMappings[questName]
-                            if macro.setdat.get(enabledKey):
-                                # For timed bears, ensure we don't attempt to claim/check while on cooldown
-                                if questName in ["brown bear", "black bear"]:
-                                    if not canClaimTimedBearQuest(questName):
-                                        # still on cooldown; skip applying requirements this cycle
-                                        pass
-                                    else:
-                                        setdatEnable, gatherFields, gumdropFields, petalGatherFields, needsRed, needsBlue, feedBees, needsRedGumdrop, needsBlueGumdrop, needsField = handleQuest(questName)
-                                else:
-                                    setdatEnable, gatherFields, gumdropFields, petalGatherFields, needsRed, needsBlue, feedBees, needsRedGumdrop, needsBlueGumdrop, needsField = handleQuest(questName)
-                                questGatherOverrides = getQuestGatherOverrides(questName)
-                                petalQuestGatherOverrides = getPetalQuestGatherOverrides(questName)
-                                for k in setdatEnable:
-                                    macro.setdat[k] = True
-                                runQuestSupportTasks(setdatEnable)
-                                for field in gatherFields:
-                                    questGatherFields.append(field)
-                                    if field not in questGatherFieldOverrides:
-                                        questGatherFieldOverrides[field] = dict(questGatherOverrides)
-                                for field in gumdropFields:
-                                    questGumdropGatherFields.append(field)
-                                    if field not in questGumdropFieldOverrides:
-                                        questGumdropFieldOverrides[field] = dict(questGatherOverrides)
-                                for field in petalGatherFields:
-                                    questPetalGatherFields.append(field)
-                                    if field not in questPetalGatherFieldOverrides:
-                                        questPetalGatherFieldOverrides[field] = dict(petalQuestGatherOverrides)
-                                redFieldNeeded = redFieldNeeded or needsRed
-                                blueFieldNeeded = blueFieldNeeded or needsBlue
-                                itemsToFeedBees.extend(feedBees)
-                                redGumdropFieldNeeded = redGumdropFieldNeeded or needsRedGumdrop
-                                blueGumdropFieldNeeded = blueGumdropFieldNeeded or needsBlueGumdrop
-                                fieldNeeded = fieldNeeded or needsField
-                                if needsRed and not redFieldOverride:
-                                    redFieldOverride = dict(questGatherOverrides)
-                                if needsBlue and not blueFieldOverride:
-                                    blueFieldOverride = dict(questGatherOverrides)
-                                if needsRedGumdrop and not redGumdropFieldOverride:
-                                    redGumdropFieldOverride = dict(questGatherOverrides)
-                                if needsBlueGumdrop and not blueGumdropFieldOverride:
-                                    blueGumdropFieldOverride = dict(questGatherOverrides)
-                                if needsField and not defaultQuestFieldOverride:
-                                    defaultQuestFieldOverride = dict(questGatherOverrides)
-
-                        if taskId not in executedTasks:
-                            executedTasks.add(taskId)
-
-            # Feed bees for quests (done once per cycle)
-            for item, quantity in itemsToFeedBees:
-                runTask(macro.feedBee, args=(item, quantity), resetAfter=False)
-                taskCompleted = True
-
-            allGatheredFields = []
-
-            # Handle gumdrop gather fields first
-            if blueGumdropFieldNeeded:
-                blueFields = ["blue flower", "bamboo", "pine tree", "stump"]
-                for f in blueFields:
-                    if f in questGumdropGatherFields:
-                        break
-                else:
-                    questGumdropGatherFields.append("pine tree")
-                    questGumdropFieldOverrides["pine tree"] = dict(blueGumdropFieldOverride)
-
-            if redGumdropFieldNeeded:
-                redFields = ["mushroom", "strawberry", "rose", "pepper"]
-                for f in redFields:
-                    if f in questGumdropGatherFields:
-                        break
-                else:
-                    questGumdropGatherFields.append("rose")
-                    questGumdropFieldOverrides["rose"] = dict(redGumdropFieldOverride)
-
-            for field in questGumdropGatherFields:
-                if field not in allGatheredFields:
-                    runTask(macro.gather, args=(field, questAIFieldCenterOverride(field, questGumdropFieldOverrides.get(field, {})), True), resetAfter=False)
-                    allGatheredFields.append(field)
-
-            # Handle regular quest gather fields
-            questGatherFields = [x for x in questGatherFields if not (x in allGatheredFields)]
-            for field in questGatherFields:
-                runTask(macro.gather, args=(field, questAIFieldCenterOverride(field, questGatherFieldOverrides.get(field, {}))), resetAfter=False)
-                allGatheredFields.append(field)
-
-            questPetalGatherFields = [x for x in questPetalGatherFields if not (x in allGatheredFields)]
-            for field in questPetalGatherFields:
-                runTask(macro.gather, args=(field, bloomsAIQuestOverride(questPetalGatherFieldOverrides.get(field, {}))), resetAfter=False)
-                allGatheredFields.append(field)
-
-            # Handle required blue/red fields for quests
-            blueFields = ["blue flower", "bamboo", "pine tree", "stump"]
-            redFields = ["mushroom", "strawberry", "rose", "pepper"]
-
-            if blueFieldNeeded:
-                for f in blueFields:
-                    if f in allGatheredFields:
-                        break
-                else:
-                    field = "pine tree"
-                    allGatheredFields.append(field)
-                    runTask(macro.gather, args=(field, questAIFieldCenterOverride(field, blueFieldOverride)), resetAfter=False)
-
-            if redFieldNeeded:
-                for f in redFields:
-                    if f in allGatheredFields:
-                        break
-                else:
-                    field = "rose"
-                    allGatheredFields.append(field)
-                    runTask(macro.gather, args=(field, questAIFieldCenterOverride(field, redFieldOverride)), resetAfter=False)
-
-            if fieldNeeded and not allGatheredFields:
-                if defaultQuestFieldOverride:
-                    runTask(macro.gather, args=("pine tree", questAIFieldCenterOverride("pine tree", defaultQuestFieldOverride)), resetAfter=False)
-                else:
-                    runTask(macro.gather, args=("pine tree", questAIFieldCenterOverride("pine tree")), resetAfter=False)
-
-            # Skip to next iteration
+            for giver in quest_giver_order(macro.setdat):
+                if not canClaimTimedBearQuest(giver):
+                    continue
+                requiredTasks, feeds = handleQuest(giver)
+                for task in requiredTasks:
+                    macro.setdat[task] = True
+                runQuestSupportTasks(requiredTasks)
+                for item, quantity in feeds:
+                    runTask(macro.feedBee, args=(item, quantity), resetAfter=False)
+            runQuestGathers()
+            waitForReadyTask()
             continue
 
         # Check if bug-run-only mode is enabled
@@ -946,25 +765,25 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 mob = taskId.replace("kill_", "")
 
                 if mob == "coconut_crab":
-                    if macro.setdat["coconut_crab"] and macro.hasRespawned("coconut_crab", 36*60*60, applyMobRespawnBonus=True):
+                    if macro.setdat["coconut_crab"] and macro.hasRespawned(mob, bossCooldowns[mob], applyMobRespawnBonus=True):
                         runTask(macro.coconutCrab)
                         executedTasks.add(taskId)
                     continue
 
                 if mob == "king_beetle":
-                    if macro.setdat["king_beetle"] and macro.hasRespawned("king_beetle", 24*60*60, applyMobRespawnBonus=True):
+                    if macro.setdat["king_beetle"] and macro.hasRespawned(mob, bossCooldowns[mob], applyMobRespawnBonus=True):
                         runTask(macro.kingBeetle)
                         executedTasks.add(taskId)
                     continue
 
                 if mob == "tunnel_bear":
-                    if macro.setdat["tunnel_bear"] and macro.hasRespawned("tunnel_bear", 48*60*60, applyMobRespawnBonus=True):
+                    if macro.setdat["tunnel_bear"] and macro.hasRespawned(mob, bossCooldowns[mob], applyMobRespawnBonus=True):
                         runTask(macro.tunnelBear)
                         executedTasks.add(taskId)
                     continue
 
                 if mob == "stump_snail":
-                    if macro.setdat["stump_snail"] and macro.hasRespawned("stump_snail", 96*60*60, applyMobRespawnBonus=True):
+                    if macro.setdat["stump_snail"] and macro.hasRespawned(mob, bossCooldowns[mob], applyMobRespawnBonus=True):
                         runTask(macro.stumpSnail)
                         executedTasks.add(taskId)
                     continue
@@ -978,98 +797,17 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                     if killedInAnyField:
                         executedTasks.add(taskId)
 
+            waitForReadyTask()
             # Skip to next iteration
             continue
 
-        # Check quest requirements for ALL enabled quests (needed for quest-related gathering fields)
-        # But only feed bees for quests that appear in priority queue order
-        questGatherFields = []
-        questGumdropGatherFields = []
-        questPetalGatherFields = []
-        questGatherFieldOverrides = {}
-        questGumdropFieldOverrides = {}
-        questPetalGatherFieldOverrides = {}
-        redFieldNeeded = False
-        blueFieldNeeded = False
-        fieldNeeded = False
-        itemsToFeedBees = []
-        redGumdropFieldNeeded = False
-        blueGumdropFieldNeeded = False
-        redFieldOverride = {}
-        blueFieldOverride = {}
-        redGumdropFieldOverride = {}
-        blueGumdropFieldOverride = {}
-        defaultQuestFieldOverride = {}
-        
-        # Track which quests have been executed in priority order (for feeding bees)
-        executedQuests = set()
-        
-        # Store quest feed requirements per quest (to feed only when quest appears in priority)
-        questFeedRequirements = {}
-
-        # Check ALL enabled quests for requirements (to know what fields might be needed)
-        # But don't execute quests (submit/get) - that will happen when quest appears in priority queue
-        for questName, enabledKey in [
-            ("polar bear", "polar_bear_quest"),
-            ("brown bear", "brown_bear_quest"),
-            ("black bear", "black_bear_quest"),
-            ("honey bee", "honey_bee_quest"),
-            ("bucko bee", "bucko_bee_quest"),
-            ("riley bee", "riley_bee_quest")
-        ]:
-            if macro.setdat.get(enabledKey):
-                # If this is a timed bear quest, skip requirement check while on cooldown
-                if questName in ["brown bear", "black bear"]:
-                    if not canClaimTimedBearQuest(questName):
-                        continue
-
-                # Check requirements without executing (submit/get) the quest
-                setdatEnable, gatherFields, gumdropFields, petalGatherFields, needsRed, needsBlue, feedBees, needsRedGumdrop, needsBlueGumdrop, needsField = handleQuest(questName, executeQuest=False)
-                # Enable any required settings
-                for k in setdatEnable:
-                    macro.setdat[k] = True
-                questGatherOverrides = getQuestGatherOverrides(questName)
-                petalQuestGatherOverrides = getPetalQuestGatherOverrides(questName)
-                # Store gather fields (will be used after priority queue)
-                for field in gatherFields:
-                    questGatherFields.append(field)
-                    if field not in questGatherFieldOverrides:
-                        questGatherFieldOverrides[field] = dict(questGatherOverrides)
-                for field in gumdropFields:
-                    questGumdropGatherFields.append(field)
-                    if field not in questGumdropFieldOverrides:
-                        questGumdropFieldOverrides[field] = dict(questGatherOverrides)
-                for field in petalGatherFields:
-                    questPetalGatherFields.append(field)
-                    if field not in questPetalGatherFieldOverrides:
-                        questPetalGatherFieldOverrides[field] = dict(petalQuestGatherOverrides)
-                redFieldNeeded = redFieldNeeded or needsRed
-                blueFieldNeeded = blueFieldNeeded or needsBlue
-                redGumdropFieldNeeded = redGumdropFieldNeeded or needsRedGumdrop
-                blueGumdropFieldNeeded = blueGumdropFieldNeeded or needsBlueGumdrop
-                fieldNeeded = fieldNeeded or needsField
-                if needsRed and not redFieldOverride:
-                    redFieldOverride = dict(questGatherOverrides)
-                if needsBlue and not blueFieldOverride:
-                    blueFieldOverride = dict(questGatherOverrides)
-                if needsRedGumdrop and not redGumdropFieldOverride:
-                    redGumdropFieldOverride = dict(questGatherOverrides)
-                if needsBlueGumdrop and not blueGumdropFieldOverride:
-                    blueGumdropFieldOverride = dict(questGatherOverrides)
-                if needsField and not defaultQuestFieldOverride:
-                    defaultQuestFieldOverride = dict(questGatherOverrides)
-                # Store feed requirements (will be used when quest appears in priority queue)
-                questFeedRequirements[questName] = feedBees
-        
-                    
-        taskCompleted = False
-
-        # A quest-mob gather interrupt discovered above must run before any quest
-        # or gather task begins. Otherwise gathering starts only to be interrupted
-        # on its first cycle by a mob that was already known to be ready.
+        # Discover support tasks without claiming quests out of priority order.
+        for giver in quest_giver_order(macro.setdat):
+            if canClaimTimedBearQuest(giver):
+                requiredTasks, _ = handleQuest(giver, executeQuest=False)
+                for task in requiredTasks:
+                    macro.setdat[task] = True
         runReadyQuestInterruptMobs()
-
-        # Quest completer feature removed. Quest-giver handling and brown bear logic remain.
 
         # Helper function for manual planters
         def goToNextCycle(cycle, slot):
@@ -1152,57 +890,18 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             if taskId in executedTasks:
                 return False
             
-            # Handle quest tasks - execute quest (submit/get) and feed bees when quest appears in priority order
             if taskId.startswith("quest_"):
-                questName = taskId.replace("quest_", "").replace("_", " ")
-                questKey = f"{questName.replace(' ', '_')}_quest"
-                # If the quest setting is disabled, skip any UI scanning for this quest
-                if not macro.setdat.get(questKey):
+                giver = taskId[6:].replace("_", " ")
+                if giver not in quest_giver_order(macro.setdat) or not canClaimTimedBearQuest(giver):
                     return False
-                # If this is a timed bear quest, skip while on cooldown
-                if questName in ["brown bear", "black bear"]:
-                    if not canClaimTimedBearQuest(questName):
-                        executedTasks.add(taskId)
-                        return False
-                # Actually execute the quest (submit/get) - this will travel to quest giver if needed
-                # For Brown Bear, capture the objectives and gather them immediately
-                if questName == "brown bear":
-                    setdatEnable, gatherFields, gumdropFields, petalGatherFields, needsRed, needsBlue, feedBees, needsRedGumdrop, needsBlueGumdrop, needsField = handleQuest(questName, executeQuest=True)
-                    
-                    # Gather the fields for this quest
-                    questGatherOverrides = getQuestGatherOverrides(questName)
-                    petalQuestGatherOverrides = getPetalQuestGatherOverrides(questName)
-                    
-                    # Gather regular fields
-                    for field in gatherFields:
-                        runTask(macro.gather, args=(field, questAIFieldCenterOverride(field, questGatherOverrides)), resetAfter=False)
-                    
-                    # Gather gumdrop fields (if any)
-                    for field in gumdropFields:
-                        runTask(macro.gather, args=(field, questAIFieldCenterOverride(field, questGatherOverrides), True), resetAfter=False)
-
-                    # Gather bloom-petal fields using BloomsAI
-                    for field in petalGatherFields:
-                        runTask(macro.gather, args=(field, bloomsAIQuestOverride(petalQuestGatherOverrides)), resetAfter=False)
-                    
-                    # Feed bees if needed
-                    for item, quantity in feedBees:
-                        runTask(macro.feedBee, args=(item, quantity), resetAfter=False)
-                        taskCompleted = True
-                else:
-                    handleQuest(questName, executeQuest=True)
-                    
-                    # Feed bees for this quest (requirements were already checked above)
-                    if questName in questFeedRequirements:
-                        feedBees = questFeedRequirements[questName]
-                        for item, quantity in feedBees:
-                            runTask(macro.feedBee, args=(item, quantity), resetAfter=False)
-                            taskCompleted = True
-                
+                requiredTasks, feeds = handleQuest(giver)
+                for task in requiredTasks:
+                    macro.setdat[task] = True
+                for item, quantity in feeds:
+                    runTask(macro.feedBee, args=(item, quantity), resetAfter=False)
                 executedTasks.add(taskId)
-                executedQuests.add(questName)
                 return True
-            
+
             # Handle collect tasks
             if taskId.startswith("collect_"):
                 collectName = taskId.replace("collect_", "")
@@ -1269,7 +968,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 
                 # Special cases: coconut_crab, king_beetle, tunnel_bear, and stump_snail
                 if mob == "coconut_crab":
-                    if macro.setdat["coconut_crab"] and macro.hasRespawned("coconut_crab", 36*60*60, applyMobRespawnBonus=True):
+                    if macro.setdat["coconut_crab"] and macro.hasRespawned(mob, bossCooldowns[mob], applyMobRespawnBonus=True):
                         runTask(macro.coconutCrab)
                         executedTasks.add(taskId)
                         return True
@@ -1278,7 +977,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
 
                 # King Beetle respawns every 24 hours (20 hours 24 minutes with Gifted Vicious Bee)
                 if mob == "king_beetle":
-                    if macro.setdat["king_beetle"] and macro.hasRespawned("king_beetle", 24*60*60, applyMobRespawnBonus=True):
+                    if macro.setdat["king_beetle"] and macro.hasRespawned(mob, bossCooldowns[mob], applyMobRespawnBonus=True):
                         runTask(macro.kingBeetle)
                         executedTasks.add(taskId)
                         return True
@@ -1286,14 +985,14 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
 
                 # Tunnel Bear respawns every 48 hours (40 hours 48 minutes with Gifted Vicious Bee)
                 if mob == "tunnel_bear":
-                    if macro.setdat["tunnel_bear"] and macro.hasRespawned("tunnel_bear", 48*60*60, applyMobRespawnBonus=True):
+                    if macro.setdat["tunnel_bear"] and macro.hasRespawned(mob, bossCooldowns[mob], applyMobRespawnBonus=True):
                         runTask(macro.tunnelBear)
                         executedTasks.add(taskId)
                         return True
                     return False
                 
                 if mob == "stump_snail":
-                    if macro.setdat["stump_snail"] and macro.hasRespawned("stump_snail", 96*60*60, applyMobRespawnBonus=True):
+                    if macro.setdat["stump_snail"] and macro.hasRespawned(mob, bossCooldowns[mob], applyMobRespawnBonus=True):
                         runTask(macro.stumpSnail)
                         executedTasks.add(taskId)
                         return True
@@ -1323,7 +1022,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
 
                 # When a field is needed for an active quest, let the quest resolver handle it
                 # in quest order instead of the global gather priority queue.
-                if fieldName in questGatherFields or fieldName in questGumdropGatherFields or fieldName in questPetalGatherFields:
+                questObjectives = gatherObjectives()
+                selectedQuestGather = choose_quest_gather(questObjectives, macro.setdat, macro.fieldSettings)
+                if (any(obj["field"] == fieldName for obj in questObjectives)
+                        or (selectedQuestGather and selectedQuestGather["field"] == fieldName)):
                     return False
                 
                 # Check if this field is enabled in gather tab
@@ -1335,14 +1037,6 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 
                 return False
 
-            if taskId.startswith("gatherpetal_"):
-                fieldName = taskId.replace("gatherpetal_", "").replace("_", " ")
-                if fieldName in questPetalGatherFields:
-                    runTask(macro.gather, args=(fieldName, bloomsAIQuestOverride(questPetalGatherFieldOverrides.get(fieldName, {}))), resetAfter=False)
-                    executedTasks.add(taskId)
-                    return True
-                return False
-            
             # Handle special tasks
             if taskId == "blender":
                 if macro.setdat["blender_enable"]:
@@ -2051,72 +1745,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 if blenderData["collectTime"] > -1 and time.time() > blenderData["collectTime"]:
                     runTask(macro.blender, args=(blenderData,))
 
-        # Handle quest gather fields and required fields that weren't executed in priority order
-        # These need to be handled separately as they depend on quest requirements
-        blueFields = ["blue flower", "bamboo", "pine tree", "stump"]
-        redFields = ["mushroom", "strawberry", "rose", "pepper"]
-        
-        # Track all gathered fields to avoid duplicates
-        allGatheredFields = []
-        
-        # Handle gumdrop gather fields first
-        if blueGumdropFieldNeeded:
-            for f in blueFields:
-                if f in questGumdropGatherFields:
-                    break
-            else:
-                questGumdropGatherFields.append("pine tree")
-                questGumdropFieldOverrides["pine tree"] = dict(blueGumdropFieldOverride)
-        
-        if redGumdropFieldNeeded:
-            for f in redFields:
-                if f in questGumdropGatherFields:
-                    break
-            else:
-                questGumdropGatherFields.append("rose")
-                questGumdropFieldOverrides["rose"] = dict(redGumdropFieldOverride)
+        allGatheredFields = runQuestGathers()
 
-        for field in questGumdropGatherFields:
-            if field not in allGatheredFields:
-                runTask(macro.gather, args=(field, questAIFieldCenterOverride(field, questGumdropFieldOverrides.get(field, {})), True), resetAfter=False)
-                allGatheredFields.append(field)
-
-        # Handle regular quest gather fields
-        questGatherFields = [x for x in questGatherFields if not (x in allGatheredFields)]
-        for field in questGatherFields:
-            runTask(macro.gather, args=(field, questAIFieldCenterOverride(field, questGatherFieldOverrides.get(field, {}))), resetAfter=False)
-            allGatheredFields.append(field)
-
-        questPetalGatherFields = [x for x in questPetalGatherFields if not (x in allGatheredFields)]
-        for field in questPetalGatherFields:
-            runTask(macro.gather, args=(field, bloomsAIQuestOverride(questPetalGatherFieldOverrides.get(field, {}))), resetAfter=False)
-            allGatheredFields.append(field)
-
-        # Handle required blue/red fields for quests
-        if blueFieldNeeded:
-            for f in blueFields:
-                if f in allGatheredFields:
-                    break
-            else:
-                field = "pine tree"
-                allGatheredFields.append(field)
-                runTask(macro.gather, args=(field, questAIFieldCenterOverride(field, blueFieldOverride)), resetAfter=False)
-        
-        if redFieldNeeded:
-            for f in redFields:
-                if f in allGatheredFields:
-                    break
-            else:
-                field = "rose"
-                allGatheredFields.append(field)
-                runTask(macro.gather, args=(field, questAIFieldCenterOverride(field, redFieldOverride)), resetAfter=False)
-        
-        if fieldNeeded and not allGatheredFields:
-            if defaultQuestFieldOverride:
-                runTask(macro.gather, args=("pine tree", questAIFieldCenterOverride("pine tree", defaultQuestFieldOverride)), resetAfter=False)
-            else:
-                runTask(macro.gather, args=("pine tree", questAIFieldCenterOverride("pine tree")), resetAfter=False)
-        
         # Handle planter gather fields (if not already gathered)
         if planterDataRaw:
             try:
@@ -2146,4 +1776,6 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         
         # Old code removed - all tasks now execute via priority order
         
-        mouse.click()
+        if taskCompleted:
+            mouse.click()
+        waitForReadyTask()

@@ -213,6 +213,7 @@ class macro(
                     f"Switched to profile: {profile['profile']}",
                     "blue",
                 )
+        return settingsChanged
 
     def _applySettingsState(self):
         """State derived from settings, rebuilt whenever settings reload."""

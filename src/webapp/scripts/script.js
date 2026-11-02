@@ -1116,6 +1116,7 @@ function applyTheme(theme) {
 function updateDependentFields() {
   updateReturnDependentFields();
   updateScheduledRejoinDependentFields();
+  updateQuestProgressFields();
 }
 
 function updateReturnDependentFields() {

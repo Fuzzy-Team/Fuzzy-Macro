@@ -6,74 +6,116 @@
   <div id="quests-settings-tab" class="standard-container sub-tab-panel">
     <script>
       const questsSettingsParent = document.getElementById("quests-settings-tab");
-      // Compact per-quest override table
-      (function buildCompactQuestOverrides(parent) {
-        const quests = [
-          { key: 'polar_bear', label: 'Polar Bear' },
-          { key: 'brown_bear', label: 'Brown Bear' },
-          { key: 'black_bear', label: 'Black Bear' },
-          { key: 'honey_bee', label: 'Honey Bee' },
-          { key: 'bucko_bee', label: 'Bucko Bee' },
-          { key: 'riley_bee', label: 'Riley Bee' }
-        ];
+      const questReturnOptions = ["No Override", "💀 Reset", "👟 Walk", "🔄 Rejoin", "🌱 Whirligig"];
 
-        const returnOptions = ["No Override", "💀 Reset", "👟 Walk", "🔄 Rejoin", "🌱 Whirligig"];
-
-        let html = `
-          <div class="poppins-medium standard-container" style="padding-top:1rem;">
-            <h2>Override Gather Settings</h2>
-            <p style="font-weight:500; font-size:1rem;">Per-quest gather overrides (mins / return). Set mins to 0 for no override.</p>
-            <div class="seperator"></div>
-            <table style="width:100%; border-collapse:collapse; font-size:0.95rem; margin-top:0.5rem;">
-              <thead>
-                <tr style="text-align:left; color:var(--muted); font-weight:600;">
-                  <th style="width:40%; padding:0.5rem 0.25rem;">Quest</th>
-                  <th style="width:30%; padding:0.5rem 0.25rem;">Gather Until Mins</th>
-                  <th style="width:30%; padding:0.5rem 0.25rem;">Return To Hive</th>
-                </tr>
-              </thead>
-              <tbody>
-        `;
-
-        quests.forEach(q => {
-          const minsId = `${q.key}_quest_gather_mins`;
-          const retId = `${q.key}_quest_gather_return`;
-          const minsInput = buildInput(minsId, { name: 'textbox', inputType: 'float', inputLimit: 4, triggerFunction: saveProfileTriggerFunction, length: 8 });
-          const retInput = buildInput(retId, { name: 'dropdown', data: returnOptions, triggerFunction: saveProfileTriggerFunction, length: 12 });
-
-          html += `
-            <tr>
-              <td style="padding:0.35rem 0.25rem; vertical-align:middle;">${q.label}</td>
-              <td style="padding:0.35rem 0.25rem; vertical-align:middle;">${minsInput}</td>
-              <td style="padding:0.35rem 0.25rem; vertical-align:middle;">${retInput}</td>
-            </tr>
-          `;
-        });
-
-        html += `</tbody></table></div>`;
-        parent.innerHTML += html;
-      })(questsSettingsParent);
-
-      buildStandardContainer(questsSettingsParent, "Goo Settings", "Decide how the macro wants to handle gathering goo", [
+      buildStandardContainer(questsSettingsParent, "Quest Scheduling", "Decide which quest objective the macro works on next", [
         {
-          id: "quest_use_gumdrops",
-          title: "Use Gumdrops",
-          desc: "Use gumdrops when gathering for goo quests (uses the Gumdrop Slot in Config)",
+          id: "quest_scheduling",
+          title: "Scheduling Mode",
+          desc: "Quest Giver Priority follows your quest order. Optimize Quest Completion finishes shared field work first.",
           type: {
-            name: "checkbox",
+            name: "dropdown",
+            data: ["Quest Giver Priority", "Optimize Quest Completion"],
             triggerFunction: saveProfileTriggerFunction,
+            length: 16,
           },
         },
+        {
+          id: "cooldown_field", title: "Cooldown Field",
+          desc: "Gather here while waiting, using the field's Gather settings",
+          type: { name: "dropdown", data: [{ label: "None - Wait at Hive", value: "none" }],
+            triggerFunction: saveProfileTriggerFunction, length: 16 },
+        },
       ]);
+
+      buildStandardContainer(questsSettingsParent, "Objective Gather Settings", "Each objective uses the same mapping for every quest giver. A field named by the quest always wins.", [
+        { id: "quest_mapping_group", title: "Objective Type", desc: "Narrows the objective list",
+          type: { name: "dropdown", data: questObjectiveGroups, triggerFunction: "showQuestObjectiveGroup(getDropdownValue(this))", length: 16 } },
+        { id: "quest_mapping_objective", title: "Objective", desc: "The settings below apply to this objective",
+          type: { name: "dropdown", data: [], triggerFunction: "showQuestObjectiveSettings(getDropdownValue(this))", length: 16 } },
+        { id: "quest_mapping_field", title: "Field", desc: "Auto may change with active quests",
+          type: { name: "dropdown", data: [{ label: "Auto", value: "auto" }], triggerFunction: "saveQuestMappingSetting(this)", length: 16 } },
+        { id: "quest_mapping_pattern", title: "Pattern", desc: "Auto follows the objective and field",
+          type: { name: "dropdown", data: [{ label: "Auto", value: "auto" }], triggerFunction: "saveQuestMappingSetting(this)", length: 16 } },
+        { id: "open-quest-gather-button", title: "Gather Settings", desc: "Size, camera, time limits, start location, goo and more",
+          type: { name: "button", text: "Edit Gather Settings", length: 16, triggerFunction: "openQuestGatherSettings()" } },
+      ]);
+      document.getElementById("objective-gather-settings").parentElement.style.display = "none";
+
+      // Saved by the popup's Save button, so these rows have no trigger of their own.
+      const questGatherRow = (property, title, desc, data) => ({
+        id: `quest_mapping_${property}`, title, desc,
+        type: { name: "dropdown", data, triggerFunction: "", length: 12 },
+      });
+      const questGatherToggle = (property, title, desc) => questGatherRow(property, title, desc, ["Auto", "On", "Off"]);
+      const questGatherModal = document.createElement("div");
+      questGatherModal.id = "quest-gather-modal";
+      questGatherModal.className = "modal-overlay";
+      questGatherModal.innerHTML = `<div class="modal-dialog poppins-regular" style="max-width:42rem;"></div>`;
+      questGatherModal.setAttribute("onclick", "if (event.target === this) closeQuestGatherSettings()");
+      questsSettingsParent.appendChild(questGatherModal);
+      const questGatherDialog = questGatherModal.firstElementChild;
+      buildStandardContainer(questGatherDialog, "Gather Settings", `<span id="quest-gather-objective"></span>. Used only for this quest objective. Auto uses objective and field defaults.`, [
+        questGatherRow("size", "Size", "Overall area the pattern covers", ["Auto", "XS", "S", "M", "L", "XL"]),
+        questGatherRow("width", "Width", "Repetitions of each pattern loop", ["Auto", 1, 2, 3, 4, 5, 6, 7, 8]),
+        questGatherToggle("invert_lr", "Invert Left/Right", "Swap left and right in the pattern"),
+        questGatherToggle("invert_fb", "Invert Forward/Back", "Swap forward and back in the pattern"),
+        questGatherToggle("shift_lock", "Use Shift Lock", "Shift lock while gathering"),
+        questGatherToggle("field_drift_compensation", "Field Drift Compensation", "Recenter between pattern loops"),
+        { title: "Rotate Camera", type: { name: "separator" } },
+        questGatherRow("turn", "Direction", "Camera turn before gathering", ["Auto", "None", "Left", "Right"]),
+        questGatherRow("turn_times", "Turn X Times", "Number of camera turns", ["Auto", 1, 2, 3, 4]),
+        { title: "Gather Until", type: { name: "separator" } },
+        { id: "quest_mapping_mins", title: "Mins", desc: "0 uses the field or petal time",
+          type: { name: "textbox", inputType: "float", inputLimit: 4, triggerFunction: "", length: 12 } },
+        questGatherRow("backpack", "Backpack%", "Backpack limit", [{ label: "Auto", value: "auto" }, ...Array.from({length: 20}, (_, index) => ({label: `${(index + 1) * 5}%`, value: String((index + 1) * 5)}))]),
+        questGatherRow("return", "Return To Hive", "How to return after gathering", [{ label: "Auto", value: "no override" }, ...questReturnOptions.slice(1)]),
+        questGatherToggle("use_whirlwig_fallback", "Use Whirlwig Fallback", "Try a whirligig if walking back fails"),
+        { title: "Start Location", type: { name: "separator" } },
+        questGatherRow("start_location", "Start Location", "Area of the field to start in", ["Auto", "Center", "Upper Right", "Right", "Lower Right", "Bottom", "Lower Left", "Left", "Upper Left", "Top"]),
+        questGatherRow("distance", "Distance", "How far to travel toward that area", ["Auto", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        { title: "Goo", type: { name: "separator" } },
+        questGatherToggle("goo", "Use Goo", "Auto enables goo for goo objectives"),
+        questGatherRow("goo_interval", "Goo Interval (secs)", "How often to use goo", ["Auto", 3, 5, 10, 15, 30, 60]),
+      ]);
+      questGatherDialog.insertAdjacentHTML("beforeend", `
+        <div class="modal-actions">
+          <button type="button" class="btn-cancel" onclick="closeQuestGatherSettings()">Cancel</button>
+          <button type="button" class="btn-confirm" onclick="saveQuestGatherSettings()">Save Settings</button>
+        </div>
+      `);
 
       buildStandardContainer(questsSettingsParent, "Live Quest Progress", "Watch the open quest menu while gathering for quests.", [
         {
           id: "quest_progress_watch",
           title: "Keep Quest Menu Open",
-          desc: "Keep the active quest visible and stop gathering as soon as its field objective is complete",
+          desc: "Stop gathering early once the objective is complete. Time and backpack limits still apply.",
           type: {
             name: "checkbox",
+            triggerFunction: `${saveProfileTriggerFunction}; updateQuestProgressFields()`,
+          },
+        },
+        {
+          id: "quest_progress_check_mode",
+          title: "Check Progress",
+          desc: "Checks happen between pattern loops, so a long pattern finishes first",
+          type: {
+            name: "dropdown",
+            data: [{ label: "On an Interval", value: "interval" }, { label: "Every Pattern Loop", value: "every iteration" }],
+            triggerFunction: `${saveProfileTriggerFunction}; updateQuestProgressFields()`,
+            length: 16,
+          },
+        },
+        {
+          id: "quest_progress_check_seconds",
+          title: "Check Interval (secs)",
+          desc: "Seconds between quest menu checks",
+          type: {
+            name: "textbox",
+            inputType: "float",
+            inputLimit: 4,
             triggerFunction: saveProfileTriggerFunction,
+            length: 16,
           },
         },
       ]);
@@ -97,26 +139,28 @@
         })),
       ]);
 
-      buildStandardContainer(questsSettingsParent, "Petal Gather", "Petal quest objectives use BloomsAI.", [
+      buildStandardContainer(questsSettingsParent, "Petal Gather", "Petal objectives use BloomsAI by default. Individual objective settings take priority.", [
         {
           id: "petal_quest_gather_mins",
           title: "Gather Until Mins",
-          desc: "Override gather time for petal quest objectives only. Set to 0 to use the quest giver override.",
+          desc: "Gather time for petal objectives. Set to 0 to use the field time.",
           type: {
             name: "textbox",
             inputType: "float",
             inputLimit: 4,
             triggerFunction: saveProfileTriggerFunction,
+            length: 16,
           },
         },
         {
           id: "petal_quest_gather_return",
           title: "Return To Hive",
-          desc: "Override return behavior for petal quest objectives only",
+          desc: "Return behavior for petal objectives",
           type: {
             name: "dropdown",
-            data: ["No Override", "💀 Reset", "👟 Walk", "🔄 Rejoin", "🌱 Whirligig"],
+            data: questReturnOptions,
             triggerFunction: saveProfileTriggerFunction,
+            length: 16,
           },
         },
         {
