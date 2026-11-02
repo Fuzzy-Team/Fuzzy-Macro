@@ -74,11 +74,49 @@ class ViciousMixin:
         return True
 
 
+    def detectViciousAnnouncement(self, text, now):
+        """Remember a live attack notification, never old chat history."""
+        import re
+        match = re.search(r"\bvicious bee is attacking\s+[^:]+?\s+in the\s+(pepper|mountain top|spider|cactus|rose)\s+(?:field|patch)\b", text.lower())
+        announcement = match.group(0) if match else None
+        if announcement is not None and announcement != getattr(self, "_viciousLastAttack", None):
+            field = match.group(1)
+            if self.setdat.get("macro_mode", "normal") == "vic" or field in self.vicFields:
+                self._viciousAttackTarget = (field, now)
+        self._viciousLastAttack = announcement
+
+    def viciousFightAnnouncedField(self):
+        target = getattr(self, "_viciousAttackTarget", None)
+        self._viciousAttackTarget = None
+        if target is None or time.time() - target[1] > 180:
+            return None
+        field = target[0]
+        if self.setdat.get("macro_mode", "normal") != "vic" and field not in self.vicFields:
+            return None
+        if self.checkPauseAndWait():
+            return False
+        self.viciousField = field
+        self.set_task_status("stinger_hunt", activity=field.title())
+        self.logger.webhook("Vicious Bee", f"Attack announced in {field.title()}, travelling to fight", "yellow", "screen", ping_category="ping_vicious_bee")
+        self.viciousActivateChat()
+        self._viciousAnnouncementBaseline = self._viciousAnnouncementCounts()
+        self.ensure_shift_lock_off(reason="Travel to announced Vicious Bee")
+        self.viciousResetCamera()
+        if not self.reset(convert=False) or not self.cannon(allowHiveResync=False, allowRejoin=False):
+            return False
+        self.goToField(field, "north")
+        result = self.viciousKillPattern()
+        self.logger.webhook("Vicious Bee", "Vicious Bee defeated" if result else "Vicious Bee hunt ended without a confirmed defeat", "light green" if result else "orange", "screen", ping_category="ping_vicious_bee")
+        return result
+
     def viciousSearchRoute(self):
         # Camera sensitivity and key-delay defaults for the Vicious route.
         self.setdat.setdefault("vicious_camera_sensitivity", 1)
         self.setdat.setdefault("vicious_key_delay_ms", 20)
         def search(field, approach):
+            result = self.viciousFightAnnouncedField()
+            if result is not None:
+                return result
             self.set_task_status("stinger_hunt", activity=field)
             self.viciousField = field.replace(" back", "").lower()
             if self.setdat.get("macro_mode", "normal") != "vic" and self.viciousField not in self.vicFields:
@@ -92,6 +130,9 @@ class ViciousMixin:
             result = self.runPath(approach)
             self.logger.webhook("Vic Hop", "Vicious Bee defeated" if result else "Vicious Bee hunt ended without a confirmed defeat", "light green" if result else "orange", "screen", ping_category="ping_vicious_bee")
             return result
+        result = self.viciousFightAnnouncedField()
+        if result is not None:
+            return result
         self.logger.webhook("Vic Hop", "Hive ready, checking fields starting with Pepper", "dark brown", "screen")
         self.runPath("vic/travel/hive_to_pepper")
         result = search("Pepper", "vic/kill_vic/pepper")
@@ -99,6 +140,9 @@ class ViciousMixin:
             return result
         if not self.runPath("vic/travel/pepper_to_mountain_top"):
             return False
+        result = self.viciousFightAnnouncedField()
+        if result is not None:
+            return result
         # Detect before rotating toward the next field.
         enabled = self.setdat.get("macro_mode", "normal") == "vic" or "mountain top" in self.vicFields
         found = enabled and self.detectViciousBee()
@@ -379,6 +423,8 @@ class ViciousMixin:
             if self.run is not None:
                 self.run.value = 0
             return
+        self._viciousAttackTarget = None
+        self._viciousLastAttack = None
         if not self.rejoin(rejoinMsg="Vic Hop", usePrivateServer=False, nightOnly=True):
             return
         if self.checkPauseAndWait():
@@ -389,6 +435,7 @@ class ViciousMixin:
             if honey > 0:
                 self.hourlyReport.setSessionStats(honey, time.time())
         self.viciousSearchRoute()
+        self._viciousAttackTarget = None
 
 
     def stingerHunt(self):
@@ -413,6 +460,7 @@ class ViciousMixin:
                     return False
             result = self.viciousSearchRoute()
         finally:
+            self._viciousAttackTarget = None
             self.night = False
             self.viciousResetCamera()
             point = self._viciousOpenedChat

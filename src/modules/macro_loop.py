@@ -285,9 +285,9 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             # Quest and Alt modes stay isolated from priority tasks.
             if (
                 macro.setdat.get("macro_mode", "normal") not in ("quest", "alt", "vic")
-                and macro.night
                 and macro.setdat["stinger_hunt"]
-                and macro.confirmNight()
+                and (getattr(macro, "_viciousAttackTarget", None)
+                     or (macro.night and macro.confirmNight()))
             ):
                 macro.stingerHunt()
                 taskCompleted = True
