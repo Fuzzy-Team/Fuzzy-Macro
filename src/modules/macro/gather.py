@@ -76,10 +76,6 @@ class GatherMixin:
         isSproutGather = not altMode and bool(fieldSetting.get("plant_sprout", False))
         skipTravel = bool(fieldSetting.get("skip_travel", False)) and self.location == normalized_field and not isHiveHubField
         pattern = fieldSetting['shape']
-        if not pattern_supports_field(pattern, normalized_field):
-            self.logger.webhook("Gather Pattern Unavailable", f"{pattern} cannot run in {normalized_field}. Using e_lol.", "red")
-            pattern = "e_lol"
-            fieldSetting["shape"] = pattern
         patternRunner = GatherPatternRunner(
             settingsManager.getProjectRoot(),
             pattern,
@@ -93,6 +89,10 @@ class GatherMixin:
             ),
             fatal_exceptions=(InterruptRequested,),
         )
+        if not pattern_supports_field(pattern, normalized_field):
+            patternRunner.mark_failed(f"Pattern cannot run in {normalized_field}")
+            pattern = patternRunner.active_pattern
+            fieldSetting["shape"] = pattern
         aiPatternLabels = {
             "fuzzy_ai_gather": "Fuzzy AI Gather",
             "blooms_ai": "BloomsAI",
