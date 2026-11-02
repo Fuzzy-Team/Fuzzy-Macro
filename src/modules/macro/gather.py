@@ -2,7 +2,7 @@ import threading
 import traceback
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
-from modules.controls.sleep import InterruptRequested, pause_aware_time as time, sleep
+from modules.controls.sleep import INTERRUPT_NONE, InterruptRequested, pause_aware_time as time, sleep
 from modules.gather_session import field_pattern_variables, GatherPatternRunner, GatherSession
 from modules.quest_planning import quest_check_due
 import modules.macro.pattern_environment as patternEnvironment
@@ -382,6 +382,11 @@ class GatherMixin:
         else:
             self.set_task_status(f"gather_{field}", task="gather", field=field)
 
+        def closeQuestMenu():
+            # Establish a known tab state even if scanning stopped before Quest opened.
+            self.toggleInventory("open")
+            self.toggleInventory("close")
+
         questMenuKeptOpen = False
         questWatchGiver = questObjective["giver"] if questObjective else None
         questWatchObjective = questObjective["action"] if questObjective else None
@@ -407,7 +412,11 @@ class GatherMixin:
                         keepGathering = False
                     self.moveMouseToDefault()
             except InterruptRequested:
-                gatherSession.finish(gatherNameSpace)
+                self.skipTask.value = INTERRUPT_NONE
+                try:
+                    closeQuestMenu()
+                finally:
+                    gatherSession.finish(gatherNameSpace)
                 raise
             except Exception:
                 print(traceback.format_exc())
@@ -516,7 +525,7 @@ class GatherMixin:
                         self.disableShiftLock()
                         self._gatherShiftLockEnabled = False
                 if questMenuKeptOpen:
-                    self.toggleQuest()
+                    closeQuestMenu()
                     questMenuKeptOpen = False
                 self.moveMouseToDefault()
             finally:
@@ -551,6 +560,7 @@ class GatherMixin:
                 try:
                     self.raiseIfInterrupted()
                 except InterruptRequested:
+                    self.skipTask.value = INTERRUPT_NONE
                     stopGather()
                     raise
 
@@ -772,8 +782,10 @@ class GatherMixin:
                         else:
                             self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Backpack - Return: {returnType.title()}", "light green", "screen", route_category="gathering")
                             keepGathering = False
-        except BaseException:
+        except BaseException as error:
             # whatever raised, stop the gather's threads and reports before leaving
+            if isinstance(error, InterruptRequested):
+                self.skipTask.value = INTERRUPT_NONE
             mouse.mouseUp()
             stopGather()
             raise

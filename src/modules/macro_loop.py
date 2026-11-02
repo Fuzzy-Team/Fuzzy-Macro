@@ -935,7 +935,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
 
                 # When a field is needed for an active quest, let the quest resolver handle it
                 # in quest order instead of the global gather priority queue.
-                if any(obj["field"] == fieldName for obj in gatherObjectives()):
+                questObjectives = gatherObjectives()
+                selectedQuestGather = choose_quest_gather(questObjectives, macro.setdat, macro.fieldSettings)
+                if (any(obj["field"] == fieldName for obj in questObjectives)
+                        or (selectedQuestGather and selectedQuestGather["field"] == fieldName)):
                     return False
                 
                 # Check if this field is enabled in gather tab
