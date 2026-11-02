@@ -562,7 +562,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         if macro.hasScheduledRejoinArrived():
             return True
         mode = macro.setdat.get("macro_mode", "normal")
-        if mode == "normal" and macro.setdat.get("mondo_buff", False) and macro.hasMondoRespawned():
+        if mode not in ("quest", "alt") and macro.setdat.get("mondo_buff", False) and macro.hasMondoRespawned():
             return True
         if mode != "bug" and any(giver not in questCache and canClaimTimedBearQuest(giver)
                                  for giver in quest_giver_order(macro.setdat)):
@@ -596,7 +596,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                     return True
             elif task == "planters" and mode == "normal" and macro.setdat.get("planters_mode", 0):
                 if macro.setdat["planters_mode"] == 1:
-                    planters = ast.literal_eval(settingsManager.loadUserText("manualplanters.txt"))
+                    planters = settingsManager.loadUserLiteral("manualplanters.txt") or {"planters": [], "harvestTimes": []}
                     if any(planter and time.time() > harvest for planter, harvest
                            in zip(planters["planters"], planters["harvestTimes"])):
                         return True
