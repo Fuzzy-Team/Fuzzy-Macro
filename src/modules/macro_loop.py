@@ -482,6 +482,12 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             return task_queue
         return settings.get("task_priority_order", [])
 
+    def completedQuestGivers():
+        """Givers whose last quest-menu read showed every objective complete, in giver order."""
+        return [giver for giver in quest_giver_order(macro.setdat)
+                if canClaimTimedBearQuest(giver) and (rows := macro.questObservations.get(giver))
+                and all(row["status"] == "complete" for row in rows)]
+
     def gatherObjectives():
         return [objective for giver in quest_giver_order(macro.setdat)
                 for objective in (getattr(macro, "questObservations", {}).get(giver) or [])
@@ -505,7 +511,18 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                     handleQuest(giver, executeQuest=False)
 
         runTask(scanQuestProgress, resetAfter=False, allowAFB=False)
+        turnedIn = set()
         while run.value != 0:
+            # A finished quest is handed in before more gathering, including for the quest it hands out.
+            for giver in completedQuestGivers():
+                questId = macro.questObservations[giver][0]["id"]
+                if questId in turnedIn:
+                    continue
+                turnedIn.add(questId)
+                requiredTasks, _ = handleQuest(giver)
+                for task in requiredTasks:
+                    macro.setdat[task] = True
+                attempted.difference_update([objectiveId for objectiveId in attempted if objectiveId[0] == giver])
             pending = [obj for obj in gatherObjectives() if obj["id"] not in attempted]
             selected = choose_quest_gather(pending, macro.setdat, macro.fieldSettings, currentField)
             if selected is None:
@@ -716,10 +733,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             continue
 
         if macro.setdat.get("macro_mode", "normal") == "quest":
-            for giver in quest_giver_order(macro.setdat):
-                if not canClaimTimedBearQuest(giver):
-                    continue
-                requiredTasks, feeds = handleQuest(giver)
+            # Hand in every finished quest before starting work on any quest, new or old.
+            claimed = [handleQuest(giver) for giver in quest_giver_order(macro.setdat)
+                       if canClaimTimedBearQuest(giver)]
+            for requiredTasks, feeds in claimed:
                 for task in requiredTasks:
                     macro.setdat[task] = True
                 runQuestSupportTasks(requiredTasks)
@@ -899,12 +916,17 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 giver = taskId[6:].replace("_", " ")
                 if giver not in quest_giver_order(macro.setdat) or not canClaimTimedBearQuest(giver):
                     return False
-                requiredTasks, feeds = handleQuest(giver)
-                for task in requiredTasks:
-                    macro.setdat[task] = True
-                for item, quantity in feeds:
-                    runTask(macro.feedBee, args=(item, quantity), resetAfter=False)
-                executedTasks.add(taskId)
+                # Other quests already known to be finished are handed in first, before any new quest's feeding.
+                givers = list(dict.fromkeys([giver] + completedQuestGivers()))
+                claimed = [handleQuest(claimGiver) for claimGiver in givers]
+                for claimGiver in givers:
+                    executedTasks.add("quest_" + claimGiver.replace(" ", "_"))
+                for requiredTasks, feeds in claimed:
+                    for task in requiredTasks:
+                        macro.setdat[task] = True
+                for _, feeds in claimed:
+                    for item, quantity in feeds:
+                        runTask(macro.feedBee, args=(item, quantity), resetAfter=False)
                 return True
 
             # Handle collect tasks
