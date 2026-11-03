@@ -73,6 +73,8 @@ class ReportMixin:
                 self.lastHourlyReport = time.time()
                 try:
                     itemSnapshot = self.itemMonitor.get_snapshot() if self.setdat.get("item_monitor", True) else None
+                    from modules.reports.vicious import send_report
+                    send_report(self.logger, self.hourlyReport)
                     hourlyReportData = self.hourlyReport.generateHourlyReport(self.setdat)
                     self.logger.hourlyReport("Hourly Report", "", "purple", fields=getattr(self.hourlyReport, "lastEmbedFields", None))
 

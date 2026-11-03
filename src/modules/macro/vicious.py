@@ -3,6 +3,10 @@ from modules.controls.sleep import pause_aware_time as time, sleep
 
 
 class ViciousMixin:
+    def recordVicStat(self, name, amount=1):
+        if self.setdat.get("macro_mode") == "vic":
+            self.hourlyReport.addHourlyStat("vic_" + name, amount)
+
     def viciousWalk(self, keys, tiles):
         try:
             for key in keys:
@@ -32,17 +36,22 @@ class ViciousMixin:
                     # never read for deaths, so old "You died" lines can't retrigger.
                     if self.blueTextImageSearch("died", screen=self.blueTextScreen()):
                         died = True
+                        self.recordVicStat("deaths")
                         break
                 if died:
                     break
                 if self.checkIfViciousDied():
                     self.hourlyReport.addHourlyStat("vicious_bees", 1)
+                    self.recordVicStat("defeats")
+                    self.recordVicStat("stingers", getattr(self, "_viciousRewardAmount", 0))
                     return True
             if not died:
                 return False
             # A kill announced right before the death still counts.
             if self.checkIfViciousDied():
                 self.hourlyReport.addHourlyStat("vicious_bees", 1)
+                self.recordVicStat("defeats")
+                self.recordVicStat("stingers", getattr(self, "_viciousRewardAmount", 0))
                 return True
             if not self.viciousReturnToField():
                 return False
@@ -70,6 +79,7 @@ class ViciousMixin:
             self.logger.webhook("Vic Hop", f"Could not return to {field.title()} after dying, ending the hunt", "orange", "screen", ping_category="ping_vicious_bee")
             return False
         self.goToField(field, "north")
+        self.recordVicStat("returns")
         self.logger.webhook("Vic Hop", f"Back in {field.title()}, fighting the Vicious Bee again", "yellow", "screen", ping_category="ping_vicious_bee")
         return True
 
@@ -95,6 +105,7 @@ class ViciousMixin:
             return None
         if self.checkPauseAndWait():
             return False
+        self.recordVicStat("sightings")
         self.viciousField = field
         self.set_task_status("stinger_hunt", activity=field.title())
         self.logger.webhook("Vicious Bee", f"Attack announced in {field.title()}, travelling to fight", "yellow", "screen", ping_category="ping_vicious_bee")
@@ -124,6 +135,7 @@ class ViciousMixin:
             if not self.detectViciousBee():
                 self.logger.webhook("Vic Hop", f"{field}: no Vicious Bee detected", "dark brown", "screen")
                 return None
+            self.recordVicStat("sightings")
             self.logger.webhook("Vic Hop", f"Vicious Bee detected in {field}, approaching", "yellow", "screen", ping_category="ping_vicious_bee")
             self.viciousActivateChat()
             self._viciousAnnouncementBaseline = self._viciousAnnouncementCounts()
@@ -148,6 +160,7 @@ class ViciousMixin:
         found = enabled and self.detectViciousBee()
         self.viciousRotate("right", 1)
         if found:
+            self.recordVicStat("sightings")
             self.viciousField = "mountain top"
             self.logger.webhook("Vic Hop", "Vicious Bee detected in Mountain Top, approaching", "yellow", "screen", ping_category="ping_vicious_bee")
             self.viciousActivateChat()
@@ -335,6 +348,7 @@ class ViciousMixin:
         image = Image.fromarray(cv2.cvtColor(readable, cv2.COLOR_BGR2RGB))
         counts = {"vicsummon": 0, "vicdead": 0}
         defeat_lines = reward_lines = 0
+        reward_amount = 0
         field = getattr(self, "viciousField", None)
         for item in ocrRead(image):
             text = " ".join(item[1][0].lower().split())
@@ -347,18 +361,22 @@ class ViciousMixin:
                 defeat_lines += 1
             if re.match(r"^\W*\+\s*\d+\s+stingers?\s*\(from vicious bee\b", text):
                 reward_lines += 1
+                reward_amount += int(re.search(r"\+\s*(\d+)", text).group(1))
         counts["vicdead"] = max(defeat_lines, reward_lines)
+        counts["stingers"] = reward_amount
         return counts
 
     def viciousNotification(self, name, frame=None):
         if name not in ("vicsummon", "vicdead"):
             raise ValueError("Unknown Vicious notification")
-        count = self._viciousAnnouncementCounts(frame)[name]
+        counts = self._viciousAnnouncementCounts(frame)
+        count = counts[name]
         if name == "vicsummon":
             # The model has already found a bee; accept this field's attack
             # even if it started before the approach snapshot.
             return count > 0
         baseline = getattr(self, "_viciousAnnouncementBaseline", {})
+        self._viciousRewardAmount = max(0, counts["stingers"] - baseline.get("stingers", 0))
         return count > baseline.get(name, 0)
 
 

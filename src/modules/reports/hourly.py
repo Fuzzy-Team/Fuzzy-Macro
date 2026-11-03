@@ -138,6 +138,7 @@ class HourlyReport():
             "bugs": 0,
             "quests_completed": 0,
             "vicious_bees": 0,
+            **dict.fromkeys(("vic_servers", "vic_nights", "vic_sightings", "vic_defeats", "vic_stingers", "vic_deaths", "vic_returns"), 0),
             "gathering_time": 0,
             "converting_time": 0,
             "bug_run_time": 0,
@@ -500,6 +501,9 @@ class HourlyReport():
         self.hourlyReportStats["bugs"] = 0
         self.hourlyReportStats["quests_completed"] = 0
         self.hourlyReportStats["vicious_bees"] = 0
+        for key in self._defaultSessionReportStats():
+            if key.startswith("vic_"):
+                self.hourlyReportStats[key] = 0
         self.hourlyReportStats["gathering_time"] = 0
         self.hourlyReportStats["converting_time"] = 0
         self.hourlyReportStats["bug_run_time"] = 0
@@ -532,6 +536,9 @@ class HourlyReport():
         self.resetHourlyStats()
     
     def addHourlyStat(self, stat, value):
+        self.hourlyReportStats.setdefault(stat, 0)
+        if stat.startswith("vic_"):
+            self.sessionReportStats.setdefault(stat, 0)
         if isinstance(self.hourlyReportStats[stat], list):
             self.hourlyReportStats[stat].append(value)
         else:

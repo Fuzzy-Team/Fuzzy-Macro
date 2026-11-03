@@ -227,6 +227,7 @@ async function updateMacroMode() {
       // Only update if the value actually differs to prevent unnecessary DOM updates
       if (macroModeDropdown.value !== currentValue) {
         macroModeDropdown.value = currentValue;
+        refreshVicHopStats();
       }
     }
   }, 50);
@@ -783,6 +784,7 @@ async function checkAndUpdateButtonState() {
       const currentValue = settings.macro_mode || "normal";
       if (macroModeDropdown.value !== currentValue) {
         macroModeDropdown.value = currentValue;
+        refreshVicHopStats();
       }
     }
   } catch (error) {
@@ -961,6 +963,7 @@ $("#home-placeholder")
 
       // Reload tasks to reflect the change
       await loadTasks();
+      await refreshVicHopStats();
     } finally {
       // Clear the flag after a short delay to allow any pending updates
       setTimeout(() => {
@@ -1011,3 +1014,33 @@ $("#home-placeholder")
       alert("Failed to export logs.");
     }
   });
+
+
+async function refreshVicHopStats() {
+  const panel = document.getElementById("vic-hop-stats");
+  if (!panel) return;
+  const visible = document.getElementById("macro_mode")?.value === "vic";
+  panel.classList.toggle("d-none", !visible);
+  document.getElementById("planter-timers-container")?.classList.toggle("d-none", visible);
+  if (!visible) return;
+  try {
+    const rows = await eel.getVicHopStats()();
+    const body = document.getElementById("vic-hop-stats-body");
+    if (!body) return;
+    body.replaceChildren(...rows.map(values => {
+      const row = document.createElement("tr");
+      values.forEach((value, index) => {
+        const cell = document.createElement(index === 0 ? "th" : "td");
+        if (index === 0) cell.scope = "row";
+        cell.textContent = String(value);
+        cell.style.padding = "0.35rem 0.75rem";
+        cell.style.textAlign = index === 0 ? "left" : "right";
+        row.appendChild(cell);
+      });
+      return row;
+    }));
+  } catch (error) {
+    console.warn("Could not refresh Vic Hop statistics", error);
+  }
+}
+setInterval(refreshVicHopStats, 5000);

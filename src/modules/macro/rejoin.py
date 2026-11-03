@@ -407,6 +407,7 @@ class RejoinMixin:
 
             self.startDetect()
             if nightOnly:
+                self.recordVicStat("servers")
                 if self.checkPauseAndWait():
                     self.clear_task_status()
                     return False
@@ -414,6 +415,7 @@ class RejoinMixin:
                     self.logger.webhook("Vic Hop", "Daytime, moving to the next server", "dark brown", "screen")
                     self.clear_task_status()
                     return False
+                self.recordVicStat("nights")
                 self.logger.webhook("Vic Hop", "Night detected, claiming a hive", "dark brown", "screen")
             if not claimHive:
                 mouse.click()

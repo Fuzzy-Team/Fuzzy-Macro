@@ -659,6 +659,8 @@ def runApp(macroTarget):
                 # Create final report object
                 finalReportObj = FinalReport()
                 sessionStats = finalReportObj.generateFinalReport(setdat, stop_time=time.time())
+                from modules.reports.vicious import send_report
+                send_report(logger, finalReportObj.hourlyReport, session=True)
                 
                 # Check if report was generated successfully
                 if sessionStats and os.path.exists("finalReport.png"):
