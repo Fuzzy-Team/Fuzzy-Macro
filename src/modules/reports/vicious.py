@@ -9,7 +9,7 @@ METRICS = (
     ("vic_nights", "Nights detected"),
     ("vic_sightings", "Vicious Bee sightings"),
     ("vic_defeats", "Confirmed defeats"),
-    ("vic_stingers", "Stingers earned (OCR confirmed)"),
+    ("vic_stingers", "Stingers earned"),
     ("vic_deaths", "Deaths during combat"),
     ("vic_returns", "Successful returns after death"),
 )
