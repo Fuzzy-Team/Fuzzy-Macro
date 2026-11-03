@@ -16,6 +16,7 @@
           <option value="field">Field Mode</option>
           <option value="quest">Quest Mode</option>
           <option value="bug">Bug Run Mode</option>
+          <option value="vic">Vic Hop Mode</option>
         </select>
       </div>
     </div>
@@ -33,7 +34,7 @@
 
     <!-- Right Column: Logs and Planters -->
     <div class="flex-col flex-1 gap-md">
-      <div class="poppins-regular standard-container flex-grow-1 overflow-y-auto flex-col gap-xs">
+      <div class="poppins-regular standard-container flex-grow-1 overflow-y-auto flex-col gap-xs" style="min-height: 10rem;">
         <div class="flex-row space-between align-items-center mb-05 border-bottom">
           <h2 style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">Logs</h2>
           <div class="flex-row gap-xs">
@@ -51,6 +52,19 @@
         </div>
         <div id="logs" class="flex-col gap-xs overflow-y-auto flex-grow-1">
           <!-- Logs will be appended here -->
+        </div>
+      </div>
+      <div id="vic-hop-stats" class="standard-container d-none">
+        <h2>Vic Hop statistics</h2>
+        <div class="overflow-y-auto">
+          <table class="w-100" aria-label="Vic Hop last session and total statistics">
+            <thead><tr>
+              <th scope="col" style="text-align: left; padding: 0.35rem 0.75rem;">Statistic</th>
+              <th scope="col" style="text-align: right; padding: 0.35rem 0.75rem;">Last session</th>
+              <th scope="col" style="text-align: right; padding: 0.35rem 0.75rem;">Total</th>
+            </tr></thead>
+            <tbody id="vic-hop-stats-body"></tbody>
+          </table>
         </div>
       </div>
       <div class="poppins-medium standard-container flex-col" id="planter-timers-container">

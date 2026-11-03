@@ -1453,3 +1453,11 @@ def launch():
         except EnvironmentError:
             print("Chrome/Chromium could not be found. Opening in default browser...")
             openInDefaultBrowser()
+
+
+@eel.expose
+def getVicHopStats():
+    """Return the last completed session alongside lifetime Vic Hop totals."""
+    from modules.reports.vicious import rows, saved_stats
+    current, last, total = saved_stats()
+    return rows(last, total)

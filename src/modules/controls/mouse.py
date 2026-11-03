@@ -30,6 +30,18 @@ def mouseUp():
 def moveBy(x = 0,y = 0, pause=True):
     pag.move(x, y, _pause=pause)  
 
+def rightDragBy(x, y):
+    """Send relative camera motion while the caller holds the right button."""
+    currentX, currentY = pag.position()
+    event = Quartz.CGEventCreateMouseEvent(
+        None, Quartz.kCGEventRightMouseDragged,
+        (currentX + x, currentY + y), Quartz.kCGMouseButtonRight,
+    )
+    Quartz.CGEventSetIntegerValueField(event, Quartz.kCGMouseEventDeltaX, int(x))
+    Quartz.CGEventSetIntegerValueField(event, Quartz.kCGMouseEventDeltaY, int(y))
+    Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
+
+
 def click():
     mouseDown()
     time.sleep(0.04)

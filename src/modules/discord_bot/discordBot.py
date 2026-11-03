@@ -350,7 +350,7 @@ DISCORD_COMMAND_PERMISSION_CATEGORIES = {
     "reports": {
         "label": "Reports",
         "setting": "discord_permission_reports_ids",
-        "commands": ["hourlyreport", "session"],
+        "commands": ["hourlyreport", "session", "vicstats"],
     },
 }
 
@@ -1082,6 +1082,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         ("quest", "Quests"),
         ("field", "Field"),
         ("bug", "Bug Runs"),
+        ("vic", "Vic Hop"),
     ]
 
     SETTINGS_CATEGORIES = {
@@ -1586,6 +1587,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             return f"Feed Bee: {task_id.replace('feed_bee_', '').replace('_', ' ').title()}"
 
         special_names = {
+            "vic_hop": "Vic Hop",
             "blender": "Blender",
             "planters": "Planters",
             "ant_challenge": "Ant Challenge",
@@ -1600,6 +1602,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         if macro_mode == "alt":
             return False
+        if macro_mode == "vic":
+            return task_id == "vic_hop"
         if macro_mode == "field" and not task_id.startswith("gather_"):
             return False
         if macro_mode == "quest" and not task_id.startswith("quest_"):
@@ -1650,6 +1654,9 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         enabled_tasks = [task_id for task_id in task_list_order if _is_task_enabled(task_id, settings)]
 
         macro_mode = settings.get("macro_mode", "normal")
+
+        if macro_mode == "vic":
+            return ["vic_hop"]
 
         if macro_mode == "alt":
             alt_field = str(
@@ -2843,6 +2850,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 "alt": "Alt",
                 "quest": "Quests",
                 "field": "Field",
+                "vic": "Vic Hop",
             }.get(settings.get("macro_mode", "normal"), settings.get("macro_mode", "normal"))
 
             if not enabled_tasks:
@@ -3986,6 +3994,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         app_commands.Choice(name="alt", value="alt"),
         app_commands.Choice(name="quests", value="quest"),
         app_commands.Choice(name="field", value="field"),
+        app_commands.Choice(name="vic hop", value="vic"),
     ])
     async def macro_mode(interaction: discord.Interaction, mode: str):
         """Set macro mode"""
@@ -4003,7 +4012,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 "normal": "Normal",
                 "alt": "Alt",
                 "quest": "Quest",
-                "field": "Field"
+                "field": "Field",
+                "vic": "Vic Hop"
             }
 
             await interaction.response.send_message(f"🔄 Macro mode set to {mode_names[mode]}!\n{message}")
@@ -4032,7 +4042,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         embed.add_field(name="**Profile Management**", value="`/swapprofile <name>` - Switch to a different profile (macro must be stopped)", inline=False)
 
-        embed.add_field(name="**Status & Monitoring**", value="`/status` - Get macro status and current task\n`/tasklist` - Show enabled task order, current task, and next task\n`/logs` - Show recent macro actions\n`/battery` - Check battery status\n`/stream <enable/disable/status>` - Control stream\n`/streamurl` - Get stream URL\n`/hourlyreport` - Generate and send the hourly report\n`/session` - Generate and send the final session report", inline=False)
+        embed.add_field(name="**Status & Monitoring**", value="`/status` - Get macro status and current task\n`/tasklist` - Show enabled task order, current task, and next task\n`/logs` - Show recent macro actions\n`/battery` - Check battery status\n`/stream <enable/disable/status>` - Control stream\n`/streamurl` - Get stream URL\n`/vicstats` - Show current Vic Hop statistics\n`/hourlyreport` - Generate and send the hourly report\n`/session` - Generate and send the final session report", inline=False)
         
         embed.add_field(name="**Advanced**", value="`/amulet <keep/replace>` - Choose amulet action\n`/close <both/roblox/macro>` - Close both, Roblox only, or macro only", inline=False)
 
@@ -4057,6 +4067,20 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 embed.set_field_at(index, name=field.name, value=field.value.replace("`/", f"`{legacyCommands.PREFIX}"), inline=field.inline)
         await interaction.response.send_message(embed=embed)
 
+
+    @bot.tree.command(name="vicstats", description="Show current Vic Hop session statistics")
+    @requires_discord_permission("reports")
+    async def vic_stats(interaction: discord.Interaction):
+        from modules.reports.vicious import METRICS, saved_stats
+        try:
+            current, last, total = saved_stats()
+            embed = discord.Embed(title="Vic Hop current session", color=discord.Color.purple())
+            for key, label in METRICS:
+                embed.add_field(name=label, value=str(current.get(key, 0)), inline=True)
+            embed.set_footer(text="Current session resets on the next macro Start.")
+            await interaction.response.send_message(embed=embed)
+        except Exception as exc:
+            await interaction.response.send_message(f"Could not read Vic Hop statistics: {exc}", ephemeral=True)
 
     @bot.tree.command(name = "hourlyreport", description = "Send the hourly report")
     @requires_discord_permission("reports")

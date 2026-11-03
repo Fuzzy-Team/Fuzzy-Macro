@@ -108,7 +108,7 @@ class HiveMixin:
                 mouse.click()
 
             if (
-                self.setdat.get("macro_mode", "normal") not in ("quest", "alt")
+                self.setdat.get("macro_mode", "normal") not in ("quest", "alt", "vic")
                 and self.night
                 and self.setdat["stinger_hunt"]
             ):

@@ -73,6 +73,11 @@ class ReportMixin:
                 self.lastHourlyReport = time.time()
                 try:
                     itemSnapshot = self.itemMonitor.get_snapshot() if self.setdat.get("item_monitor", True) else None
+                    try:
+                        from modules.reports.vicious import send_report
+                        send_report(self.logger, self.hourlyReport)
+                    except Exception:
+                        self.logger.webhook("Vic Hop Report Error", traceback.format_exc(), "red", ping_category="ping_critical_errors")
                     hourlyReportData = self.hourlyReport.generateHourlyReport(self.setdat)
                     self.logger.hourlyReport("Hourly Report", "", "purple", fields=getattr(self.hourlyReport, "lastEmbedFields", None))
 
