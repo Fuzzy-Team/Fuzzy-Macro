@@ -24,6 +24,9 @@ def send_report(logger, report, session=False):
     total = report.sessionReportStats
     if not total.get("vic_servers", 0):
         return
+    if session:
+        report.vicLastSession = {key: total.get(key, 0) for key, _ in METRICS}
+        report.saveHourlyReportData()
     title = "Vic Hop Session Report" if session else "Vic Hop Hourly Report"
     data = rows(hour, total)
     canvas = Image.new("RGB", (700, 100 + len(data) * 42), "#191923")
@@ -42,3 +45,18 @@ def send_report(logger, report, session=False):
     path = "vicSessionReport.png" if session else "vicHourlyReport.png"
     canvas.save(path)
     logger.itemReport(title, "Stinger totals include only rewards successfully read by OCR.", "purple", fields=fields, imagePath=path)
+
+
+def saved_stats():
+    """Return current, last session and lifetime counters from the atomic snapshot."""
+    import pickle
+    from modules.misc import settingsManager
+    path = Path(settingsManager.getUserDataPath("hourly_report_stats.pkl"))
+    if not path.exists():
+        return {}, {}, {}
+    with path.open("rb") as source:
+        data = pickle.load(source)
+    current = data.get("sessionReportStats", {})
+    completed = data.get("vicCompletedTotals", {})
+    total = {key: completed.get(key, 0) + current.get(key, 0) for key, _ in METRICS}
+    return current, data.get("vicLastSession", {}), total

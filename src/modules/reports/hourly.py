@@ -118,6 +118,8 @@ class HourlyReport():
         # setup stats; loadHourlyReportData replaces these when saved stats exist
         self.hourlyReportStats = {**self._defaultSessionReportStats(), "start_time": 0, "start_honey": 0}
         self.sessionReportStats = self._defaultSessionReportStats()
+        self.vicLastSession = {}
+        self.vicCompletedTotals = {}
         self.uptimeBuffsValues = self._defaultHourlyUptimeBuffs()
         self.buffGatherIntervals = [0]*600
         self.sessionUptimeBuffsValues = self._defaultSessionUptimeBuffs()
@@ -522,6 +524,12 @@ class HourlyReport():
         self.saveHourlyReportData()
     
     def resetAllStats(self):
+        self.loadHourlyReportData()
+        from modules.reports.vicious import METRICS
+        if self.sessionReportStats.get("vic_servers", 0):
+            self.vicLastSession = {key: self.sessionReportStats.get(key, 0) for key, _ in METRICS}
+            for key, _ in METRICS:
+                self.vicCompletedTotals[key] = self.vicCompletedTotals.get(key, 0) + self.sessionReportStats.get(key, 0)
         self.hourlyReportStats["start_time"] = 0
         self.hourlyReportStats["start_honey"] = 0
         self.sessionReportStats = self._defaultSessionReportStats()
@@ -564,6 +572,8 @@ class HourlyReport():
             data = copy.deepcopy({
                 "hourlyReportStats": self.hourlyReportStats,
                 "sessionReportStats": self.sessionReportStats,
+                "vicLastSession": self.vicLastSession,
+                "vicCompletedTotals": self.vicCompletedTotals,
                 "uptimeBuffsValues": self.uptimeBuffsValues,
                 "buffGatherIntervals": self.buffGatherIntervals,
                 "sessionUptimeBuffsValues": self.sessionUptimeBuffsValues,
@@ -593,6 +603,8 @@ class HourlyReport():
             return
         with open(path, "rb") as f:
             data = pickle.load(f)
+            self.vicLastSession = data.get("vicLastSession", {})
+            self.vicCompletedTotals = data.get("vicCompletedTotals", {})
             self.hourlyReportStats = data["hourlyReportStats"]
             self.sessionReportStats = data.get("sessionReportStats", self._defaultSessionReportStats())
             self.uptimeBuffsValues = data.get("uptimeBuffsValues", self._defaultHourlyUptimeBuffs())

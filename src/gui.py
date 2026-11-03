@@ -1457,12 +1457,7 @@ def launch():
 
 @eel.expose
 def getVicHopStats():
-    """Read the atomically saved counters owned by the macro process."""
-    import pickle
-    from modules.reports.vicious import rows
-    path = settingsManager.getUserDataPath("hourly_report_stats.pkl")
-    if not os.path.exists(path):
-        return rows({}, {})
-    with open(path, "rb") as source:
-        data = pickle.load(source)
-    return rows(data.get("hourlyReportStats", {}), data.get("sessionReportStats", {}))
+    """Return the last completed session alongside lifetime Vic Hop totals."""
+    from modules.reports.vicious import rows, saved_stats
+    current, last, total = saved_stats()
+    return rows(last, total)

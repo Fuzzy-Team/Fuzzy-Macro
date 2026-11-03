@@ -4042,7 +4042,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         embed.add_field(name="**Profile Management**", value="`/swapprofile <name>` - Switch to a different profile (macro must be stopped)", inline=False)
 
-        embed.add_field(name="**Status & Monitoring**", value="`/status` - Get macro status and current task\n`/tasklist` - Show enabled task order, current task, and next task\n`/logs` - Show recent macro actions\n`/battery` - Check battery status\n`/stream <enable/disable/status>` - Control stream\n`/streamurl` - Get stream URL\n`/hourlyreport` - Generate and send the hourly report\n`/session` - Generate and send the final session report", inline=False)
+        embed.add_field(name="**Status & Monitoring**", value="`/status` - Get macro status and current task\n`/tasklist` - Show enabled task order, current task, and next task\n`/logs` - Show recent macro actions\n`/battery` - Check battery status\n`/stream <enable/disable/status>` - Control stream\n`/streamurl` - Get stream URL\n`/vicstats` - Show current Vic Hop statistics\n`/hourlyreport` - Generate and send the hourly report\n`/session` - Generate and send the final session report", inline=False)
         
         embed.add_field(name="**Advanced**", value="`/amulet <keep/replace>` - Choose amulet action\n`/close <both/roblox/macro>` - Close both, Roblox only, or macro only", inline=False)
 
@@ -4067,6 +4067,20 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 embed.set_field_at(index, name=field.name, value=field.value.replace("`/", f"`{legacyCommands.PREFIX}"), inline=field.inline)
         await interaction.response.send_message(embed=embed)
 
+
+    @bot.tree.command(name="vicstats", description="Show current Vic Hop session statistics")
+    @requires_discord_permission("reports")
+    async def vic_stats(interaction: discord.Interaction):
+        from modules.reports.vicious import METRICS, saved_stats
+        try:
+            current, last, total = saved_stats()
+            embed = discord.Embed(title="Vic Hop current session", color=discord.Color.purple())
+            for key, label in METRICS:
+                embed.add_field(name=label, value=str(current.get(key, 0)), inline=True)
+            embed.set_footer(text="Stingers include only OCR-confirmed rewards. The latest session remains visible after stopping.")
+            await interaction.response.send_message(embed=embed)
+        except Exception as exc:
+            await interaction.response.send_message(f"Could not read Vic Hop statistics: {exc}", ephemeral=True)
 
     @bot.tree.command(name = "hourlyreport", description = "Send the hourly report")
     @requires_discord_permission("reports")
