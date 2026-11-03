@@ -15,8 +15,8 @@ METRICS = (
 )
 
 
-def rows(hour, session):
-    return [(label, hour.get(key, 0), session.get(key, 0)) for key, label in METRICS]
+def rows(first, second):
+    return [(label, first.get(key, 0), second.get(key, 0)) for key, label in METRICS]
 
 
 def send_report(logger, report, session=False):

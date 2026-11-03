@@ -350,7 +350,7 @@ DISCORD_COMMAND_PERMISSION_CATEGORIES = {
     "reports": {
         "label": "Reports",
         "setting": "discord_permission_reports_ids",
-        "commands": ["hourlyreport", "session"],
+        "commands": ["hourlyreport", "session", "vicstats"],
     },
 }
 
@@ -4077,7 +4077,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             embed = discord.Embed(title="Vic Hop current session", color=discord.Color.purple())
             for key, label in METRICS:
                 embed.add_field(name=label, value=str(current.get(key, 0)), inline=True)
-            embed.set_footer(text="Stingers include only OCR-confirmed rewards. The latest session remains visible after stopping.")
+            embed.set_footer(text="Current session resets on the next macro Start.")
             await interaction.response.send_message(embed=embed)
         except Exception as exc:
             await interaction.response.send_message(f"Could not read Vic Hop statistics: {exc}", ephemeral=True)

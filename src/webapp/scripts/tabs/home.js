@@ -822,6 +822,7 @@ $("#home-placeholder")
     if (macroModeDropdown && !isUserChangingMode) {
       const currentValue = settings.macro_mode || "normal";
       macroModeDropdown.value = currentValue;
+      await refreshVicHopStats();
     }
 
     // Start checking button state every 500ms

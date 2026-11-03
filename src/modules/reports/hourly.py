@@ -524,7 +524,10 @@ class HourlyReport():
         self.saveHourlyReportData()
     
     def resetAllStats(self):
-        self.loadHourlyReportData()
+        try:
+            self.loadHourlyReportData()
+        except (OSError, EOFError, pickle.UnpicklingError) as exc:
+            print(f"Could not load previous report statistics: {exc}")
         from modules.reports.vicious import METRICS
         if self.sessionReportStats.get("vic_servers", 0):
             self.vicLastSession = {key: self.sessionReportStats.get(key, 0) for key, _ in METRICS}
