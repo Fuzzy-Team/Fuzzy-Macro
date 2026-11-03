@@ -351,6 +351,8 @@ class ViciousMixin:
         counts = {"vicsummon": 0, "vicdead": 0}
         defeat_lines = reward_lines = 0
         reward_amount = 0
+        kill_ys = []
+        rewards = []
         field = getattr(self, "viciousField", None)
         for item in ocrRead(image):
             text = " ".join(item[1][0].lower().split())
@@ -361,11 +363,18 @@ class ViciousMixin:
                     counts["vicsummon"] += 1
             if re.match(r"^(?!.*:).{0,3}vicious bee (?:has been )?defeated\b", text):
                 defeat_lines += 1
+                kill_ys.append(min(point[1] for point in item[0]))
             if re.match(r"^\W*\+\s*\d+\s+stingers?\s*\(from vicious bee\b", text):
                 reward_lines += 1
-                reward_amount += int(re.search(r"\+\s*(\d+)", text).group(1))
+                amount = int(re.search(r"\+\s*(\d+)", text).group(1))
+                y = min(point[1] for point in item[0])
+                kill_ys.append(y)
+                rewards.append((y, amount))
+                reward_amount += amount
         counts["vicdead"] = max(defeat_lines, reward_lines)
         counts["stingers"] = reward_amount
+        counts["bottom"] = max(kill_ys, default=-1)
+        counts["rewards"] = rewards
         return counts
 
     def viciousNotification(self, name, frame=None):
@@ -378,8 +387,11 @@ class ViciousMixin:
             # even if it started before the approach snapshot.
             return count > 0
         baseline = getattr(self, "_viciousAnnouncementBaseline", {})
-        self._viciousRewardAmount = max(0, counts["stingers"] - baseline.get("stingers", 0))
-        return count > baseline.get(name, 0)
+        # Old chat lines only move upward. Half a line allows for OCR jitter.
+        floor = baseline.get("bottom", -1) + 12
+        fresh_rewards = [amount for y, amount in counts["rewards"] if y > floor]
+        self._viciousRewardAmount = sum(fresh_rewards) if fresh_rewards else max(0, counts["stingers"] - baseline.get("stingers", 0))
+        return count > baseline.get(name, 0) or counts["bottom"] > floor
 
 
     def checkIfVicSummoned(self, frame=None):

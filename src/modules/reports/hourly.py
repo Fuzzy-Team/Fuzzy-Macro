@@ -526,7 +526,7 @@ class HourlyReport():
     def resetAllStats(self):
         try:
             self.loadHourlyReportData()
-        except (OSError, EOFError, pickle.UnpicklingError) as exc:
+        except Exception as exc:
             print(f"Could not load previous report statistics: {exc}")
         from modules.reports.vicious import METRICS
         if self.sessionReportStats.get("vic_servers", 0):
