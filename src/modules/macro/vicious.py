@@ -105,6 +105,8 @@ class ViciousMixin:
             return None
         if self.checkPauseAndWait():
             return False
+        if time.time() - target[1] > 180:
+            return None
         self.recordVicStat("sightings")
         self.viciousField = field
         self.set_task_status("stinger_hunt", activity=field.title())
@@ -448,10 +450,12 @@ class ViciousMixin:
         if self.checkPauseAndWait():
             return
         stats = self.hourlyReport.hourlyReportStats
-        if not stats["start_time"] or not stats["start_honey"]:
+        if not stats["start_time"]:
+            self.hourlyReport.setSessionStats(stats["start_honey"], time.time())
+        if not stats["start_honey"]:
             honey = self.getHoney()
             if honey > 0:
-                self.hourlyReport.setSessionStats(honey, time.time())
+                self.hourlyReport.setSessionStats(honey, stats["start_time"])
         self.viciousSearchRoute()
         self._viciousAttackTarget = None
 

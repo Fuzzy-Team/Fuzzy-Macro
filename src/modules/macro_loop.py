@@ -286,7 +286,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             if (
                 macro.setdat.get("macro_mode", "normal") not in ("quest", "alt", "vic")
                 and macro.setdat["stinger_hunt"]
-                and (getattr(macro, "_viciousAttackTarget", None)
+                and ((getattr(macro, "_viciousAttackTarget", None)
+                      and time.time() - macro._viciousAttackTarget[1] <= 180)
                      or (macro.night and macro.confirmNight()))
             ):
                 macro.stingerHunt()

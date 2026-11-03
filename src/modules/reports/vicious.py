@@ -54,8 +54,11 @@ def saved_stats():
     path = Path(settingsManager.getUserDataPath("hourly_report_stats.pkl"))
     if not path.exists():
         return {}, {}, {}
-    with path.open("rb") as source:
-        data = pickle.load(source)
+    try:
+        with path.open("rb") as source:
+            data = pickle.load(source)
+    except (OSError, EOFError, pickle.UnpicklingError):
+        return {}, {}, {}
     current = data.get("sessionReportStats", {})
     completed = data.get("vicCompletedTotals", {})
     total = {key: completed.get(key, 0) + current.get(key, 0) for key, _ in METRICS}
