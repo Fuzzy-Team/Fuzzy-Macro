@@ -33,6 +33,7 @@ ONNX_MODELS = (
     "bloom_detection_light.onnx",
     "bloom_detection_mini.onnx",
 )
+VICIOUS_MODEL = "vicious_bee.onnx"
 # Files macOS adds to folders it has opened; never part of a model.
 MACOS_METADATA_FILES = {".DS_Store"}
 
@@ -90,8 +91,8 @@ def _supported_model_names():
     # ONNX only as the cross-platform fallback; fetching both makes startup
     # repeatedly restore ONNX models that the Core ML runtime later removes.
     if _macos_version() >= (12, 0):
-        return COREML_MODELS
-    return ONNX_MODELS
+        return COREML_MODELS + (VICIOUS_MODEL,)
+    return ONNX_MODELS + (VICIOUS_MODEL,)
 
 
 def _delete_path(path):
@@ -383,7 +384,7 @@ def ensure_missing_models(model_names):
     missing_remote = []
     failures = {}
     for model_name in model_names:
-        if model_name not in set(COREML_MODELS).union(ONNX_MODELS):
+        if model_name not in set(COREML_MODELS).union(ONNX_MODELS, (VICIOUS_MODEL,)):
             failures[model_name] = "unknown model name"
             continue
         local_path = os.path.join(MODEL_DIR, model_name)

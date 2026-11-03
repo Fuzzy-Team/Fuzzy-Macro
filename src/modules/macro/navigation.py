@@ -27,7 +27,11 @@ class NavigationMixin:
             pyPath = f"{path}.py"
             #ensure that path exists
             if not fileMustExist and not os.path.isfile(pyPath): return
-            exec(open(pyPath).read())
+            # A path may set result when its caller needs a success value.
+            namespace = locals()
+            with open(pyPath) as path_file:
+                exec(path_file.read(), globals(), namespace)
+            return namespace.get("result")
 
     def faceDirection(self, field, dir):
         keys = fieldFaceNorthKeys[field]

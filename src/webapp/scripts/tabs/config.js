@@ -69,13 +69,14 @@ const MODEL_PRESENTATION = {
   "bloom_detection_standard.mlmodelc": { group: "Standard", label: "Bloom Detection" },
   "bloom_detection_light.mlmodelc": { group: "Small", label: "Bloom Detection" },
   "bloom_detection_mini.mlmodelc": { group: "Mini", label: "Bloom Detection" },
+  "vicious_bee.onnx": { group: "Vicious Bee", label: "Vicious Bee Detection" },
   "token_detection_standard.onnx": { group: "Standard", label: "Token Detection" },
   "sprinkler_detection_standard.onnx": { group: "Standard", label: "Sprinkler Detection" },
   "bloom_detection_standard.onnx": { group: "Standard", label: "Bloom Detection" },
   "bloom_detection_light.onnx": { group: "Small", label: "Bloom Detection" },
   "bloom_detection_mini.onnx": { group: "Mini", label: "Bloom Detection" },
 };
-const MODEL_GROUP_ORDER = ["Standard", "Small", "Mini"];
+const MODEL_GROUP_ORDER = ["Standard", "Small", "Mini", "Vicious Bee"];
 
 function getModelPresentation(model) {
   return MODEL_PRESENTATION[model.name] || { group: "Other", label: "AI Model" };

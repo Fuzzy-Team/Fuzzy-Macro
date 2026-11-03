@@ -118,6 +118,8 @@ class HourlyReport():
         # setup stats; loadHourlyReportData replaces these when saved stats exist
         self.hourlyReportStats = {**self._defaultSessionReportStats(), "start_time": 0, "start_honey": 0}
         self.sessionReportStats = self._defaultSessionReportStats()
+        self.vicLastSession = {}
+        self.vicCompletedTotals = {}
         self.uptimeBuffsValues = self._defaultHourlyUptimeBuffs()
         self.buffGatherIntervals = [0]*600
         self.sessionUptimeBuffsValues = self._defaultSessionUptimeBuffs()
@@ -138,6 +140,7 @@ class HourlyReport():
             "bugs": 0,
             "quests_completed": 0,
             "vicious_bees": 0,
+            **dict.fromkeys(("vic_servers", "vic_nights", "vic_sightings", "vic_defeats", "vic_stingers", "vic_deaths", "vic_returns"), 0),
             "gathering_time": 0,
             "converting_time": 0,
             "bug_run_time": 0,
@@ -500,6 +503,9 @@ class HourlyReport():
         self.hourlyReportStats["bugs"] = 0
         self.hourlyReportStats["quests_completed"] = 0
         self.hourlyReportStats["vicious_bees"] = 0
+        for key in self._defaultSessionReportStats():
+            if key.startswith("vic_"):
+                self.hourlyReportStats[key] = 0
         self.hourlyReportStats["gathering_time"] = 0
         self.hourlyReportStats["converting_time"] = 0
         self.hourlyReportStats["bug_run_time"] = 0
@@ -518,6 +524,15 @@ class HourlyReport():
         self.saveHourlyReportData()
     
     def resetAllStats(self):
+        try:
+            self.loadHourlyReportData()
+        except Exception as exc:
+            print(f"Could not load previous report statistics: {exc}")
+        from modules.reports.vicious import METRICS
+        if self.sessionReportStats.get("vic_servers", 0):
+            self.vicLastSession = {key: self.sessionReportStats.get(key, 0) for key, _ in METRICS}
+            for key, _ in METRICS:
+                self.vicCompletedTotals[key] = self.vicCompletedTotals.get(key, 0) + self.sessionReportStats.get(key, 0)
         self.hourlyReportStats["start_time"] = 0
         self.hourlyReportStats["start_honey"] = 0
         self.sessionReportStats = self._defaultSessionReportStats()
@@ -532,6 +547,9 @@ class HourlyReport():
         self.resetHourlyStats()
     
     def addHourlyStat(self, stat, value):
+        self.hourlyReportStats.setdefault(stat, 0)
+        if stat.startswith("vic_"):
+            self.sessionReportStats.setdefault(stat, 0)
         if isinstance(self.hourlyReportStats[stat], list):
             self.hourlyReportStats[stat].append(value)
         else:
@@ -557,6 +575,8 @@ class HourlyReport():
             data = copy.deepcopy({
                 "hourlyReportStats": self.hourlyReportStats,
                 "sessionReportStats": self.sessionReportStats,
+                "vicLastSession": self.vicLastSession,
+                "vicCompletedTotals": self.vicCompletedTotals,
                 "uptimeBuffsValues": self.uptimeBuffsValues,
                 "buffGatherIntervals": self.buffGatherIntervals,
                 "sessionUptimeBuffsValues": self.sessionUptimeBuffsValues,
@@ -586,6 +606,8 @@ class HourlyReport():
             return
         with open(path, "rb") as f:
             data = pickle.load(f)
+            self.vicLastSession = data.get("vicLastSession", {})
+            self.vicCompletedTotals = data.get("vicCompletedTotals", {})
             self.hourlyReportStats = data["hourlyReportStats"]
             self.sessionReportStats = data.get("sessionReportStats", self._defaultSessionReportStats())
             self.uptimeBuffsValues = data.get("uptimeBuffsValues", self._defaultHourlyUptimeBuffs())

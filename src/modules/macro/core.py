@@ -43,6 +43,7 @@ from modules.macro.rejoin import RejoinMixin
 from modules.macro.reports import ReportMixin
 from modules.macro.gather import GatherMixin
 from modules.macro.mobs import MobMixin
+from modules.macro.vicious import ViciousMixin
 from modules.macro.planters import PlanterMixin
 from modules.macro.quests import QuestMixin
 from modules.macro.quest_objectives import QuestObjectiveMixin
@@ -62,6 +63,7 @@ class macro(
     ReportMixin,
     GatherMixin,
     MobMixin,
+    ViciousMixin,
     PlanterMixin,
     QuestMixin,
     QuestObjectiveMixin,
@@ -223,7 +225,7 @@ class macro(
         self.collectCooldowns["sticker_printer"] = 1*60*60
         self.enableNightDetection = bool(self.setdat["stinger_hunt"])
         #fields vic can appear in, filtered to the ones the player enabled
-        vicFields = ["pepper", "mountain top", "rose", "cactus", "spider", "clover"]
+        vicFields = ["pepper", "mountain top", "rose", "cactus", "spider"]
         self.vicFields = [x for x in vicFields if self.setdat["stinger_{}".format(x.replace(" ","_"))]]
 
     #get the size of the roblox window and update the relevant variables
@@ -434,19 +436,23 @@ class macro(
         hourlyReportBackgroundThread = threading.Thread(target=self.hourlyReportBackground, daemon=True)
         hourlyReportBackgroundThread.start()
         
+        # Vic Hop owns joining and checks the sky before acquiring a hive.
+        vicHop = self.setdat.get("macro_mode", "normal") == "vic"
         # Rejoin at startup unless Roblox is already open and the user has
         # explicitly disabled Always Rejoin.
-        if self.setdat.get("always_rejoin", True) or not appManager.openApp("Roblox"):
-            self.rejoin()
-        else:
-            self.startDetect()
-            self.setRobloxWindowInfo()
+        if not vicHop:
+            if self.setdat.get("always_rejoin", True) or not appManager.openApp("Roblox"):
+                self.rejoin()
+            else:
+                self.startDetect()
+                self.setRobloxWindowInfo()
     
         if not benchmarkMSS():
             self.logger.webhook("", "MSS is too slow, switching to pillow", "dark brown")
         
-        if not self.hourlyReport.hourlyReportStats["start_time"] or not self.hourlyReport.hourlyReportStats["start_honey"]:
+        if not vicHop and (not self.hourlyReport.hourlyReportStats["start_time"] or not self.hourlyReport.hourlyReportStats["start_honey"]):
             self.hourlyReport.setSessionStats(self.getHoney(), time.time())
 
-        self.reset(convert=True)
+        if not vicHop:
+            self.reset(convert=True)
         self.saveTiming("rejoin_every")
