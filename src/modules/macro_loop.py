@@ -517,14 +517,17 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         while run.value != 0:
             # A finished quest is handed in before more gathering, including for the quest it hands out.
             for giver in completedQuestGivers():
-                questId = macro.questObservations[giver][0]["id"]
-                if questId in turnedIn:
+                if giver in turnedIn:
                     continue
-                turnedIn.add(questId)
+                turnedIn.add(giver)
                 requiredTasks, _ = handleQuest(giver)
                 for task in requiredTasks:
                     macro.setdat[task] = True
-                attempted.difference_update([objectiveId for objectiveId in attempted if objectiveId[0] == giver])
+                # The quest it handed out is new work: it keeps no skips and can be turned in later.
+                for skipped in (attempted, macro.deferredQuestObjectives):
+                    skipped.difference_update([objectiveId for objectiveId in skipped if objectiveId[0] == giver])
+                if giver not in completedQuestGivers():
+                    turnedIn.discard(giver)
             pending = [obj for obj in gatherObjectives() if obj["id"] not in attempted]
             selected = choose_quest_gather(pending, macro.setdat, macro.fieldSettings, currentField)
             if selected is None:
