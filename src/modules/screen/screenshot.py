@@ -30,7 +30,9 @@ def pillowGrab(x,y,w,h):
             args = ["screencapture", "-R{},{},{},{}".format(int(x), int(y), int(w), int(h))]
         else:
             args = ["screencapture"]
-        subprocess.call(args + ["-x", filepath])
+        status = subprocess.call(args + ["-x", filepath])
+        if status and virtual_display.active():
+            raise virtual_display.DisplayError("Virtual-display capture failed (screencapture exit {}).".format(status))
         with Image.open(filepath) as im:
             im.load()
             if virtual_display.active():
@@ -38,6 +40,10 @@ def pillowGrab(x,y,w,h):
                     raise virtual_display.DisplayError("The virtual-display capture is not at 1x scale.")
                 return im.crop((0, 0, int(w), int(h)))
             return im.crop((x, y, x + w, y + h))
+    except OSError as error:
+        if virtual_display.active():
+            raise virtual_display.DisplayError("Cannot read the virtual-display capture: {}".format(error)) from error
+        raise
     finally:
         try:
             os.unlink(filepath)

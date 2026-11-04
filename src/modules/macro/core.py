@@ -472,12 +472,10 @@ class macro(
         self.lastHourlyReport = 0
 
         backgroundThread = threading.Thread(target=self.background, daemon=True)
-        if not virtual_display.active():
-            backgroundThread.start()
+        backgroundThread.start()
 
         hourlyReportBackgroundThread = threading.Thread(target=self.hourlyReportBackground, daemon=True)
-        if not virtual_display.active():
-            hourlyReportBackgroundThread.start()
+        hourlyReportBackgroundThread.start()
         
         # Vic Hop owns joining and checks the sky before acquiring a hive.
         vicHop = self.setdat.get("macro_mode", "normal") == "vic"
@@ -503,10 +501,6 @@ class macro(
         if is_stopped():
             return False
     
-        if virtual_display.active():
-            backgroundThread.start()
-            hourlyReportBackgroundThread.start()
-
         if not benchmarkMSS():
             self.logger.webhook("", "MSS is too slow, switching to pillow", "orange")
         
