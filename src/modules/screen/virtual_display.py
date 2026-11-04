@@ -165,6 +165,7 @@ class DisplaySession:
             try:
                 command("quit")
             except DisplayError:
+                # Still wait for or terminate our process if its command channel failed.
                 pass
             try:
                 self.process.wait(timeout=4)
