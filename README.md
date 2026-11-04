@@ -70,7 +70,7 @@ Follow our [installation guide](https://fuzzy-team.gitbook.io/fuzzy-macro) to ge
 - Unreadable progress stays unfinished, and time or backpack limits still end a gather session
 - Gumdrop support for goo gathering
 - Smart field selection for quest requirements
-- Quest feed bee automation (Fix in progress)
+- Quest feed bee automation
 
 ### Boost & Buff Management
 - Field Dice support (Field Dice, Smooth Dice, Loaded Dice)
@@ -82,7 +82,7 @@ Follow our [installation guide](https://fuzzy-team.gitbook.io/fuzzy-macro) to ge
 - **Sticker Printer**: Automated sticker printing with egg selection
 - **Blender**: Item crafting automation (extracts, wax, items)
 - **Ant Challenge**: Automated ant challenge completion
-- **Memory Match**: Support for all memory match variants (Now with memory!)
+- **Memory Match**: Support for all memory match variants
 - **Cannon**: Automated cannon usage from hive (Canon access required to use Macro)
 
 ### Utility Features
@@ -90,7 +90,6 @@ Follow our [installation guide](https://fuzzy-team.gitbook.io/fuzzy-macro) to ge
 - Automatic rejoin with configurable intervals
 - Discord webhook integration
 - Discord bot for remote control
-- Discord standby mode: `/standby 30m` or `/standby 1h 30m` stops the macro, quits Roblox, and keeps the Mac awake. Omit the duration for indefinite standby, repeat the command to disable it, or use `/start` to resume. Durations must be greater than zero and at most 7 days. On macOS 10.12-10.14, use `fuzz!standby` and `fuzz!start` instead.
 - Web-based GUI for configuration
 - Profile system for multiple configurations
 - Task priority system with drag-and-drop ordering
