@@ -179,6 +179,7 @@ class RejoinMixin:
         if self.skipServer is not None:
             self.skipServer.value = 0
         self.canDetectNight = False
+        self.questMenuOpen = False
         self.location = "spawn"
         self.cannonFromHive = False
         placeId = str(placeId or MAIN_GAME_PLACE_ID)

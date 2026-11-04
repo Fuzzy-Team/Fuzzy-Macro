@@ -28,10 +28,10 @@ class QuestMixin:
     def readWatchedQuestObjective(self, objective, reposition=False):
         previous = self.questObservations.get(objective["giver"]) or []
         if reposition:
-            # Close the known-open panel before findQuest opens and positions it.
-            self.toggleQuest()
+            # findQuest scrolls the open panel back to this giver's quest.
             found = self.findQuest(objective["giver"], keepQuestMenuOpen=True, logDetection=False)
             if found is None:
+                # It closed the panel; the watch keeps reading, so open it again.
                 self.toggleQuest()
             self.moveMouseToDefault()
         else:
@@ -104,7 +104,6 @@ class QuestMixin:
                     "objective": objective,
                     "watched_objective": watchedObjective,
                     "report": report,
-                    "menu_open": True,
                 }
             except Exception:
                 print(traceback.format_exc())
@@ -152,15 +151,16 @@ class QuestMixin:
         if report:
             report.stop()
 
+        # A reset can close the panel under the watcher, so trust the tracked state.
         completed = False
         try:
-            if checkCompletion and context.get("menu_open"):
+            if checkCompletion and self.questMenuOpen:
                 time.sleep(0.5)
                 completed = self.readWatchedQuestObjective(context["watched_objective"]) == "complete"
         except Exception:
             print(traceback.format_exc())
         finally:
-            if context.get("menu_open"):
+            if self.questMenuOpen:
                 self.toggleQuest()
             self.moveMouseToDefault()
 
@@ -173,15 +173,27 @@ class QuestMixin:
         mouse.moveBy(0,3)
         time.sleep(0.1)
         mouse.click()
+        # The scroll position is only known while the menu stays open.
+        self.questMenuOpen = not self.questMenuOpen
+        self.questMenuStep = None
+        self.questGiverSteps = {}
         time.sleep(0.3)
         mouse.moveTo(self.robloxWindow.mx+(312), self.robloxWindow.my+(200))
         mouse.click()
 
-    def captureQuestScreenshots(self, maxScreens=150):
+    def closeQuestMenu(self):
+        """Close a quest menu a scan or watcher left open, from whatever tab state it is in."""
+        if self.questMenuOpen:
+            self.toggleInventory("open")
+            self.questMenuOpen = True  # the panel is still up until the second click lands
+            self.toggleInventory("close")
+
+    def captureQuestScreenshots(self, maxScreens=150, keepOpen=False):
         """
         Capture the quest list from top to bottom once.
         Returned RGBA screenshots can be reused by findQuest for multiple
         quest givers without reopening and rescrolling the quest UI.
+        keepOpen leaves the menu open at the bottom of the list for the work that follows.
         """
         def screenshotQuest(screenshotHeight, mode="gray"):
             mode = mode.lower()
@@ -218,7 +230,10 @@ class QuestMixin:
                 break
             prevHash = currentHash
 
-        self.toggleQuest()
+        if keepOpen:
+            self.questMenuStep = len(screens) - 1
+        else:
+            self.toggleQuest()
         self.moveMouseToDefault()
         return screens
 
@@ -608,11 +623,17 @@ class QuestMixin:
             return bestMatch
         
         manageQuestUi = questScreens is None
-        #open inventory to ensure quest page is closed
-        if manageQuestUi:
+        # A scan or watcher may have left the menu open; only open it when it is not.
+        reuseMenu = manageQuestUi and self.questMenuOpen
+        if manageQuestUi and not reuseMenu:
+            #open inventory to ensure quest page is closed
             self.toggleInventory("close")
             self.toggleQuest()
-            #scroll to top
+        elif reuseMenu:
+            # The last read parked the mouse outside the panel; scrolling needs it over the list.
+            mouse.moveTo(self.robloxWindow.mx+(312), self.robloxWindow.my+(200))
+
+        def scrollToTop():
             #stop scrolling when the quest page remains unchanged
             prevHash = None
             for _ in range(200):
@@ -622,6 +643,19 @@ class QuestMixin:
                 if not prevHash is None and prevHash == hash:
                     break
                 prevHash = hash
+            self.questMenuStep = 0
+
+        # Return to the step where this giver's quest was last seen. The title match below
+        # confirms it, and a miss rescrolls from the top with the menu still open.
+        recordedStep = self.questGiverSteps.get(questGiver) if reuseMenu and self.questMenuStep is not None else None
+        positioned = recordedStep is not None
+        if manageQuestUi and not positioned:
+            scrollToTop()
+        while positioned and self.questMenuStep != recordedStep:
+            direction = -1 if recordedStep > self.questMenuStep else 1
+            mouse.scroll(direction, True)
+            time.sleep(0.06)
+            self.questMenuStep -= direction
         #scroll down, note the best match
         if manageQuestUi:
             sleep(0.4)
@@ -703,8 +737,14 @@ class QuestMixin:
                         self.logger.webhook("", f"Quest Title: {questTitle}", "dark brown")
                     break
                 
-            if manageQuestUi:
+            if manageQuestUi and positioned:
+                positioned = False
+                scrollToTop()
+                sleep(0.4)
+                prevHash = None
+            elif manageQuestUi:
                 mouse.scroll(-1, True)
+                self.questMenuStep += 1
                 time.sleep(0.06)
                 hash = average_hash(Image.fromarray(screenshotQuest(100)))
                 if not prevHash is None and prevHash == hash:
@@ -718,6 +758,11 @@ class QuestMixin:
                 self.toggleQuest()
                 self.moveMouseToDefault()
             return None
+
+        # A scan shows many screens; a single watch screen is read where this giver was already recorded.
+        step = self.questMenuStep if manageQuestUi else (i if len(questScreens) > 1 else None)
+        if step is not None:
+            self.questGiverSteps[questGiver] = step
 
         def objectiveTextShowsIncompleteProgress(textChunk):
             import re

@@ -65,6 +65,8 @@ class GatherMixin:
 
     def gather(self, field, settingsOverride = {}, questObjective=None, stopWhen=None):
         self.robloxWindow.questMenuVisibleForAI = False
+        if not (questObjective and self.setdat.get("quest_progress_watch", False)):
+            self.closeQuestMenu()
         if stopWhen and stopWhen():
             return
         # Normalize field name to handle both space and underscore formats
@@ -389,11 +391,6 @@ class GatherMixin:
         else:
             self.set_task_status(f"gather_{field}", task="gather", field=field)
 
-        def closeQuestMenu():
-            # Establish a known tab state even if scanning stopped before Quest opened.
-            self.toggleInventory("open")
-            self.toggleInventory("close")
-
         questMenuKeptOpen = False
         questWatchGiver = questObjective["giver"] if questObjective else None
         questWatchObjective = questObjective["action"] if questObjective else None
@@ -421,7 +418,7 @@ class GatherMixin:
             except InterruptRequested:
                 self.skipTask.value = INTERRUPT_NONE
                 try:
-                    closeQuestMenu()
+                    self.closeQuestMenu()
                 finally:
                     gatherSession.finish(gatherNameSpace)
                 raise
@@ -532,7 +529,7 @@ class GatherMixin:
                         self.disableShiftLock()
                         self._gatherShiftLockEnabled = False
                 if questMenuKeptOpen:
-                    closeQuestMenu()
+                    self.closeQuestMenu()
                     questMenuKeptOpen = False
                 self.moveMouseToDefault()
             finally:
