@@ -83,7 +83,6 @@ class InventoryMixin:
         return False
 
     def toggleInventory(self, mode):
-        self.questMenuOpen = False
         def clickInv():
             mouse.moveTo(self.robloxWindow.mx+30, self.robloxWindow.my+113)
             time.sleep(0.1)
@@ -103,6 +102,8 @@ class InventoryMixin:
             time.sleep(0.1)
         else:
             clickInv()
+        # Cleared only once the clicks are done, so an interrupt mid-close still lets reset close the panel.
+        self.questMenuOpen = False
         self.moveMouseToDefault()
         time.sleep(0.3)
         '''
