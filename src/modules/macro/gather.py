@@ -330,6 +330,7 @@ class GatherMixin:
         returnType = "rejoin" if isHiveHubField else fieldSetting["return"]
         fuzzyAIRuntimeDefaults = settingsManager.FUZZY_AI_RUNTIME_DEFAULTS
         pattern_blooms_ai_model = str(self.setdat.get("blooms_ai_model", "Standard"))
+        pattern_pine_dupe_detection = str(fieldSetting.get("pine_dupe_detection", "Pixel"))
         pattern_ai_gather_model = str(fieldSetting.get("ai_gather_model", self.setdat.get("ai_gather_model", "Standard")))
         fuzzyAITokenRanking = settingsManager.loadFuzzyAITokenRanking(field, pattern_ai_gather_model)
         pattern_capture_backend = fuzzyAIRuntimeDefaults["fuzzy_ai_capture_backend"]
