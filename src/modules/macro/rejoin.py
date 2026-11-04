@@ -1,3 +1,4 @@
+from modules.screen import virtual_display
 import re
 import random
 import requests
@@ -276,10 +277,15 @@ class RejoinMixin:
                         robloxOpenTime = time.time()
                     try:
                         self.setRobloxWindowInfo(setYOffset=False)
+                    except virtual_display.DisplayError:
+                        raise
                     except Exception:
                         pass
                 else:
                     robloxOpenTime = 0
+                if virtual_display.active() and not virtual_display.state().get("window_ready"):
+                    time.sleep(0.25)
+                    continue
                 if (
                     robloxOpenTime
                     and time.time() >= joinErrorScanAfter

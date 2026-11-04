@@ -69,6 +69,19 @@ def canClaimTimedBearQuest(name):
 # (set_enabled moved into RichPresenceManager class)
 #controller for the macro
 def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMessageQueue=None, planterCommandQueue=None, skipServer=None):
+    from modules.screen.virtual_display import DisplayError
+    try:
+        _run_macro(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer)
+    except DisplayError as error:
+        run.value = 0
+        from modules.controls.keyboard import keyboard
+        from modules.logging.log import log
+        keyboard.releaseMovement()
+        mouse.mouseUp()
+        log(logQueue, False, None, False).webhook("1080p Display Error", str(error), "red")
+
+
+def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMessageQueue=None, planterCommandQueue=None, skipServer=None):
     # imported here so the GUI process, which only passes this function to the macro
     # process, doesn't load the macro package (OCR, cv2, Vision, pyautogui)
     import modules.macro as macroModule

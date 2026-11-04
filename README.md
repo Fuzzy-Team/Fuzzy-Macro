@@ -99,6 +99,14 @@ Follow our [installation guide](https://fuzzy-team.gitbook.io/fuzzy-macro) to ge
 - Death detection and recovery
 - Screen resolution detection (See [Display Settings](https://fuzzy-team.gitbook.io/fuzzy-macro/system-settings/display-settings))
 
+### Optional 1080p display mode
+
+On macOS 13 or later, enable **Use 1080p virtual display** in Config → Other Settings → Display to give one Roblox client a 1920×1080 game area at normal pixel density. This can help detection on Retina screens. The setting defaults to off and applies on the next macro start.
+
+Roblox stays windowed on a virtual monitor while a borderless preview shows the game on your physical screen. Stop keeps the virtual monitor available. Disabling the setting takes effect on the next Start and restores window placement; exiting Fuzzy also restores placement. Keyboard and mouse input still belong to the macro while it runs.
+
+The bundled helper comes from [Fuzzy Display](https://github.com/Fuzzy-Team/Fuzzy-Display), a reduced [DeskPad](https://github.com/Stengo/DeskPad) fork. It needs Accessibility and Screen Recording permissions. The binary is ad hoc signed. Live display, input, reconnect and restoration checks passed on macOS 27.0.1 with Apple Silicon, along with a Pine Tree gather through backpack-limit detection, walking home and conversion. Physical Retina hardware, Intel runtime and clean-machine permission setup still need validation.
+
 ## Credits
 ### Macro Inspiration:
 - [Natro Macro](https://github.com/NatroTeam/NatroMacro)

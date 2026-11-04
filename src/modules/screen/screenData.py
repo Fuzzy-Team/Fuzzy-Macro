@@ -5,6 +5,7 @@ import mss
 import mss.darwin
 mss.darwin.IMAGE_OPTIONS = 0
 from ..misc import settingsManager
+from modules.screen import virtual_display
 
 BASE_SCREEN_WIDTH = 2880
 BASE_SCREEN_HEIGHT = 1800
@@ -73,6 +74,8 @@ def scaleRegion(left, top, width, height, anchor_x="left", anchor_y="top", scree
 
 
 def setScreenData():
+    if virtual_display.active():
+        return
     wwd, whd = pag.size()
     screenData = {
         "display_type": "built-in",
@@ -131,6 +134,16 @@ def setScreenData():
     settingsManager.saveDict(screenPath, screenData)
 
 def getScreenData():
+    if virtual_display.active():
+        # Child processes must not inherit physical Retina metadata from screen.txt.
+        width, height = virtual_display.screen_size()
+        return {
+            "display_type": "built-in", "screen_width": width, "screen_height": height,
+            "reference_width": BASE_SCREEN_WIDTH, "reference_height": BASE_SCREEN_HEIGHT,
+            "x_scale": width / BASE_SCREEN_WIDTH, "y_scale": height / BASE_SCREEN_HEIGHT,
+            "x_multiplier": BASE_SCREEN_WIDTH / width, "y_multiplier": BASE_SCREEN_HEIGHT / height,
+            "x_length_multiplier": BASE_SCREEN_WIDTH / width, "y_length_multiplier": BASE_SCREEN_HEIGHT / height,
+        }
     # This module is imported before main.py gets a chance to refresh display
     # information. Recreate the file here when it has been removed so imports
     # such as modules.screen.screenshot do not fail at startup.

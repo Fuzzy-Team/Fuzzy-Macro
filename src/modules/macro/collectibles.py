@@ -863,7 +863,7 @@ class CollectiblesMixin:
             # start slightly lower to avoid being barely too high
             mouse.moveTo(self.robloxWindow.mx+(x), self.robloxWindow.my+(y+25))
             time.sleep(0.3)
-            pag.dragTo(self.robloxWindow.mx + self.robloxWindow.mw//2, self.robloxWindow.my + self.robloxWindow.mh//2-80, 0.6, button='left')
+            mouse.dragTo(self.robloxWindow.mx + self.robloxWindow.mw//2, self.robloxWindow.my + self.robloxWindow.mh//2-80, 0.6, button='left')
 
         #interact with feed menu
         time.sleep(1)

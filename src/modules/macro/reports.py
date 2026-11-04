@@ -63,6 +63,9 @@ class ReportMixin:
         return 0
 
     def hourlyReportBackgroundOnce(self):
+        from modules.screen import virtual_display
+        if virtual_display.active() and (self.status.value == "rejoining" or not virtual_display.state().get("window_ready")):
+            return
         try:
             currMin = datetime.now().minute
             currSec = datetime.now().second
