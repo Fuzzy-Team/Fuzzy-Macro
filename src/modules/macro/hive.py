@@ -192,6 +192,7 @@ class HiveMixin:
         return True
 
     def reset(self, hiveCheck = False, convert = True, AFB = False):
+        self.closeQuestMenu()
         self.alreadyConverted = False
         self.keyboard.releaseMovement()
 
