@@ -1,4 +1,5 @@
 import eel
+from modules.gather_session import PATTERN_FIELDS
 import eel.chrome
 import webbrowser
 import modules.misc.settingsManager as settingsManager
@@ -573,6 +574,7 @@ def getPatterns():
                     "ai_backed": metadata.get("ai_backed", False),
                     "requires_models": metadata.get("requires_models", False),
                     "description": metadata.get("description", ""),
+                    "supported_fields": sorted(PATTERN_FIELDS[root.lower()]) if root.lower() in PATTERN_FIELDS else None,
                 }
             )
     except Exception:
