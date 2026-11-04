@@ -136,6 +136,21 @@ def locateImageOnScreen(target, x, y, w, h, threshold=0, scales=None, return_sca
     return locateImageInScreen(target, captureRegionBGR(x, y, w, h), threshold, scales, return_scale, resize_interp, early_exit_thresh)
 
 
+def findBlackPixel(window, x1, x2, y):
+    """First exact black pixel on an inclusive window-relative row, or None.
+
+    Source patterns truncate coordinates before capturing, including neighbour rows
+    just outside the window. Retina captures are sampled in logical window pixels.
+    """
+    x1, x2, y = int(x1), int(x2), int(y)
+    width = x2 - x1 + 1
+    screen = captureRegionBGR(window.mx + x1, window.my + y, width, 1)
+    if screen.shape[:2] != (1, width):
+        screen = cv2.resize(screen, (width, 1), interpolation=cv2.INTER_NEAREST_EXACT)
+    hits = np.flatnonzero(np.all(screen[0] == 0, axis=1))
+    return x1 + int(hits[0]) if hits.size else None
+
+
 def captureRegionBGR(x, y, w, h):
     """Screenshot a region as a BGR array, for passing to locateImageInScreen."""
     return cv2.cvtColor(np.array(mssScreenshot(x, y, w, h)), cv2.COLOR_RGB2BGR)

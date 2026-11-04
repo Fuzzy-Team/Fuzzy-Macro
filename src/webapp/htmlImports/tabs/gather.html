@@ -312,6 +312,28 @@
         `
       );
 
+      const pineDupeContainer = document.createElement("div");
+      pineDupeContainer.id = "pine-dupe-section";
+      pineDupeContainer.style.display = "none";
+      parentElement.appendChild(pineDupeContainer);
+      buildStandardContainer(
+        pineDupeContainer,
+        "PineDupe",
+        "",
+        [
+          {
+            id: "pine_dupe_detection",
+            title: "Dupe Detection",
+            desc: "Pixel looks for black pixels where duped tokens appear. AI uses the Standard token model to find duped tokens instead.",
+            type: {
+              name: "dropdown",
+              data: ["Pixel", "AI"],
+              triggerFunction: triggerFunction,
+            },
+          },
+        ]
+      );
+
       // Add control buttons at the bottom
       const buttonContainer = document.createElement('div');
       buttonContainer.style.cssText = 'display: flex; justify-content: center; gap: 10px; margin-top: 20px; margin-bottom: 20px;';
