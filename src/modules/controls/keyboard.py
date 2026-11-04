@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pyautogui as pag
+from modules.screen import virtual_display
 import time
 from typing import TYPE_CHECKING
 from modules.controls.sleep import is_paused, is_stopped, wait_while_paused
@@ -23,6 +24,7 @@ def _pausePoint():
         pag.keyUp(k, _pause=False)
     wait_while_paused()
     if not is_stopped():
+        if virtual_display.active(): virtual_display.state(require_window=True)
         for k in held:
             pag.keyDown(k, _pause=False)
     return time.perf_counter() - start
@@ -119,9 +121,11 @@ class keyboard:
     @staticmethod
     #call the press function of the pag library
     def pagPress(k):
+        if virtual_display.active(): virtual_display.state(require_window=True)
         pag.press(k)
     @staticmethod
     def keyDown(k, pause = True):
+        if virtual_display.active(): virtual_display.state(require_window=True)
         #for some reason, the function key is sometimes held down, causing it to open the dock or enable dictation
         keyboard.keyUp('fn', False)
         if k not in _held:
@@ -143,9 +147,11 @@ class keyboard:
             keyboard.keyUp(key, False)
 
     def write(self, text, interval = 0.1):
+        if virtual_display.active(): virtual_display.state(require_window=True)
         pag.typewrite(text, interval)
     #pyautogui with the pause
     def slowPress(self,k):
+        if virtual_display.active(): virtual_display.state(require_window=True)
         pag.keyDown(k)
         time.sleep(0.08)
         pag.keyUp(k)

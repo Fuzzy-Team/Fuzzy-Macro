@@ -272,6 +272,10 @@ class cloudflaredStream:
                         self.capture_thread = None
                         break
                 try:
+                    from modules.screen import virtual_display
+                    if virtual_display.active():
+                        x, y = virtual_display.origin()
+                        monitor = {"left": x, "top": y, "width": 1920, "height": 1080}
                     screen = np.array(sct.grab(monitor), dtype=np.uint8)
                     
                     #resolution scaling if needed
