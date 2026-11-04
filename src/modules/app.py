@@ -675,6 +675,7 @@ def runApp(macroTarget):
                 try:
                     virtual_display.command("hide")
                 except virtual_display.DisplayError:
+                    # A failed helper must not prevent Stop from finishing.
                     pass
 
             run.value = 3
