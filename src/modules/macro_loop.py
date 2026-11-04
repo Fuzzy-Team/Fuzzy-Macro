@@ -575,7 +575,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             questCache.clear()
             questScanScreens = None
         # Nothing was picked to use the menu a scan left open.
-        macro.closeQuestMenu()
+        if macro.questMenuOpen:
+            runTask(macro.closeQuestMenu, resetAfter=False, allowAFB=False)
         return gathered
 
     def cooldownTaskReady():

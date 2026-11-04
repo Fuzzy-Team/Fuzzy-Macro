@@ -185,6 +185,7 @@ class QuestMixin:
         """Close a quest menu a scan or watcher left open, from whatever tab state it is in."""
         if self.questMenuOpen:
             self.toggleInventory("open")
+            self.questMenuOpen = True  # the panel is still up until the second click lands
             self.toggleInventory("close")
 
     def captureQuestScreenshots(self, maxScreens=150, keepOpen=False):

@@ -102,10 +102,10 @@ class InventoryMixin:
             time.sleep(0.1)
         else:
             clickInv()
-        # Cleared only once the clicks are done, so an interrupt mid-close still lets reset close the panel.
-        self.questMenuOpen = False
         self.moveMouseToDefault()
         time.sleep(0.3)
+        # Cleared only once every pause is done, so an interrupt mid-close still lets reset close the panel.
+        self.questMenuOpen = False
         '''
         self.keyboard.press("\\")
         #align with first buff
