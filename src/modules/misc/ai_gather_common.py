@@ -339,6 +339,10 @@ def decode_detections(runtime, prefix, output, confidence_threshold):
 
 
 def build_capture(viewport, capture_backend="auto"):
+    from modules.screen import virtual_display
+    if virtual_display.active():
+        virtual_display.state(require_window=True)
+        return {"backend": "fuzzy", "viewport": viewport, "width": 1920, "height": 1080}
     if viewport is not None:
         left = int(getattr(viewport, "mx", 0))
         top = int(getattr(viewport, "my", 0))
@@ -408,6 +412,9 @@ def mss_grab_to_array(session, monitor, capture=None):
 
 def grab_frame(runtime):
     capture = runtime["capture"]
+    if capture["backend"] == "fuzzy":
+        from modules.screen.screenshot import mssScreenshotNP
+        return mssScreenshotNP(0, 0, 1920, 1080)
     if capture["backend"] == "mss":
         monitor = capture["monitor"]
         return mss_grab_to_array(capture["session"], monitor, capture=capture)

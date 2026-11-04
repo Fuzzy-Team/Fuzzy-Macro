@@ -1,6 +1,7 @@
 import os
 import subprocess
 import pyautogui as pag
+from modules.screen import virtual_display
 from AppKit import NSWorkspace
 mw,mh = pag.size()
 
@@ -59,6 +60,9 @@ def closeApp(app):
         print("quit application timed out")
 
 def getWindowSize(windowName):
+    if virtual_display.active() and "roblox" in windowName.lower():
+        virtual_display.state(require_window=True)
+        return 0, 0, virtual_display.WIDTH, virtual_display.HEIGHT
     import Quartz
     
     windowList = Quartz.CGWindowListCopyWindowInfo(

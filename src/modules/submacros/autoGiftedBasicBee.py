@@ -375,7 +375,7 @@ class AutoGiftedBasicBeeRunner:
         time.sleep(0.15)
         pag.mouseDown(button="left")
         time.sleep(0.1)
-        pag.moveTo(int(bee_slot[0]), int(bee_slot[1]), duration=0.25)
+        mouse.moveTo(int(bee_slot[0]), int(bee_slot[1]), delay=0.25)
         time.sleep(0.1)
         pag.mouseUp(button="left")
 
@@ -549,7 +549,7 @@ class AutoGiftedBasicBeeRunner:
                 )
                 time.sleep(1)
 
-            bee_slot = pag.position()
+            bee_slot = mouse.getPos()
             self._update_status(
                 state="rolling",
                 message="Bee slot captured. Starting rolls.",
