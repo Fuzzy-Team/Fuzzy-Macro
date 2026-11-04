@@ -104,7 +104,6 @@ class QuestMixin:
                     "objective": objective,
                     "watched_objective": watchedObjective,
                     "report": report,
-                    "menu_open": True,
                 }
             except Exception:
                 print(traceback.format_exc())
@@ -152,15 +151,16 @@ class QuestMixin:
         if report:
             report.stop()
 
+        # A reset can close the panel under the watcher, so trust the tracked state.
         completed = False
         try:
-            if checkCompletion and context.get("menu_open"):
+            if checkCompletion and self.questMenuOpen:
                 time.sleep(0.5)
                 completed = self.readWatchedQuestObjective(context["watched_objective"]) == "complete"
         except Exception:
             print(traceback.format_exc())
         finally:
-            if context.get("menu_open"):
+            if self.questMenuOpen:
                 self.toggleQuest()
             self.moveMouseToDefault()
 
@@ -628,6 +628,9 @@ class QuestMixin:
             #open inventory to ensure quest page is closed
             self.toggleInventory("close")
             self.toggleQuest()
+        elif reuseMenu:
+            # The last read parked the mouse outside the panel; scrolling needs it over the list.
+            mouse.moveTo(self.robloxWindow.mx+(312), self.robloxWindow.my+(200))
 
         def scrollToTop():
             #stop scrolling when the quest page remains unchanged
