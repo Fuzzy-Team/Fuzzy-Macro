@@ -290,6 +290,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                       and time.time() - macro._viciousAttackTarget[1] <= 180)
                      or (macro.night and macro.confirmNight()))
             ):
+                macro.closeQuestMenu()
                 macro.stingerHunt()
                 taskCompleted = True
             if (
@@ -297,6 +298,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 and macro.setdat["mondo_buff"]
                 and macro.hasMondoRespawned()
             ):
+                macro.closeQuestMenu()
                 macro.collectMondoBuff()
                 taskCompleted = True
             if macro.setdat.get("macro_mode", "normal") not in ("alt", "vic") and macro.hasScheduledRejoinArrived():
@@ -520,7 +522,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 if giver in turnedIn:
                     continue
                 turnedIn.add(giver)
-                requiredTasks, _ = handleQuest(giver)
+                handed = runTask(handleQuest, args=(giver,), resetAfter=False, allowAFB=False)
+                if handed is None:
+                    continue  # interrupted; the finished quest is retried on the next pass
+                requiredTasks, _ = handed
                 for task in requiredTasks:
                     macro.setdat[task] = True
                 # The quest it handed out is new work: it keeps no skips and can be turned in later.
