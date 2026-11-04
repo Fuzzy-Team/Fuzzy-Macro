@@ -503,7 +503,7 @@ class RejoinMixin:
                     detect=self.claimHiveByDetectMethod,
                     check=self.claimHiveByCheckMethod,
                     stopped=lambda: self._hiveAcquisitionControlStatus() == "stopped",
-                    fatal_exceptions=(InterruptRequested,),
+                    fatal_exceptions=(InterruptRequested, virtual_display.DisplayError),
                 )
             except BaseException:
                 _finish_rejoin(False)

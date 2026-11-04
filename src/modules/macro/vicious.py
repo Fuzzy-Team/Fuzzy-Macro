@@ -293,7 +293,7 @@ class ViciousMixin:
             mouse.click()
         width, height = self.robloxWindow.mw, self.robloxWindow.mh
         for x, y in ((1465, 162), (1467, 165)):
-            mouse.moveTo(int(x * width / 1920 + 0.5), int(y * height / 1080 + 0.5))
+            mouse.moveTo(win.mx + int(x * width / 1920 + 0.5), win.my + int(y * height / 1080 + 0.5))
             sleep(0.05)
 
 

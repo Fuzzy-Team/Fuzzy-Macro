@@ -30,7 +30,7 @@ def state(require_window=False, allow_error=False):
     try:
         with open(os.path.join(os.environ[ENV], "status.json")) as handle:
             result = json.load(handle)
-        if result.get("protocol") != 1 or time.time() - result["updated"] > 3:
+        if result.get("protocol") != 1 or abs(time.time() - result["updated"]) > 3:
             raise DisplayError("Fuzzy Display stopped responding. Restart the macro.")
         if result.get("error") and not allow_error:
             raise DisplayError(result["error"])
