@@ -64,8 +64,6 @@ class ReportMixin:
 
     def hourlyReportBackgroundOnce(self):
         from modules.screen import virtual_display
-        if virtual_display.active() and (self.status.value == "rejoining" or not virtual_display.state().get("window_ready")):
-            return
         try:
             currMin = datetime.now().minute
             currSec = datetime.now().second
@@ -113,6 +111,13 @@ class ReportMixin:
                     #reset stats even if the report failed, so this hour's data is not carried forward
                     self.hourlyReport.resetHourlyStats()
                     self.itemMonitor.reset_hourly()
+
+            if virtual_display.active():
+                try:
+                    if self.status.value == "rejoining" or not virtual_display.state().get("window_ready"):
+                        return
+                except virtual_display.DisplayError:
+                    return
 
             #Hourly report
             if self.status.value != "rejoining":

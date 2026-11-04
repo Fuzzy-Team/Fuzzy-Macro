@@ -1,5 +1,6 @@
 import os
 import subprocess
+import time
 import pyautogui as pag
 from modules.screen import virtual_display
 from AppKit import NSWorkspace
@@ -46,7 +47,18 @@ def openDeeplink(link):
 def closeApp(app):
     for runningApp in NSWorkspace.sharedWorkspace().runningApplications():
         if (runningApp.localizedName() or "").casefold() == app.casefold():
-            runningApp.terminate()
+            pid = runningApp.processIdentifier()
+            if not runningApp.terminate():
+                raise RuntimeError("Could not close {}.".format(app))
+            deadline = time.monotonic() + 10
+            while True:
+                try:
+                    os.kill(pid, 0)
+                except ProcessLookupError:
+                    break
+                if time.monotonic() >= deadline:
+                    raise RuntimeError("{} did not exit. Close it before restarting the macro.".format(app))
+                time.sleep(0.1)
 
 def getWindowSize(windowName):
     if virtual_display.active() and "roblox" in windowName.lower():

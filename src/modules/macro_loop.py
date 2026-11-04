@@ -75,10 +75,19 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
     except DisplayError as error:
         run.value = 0
         from modules.controls.keyboard import keyboard
-        from modules.logging.log import log
+        from modules.logging import log as logModule
         keyboard.releaseMovement()
         mouse.mouseUp()
-        log(logQueue, False, None, False).webhook("1080p Display Error", str(error), "red")
+        settings = settingsManager.loadMacroProfile()["settings"]
+        logger = logModule.log(
+            logQueue, logModule.delivery_uses_webhook(settings),
+            logModule.get_default_delivery_route(settings), False,
+            enableDiscordBot=logModule.delivery_uses_bot_messages(settings),
+            discordMessageQueue=discordMessageQueue,
+            routeSettings=logModule.build_route_settings(settings),
+            webhookTimeFormat=settings.get("webhook_time_format", 24),
+        )
+        logger.webhook("1080p Display Error", str(error), "red", ping_category="ping_critical_errors")
 
 
 def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMessageQueue=None, planterCommandQueue=None, skipServer=None):
