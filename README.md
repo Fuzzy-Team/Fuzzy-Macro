@@ -100,11 +100,9 @@ Follow our [installation guide](https://fuzzy-team.gitbook.io/fuzzy-macro) to ge
 
 ## Credits
 ### Macro Inspiration:
-- [Natro Macro](https://github.com/NatroTeam/NatroMacro)
-- <a href="https://github.com/alaninnovates/bss-macro" target="_blank">Stumpy Macro</a>
 - <a href="https://github.com/existancepy/bss-macro-py" target="_blank">Existance Macro</a>
 - Developers: [Logan](https://github.com/LaganYT)
-  - Based off code written by: [Existance](https://github.com/existancepy/bss-macro-py)
+  - Based off code written by: [Existance](https://github.com/existancepy/)
 - Pattern Makers: Existance, NatroTeam, tvojamamkajenic, sev, dully176, chillketchup, Electro
 
 ## Preview
@@ -113,7 +111,5 @@ Follow our [installation guide](https://fuzzy-team.gitbook.io/fuzzy-macro) to ge
 
 ## Notes
 
-- This Macro supports macOS and Windows is in beta testing. Linux support is not planned; for Linux use [BeeTuxMacro](https://github.com/painvision/BeeTuxMacro).
+- This Macro supports macOS and Windows. Linux support is not planned.
 - Fuzzy Macro is built on top of Existance Macro, meaning you can easily transitition to Fuzzy Macro. The settings and config works the same, think of Fuzzy Macro as a continuation project of Existance Macro.
-- The macro backend is written in Python while the frontend uses HTML/CSS/JS with eel as a communication layer.
-- Version system uses the format Major.Minor.Bugfix, with an optional letter at the end for test versions. (Ex: 1.1.0 is newer than 1.1.0a - 1.1.0a is a beta version in this case)
