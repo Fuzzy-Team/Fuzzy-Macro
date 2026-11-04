@@ -3,7 +3,7 @@ import traceback
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
 from modules.controls.sleep import INTERRUPT_NONE, InterruptRequested, pause_aware_time as time, sleep
-from modules.gather_session import field_pattern_variables, GatherPatternRunner, GatherSession
+from modules.gather_session import pattern_supports_field, field_pattern_variables, GatherPatternRunner, GatherSession
 from modules.quest_planning import quest_check_due
 import modules.macro.pattern_environment as patternEnvironment
 from modules.macro.game_data import (
@@ -89,6 +89,10 @@ class GatherMixin:
             ),
             fatal_exceptions=(InterruptRequested,),
         )
+        if not pattern_supports_field(pattern, normalized_field):
+            patternRunner.mark_failed(f"Pattern cannot run in {normalized_field}")
+            pattern = patternRunner.active_pattern
+            fieldSetting["shape"] = pattern
         aiPatternLabels = {
             "fuzzy_ai_gather": "Fuzzy AI Gather",
             "blooms_ai": "BloomsAI",
