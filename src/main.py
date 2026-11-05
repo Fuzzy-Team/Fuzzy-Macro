@@ -2758,6 +2758,10 @@ def watch_for_hotkeys(run):
     # Add threading lock for synchronization
     import threading
     key_lock = threading.Lock()
+
+    def show_message(title, text):
+        # a modal box would block the pynput callback and hold key_lock
+        threading.Thread(target=messageBox.msgBox, kwargs={"title": title, "text": text}, daemon=True).start()
     
     # Add key state cleanup to handle stuck keys
     last_cleanup_time = 0
@@ -2977,7 +2981,7 @@ def watch_for_hotkeys(run):
                     try:
                         import gui
                         if gui.isAnyToolRunning():
-                            messageBox.msgBox(title="Tool Running", text="Stop the running tool before starting the macro.")
+                            show_message("Tool Running", "Stop the running tool before starting the macro.")
                             return
                     except Exception:
                         pass
@@ -3035,7 +3039,7 @@ def watch_for_hotkeys(run):
                         import gui
                         result = gui.startHotbarBuffTool()
                         if not result.get("ok") and not gui.isAnyToolRunning():
-                            messageBox.msgBox(title="Hotbar Buff", text=result.get("message", "Could not start Hotbar Buff."))
+                            show_message("Hotbar Buff", result.get("message", "Could not start Hotbar Buff."))
                     except Exception:
                         pass
                 elif keys_match_keybind(autoclicker_keybind):
@@ -3048,7 +3052,7 @@ def watch_for_hotkeys(run):
                         import gui
                         result = gui.startAutoClickerTool()
                         if not result.get("ok") and not gui.isAnyToolRunning():
-                            messageBox.msgBox(title="Auto Clicker", text=result.get("message", "Could not start Auto Clicker."))
+                            show_message("Auto Clicker", result.get("message", "Could not start Auto Clicker."))
                     except Exception:
                         pass
                 elif keys_match_keybind(auto_gifted_basic_bee_start_keybind):
@@ -3061,7 +3065,7 @@ def watch_for_hotkeys(run):
                         import gui
                         result = gui.startAutoGiftedBasicBeeTool()
                         if not result.get("ok") and not gui.isAnyToolRunning():
-                            messageBox.msgBox(title="Auto Gifted Basic Bee", text=result.get("message", "Could not start Auto Gifted Basic Bee."))
+                            show_message("Auto Gifted Basic Bee", result.get("message", "Could not start Auto Gifted Basic Bee."))
                     except Exception:
                         pass
                 elif keys_match_keybind(pause_keybind):
