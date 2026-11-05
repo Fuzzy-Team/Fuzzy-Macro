@@ -17,6 +17,12 @@ activate_virtual_env() {
     source "$VENV_PATH/bin/activate"
 }
 
+# Run the venv's pip directly. A venv moved from where it was created still points
+# `activate` at the old path, so a bare `pip` would fall through to another Python.
+venv_pip() {
+    "$VENV_PATH/bin/python" -m pip "$@"
+}
+
 install_pip_package() {
 	local packages="$1"
 	local extra_args="$2"
@@ -31,10 +37,10 @@ install_pip_package() {
 	fi
 
 	if [ "$chip" = "arm64" ]; then
-		arch -arm64 pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 $extra_args $packages $constraint_arg
+		arch -arm64 "$VENV_PATH/bin/python" -m pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 $extra_args $packages $constraint_arg
 	else
 		#fallback for other architectures
-		pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 $extra_args $packages $constraint_arg
+		venv_pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 $extra_args $packages $constraint_arg
 	fi
 
 	if [ -n "$tmp_constraint" ] && [ -f "$tmp_constraint" ]; then
@@ -179,7 +185,7 @@ while [ "$attempt" -le 3 ]; do
 	fi
 done
 
-pip install --upgrade pip setuptools wheel
+venv_pip install --upgrade pip setuptools wheel
 install_pip_package "numpy<2"
 printf "\033[1;35mInstalling libraries\033[0m\n\n"
 
@@ -202,7 +208,7 @@ elif version_at_least "$os_ver" "10.15.0"; then
 	# OpenCV 4.4 and 4.6 cannot load the current AI Gather ONNX models.
 	# OpenCV 4.10 has a compatible macOS 10.15 Intel wheel. Keep exactly one
 	# OpenCV package installed because all variants share the cv2 namespace.
-	pip uninstall -y opencv-python opencv-contrib-python opencv-python-headless opencv-contrib-python-headless
+	venv_pip uninstall -y opencv-python opencv-contrib-python opencv-python-headless opencv-contrib-python-headless
 	install_pip_package "opencv-python==4.10.0.84 numpy==1.19.1 Polygon3" "--force-reinstall"
 	install_pip_package "easyocr" "--no-deps"
 	install_pip_package "torch"
@@ -221,13 +227,12 @@ else
 	export CMAKE_ARGS="-DBUILD_JAVA=OFF"
 	install_pip_package "opencv-python==4.6.0.66"
 	unset CMAKE_ARGS
-	#python"${python_ver}" -m pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org paddlepaddle==2.4.2 -i https://pypi.tuna.tsinghua.edu.cn/simple
-	#python"${python_ver}" -m pip install --no-deps --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org paddleocr==2.6.1.3
-	#printf "\033[31;1mInstalling lxml, this can take a while \033[0m\n"
-	#python"${python_ver}" -m pip install --default-timeout=100 --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org attrdict beautifulsoup4 cython fire fonttools imgaug lanms-neo==1.0.2 lmdb lxml opencv-contrib-python==4.6.0.66 opencv-python==4.6.0.66 openpyxl Polygon3 premailer pyclipper pymupdf python-docx rapidfuzz scikit-image shapely tqdm visualdl
-	#pip"${python_ver}" install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org protobuf==3.20.0
-	#pip"${python_ver}" install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org orjson==3.9.6
-	install_pip_package "ocrmac"
+	# Apple Vision OCR needs macOS 10.15, so use easyocr. 1.7.1 is the last release that
+	# works with python-bidi 0.4.2 (the newest for Python 3.7), and torch 1.13.1 is the last
+	# for Python 3.7. --no-deps keeps easyocr from adding a second OpenCV package and
+	# scikit-image (its wheels need macOS 10.15; ocr.py stands in for it).
+	install_pip_package "easyocr==1.7.1" "--no-deps"
+	install_pip_package "torch==1.13.1 torchvision==0.14.1 scipy shapely pyclipper python-bidi==0.4.2 PyYAML ninja packaging"
 fi
 install_pip_package "pyautogui"
 install_pip_package "mss"

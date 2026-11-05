@@ -21,7 +21,8 @@ mac_version = tuple(int(part) for part in platform.mac_ver()[0].split(".")[:2] i
 # preference API, which is detected and disabled below).  Do not load ocrmac on
 # Catalina: recent transitive Core ML wheels can be compiled for a newer macOS
 # and emit noisy dyld errors before the fallback OCR is selected.
-if len(mac_version) >= 2 and mac_version >= (11, 0):
+# Python 3.8 from python.org (used on Intel Macs) reports every macOS 11+ as 10.16.
+if len(mac_version) >= 2 and mac_version >= (10, 16):
     try:
         from ocrmac import ocrmac #see if ocr mac is installed
         ocrLib = "ocrmac"
@@ -35,6 +36,19 @@ if ocrLib is None:
         print("Imported paddleocr")
         ocrLib = "paddleocr"
     except:
+        try:
+            import skimage.io
+        except ImportError:
+            # easyocr imports skimage.io only to read image files, and the macro passes it arrays.
+            # scikit-image isn't installed below macOS 10.15 (its wheels bundle a libomp that
+            # needs 10.15), so give easyocr a stand-in.
+            import sys
+            import types
+            skimageStub = types.ModuleType("skimage")
+            skimageStub.io = types.ModuleType("skimage.io")
+            skimageStub.io.imread = lambda path: np.asarray(Image.open(path))
+            sys.modules["skimage"] = skimageStub
+            sys.modules["skimage.io"] = skimageStub.io
         import easyocr
         import ssl
         ssl._create_default_https_context = ssl._create_unverified_context
