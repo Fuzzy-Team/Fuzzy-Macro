@@ -145,7 +145,8 @@ class PlanterMixin:
                     placementError = "notinfield"
                     placedPlanter = False
                     break
-                if self.blueTextImageSearch("maxplanters"):
+                # hotbar placement only watches for "not in field", otherwise assume it was placed
+                if not hotbarSlot and self.blueTextImageSearch("maxplanters"):
                     placementError = "maxplanters"
                     placedPlanter = False
                     break
