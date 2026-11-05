@@ -2384,16 +2384,16 @@ class macro:
     def findItemInInventory(self, itemName):
         
         def scrollToTop():
-            prevHash = None
-            for i in range(9):
+            hashes = []
+            for _ in range(9):
                 mouse.scroll(100)
                 sleep(0.05)
-                if i > 10:
-                    screen = cv2.cvtColor(mssScreenshotNP(self.robloxWindow.mx, self.robloxWindow.my+120, 100, 200), cv2.COLOR_BGRA2RGB)
-                    hash = imagehash.average_hash(Image.fromarray(screen))
-                    if not prevHash is None and prevHash == hash:
-                        break
-                    prevHash = hash
+                screen = cv2.cvtColor(mssScreenshotNP(self.robloxWindow.mx, self.robloxWindow.my+120, 100, 200), cv2.COLOR_BGRA2RGB)
+                hashes.append(imagehash.average_hash(Image.fromarray(screen)))
+                #stop once the list hasn't moved over the last 3 scrolls (150ms+), so a frame
+                #that lags behind a scroll can't be mistaken for the top
+                if len(hashes) >= 4 and all(h == hashes[-1] for h in hashes[-4:]):
+                    break
         #for retina, just a regular image search
         #for built-in, a transparency search
         itemImg = self.adjustImage("./images/inventory/old", itemName)
