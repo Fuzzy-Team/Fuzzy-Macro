@@ -2051,7 +2051,11 @@ class macro:
             with self._fieldBoosterGlitterLock:
                 if generation != self._fieldBoosterGlitterGeneration:
                     return
-            self.useGlitterFromSlot(glitterSlot)
+            try:
+                self.useGlitterFromSlot(glitterSlot)
+            except RuntimeError as error:
+                self.logger.webhook("", f"Could not extend field booster: {error}", "red")
+                return
             self.logger.webhook("", f"Used Glitter from hotbar slot {glitterSlot}; extending field booster", "bright green")
 
         threading.Thread(
@@ -2061,9 +2065,11 @@ class macro:
         ).start()
 
     def useGlitterFromSlot(self, slot):
-        """Use a Glitter hotbar slot, or locate Glitter in the inventory for slot 0."""
+        """Use a Glitter hotbar slot, or locate Glitter in the inventory for slot 0.
+        Raises RuntimeError if Glitter isn't in the inventory."""
         if int(slot) == 0:
-            self.useItemInInventory("glitter")
+            if not self.useItemInInventory("glitter"):
+                raise RuntimeError("Glitter was not found in the inventory")
         else:
             self.keyboard.press(str(slot))
 
@@ -2073,6 +2079,7 @@ class macro:
         if timing is None: timing = self.getTiming(name)
         if not isinstance(timing, float) and not isinstance(timing, int):
             print(f"Timing is not a valid number? {timing}")
+            timing = 0 #treat a corrupted entry as never done
         mobRespawnBonus = 1
         if applyMobRespawnBonus:
             mobRespawnBonus -= 0.15 if self.setdat["gifted_vicious"] else 0
@@ -6361,31 +6368,6 @@ class macro:
                     placedPlanter = False
                     break
                 time.sleep(0.3)
-            if hotbarSlot and placedPlanter and not recoverAlreadyPlacedPlanterState():
-                self.logger.webhook("", f"[Planter Placement] Hotbar slot {hotbarSlot} did not confirm {planter.title()} placement. Trying inventory fallback.", "orange", "screen")
-                self.planterCoords = None
-                self.findPlanterInInventory(name)
-                if self.planterCoords is None:
-                    placedPlanter = False
-                else:
-                    if not self.goToPlanter(planter, field, "place"):
-                        updateHourlyTime()
-                        return False
-                    self.useItemInInventory(x=self.planterCoords[0], y=self.planterCoords[1])
-                    time.sleep(0.5)
-                    placementError = None
-                    for _ in range(7):
-                        if self.blueTextImageSearch("notinfield"):
-                            placementError = "notinfield"
-                            placedPlanter = False
-                            break
-                        if self.blueTextImageSearch("maxplanters"):
-                            placementError = "maxplanters"
-                            placedPlanter = False
-                            break
-                        time.sleep(0.3)
-                    if placedPlanter:
-                        placedPlanter = recoverAlreadyPlacedPlanterState()
             if placedPlanter: 
                 self.logger.webhook("",f"Placed {planter.title()} Planter", "dark brown", "screen")
                 #use glitter
@@ -9055,6 +9037,7 @@ class macro:
         if timing is None: timing = self.getAFBtiming(name)
         if not isinstance(timing, float) and not isinstance(timing, int):
             print(f"Timing is not a valid number? {timing}")
+            timing = 0 #treat a corrupted entry as never done
         mobRespawnBonus = 1
         if applyMobRespawnBonus:
             mobRespawnBonus -= 0.15 if self.setdat["gifted_vicious"] else 0
