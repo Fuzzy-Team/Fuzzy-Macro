@@ -606,6 +606,7 @@ class HiveMixin:
         excluded_slots = set(excluded_slots or set())
         preferred_slot = max(1, min(6, int(preferred_slot)))
         self.logger.webhook("", f"Walking spawn → hive {preferred_slot} (check)", "dark brown")
+        self.spinToFaceHive()
         self.walkSpawnToHiveSlot(preferred_slot)
         prompt = self.waitForHivePrompt(preferred_slot, max_attempts=3)
         if not prompt:
