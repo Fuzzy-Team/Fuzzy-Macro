@@ -572,6 +572,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
 
         def handle_interrupt(action):
             skipTask.value = INTERRUPT_NONE
+            macro.stickerSproutInterruptRequested = False
             macro.keyboard.releaseMovement()
             mouse.mouseUp()
             interrupted_status = status.value.replace('_', ' ').title() if status.value else "Current Task"
