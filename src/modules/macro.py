@@ -1240,6 +1240,32 @@ class macro:
             self.night = False
             self.nightDetectStreaks = 0
 
+    #ported from Natro's nm_confirmNight. Shaded grass beside a wall can look like night to detectNight,
+    #so before a night task, reset and look down at the open ground in front of the hive
+    def confirmNight(self):
+        self.reset(convert=False)
+        for _ in range(10):
+            self.keyboard.press("pageup")
+        for _ in range(7):
+            self.keyboard.press("o")
+            time.sleep(0.025)
+
+        win = self.robloxWindow
+        screen = mssScreenshotNP(win.mx+300, win.my+win.mh//2+50, win.mw-600, win.mh//2-50)
+        bgr = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (10, 10))
+        #night grass, night snow. Natro matches these exactly; allow 2 for the small colour shift on macOS (shade by a wall matches from 3)
+        isNight = any(findColorObjectRGB(bgr, color, variance=2, kernel=kernel, mode="box") for color in [(0x17, 0x48, 0x1F), (0x56, 0x64, 0x6B)])
+
+        for _ in range(4):
+            self.keyboard.press("pagedown")
+        if isNight:
+            self.logger.webhook("", "Confirmed night", "dark brown", "screen")
+        else:
+            self.logger.webhook("", "Not night, skipping the night tasks", "dark brown", "screen")
+            self.night = False
+        return isNight
+
     def detectGuidingStarAnnouncement(self):
         if not self.setdat.get("guiding_star_announcements", False):
             return
@@ -2609,7 +2635,8 @@ class macro:
                     liveGatherReport.stop()
                 self.keyboard.press(".")
                 self.converting = False
-                self.stingerHunt()
+                if self.confirmNight():
+                    self.stingerHunt()
                 return
             
             #check if backpack is done
