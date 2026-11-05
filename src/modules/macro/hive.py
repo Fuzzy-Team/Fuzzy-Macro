@@ -327,26 +327,7 @@ class HiveMixin:
             self.canDetectNight = True
             self.location = "spawn"
             #detect if player is at hive. Spin a max of 4 times
-            atHive = False
-            for i in range(4):
-                screen = pillowToCv2(mssScreenshot(self.robloxWindow.mx+(self.robloxWindow.mw//2-100), self.robloxWindow.my+(self.robloxWindow.mh-10), 200, 10))
-                # Convert the image from BGR to HLS color space
-                hsl = cv2.cvtColor(screen, cv2.COLOR_BGR2HLS)
-                # Create a mask for the color range
-                mask1 = cv2.inRange(hsl, resetLower1, resetUpper1)  
-                mask2 = cv2.inRange(hsl, resetLower2, resetUpper2)    
-                mask = cv2.bitwise_or(mask1, mask2)
-                mask = cv2.erode(mask, resetKernel)
-                #get contours. If contours exist, direction is correct
-                contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                print(f"spin {i+1}: {time.time()-st}")
-                if contours:
-                    atHive = True
-                    break
-                #failed to detect, spin
-                for _ in range(4):
-                    self.keyboard.press(".")
-                time.sleep(0.1)
+            atHive = self.spinToFaceHive()
 
             self.keyboard.releaseMovement()
             for _ in range(8):
@@ -376,6 +357,28 @@ class HiveMixin:
         
         else:
             self.logger.webhook("", "Unable to detect that player respawned at hive", "dark brown", "screen")
+
+    def spinToFaceHive(self):
+        """Spin the camera up to 4 times until the hive's respawn pad or balloon shows at the bottom of the screen."""
+        for i in range(4):
+            screen = pillowToCv2(mssScreenshot(self.robloxWindow.mx+(self.robloxWindow.mw//2-100), self.robloxWindow.my+(self.robloxWindow.mh-10), 200, 10))
+            # Convert the image from BGR to HLS color space
+            hsl = cv2.cvtColor(screen, cv2.COLOR_BGR2HLS)
+            # Create a mask for the color range
+            mask1 = cv2.inRange(hsl, resetLower1, resetUpper1)
+            mask2 = cv2.inRange(hsl, resetLower2, resetUpper2)
+            mask = cv2.bitwise_or(mask1, mask2)
+            mask = cv2.erode(mask, resetKernel)
+            #get contours. If contours exist, direction is correct
+            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            print(f"spin {i+1}")
+            if contours:
+                return True
+            #failed to detect, spin
+            for _ in range(4):
+                self.keyboard.press(".")
+            time.sleep(0.1)
+        return False
 
     def walkHiveSlots(self, direction, slots):
         for _ in range(max(0, int(slots))):
@@ -603,6 +606,7 @@ class HiveMixin:
         excluded_slots = set(excluded_slots or set())
         preferred_slot = max(1, min(6, int(preferred_slot)))
         self.logger.webhook("", f"Walking spawn → hive {preferred_slot} (check)", "dark brown")
+        self.spinToFaceHive()
         self.walkSpawnToHiveSlot(preferred_slot)
         prompt = self.waitForHivePrompt(preferred_slot, max_attempts=3)
         if not prompt:
@@ -904,6 +908,9 @@ class HiveMixin:
         excluded_slots = set(excluded_slots or set())
         preferred_slot = max(1, min(6, int(preferred_slot)))
         self.logger.webhook("", "Detecting Hive", "dark brown")
+
+        # Face the hives before the camera changes, since the check reads the normal view.
+        self.spinToFaceHive()
 
         # Zoom out so all six pads (and their claim arrows) fit on screen.
         zoom = pitch = 0
