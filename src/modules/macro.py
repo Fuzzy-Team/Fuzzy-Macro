@@ -1713,7 +1713,6 @@ class macro:
             return math.floor(value * (self.robloxWindow.mh / 1080))
 
         def clickWindShrineDialogsUntilGone():
-            dialogImg = self.adjustImage("./images/menu", "dialog")
             searchX = self.robloxWindow.mx + math.floor(0.25 * self.robloxWindow.mw)
             searchY = self.robloxWindow.my + math.floor(0.55 * self.robloxWindow.mh)
             searchW = math.floor(0.5 * self.robloxWindow.mw)
@@ -1723,18 +1722,16 @@ class macro:
             consecutiveMisses = 0
 
             for _ in range(80):
-                dialogVisible = False
-                result = locateTransparentImageOnScreen(dialogImg, searchX, searchY, searchW, searchH, 0.65)
-                if result:
-                    dialogVisible = True
-                    _score, loc = result
-                    clickY = searchY + loc[1] + shrineScaleY(35)
-                else:
-                    try:
-                        dialogText = ''.join([x[1][0] for x in ocr.ocrRead(mssScreenshot(searchX, searchY, searchW, searchH))]).lower()
-                        dialogVisible = any(text in dialogText for text in ("wind shrine", "click to continue", "blown", "whirlwind"))
-                    except Exception:
-                        dialogVisible = False
+                try:
+                    lines = self.ocrLines(searchX, searchY, searchW, searchH)
+                except Exception:
+                    lines = []
+                dialogText = ''.join(text for text, _, _ in lines)
+                dialogVisible = any(text in dialogText for text in ("windshrine", "clicktocontinue", "blown", "whirlwind"))
+                for text, _, cy in lines:
+                    if "clicktocontinue" in text:
+                        clickY = int(cy)
+                        break
 
                 if not dialogVisible:
                     consecutiveMisses += 1
@@ -1751,11 +1748,10 @@ class macro:
             # One final generic dialog pass catches any follow-up line that appears
             # after the Wind Shrine-specific text has advanced.
             for _ in range(3):
-                result = locateTransparentImageOnScreen(dialogImg, searchX, searchY, searchW, searchH, 0.65)
+                result = self.findText("clicktocontinue", searchX, searchY, searchW, searchH)
                 if not result:
                     break
-                _score, loc = result
-                mouse.moveTo(clickX, searchY + loc[1] + shrineScaleY(35))
+                mouse.moveTo(clickX, result[1])
                 mouse.click()
                 time.sleep(0.2)
 
@@ -2035,14 +2031,32 @@ class macro:
             return True
         return compactPlanter in compactPrompt
 
-    def isBesideEImage(self, name):
-        template = self.adjustImage("./images/menu",name)
-        return locateTransparentImageOnScreen(template, self.robloxWindow.mx+(self.robloxWindow.mw//2-200), self.robloxWindow.my+self.robloxWindow.yOffset+34, 400, 140, 0.75)
-
     def isMakeHoneyPrompt(self, log=False):
         text = self.getTextBesideE()
         if log: print(f"output text: {text}")
-        return ("make" in text and "honey" in text) or self.isBesideEImage("makehoney")
+        return "make" in text and "honey" in text
+
+    def ocrLines(self, x, y, w, h):
+        """OCR a screen region. Returns [(text, cx, cy)]: each line's letters and digits in lowercase,
+        and the centre of its box in screen points."""
+        multi = self.robloxWindow.multi
+        lines = []
+        for box, (text, _conf) in ocr.ocrRead(mssScreenshot(x, y, w, h)):
+            text = self._compactPromptText(self.convertCyrillic(text.lower()))
+            if not text:
+                continue
+            cx = sum(p[0] for p in box) / len(box) / multi + x
+            cy = sum(p[1] for p in box) / len(box) / multi + y
+            lines.append((text, cx, cy))
+        return lines
+
+    def findText(self, word, x, y, w, h, exact=False):
+        """Centre (screen points) of the first OCR line in the region that contains word, or equals it
+        when exact. word is lowercase letters and digits only. None if the text isn't there."""
+        for text, cx, cy in self.ocrLines(x, y, w, h):
+            if (text == word) if exact else (word in text):
+                return int(cx), int(cy)
+        return None
 
     def getTiming(self,name = None):
         timings_path = settingsManager.getUserDataPath("timings.txt")
@@ -2177,7 +2191,7 @@ class macro:
         #place one sprinkler and check if its in field
         self.keyboard.press(sprinklerSlot)
         time.sleep(1)
-        if self.blueTextImageSearch("notinfield"):
+        if self.blueTextHas("notinfield"):
             return False
         #place the remaining sprinklers
         #hold jump and spam place sprinklers
@@ -2202,7 +2216,6 @@ class macro:
         else:
             time.sleep(20)
     #click the yes popup
-    #if detect is set to true, the macro will check if the yes button is there
     #if detectOnly is set to true, the macro will not click 
     def _clickYesByColor(self, detectOnly=False, clickOnce=False):
         """
@@ -2244,9 +2257,10 @@ class macro:
             return False
         if detectOnly:
             return True
-        clickX = x + (bx + bw // 2) // self.robloxWindow.multi
-        clickY = y + (by + bh // 2) // self.robloxWindow.multi
-        mouse.moveTo(clickX, clickY)
+        return self._clickYesAt(x + (bx + bw // 2) // self.robloxWindow.multi, y + (by + bh // 2) // self.robloxWindow.multi, clickOnce)
+
+    def _clickYesAt(self, x, y, clickOnce=False):
+        mouse.moveTo(x, y)
         time.sleep(0.2)
         mouse.moveBy(2, 2)
         time.sleep(0.1)
@@ -2254,34 +2268,17 @@ class macro:
             mouse.click()
         return True
 
-    def clickYes(self, detect = False, detectOnly = False, clickOnce=False):
-        yesImg = self.adjustImage("./images/menu", "yes")
+    def clickYes(self, detectOnly = False, clickOnce=False):
         x = self.robloxWindow.mx+self.robloxWindow.mw//2-270
         y = self.robloxWindow.my+self.robloxWindow.mh//2-60
         time.sleep(0.4)
-        threshold = 0
-        if detect or detectOnly: threshold = 0.75
-        res = locateImageOnScreen(yesImg, x, y, 580, 265, threshold)
-        # Template match can land on the No button under some Retina/scale mismatches.
+        pos = self.findText("yes", x, y, 580, 265, exact=True)
         # Yes is always left of center in this search region — reject right-side hits.
-        matchOk = False
-        bestX = bestY = None
-        if res is not None:
-            bestX, bestY = [v // self.robloxWindow.multi for v in res[1]]
-            if bestX <= 580 // 2:
-                matchOk = True
-        if not matchOk:
+        if pos is None or pos[0] - x > 580 // 2:
             return self._clickYesByColor(detectOnly=detectOnly, clickOnce=clickOnce)
         if detectOnly: return True
-        mouse.moveTo(bestX+x, bestY+y)
-        time.sleep(0.2)
-        # Nudge into the Yes button body (template is only the "Y") without reaching No
-        mouse.moveBy(15, 5)
-        time.sleep(0.1)
-        for _ in range(1 if clickOnce else 2):
-            mouse.click()
-        return True
-    
+        return self._clickYesAt(*pos, clickOnce=clickOnce)
+
     def toggleInventory(self, mode):
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(5,5))
         screen = mssScreenshotNP(self.robloxWindow.mx+4, self.robloxWindow.my+100, 50, 60)
@@ -2545,7 +2542,7 @@ class macro:
     def convert(self, bypass = False, forced_convert_balloon=None):
         self.location = "spawn"
         if not bypass:
-            if not self.isBesideEImage("makehoney"): 
+            if not self.isMakeHoneyPrompt():
                 self.alreadyConverted = False
                 return False
         #start convert
@@ -2890,8 +2887,8 @@ class macro:
                 self.keyboard.press("e")
             print(f"check sticker printer popup: {time.time()-st}")
             
-            mmImg = self.adjustImage("./images/menu", "mmopen") #memory match
-            if locateImageOnScreen(mmImg, self.robloxWindow.mx+(self.robloxWindow.mw/4), self.robloxWindow.my+(self.robloxWindow.mh/4), self.robloxWindow.mw/4, self.robloxWindow.mh/3.5, 0.8):
+            #memory match
+            if self.findText("badge", self.robloxWindow.mx+(self.robloxWindow.mw/4), self.robloxWindow.my+(self.robloxWindow.mh/4), self.robloxWindow.mw/4, self.robloxWindow.mh/3.5):
                 self.canDetectNight = False
                 self.memoryMatch.solveMemoryMatch(self.latestMM, self.setdat.get("memory_match_rewards", []))
                 self.canDetectNight = True
@@ -2905,23 +2902,6 @@ class macro:
             self.clickdialog(mustFindDialog=True)
             print(f"checked dialog: {time.time()-st}")
 
-            performanceStatsImg = self.adjustImage("./images/menu", "performancestats")
-            if locateTransparentImageOnScreen(performanceStatsImg, self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw/3.5, 70, 0.7):
-                if sys.platform == "darwin":
-                    '''
-                    #self.keyboard.keyDown("fn", False)
-                    self.keyboard.keyDown("command", False)
-                    self.keyboard.keyDown("option", False)
-                    self.keyboard.keyDown("f7")
-                    #self.keyboard.keyUp("fn")
-                    self.keyboard.keyUp("command", False)
-                    self.keyboard.keyUp("option", False)
-                    self.keyboard.keyUp("f7", False)
-                    '''
-                    pass
-                else:
-                    pass
-            print(f"checked performance stats: {time.time()-st}")
 
             keepOld = self.keepOldCheck()
             if keepOld is not None:
@@ -2930,15 +2910,11 @@ class macro:
                 time.sleep(0.2)
                 mouse.click()
 
-            noImg = self.adjustImage("./images/menu", "no") #yes/no popup
-            x = self.robloxWindow.mx + self.robloxWindow.mw/2-300
-            y = self.robloxWindow.my
-            res = locateImageOnScreen(noImg, x, y, 650, self.robloxWindow.mh, 0.8)
+            #yes/no popup
+            res = self.findText("no", self.robloxWindow.mx + self.robloxWindow.mw/2-300, self.robloxWindow.my, 650, self.robloxWindow.mh, exact=True)
             print(f"checked yes/no popup: {time.time()-st}")
-            #mssScreenshot(x,y,self.robloxWindow.mw/2.5,self.robloxWindow.mh/3.4, True)
             if res:
-                x2, y2 = [j//self.robloxWindow.multi for j in res[1]]
-                mouse.moveTo(x+x2, y+y2)
+                mouse.moveTo(*res)
                 time.sleep(0.08)
                 mouse.moveBy(1,1)
                 time.sleep(0.1)
@@ -3145,20 +3121,9 @@ class macro:
         return False
 
     def claimHivePromptVisible(self):
-        try:
-            if self.isBesideEImage("claimhive"):
-                return True
-        except Exception:
-            pass
         return bool(self.isBesideE(["claim"], ["send", "trad", "trade"], log=True))
 
     def occupiedHivePromptVisible(self):
-        for name in ("sendtrade", "tradedisabled", "tradelocked"):
-            try:
-                if self.isBesideEImage(name):
-                    return True
-            except Exception:
-                pass
         return bool(self.isBesideE(["send", "trad", "trade"], ["claim"], log=True))
 
     def anyHivePromptVisible(self):
@@ -3844,7 +3809,7 @@ class macro:
                     if wasPaused:
                         startTime += time.time() - pauseStart
                         self.keyboard.keyDown("d", False)
-                    if self.isBesideEImage("cannon"):
+                    if self.isBesideE(["fire"]):
                         foundCannon = True
                         break
             finally:
@@ -3854,7 +3819,7 @@ class macro:
             if foundCannon:
                 for _ in range(9):
                     time.sleep(0.5)
-                    if self.isBesideEImage("cannon"):
+                    if self.isBesideE(["fire"]):
                         return True
                     self.keyboard.tileWalk("a", 1.5)
             self.logger.webhook("Notice", f"Could not find cannon (attempt {i + 1}/{max_attempts})", "dark brown", "screen")
@@ -4051,8 +4016,6 @@ class macro:
             # A deeplink is asynchronous, so ignore the old join-error dialog
             # briefly while Roblox starts processing this new request.
             joinErrorScanAfter = loadStartTime + 5
-            signUpImage = self.adjustImage("./images/menu", "signup")
-            disconnectImage = self.adjustImage("./images/menu", "disconnect")
             # prepare rejoin color-based detection
             try:
                 sample_colors = get_sample_colors()
@@ -4148,7 +4111,7 @@ class macro:
                     break
                 # Check if the user is stuck on the sign-up screen. Rejoining
                 # always uses the Roblox app deeplink, so prompt them to sign in.
-                if robloxOpenTime and locateImageOnScreen(signUpImage, self.robloxWindow.mx+(self.robloxWindow.mw/4), self.robloxWindow.my+(self.robloxWindow.mh/3), self.robloxWindow.mw/2, self.robloxWindow.mh*2/3, 0.7):
+                if robloxOpenTime and self.findText("signup", self.robloxWindow.mx+(self.robloxWindow.mw/4), self.robloxWindow.my+(self.robloxWindow.mh/3), self.robloxWindow.mw/2, self.robloxWindow.mh*2/3):
                     self.logger.webhook("", "Not logged into the Roblox app. Please sign in to continue rejoining via deeplink.", "red", "screen", ping_category="ping_disconnects")
                     rejoinSuccess = False
                     break
@@ -4161,7 +4124,7 @@ class macro:
                         rejoinSuccess = False
                         break
 
-                if locateImageOnScreen(disconnectImage, self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw, self.robloxWindow.mh, 0.75):
+                if self.findText("disconnected", self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw, self.robloxWindow.mh):
                     self.logger.webhook("", "Roblox disconnected while loading; retrying rejoin", "dark brown", "screen")
                     rejoinSuccess = False
                     break
@@ -4275,9 +4238,34 @@ class macro:
         self.clear_task_status()
         return False
     
-    def blueTextImageSearch(self, text, threshold=0.7):
-        target = self.adjustImage("./images/blue", text)
-        return locateImageOnScreen(target, self.robloxWindow.mx+(self.robloxWindow.mw*3/4), self.robloxWindow.my+(self.robloxWindow.mh*3/5), self.robloxWindow.mw/4, self.robloxWindow.mh-self.robloxWindow.mh*3/5, threshold)
+    # Key = name used by callers, value = the letters and digits to look for in the blue text.
+    BLUE_TEXT = {
+        "notinfield": "youmust",
+        "maxplanters": "planters",
+        "died": "died",
+        "defeated": "defeated",
+        "mondo": "mondo",
+        "boosted": "boosted",
+        "tokenlink": "tokenlink",
+        "coconutcrab_defeat": "coconutcrab",
+        "vicdefeat": "defeated",
+        "vicpepper": "pepper",
+        "vicmountain top": "mountaintop",
+        "vicrose": "rose",
+        "viccactus": "cactus",
+        "vicspider": "spider",
+        "vicclover": "clover",
+    }
+
+    def blueTextScreen(self):
+        """OCR the blue text area once, to check several messages against the same frame."""
+        w = self.robloxWindow
+        return ''.join(text for text, _, _ in self.ocrLines(w.mx+(w.mw*3/4), w.my+(w.mh*3/5), w.mw/4, w.mh-w.mh*3/5))
+
+    def blueTextHas(self, name, screen=None):
+        if screen is None:
+            screen = self.blueTextScreen()
+        return self.BLUE_TEXT[name] in screen
     #background thread for gather
     #check if mobs have been killed and reset their timings
     #check if player died
@@ -4285,7 +4273,7 @@ class macro:
     def gatherBackgroundOnce(self, field):
         #death check
         st = time.time()
-        if self.blueTextImageSearch("died", 0.8):
+        if self.blueTextHas("died"):
             self.died = True
 
     def gatherBackground(self):
@@ -5140,12 +5128,12 @@ class macro:
             self.canDetectNight = True
             while time.time()-st < 10:
                 #goo timer continues via background thread during hive search
-                if self.isBesideEImage("makehoney"):
+                if self.isMakeHoneyPrompt():
                     break
             self.keyboard.keyUp("a")
             #in case we overrun
             time.sleep(0.4)
-            if self.isBesideEImage("makehoney"):
+            if self.isMakeHoneyPrompt():
                 if not convertAtHive:
                     return True
             elif not convertAtHive:
@@ -5212,19 +5200,7 @@ class macro:
 
     #returns the coordinates of the keep old text
     def keepOldCheck(self):
-        noImg = self.adjustImage("./images/menu", "keep") #yes/no popup
-        x = self.robloxWindow.mx + self.robloxWindow.mw/2-300
-        y = self.robloxWindow.my
-        res = locateImageOnScreen(noImg, x, y, 650, self.robloxWindow.mh, 0.8)
-        if res:
-            ix, iy = [j//self.robloxWindow.multi for j in res[1]]
-            return x+ix+5, y+iy+5
-        # region = (self.ww/3.15,self.wh/2.15,self.ww/2.7,self.wh/4.2)
-        # res = ocr.customOCR(*region,0)
-        # for i in res:
-        #     if "keep" in i[1][0].lower() and "o" in i[1][0].lower():
-        #         return ((i[0][0][0]+region[0])//self.robloxWindow.multi, (i[0][0][1]+region[1])//self.robloxWindow.multi)
-        
+        return self.findText("keep", self.robloxWindow.mx + self.robloxWindow.mw/2-300, self.robloxWindow.my, 650, self.robloxWindow.mh)
 
     def antChallenge(self):
         self.logger.webhook("","Travelling: Ant Challenge","dark brown")
@@ -5277,7 +5253,7 @@ class macro:
                     self.logger.webhook("","Ant Challenge Complete","bright green", "screen", ping_category="ping_ant_challenge")
                     clickKeepOld(keepOld)
                     return True
-                if self.blueTextImageSearch("died", 0.8):
+                if self.blueTextHas("died"):
                     mouse.mouseUp()
                     self.logger.webhook("","Player died during Ant Challenge; resetting", "dark brown", "screen", ping_category="ping_character_deaths")
                     self.reset(convert=False)
@@ -5326,11 +5302,12 @@ class macro:
             self.enableShiftLock() #moves slightly up (or down) when hitting wall, so this reduces that
             while True:
                 #defeat
-                if self.blueTextImageSearch("defeated") and self.blueTextImageSearch("mondo"): 
+                blueScreen = self.blueTextScreen()
+                if self.blueTextHas("defeated", blueScreen) and self.blueTextHas("mondo", blueScreen): 
                     self.saveTiming("mondo") 
                     break
                 #died
-                if self.blueTextImageSearch("died"):
+                if self.blueTextHas("died"):
                     self.died = True
                     self.keyboard.press("shift")
                     self.logger.webhook("", "Player Died", "red", "screen", ping_category="ping_character_deaths")
@@ -5439,8 +5416,7 @@ class macro:
         time.sleep(0.2)
         mouse.click()
         time.sleep(1)
-        confirmImg = self.adjustImage("./images/menu", "confirm")
-        if not locateImageOnScreen(confirmImg, self.robloxWindow.mx+(self.robloxWindow.mw//2+150), self.robloxWindow.my+(4*self.robloxWindow.mh//10+160), 120, 60, 0.7):
+        if not self.findText("confirm", self.robloxWindow.mx+(self.robloxWindow.mw//2+150), self.robloxWindow.my+(4*self.robloxWindow.mh//10+160), 120, 60):
             self.logger.webhook(f"", "Sticker printer on cooldown", "dark brown", "screen")
             self.keyboard.press("e")
             self.saveTiming("sticker_printer")
@@ -5455,7 +5431,7 @@ class macro:
         mouse.click()
         time.sleep(0.2)
         #click yes
-        if not self.clickYes(detect=True):
+        if not self.clickYes():
             egg = self.setdat["sticker_printer_egg"]
             self.logger.webhook("", f"No {egg} eggs left, Sticker Printer has been disabled", "red", "screen", ping_category="ping_critical_errors")
             self.updateGUI.value = 1
@@ -5737,10 +5713,10 @@ class macro:
             timeout = 40
 
         while True:
-            if self.blueTextImageSearch("died"):
+            if self.blueTextHas("died"):
                 self.mobRunStatus = "dead"
                 break
-            elif self.blueTextImageSearch("defeated"):
+            elif self.blueTextHas("defeated"):
                 self.mobRunStatus = "looting"
                 break
             elif time.time() - st > timeout:
@@ -5750,7 +5726,7 @@ class macro:
     def mobRunLootingBackground(self):
         st = time.time()
         while time.time() - st < 20:
-           if self.blueTextImageSearch("tokenlink", 0.8):
+           if self.blueTextHas("tokenlink"):
             time.sleep(0.5) 
             self.logger.webhook("","Collected Token Link", "white", "blue")
             break
@@ -5873,13 +5849,13 @@ class macro:
             #detect which field the vic is in
             if self.vicField is None:
                 for field in self.vicFields:
-                    if self.blueTextImageSearch(f"vic{field}", 0.75):
+                    if self.blueTextHas(f"vic{field}"):
                         self.vicField = field
                         break
             else:
-                if self.blueTextImageSearch("died"): self.died = True
+                if self.blueTextHas("died"): self.died = True
             
-            if self.blueTextImageSearch("vicdefeat"):
+            if self.blueTextHas("vicdefeat"):
                 self.vicStatus = "defeated"
                 
     def stingerHunt(self):
@@ -6069,13 +6045,9 @@ class macro:
             mouse.click()
 
         def replace():
-            replaceImg = self.adjustImage("./images/menu", "replace")
-            x = self.robloxWindow.mx + self.robloxWindow.mw/2-300
-            y = self.robloxWindow.my
-            res = locateImageOnScreen(replaceImg, x, y, 650, self.robloxWindow.mh, 0.8)
+            res = self.findText("replace", self.robloxWindow.mx + self.robloxWindow.mw/2-300, self.robloxWindow.my, 650, self.robloxWindow.mh)
             if res is not None:
-                ix, iy = [j//self.robloxWindow.multi for j in res[1]]
-                mouse.moveTo(x + ix + 5, y + iy + 5)
+                mouse.moveTo(*res)
                 mouse.click()
                 return
             if keepOldData is not None:
@@ -6114,9 +6086,9 @@ class macro:
 
     def coconutCrabBackground(self):
         while self.bossStatus is None:
-            if self.blueTextImageSearch("died"):
+            if self.blueTextHas("died"):
                 self.died = True
-            if self.blueTextImageSearch("coconutcrab_defeat", 0.8):
+            if self.blueTextHas("coconutcrab_defeat"):
                 self.bossStatus = "defeated"
         
 
@@ -6193,11 +6165,11 @@ class macro:
             # Continue the movement pattern and check for defeat
             while self.bossStatus is None and not self.died:
                 # Check if defeated
-                if self.blueTextImageSearch("defeated"):
+                if self.blueTextHas("defeated"):
                     self.bossStatus = "defeated"
                     break
                 # Check if died
-                if self.blueTextImageSearch("died"):
+                if self.blueTextHas("died"):
                     self.died = True
                     break
                 # Continue movement
@@ -6241,11 +6213,11 @@ class macro:
             # Continue the movement pattern and check for defeat
             while self.bossStatus is None and not self.died:
                 # Check if defeated
-                if self.blueTextImageSearch("defeated"):
+                if self.blueTextHas("defeated"):
                     self.bossStatus = "defeated"
                     break
                 # Check if died
-                if self.blueTextImageSearch("died"):
+                if self.blueTextHas("died"):
                     self.died = True
                     break
                 # Continue movement
@@ -6287,11 +6259,11 @@ class macro:
                 st = time.time()
                 while time.time()-st < (finalKey[1]+1):
                     self.keyboard.walk(finalKey[0],0.25)
-                    if self.isBesideEImage("ebutton"): 
+                    if self.isBesideE(["harvest", "planter"]): 
                         return True
             else:
                 time.sleep(1)
-                if self.isBesideEImage("ebutton"): 
+                if self.isBesideE(["harvest", "planter"]): 
                     return True
             #can't find it, try detecting and moving to it
             self.moveToPlanter()
@@ -6400,11 +6372,11 @@ class macro:
             placedPlanter = True
             placementError = None
             for _ in range(7):
-                if self.blueTextImageSearch("notinfield"):
+                if self.blueTextHas("notinfield"):
                     placementError = "notinfield"
                     placedPlanter = False
                     break
-                if self.blueTextImageSearch("maxplanters"):
+                if self.blueTextHas("maxplanters"):
                     placementError = "maxplanters"
                     placedPlanter = False
                     break
@@ -6698,9 +6670,7 @@ class macro:
         y = self.robloxWindow.my + self.robloxWindow.mh//2 - 240
 
         def clickOnBlenderElement(cx, cy):
-            cx //= self.robloxWindow.multi
-            cy //= self.robloxWindow.multi
-            mouse.moveTo(cx+x, cy+y)
+            mouse.moveTo(cx, cy)
             time.sleep(0.1)
             mouse.click()
             mouse.moveBy(2,2)
@@ -6719,14 +6689,13 @@ class macro:
         res = locateImageOnScreen(doneImg, x, self.robloxWindow.my+(y), 560, 480, 0.75)
         if res:
             print("done")
-            clickOnBlenderElement(*res[1])
+            clickOnBlenderElement(x + res[1][0]//self.robloxWindow.multi, y + res[1][1]//self.robloxWindow.multi)
         
         #check for cancel button
-        cancelImg = self.adjustImage("images/menu", "blendercancel")
-        res = locateImageOnScreen(cancelImg, x, self.robloxWindow.my+(y), 560, 480, 0.75)
+        res = self.findText("cancel", x, y, 560, 480)
         if res:
             print("cancel")
-            clickOnBlenderElement(*res[1])
+            clickOnBlenderElement(*res)
 
         #check if still crafting and get cd
         notDoneImg = self.adjustImage("images/menu", "blenderend")
@@ -6735,7 +6704,7 @@ class macro:
         def cancelCraft():
             self.logger.webhook("", "Unable to detect remaining crafting time, ending craft", "dark brown", "screen")
             #mouse.moveTo(self.robloxWindow.mx+(self.robloxWindow.mw/2-120), self.robloxWindow.my+(math.floor(self.robloxWindow.mh*0.48))+120)
-            clickOnBlenderElement(*res[1])
+            clickOnBlenderElement(x + res[1][0]//self.robloxWindow.multi, y + res[1][1]//self.robloxWindow.multi)
 
         if res:
             cdImg = mssScreenshot(self.robloxWindow.mx+(self.robloxWindow.mw/2-130),self.robloxWindow.my+(math.floor(self.robloxWindow.mh*0.48)-70), 400, 65)
@@ -6767,8 +6736,7 @@ class macro:
             mouse.click()
             sleep(0.06)
         #check if the item can be crafted
-        canMake = self.adjustImage("images/menu", "blendermake")
-        if not locateImageOnScreen(canMake, self.robloxWindow.mx+(x), self.robloxWindow.my+(y), 560, 480, 0.8):
+        if not self.findText("make", x, y, 560, 480):
             self.logger.webhook("", f"Unable to craft {itemDisplay}", "dark brown", "screen")
         #open the crafting menu
         mouse.moveTo(self.robloxWindow.mx+(self.robloxWindow.mw/2), self.robloxWindow.my+(math.floor(self.robloxWindow.mh*0.48))+130)
@@ -6888,7 +6856,7 @@ class macro:
         #click yes (regular stickers have 2 confirms; cub/hive skins can have 4)
         yesPopup = False
         for _ in range(4):
-            if not self.clickYes(detect=True, clickOnce=True):
+            if not self.clickYes(clickOnce=True):
                 break
             yesPopup = True
             # Second confirm can take a beat to replace the first; wait before re-scanning
@@ -8891,13 +8859,13 @@ class macro:
 
     def clickdialog(self, mustFindDialog=False):
         # Find dialog image and compute a click/sample location
-        dialogImgRef = self.adjustImage("./images/menu", "dialog")
         x = self.robloxWindow.mw // 2
         y = int(self.robloxWindow.mh * 2 / 3)
-        a = locateImageOnScreen(dialogImgRef, self.robloxWindow.mx + (x), self.robloxWindow.my + (y), 300, self.robloxWindow.mh // 3, 0.8 if mustFindDialog else 0.5)
+        a = self.findText("clicktocontinue", self.robloxWindow.mx + (x), self.robloxWindow.my + (y), 300, self.robloxWindow.mh // 3)
         if a:
-            _, loc = a
-            xr, yr = [j // self.robloxWindow.multi for j in loc]
+            # the point just above the dialog box, as the old image match's top edge gave
+            xr = a[0] - (self.robloxWindow.mx + x)
+            yr = a[1] - (self.robloxWindow.my + y) - 12
         else:
             xr = 0
             yr = 0
@@ -9011,18 +8979,15 @@ class macro:
 
         #interact with feed menu
         time.sleep(1)
-        feedButtonImg = self.adjustImage("./images/menu", "feed")
         fx = self.robloxWindow.mx + (54*self.robloxWindow.mw)//100-300
         fy = self.robloxWindow.my + self.robloxWindow.yOffset + (46*self.robloxWindow.mh)//100-59
-        fres = locateImageOnScreen(feedButtonImg, fx, fy, 300, 120, 0.75)
-        if not fres:         
+        fres = self.findText("feed", fx, fy, 300, 120)
+        if not fres:
             self.moveMouseToDefault()
             return
 
-        frx, fry = [x//self.robloxWindow.multi for x in fres[1]]
-
-        #change quantity
-        mouse.moveTo(fx+frx+150, fy+fry+8)
+        #change quantity: the field sits to the right of the feed button
+        mouse.moveTo(fres[0]+120, fres[1])
         time.sleep(0.1)
         for _ in range(2):
             mouse.click()
@@ -9030,7 +8995,7 @@ class macro:
         self.keyboard.write(str(quantity))
 
         #click feed button
-        mouse.moveTo(fx+frx, fy+fry)
+        mouse.moveTo(*fres)
         time.sleep(0.1)
         for _ in range(2):
             mouse.click()
@@ -9294,7 +9259,7 @@ class macro:
 
                         timeout = 0
                         for _ in range(300):
-                            if self.blueTextImageSearch("boosted"):
+                            if self.blueTextHas("boosted"):
                                 time.sleep(2)
                                 break
                             timeout += 1

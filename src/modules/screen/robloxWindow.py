@@ -3,9 +3,7 @@ import time
 from modules.screen import screenData
 from operator import itemgetter
 from modules.misc.appManager import getWindowSize
-from PIL import Image
-from modules.screen.screenshot import mssScreenshotPillowRGBA
-from modules import bitmap_matcher
+from modules.screen.screenshot import mssScreenshot
 
 class RobloxWindowBounds:
     '''
@@ -31,20 +29,25 @@ class RobloxWindowBounds:
 
         #calculate y offset and the actual roblox content bounds
         if setYOffset:
-            honeyImg = Image.open(f"./images/menu/honeybar-{self.display_type}.png").convert('RGBA')
-            res = self._detectContentYOffset(honeyImg)
-            if res:
-                self.contentYOffset = max((res[1]//self.multi)-15-self.yOffset, 0)
+            top = self._honeyLabelTop()
+            if top is not None:
+                self.contentYOffset = max((top//self.multi)-15-self.yOffset, 0)
                 if self.contentYOffset != 0:
                     pag.hotkey("ctrl", "command", "f")
                     time.sleep(0.5)
                     self.mx, self.my, self.mw, self.mh = getWindowSize("roblox roblox")
-                    res = self._detectContentYOffset(honeyImg)
-                    self.contentYOffset = max((res[1]//self.multi)-15-self.yOffset, 0) if res else 0
+                    top = self._honeyLabelTop()
+                    self.contentYOffset = max((top//self.multi)-15-self.yOffset, 0) if top is not None else 0
                 self.my+=self.contentYOffset
                 self.mh-=self.contentYOffset
-            
-        
-    def _detectContentYOffset(self, honeyImg):
-        screen = mssScreenshotPillowRGBA(self.mx,self.my,self.mw,self.mh//3)
-        return bitmap_matcher.find_bitmap_cython(screen, honeyImg, variance=5)
+
+
+    def _honeyLabelTop(self):
+        """Top pixel row of the 'Honey' label in the honey bar, or None if it isn't found."""
+        #imported here because the main process imports this module and shouldn't load the OCR models
+        import modules.screen.ocr as ocr
+        tops = []
+        for box, (text, _conf) in ocr.ocrRead(mssScreenshot(self.mx, self.my, self.mw, self.mh//3)):
+            if ''.join(ch for ch in text.lower() if ch.isalnum()).startswith("honey"):
+                tops.append(min(p[1] for p in box))
+        return int(min(tops)) if tops else None
