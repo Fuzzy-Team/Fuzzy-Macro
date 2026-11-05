@@ -6376,7 +6376,8 @@ class macro:
                     placementError = "notinfield"
                     placedPlanter = False
                     break
-                if self.blueTextHas("maxplanters"):
+                # hotbar placement only watches for "not in field", otherwise assume it was placed
+                if not hotbarSlot and self.blueTextHas("maxplanters"):
                     placementError = "maxplanters"
                     placedPlanter = False
                     break
