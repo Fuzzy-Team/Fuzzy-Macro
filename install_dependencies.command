@@ -42,10 +42,18 @@ install_pip_package() {
 		#fallback for other architectures
 		venv_pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 $extra_args $packages $constraint_arg
 	fi
+	local status=$?
 
 	if [ -n "$tmp_constraint" ] && [ -f "$tmp_constraint" ]; then
 		rm -f "$tmp_constraint"
 	fi
+	return "$status"
+}
+
+# Stop instead of printing "Installation complete!" when pip failed.
+pip_failed() {
+	printf "\033[31;1mInstalling the libraries failed. Fix the error above, then run this installer again.\033[0m\n"
+	exit 1
 }
 
 upgrade_pip_tools() {
@@ -198,9 +206,9 @@ venv_pip install --upgrade pip setuptools wheel
 printf "\033[1;35mInstalling libraries\033[0m\n\n"
 
 # Everything is installed in one pip call at the end so pip resolves it together, and the
-# numpy<2 constraint keeps numpy below 2. Each branch below adds its own packages. Only easyocr
-# gets a separate call because it needs --no-deps.
-packages="pyautogui mss==9.0.1 pillow discord-webhook pypresence fuzzywuzzy python-Levenshtein pyscreeze<0.1.29 gevent eel flask pygetwindow requests pynput psutil"
+# numpy<2 below (and the constraints file) keeps numpy below 2. Each branch below adds its own
+# packages. Only easyocr gets a separate call because it needs --no-deps.
+packages="numpy<2 pyautogui mss==9.0.1 pillow discord-webhook pypresence fuzzywuzzy python-Levenshtein pyscreeze<0.1.29 gevent eel flask pygetwindow requests pynput psutil"
 if [ "$python_ver" = '3.7' ]; then
 	# discord.py 2.x needs Python 3.8. 1.7.3 has no slash commands, so the bot runs them as
 	# fuzz! prefix commands (modules/discord_bot/legacyCommands.py). It needs aiohttp below 3.8;
@@ -234,7 +242,7 @@ elif version_at_least "$os_ver" "10.15.0"; then
 		opencv_version="4.6.0.66"
 	fi
 	venv_pip uninstall -y opencv-python opencv-contrib-python opencv-python-headless opencv-contrib-python-headless
-	install_pip_package "easyocr" "--no-deps"
+	install_pip_package "easyocr" "--no-deps" || pip_failed
 	packages="$packages opencv-python==$opencv_version torch torchvision>=0.5 scipy shapely ninja pyclipper python-bidi scikit-image PyYAML pyobjc-framework-ColorSync<12.0 pyobjc-framework-ApplicationServices"
 
 else
@@ -242,7 +250,7 @@ else
 	# works with python-bidi 0.4.2 (the newest for Python 3.7), and torch 1.13.1 is the last
 	# for Python 3.7. --no-deps keeps easyocr from adding a second OpenCV package and
 	# scikit-image (its wheels need macOS 10.15; ocr.py stands in for it).
-	install_pip_package "pyobjc-framework-ColorSync<11.0 pyobjc-framework-ApplicationServices<11.0 easyocr==1.7.1" "--no-deps"
+	install_pip_package "pyobjc-framework-ColorSync<11.0 pyobjc-framework-ApplicationServices<11.0 easyocr==1.7.1" "--no-deps" || pip_failed
 	packages="$packages pyobjc-core<11.0 pyobjc-framework-Cocoa<11.0 opencv-python==4.6.0.66 torch==1.13.1 torchvision==0.14.1 scipy shapely pyclipper python-bidi==0.4.2 PyYAML ninja packaging"
 	# No 4.6 wheel exists below macOS 10.15, so pip builds it from source here (slow, but known
 	# to work down to 10.12, unlike the older wheels, which bundle libraries built for 10.13).
@@ -250,7 +258,7 @@ else
 	# "you need to install a JDK" dialog when no JDK is installed.
 	export CMAKE_ARGS="-DBUILD_JAVA=OFF"
 fi
-install_pip_package "$packages"
+install_pip_package "$packages" || pip_failed
 unset CMAKE_ARGS
 # no longer used; ocrmac imports matplotlib whenever it is installed, slowing startup
 venv_pip uninstall -y matplotlib html2image httpx ImageHash
