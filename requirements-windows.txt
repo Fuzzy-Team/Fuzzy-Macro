@@ -1,0 +1,24 @@
+# Windows x64, Python 3.8 or 3.9. Mirrors install_dependencies.command, minus the macOS-only packages.
+numpy<2
+opencv-python-headless<4.11
+torch
+torchvision
+easyocr
+pyautogui
+pydirectinput
+mss
+pillow
+discord-webhook
+discord.py
+aiohttp==3.10.5
+pypresence
+fuzzywuzzy
+python-Levenshtein
+pyscreeze<0.1.29
+gevent
+eel
+flask
+pygetwindow
+requests
+pynput
+certifi

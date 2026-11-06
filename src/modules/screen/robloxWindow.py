@@ -1,4 +1,5 @@
 import pyautogui as pag
+import sys
 import time
 from modules.screen import screenData
 from operator import itemgetter
@@ -36,7 +37,10 @@ class RobloxWindowBounds:
             if res:
                 self.contentYOffset = max((res[1]//self.multi)-15-self.yOffset, 0)
                 if self.contentYOffset != 0:
-                    pag.hotkey("ctrl", "command", "f")
+                    if sys.platform == "win32":
+                        pag.press("f11")
+                    else:
+                        pag.hotkey("ctrl", "command", "f")
                     time.sleep(0.5)
                     self.mx, self.my, self.mw, self.mh = getWindowSize("roblox roblox")
                     res = self._detectContentYOffset(honeyImg)

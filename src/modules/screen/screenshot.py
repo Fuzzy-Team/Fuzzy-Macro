@@ -1,6 +1,8 @@
 import mss
-import mss.darwin
-mss.darwin.IMAGE_OPTIONS = 0
+import sys
+if sys.platform == "darwin":
+    import mss.darwin
+    mss.darwin.IMAGE_OPTIONS = 0
 from PIL import Image
 import mss.tools
 import time
