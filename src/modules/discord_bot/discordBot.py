@@ -333,7 +333,7 @@ DISCORD_COMMAND_PERMISSION_CATEGORIES = {
     "observation": {
         "label": "Observation",
         "setting": "discord_permission_observation_ids",
-        "commands": ["battery", "logs", "nectar", "plantertimers", "screenshot", "status", "tasklist"],
+        "commands": ["battery", "logs", "nectar", "performance", "plantertimers", "screenshot", "status", "tasklist"],
     },
     "macro_control": {
         "label": "Macro Control",
@@ -668,6 +668,34 @@ def _set_shift_lock_mode(mode: str):
         state_text = "on" if last_detection["state"] else "off"
         return f"⚠️ Sent shift input, but shift lock still appears {state_text}."
     return "⚠️ Sent shift input, but I could not verify the shift lock state afterwards."
+
+def _read_performance():
+    """Machine and macro CPU/RAM. Blocks for one second to sample CPU, so run it in an executor."""
+    import psutil
+    # The bot's parent is the GUI process. Its Python children are the macro and the
+    # multiprocessing manager. The eel Chrome window is a child too, so it is left out.
+    gui = psutil.Process(os.getppid())
+    # The macro process restarts on every Start/Stop, so a process can exit mid-sample; skip it.
+    macro = []
+    for p in [gui] + gui.children():
+        try:
+            if p is gui or "python" in p.name().lower():
+                p.cpu_percent(None)
+                macro.append(p)
+        except psutil.NoSuchProcess:
+            pass  # exited before sampling started
+    system_cpu = psutil.cpu_percent(interval=1)
+    macro_cpu = macro_ram = 0
+    for p in macro:
+        try:
+            macro_cpu += p.cpu_percent(None)
+            macro_ram += p.memory_info().rss
+        except psutil.NoSuchProcess:
+            pass  # exited during the sample
+    ram = psutil.virtual_memory()
+    # per-process CPU is out of one core; divide so it is on the same 0-100 scale as the machine
+    return system_cpu, ram.total - ram.available, ram.total, ram.percent, macro_cpu / (psutil.cpu_count() or 1), macro_ram
+
 
 def _format_logger_time(time_value, time_format=24):
     if time_format == 12:
@@ -3096,7 +3124,20 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message("Battery information not found.")
         except Exception as e:
             await interaction.response.send_message(f"An error occurred: {e}")
-    
+
+    @bot.tree.command(name = "performance", description = "Show CPU and RAM usage")
+    @requires_discord_permission("observation")
+    async def performance(interaction: discord.Interaction):
+        import asyncio
+        await interaction.response.defer()
+        cpu, used, total, percent, macro_cpu, macro_ram = await asyncio.get_running_loop().run_in_executor(None, _read_performance)
+        gb = 1024 ** 3
+        embed = discord.Embed(title="Performance", color=0x00ff00)
+        embed.add_field(name="CPU", value=f"{cpu:.0f}%", inline=True)
+        embed.add_field(name="RAM", value=f"{used / gb:.1f} / {total / gb:.1f} GB ({percent:.0f}%)", inline=True)
+        embed.add_field(name="Fuzzy Macro", value=f"{macro_cpu:.1f}% CPU, {macro_ram / 1024 ** 2:.0f} MB RAM", inline=False)
+        await interaction.followup.send(embed=embed)
+
     @bot.tree.command(name = "close", description = "Close the macro and/or Roblox")
     @requires_discord_permission("system_actions")
     @app_commands.describe(action="What to close: both, roblox, macro")
@@ -4158,7 +4199,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         embed.add_field(name="**Profile Management**", value="`/swapprofile <name>` - Switch to a different profile (macro must be stopped)", inline=False)
 
-        embed.add_field(name="**Status & Monitoring**", value="`/status` - Get macro status and current task\n`/tasklist` - Show enabled task order, current task, and next task\n`/logs` - Show recent macro actions\n`/battery` - Check battery status\n`/stream <enable/disable/status>` - Control stream\n`/streamurl` - Get stream URL\n`/vicstats` - Show current Vic Hop statistics\n`/hourlyreport` - Generate and send the hourly report\n`/session` - Generate and send the final session report", inline=False)
+        embed.add_field(name="**Status & Monitoring**", value="`/status` - Get macro status and current task\n`/tasklist` - Show enabled task order, current task, and next task\n`/logs` - Show recent macro actions\n`/battery` - Check battery status\n`/performance` - Show CPU and RAM usage\n`/stream <enable/disable/status>` - Control stream\n`/streamurl` - Get stream URL\n`/vicstats` - Show current Vic Hop statistics\n`/hourlyreport` - Generate and send the hourly report\n`/session` - Generate and send the final session report", inline=False)
         
         embed.add_field(name="**Advanced**", value="`/amulet <keep/replace>` - Choose amulet action\n`/close <both/roblox/macro>` - Close both, Roblox only, or macro only", inline=False)
 

@@ -1,6 +1,11 @@
+import os
+import sys
 import time as timeModule
 import threading
+import traceback
 import queue
+from datetime import datetime
+import modules.misc.settingsManager as settingsManager
 from modules.screen.screenshot import mssScreenshot
 import modules.logging.webhook as logWebhook
 import mss
@@ -37,6 +42,7 @@ PING_CATEGORY_ROUTES = {
     "ping_unusual_sprouts": "activities",
     "ping_windy_bee": "activities",
     "ping_gummyball": "activities",
+    "ping_night": "combat",
 }
 
 ALLOWED_PING_KEYS = {
@@ -47,6 +53,7 @@ ALLOWED_PING_KEYS = {
     "ping_unusual_sprouts",
     "ping_windy_bee",
     "ping_gummyball",
+    "ping_night",
 }
 
 ROUTE_FALLBACKS = {
@@ -233,6 +240,50 @@ def resolve_bot_route(route_settings, category, legacy_route=""):
     if route_type(legacy) == "bot":
         return legacy, "default", "bot"
     return "", category, None
+
+
+def getLogDir():
+    """Hidden folder holding errors.log; the Config tab's Open Log Folder button opens it."""
+    path = settingsManager.getUserDataPath(".logs")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def logException(excType, exc, tb):
+    """Append an uncaught exception and its stack to errors.log so users can send it to support."""
+    try:
+        header = f"#### {datetime.now():%Y-%m-%d %H:%M:%S} (pid {os.getpid()}) ####\n"
+        with open(os.path.join(getLogDir(), "errors.log"), "a", encoding="utf-8") as f:
+            f.write(header + "".join(traceback.format_exception(excType, exc, tb)) + "\n")
+    except Exception:
+        pass  # if the log can't be written there is nothing more to do
+
+
+def installCrashLog():
+    """Log uncaught exceptions in this process's main thread and in its threads."""
+    def onException(excType, exc, tb):
+        logException(excType, exc, tb)
+        sys.__excepthook__(excType, exc, tb)
+
+    printThreadException = threading.excepthook  # threading.__excepthook__ needs Python 3.10
+
+    def onThreadException(args):
+        if args.exc_type is not SystemExit:
+            logException(args.exc_type, args.exc_value, args.exc_traceback)
+        printThreadException(args)
+
+    sys.excepthook = onException
+    threading.excepthook = onThreadException
+
+
+def runLogged(target, *args):
+    """Process target wrapper. multiprocessing prints a child's crash without calling sys.excepthook."""
+    installCrashLog()
+    try:
+        target(*args)
+    except Exception:
+        logException(*sys.exc_info())
+        raise
 
 
 class webhookQueue:

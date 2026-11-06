@@ -7,6 +7,7 @@ import os
 import modules.misc.update as updateModule
 import modules.misc.modelManager as modelManager
 import modules.controls.mouse as mouseControl
+import subprocess
 import sys
 import ast
 import json
@@ -526,6 +527,10 @@ def configureToolRuntime(logger=None, status=None, presence=None, ssa_command=No
 def openLink(link):
     webbrowser.open(link, autoraise = True)
     
+@eel.expose
+def openLogFolder():
+    subprocess.call(["open", logModule.getLogDir()])
+
 @eel.expose
 def start():
     if run.value != 3:
