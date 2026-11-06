@@ -6,6 +6,8 @@ import time
 
 import pyautogui as pag
 
+from modules.controls.keyboard import keys
+
 import modules.controls.mouse as mouse
 import modules.misc.appManager as appManager
 from modules.screen.robloxWindow import RobloxWindowBounds
@@ -412,7 +414,7 @@ class SsaRollerRunner:
     def _open_prompt(self):
         if self._prompt_visible():
             return
-        pag.press("e")
+        keys.press("e")
         end = time.time() + OPEN_PROMPT_TIMEOUT
         while not self._prompt_visible():
             if time.time() >= end:

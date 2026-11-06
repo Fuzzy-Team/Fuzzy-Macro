@@ -1,7 +1,6 @@
 import cv2
 import numpy as np
 import mss
-import mss.darwin
 import json
 import threading
 import subprocess
@@ -10,6 +9,7 @@ import re
 import os
 import gc
 import shutil
+import sys
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from modules.misc.cooldowns import get_cooldown_rows
@@ -253,6 +253,11 @@ class cloudflaredStream:
             "/usr/local/Homebrew/bin/cloudflared",
             "/usr/local/bin/cloudflared"
         ]
+        if sys.platform == "win32":
+            paths = [shutil.which("cloudflared")] + [
+                os.path.join(os.environ.get(var, ""), folder, "cloudflared.exe")
+                for var, folder in (("LOCALAPPDATA", "cloudflared"), ("ProgramFiles", "cloudflared"), ("ProgramFiles(x86)", "cloudflared"))
+            ]
         for path in paths:
             if path and os.path.isfile(path) and os.access(path, os.X_OK):
                 self.cloudflaredPath = path

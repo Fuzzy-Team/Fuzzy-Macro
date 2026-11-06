@@ -1,10 +1,13 @@
 import ctypes
 import os
 import subprocess
+import sys
 import time
 import pyautogui as pag
 from modules.screen import virtual_display
-from AppKit import NSWorkspace
+IS_WINDOWS = sys.platform == "win32"
+if not IS_WINDOWS:
+    from AppKit import NSWorkspace
 mw,mh = pag.size()
 
 def runAppleScript(code):
@@ -185,7 +188,132 @@ def enterRobloxFullscreen():
             return
 
 
-# Set the functions to use macOS implementations
-openApp = openAppMac
-isAppOpen = isAppOpenMac
-isAppFocused = isAppFocusedMac
+# ---- Windows ----
+# Roblox is found by its process, not its window title, so a browser tab named "Roblox" never matches.
+ROBLOX_EXE = "RobloxPlayerBeta.exe"
+
+if IS_WINDOWS:
+    from ctypes import wintypes
+    user32 = ctypes.windll.user32
+
+    HWND = wintypes.HWND
+    user32.EnumWindows.argtypes = [ctypes.WINFUNCTYPE(wintypes.BOOL, HWND, wintypes.LPARAM), wintypes.LPARAM]
+    user32.IsWindowVisible.argtypes = [HWND]
+    user32.GetWindowThreadProcessId.argtypes = [HWND, ctypes.POINTER(wintypes.DWORD)]
+    user32.GetForegroundWindow.restype = HWND
+    user32.ShowWindow.argtypes = [HWND, ctypes.c_int]
+    user32.SetForegroundWindow.argtypes = [HWND]
+    user32.GetClientRect.argtypes = [HWND, ctypes.POINTER(wintypes.RECT)]
+    user32.ClientToScreen.argtypes = [HWND, ctypes.POINTER(wintypes.POINT)]
+    user32.IsIconic.argtypes = [HWND]
+    user32.GetWindowRect.argtypes = [HWND, ctypes.POINTER(wintypes.RECT)]
+    user32.MonitorFromWindow.argtypes = [HWND, wintypes.DWORD]
+    user32.MonitorFromWindow.restype = ctypes.c_void_p
+    user32.GetMonitorInfoW.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+
+    class _MonitorInfo(ctypes.Structure):
+        _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT), ("rcWork", wintypes.RECT), ("dwFlags", wintypes.DWORD)]
+
+def _robloxPids():
+    out = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {ROBLOX_EXE}", "/FO", "CSV", "/NH"],
+                         capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW).stdout
+    pids = set()
+    for line in out.splitlines():
+        cols = [c.strip('"') for c in line.split('","')]
+        if len(cols) > 1 and cols[0].strip('"').lower() == ROBLOX_EXE.lower():
+            pids.add(int(cols[1]))
+    return pids
+
+def _robloxWindows():
+    """Visible top level windows owned by the Roblox player."""
+    pids = _robloxPids()
+    found = []
+    if not pids:
+        return found
+    def visit(hwnd, _):
+        pid = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        if pid.value in pids and user32.IsWindowVisible(hwnd):
+            found.append(hwnd)
+        return True
+    user32.EnumWindows(ctypes.WINFUNCTYPE(wintypes.BOOL, HWND, wintypes.LPARAM)(visit), 0)
+    return found
+
+def _clientBounds(hwnd):
+    """x, y, w, h of the window's content, excluding the title bar and borders."""
+    rect = wintypes.RECT()
+    user32.GetClientRect(hwnd, ctypes.byref(rect))
+    origin = wintypes.POINT(0, 0)
+    user32.ClientToScreen(hwnd, ctypes.byref(origin))
+    return origin.x, origin.y, rect.right, rect.bottom
+
+def isAppOpenWin(app="roblox"):
+    return bool(_robloxPids())
+
+def isAppFocusedWin(app="Roblox"):
+    foreground = user32.GetForegroundWindow()
+    if not foreground:
+        return False
+    pid = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(foreground, ctypes.byref(pid))
+    return pid.value in _robloxPids()
+
+def openAppWin(app="Roblox"):
+    windows = _robloxWindows()
+    if not windows:
+        return False
+    hwnd = windows[0]
+    if user32.IsIconic(hwnd):
+        user32.ShowWindow(hwnd, 9) #SW_RESTORE
+    user32.SetForegroundWindow(hwnd)
+    return True
+
+def openDeeplinkWin(link):
+    os.startfile(link)
+
+def closeAppWin(app):
+    subprocess.call(["taskkill", "/F", "/IM", ROBLOX_EXE], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    creationflags=subprocess.CREATE_NO_WINDOW)
+
+def getWindowSizeWin(windowName):
+    best = None
+    for hwnd in _robloxWindows():
+        x, y, w, h = _clientBounds(hwnd)
+        if w >= 200 and h >= 200 and (best is None or w * h > best[2] * best[3]):
+            best = (x, y, w, h)
+    # Window not found or minimised, assume fullscreen
+    return best or (0, 0, mw, mh)
+
+def enterRobloxFullscreenWin():
+    """Press F11 when the Roblox window doesn't cover its monitor, so the game starts at the top of the screen."""
+    for hwnd in _robloxWindows():
+        window = wintypes.RECT()
+        user32.GetWindowRect(hwnd, ctypes.byref(window))
+        monitor = user32.MonitorFromWindow(hwnd, 2) #MONITOR_DEFAULTTONEAREST
+        info = _MonitorInfo()
+        info.cbSize = ctypes.sizeof(_MonitorInfo)
+        user32.GetMonitorInfoW(monitor, ctypes.byref(info))
+        screen = info.rcMonitor
+        if (window.left, window.top, window.right, window.bottom) != (screen.left, screen.top, screen.right, screen.bottom):
+            openAppWin()
+            pag.press("f11")
+            time.sleep(1.5) # the fullscreen animation
+        return
+
+def missingPermissionsWin():
+    return []
+
+if IS_WINDOWS:
+    openApp = openAppWin
+    isAppOpen = isAppOpenWin
+    isAppFocused = isAppFocusedWin
+    openDeeplink = openDeeplinkWin
+    closeApp = closeAppWin
+    getWindowSize = getWindowSizeWin
+    enterRobloxFullscreen = enterRobloxFullscreenWin
+    missingPermissions = missingPermissionsWin
+else:
+    # Set the functions to use macOS implementations
+    openApp = openAppMac
+    isAppOpen = isAppOpenMac
+    isAppFocused = isAppFocusedMac

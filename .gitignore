@@ -1,5 +1,6 @@
 __pycache__/
 *.py[cod]
+!src/modules/bitmap_matcher/*.pyd
 .DS_STORE
 macroLogs.log
 bin

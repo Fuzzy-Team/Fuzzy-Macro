@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 
-import AppKit
-import ColorSync
-import CoreFoundation
+import sys
 import urllib.parse
+
+#macOS only; app.py skips the color profile check on other platforms
+if sys.platform == "darwin":
+    import AppKit
+    import ColorSync
+    import CoreFoundation
 
 class DisplayColorProfile:
     #color profile manager for macos

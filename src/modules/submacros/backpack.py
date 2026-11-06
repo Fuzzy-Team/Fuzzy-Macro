@@ -1,9 +1,11 @@
 import mss
-import mss.darwin
+import sys
+if sys.platform == "darwin":
+    import mss.darwin
+    mss.darwin.IMAGE_OPTIONS = 0
 import numpy as np
 from modules.screen import virtual_display
 
-mss.darwin.IMAGE_OPTIONS = 0
 
 
 def getPixelColor(x, y):
