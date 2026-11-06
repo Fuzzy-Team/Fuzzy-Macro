@@ -204,16 +204,21 @@ class MemoryMatch:
         
         return grid_coords, grid_size, (offset_x, offset_y)
 
-    def _get_attempts_count(self, middle_x: int, middle_y: int, offset_x: int) -> int:
-        """Read the number of attempts from the screen."""
+    def _read_chances(self, middle_x: int, middle_y: int, offset_x: int) -> Optional[int]:
+        """Read the number of attempts shown next to the board, or None if unreadable."""
         try:
             cap = mssScreenshot(middle_x - 275 - offset_x, middle_y - 146, 100, 100)
-            attempts_ocr = int(''.join([x[1][0] for x in ocrRead(cap) if x[1][0].isdigit()]))
-            if self.MIN_ATTEMPTS <= attempts_ocr <= self.MAX_ATTEMPTS:
-                print(f"Number of attempts: {attempts_ocr}")
-                return attempts_ocr
-        except (ValueError, IndexError, Exception) as e:
+            return int(''.join([x[1][0] for x in ocrRead(cap) if x[1][0].isdigit()]))
+        except Exception as e:
             print(f"Error reading attempts: {e}")
+            return None
+
+    def _get_attempts_count(self, middle_x: int, middle_y: int, offset_x: int) -> int:
+        """Read the number of attempts from the screen."""
+        attempts_ocr = self._read_chances(middle_x, middle_y, offset_x)
+        if attempts_ocr is not None and self.MIN_ATTEMPTS <= attempts_ocr <= self.MAX_ATTEMPTS:
+            print(f"Number of attempts: {attempts_ocr}")
+            return attempts_ocr
         return self.DEFAULT_ATTEMPTS
 
     def solveMemoryMatch(self, mm_type: str, preferred_rewards: Optional[List[str]] = None) -> None:
@@ -422,7 +427,9 @@ class MemoryMatch:
         # If we found a match on first tile, click the matching tile
         match_found = self._lookup_seen(first_tile_hash, claimed_coords, exclude_index=first_tile_index)
         if match_found is not None:
-            if not self._should_claim_match(tile_rewards[first_tile_index], tile_rewards[match_found], preferred_rewards):
+            # On the last chance there is nothing left to save the pair for, so take it even if not preferred.
+            if (not self._should_claim_match(tile_rewards[first_tile_index], tile_rewards[match_found], preferred_rewards)
+                    and self._read_chances(middle_x, middle_y, offset_x) != 1):
                 match_found = None
             else:
                 print("Match found, clicking matching tile")
