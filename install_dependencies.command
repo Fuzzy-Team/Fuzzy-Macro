@@ -54,7 +54,8 @@ install_pip_package() {
 # Intel wheel that runs on macOS 10.12-11 and loads the AI Gather ONNX models. pip checks the
 # sha256 and refuses a file that doesn't match. Returns non-zero if the install fails so the
 # caller can fall back. Keep exactly one OpenCV package installed because all variants share
-# the cv2 namespace.
+# the cv2 namespace. opencv-python itself isn't uninstalled first: --force-reinstall swaps it
+# only once the new one is ready, so a failed download leaves the working cv2 in place.
 install_prebuilt_opencv() {
 	local release="https://github.com/Fuzzy-Team/Fuzzy-Macro-Wheels/releases/download/legacy-macos-3"
 	local wheel sha
@@ -67,7 +68,7 @@ install_prebuilt_opencv() {
 			sha="83bc5c4a45b494e6ef33a88dd22c0527df88d05e77e2e66b37bb4038fff3aa55" ;;
 		*) return 1 ;;
 	esac
-	venv_pip uninstall -y opencv-python opencv-contrib-python opencv-python-headless opencv-contrib-python-headless
+	venv_pip uninstall -y opencv-contrib-python opencv-python-headless opencv-contrib-python-headless
 	install_pip_package "$release/$wheel#sha256=$sha" "--force-reinstall"
 }
 
@@ -240,7 +241,7 @@ elif version_at_least "$os_ver" "10.15.0"; then
 		else
 			opencv_version="4.6.0.66"
 		fi
-		venv_pip uninstall -y opencv-python opencv-contrib-python opencv-python-headless opencv-contrib-python-headless
+		venv_pip uninstall -y opencv-contrib-python opencv-python-headless opencv-contrib-python-headless
 		install_pip_package "opencv-python==$opencv_version numpy==1.19.1" "--force-reinstall"
 	fi
 	install_pip_package "easyocr" "--no-deps"
