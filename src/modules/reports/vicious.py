@@ -1,4 +1,5 @@
 """Vic Hop counters shared by the live table and report attachments."""
+import time
 from PIL import Image, ImageDraw, ImageFont
 from pathlib import Path
 
@@ -32,10 +33,14 @@ def send_report(logger, report, session=False):
     canvas = Image.new("RGB", (700, 100 + len(data) * 42), "#191923")
     draw = ImageDraw.Draw(canvas)
     font = ImageFont.truetype(str(FONT_PATH), 18)
+    start = hour.get("start_time", 0)
+    seconds = max(0, int(time.time() - start)) if start else 0
+    elapsed = f"{seconds // 3600:02d}:{seconds % 3600 // 60:02d}:{seconds % 60:02d}"
     draw.text((24, 20), title, fill="white", font=font)
+    draw.text((455, 20), f"Time elapsed: {elapsed}", fill="white", font=font)
     draw.text((455, 60), "This hour", fill="white", font=font)
     draw.text((580, 60), "Session", fill="white", font=font)
-    fields = []
+    fields = [{"name": "Time elapsed", "value": elapsed, "inline": True}]
     for i, (label, current, cumulative) in enumerate(data):
         y = 90 + i * 42
         draw.text((24, y), label, fill="white", font=font)
