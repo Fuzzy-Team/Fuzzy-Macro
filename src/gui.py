@@ -17,6 +17,7 @@ import plistlib
 import platform
 from bottle import route, static_file
 from modules.submacros.autoGiftedBasicBee import AutoGiftedBasicBeeRunner
+from modules.submacros.ssaRoller import SsaRollerRunner
 import modules.controls.keyboard as keyboardModule
 import modules.logging.log as logModule
 
@@ -89,12 +90,12 @@ def _clear_tool_presence(presence_key=None):
         pass
 
 
-def _send_tool_webhook(title, desc, color="light blue"):
+def _send_tool_webhook(title, desc, color="light blue", ss=None, image_path=None):
     if _tool_logger is None:
         return
     _refresh_tool_logger_settings()
     try:
-        _tool_logger.webhook(title, desc, color)
+        _tool_logger.webhook(title, desc, color, ss, imagePath=image_path)
     except Exception:
         pass
 
@@ -121,6 +122,36 @@ def _handle_auto_gifted_basic_bee_event(event_name, payload=None):
 
 
 _auto_gifted_basic_bee_runner = AutoGiftedBasicBeeRunner(event_callback=_handle_auto_gifted_basic_bee_event)
+
+
+def _handle_ssa_roller_event(event_name, payload=None):
+    payload = payload or {}
+    message = payload.get("message", "")
+    if event_name == "waiting":
+        _send_tool_webhook("SSA Roller", f"{message}\nNothing has been clicked. Send /ssa go to start rolling or /ssa end to cancel.", "purple", "screen")
+    elif event_name == "rolled":
+        rolls = payload["rolls"]
+        if payload["review"]:
+            _send_tool_webhook(
+                "SSA Roller Review",  # the Discord bot adds buttons to messages with this title
+                f"Roll {rolls} matches. Approve to stop here and keep this result open, or deny to keep rolling.\n"
+                "Use the buttons, or send /ssa approve or /ssa deny (fuzz!ssa approve / fuzz!ssa deny).",
+                "purple", image_path=payload["image"],
+            )
+        else:
+            roll_text = f"Roll {rolls}. {payload['honey_spent_b']}b honey spent." if rolls else "The result that was open when the tool started."
+            _send_tool_webhook("SSA Roller", roll_text, "light blue", image_path=payload["image"])
+    elif event_name == "finished":
+        result = payload.get("result", "")
+        if result == "success":
+            _send_tool_webhook("SSA Roller", message, "bright green", "screen")
+        elif result == "stopped":
+            _send_tool_webhook("SSA Roller", message, "orange")
+        else:
+            _send_tool_webhook("SSA Roller", message, "red")
+
+
+_ssa_roller_runner = SsaRollerRunner(event_callback=_handle_ssa_roller_event)
 
 
 class AutoClickerRunner:
@@ -485,11 +516,12 @@ class HotbarBuffRunner:
 _hotbar_buff_runner = HotbarBuffRunner()
 
 
-def configureToolRuntime(logger=None, status=None, presence=None):
+def configureToolRuntime(logger=None, status=None, presence=None, ssa_command=None):
     global _tool_logger, _tool_status, _tool_presence
     _tool_logger = logger
     _tool_status = status
     _tool_presence = presence
+    _ssa_roller_runner.command = ssa_command
 @eel.expose
 def openLink(link):
     webbrowser.open(link, autoraise = True)
@@ -1132,6 +1164,18 @@ def getAutoGiftedBasicBeeStatus():
     return _auto_gifted_basic_bee_runner.get_status()
 
 @eel.expose
+def startSsaRollerTool(config=None):
+    return _ssa_roller_runner.start(config, getRunState())
+
+@eel.expose
+def stopSsaRollerTool():
+    return _ssa_roller_runner.stop()
+
+@eel.expose
+def getSsaRollerStatus():
+    return _ssa_roller_runner.get_status()
+
+@eel.expose
 def startHotbarBuffTool():
     result = _hotbar_buff_runner.start(getRunState())
     if result.get("ok"):
@@ -1164,13 +1208,14 @@ def isKeybindRecording():
 
 @eel.expose
 def isAnyToolRunning():
-    return _auto_clicker_runner.is_active() or _auto_gifted_basic_bee_runner.is_active() or _hotbar_buff_runner.is_active()
+    return _auto_clicker_runner.is_active() or _auto_gifted_basic_bee_runner.is_active() or _ssa_roller_runner.is_active() or _hotbar_buff_runner.is_active()
 
 @eel.expose
 def stopAllTools():
     results = {
         "auto_clicker": stopAutoClickerTool(),
         "auto_gifted_basic_bee": stopAutoGiftedBasicBeeTool(),
+        "ssa_roller": stopSsaRollerTool(),
         "hotbar_buff": stopHotbarBuffTool(),
     }
     return {"ok": True, "results": results}
@@ -1188,6 +1233,7 @@ def syncToolSession(session_id):
             "status": {
                 "auto_clicker": getAutoClickerStatus(),
                 "auto_gifted_basic_bee": getAutoGiftedBasicBeeStatus(),
+                "ssa_roller": getSsaRollerStatus(),
                 "hotbar_buff": getHotbarBuffStatus(),
             },
         }
@@ -1207,6 +1253,7 @@ def syncToolSession(session_id):
         "status": {
             "auto_clicker": getAutoClickerStatus(),
             "auto_gifted_basic_bee": getAutoGiftedBasicBeeStatus(),
+            "ssa_roller": getSsaRollerStatus(),
             "hotbar_buff": getHotbarBuffStatus(),
         },
     }

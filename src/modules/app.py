@@ -64,6 +64,7 @@ def runApp(macroTarget):
     skipTask = manager.Value('i', INTERRUPT_NONE)  # interrupt action for the running task
     skipServer = manager.Value('i', 0)  # one-shot request to abandon the active private-server join
     status = manager.Value(ctypes.c_wchar_p, "none")
+    ssaCommand = manager.Value(ctypes.c_wchar_p, "")  # SSA Roller tool <-> /ssa command
     presence = manager.Value(ctypes.c_wchar_p, "")
     logQueue = manager.Queue()
     discordMessageQueue = manager.Queue()
@@ -76,7 +77,7 @@ def runApp(macroTarget):
     pin_requests = manager.Queue()  # Shared queue for pin requests
     start_keyboard_listener_fn = watch_for_hotkeys(run)
     logger = logModule.log(logQueue, False, None, False, discordMessageQueue=discordMessageQueue)
-    gui.configureToolRuntime(logger=logger, status=status, presence=presence)
+    gui.configureToolRuntime(logger=logger, status=status, presence=presence, ssa_command=ssaCommand)
 
     disconnectCooldownUntil = 0
 
@@ -499,7 +500,7 @@ def runApp(macroTarget):
                 print("Detected change in discord bot token, killing previous bot process")
                 discordBotProc.terminate()
                 discordBotProc.join()
-            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI, discordMessageQueue, planterCommandQueue, streamControlQueue, skipServer, standbyCommandQueue, standbyState), daemon=True)
+            discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI, discordMessageQueue, planterCommandQueue, streamControlQueue, skipServer, standbyCommandQueue, standbyState, ssaCommand), daemon=True)
             prevDiscordBotToken = currentDiscordBotToken
             discordBotProc.start()
         elif not shouldRunDiscordBot and discordBotProc is not None and discordBotProc.is_alive():
