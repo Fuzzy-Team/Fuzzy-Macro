@@ -42,6 +42,8 @@ def runApp(macroTarget):
     from modules.submacros.stream import cloudflaredStream
     import os
 
+    logModule.installCrashLog()
+
     if sys.version_info[1] <= 7:
         print("start method set to spawn")
         multiprocessing.set_start_method("spawn")
@@ -209,7 +211,7 @@ def runApp(macroTarget):
         releaseInputsSafely()
     
     def startMacroProcess():
-        proc = multiprocessing.Process(target=macroTarget, args=(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer), daemon=True)
+        proc = multiprocessing.Process(target=logModule.runLogged, args=(macroTarget, status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer), daemon=True)
         proc.start()
         return proc
 

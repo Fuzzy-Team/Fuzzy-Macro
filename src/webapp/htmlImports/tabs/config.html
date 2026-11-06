@@ -801,6 +801,16 @@
             triggerFunction: "exportDebugFolder()",
           },
         },
+        {
+          id: "open_log_folder_button",
+          title: "Open Log Folder",
+          desc: "Opens the folder with errors.log, which records crashes with their stack trace. Send it to support if the macro crashes.",
+          type: {
+            name: "button",
+            text: "Open Log Folder",
+            triggerFunction: "openLogFolder()",
+          },
+        },
       ]);
       
       // Advanced: Beta Testing (input + button on same row)
