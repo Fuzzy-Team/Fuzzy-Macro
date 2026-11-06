@@ -11,6 +11,14 @@ from modules.screen.imageSearch import locateImageOnScreen, locateTransparentIma
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP
 
 
+def formatHoney(n):
+    """1234567890 -> '1.235B'"""
+    for size, suffix in ((10**15, "Qa"), (10**12, "T"), (10**9, "B"), (10**6, "M"), (10**3, "K")):
+        if n >= size:
+            return f"{n / size:.3f}".rstrip("0").rstrip(".") + suffix
+    return str(n)
+
+
 class HiveMixin:
     def convert(self, bypass = False, forced_convert_balloon=None):
         self.location = "spawn"
@@ -55,6 +63,8 @@ class HiveMixin:
                     convertBalloon = False
 
         convertedBackpack = False
+        balloonStartHoney = 0
+        balloonBlessing = "0"
         inactiveHoneyChecks = 0
 
         if self.enableNightDetection:
@@ -132,6 +142,9 @@ class HiveMixin:
                     #backpack is done converting, now convert balloon
                     convertedBackpack = True
                     if not convertBalloon: break
+                    # Backpack honey is already counted, so the rise from here is the balloon's.
+                    balloonStartHoney = self.getHoney()
+                    balloonBlessing = self.buffDetector.getBuffsWithImage({"blessing": ["top", True, True]})[0]
                     self.logger.webhook("", "Converting Balloon", "light blue")
 
             # Check for conversion timeout
@@ -179,7 +192,15 @@ class HiveMixin:
         if liveGatherReport:
             liveGatherReport.stop()
         #deal with the extra delay
-        self.logger.webhook("", f"Finished converting (Time: {self.convertSecsToMinsAndSecs(time.time()-st)})", "brown", "screen", ping_category="ping_conversion_events")
+        balloonLines = []
+        if convertBalloon and convertedBackpack:
+            endHoney = self.getHoney()
+            # getHoney returns 0 when OCR fails; leave the line out rather than report a wrong number.
+            if balloonStartHoney and endHoney >= balloonStartHoney:
+                balloonLines.append(f"Balloon Honey: {formatHoney(endHoney - balloonStartHoney)}")
+            if balloonBlessing not in (None, "", "0"):
+                balloonLines.append(f"Balloon Blessing x{balloonBlessing}")
+        self.logger.webhook(f"Finished converting (Time: {self.convertSecsToMinsAndSecs(time.time()-st)})", "\n".join(balloonLines), "brown", "screen", ping_category="ping_conversion_events")
         wait = self.setdat["convert_wait"]
         if (wait):
             self.logger.webhook("", f'Waiting for an additional {wait} seconds', "light green")
