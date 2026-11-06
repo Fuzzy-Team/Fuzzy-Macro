@@ -278,7 +278,9 @@ install_pip_package "discord-webhook"
 if [ "$python_ver" = '3.7' ]; then
 	# discord.py 2.x needs Python 3.8. 1.7.3 has no slash commands, so the bot runs them as
 	# fuzz! prefix commands (modules/discord_bot/legacyCommands.py). It needs aiohttp below 3.8;
-	# 3.7.4.post0 is the newest, and pip builds it from source below macOS 10.14.
+	# 3.7.4.post0 is the newest, and pip builds it from source below macOS 10.14. Install the
+	# prebuilt wheel first (sha256-checked); if that fails, the line below builds it as before.
+	install_pip_package "https://github.com/Fuzzy-Team/Fuzzy-Macro-Wheels/releases/download/legacy-macos-3/aiohttp-3.7.4.post0-cp37-cp37m-macosx_10_12_x86_64.whl#sha256=5d232cc01fbe8ae0d69c2680ea32af55e0283abfe2a31ce7d3121d296dacd711"
 	install_pip_package "discord.py==1.7.3 aiohttp==3.7.4.post0"
 else
 	install_pip_package "discord.py"
