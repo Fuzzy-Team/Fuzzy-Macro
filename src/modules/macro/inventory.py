@@ -1,10 +1,14 @@
 import cv2
+import queue
+import threading
 import time as raw_time
 from contextlib import contextmanager
+from types import SimpleNamespace
 from modules.misc.imageManipulation import average_hash
 from PIL import Image
 from difflib import SequenceMatcher
 import modules.controls.mouse as mouse
+import modules.misc.appManager as appManager
 import modules.screen.ocr as ocr
 from modules.controls.sleep import pause_aware_time as time, sleep
 from modules.screen.imageSearch import locateImageOnScreen
@@ -135,19 +139,74 @@ class InventoryMixin:
         with self.inventoryInteraction():
             return self._findItemInInventory(itemName)
 
+    def _scrollInventoryToTop(self):
+        hashes = []
+        for _ in range(9):
+            mouse.scroll(100)
+            sleep(0.05)
+            screen = cv2.cvtColor(mssScreenshotNP(self.robloxWindow.mx, self.robloxWindow.my+120, 100, 200), cv2.COLOR_BGRA2RGB)
+            hashes.append(average_hash(Image.fromarray(screen)))
+            #stop once the list hasn't moved over the last 3 scrolls (150ms+), so a frame
+            #that lags behind a scroll can't be mistaken for the top
+            if len(hashes) >= 4 and all(h == hashes[-1] for h in hashes[-4:]):
+                break
+
+    def findItemReport(self, query):
+        """findItemByName as (message, screenshot of the row or None)."""
+        result = self.findItemByName(query)
+        if result is None:
+            return f"Could not find an item matching \"{query}\" in the inventory", None
+        return f"Found {result[0]}", result[1]
+
+    def findItemByName(self, query):
+        """Read every row of the inventory with OCR and return (row text, screenshot of the row)
+        for the closest match to a possibly misspelled name, or None if nothing is close."""
+        def key(text):
+            return ''.join(c for c in text.lower() if c.isalnum())
+
+        query = key(query)
+        if not query:
+            return None
+        multi = self.robloxWindow.multi
+        best = (0, None, None)
+        with self.inventoryInteraction():
+            self.toggleInventory("open")
+            try:
+                time.sleep(0.3)
+                mouse.moveTo(self.robloxWindow.mx+312, self.robloxWindow.my+200)
+                mouse.click()
+                self._scrollInventoryToTop()
+                time.sleep(0.3)
+                prevHash = None
+                unchanged = 0
+                for _ in range(180):
+                    page = mssScreenshot(self.robloxWindow.mx, self.robloxWindow.my+90, 310, self.robloxWindow.mh-180)
+                    for bbox, (text, _conf) in ocr.ocrRead(page):
+                        name = key(text)
+                        if not name:
+                            continue
+                        score = 1.0 if query in name else self.getStringSimilarity(query, name)
+                        if score > best[0]:
+                            top = int(min(point[1] for point in bbox))
+                            row = page.crop((0, max(0, top-30*multi), page.width, min(page.height, top+70*multi)))
+                            best = (score, text.strip(), row)
+                    if best[0] == 1.0:
+                        break
+                    #stop after the list hasn't moved for 3 pages in a row
+                    hash = average_hash(page)
+                    unchanged = unchanged + 1 if hash == prevHash else 0
+                    if unchanged >= 3:
+                        break
+                    prevHash = hash
+                    mouse.scroll(-2, True)
+                    time.sleep(0.15)
+            finally:
+                self.toggleInventory("close")
+        if best[0] < 0.7:
+            return None
+        return best[1], best[2]
+
     def _findItemInInventory(self, itemName):
-        
-        def scrollToTop():
-            hashes = []
-            for _ in range(9):
-                mouse.scroll(100)
-                sleep(0.05)
-                screen = cv2.cvtColor(mssScreenshotNP(self.robloxWindow.mx, self.robloxWindow.my+120, 100, 200), cv2.COLOR_BGRA2RGB)
-                hashes.append(average_hash(Image.fromarray(screen)))
-                #stop once the list hasn't moved over the last 3 scrolls (150ms+), so a frame
-                #that lags behind a scroll can't be mistaken for the top
-                if len(hashes) >= 4 and all(h == hashes[-1] for h in hashes[-4:]):
-                    break
         #for retina, just a regular image search
         #for built-in, a transparency search
         itemImg = self.adjustImage("./images/inventory", itemName)
@@ -164,7 +223,7 @@ class InventoryMixin:
         mouse.moveTo(self.robloxWindow.mx+312, self.robloxWindow.my+200)
         mouse.click()
         #scroll to top
-        scrollToTop()
+        self._scrollInventoryToTop()
         #scroll down until the item is found
         bestY = None
 
@@ -218,3 +277,27 @@ class InventoryMixin:
             if closeInventoryAfter:
                 self.toggleInventory("close")
             return True
+
+
+_standaloneSearchLock = threading.Lock()
+
+def findItemWithoutMacro(query, discordMessageQueue=None):
+    """/finditem while the macro is stopped or paused, run in the Discord bot process.
+    Focuses Roblox, or joins Bee Swarm with the macro's own rejoin (private servers, failover, join errors)
+    if it isn't open, then searches. Returns (message, image or None)."""
+    if not _standaloneSearchLock.acquire(blocking=False):
+        return "Already searching the inventory", None
+    try:
+        from modules.macro.core import macro
+        # No run state or interrupt, so nothing in this macro waits on a pause. Status and logs stay local
+        # so they don't overwrite a paused macro's, but its messages still reach Discord.
+        host = macro(SimpleNamespace(value=""), queue.Queue(), SimpleNamespace(value=0), discordMessageQueue=discordMessageQueue)
+        if appManager.isAppOpen("roblox"):
+            appManager.openApp("Roblox")
+            raw_time.sleep(0.5)
+            host.setRobloxWindowInfo()
+        elif not host.rejoin("Opening Roblox for /finditem", claimHive=False):
+            return "Could not join Bee Swarm", None
+        return host.findItemReport(query)
+    finally:
+        _standaloneSearchLock.release()
