@@ -208,14 +208,15 @@ printf "\033[1;35mInstalling libraries\033[0m\n\n"
 # Everything is installed in one pip call at the end so pip resolves it together, and the
 # numpy<2 below (and the constraints file) keeps numpy below 2. Each branch below adds its own
 # packages. Only easyocr gets a separate call because it needs --no-deps.
-packages="numpy<2 pyautogui mss==9.0.1 pillow discord-webhook pypresence fuzzywuzzy python-Levenshtein pyscreeze<0.1.29 gevent eel requests pynput psutil"
+packages="numpy<2 pyautogui pillow discord-webhook pypresence fuzzywuzzy python-Levenshtein pyscreeze<0.1.29 gevent eel requests pynput psutil"
 if [ "$python_ver" = '3.7' ]; then
 	# discord.py 2.x needs Python 3.8. 1.7.3 has no slash commands, so the bot runs them as
 	# fuzz! prefix commands (modules/discord_bot/legacyCommands.py). It needs aiohttp below 3.8;
 	# 3.7.4.post0 is the newest, and pip builds it from source below macOS 10.14.
-	packages="$packages discord.py==1.7.3 aiohttp==3.7.4.post0"
+	# mss 9.0.1 needs Python 3.8, so Python 3.7 takes the newest mss it supports.
+	packages="$packages discord.py==1.7.3 aiohttp==3.7.4.post0 mss"
 else
-	packages="$packages discord.py aiohttp==3.10.5"
+	packages="$packages discord.py aiohttp==3.10.5 mss==9.0.1"
 fi
 
 if [ "$python_ver" = '3.9' ] || { [ "$python_ver" = '3.8' ] && version_at_least "$os_ver" "12.0.0"; }; then
