@@ -333,7 +333,7 @@ DISCORD_COMMAND_PERMISSION_CATEGORIES = {
     "observation": {
         "label": "Observation",
         "setting": "discord_permission_observation_ids",
-        "commands": ["battery", "logs", "nectar", "performance", "plantertimers", "screenshot", "status", "tasklist"],
+        "commands": ["battery", "cooldowns", "logs", "nectar", "performance", "plantertimers", "screenshot", "status", "tasklist"],
     },
     "macro_control": {
         "label": "Macro Control",
@@ -411,6 +411,25 @@ def _format_planter_time(seconds_remaining: float) -> str:
     if minutes:
         return f"{minutes}m {seconds}s"
     return f"{seconds}s"
+
+
+def _get_cooldown_rows(settings: Dict, timings: Dict, sticker_stack_cooldown: int) -> List[Tuple[str, float]]:
+    """(name, ready-at unix time) for each enabled item the macro tracks in timings.txt."""
+    from modules.macro.game_data import collectData, fieldBoosterData
+
+    cooldowns = {name: data[2] for name, data in {**collectData, **fieldBoosterData}.items() if data[2]}
+    cooldowns["sticker_printer"] = 60 * 60  # same value as Macro._applySettingsState
+    cooldowns["sticker_stack"] = sticker_stack_cooldown
+
+    rows = []
+    for name, cooldown in cooldowns.items():
+        if not settings.get(name):
+            continue
+        ready_at = timings.get(name, 0) + cooldown
+        if name in fieldBoosterData:
+            ready_at = max(ready_at, timings.get("last_booster", 0) + settings.get("boost_seperate", 0) * 60)
+        rows.append((name, ready_at))
+    return sorted(rows, key=lambda row: row[1])
 
 
 def _load_manual_planter_data() -> Dict:
@@ -3990,6 +4009,27 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         except Exception as e:
             await interaction.response.send_message(f"❌ Error retrieving planter timers: {str(e)}")
 
+    @bot.tree.command(name="cooldowns", description="Show when each enabled collectible and machine is ready")
+    @requires_discord_permission("observation")
+    async def cooldowns(interaction: discord.Interaction):
+        try:
+            timings = settingsManager.readSettingsFile(settingsManager.getUserDataPath("timings.txt"))
+            sticker_stack_cooldown = int(settingsManager.loadUserText("sticker_stack.txt"))
+            rows = _get_cooldown_rows(get_cached_settings(), timings, sticker_stack_cooldown)
+
+            if not rows:
+                await interaction.response.send_message("❌ No collectibles are enabled.")
+                return
+
+            now = time.time()
+            lines = [
+                f"**{name.replace('_', ' ').title()}**: " + ("Ready!" if ready_at <= now else f"<t:{int(ready_at)}:R>")
+                for name, ready_at in rows
+            ]
+            await interaction.response.send_message(embed=discord.Embed(title="⏱️ Cooldowns", description="\n".join(lines), color=0x00ff00))
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error retrieving cooldowns: {str(e)}")
+
     # === MOB RUN COMMANDS ===
 
     @bot.tree.command(name="mobs", description="View mob run configuration")
@@ -4199,7 +4239,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         embed.add_field(name="**Profile Management**", value="`/swapprofile <name>` - Switch to a different profile (macro must be stopped)", inline=False)
 
-        embed.add_field(name="**Status & Monitoring**", value="`/status` - Get macro status and current task\n`/tasklist` - Show enabled task order, current task, and next task\n`/logs` - Show recent macro actions\n`/battery` - Check battery status\n`/performance` - Show CPU and RAM usage\n`/stream <enable/disable/status>` - Control stream\n`/streamurl` - Get stream URL\n`/vicstats` - Show current Vic Hop statistics\n`/hourlyreport` - Generate and send the hourly report\n`/session` - Generate and send the final session report", inline=False)
+        embed.add_field(name="**Status & Monitoring**", value="`/status` - Get macro status and current task\n`/tasklist` - Show enabled task order, current task, and next task\n`/cooldowns` - Show when each enabled collectible and machine is ready\n`/logs` - Show recent macro actions\n`/battery` - Check battery status\n`/performance` - Show CPU and RAM usage\n`/stream <enable/disable/status>` - Control stream\n`/streamurl` - Get stream URL\n`/vicstats` - Show current Vic Hop statistics\n`/hourlyreport` - Generate and send the hourly report\n`/session` - Generate and send the final session report", inline=False)
         
         embed.add_field(name="**Advanced**", value="`/amulet <keep/replace>` - Choose amulet action\n`/close <both/roblox/macro>` - Close both, Roblox only, or macro only", inline=False)
 
