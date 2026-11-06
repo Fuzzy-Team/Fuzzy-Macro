@@ -108,10 +108,14 @@ def runApp(macroTarget):
     #setup stream class
     stream = cloudflaredStream()
     standbyCaffeinateProc = None
+    ES_CONTINUOUS, ES_SYSTEM_REQUIRED, ES_DISPLAY_REQUIRED = 0x80000000, 0x1, 0x2
 
     def stopStandbyKeepAwake():
         """Stop only the caffeinate instance started by this macro."""
         nonlocal standbyCaffeinateProc
+        if sys.platform == "win32":
+            ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS)
+            return
         if standbyCaffeinateProc is None:
             return
         if standbyCaffeinateProc.poll() is None:
@@ -128,6 +132,10 @@ def runApp(macroTarget):
 
     def startStandbyKeepAwake():
         nonlocal standbyCaffeinateProc
+        if sys.platform == "win32":
+            #applies to the calling thread until stopStandbyKeepAwake runs on it
+            ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED)
+            return True
         if standbyCaffeinateProc is not None and standbyCaffeinateProc.poll() is None:
             return True
         try:
@@ -242,43 +250,44 @@ def runApp(macroTarget):
     
     #use run.value to control the macro loop
 
-    #check color profile
-    try:
-        colorProfileManager = DisplayColorProfile()
-        currentProfileColor = colorProfileManager.getCurrentColorProfile()
-        if not "sRGB" in currentProfileColor:
-            try:
-                if messageBox.msgBoxOkCancel(title="Incorrect Color Profile", text=f"You current display's color profile is {currentProfileColor} but sRGB is required for the macro.\nPress 'Ok' to change color profiles"):
-                    colorProfileManager.resetDisplayProfile()
-                    colorProfileManager.setCustomProfile("/System/Library/ColorSync/Profiles/sRGB Profile.icc")
-                    messageBox.msgBox(title="Color Profile Success", text="Successfully changed the current color profile to sRGB")
+    #color profile, screen recording and keyboard access only apply to macOS
+    if sys.platform == "darwin":
+        try:
+            colorProfileManager = DisplayColorProfile()
+            currentProfileColor = colorProfileManager.getCurrentColorProfile()
+            if not "sRGB" in currentProfileColor:
+                try:
+                    if messageBox.msgBoxOkCancel(title="Incorrect Color Profile", text=f"You current display's color profile is {currentProfileColor} but sRGB is required for the macro.\nPress 'Ok' to change color profiles"):
+                        colorProfileManager.resetDisplayProfile()
+                        colorProfileManager.setCustomProfile("/System/Library/ColorSync/Profiles/sRGB Profile.icc")
+                        messageBox.msgBox(title="Color Profile Success", text="Successfully changed the current color profile to sRGB")
 
-            except Exception as e:
-                messageBox.msgBox(title="Failed to change color profile", text=e)
-    except Exception:
-        pass
+                except Exception as e:
+                    messageBox.msgBox(title="Failed to change color profile", text=e)
+        except Exception:
+            pass
     
-    #check screen recording permissions
-    try:
-        cg = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
-        cg.CGRequestScreenCaptureAccess.restype = ctypes.c_bool
-        if not cg.CGRequestScreenCaptureAccess():
-            messageBox.msgBox(title="Screen Recording Permission", text='Terminal does not have the screen recording permission. The macro will not work properly.\n\nTo fix it, go to System Settings -> Privacy and Security -> Screen Recording -> add and enable Terminal. After that, restart the macro')
-    except AttributeError:
-        pass
-    #check full keyboard access
-    try:
-        result = subprocess.run(
-            ["defaults", "read", "com.apple.universalaccess", "KeyboardAccessEnabled"],
-            capture_output=True,
-            text=True
-        )
-        value = result.stdout.strip()
-        if value == "1":
-            messageBox.msgBox(text = "Full Keyboard Access is enabled. The macro will not work properly\
-                \nTo disable it, go to System Settings -> Accessibility -> Keyboard -> uncheck 'Full Keyboard Access'")
-    except Exception as e:
-        print("Error reading Full Keyboard Access:", e)
+        #check screen recording permissions
+        try:
+            cg = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
+            cg.CGRequestScreenCaptureAccess.restype = ctypes.c_bool
+            if not cg.CGRequestScreenCaptureAccess():
+                messageBox.msgBox(title="Screen Recording Permission", text='Terminal does not have the screen recording permission. The macro will not work properly.\n\nTo fix it, go to System Settings -> Privacy and Security -> Screen Recording -> add and enable Terminal. After that, restart the macro')
+        except AttributeError:
+            pass
+        #check full keyboard access
+        try:
+            result = subprocess.run(
+                ["defaults", "read", "com.apple.universalaccess", "KeyboardAccessEnabled"],
+                capture_output=True,
+                text=True
+            )
+            value = result.stdout.strip()
+            if value == "1":
+                messageBox.msgBox(text = "Full Keyboard Access is enabled. The macro will not work properly\
+                    \nTo disable it, go to System Settings -> Accessibility -> Keyboard -> uncheck 'Full Keyboard Access'")
+        except Exception as e:
+            print("Error reading Full Keyboard Access:", e)
 
     discordBotProc = None
     prevDiscordBotToken = None

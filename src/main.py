@@ -3,12 +3,19 @@ import subprocess
 import sys
 from modules.misc import messageBox
 
+# Windows scales coordinates on high DPI displays unless the process opts out. This file's top level
+# also runs in every spawned child, and it must happen before pyautogui or mss read the screen size.
+if sys.platform == "win32":
+    import ctypes
+    ctypes.windll.shcore.SetProcessDpiAwareness(2)
+
 
 def exitForMissingDependencies(message):
-    script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "install_dependencies.command"))
+    windows = sys.platform == "win32"
+    script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "install_dependencies.bat" if windows else "install_dependencies.command"))
     try:
         if os.path.exists(script):
-            subprocess.Popen(["/bin/bash", script])
+            subprocess.Popen(["cmd", "/c", script] if windows else ["/bin/bash", script])
         else:
             messageBox.msgBox(title="Dependencies not installed", text=message)
     except Exception:

@@ -1,4 +1,5 @@
 import os
+import sys
 import modules.controls.mouse as mouse
 import modules.misc.appManager as appManager
 from modules.controls.sleep import pause_aware_time as time, sleep
@@ -21,7 +22,7 @@ class NavigationMixin:
         #try running a automator workflow
         #if it doesnt exist, run the .py file instead
 
-        if os.path.exists(path+".workflow"):
+        if sys.platform == "darwin" and os.path.exists(path+".workflow"):
             os.system(f"/usr/bin/automator {path}.workflow")
         else:
             pyPath = f"{path}.py"

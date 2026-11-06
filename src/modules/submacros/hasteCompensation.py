@@ -3,8 +3,10 @@ from PIL import Image
 from io import BytesIO
 from modules import bitmap_matcher
 import mss
-import mss.darwin
-mss.darwin.IMAGE_OPTIONS = 0
+import sys
+if sys.platform == "darwin":
+    import mss.darwin
+    mss.darwin.IMAGE_OPTIONS = 0
 from modules.screen.robloxWindow import RobloxWindowBounds
 from modules.reports.buffs import NATRO_BUFF_CHARACTER_TEMPLATES
 
