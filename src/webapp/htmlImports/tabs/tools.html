@@ -5,6 +5,7 @@
     <div id="tools-bond-calculator" class="tools-tab-item">Bond Calculator</div>
     <div id="tools-ticket-calculator" class="tools-tab-item">Ticket Price Calculator</div>
     <div id="tools-auto-gifted-basic-bee" class="tools-tab-item">Auto Gifted Basic Bee</div>
+    <div id="tools-ssa-roller" class="tools-tab-item">SSA Roller</div>
   </div>
 
   <div id="tools-autoclicker-tab" class="standard-container sub-tab-panel active">
@@ -494,6 +495,89 @@
 
       <p style="font-size:0.9rem; opacity:0.75; margin-top:1rem; font-style: bold; color: #ff6f91;">
         Please note: this is beta, it may mess up, it is not garunteed to work, please watch it run and report any issues you see on the discord. The tool relies on OCR to read the result of each roll, so it may misread sometimes, especially if your game resolution is low or if you have a lot of screen clutter. If it misreads a result, it may do extra rolls or stop when it shouldn't, so it's important to keep an eye on it while it's running.
+      </p>
+    </div>
+  </div>
+
+  <div id="tools-ssa-roller-tab" class="standard-container sub-tab-panel">
+    <div class="poppins-medium standard-container" style="display: block; justify-items: unset; padding-top: 1rem;">
+      <h2>SSA Roller (BETA)</h2>
+      <p style="font-size:0.95rem; opacity:0.8; margin-top:0.25rem;">
+        Rolls the Supreme Star Amulet generator until a roll has your main passive and stats, then stops with the result left open so you can choose Keep or Replace in-game.
+      </p>
+      <p style="font-size:0.95rem; opacity:0.8; margin-top:0.5rem;">
+        Stand at the generator with its E prompt visible, or leave an SSA result open, then press Start.
+        To stop, use the macro stop hotkey:
+        <span id="ssa-roller-stop-hotkey" style="font-weight:600;">F3</span>.
+      </p>
+      <div class="seperator"></div>
+
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.5rem;">
+        <div>
+          <label for="ssa-main-passive">Main Passive</label>
+          <select id="ssa-main-passive" class="textbox bond-calc-select" style="margin-top:0.5rem;"></select>
+          <label style="display:flex; align-items:center; gap:0.5rem; margin-top:1rem;">
+            <input id="ssa-double-passive" type="checkbox" />
+            Double Passive (500b per roll)
+          </label>
+          <div id="ssa-side-passives" style="margin-top:0.75rem; display:grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap:0.5rem;"></div>
+        </div>
+        <div>
+          <label>Stats (up to 5, Min % blank = any value)</label>
+          <div id="ssa-stat-rows" style="margin-top:0.5rem; display:grid; gap:0.5rem;"></div>
+        </div>
+      </div>
+
+      <div style="margin-top:1.5rem; display:flex; gap:1.5rem; flex-wrap:wrap; align-items:end;">
+        <div>
+          <label for="ssa-honey-limit">Honey Limit (trillions, 0 = no limit)</label>
+          <input id="ssa-honey-limit" class="textbox" type="number" min="0" step="1" value="5" style="margin-top:0.5rem; width:8rem;" />
+        </div>
+        <label style="display:flex; align-items:center; gap:0.5rem;">
+          <input id="ssa-wait-for-command" type="checkbox" checked />
+          Wait for Discord command: shows what it sees, then waits for /ssa go before clicking anything
+        </label>
+        <label style="display:flex; align-items:center; gap:0.5rem;">
+          <input id="ssa-manual-review" type="checkbox" />
+          Manual review: send each match to Discord to approve (stop) or deny (keep rolling)
+        </label>
+        <label style="display:flex; align-items:center; gap:0.5rem;">
+          <input id="ssa-safety" type="checkbox" />
+          Safety: stop if a full roll can't be read in time
+        </label>
+        <div style="display:flex; gap:0.75rem; flex-wrap:wrap;">
+          <button id="ssa-roller-start" class="purple-button" onclick="startSsaRollerTool()">Start</button>
+          <button id="ssa-roller-stop" class="purple-button" onclick="stopSsaRollerTool()" style="display:none;">Stop</button>
+        </div>
+      </div>
+
+      <div style="margin-top:1rem; padding:1rem; border-radius:10px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.07);">
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:0.75rem;">
+          <div>
+            <label>Status</label>
+            <div id="ssa-roller-state" style="margin-top:0.3rem; font-weight:600;">Idle</div>
+          </div>
+          <div>
+            <label>Rolls</label>
+            <div id="ssa-roller-rolls" style="margin-top:0.3rem;">0</div>
+          </div>
+          <div>
+            <label>Honey Spent</label>
+            <div id="ssa-roller-honey" style="margin-top:0.3rem;">0b</div>
+          </div>
+        </div>
+        <div style="margin-top:1rem;">
+          <label>Message</label>
+          <div id="ssa-roller-message" style="margin-top:0.3rem; opacity:0.9;">Ready</div>
+        </div>
+        <div style="margin-top:1rem;">
+          <label>Last OCR Read</label>
+          <div id="ssa-roller-last-text" style="margin-top:0.3rem; opacity:0.75; word-break:break-word;">None</div>
+        </div>
+      </div>
+
+      <p style="font-size:0.9rem; opacity:0.75; margin-top:1rem;">
+        Requirements: stop the main macro first and keep Roblox visible. The honey limit counts what this tool spends, not your honey in-game. The tool reads each roll with OCR, so watch the first few rolls.
       </p>
     </div>
   </div>

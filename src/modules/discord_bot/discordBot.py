@@ -321,7 +321,7 @@ DISCORD_COMMAND_PERMISSION_CATEGORIES = {
     "task_interrupts": {
         "label": "Task Interrupts",
         "setting": "discord_permission_task_interrupt_ids",
-        "commands": ["amulet", "collectplanter", "planterreset", "reroll", "reset", "skip", "usehotbar"],
+        "commands": ["amulet", "collectplanter", "planterreset", "reroll", "reset", "skip", "ssa", "usehotbar"],
     },
     "configuration": {
         "label": "Configuration",
@@ -672,7 +672,7 @@ def _build_logger_embed(data):
     return embed
 
 
-def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None, updateGUI=None, discord_message_queue=None, planter_command_queue=None, stream_control_queue=None, skipServer=None, standby_command_queue=None, standby_state=None):
+def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None, updateGUI=None, discord_message_queue=None, planter_command_queue=None, stream_control_queue=None, skipServer=None, standby_command_queue=None, standby_state=None, ssa_command=None):
     _patch_discord_response_footers()
     bot = commands.Bot(command_prefix="fuzz!", intents=discord.Intents.all())
     if legacyCommands.IS_LEGACY:
@@ -886,7 +886,11 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         try:
             if image_path and os.path.exists(image_path):
                 file_obj = discord.File(image_path, filename="screenshot.png")
-            await channel.send(content=content, embed=embed, file=file_obj)
+            options = {}
+            # the SSA Roller's manual review message gets Approve/Deny buttons (discord.py 1.x has none)
+            if data.get("title") == "SSA Roller Review" and not legacyCommands.IS_LEGACY:
+                options["view"] = SsaReviewView()
+            await channel.send(content=content, embed=embed, file=file_obj, **options)
         except Exception as e:
             print(f"Discord logger send error: {e}")
     
@@ -3007,6 +3011,52 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         elif option in replaceAlias:
             status.value = "amulet_replace"
             await interaction.response.send_message("Replacing amulet")
+
+    def answer_ssa_roller(action):
+        """Pass a Discord answer to the SSA Roller tool. Returns (accepted, reply text).
+        The tool sets ssa_command to "waiting" (for go) or "reviewing" (for approve/deny) and polls it.
+        It has its own value because the main loop overwrites status (e.g. for Rich Presence)."""
+        state = ssa_command.value if ssa_command is not None else ""
+        if not state:
+            return False, "The SSA Roller isn't running"
+        if action != "end" and state != {"go": "waiting", "approve": "reviewing", "deny": "reviewing"}[action]:
+            return False, f"The SSA Roller isn't waiting for /ssa {action}"
+        ssa_command.value = action
+        return True, {"go": "Rolling", "approve": "Approved. The result stays open: choose Keep or Replace in-game.",
+                      "deny": "Denied. Rolling again", "end": "Ending the SSA Roller"}[action]
+
+    class SsaReviewButton(discord.ui.Button):
+        def __init__(self, action, label, style):
+            super().__init__(label=label, style=style)
+            self.action = action
+
+        async def callback(self, interaction: discord.Interaction):
+            if not _user_can_use_permission_category(interaction, "task_interrupts"):
+                await _send_permission_denied(interaction, "task_interrupts")
+                return
+            accepted, reply = answer_ssa_roller(self.action)
+            if accepted:
+                await interaction.response.edit_message(content=reply, view=None)
+            else:
+                await interaction.response.send_message(reply, ephemeral=True)
+
+    class SsaReviewView(discord.ui.View):
+        def __init__(self):
+            super().__init__(timeout=None)
+            self.add_item(SsaReviewButton("approve", "Approve", discord.ButtonStyle.success))
+            self.add_item(SsaReviewButton("deny", "Deny", discord.ButtonStyle.danger))
+
+    @bot.tree.command(name = "ssa", description = "Control the SSA Roller tool")
+    @requires_discord_permission("task_interrupts")
+    @app_commands.describe(action = "go to start rolling, approve or deny a match in manual review, end to stop (like F3)")
+    @app_commands.choices(action=[
+        app_commands.Choice(name="go", value="go"),
+        app_commands.Choice(name="approve", value="approve"),
+        app_commands.Choice(name="deny", value="deny"),
+        app_commands.Choice(name="end", value="end"),
+    ])
+    async def ssa(interaction: discord.Interaction, action: str):
+        await interaction.response.send_message(answer_ssa_roller(action)[1])
 
     @bot.tree.command(name = "battery", description = "Get your current battery status")
     @requires_discord_permission("observation")
