@@ -209,12 +209,16 @@ printf "\033[1;35mInstalling libraries\033[0m\n\n"
 # numpy<2 below (and the constraints file) keeps numpy below 2. Each branch below adds its own
 # packages. Only easyocr gets a separate call because it needs --no-deps.
 packages="numpy<2 pyautogui pillow discord-webhook pypresence fuzzywuzzy python-Levenshtein pyscreeze<0.1.29 gevent eel requests pynput psutil"
+# Wheels built for macOS 10.12 on Intel (github.com/Fuzzy-Team/Fuzzy-Macro-Wheels). PyPI has no
+# Intel OpenCV wheel that runs on macOS 10.12-11 and loads the AI Gather ONNX models (they need
+# OpenCV 4.8+), and its aiohttp 3.7.4 has none below 10.14. pip checks the sha256 after the #.
+wheels="https://github.com/Fuzzy-Team/Fuzzy-Macro-Wheels/releases/download/legacy-macos-3"
 if [ "$python_ver" = '3.7' ]; then
 	# discord.py 2.x needs Python 3.8. 1.7.3 has no slash commands, so the bot runs them as
 	# fuzz! prefix commands (modules/discord_bot/legacyCommands.py). It needs aiohttp below 3.8;
-	# 3.7.4.post0 is the newest, and pip builds it from source below macOS 10.14.
+	# 3.7.4.post0 is the newest.
 	# mss 9.0.1 needs Python 3.8, so Python 3.7 takes the newest mss it supports.
-	packages="$packages discord.py==1.7.3 aiohttp==3.7.4.post0 mss"
+	packages="$packages discord.py==1.7.3 $wheels/aiohttp-3.7.4.post0-cp37-cp37m-macosx_10_12_x86_64.whl#sha256=5d232cc01fbe8ae0d69c2680ea32af55e0283abfe2a31ce7d3121d296dacd711 mss"
 else
 	packages="$packages discord.py aiohttp==3.10.5 mss==9.0.1"
 fi
@@ -238,19 +242,11 @@ elif version_at_least "$os_ver" "10.15.0"; then
 	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 	source "$HOME/.cargo/env"
 
-	# AI Gather's ONNX models need OpenCV 4.8 or later. 4.9.0.80 is the newest Intel
-	# wheel for macOS 11; 4.10 needs macOS 12, so pip would try to build it from source,
-	# fail, and leave no cv2 behind. macOS 10.15 has no wheel that can load the models,
-	# so it keeps 4.6.0.66. Keep exactly one OpenCV package installed because all
-	# variants share the cv2 namespace.
-	if version_at_least "$os_ver" "11.0"; then
-		opencv_version="4.9.0.80"
-	else
-		opencv_version="4.6.0.66"
-	fi
-	venv_pip uninstall -y opencv-python opencv-contrib-python opencv-python-headless opencv-contrib-python-headless
+	# Keep exactly one OpenCV package installed because all variants share the cv2 namespace.
+	# pip replaces an installed opencv-python itself, so only the other variants are removed.
+	venv_pip uninstall -y opencv-contrib-python opencv-python-headless opencv-contrib-python-headless
 	install_pip_package "easyocr" "--no-deps" || pip_failed
-	packages="$packages opencv-python==$opencv_version torch torchvision>=0.5 scipy shapely ninja pyclipper python-bidi scikit-image PyYAML pyobjc-framework-ColorSync<12.0 pyobjc-framework-ApplicationServices"
+	packages="$packages $wheels/opencv_python-4.11.0.86-cp38-cp38-macosx_10_12_x86_64.whl#sha256=83bc5c4a45b494e6ef33a88dd22c0527df88d05e77e2e66b37bb4038fff3aa55 torch torchvision>=0.5 scipy shapely ninja pyclipper python-bidi scikit-image PyYAML pyobjc-framework-ColorSync<12.0 pyobjc-framework-ApplicationServices"
 
 else
 	# Apple Vision OCR needs macOS 10.15, so use easyocr. 1.7.1 is the last release that
@@ -258,15 +254,9 @@ else
 	# for Python 3.7. --no-deps keeps easyocr from adding a second OpenCV package and
 	# scikit-image (its wheels need macOS 10.15; ocr.py stands in for it).
 	install_pip_package "pyobjc-framework-ColorSync<11.0 pyobjc-framework-ApplicationServices<11.0 easyocr==1.7.1" "--no-deps" || pip_failed
-	packages="$packages pyobjc-core<11.0 pyobjc-framework-Cocoa<11.0 opencv-python==4.6.0.66 torch==1.13.1 torchvision==0.14.1 scipy shapely pyclipper python-bidi==0.4.2 PyYAML ninja packaging"
-	# No 4.6 wheel exists below macOS 10.15, so pip builds it from source here (slow, but known
-	# to work down to 10.12, unlike the older wheels, which bundle libraries built for 10.13).
-	# BUILD_JAVA=OFF skips OpenCV's Java detection, which runs `java` and makes macOS show a
-	# "you need to install a JDK" dialog when no JDK is installed.
-	export CMAKE_ARGS="-DBUILD_JAVA=OFF"
+	packages="$packages pyobjc-core<11.0 pyobjc-framework-Cocoa<11.0 $wheels/opencv_python-4.11.0.86-cp37-cp37m-macosx_10_12_x86_64.whl#sha256=6fa718f43386ab0f9d1435592229bb36b53f701d141b70ff048b706e0dd2a4f6 torch==1.13.1 torchvision==0.14.1 scipy shapely pyclipper python-bidi==0.4.2 PyYAML ninja packaging"
 fi
 install_pip_package "$packages" || pip_failed
-unset CMAKE_ARGS
 # no longer used; ocrmac imports matplotlib whenever it is installed, slowing startup
 venv_pip uninstall -y matplotlib html2image httpx ImageHash
 
