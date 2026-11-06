@@ -955,6 +955,10 @@ async function triggerBetaUpdate() {
   }
 }
 
+function openLogFolder() {
+  eel.openLogFolder()();
+}
+
 // Export debug folder (profile, logs, system info)
 async function exportDebugFolder() {
   try {
