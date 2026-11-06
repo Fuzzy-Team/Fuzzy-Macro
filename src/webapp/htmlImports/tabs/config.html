@@ -454,6 +454,15 @@
   <div id="other" class="standard-container sub-tab-panel" style="display: none">
     <script>
       const parentOther = document.getElementById("other");
+      buildStandardContainer(parentOther, "Display", "", [
+        {
+          id: "use_1080p_virtual_display",
+          title: "Use 1080p virtual display",
+          desc: "Runs Roblox with a 1920×1080 game area for consistent detection on Retina screens. Requires macOS 13 or later. Changes apply the next time you start the macro.",
+          type: { name: "checkbox", triggerFunction: saveGeneralTriggerFunction },
+        },
+      ]);
+      document.getElementById("use_1080p_virtual_display").setAttribute("aria-label", "Use 1080p virtual display");
       buildStandardContainer(parentOther, "Rejoining", "", [
         {
           id: "always_rejoin",

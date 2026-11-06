@@ -2,10 +2,8 @@ import base64
 from PIL import Image
 from io import BytesIO
 from modules import bitmap_matcher
-import mss
-import mss.darwin
-mss.darwin.IMAGE_OPTIONS = 0
 from modules.screen.robloxWindow import RobloxWindowBounds
+from modules.screen.screenshot import mssScreenshotPillowRGBA
 from modules.reports.buffs import NATRO_BUFF_CHARACTER_TEMPLATES
 
 class HasteCompensationRevamped():
@@ -57,13 +55,11 @@ class HasteCompensationRevamped():
             bitmaps.append(img)
         return bitmaps
 
-    def screenshotBuff(self):   
-        with mss.mss() as sct:
-            monitor = {"left": int(self.robloxWindow.mx), "top": int(self.robloxWindow.my+self.robloxWindow.yOffset+33), "width": int(self.robloxWindow.mw), "height": int(48)}
-            sct_img = sct.grab(monitor)
-            img = Image.frombytes("RGBA", sct_img.size, sct_img.bgra, "raw", "BGRA")
-            #img.save(f"buff_area.png")
-            return img
+    def screenshotBuff(self):
+        return mssScreenshotPillowRGBA(
+            self.robloxWindow.mx, self.robloxWindow.my + self.robloxWindow.yOffset + 33,
+            self.robloxWindow.mw, 48,
+        )
 
     #similar to natro's implementation for haste detection
     def getHaste(self):

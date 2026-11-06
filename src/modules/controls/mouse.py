@@ -1,16 +1,18 @@
 import pyautogui as pag
 import Quartz
+from modules.screen import virtual_display
 import time
 from pynput.mouse import Button, Controller
 
 pynputMouse = Controller()
 #move the mouse instantly
 def teleport(x,y):
-    pag.moveTo(int(x),int(y))
+    pag.moveTo(*virtual_display.to_global(x, y))
 
 def moveTo(x,y, delay = 0.1):
-    pag.moveTo(int(x),int(y), delay)
-    pynputMouse.position = (int(x), int(y))
+    x, y = virtual_display.to_global(x, y)
+    pag.moveTo(x, y, delay)
+    pynputMouse.position = (x, y)
 
 #pyautogui posts left button events without a click state, which makes WindowServer's gesture
 #handling lag on macOS 27. Post them the way pyautogui does, plus click state 1.
@@ -22,16 +24,19 @@ def postLeftButton(eventType):
 
 #send a single press/release; posting through both pynput and pyautogui doubled every event
 def mouseDown():
+    if virtual_display.active(): virtual_display.state(require_window=True)
     postLeftButton(Quartz.kCGEventLeftMouseDown)
 
 def mouseUp():
     postLeftButton(Quartz.kCGEventLeftMouseUp)
 
 def moveBy(x = 0,y = 0, pause=True):
+    if virtual_display.active(): virtual_display.state(require_window=True)
     pag.move(x, y, _pause=pause)  
 
 def rightDragBy(x, y):
     """Send relative camera motion while the caller holds the right button."""
+    if virtual_display.active(): virtual_display.state(require_window=True)
     currentX, currentY = pag.position()
     event = Quartz.CGEventCreateMouseEvent(
         None, Quartz.kCGEventRightMouseDragged,
@@ -48,11 +53,17 @@ def click():
     mouseUp()
 
 def fastClick():
+    if virtual_display.active(): virtual_display.state(require_window=True)
     pynputMouse.press(Button.left)
     pynputMouse.release(Button.left)
 
 def scroll(clicks, pause = False):
+    if virtual_display.active(): virtual_display.state(require_window=True)
     pag.scroll(clicks, _pause = pause)
 
 def getPos():
-    return pag.position()
+    return virtual_display.to_local(*pag.position())
+
+def dragTo(x, y, duration=0.6, button="left"):
+    x, y = virtual_display.to_global(x, y)
+    pag.dragTo(x, y, duration, button=button)

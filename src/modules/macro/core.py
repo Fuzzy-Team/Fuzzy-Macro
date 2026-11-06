@@ -21,6 +21,7 @@ from modules.controls.sleep import (
 from modules.macro.game_data import mergedCollectData, PING_SETTING_KEYS
 from modules.misc import messageBox
 from modules.screen.robloxWindow import RobloxWindowBounds
+from modules.screen import virtual_display
 from modules.screen.screenshot import benchmarkMSS, mssScreenshot
 from modules.submacros.fieldDriftCompensation import (
     fieldDriftCompensation as fieldDriftCompensationClass,
@@ -330,6 +331,8 @@ class macro(
         return datetime.now().minute
 
     def backgroundOnce(self):
+        if virtual_display.active() and (self.status.value == "rejoining" or not virtual_display.state().get("window_ready")):
+            return
         with open(settingsManager.ensureUserFile("hotbar_timings.txt"), "r") as f:
             hotbarSlotTimings = ast.literal_eval(f.read())
 
@@ -389,7 +392,15 @@ class macro(
 
     def background(self):
         while True:
-            self.backgroundOnce()
+            try:
+                self.backgroundOnce()
+            except virtual_display.DisplayError as error:
+                self.keyboard.releaseMovement()
+                mouse.mouseUp()
+                self.logger.webhook("1080p Display Error", str(error), "red")
+                if self.run is not None:
+                    self.run.value = 0
+                return
             time.sleep(1)
 
     def startDetect(self):
@@ -449,8 +460,12 @@ class macro(
             if self.setdat.get("always_rejoin", True) or not appManager.openApp("Roblox"):
                 self.rejoin()
             else:
-                self.startDetect()
-                self.setRobloxWindowInfo()
+                if virtual_display.active():
+                    self.setRobloxWindowInfo()
+                    self.startDetect()
+                else:
+                    self.startDetect()
+                    self.setRobloxWindowInfo()
     
         if not benchmarkMSS():
             self.logger.webhook("", "MSS is too slow, switching to pillow", "dark brown")

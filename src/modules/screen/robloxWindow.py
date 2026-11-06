@@ -1,6 +1,6 @@
 import pyautogui as pag
 import time
-from modules.screen import screenData
+from modules.screen import screenData, virtual_display
 from operator import itemgetter
 from modules.misc.appManager import getWindowSize
 from PIL import Image
@@ -13,7 +13,7 @@ class RobloxWindowBounds:
     '''
 
     def __init__(self):
-        self.screenw, self.screenh = pag.size()
+        self.screenw, self.screenh = virtual_display.screen_size()
         self.mx = 0
         self.my = 0
         self.mw = self.screenw
@@ -27,6 +27,15 @@ class RobloxWindowBounds:
         self.multi = 2 if self.isRetina else 1 #used for pixel calculation compatibility between retina and non-retina displays
     
     def setRobloxWindowBounds(self, setYOffset = True):
+        if virtual_display.active():
+            result = virtual_display.prepare_window()
+            if not result.get("window_ready"):
+                if setYOffset:
+                    raise virtual_display.DisplayError("Roblox has no window on Fuzzy Display.")
+                return
+            self.mx, self.my, self.mw, self.mh = 0, 0, 1920, 1080
+            self.contentYOffset = 0
+            return
         self.mx, self.my, self.mw, self.mh = getWindowSize("roblox roblox")
 
         #calculate y offset and the actual roblox content bounds
@@ -46,5 +55,6 @@ class RobloxWindowBounds:
             
         
     def _detectContentYOffset(self, honeyImg):
-        screen = mssScreenshotPillowRGBA(self.mx,self.my,self.mw,self.mh//3)
+        # The Honey label precedes the amount's OCR region; field pixels can share its color.
+        screen = mssScreenshotPillowRGBA(self.mx + self.mw//2 - 300, self.my, 59, self.mh//3)
         return bitmap_matcher.find_bitmap_cython(screen, honeyImg, variance=5)

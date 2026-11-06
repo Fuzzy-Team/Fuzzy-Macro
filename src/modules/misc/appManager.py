@@ -1,6 +1,8 @@
 import os
 import subprocess
+import time
 import pyautogui as pag
+from modules.screen import virtual_display
 from AppKit import NSWorkspace
 from ApplicationServices import AXUIElementCreateApplication, AXUIElementSetAttributeValue, AXUIElementCopyAttributeValue, AXValueCreate, kAXValueCGPointType, kAXValueCGSizeType, AXUIElementCopyAttributeNames
 from Quartz import CGPoint, CGSize
@@ -11,8 +13,8 @@ def runAppleScript(code):
     os.system(cmd)
 
 def isAppOpenMac(app="roblox"):
-    tmp = os.popen("ps -Af").read()
-    return app in tmp[:]
+    processName = "RobloxPlayer" if app.casefold() == "roblox" else app
+    return subprocess.run(["pgrep", "-ix", processName], stdout=subprocess.DEVNULL).returncode == 0
 
 def openAppMac(app="Roblox"):
     if not isAppOpenMac(app): return False
@@ -43,16 +45,25 @@ def openDeeplink(link):
     subprocess.call(["open", link])
 
 def closeApp(app):
-    try:
-        subprocess.call(["pkill", app], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except Exception:
-        pass
-    cmd = """
-        osascript -e 'quit application "Roblox"'
-    """
-    os.system(cmd)
+    for runningApp in NSWorkspace.sharedWorkspace().runningApplications():
+        if (runningApp.localizedName() or "").casefold() == app.casefold():
+            pid = runningApp.processIdentifier()
+            if not runningApp.terminate():
+                raise RuntimeError("Could not close {}.".format(app))
+            deadline = time.monotonic() + 10
+            while True:
+                try:
+                    os.kill(pid, 0)
+                except ProcessLookupError:
+                    break
+                if time.monotonic() >= deadline:
+                    raise RuntimeError("{} did not exit. Close it before restarting the macro.".format(app))
+                time.sleep(0.1)
 
 def getWindowSize(windowName):
+    if virtual_display.active() and "roblox" in windowName.lower():
+        virtual_display.state(require_window=True)
+        return 0, 0, virtual_display.WIDTH, virtual_display.HEIGHT
     import Quartz
     
     windowList = Quartz.CGWindowListCopyWindowInfo(
@@ -79,6 +90,9 @@ def getWindowSize(windowName):
 
 
 def setAppFullscreenMac(app="Roblox", fullscreen=True):
+    if virtual_display.active() and app.lower() == "roblox":
+        virtual_display.prepare_window()
+        return
     workspace = NSWorkspace.sharedWorkspace()
     for runningApp in workspace.runningApplications():
         if runningApp.localizedName() == app:
@@ -92,6 +106,9 @@ def setAppFullscreenMac(app="Roblox", fullscreen=True):
     AXUIElementSetAttributeValue(windowRef, "AXFullScreen", fullscreen)
 
 def maximiseAppWindowMac(app="Roblox"):
+    if virtual_display.active() and app.lower() == "roblox":
+        virtual_display.prepare_window()
+        return
     workspace = NSWorkspace.sharedWorkspace()
     for runningApp in workspace.runningApplications():
         if runningApp.localizedName() == app:
