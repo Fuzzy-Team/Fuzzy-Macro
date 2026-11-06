@@ -29,7 +29,7 @@ class GatherMixin:
         #place one sprinkler and check if its in field
         self.keyboard.press(sprinklerSlot)
         time.sleep(1)
-        if self.blueTextImageSearch("notinfield"):
+        if self.blueTextHas("notinfield"):
             return False
         #place the remaining sprinklers
         #hold jump and spam place sprinklers
@@ -837,12 +837,12 @@ class GatherMixin:
             self.canDetectNight = True
             while time.time()-st < 10:
                 #goo timer continues via background thread during hive search
-                if self.isBesideEImage("makehoney"):
+                if self.isMakeHoneyPrompt():
                     break
             self.keyboard.keyUp("a")
             #in case we overrun
             time.sleep(0.4)
-            if self.isBesideEImage("makehoney"):
+            if self.isMakeHoneyPrompt():
                 if not convertAtHive:
                     return True
             elif not convertAtHive:

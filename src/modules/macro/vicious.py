@@ -34,7 +34,7 @@ class ViciousMixin:
                     sleep(0.8)
                     # Same blue-text "died" check as the other fights; chat is
                     # never read for deaths, so old "You died" lines can't retrigger.
-                    if self.blueTextImageSearch("died", screen=self.blueTextScreen()):
+                    if self.blueTextHas("died", screen=self.blueTextScreen()):
                         died = True
                         self.recordVicStat("deaths")
                         break

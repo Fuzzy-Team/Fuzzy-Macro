@@ -15,9 +15,7 @@ from modules.discord_bot.richPresence import RichPresenceManager
 from modules.misc import messageBox
 from modules.misc.ColorProfile import DisplayColorProfile
 from modules.misc.appManager import getWindowSize
-from modules.misc.imageManipulation import adjustImage
 from modules.misc.settings_defaults import BLENDER_ITEM_SLOTS
-from modules.screen.imageSearch import locateImageOnScreen
 from modules.submacros.tadAltSync import TadAltSync
 
 
@@ -765,9 +763,12 @@ def runApp(macroTarget):
             updateGUI.value = 0
         
         if run.value == 2 and time.time() > disconnectCooldownUntil:
-            img = adjustImage("./images/menu", "disconnect", screenInfo["display_type"])
+            # imported here so the GUI process only loads OCR once the macro runs
+            from modules.screen import ocr
+            from modules.screen.screenshot import mssScreenshot
             wmx, wmy, wmw, wmh = getWindowSize("roblox roblox")
-            if locateImageOnScreen(img, wmx+wmw/3, wmy+wmh/2.8, wmw/2.3, wmh/5, 0.7):
+            screenText = ''.join(x[1][0] for x in ocr.ocrRead(mssScreenshot(wmx+wmw/3, wmy+wmh/2.8, wmw/2.3, wmh/5))).lower()
+            if "disconnected" in screenText.replace(" ", ""):
                 print("disconnected")
                 run.value = 4
                 disconnectCooldownUntil = time.time() + 300  # 5 min cooldown

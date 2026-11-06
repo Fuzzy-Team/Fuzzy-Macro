@@ -244,8 +244,6 @@ class RejoinMixin:
             # A deeplink is asynchronous, so ignore the old join-error dialog
             # briefly while Roblox starts processing this new request.
             joinErrorScanAfter = loadStartTime + 5
-            signUpImage = self.adjustImage("./images/menu", "signup")
-            disconnectImage = self.adjustImage("./images/menu", "disconnect")
             # prepare rejoin color-based detection
             try:
                 sample_colors = get_sample_colors()
@@ -344,7 +342,7 @@ class RejoinMixin:
                     break
                 # Check if the user is stuck on the sign-up screen. Rejoining
                 # always uses the Roblox app deeplink, so prompt them to sign in.
-                if robloxOpenTime and locateImageOnScreen(signUpImage, self.robloxWindow.mx+(self.robloxWindow.mw/4), self.robloxWindow.my+(self.robloxWindow.mh/3), self.robloxWindow.mw/2, self.robloxWindow.mh*2/3, 0.7):
+                if robloxOpenTime and self.findText("signup", self.robloxWindow.mx+(self.robloxWindow.mw/4), self.robloxWindow.my+(self.robloxWindow.mh/3), self.robloxWindow.mw/2, self.robloxWindow.mh*2/3):
                     self.logger.webhook("", "Not logged into the Roblox app. Please sign in to continue rejoining via deeplink.", "red", "screen", ping_category="ping_disconnects")
                     rejoinSuccess = False
                     break
@@ -357,7 +355,7 @@ class RejoinMixin:
                         rejoinSuccess = False
                         break
 
-                if locateImageOnScreen(disconnectImage, self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw, self.robloxWindow.mh, 0.75):
+                if self.findText("disconnected", self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw, self.robloxWindow.mh):
                     self.logger.webhook("", "Roblox disconnected while loading; retrying rejoin", "dark brown", "screen")
                     rejoinSuccess = False
                     break

@@ -10,7 +10,6 @@ from modules.macro.game_data import (
     regularMobQuantitiesInFields,
     regularMobTypesInFields,
 )
-from modules.screen.imageSearch import locateImageOnScreen
 
 
 class MobMixin:
@@ -39,7 +38,7 @@ class MobMixin:
             self.enableShiftLock()
             while time.perf_counter() < end_time and self.getCurrentMinute() < 15:
                 screen = self.blueTextScreen()
-                if self.blueTextImageSearch("defeated", screen=screen) and self.blueTextImageSearch("mondo", screen=screen):
+                if self.blueTextHas("defeated", screen=screen) and self.blueTextHas("mondo", screen=screen):
                     break
                 if self.setdat["mondo_collect_token"]:
                     self.keyboard.walk("a", 0.45)
@@ -56,11 +55,11 @@ class MobMixin:
             while True:
                 screen = self.blueTextScreen()
                 #defeat
-                if self.blueTextImageSearch("defeated", screen=screen) and self.blueTextImageSearch("mondo", screen=screen):
+                if self.blueTextHas("defeated", screen=screen) and self.blueTextHas("mondo", screen=screen):
                     self.saveTiming("mondo") 
                     break
                 #died
-                if self.blueTextImageSearch("died", screen=screen):
+                if self.blueTextHas("died", screen=screen):
                     self.died = True
                     self.keyboard.press("shift")
                     self.logger.webhook("", "Player Died", "red", "screen", ping_category="ping_character_deaths")
@@ -184,10 +183,10 @@ class MobMixin:
 
         while True:
             screen = self.blueTextScreen()
-            if self.blueTextImageSearch("died", screen=screen):
+            if self.blueTextHas("died", screen=screen):
                 self.mobRunStatus = "dead"
                 break
-            elif self.blueTextImageSearch("defeated", screen=screen):
+            elif self.blueTextHas("defeated", screen=screen):
                 self.mobRunStatus = "looting"
                 break
             elif time.time() - st > timeout:
@@ -198,7 +197,7 @@ class MobMixin:
     def mobRunLootingBackground(self):
         st = time.time()
         while time.time() - st < 20:
-           if self.blueTextImageSearch("tokenlink", 0.8):
+           if self.blueTextHas("tokenlink"):
             time.sleep(0.5) 
             self.logger.webhook("","Collected Token Link", "white", "blue")
             break
@@ -419,13 +418,9 @@ class MobMixin:
             mouse.click()
 
         def replace():
-            replaceImg = self.adjustImage("./images/menu", "replace")
-            x = self.robloxWindow.mx + self.robloxWindow.mw/2-300
-            y = self.robloxWindow.my
-            res = locateImageOnScreen(replaceImg, x, y, 650, self.robloxWindow.mh, 0.8)
+            res = self.findText("replace", self.robloxWindow.mx + self.robloxWindow.mw/2-300, self.robloxWindow.my, 650, self.robloxWindow.mh)
             if res is not None:
-                ix, iy = [j//self.robloxWindow.multi for j in res[1]]
-                mouse.moveTo(x + ix + 5, y + iy + 5)
+                mouse.moveTo(*res)
                 mouse.click()
                 return
             if keepOldData is not None:
@@ -460,9 +455,9 @@ class MobMixin:
     def coconutCrabBackground(self):
         while self.bossStatus is None:
             screen = self.blueTextScreen()
-            if self.blueTextImageSearch("died", screen=screen):
+            if self.blueTextHas("died", screen=screen):
                 self.died = True
-            if self.blueTextImageSearch("coconutcrab_defeat", 0.8, screen=screen):
+            if self.blueTextHas("coconutcrab_defeat", screen=screen):
                 self.bossStatus = "defeated"
 
     def coconutCrab(self):
@@ -539,11 +534,11 @@ class MobMixin:
             while self.bossStatus is None and not self.died:
                 screen = self.blueTextScreen()
                 # Check if defeated
-                if self.blueTextImageSearch("defeated", screen=screen):
+                if self.blueTextHas("defeated", screen=screen):
                     self.bossStatus = "defeated"
                     break
                 # Check if died
-                if self.blueTextImageSearch("died", screen=screen):
+                if self.blueTextHas("died", screen=screen):
                     self.died = True
                     break
                 # Continue movement
@@ -588,11 +583,11 @@ class MobMixin:
             while self.bossStatus is None and not self.died:
                 screen = self.blueTextScreen()
                 # Check if defeated
-                if self.blueTextImageSearch("defeated", screen=screen):
+                if self.blueTextHas("defeated", screen=screen):
                     self.bossStatus = "defeated"
                     break
                 # Check if died
-                if self.blueTextImageSearch("died", screen=screen):
+                if self.blueTextHas("died", screen=screen):
                     self.died = True
                     break
                 # Continue movement
