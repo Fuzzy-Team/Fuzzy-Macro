@@ -268,6 +268,7 @@ install_pip_package "flask"
 install_pip_package "pygetwindow"
 install_pip_package "requests" #used to check if this script was ran, should be installed by discord-webhooks
 install_pip_package "pynput"
+install_pip_package "psutil"
 # no longer used; ocrmac imports matplotlib whenever it is installed, slowing startup
 venv_pip uninstall -y matplotlib html2image httpx ImageHash
 install_pip_package "numpy<2" "--force-reinstall"
