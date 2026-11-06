@@ -51,7 +51,6 @@ from difflib import SequenceMatcher
 import fuzzywuzzy.process
 import fuzzywuzzy
 import traceback
-import pygetwindow as gw
 from modules.submacros.hasteCompensation import HasteCompensationRevamped
 from modules import bitmap_matcher
 from modules.gather_session import GatherPatternRunner, GatherSession

@@ -6,7 +6,7 @@ Width: Expands the leash radius and target clustering range.
 Size: Scales each movement step so the pattern still respects the GUI controls.
 
 Requirements:
-- coremltools
+- pyobjc-framework-CoreML
 - opencv-python
 - numpy
 - mss or Pillow
@@ -24,7 +24,6 @@ from modules.misc import ai_gather_common as agc
 
 cv2 = agc.cv2
 np = agc.np
-ct = agc.ct
 Image = agc.Image
 
 INPUT_WIDTH = agc.INPUT_WIDTH

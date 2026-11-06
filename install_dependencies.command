@@ -208,7 +208,7 @@ printf "\033[1;35mInstalling libraries\033[0m\n\n"
 # Everything is installed in one pip call at the end so pip resolves it together, and the
 # numpy<2 below (and the constraints file) keeps numpy below 2. Each branch below adds its own
 # packages. Only easyocr gets a separate call because it needs --no-deps.
-packages="numpy<2 pyautogui mss==9.0.1 pillow discord-webhook pypresence fuzzywuzzy python-Levenshtein pyscreeze<0.1.29 gevent eel flask pygetwindow requests pynput psutil"
+packages="numpy<2 pyautogui mss==9.0.1 pillow discord-webhook pypresence fuzzywuzzy python-Levenshtein pyscreeze<0.1.29 gevent eel requests pynput psutil"
 if [ "$python_ver" = '3.7' ]; then
 	# discord.py 2.x needs Python 3.8. 1.7.3 has no slash commands, so the bot runs them as
 	# fuzz! prefix commands (modules/discord_bot/legacyCommands.py). It needs aiohttp below 3.8;
@@ -220,11 +220,17 @@ fi
 
 if [ "$python_ver" = '3.9' ] || { [ "$python_ver" = '3.8' ] && version_at_least "$os_ver" "12.0.0"; }; then
 	# This installs the latest opencv-headless below 4.11.
-	# coremltools only needs torch to convert PyTorch models, not to run the macro's models
-	packages="$packages opencv-python-headless<4.11 coremltools ocrmac pyobjc-framework-ColorSync<12.0 pyobjc-framework-ApplicationServices"
-	# torch was installed here before coremltools stopped needing it, and scipy/PyWavelets
-	# only came with ImageHash. Nothing on this path uses them anymore.
-	venv_pip uninstall -y torch torchvision scipy PyWavelets
+	# Core ML models run through the system framework, so coremltools is not needed
+	packages="$packages opencv-python-headless<4.11 ocrmac pyobjc-framework-CoreML pyobjc-framework-ColorSync<12.0 pyobjc-framework-ApplicationServices"
+	# Nothing on this path uses these anymore: torch (from before coremltools stopped needing it),
+	# scipy/PyWavelets (came with ImageHash), coremltools and what it pulled in, Flask (stream.py
+	# uses the standard library), and the dependencies of matplotlib, httpx and torch.
+	# Only this path removes them; the older Intel paths still need torch and its dependencies.
+	venv_pip uninstall -y torch torchvision scipy PyWavelets \
+		coremltools sympy mpmath protobuf tqdm pyaml PyYAML cattrs exceptiongroup \
+		flask werkzeug jinja2 markupsafe itsdangerous blinker \
+		networkx fsspec filelock fonttools contourpy kiwisolver cycler python-dateutil \
+		anyio httpcore h11 websocket-client
 
 elif version_at_least "$os_ver" "10.15.0"; then
 	printf "\033[1;35mInstalling rust\n\n\033[0m"
