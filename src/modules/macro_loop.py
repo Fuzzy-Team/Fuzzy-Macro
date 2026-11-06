@@ -12,6 +12,7 @@ from modules.controls.sleep import (
     INTERRUPT_AFB_REROLL,
     INTERRUPT_COLLECT_PLANTER,
     INTERRUPT_STICKER_SPROUT,
+    INTERRUPT_FIND_ITEM,
 )
 
 
@@ -156,6 +157,16 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         handled = False
         while not planterCommandQueue.empty():
             command = planterCommandQueue.get()
+            if command.get("action") == "finditem":
+                query = command.get("item", "")
+                message, image = macro.findItemReport(query)
+                if image is None:
+                    macro.logger.webhook("", message, "red")
+                else:
+                    image.save("findItem.png")
+                    macro.logger.webhook("", message, "bright green", imagePath="findItem.png")
+                handled = True
+                continue
             if command.get("action") != "collect":
                 continue
             planter = command.get("planter", "")
@@ -224,8 +235,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 macro.logger.webhook("Collect Planter", f"Collect planter requested during: {interrupted_status}", "orange")
             elif action == INTERRUPT_STICKER_SPROUT:
                 macro.logger.webhook("Sticker Sprout", f"Interrupting {interrupted_status} to collect in Hive Hub", "orange")
+            elif action == INTERRUPT_FIND_ITEM:
+                macro.logger.webhook("Find Item", f"Inventory search requested during: {interrupted_status}", "orange")
             macro.reset(convert=True)
-            if action == INTERRUPT_COLLECT_PLANTER:
+            if action in (INTERRUPT_COLLECT_PLANTER, INTERRUPT_FIND_ITEM):
                 processPlanterCommandQueue()
                 return None
             if action == INTERRUPT_STICKER_SPROUT:

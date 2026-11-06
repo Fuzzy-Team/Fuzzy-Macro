@@ -15,13 +15,14 @@ import subprocess
 import sys
 import os
 import re
+import asyncio
 import signal
 import json
 import ast
 import time
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Tuple
-from modules.controls.sleep import INTERRUPT_SKIP, INTERRUPT_RESET, INTERRUPT_AFB_REROLL, INTERRUPT_COLLECT_PLANTER
+from modules.controls.sleep import INTERRUPT_SKIP, INTERRUPT_RESET, INTERRUPT_AFB_REROLL, INTERRUPT_COLLECT_PLANTER, INTERRUPT_FIND_ITEM
 
 from modules.misc import settingsManager
 from modules.screen.shiftLock import detect_shift_lock, detect_shift_lock_with_retries
@@ -302,6 +303,27 @@ AUTO_PLANTER_OPTIONS = [
     ("planter_of_plenty", "auto_planter_planter_of_plenty", "Planter Of Plenty"),
 ]
 
+# Inventory item names for /finditem, shown as Discord suggestions. From Natro Macro's /finditem list
+# (unchanged since 2024) plus Sticker Planter.
+FIND_ITEM_NAMES = [
+    "Cog", "Ticket", "Sprinkler Builder", "Beequip Case", "Gumdrops", "Coconut", "Stinger", "Snowflake",
+    "Micro Converter", "Honeysuckle", "Whirligig", "Field Dice", "Smooth Dice", "Loaded Dice", "Jelly Beans",
+    "Red Extract", "Blue Extract", "Glitter", "Glue", "Oil", "Enzymes", "Tropical Drink", "Purple Potion",
+    "Super Smoothie", "Marshmallow Bee", "Sprout", "Magic Bean", "Festive Bean", "Cloud Vial", "Night Bell",
+    "Box O Frogs", "Ant Pass", "Broken Drive", "7 Pronged Cog", "Robo Pass", "Translator", "Spirit Petal",
+    "Present", "Treat", "Star Treat", "Atomic Treat", "Sunflower Seed", "Strawberry", "Pineapple",
+    "Blueberry", "Bitterberry", "Neonberry", "Moon Charm", "Gingerbread Bear", "Aged Gingerbread Bear",
+    "White Drive", "Red Drive", "Blue Drive", "Glitched Drive", "Comforting Vial", "Invigorating Vial",
+    "Motivating Vial", "Refreshing Vial", "Satisfying Vial", "Pink Balloon", "Red Balloon", "White Balloon",
+    "Black Balloon", "Soft Wax", "Hard Wax", "Caustic Wax", "Swirled Wax", "Turpentine", "Paper Planter",
+    "Ticket Planter", "Festive Planter", "Plastic Planter", "Candy Planter", "Red Clay Planter",
+    "Blue Clay Planter", "Tacky Planter", "Pesticide Planter", "Heat Treated Planter", "Hydroponic Planter",
+    "Petal Planter", "The Planter Of Plenty", "Sticker Planter", "Basic Egg", "Silver Egg", "Gold Egg",
+    "Diamond Egg", "Mythic Egg", "Star Egg", "Gifted Silver Egg", "Gifted Gold Egg", "Gifted Diamond Egg",
+    "Gifted Mythic Egg", "Royal Jelly", "Star Jelly", "Bumble Bee Egg", "Bumble Bee Jelly", "Rage Bee Jelly",
+    "Shocked Bee Jelly",
+]
+
 DISCORD_COMMAND_PERMISSION_CATEGORIES = {
     "public_info": {
         "label": "Public Info",
@@ -321,7 +343,7 @@ DISCORD_COMMAND_PERMISSION_CATEGORIES = {
     "task_interrupts": {
         "label": "Task Interrupts",
         "setting": "discord_permission_task_interrupt_ids",
-        "commands": ["amulet", "collectplanter", "planterreset", "reroll", "reset", "skip", "ssa", "usehotbar"],
+        "commands": ["amulet", "collectplanter", "finditem", "planterreset", "reroll", "reset", "skip", "ssa", "usehotbar"],
     },
     "configuration": {
         "label": "Configuration",
@@ -3891,6 +3913,50 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             )
         except Exception as e:
             await interaction.response.send_message(f"❌ Error queueing planter collection: {str(e)}")
+
+    def _find_item_key(text: str) -> str:
+        return re.sub(r"[^a-z0-9]", "", text.lower())
+
+    async def find_item_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice]:
+        """Suggest inventory item names that contain what has been typed"""
+        typed = _find_item_key(current)
+        return [app_commands.Choice(name=name, value=name) for name in FIND_ITEM_NAMES if typed in _find_item_key(name)][:25]
+
+    @bot.tree.command(name="finditem", description="Send a screenshot of an item in the inventory")
+    @requires_discord_permission("task_interrupts")
+    @app_commands.describe(item="Pick an item from the list")
+    @app_commands.autocomplete(item=find_item_autocomplete)
+    async def find_item(interaction: discord.Interaction, item: str):
+        """Running macro: queue the search, the macro posts the result. Stopped or paused: search here."""
+        if run.value not in (2, 3, 6):
+            await interaction.response.send_message("Macro is starting, stopping or reconnecting. Try again in a moment.")
+            return
+        if run.value == 2 and _planter_command_queue is None:
+            await interaction.response.send_message("❌ Command queue is not available.")
+            return
+        name = next((n for n in FIND_ITEM_NAMES if _find_item_key(n) == _find_item_key(item)), None)
+        if name is None:
+            await interaction.response.send_message(f"❌ No item called \"{item}\". Pick one from the suggestions.")
+            return
+        if run.value == 2:
+            _planter_command_queue.put({"action": "finditem", "item": name})
+            skipTask.value = INTERRUPT_FIND_ITEM
+            await interaction.response.send_message(f"Searching the inventory for {name}. The macro will interrupt its current task.")
+            return
+        # Not running: this process focuses Roblox (joining the game first if it isn't open) and clicks through the inventory itself
+        await interaction.response.defer()
+        try:
+            from modules.macro.inventory import findItemWithoutMacro
+            message, image = await asyncio.get_event_loop().run_in_executor(None, findItemWithoutMacro, name, _discord_message_queue)
+            if image is None:
+                await interaction.followup.send(f"❌ {message}")
+                return
+            with io.BytesIO() as imageBinary:
+                image.save(imageBinary, "PNG")
+                imageBinary.seek(0)
+                await interaction.followup.send(message, file=discord.File(fp=imageBinary, filename="finditem.png"))
+        except Exception as e:
+            await interaction.followup.send(f"❌ Error searching the inventory: {str(e)}")
 
     @bot.tree.command(name="plantertimers", description="View active planter timers")
     @requires_discord_permission("observation")
