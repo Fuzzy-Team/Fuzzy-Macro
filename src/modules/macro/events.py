@@ -148,7 +148,7 @@ class EventDetectionMixin:
         
         if self.canDetectNight and isNight():
             self.night = True
-            self.logger.webhook("","Night detected","dark brown", "screen")
+            self.logger.webhook("","Night detected","dark brown", "screen", ping_category="ping_night")
             time.sleep(200) #wait for night to end
             self.night = False
             self.nightDetectStreaks = 0
