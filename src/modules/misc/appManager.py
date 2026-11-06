@@ -119,7 +119,6 @@ if IS_WINDOWS:
     import ctypes
     from ctypes import wintypes
     user32 = ctypes.windll.user32
-    kernel32 = ctypes.windll.kernel32
 
     HWND = wintypes.HWND
     user32.EnumWindows.argtypes = [ctypes.WINFUNCTYPE(wintypes.BOOL, HWND, wintypes.LPARAM), wintypes.LPARAM]
