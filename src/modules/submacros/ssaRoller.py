@@ -127,7 +127,7 @@ def _stat_value(line, key):
             if re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", raw) and 1.0 <= float(raw) <= 2.0:
                 return int(round(float(raw) * 100))
         return None
-    match = re.search(r"(?<![a-z])([0-9lis]+(?:\s*[0-9lis]+)*)\s*%", line)
+    match = re.search(r"(?<![a-z])([0-9lis][0-9lis\s]*)%", line)
     if match:
         raw = _digits(re.sub(r"\s+", "", match.group(1)))
         if raw.isdigit():
@@ -265,7 +265,7 @@ class SsaRollerRunner:
             try:
                 self._event_callback(event_name, payload)
             except Exception:
-                pass
+                pass  # a failed Discord message must not stop the roller
 
     def _refuse(self, message):
         """Refuse to start. The message goes in the status too, since the UI polls it."""
