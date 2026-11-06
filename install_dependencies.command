@@ -42,10 +42,33 @@ install_pip_package() {
 		#fallback for other architectures
 		venv_pip install --prefer-binary --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --default-timeout=100 $extra_args $packages $constraint_arg
 	fi
+	local pip_status=$?
 
 	if [ -n "$tmp_constraint" ] && [ -f "$tmp_constraint" ]; then
 		rm -f "$tmp_constraint"
 	fi
+	return $pip_status
+}
+
+# OpenCV 4.11 built for macOS 10.12 (github.com/Fuzzy-Team/Fuzzy-Macro-Wheels). PyPI has no
+# Intel wheel that runs on macOS 10.12-11 and loads the AI Gather ONNX models. pip checks the
+# sha256 and refuses a file that doesn't match. Returns non-zero if the install fails so the
+# caller can fall back. Keep exactly one OpenCV package installed because all variants share
+# the cv2 namespace.
+install_prebuilt_opencv() {
+	local release="https://github.com/Fuzzy-Team/Fuzzy-Macro-Wheels/releases/download/legacy-macos-3"
+	local wheel sha
+	case "$python_ver" in
+		3.7)
+			wheel="opencv_python-4.11.0.86-cp37-cp37m-macosx_10_12_x86_64.whl"
+			sha="6fa718f43386ab0f9d1435592229bb36b53f701d141b70ff048b706e0dd2a4f6" ;;
+		3.8)
+			wheel="opencv_python-4.11.0.86-cp38-cp38-macosx_10_12_x86_64.whl"
+			sha="83bc5c4a45b494e6ef33a88dd22c0527df88d05e77e2e66b37bb4038fff3aa55" ;;
+		*) return 1 ;;
+	esac
+	venv_pip uninstall -y opencv-python opencv-contrib-python opencv-python-headless opencv-contrib-python-headless
+	install_pip_package "$release/$wheel#sha256=$sha" "--force-reinstall"
 }
 
 upgrade_pip_tools() {
@@ -207,18 +230,19 @@ elif version_at_least "$os_ver" "10.15.0"; then
 	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 	source "$HOME/.cargo/env"
 
-	# AI Gather's ONNX models need OpenCV 4.8 or later. 4.9.0.80 is the newest Intel
-	# wheel for macOS 11; 4.10 needs macOS 12, so pip would try to build it from source,
-	# fail, and leave no cv2 behind. macOS 10.15 has no wheel that can load the models,
-	# so it keeps 4.6.0.66. Keep exactly one OpenCV package installed because all
-	# variants share the cv2 namespace.
-	if version_at_least "$os_ver" "11.0"; then
-		opencv_version="4.9.0.80"
-	else
-		opencv_version="4.6.0.66"
+	# AI Gather's ONNX models need OpenCV 4.8 or later. Use the prebuilt 4.11 wheel; if it
+	# can't be downloaded, fall back to the newest PyPI wheel that exists for this macOS.
+	# 4.10 needs macOS 12, so pip would try to build it from source, fail, and leave no cv2
+	# behind. macOS 10.15 has no PyPI wheel that can load the models, so it gets 4.6.0.66.
+	if ! install_prebuilt_opencv; then
+		if version_at_least "$os_ver" "11.0"; then
+			opencv_version="4.9.0.80"
+		else
+			opencv_version="4.6.0.66"
+		fi
+		venv_pip uninstall -y opencv-python opencv-contrib-python opencv-python-headless opencv-contrib-python-headless
+		install_pip_package "opencv-python==$opencv_version numpy==1.19.1" "--force-reinstall"
 	fi
-	venv_pip uninstall -y opencv-python opencv-contrib-python opencv-python-headless opencv-contrib-python-headless
-	install_pip_package "opencv-python==$opencv_version numpy==1.19.1" "--force-reinstall"
 	install_pip_package "easyocr" "--no-deps"
 	install_pip_package "torch"
 	install_pip_package "torchvision>=0.5"
@@ -231,13 +255,15 @@ else
 	install_pip_package "pyobjc-framework-Cocoa<11.0"
 	install_pip_package "pyobjc-framework-ColorSync<11.0" "--no-deps"
 	install_pip_package "pyobjc-framework-ApplicationServices<11.0" "--no-deps"
-	# No 4.6 wheel exists below macOS 10.15, so pip builds it from source here (slow, but known
-	# to work down to 10.12, unlike the older wheels, which bundle libraries built for 10.13).
+	# If the prebuilt wheel can't be downloaded, pip builds 4.6 from source (slow, but known
+	# to work down to 10.12, unlike the PyPI wheels, which bundle libraries built for 10.13).
 	# BUILD_JAVA=OFF skips OpenCV's Java detection, which runs `java` and makes macOS show a
 	# "you need to install a JDK" dialog when no JDK is installed.
-	export CMAKE_ARGS="-DBUILD_JAVA=OFF"
-	install_pip_package "opencv-python==4.6.0.66"
-	unset CMAKE_ARGS
+	if ! install_prebuilt_opencv; then
+		export CMAKE_ARGS="-DBUILD_JAVA=OFF"
+		install_pip_package "opencv-python==4.6.0.66"
+		unset CMAKE_ARGS
+	fi
 	# Apple Vision OCR needs macOS 10.15, so use easyocr. 1.7.1 is the last release that
 	# works with python-bidi 0.4.2 (the newest for Python 3.7), and torch 1.13.1 is the last
 	# for Python 3.7. --no-deps keeps easyocr from adding a second OpenCV package and
