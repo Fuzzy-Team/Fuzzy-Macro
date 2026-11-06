@@ -9,7 +9,7 @@ import threading
 import time
 from pathlib import Path
 
-from modules.misc.modelManager import import_coremltools
+from modules.misc.modelManager import CoreMLModel, import_coreml
 
 try:
     import cv2
@@ -21,8 +21,9 @@ try:
 except Exception:
     np = None
 
-# None before macOS 12, where AI Gather uses the ONNX models instead
-ct = import_coremltools()
+# None before macOS 12.3, where AI Gather uses the ONNX models instead.
+# Pattern files installed by older releases read agc.ct, so keep the name.
+ct = import_coreml()
 
 try:
     import mss
@@ -70,7 +71,7 @@ MODEL_DIR = (src_root() / "data" / "models").resolve()
 
 
 def coreml_available():
-    """Return whether coremltools loaded successfully in this environment."""
+    """Return whether Core ML loaded successfully in this environment."""
     return ct is not None
 
 
@@ -814,23 +815,8 @@ def update_detection_fps(runtime, elapsed):
 
 def load_coreml_model(model_path, compiled_output_name="var_1445"):
     if ct is None:
-        raise RuntimeError("coremltools is required. Install coremltools, then restart the macro.")
-
-    model_path = Path(model_path)
-    if model_path.suffix.lower() == ".mlmodelc":
-        compiled_model_class = getattr(ct.models, "CompiledMLModel", None)
-        if compiled_model_class is None:
-            raise RuntimeError(
-                "This coremltools version cannot load compiled .mlmodelc bundles. Upgrade coremltools, then restart the macro."
-            )
-        model = compiled_model_class(str(model_path), compute_units=ct.ComputeUnit.ALL)
-        return model, "image", compiled_output_name
-
-    model = ct.models.MLModel(str(model_path), compute_units=ct.ComputeUnit.ALL)
-    description = model.get_spec().description
-    input_name = description.input[0].name
-    output_name = description.output[0].name
-    return model, input_name, output_name
+        raise RuntimeError("Core ML needs macOS 12.3 or later.")
+    return CoreMLModel(model_path), "image", compiled_output_name
 
 
 def load_onnx_model(model_path):
@@ -1499,9 +1485,7 @@ def require_vision_deps():
 
 def require_coreml_or_raise():
     if ct is None:
-        raise RuntimeError(
-            "coremltools is required for CoreML AI gathering. Install coremltools, then restart the macro."
-        )
+        raise RuntimeError("CoreML AI gathering needs macOS 12.3 or later.")
     if Image is None:
         raise RuntimeError("Pillow is required for CoreML AI Gathering, please run install dependencies before continuing.")
     return ct
