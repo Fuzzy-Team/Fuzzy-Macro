@@ -28,11 +28,11 @@ class PlanterMixin:
                 st = time.time()
                 while time.time()-st < (finalKey[1]+1):
                     self.keyboard.walk(finalKey[0],0.25)
-                    if self.isBesideEImage("ebutton"): 
+                    if self.isBesideE(["harvest", "planter"]): 
                         return True
             else:
                 time.sleep(1)
-                if self.isBesideEImage("ebutton"): 
+                if self.isBesideE(["harvest", "planter"]): 
                     return True
             #can't find it, try detecting and moving to it
             self.moveToPlanter()
@@ -141,12 +141,12 @@ class PlanterMixin:
             placedPlanter = True
             placementError = None
             for _ in range(7):
-                if self.blueTextImageSearch("notinfield"):
+                if self.blueTextHas("notinfield"):
                     placementError = "notinfield"
                     placedPlanter = False
                     break
                 # hotbar placement only watches for "not in field", otherwise assume it was placed
-                if not hotbarSlot and self.blueTextImageSearch("maxplanters"):
+                if not hotbarSlot and self.blueTextHas("maxplanters"):
                     placementError = "maxplanters"
                     placedPlanter = False
                     break

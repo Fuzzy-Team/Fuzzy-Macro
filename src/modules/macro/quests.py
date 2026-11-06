@@ -14,7 +14,6 @@ from modules import bitmap_matcher
 from modules.controls.sleep import pause_aware_time as time, sleep
 from modules.macro.game_data import quest_data
 from modules.quest_planning import make_quest_objectives, objective_matches_text
-from modules.screen.imageSearch import locateImageOnScreen
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP, mssScreenshotPillowRGBA
 
 
@@ -1210,13 +1209,13 @@ class QuestMixin:
 
     def clickdialog(self, mustFindDialog=False):
         # Find dialog image and compute a click/sample location
-        dialogImgRef = self.adjustImage("./images/menu", "dialog")
         x = self.robloxWindow.mw // 2
         y = int(self.robloxWindow.mh * 2 / 3)
-        a = locateImageOnScreen(dialogImgRef, self.robloxWindow.mx + (x), self.robloxWindow.my + (y), 300, self.robloxWindow.mh // 3, 0.8 if mustFindDialog else 0.5)
+        a = self.findText("clicktocontinue", self.robloxWindow.mx + (x), self.robloxWindow.my + (y), 300, self.robloxWindow.mh // 3)
         if a:
-            _, loc = a
-            xr, yr = [j // self.robloxWindow.multi for j in loc]
+            # the point just above the dialog box, as the old image match's top edge gave
+            xr = a[0] - (self.robloxWindow.mx + x)
+            yr = a[1] - (self.robloxWindow.my + y) - 12
         else:
             xr = 0
             yr = 0

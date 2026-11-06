@@ -1,13 +1,12 @@
 import cv2
 import numpy as np
-import sys
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
 from modules.controls.sleep import InterruptRequested, pause_aware_time as time
 from modules.hive_acquisition import confirm_claim, DetectionAfterWalkError
 from modules.macro.game_data import resetKernel, resetLower1, resetLower2, resetUpper1, resetUpper2
 from modules.misc.imageManipulation import pillowToCv2
-from modules.screen.imageSearch import locateImageOnScreen, locateTransparentImageOnScreen
+from modules.screen.imageSearch import locateImageOnScreen
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP
 
 
@@ -23,7 +22,7 @@ class HiveMixin:
     def convert(self, bypass = False, forced_convert_balloon=None):
         self.location = "spawn"
         if not bypass:
-            if not self.isBesideEImage("makehoney"): 
+            if not self.isMakeHoneyPrompt(): 
                 self.alreadyConverted = False
                 return False
         #start convert
@@ -236,8 +235,8 @@ class HiveMixin:
                 self.keyboard.press("e")
             print(f"check sticker printer popup: {time.time()-st}")
             
-            mmImg = self.adjustImage("./images/menu", "mmopen") #memory match
-            if locateImageOnScreen(mmImg, self.robloxWindow.mx+(self.robloxWindow.mw/4), self.robloxWindow.my+(self.robloxWindow.mh/4), self.robloxWindow.mw/4, self.robloxWindow.mh/3.5, 0.8):
+            #memory match
+            if self.findText("badge", self.robloxWindow.mx+(self.robloxWindow.mw/4), self.robloxWindow.my+(self.robloxWindow.mh/4), self.robloxWindow.mw/4, self.robloxWindow.mh/3.5):
                 self.canDetectNight = False
                 self.memoryMatch.solveMemoryMatch(self.latestMM, self.setdat.get("memory_match_rewards", []))
                 self.canDetectNight = True
@@ -251,23 +250,6 @@ class HiveMixin:
             self.clickdialog(mustFindDialog=True)
             print(f"checked dialog: {time.time()-st}")
 
-            performanceStatsImg = self.adjustImage("./images/menu", "performancestats")
-            if locateTransparentImageOnScreen(performanceStatsImg, self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw/3.5, 70, 0.7):
-                if sys.platform == "darwin":
-                    '''
-                    #self.keyboard.keyDown("fn", False)
-                    self.keyboard.keyDown("command", False)
-                    self.keyboard.keyDown("option", False)
-                    self.keyboard.keyDown("f7")
-                    #self.keyboard.keyUp("fn")
-                    self.keyboard.keyUp("command", False)
-                    self.keyboard.keyUp("option", False)
-                    self.keyboard.keyUp("f7", False)
-                    '''
-                else:
-                    pass
-            print(f"checked performance stats: {time.time()-st}")
-
             keepOld = self.keepOldCheck()
             if keepOld is not None:
                 time.sleep(0.1)
@@ -275,15 +257,11 @@ class HiveMixin:
                 time.sleep(0.2)
                 mouse.click()
 
-            noImg = self.adjustImage("./images/menu", "no") #yes/no popup
-            x = self.robloxWindow.mx + self.robloxWindow.mw/2-300
-            y = self.robloxWindow.my
-            res = locateImageOnScreen(noImg, x, y, 650, self.robloxWindow.mh, 0.8)
+            #yes/no popup
+            res = self.findText("no", self.robloxWindow.mx + self.robloxWindow.mw/2-300, self.robloxWindow.my, 650, self.robloxWindow.mh, exact=True)
             print(f"checked yes/no popup: {time.time()-st}")
-            #mssScreenshot(x,y,self.robloxWindow.mw/2.5,self.robloxWindow.mh/3.4, True)
             if res:
-                x2, y2 = [j//self.robloxWindow.multi for j in res[1]]
-                mouse.moveTo(x+x2, y+y2)
+                mouse.moveTo(*res)
                 time.sleep(0.08)
                 mouse.moveBy(1,1)
                 time.sleep(0.1)
@@ -484,20 +462,9 @@ class HiveMixin:
         time.sleep(0.25)
 
     def claimHivePromptVisible(self):
-        try:
-            if self.isBesideEImage("claimhive"):
-                return True
-        except Exception:
-            pass
         return bool(self.isBesideE(["claim"], ["send", "trad", "trade"], log=True))
 
     def occupiedHivePromptVisible(self):
-        for name in ("sendtrade", "tradedisabled", "tradelocked"):
-            try:
-                if self.isBesideEImage(name):
-                    return True
-            except Exception:
-                pass
         return bool(self.isBesideE(["send", "trad", "trade"], ["claim"], log=True))
 
     def anyHivePromptVisible(self):
