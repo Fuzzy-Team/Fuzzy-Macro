@@ -214,7 +214,7 @@ class EventDetectionMixin:
         detectors = []  # (detector, seconds between scans)
         if self.setdat.get("macro_mode", "normal") == "vic" or self.setdat.get("stinger_hunt", False):
             detectors.append((self.detectViciousAnnouncement, 1))
-        if self.setdat.get("guiding_star_announcements", False):
+        if self.setdat.get("ping_guiding_star", False):
             detectors.append((self.detectGuidingStarAnnouncement, 10))
         if self.setdat.get("ping_unusual_sprouts", False):
             detectors.append((self.detectUnusualSproutAnnouncement, 10))
