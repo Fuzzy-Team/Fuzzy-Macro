@@ -661,7 +661,7 @@ def _read_performance():
                 p.cpu_percent(None)
                 macro.append(p)
         except psutil.NoSuchProcess:
-            pass
+            pass  # exited before sampling started
     system_cpu = psutil.cpu_percent(interval=1)
     macro_cpu = macro_ram = 0
     for p in macro:
@@ -669,7 +669,7 @@ def _read_performance():
             macro_cpu += p.cpu_percent(None)
             macro_ram += p.memory_info().rss
         except psutil.NoSuchProcess:
-            pass
+            pass  # exited during the sample
     ram = psutil.virtual_memory()
     # per-process CPU is out of one core; divide so it is on the same 0-100 scale as the machine
     return system_cpu, ram.total - ram.available, ram.total, ram.percent, macro_cpu / (psutil.cpu_count() or 1), macro_ram
