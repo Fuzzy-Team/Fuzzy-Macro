@@ -18,6 +18,11 @@ def formatHoney(n):
     return str(n)
 
 
+def hiveRedMask(hsv):
+    """Bright pure red, the claim arrows' heads. Hive faces are more orange (hue 4-7) and avatar parts are dimmer."""
+    return cv2.inRange(hsv, np.array([0, 130, 200]), np.array([3, 255, 255]))
+
+
 class HiveMixin:
     def convert(self, bypass = False, forced_convert_balloon=None):
         self.location = "spawn"
@@ -620,241 +625,56 @@ class HiveMixin:
         # Preferred taken/excluded, or prompt was ambiguous — scan toward cannon first.
         return self.scanHivesForClaim(preferred_slot, excluded_slots)
 
-    def detectOpenHiveSlotsFromSpawn(self):
-        """
-        From spawn (zoomed out + pitched up), find unclaimed hive slots.
-
-        Screen left→right is slots 6..1.
-
-        Signals (in priority order):
-        1) Red claim arrows floating above pads — used when ≥2 tips map cleanly.
-        2) White claim disks on the pad row, plus nearby empty faces (covers
-           disks hidden under annotation/occlusion).
-        3) Low bee-cell density on the hive face (ignores balloon/glare columns).
-
-        Pad columns come from the bright pad/nametag row when spacing is even;
-        otherwise an equal 6-way split of the yellow/white platform span.
-        """
+    def captureHiveBand(self):
+        """BGR screenshot of the strip of the screen that holds the six hive pads, or None."""
         x = int(self.robloxWindow.mx + self.robloxWindow.mw * 0.01)
         y = int(self.robloxWindow.my + self.robloxWindow.mh * 0.12)
         w = int(self.robloxWindow.mw * 0.98)
         h = int(self.robloxWindow.mh * 0.32)
         if w < 60 or h < 40:
-            return []
-
+            return None
         try:
-            screen = mssScreenshotNP(x, y, w, h)
-            bgr = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
-            hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+            return cv2.cvtColor(mssScreenshotNP(x, y, w, h), cv2.COLOR_BGRA2BGR)
         except Exception:
+            return None
+
+    def detectOpenHiveSlotsFromSpawn(self):
+        """
+        From spawn (zoomed out + pitched up), find unclaimed hive slots.
+
+        Every open pad gets a red arrow from the player to the pad, with its head
+        on the pad's disk. Screen left→right is slots 6..1, evenly spaced, so the
+        slot is whichever pad the arrowhead (the top of a thin red stroke) is on.
+        Returns [] when no arrow is seen, which makes the caller check slots instead.
+        """
+        bgr = self.captureHiveBand()
+        if bgr is None:
             return []
+        band_h, band_w = bgr.shape[:2]
+        mask = hiveRedMask(cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV))
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
 
-        red_mask = cv2.bitwise_or(
-            cv2.inRange(hsv, np.array([0, 130, 130]), np.array([8, 255, 255])),
-            cv2.inRange(hsv, np.array([172, 130, 130]), np.array([179, 255, 255])),
-        )
-        # Keep the unfiltered mask for identifying red/Festive hive faces. The
-        # component cleanup below intentionally removes their large red panels.
-        raw_red_mask = red_mask.copy()
-        # Strip ultra-wide red strokes (hand-drawn arrows / UI, not claim chevrons).
-        num_red, red_labels, red_stats, _ = cv2.connectedComponentsWithStats(red_mask, 8)
-        for i in range(1, num_red):
-            bw = int(red_stats[i, cv2.CC_STAT_WIDTH])
-            bh = int(red_stats[i, cv2.CC_STAT_HEIGHT])
-            area = int(red_stats[i, cv2.CC_STAT_AREA])
-            if area > 400 and (bw > w * 0.12 or bh > h * 0.35):
-                red_mask[red_labels == i] = 0
+        # Pad centers as a fraction of the band width (measured at 1920x1080).
+        first_pad, pad_pitch = 0.0393, 0.1526
+        min_area = 0.00004 * band_w ** 2  # small enough for a head half-covered by another player
+        max_stroke = 0.013 * band_w  # arrows are ~12px at 1881px wide; hive faces and rims are far thicker
 
-        kernel = np.ones((3, 3), np.uint8)
-        red_mask = cv2.morphologyEx(red_mask, cv2.MORPH_OPEN, kernel, iterations=1)
-        red_mask = cv2.morphologyEx(red_mask, cv2.MORPH_CLOSE, kernel, iterations=2)
-
-        band_h, band_w = red_mask.shape[:2]
-        min_area = max(140, int(200 * (band_w / 1024.0) ** 2))
-
-        # --- 6 pad column centers ---
-        pad_row = hsv[: max(1, int(band_h * 0.35))]
-        bright = (
-            (pad_row[:, :, 2] > 175) & (pad_row[:, :, 1] < 100)
-        ).astype(np.uint8) * 255
-        proj = bright.sum(axis=0).astype(np.float32)
-        if float(proj.max()) <= 0:
-            proj = np.ones(band_w, dtype=np.float32)
-        k = max(9, (band_w // 90) | 1)
-        proj_s = np.convolve(proj, np.ones(k, dtype=np.float32) / k, mode="same")
-        min_dist = max(40, band_w // 14)
-        height_thr = max(10.0, float(proj_s.max()) * 0.10)
-        peaks = []
-        for i in range(1, band_w - 1):
-            if proj_s[i] < height_thr:
-                continue
-            if proj_s[i] >= proj_s[i - 1] and proj_s[i] >= proj_s[i + 1]:
-                if band_w * 0.02 < i < band_w * 0.98:
-                    peaks.append((float(proj_s[i]), i))
-        peaks.sort(reverse=True)
-        kept_peaks = []
-        for _hgt, px in peaks:
-            if any(abs(px - kx) < min_dist for kx in kept_peaks):
-                continue
-            kept_peaks.append(px)
-            if len(kept_peaks) >= 6:
-                break
-        kept_peaks = sorted(kept_peaks)
-
-        use_peaks = False
-        if len(kept_peaks) == 6:
-            diffs = np.diff(kept_peaks)
-            spacing_ratio = float(np.max(diffs)) / max(float(np.min(diffs)), 1.0)
-            # Uneven peaks remap slots (e.g. 5,6 → wrong columns); fall back.
-            use_peaks = spacing_ratio < 2.2
-
-        if use_peaks:
-            centers = [float(p) for p in kept_peaks]
-        else:
-            white_mask = cv2.inRange(hsv, np.array([0, 0, 200]), np.array([179, 55, 255]))
-            yellow_mask = cv2.inRange(hsv, np.array([16, 100, 140]), np.array([40, 255, 255]))
-            plat = cv2.bitwise_or(white_mask, yellow_mask)
-            pproj = plat.sum(axis=0).astype(np.float32)
-            if float(pproj.max()) > 0:
-                thr = max(float(pproj.max()) * 0.18, 1.0)
-                xs = np.where(pproj >= thr)[0]
-                if xs.size >= 2:
-                    row_left, row_right = int(xs[0]), int(xs[-1])
-                else:
-                    row_left, row_right = int(band_w * 0.06), int(band_w * 0.94)
-            else:
-                row_left, row_right = int(band_w * 0.06), int(band_w * 0.94)
-            if (row_right - row_left) > band_w * 0.92 or (row_right - row_left) < band_w * 0.30:
-                row_left, row_right = int(band_w * 0.06), int(band_w * 0.94)
-            span = max(1, row_right - row_left)
-            centers = [row_left + (i + 0.5) * span / 6.0 for i in range(6)]
-
-        slot_w = float(np.median(np.diff(centers))) if len(centers) > 1 else band_w / 6.0
-
-        # --- Per-slot face / pad metrics ---
-        bees_map = {}
-        white_map = {}
-        bright_mid_map = {}
-        red_hive_map = {}
-        for i, slot in enumerate((6, 5, 4, 3, 2, 1)):
-            cx = centers[i]
-            half = max(18.0, slot_w * 0.36)
-            x0 = max(0, int(cx - half))
-            x1 = min(band_w, int(cx + half))
-            face = hsv[: max(1, int(band_h * 0.50)), x0:x1]
-            face_red = red_mask[: max(1, int(band_h * 0.50)), x0:x1]
-            if face.size == 0:
-                bees_map[slot] = 1.0
-                white_map[slot] = 0.0
-                bright_mid_map[slot] = 0.0
-                red_hive_map[slot] = 0.0
-                continue
-            fh, fs, fv = face[:, :, 0], face[:, :, 1], face[:, :, 2]
-            colored_px = (fs > 110) & (fv > 100) & ~((fh >= 35) & (fh <= 85))
-            # A claim arrow can overlap the lower face region, so red used to be
-            # discarded here entirely.  That also discarded red/Festive hive
-            # cells and made occupied hives (most noticeably slot 3) look empty.
-            # Red in the upper hive-cell region is occupancy; keep excluding it
-            # below that region where floating claim arrows appear.
-            face_rows = np.arange(face.shape[0])[:, None]
-            upper_hive = face_rows < int(band_h * 0.25)
-            bee_px = colored_px & ((face_red == 0) | upper_hive)
-            bees_map[slot] = float(bee_px.mean())
-            upper_red = raw_red_mask[: max(1, int(band_h * 0.25)), x0:x1]
-            red_hive_map[slot] = float((upper_red > 0).mean())
-            pad = hsv[int(band_h * 0.40) :, x0:x1]
-            if pad.size:
-                white_map[slot] = float(
-                    ((pad[:, :, 2] > 200) & (pad[:, :, 1] < 70)).mean()
-                )
-            else:
-                white_map[slot] = 0.0
-            mid = hsv[int(band_h * 0.25) : int(band_h * 0.55), x0:x1]
-            if mid.size:
-                # Balloons / bright glare falsely look "empty" on bee density alone.
-                bright_mid_map[slot] = float(
-                    ((mid[:, :, 2] > 210) & (mid[:, :, 1] < 80)).mean()
-                )
-            else:
-                bright_mid_map[slot] = 0.0
-
-        pad_slots = {
-            slot
-            for slot, bees in bees_map.items()
-            if bees < 0.40 and bright_mid_map[slot] < 0.15
-        }
-        white_slots = {slot for slot, white in white_map.items() if white >= 0.08}
-
-        # --- Floating red claim arrows ---
-        num_labels, labels, stats, _centroids = cv2.connectedComponentsWithStats(
-            red_mask, connectivity=8
-        )
-        # Tips in the top of the band are usually drawings/UI on the pad row,
-        # not floating claim arrows.
-        pad_row_y = int(band_h * 0.28)
-        tips = []
-        for i in range(1, num_labels):
+        num, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+        slots = set()
+        for i in range(1, num):
             area = int(stats[i, cv2.CC_STAT_AREA])
-            if area < 80:
-                continue
-            bw = int(stats[i, cv2.CC_STAT_WIDTH])
-            bh = int(stats[i, cv2.CC_STAT_HEIGHT])
-            if bw > slot_w * 0.95 and bh < bw * 0.35:
-                continue
-            if bw > slot_w * 1.55:
+            length = float(np.hypot(stats[i, cv2.CC_STAT_WIDTH], stats[i, cv2.CC_STAT_HEIGHT]))
+            if area < min_area or area / length > max_stroke:
                 continue
             ys, xs = np.where(labels == i)
-            if ys.size == 0:
+            top = int(np.argmin(ys))
+            # the head sits on the disk row, which skips red hive faces at the top edge and stray red lower down
+            if not 0.08 * band_h <= ys[top] <= 0.28 * band_h:
                 continue
-            ycut = float(np.quantile(ys, 0.80))
-            tip_xs = xs[ys >= ycut]
-            tip_ys = ys[ys >= ycut]
-            if tip_xs.size == 0:
-                continue
-            tip_x = float(tip_xs.mean())
-            tip_y = float(tip_ys.mean())
-            if tip_y < pad_row_y:
-                continue
-            tips.append((area, tip_x, tip_y))
-
-        tips.sort(key=lambda t: t[0], reverse=True)
-        kept = []
-        for area, tip_x, tip_y in tips:
-            if area < min_area:
-                continue
-            if any(abs(tip_x - kx) < slot_w * 0.85 for _, kx, _ in kept):
-                continue
-            kept.append((area, tip_x, tip_y))
-
-        tip_bias = 0.18 * slot_w
-        arrow_slots = set()
-        for area, tip_x, tip_y in kept:
-            eff_x = tip_x - tip_bias
-            dists = [abs(eff_x - c) for c in centers]
-            idx = int(np.argmin(dists))
-            if dists[idx] > slot_w * 0.55:
-                continue
-            slot = 6 - idx
-            # A red/Festive hive panel can leave arrow-sized red components in
-            # the lower face. Do not accept those as claim arrows when the same
-            # slot has substantial red coverage across its upper hive face.
-            if red_hive_map.get(slot, 0.0) >= 0.08:
-                continue
-            arrow_slots.add(slot)
-
-        # Prefer multiple floating arrows; else white disks (+ empty companions);
-        # else empty faces alone.
-        if len(arrow_slots) >= 2:
-            available = sorted(arrow_slots)
-        elif len(white_slots) >= 2:
-            companions = {slot for slot in pad_slots if bees_map[slot] < 0.32}
-            available = sorted(white_slots | companions)
-        elif pad_slots:
-            available = sorted(pad_slots)
-        else:
-            available = sorted(arrow_slots | white_slots)
-
-        return available
+            pad = (xs[top] / band_w - first_pad) / pad_pitch
+            if 0 <= round(pad) <= 5 and abs(pad - round(pad)) < 0.4:
+                slots.add(6 - round(pad))
+        return sorted(slots)
 
     def chooseDetectedHiveSlot(self, available_slots, preferred_slot, excluded_slots=None):
         excluded_slots = set(excluded_slots or set())
