@@ -2,8 +2,10 @@
 import pyautogui as pag
 import os
 import mss
-import mss.darwin
-mss.darwin.IMAGE_OPTIONS = 0
+import sys
+if sys.platform == "darwin":
+    import mss.darwin
+    mss.darwin.IMAGE_OPTIONS = 0
 from ..misc import settingsManager
 
 BASE_SCREEN_WIDTH = 2880

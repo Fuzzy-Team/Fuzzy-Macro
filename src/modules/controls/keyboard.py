@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 import pyautogui as pag
+import sys
 import time
 from typing import TYPE_CHECKING
 from modules.controls.sleep import is_paused, is_stopped, wait_while_paused
 
 if TYPE_CHECKING:
     from modules.submacros.hasteCompensation import HasteCompensationRevamped
+
+#pydirectinput sends scancodes, which Roblox on Windows reads (pyautogui only sends virtual keys)
+if sys.platform == "win32":
+    import pydirectinput as keys
+    keys.PAUSE = pag.PAUSE
+else:
+    keys = pag
 
 #keys currently held down through keyboard.keyDown, so a pause can let go of them and press them again
 _held = []
@@ -20,11 +28,11 @@ def _pausePoint():
     start = time.perf_counter()
     held = list(_held)
     for k in held:
-        pag.keyUp(k, _pause=False)
+        keys.keyUp(k, _pause=False)
     wait_while_paused()
     if not is_stopped():
         for k in held:
-            pag.keyDown(k, _pause=False)
+            keys.keyDown(k, _pause=False)
     return time.perf_counter() - start
 
 
@@ -124,20 +132,21 @@ class keyboard:
     @staticmethod
     #call the press function of the pag library
     def pagPress(k):
-        pag.press(k)
+        keys.press(k)
     @staticmethod
     def keyDown(k, pause = True):
         #for some reason, the function key is sometimes held down, causing it to open the dock or enable dictation
-        keyboard.keyUp('fn', False)
+        if sys.platform == "darwin":
+            keyboard.keyUp('fn', False)
         if k not in _held:
             _held.append(k)
-        pag.keyDown(k, _pause = pause)
+        keys.keyDown(k, _pause = pause)
 
     @staticmethod
     def keyUp(k, pause = True):
         if k in _held:
             _held.remove(k)
-        pag.keyUp(k, _pause = pause)
+        keys.keyUp(k, _pause = pause)
 
     #pyautogui without the pause
     def press(self,key, delay = 0.02):
@@ -151,9 +160,9 @@ class keyboard:
         pag.typewrite(text, interval)
     #pyautogui with the pause
     def slowPress(self,k):
-        pag.keyDown(k)
+        keys.keyDown(k)
         time.sleep(0.08)
-        pag.keyUp(k)
+        keys.keyUp(k)
 
     def getMoveSpeed(self):
         movespeed = self.hasteCompensation.getHaste()

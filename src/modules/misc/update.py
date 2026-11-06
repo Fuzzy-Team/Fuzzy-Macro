@@ -760,6 +760,28 @@ def delete_backup_if_pending(destination=None):
 
 
 
+def _run_install_script(destination):
+    """Start the platform's dependency installer detached and silent. Fails silently."""
+    try:
+        import subprocess
+        if sys.platform == "win32":
+            script = os.path.join(destination, "install_dependencies.bat")
+            if os.path.exists(script):
+                subprocess.Popen(["cmd", "/c", script, "--no-launch"],
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
+                                 creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
+            return
+        script = os.path.join(destination, "install_dependencies.command")
+        if os.path.exists(script):
+            st = os.stat(script)
+            os.chmod(script, st.st_mode | stat.S_IEXEC)
+            subprocess.Popen(["sh", script],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
+                             start_new_session=True, close_fds=True)
+    except Exception:
+        pass
+
+
 def update(t="main", update_channel="stable", progress_callback=None):
     """Install the latest release from the selected update channel."""
     _report_update_progress(progress_callback, 0, "Starting update")
@@ -980,29 +1002,8 @@ def update(t="main", update_channel="stable", progress_callback=None):
     except Exception:
         pass
     # Attempt to run install dependencies script (non-blocking). Fail silently.
-    try:
-        _report_update_progress(progress_callback, 96, "Finishing update")
-        install_script = os.path.join(destination, "install_dependencies.command")
-        if os.path.exists(install_script):
-            try:
-                st = os.stat(install_script)
-                os.chmod(install_script, st.st_mode | stat.S_IEXEC)
-            except Exception:
-                pass
-            try:
-                import subprocess
-                # Detached, fully silent run: redirect stdin/stdout/stderr and
-                # start a new session so the process isn't tied to this updater.
-                subprocess.Popen(["sh", install_script],
-                                 stdout=subprocess.DEVNULL,
-                                 stderr=subprocess.DEVNULL,
-                                 stdin=subprocess.DEVNULL,
-                                 start_new_session=True,
-                                 close_fds=True)
-            except Exception:
-                pass
-    except Exception:
-        pass
+    _report_update_progress(progress_callback, 96, "Finishing update")
+    _run_install_script(destination)
 
     _report_update_progress(progress_callback, 100, "Update complete")
     msgBox("Update success", "Update complete. You can now relaunch the macro")
@@ -1154,28 +1155,8 @@ def update_from_commit(commit_hash, progress_callback=None):
     except Exception:
         pass
     # Attempt to run install dependencies script (non-blocking). Fail silently.
-    try:
-        _report_update_progress(progress_callback, 96, "Finishing update")
-        install_script = os.path.join(destination, "install_dependencies.command")
-        if os.path.exists(install_script):
-            try:
-                st = os.stat(install_script)
-                os.chmod(install_script, st.st_mode | stat.S_IEXEC)
-            except Exception:
-                pass
-            try:
-                import subprocess
-                # Detached, fully silent run
-                subprocess.Popen(["sh", install_script],
-                                 stdout=subprocess.DEVNULL,
-                                 stderr=subprocess.DEVNULL,
-                                 stdin=subprocess.DEVNULL,
-                                 start_new_session=True,
-                                 close_fds=True)
-            except Exception:
-                pass
-    except Exception:
-        pass
+    _report_update_progress(progress_callback, 96, "Finishing update")
+    _run_install_script(destination)
 
     _report_update_progress(progress_callback, 100, "Update complete")
     msgBox("Update success", "Update complete. You can now relaunch the macro")
