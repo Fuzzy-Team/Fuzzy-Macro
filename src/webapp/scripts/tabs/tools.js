@@ -397,6 +397,11 @@ async function refreshToolStopHotkey() {
       autoGiftedBasicBeeStopHotkey.textContent = stopKey;
     }
 
+    const ssaRollerStopHotkey = document.getElementById("ssa-roller-stop-hotkey");
+    if (ssaRollerStopHotkey) {
+      ssaRollerStopHotkey.textContent = stopKey;
+    }
+
     const autoGiftedBasicBeeStartHotkey = document.getElementById("auto-gifted-basic-bee-start-hotkey");
     if (autoGiftedBasicBeeStartHotkey) {
       autoGiftedBasicBeeStartHotkey.textContent = autoGiftedBasicBeeStartKey;
@@ -473,6 +478,10 @@ async function syncToolSessionState() {
 
     if (result?.status?.auto_gifted_basic_bee) {
       renderAutoGiftedBasicBeeStatus(result.status.auto_gifted_basic_bee);
+    }
+
+    if (result?.status?.ssa_roller) {
+      renderSsaRollerStatus(result.status.ssa_roller);
     }
 
     if (result?.status?.hotbar_buff) {
@@ -657,6 +666,188 @@ function initializeAutoGiftedBasicBeeTool() {
   refreshAutoGiftedBasicBeeStatus();
 }
 
+const SSA_PASSIVES = {
+  pop: "Pop Star",
+  scorch: "Scorch Star",
+  gummy: "Gummy Star",
+  guiding: "Guiding Star",
+  saw: "Star Saw",
+  shower: "Star Shower",
+};
+// [label, min % range]; the roller clamps Min % to the range
+const SSA_STATS = {
+  white: ["White Pollen", "15-70"],
+  red: ["Red Pollen", "15-70"],
+  blue: ["Blue Pollen", "15-70"],
+  pollen: ["Pollen", "5-20"],
+  gather: ["Bee Gather Pollen", "15-70"],
+  convert: ["Convert Rate (105 = x1.05)", "105-125"],
+  critical: ["Critical Chance", "1-7"],
+  instant: ["Instant Conversion", "3-12"],
+  ability: ["Bee Ability Rate", "1-7"],
+};
+const SSA_STAT_ROWS = 5;
+let ssaRollerStatusTimer = null;
+
+function updateSsaSidePassives() {
+  const main = document.getElementById("ssa-main-passive").value;
+  const double = document.getElementById("ssa-double-passive").checked;
+  document.querySelectorAll("#ssa-side-passives input").forEach((box) => {
+    const isMain = box.value === main;
+    if (isMain) box.checked = false;
+    box.disabled = !double || isMain;
+  });
+}
+
+function updateSsaMinPlaceholder(row) {
+  const range = SSA_STATS[row.querySelector("select").value]?.[1];
+  row.querySelector("input").placeholder = range ? `Min % (${range})` : "Min %";
+}
+
+// The tool page runs in an incognito browser, so the form is saved in the profile settings.
+function saveSsaRollerSettings() {
+  if (!window.eel || typeof eel.saveProfileSetting !== "function") return;
+  eel.saveProfileSetting("ssa_roller_settings", getSsaRollerConfig())().catch((error) => {
+    console.error("Failed to save SSA Roller settings:", error);
+  });
+}
+
+async function restoreSsaRollerSettings() {
+  let saved = {};
+  try {
+    saved = (await loadAllSettings()).ssa_roller_settings || {};
+  } catch (error) {
+    console.error("Failed to load SSA Roller settings:", error);
+  }
+  if (!saved.main_passive) return;
+
+  const mainSelect = document.getElementById("ssa-main-passive");
+  if (SSA_PASSIVES[saved.main_passive]) mainSelect.value = saved.main_passive;
+  document.getElementById("ssa-double-passive").checked = !!saved.double_passive;
+  document.querySelectorAll("#ssa-side-passives input").forEach((box) => {
+    box.checked = (saved.side_passives || []).includes(box.value);
+  });
+  updateSsaSidePassives();
+  document.querySelectorAll("#ssa-stat-rows > div").forEach((row, index) => {
+    const stat = (saved.stats || [])[index];
+    if (!stat || !SSA_STATS[stat.key]) return;
+    row.querySelector("select").value = stat.key;
+    row.querySelector("input").value = stat.min > 0 ? stat.min : "";
+    updateSsaMinPlaceholder(row);
+  });
+  document.getElementById("ssa-honey-limit").value = saved.honey_limit ?? 5;
+  document.getElementById("ssa-safety").checked = !!saved.safety;
+  document.getElementById("ssa-wait-for-command").checked = saved.wait_for_command !== false;
+  document.getElementById("ssa-manual-review").checked = !!saved.manual_review;
+}
+
+function getSsaRollerConfig() {
+  return {
+    main_passive: document.getElementById("ssa-main-passive").value,
+    double_passive: document.getElementById("ssa-double-passive").checked,
+    side_passives: Array.from(document.querySelectorAll("#ssa-side-passives input:checked")).map((box) => box.value),
+    stats: Array.from(document.querySelectorAll("#ssa-stat-rows > div")).map((row) => ({
+      key: row.querySelector("select").value,
+      min: parseInt(row.querySelector("input").value, 10) || 0,
+    })),
+    honey_limit: parseInt(document.getElementById("ssa-honey-limit").value, 10) || 0,
+    safety: document.getElementById("ssa-safety").checked,
+    wait_for_command: document.getElementById("ssa-wait-for-command").checked,
+    manual_review: document.getElementById("ssa-manual-review").checked,
+  };
+}
+
+function renderSsaRollerStatus(status) {
+  if (!status) return;
+  const set = (id, text) => {
+    const element = document.getElementById(id);
+    if (element) element.textContent = text;
+  };
+  set("ssa-roller-state", status.state || "idle");
+  set("ssa-roller-rolls", status.rolls ?? 0);
+  set("ssa-roller-honey", `${status.honey_spent_b ?? 0}b`);
+  set("ssa-roller-message", status.message || "Ready");
+  set("ssa-roller-last-text", status.last_detected_text || "None");
+
+  const startButton = document.getElementById("ssa-roller-start");
+  const stopButton = document.getElementById("ssa-roller-stop");
+  if (startButton) startButton.style.display = status.running ? "none" : "";
+  if (stopButton) stopButton.style.display = status.running ? "" : "none";
+}
+
+async function refreshSsaRollerStatus() {
+  if (!window.eel || typeof eel.getSsaRollerStatus !== "function") return;
+  try {
+    renderSsaRollerStatus(await eel.getSsaRollerStatus()());
+  } catch (error) {
+    console.error("Failed to refresh SSA Roller status:", error);
+  }
+}
+
+async function startSsaRollerTool() {
+  if (!window.eel || typeof eel.startSsaRollerTool !== "function") return;
+  try {
+    const result = await eel.startSsaRollerTool(getSsaRollerConfig())();
+    const message = document.getElementById("ssa-roller-message");
+    if (message && result && result.message) message.textContent = result.message;
+    if (result?.ok) await refreshSsaRollerStatus();
+  } catch (error) {
+    console.error("Failed to start SSA Roller tool:", error);
+  }
+}
+
+async function stopSsaRollerTool() {
+  if (!window.eel || typeof eel.stopSsaRollerTool !== "function") return;
+  try {
+    await eel.stopSsaRollerTool()();
+    await refreshSsaRollerStatus();
+  } catch (error) {
+    console.error("Failed to stop SSA Roller tool:", error);
+  }
+}
+
+function initializeSsaRollerTool() {
+  const mainSelect = document.getElementById("ssa-main-passive");
+  if (!mainSelect || mainSelect.options.length) return;
+
+  const passiveOptions = Object.entries(SSA_PASSIVES);
+  mainSelect.innerHTML = passiveOptions.map(([key, label]) => `<option value="${key}">${label}</option>`).join("");
+  document.getElementById("ssa-side-passives").innerHTML = passiveOptions
+    .map(
+      ([key, label]) =>
+        `<label style="display:flex; align-items:center; gap:0.5rem;"><input type="checkbox" value="${key}" disabled />${label}</label>`
+    )
+    .join("");
+
+  const statOptions =
+    `<option value="">None</option>` +
+    Object.entries(SSA_STATS).map(([key, [label]]) => `<option value="${key}">${label}</option>`).join("");
+  const rows = [];
+  for (let i = 0; i < SSA_STAT_ROWS; i += 1) {
+    rows.push(`
+      <div style="display:flex; gap:0.5rem; align-items:center;">
+        <select class="textbox bond-calc-select" style="flex:1;">${statOptions}</select>
+        <input class="textbox" type="number" min="0" step="1" placeholder="Min %" style="width:6rem;" />
+      </div>`);
+  }
+  document.getElementById("ssa-stat-rows").innerHTML = rows.join("");
+  document.querySelectorAll("#ssa-stat-rows > div").forEach((row) => {
+    const select = row.querySelector("select");
+    select.addEventListener("change", () => updateSsaMinPlaceholder(row));
+  });
+
+  mainSelect.addEventListener("change", updateSsaSidePassives);
+  document.getElementById("ssa-double-passive").addEventListener("change", updateSsaSidePassives);
+  updateSsaSidePassives();
+  restoreSsaRollerSettings();
+  document.getElementById("tools-ssa-roller-tab").addEventListener("change", saveSsaRollerSettings);
+
+  if (!ssaRollerStatusTimer) {
+    ssaRollerStatusTimer = setInterval(refreshSsaRollerStatus, 1000);
+  }
+  refreshSsaRollerStatus();
+}
+
 function renderHotbarBuffStatus(status) {
   if (!status) return;
 
@@ -776,6 +967,7 @@ function loadTools() {
   initializeBondTreatCalculator();
   initializeTicketPriceCalculator();
   initializeAutoGiftedBasicBeeTool();
+  initializeSsaRollerTool();
   initializeHotbarBuffTool();
 
   switchToolsTab(
