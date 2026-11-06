@@ -653,15 +653,26 @@ def _read_performance():
     # The bot's parent is the GUI process. Its Python children are the macro and the
     # multiprocessing manager. The eel Chrome window is a child too, so it is left out.
     gui = psutil.Process(os.getppid())
-    macro = [gui] + [p for p in gui.children() if "python" in p.name().lower()]
-    for p in macro:
-        p.cpu_percent(None)
+    # The macro process restarts on every Start/Stop, so a process can exit mid-sample; skip it.
+    macro = []
+    for p in [gui] + gui.children():
+        try:
+            if p is gui or "python" in p.name().lower():
+                p.cpu_percent(None)
+                macro.append(p)
+        except psutil.NoSuchProcess:
+            pass
     system_cpu = psutil.cpu_percent(interval=1)
-    # per-process CPU is out of one core; divide so it is on the same 0-100 scale as the machine
-    macro_cpu = sum(p.cpu_percent(None) for p in macro) / (psutil.cpu_count() or 1)
-    macro_ram = sum(p.memory_info().rss for p in macro)
+    macro_cpu = macro_ram = 0
+    for p in macro:
+        try:
+            macro_cpu += p.cpu_percent(None)
+            macro_ram += p.memory_info().rss
+        except psutil.NoSuchProcess:
+            pass
     ram = psutil.virtual_memory()
-    return system_cpu, ram.total - ram.available, ram.total, ram.percent, macro_cpu, macro_ram
+    # per-process CPU is out of one core; divide so it is on the same 0-100 scale as the machine
+    return system_cpu, ram.total - ram.available, ram.total, ram.percent, macro_cpu / (psutil.cpu_count() or 1), macro_ram
 
 
 def _format_logger_time(time_value, time_format=24):
