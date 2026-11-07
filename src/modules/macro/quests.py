@@ -83,24 +83,37 @@ class QuestMixin:
                                     route_category="quests")
 
     def shareJellyBeans(self):
-        """Use Jelly Beans in a public Hive Hub server, where other players can pick them up, then check the quest log back in the game."""
-        for objective in self.pendingQuestObjectives("use"):
-            if QUEST_ITEMS[quest_item(objective)][2] != "hub":
-                continue
-            left = self.questItemsLeft(objective)
-            # Always public: a private server has nobody to share with.
-            if not self.goToField("hive hub", usePrivateServer=False):
-                return
-            for _ in range(left):
+        """One trip to a public Hive Hub server for every Jelly Bean row, using beans until each row is done."""
+        rows = [objective for objective in self.pendingQuestObjectives("use")
+                if QUEST_ITEMS[quest_item(objective)][2] == "hub"]
+        if not rows:
+            return
+        # Always public: a private server has nobody to share with.
+        if not self.goToField("hive hub", usePrivateServer=False):
+            return
+        outOfBeans = False
+        for objective in rows:
+            # Beans shared for one quest count for the others too, so look again before starting a row.
+            objective = self.readQuestObjective(objective)
+            idle = 0
+            while objective and objective["status"] == "incomplete" and objective["remaining"] is not None and idle < 5:
                 if not self.useItemInInventory(QUEST_ITEMS["jellybean"][0]):
-                    self.questItemShort[objective["id"]] = time.time()
+                    outOfBeans = True
                     break
                 time.sleep(2)
-            self.rejoin(placeId=MAIN_GAME_PLACE_ID, claimHive=True)
-            # Nobody picked them up if the count did not drop; try again later.
-            row = self.readQuestObjective(objective)
-            if row and row["status"] == "incomplete" and (row["remaining"] is None or row["remaining"] >= left):
+                before = objective["remaining"]
+                objective = self.readQuestObjective(objective)
+                if objective and objective["status"] == "incomplete":
+                    idle = 0 if objective["remaining"] is not None and objective["remaining"] < before else idle + 1
+            if outOfBeans:
+                break
+            # Nobody picked them up (or the count could not be read): leave the row for later.
+            if objective and objective["status"] == "incomplete":
                 self.questItemShort[objective["id"]] = time.time()
+        if outOfBeans:
+            for objective in rows:
+                self.questItemShort[objective["id"]] = time.time()
+        self.rejoin(placeId=MAIN_GAME_PLACE_ID, claimHive=True)
 
     def readQuestObjective(self, objective):
         """Re-read the quest log and return this row as it now stands, or None if it couldn't be read."""
