@@ -13,16 +13,97 @@ import modules.screen.ocr as ocr
 from modules import bitmap_matcher
 from modules.controls.sleep import pause_aware_time as time, sleep
 from modules.macro.game_data import quest_data
-from modules.quest_planning import make_quest_objectives, objective_matches_text
+from modules.quest_planning import (make_quest_objectives, objective_matches_text, objective_allowed, quest_giver_order,
+                                    quest_item, QUEST_ITEMS)
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP, mssScreenshotPillowRGBA
 
 
 class QuestMixin:
-    def recordQuestObjectives(self, giver, title, actions, statuses):
+    def recordQuestObjectives(self, giver, title, actions, statuses, remaining=None):
         if not hasattr(self, "questObservations"):
             self.questObservations = {}
-        self.questObservations[giver] = make_quest_objectives(giver, title, actions, statuses)
+        self.questObservations[giver] = make_quest_objectives(giver, title, actions, statuses, remaining)
+        # A fresh read replaces what we counted ourselves.
+        for key in [key for key in self.questItemUses if key[0] == giver]:
+            del self.questItemUses[key]
         return [action for action, status in zip(actions, statuses) if status != "complete"]
+
+    def questItemsLeft(self, objective):
+        """How many more of a row's item the quest asks for, counting what we used since the last read."""
+        left = objective["remaining"] if objective["remaining"] is not None else int(objective["action"].split("_")[1])
+        return max(0, left - self.questItemUses.get(objective["id"], 0))
+
+    def questItemIsShort(self, objectiveId):
+        """The inventory ran out recently; the row stays the user's for half an hour, then we look again."""
+        return time.time() - self.questItemShort.get(objectiveId, 0) < 30 * 60
+
+    def pendingQuestObjectives(self, kind):
+        """Rows of a kind the quest log shows as incomplete, in giver order, that the user's settings let the macro do."""
+        return [objective for giver in quest_giver_order(self.setdat)
+                for objective in (getattr(self, "questObservations", {}).get(giver) or [])
+                if objective["kind"] == kind and objective["status"] == "incomplete"
+                and objective_allowed(objective, self.setdat) and not self.questItemIsShort(objective["id"])
+                and self.questItemsLeft(objective) > 0]
+
+    def questWantsCollect(self, name):
+        """True when a quest row needs this collect even though its own setting is off."""
+        if name == "wind_shrine":
+            return bool(self.pendingQuestObjectives("donate"))
+        if name in ("memory_match", "mega_memory_match", "extreme_memory_match"):
+            return bool(self.pendingQuestObjectives("pairs"))
+        return False
+
+    def memoryMatchRewards(self):
+        """Preferred rewards for the solver; none while a quest needs pairs, so it just matches as many as it can."""
+        return [] if self.pendingQuestObjectives("pairs") else self.setdat.get("memory_match_rewards", [])
+
+    def useQuestItems(self, moment):
+        """Use the inventory items quests still need at this point of a run ('gather' or 'convert')."""
+        for objective in self.pendingQuestObjectives("use"):
+            name, _, when = QUEST_ITEMS[quest_item(objective)]
+            if when != moment:
+                continue
+            used = 0
+            for _ in range(self.questItemsLeft(objective)):
+                if not self.useItemInInventory(name):
+                    self.questItemShort[objective["id"]] = time.time()
+                    break
+                used += 1
+            self.questItemUses[objective["id"]] = self.questItemUses.get(objective["id"], 0) + used
+            if used:
+                self.logger.webhook("", f"Used {used} {name} for {objective['giver'].title()}", "bright green",
+                                    route_category="quests")
+
+    def shareJellyBeans(self):
+        """Use Jelly Beans at the hub until the quest rows are done, the inventory runs out, or nobody picks them up."""
+        for objective in self.pendingQuestObjectives("use"):
+            if QUEST_ITEMS[quest_item(objective)][2] != "hub":
+                continue
+            if not self.travelViaCannon("Jelly Beans"):
+                return
+            self.runPath("quests/jelly_bean_hub")
+            idle = 0
+            while idle < 5:
+                if not self.useItemInInventory(QUEST_ITEMS["jellybean"][0]):
+                    self.questItemShort[objective["id"]] = time.time()
+                    break
+                time.sleep(2)
+                before = self.questItemsLeft(objective)
+                row = self.readQuestObjective(objective)
+                if row is None or row["status"] == "complete":
+                    break
+                after = self.questItemsLeft(row)
+                idle = 0 if after < before else idle + 1
+                objective = row
+            else:
+                self.questItemShort[objective["id"]] = time.time()
+            self.reset()
+
+    def readQuestObjective(self, objective):
+        """Re-read the quest log and return this row as it now stands, or None if it couldn't be read."""
+        self.findQuest(objective["giver"], logDetection=False)
+        return next((row for row in (self.questObservations.get(objective["giver"]) or [])
+                     if row["id"] == objective["id"]), None)
 
     def readWatchedQuestObjective(self, objective, reposition=False):
         previous = self.questObservations.get(objective["giver"]) or []
@@ -1057,15 +1138,23 @@ class QuestMixin:
         incompleteObjectives = []
         objectivePanels = detectObjectivePanels(screen)
         observedStatuses = ["unknown"] * len(objectives)
+        observedRemaining = [None] * len(objectives)
 
         def observeRow(index, text, status, fullRow=True):
             if not fullRow:
                 return
             matches = [row for row, action in enumerate(objectives) if objective_matches_text(action, text)]
             if len(matches) == 1:
-                observedStatuses[matches[0]] = status
+                row = matches[0]
             elif len(objectivePanels) == len(objectives):
-                observedStatuses[index] = status
+                row = index
+            else:
+                return
+            observedStatuses[row] = status
+            progress = re.search(r"(\d[\d,.]*)\s*/\s*(\d[\d,.]*)", text)
+            if progress:
+                done, total = (int(re.sub(r"\D", "", part)) for part in progress.groups())
+                observedRemaining[row] = max(0, total - done)
 
         if objectivePanels:
             for i, panel in enumerate(objectivePanels[:len(objectives)]):
@@ -1189,7 +1278,7 @@ class QuestMixin:
         if manageQuestUi and not keepQuestMenuOpen:
             self.toggleQuest()
             self.moveMouseToDefault()
-        return self.recordQuestObjectives(questGiver, questTitle, objectives, observedStatuses)
+        return self.recordQuestObjectives(questGiver, questTitle, objectives, observedStatuses, observedRemaining)
 
     def goToQuestGiver(self, questGiver, reason):
         for _ in range(3):

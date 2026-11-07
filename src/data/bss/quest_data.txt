@@ -732,8 +732,8 @@ manual_collect 512 melody tokens
 token_rage
 manual_feed 101 moon charms to your bees
 manual_use 10 glue
-manual_use 10 blue extracts
-manual_use 10 red extracts
+use_10_blueextract
+use_10_redextract
 manual_craft 101 ingredients with the blender
 kill_101_rhinobeetle
 kill_10_werewolf
@@ -916,7 +916,7 @@ gather_clover
 pollengoo_blue
 fieldtoken_blueberry
 manual_collect 25 inspire tokens
-manual_donate 1 cloud vial to the wind shrine
+donate_1_cloud vial
 
 -rules of the road
 pollen_white
@@ -925,7 +925,7 @@ gather_rose
 pollengoo_red
 fieldtoken_strawberry
 manual_collect 50 tokens from leaves
-manual_donate 100 sunflower seeds to the wind shrine
+donate_100_sunflower seed
 
 -qr quest
 pollen_white
@@ -934,7 +934,7 @@ gather_spider
 pollengoo_any
 manual_collect 5 gumdrops tokens
 manual_collect 25 tokens from sparkles
-manual_donate 150 blueberries to the wind shrine
+donate_150_blueberry
 
 -pleasant pastimes
 manual_earn 15 ace badges
@@ -943,8 +943,8 @@ gather_pepper
 gather_sunflower
 pollengoo_white
 token_honey
-manual_share 50 jelly bean tokens
-manual_match 5 pairs in memory match games
+use_50_jellybean
+pairs_5
 
 -nature's lessons
 manual_earn 1 master badge
@@ -952,10 +952,10 @@ pollen_white
 gather_pine tree
 gather_mushroom
 pollengoo_blue
-manual_use 1 magic bean
+use_1_magicbean
 feed_250_blueberry
 manual_collect 25 moon charm tokens
-manual_donate 250 sunflower seeds to the wind shrine
+donate_250_sunflower seed
 
 -the gifts of life
 manual_earn 2 master badges
@@ -967,7 +967,7 @@ manual_collect 50 inspire tokens
 manual_collect 100 tokens from festive gifts
 manual_collect 300 treat tokens
 manual_collect 10 royal jelly tokens
-manual_donate 300 pineapples to the wind shrine
+donate_300_pineapple
 
 -out-questing questions
 manual_earn 4 master badges
@@ -977,8 +977,8 @@ gather_blue flower
 pollengoo_any
 manual_collect 200 pineapple tokens
 manual_collect 80 tokens from sparkles
-manual_donate 5 oils to the wind shrine
-manual_match 10 pairs in memory match games
+donate_5_oil
+pairs_10
 
 -forcefully friendly
 manual_earn 6 master badges
@@ -987,12 +987,12 @@ gather_rose
 gather_pineapple
 gather_stump
 pollengoo_red
-manual_use 10 field dice
+use_10_fielddice
 feed_500_treat
 manual_complete 1 polar bear quest
 manual_collect 200 tokens from sprouts
-manual_donate 3 blue extracts to the wind shrine
-manual_donate 3 red extracts to the wind shrine
+donate_3_blue extract
+donate_3_red extract
 
 -sway away
 manual_earn 10 master badges
@@ -1002,9 +1002,9 @@ gather_clover
 gather_sunflower
 pollengoo_white
 manual_collect 250 tokens from wild windy bee
-manual_share 100 jelly bean tokens
-manual_donate 5 red extracts to the wind shrine
-manual_donate 5 blue extracts to the wind shrine
+use_100_jellybean
+donate_5_red extract
+donate_5_blue extract
 
 -memories of memories
 manual_earn 11 master badges
@@ -1014,9 +1014,9 @@ gather_spider
 pollengoo_blue
 token_honey
 manual_collect 100 tokens from leaves
-manual_donate 500 sunflower seeds to the wind shrine
+donate_500_sunflower seed
 manual_use 3 wealth clock
-manual_match 10 pairs in memory match games
+pairs_10
 
 -beans becoming
 manual_earn 12 master badges
@@ -1025,10 +1025,10 @@ gather_pumpkin
 gather_mushroom
 gathergoo_mushroom
 manual_collect 100 inspire tokens
-manual_use 1 magic bean
+use_1_magicbean
 manual_collect 400 tokens from sprouts
-manual_share 50 jelly bean tokens
-manual_donate 10 red extracts to the wind shrine
+use_50_jellybean
+donate_10_red extract
 
 -do you bee-lieve in magic?
 manual_earn 13 master badges
@@ -1040,7 +1040,7 @@ manual_collect 150 tokens from sparkles
 manual_use 1 moon amulet generator
 manual_use 1 special sprout summoner
 collect_honeystorm
-manual_donate 10 blue extracts to the wind shrine
+donate_10_blue extract
 
 -the ways of the winds / the wind and its ways
 manual_earn 14 master badges
@@ -1049,8 +1049,8 @@ gather_cactus
 gather_blue flower
 pollengoo_red
 fieldtoken_blueberry
-manual_use 3 cloud vials
-manual_donate 1 gold egg to the wind shrine
+use_3_cloudvial
+donate_1_gold egg
 
 -beauty duty
 manual_earn 15 master badges
@@ -1062,7 +1062,7 @@ gathergoo_dandelion
 manual_collect 500 treat tokens
 manual_collect 25 royal jelly tokens
 manual_collect 250 tokens from leaves
-manual_share 150 jelly bean tokens
+use_150_jellybean
 
 -witness grandeur
 pollen_white
@@ -1071,32 +1071,32 @@ gather_spider
 pollengoo_white
 manual_collect 150 inspire tokens
 token_honey
-manual_donate 500 blueberries to the wind shrine
-manual_donate 1 oil to the wind shrine
+donate_500_blueberry
+donate_1_oil
 
 -beeternity
 pollen_white
 gather_pepper
 gather_pumpkin
 pollengoo_red
-manual_use 5 red extracts
+use_5_redextract
 manual_catch 20 falling coconuts
 manual_collect 300 sunflower seed tokens
 manual_collect 300 pineapple tokens
 manual_use 3 wealth clock
-manual_match 10 pairs in memory match games
-manual_donate 5 tropical drinks to the wind shrine
+pairs_10
+donate_5_tropical drink
 
 -a breath of blue
 pollen_white
 gather_pine tree
 gather_bamboo
 gathergoo_stump
-manual_use 5 blue extracts
-manual_use 10 field dice
+use_5_blueextract
+use_10_fielddice
 manual_collect 600 tokens from sprouts
-manual_donate 1 basic egg to the wind shrine
-manual_donate 5,000 treats to the wind shrine
+donate_1_basic egg
+donate_5000_treat
 
 -glory of goo
 pollen_white
@@ -1107,8 +1107,8 @@ pollengoo_white
 manual_collect 300 sunflower seed tokens
 manual_collect 30 gumdrops tokens
 manual_collect 200 tokens from sparkles
-manual_donate 3 glues to the wind shrine
-manual_donate 300 sunflower seeds to the wind shrine
+donate_3_glue
+donate_300_sunflower seed
 
 -tickle the wind
 pollen_white
@@ -1118,7 +1118,7 @@ gather_dandelion
 pollengoo_any
 token_honey
 manual_collect 500 tokens from wild windy bee
-manual_share 200 jelly bean tokens
+use_200_jellybean
 
 -rhubarb that could have been
 pollen_white
@@ -1128,9 +1128,9 @@ pollengoo_blue
 manual_collect 1 oil token
 manual_collect 800 tokens from sprouts
 feed_250_blueberry
-manual_donate 1 gold egg to the wind shrine
-manual_donate 10 oils to the wind shrine
-manual_match 15 pairs in memory match games
+donate_1_gold egg
+donate_10_oil
+pairs_15
 
 -dreams of being a bee
 pollen_white
@@ -1139,11 +1139,11 @@ gather_cactus
 pollengoo_red
 manual_collect 1 red extract token
 manual_collect 300 tokens from leaves
-manual_use 10 field dice
+use_10_fielddice
 manual_use 1 moon amulet generator
 manual_use 5 wealth clock
-manual_donate 50 royal jellies to the wind shrine
-manual_donate 10 red extracts to the wind shrine
+donate_50_royal jelly
+donate_10_red extract
 
 -the sky over the stump
 pollen_white
@@ -1152,9 +1152,9 @@ gather_stump
 pollengoo_white
 manual_collect 50 gumdrop tokens
 manual_collect 1 glue token
-manual_use 3 cloud vials
-manual_donate 3 cloud vials to the wind shrine
-manual_donate 10 glues to the wind shrine
+use_3_cloudvial
+donate_3_cloud vial
+donate_10_glue
 
 -space oblivion
 pollen_white
@@ -1164,8 +1164,8 @@ gathergoo_mountain top
 manual_collect 1,000 treat tokens
 manual_collect 250 tokens from sparkles
 manual_collect 250 inspire tokens
-manual_donate 1,000 sunflower seeds to the wind shrine
-manual_donate 10 red extracts to the wind shrine
+donate_1000_sunflower seed
+donate_10_red extract
 
 -pollenpalooza
 pollen_white
@@ -1176,8 +1176,8 @@ gathergoo_sunflower
 manual_catch 50 falling coconuts
 feed_1000_sunflower seed
 manual_collect 350 tokens from leaves
-manual_share 250 jelly bean tokens
-manual_donate 1 basic egg to the wind shrine
+use_250_jellybean
+donate_1_basic egg
 
 -dancing with stick bug
 manual_earn 1 grandmaster badge
@@ -1189,8 +1189,8 @@ pollengoo_blue
 manual_collect 2,000 tokens from stick nymphs
 token_honey
 feed_1000_pineapple
-manual_donate 25 oils to the wind shrine
-manual_match 25 pairs in memory match games
+donate_25_oil
+pairs_25
 
 -bear without despair
 manual_earn 2 grandmaster badges
@@ -1205,7 +1205,7 @@ manual_collect 100 gumdrops tokens
 manual_collect 1,000 tokens from sprouts
 manual_use 1 moon amulet generator
 manual_use 5 wealth clock
-manual_donate 25 blue extracts to the wind shrine
+donate_25_blue extract
 
 -spirit spree
 manual_earn 3 grandmaster badges
@@ -1218,10 +1218,10 @@ feed_1000_sunflower seed
 manual_collect 5 oil tokens
 manual_catch 100 falling coconuts
 manual_collect 500 inspire tokens
-manual_donate 1,500 strawberries to the wind shrine
-manual_donate 1 basic egg to the wind shrine
-manual_donate 1 silver egg to the wind shrine
-manual_donate 1 gold egg to the wind shrine
+donate_1500_strawberry
+donate_1_basic egg
+donate_1_silver egg
+donate_1_gold egg
 
 -echoing call
 manual_earn 4 grandmaster badges
@@ -1231,13 +1231,13 @@ gather_bamboo
 gather_blue flower
 pollengoo_any
 feed_1000_blueberry
-manual_use 20 field dice
+use_20_fielddice
 manual_collect 5 red extract tokens
 manual_collect 5 blue extract tokens
 manual_collect 500 tokens from leaves
-manual_donate 25 glues to the wind shrine
-manual_donate 25 tropical drinks to the wind shrine
-manual_match 25 pairs in memory match games
+donate_25_glue
+donate_25_tropical drink
+pairs_25
 
 -spring out of the mountain
 manual_earn 5 grandmaster badges
@@ -1247,7 +1247,7 @@ gather_coconut
 gather_stump
 gather_dandelion
 pollengoo_white
-manual_share 500 jelly bean tokens
+use_500_jellybean
 manual_collect 100 royal jelly tokens
 manual_collect 1000 tokens from wild windy bee
-manual_donate 50 cloud vials to the wind shrine
+donate_50_cloud vial

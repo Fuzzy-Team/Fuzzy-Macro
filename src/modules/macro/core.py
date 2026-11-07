@@ -124,6 +124,8 @@ class macro(
 
         #memory match
         self.latestMM = "normal"
+        self.questItemUses = {}
+        self.questItemShort = {}
         self.lastBlueTextScan = 0
         self.guidingStarLastAnnounced = {}
         self.unusualSproutLastAnnounced = {}

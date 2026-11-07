@@ -4,7 +4,7 @@ import time
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
 from modules.quest_planning import (quest_giver_order, choose_quest_gather, is_gather_objective, allowed_fields,
-                                    quest_uses_ant_challenge, manual_objective_name, FIXED_LINE_GIVERS)
+                                    quest_uses_ant_challenge, manual_objective_name, objective_allowed, FIXED_LINE_GIVERS)
 from modules.controls.sleep import (
     InterruptRequested,
     INTERRUPT_NONE,
@@ -19,6 +19,8 @@ from modules.controls.sleep import (
 
 # Quest titles that are primarily bloom-petal objectives and can be skipped by setting.
 HARDCODED_PETAL_IGNORE_TITLES = {"petal tabbouleh", "petals", "mashed blooms"}
+# Collects a quest row can ask for even when their own setting is off (see questWantsCollect).
+QUEST_COLLECTS = ("wind_shrine", "memory_match", "mega_memory_match", "extreme_memory_match")
 
 
 def canClaimTimedBearQuest(name):
@@ -204,6 +206,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 "tunnelBear": "kill_tunnel_bear",
                 "stumpSnail": "kill_stump_snail",
                 "stingerHunt": "stinger_hunt",
+                "shareJellyBeans": "use_jellybean",
             }
             return taskKeys.get(functionName)
 
@@ -372,7 +375,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
     def noticeManualObjectives(questGiver):
         """Tell the user once when everything left in a quest is theirs to do."""
         rows = [row for row in (macro.questObservations.get(questGiver) or []) if row["status"] != "complete"]
-        if not rows or any(row["kind"] != "manual" for row in rows) or all(row["status"] == "unknown" for row in rows):
+        if not rows or any(objective_allowed(row, macro.setdat) and not macro.questItemIsShort(row["id"]) for row in rows) \
+                or all(row["status"] == "unknown" for row in rows):
             return
         names = [manual_objective_name(row["action"]) for row in rows]
         notice = (rows[0]["title"], tuple(names))
@@ -442,6 +446,16 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             elif kind == "token" and target == "honey":
                 tasks = ["honeytoken"]
                 watchTask = None
+            elif kind == "use" and target.endswith("jellybean") and macro.setdat.get("quest_use_jelly_beans"):
+                tasks = ["jelly_beans"]
+                watchTask = "use_jellybean"
+            elif kind == "donate" and macro.setdat.get("quest_donate_wind_shrine"):
+                macro.questTaskWatchers.setdefault("collect_wind_shrine", []).append((questGiver, objective))
+                continue
+            elif kind == "pairs" and macro.setdat.get("quest_play_memory_match"):
+                for task in ("collect_memory_match", "collect_mega_memory_match", "collect_extreme_memory_match"):
+                    macro.questTaskWatchers.setdefault(task, []).append((questGiver, objective))
+                continue
             else:
                 continue
             requiredTasks.extend(tasks)
@@ -477,6 +491,11 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 continue
 
             if taskName == "honeytoken":
+                continue
+
+            if taskName == "jelly_beans":
+                runTask(macro.shareJellyBeans, resetAfter=False)
+                taskCompleted = True
                 continue
 
             if taskName in ("king_beetle", "tunnel_bear"):
@@ -541,7 +560,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         return [objective for giver in quest_giver_order(macro.setdat)
                 for objective in (getattr(macro, "questObservations", {}).get(giver) or [])
                 if is_gather_objective(objective, macro.setdat) and objective["status"] != "complete"
-                and objective["id"] not in macro.deferredQuestObjectives]
+                and objective["id"] not in macro.deferredQuestObjectives and not macro.questItemIsShort(objective["id"])]
 
     def runQuestGathers():
         nonlocal questScanScreens, taskCompleted
@@ -658,7 +677,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                     return True
             elif task.startswith("collect_") and mode != "bug":
                 item = task[8:]
-                if not macro.setdat.get(item, False):
+                if not (macro.setdat.get(item, False) or macro.questWantsCollect(item)):
                     continue
                 if item == "sticker_stack":
                     if macro.hasStickerStackRespawned():
@@ -802,6 +821,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 runQuestSupportTasks(requiredTasks)
                 for item, quantity in feeds:
                     runTask(macro.feedBee, args=(item, quantity), resetAfter=False)
+            for name in QUEST_COLLECTS:
+                if macro.questWantsCollect(name) and macro.hasRespawned(name, macro.collectCooldowns[name]):
+                    runTask(macro.collect, args=(name,))
+                    taskCompleted = True
             runQuestGathers()
             waitForReadyTask()
             continue
@@ -984,9 +1007,11 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 for requiredTasks, feeds in claimed:
                     for task in requiredTasks:
                         macro.setdat[task] = True
-                for _, feeds in claimed:
+                for requiredTasks, feeds in claimed:
                     for item, quantity in feeds:
                         runTask(macro.feedBee, args=(item, quantity), resetAfter=False)
+                    if "jelly_beans" in requiredTasks:
+                        runQuestSupportTasks(["jelly_beans"])
                 return True
 
             # Handle collect tasks
@@ -1041,7 +1066,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 
                 # Regular collect items
                 if collectName in macroModule.collectData:
-                    if macro.setdat[collectName] and macro.hasRespawned(collectName, macro.collectCooldowns[collectName]):
+                    if (macro.setdat[collectName] or macro.questWantsCollect(collectName)) and macro.hasRespawned(collectName, macro.collectCooldowns[collectName]):
                         if collectName == "wreath" and not isBackpackReadyForWreath():
                             macro.logger.webhook("", "Honey Wreath ready, but backpack is not full yet. Deferring claim", "dark brown", "screen")
                             return False

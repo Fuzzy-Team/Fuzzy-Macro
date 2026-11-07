@@ -135,6 +135,12 @@ class CollectiblesMixin:
         item = str(self.setdat.get("wind_shrine_item", "field dice")).replace("_", " ").lower()
         itemAliases = getShrineItemAliases(item)
         quantity = max(1, int(self.setdat.get("wind_shrine_quantity", 1) or 1))
+        # A waiting quest donation goes first, in place of the settings' item for this visit.
+        questDonation = next(iter(self.pendingQuestObjectives("donate")), None)
+        if questDonation:
+            item = questDonation["action"].partition("_")[2].partition("_")[2]
+            itemAliases = getShrineItemAliases(item)
+            quantity = self.questItemsLeft(questDonation)
         time.sleep(2)
 
         # Open the shrine item selector from the initial dialog.
@@ -195,6 +201,8 @@ class CollectiblesMixin:
         time.sleep(2)
         clickWindShrineDialogsUntilGone()
         self.logger.webhook("", f"Offered {item.title()} x{quantity} to Wind Shrine", "bright green", "screen")
+        if questDonation:
+            self.questItemUses[questDonation["id"]] = self.questItemUses.get(questDonation["id"], 0) + quantity
         time.sleep(0.5)
         lootWindShrineTokens()
         self.logger.webhook("", "Collected loot from Wind Shrine", "bright green", "screen")
@@ -504,7 +512,7 @@ class CollectiblesMixin:
                 time.sleep(2)
                 self.logger.webhook("", f"Solving: {displayName}", "dark brown", "screen")
                 self.canDetectNight = False
-                self.memoryMatch.solveMemoryMatch(mmType, self.setdat.get("memory_match_rewards", []))
+                self.memoryMatch.solveMemoryMatch(mmType, self.memoryMatchRewards())
                 self.canDetectNight = True
                 time.sleep(2)
                 self.logger.webhook("", f"Completed: {displayName}", "bright green", "blue")

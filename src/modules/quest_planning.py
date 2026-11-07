@@ -10,6 +10,19 @@ QUEST_GIVERS = ("polar bear", "brown bear", "black bear", "honey bee", "bucko be
 FIXED_LINE_GIVERS = ("panda bear", "science bear", "mother bear", "onett", "spirit bear")
 # Hive bees needed before a giver talks to you; givers above the config's bee count stay locked.
 QUEST_GIVER_MIN_BEES = {"panda bear": 5, "science bear": 10, "onett": 30, "spirit bear": 35}
+# Items quest rows can use: key -> (inventory name, setting that allows it, when the macro uses it).
+# "gather" and "convert" uses ride along with a gather/conversion; "hub" is its own trip.
+QUEST_ITEMS = {
+    "jellybean": ("jelly beans", "quest_use_jelly_beans", "hub"),
+    "magicbean": ("magic bean", "quest_use_magic_beans", "gather"),
+    "cloudvial": ("cloud vial", "quest_use_cloud_vials", "gather"),
+    "redextract": ("red extract", "quest_use_extracts", "gather"),
+    "blueextract": ("blue extract", "quest_use_extracts", "gather"),
+    "fielddice": ("field dice", "quest_use_field_dice", "convert"),
+}
+# Row kinds that need a setting before the macro will spend items or tickets on them.
+QUEST_DONATE_SETTING = "quest_donate_wind_shrine"
+QUEST_PAIRS_SETTING = "quest_play_memory_match"
 BLUE_FIELDS = ("blue flower", "bamboo", "pine tree", "stump")
 RED_FIELDS = ("mushroom", "strawberry", "rose", "pepper")
 FIELDS = ("sunflower", "dandelion", "mushroom", "blue flower", "clover", "strawberry",
@@ -57,7 +70,7 @@ def load_quest_catalog(path=QUEST_DATA_PATH):
 
 
 def objective_type(action):
-    return re.sub(r"^(kill|feed)_(?:\d+|\*)_", r"\1_", action.replace(" ", "_"))
+    return re.sub(r"^(kill|feed|use|donate)_(?:\d+|\*)_", r"\1_", action.replace(" ", "_"))
 
 
 def objective_setting_prefix(objective):
@@ -75,7 +88,9 @@ def gather_objective_types(catalog):
                 key = objective_type(objective["action"])
                 kind, _, target = objective["action"].partition("_")
                 name = target.replace("_", " ").title()
-                if kind in ("gather", "gathergoo", "gatherpetal"):
+                if kind == "use":
+                    label = "Use " + QUEST_ITEMS[target.partition("_")[2]][0].title()
+                elif kind in ("gather", "gathergoo", "gatherpetal"):
                     label = {"gather": "Pollen", "gathergoo": "Goo", "gatherpetal": "Bloom Petals"}[kind] + " in " + name
                 elif kind in ("pollen", "pollengoo"):
                     label = "Collect " + name + (" Pollen" if kind == "pollen" else " Goo")
@@ -98,11 +113,38 @@ def quest_giver_order(settings):
 
 
 def manual_objective_name(action):
-    """'manual_use 10 red portal' -> 'Use 10 Red Portal'"""
-    return action.partition("_")[2].title()
+    """'manual_use 10 red portal' -> 'Use 10 Red Portal'; 'use_10_fielddice' -> 'Use 10 Field Dice'"""
+    kind, _, target = action.partition("_")
+    if kind == "use":
+        count, _, key = target.partition("_")
+        return f"Use {count} {QUEST_ITEMS[key][0].title()}"
+    if kind == "donate":
+        count, _, item = target.partition("_")
+        return f"Donate {count} {item.title()} to the Wind Shrine"
+    if kind == "pairs":
+        return f"Match {target} Memory Match pairs"
+    return target.title()
 
 
-def make_quest_objectives(giver, title, actions, statuses):
+def quest_item(objective):
+    """Inventory key of a use row: 'use_10_fielddice' -> 'fielddice'."""
+    return objective["action"].rpartition("_")[2] if objective["kind"] == "use" else None
+
+
+def objective_allowed(objective, settings):
+    """False for rows the user keeps to themselves: manual rows, and item/ticket rows whose setting is off."""
+    kind = objective["kind"]
+    if kind == "use":
+        return bool(settings.get(QUEST_ITEMS[quest_item(objective)][1]))
+    if kind == "donate":
+        return bool(settings.get(QUEST_DONATE_SETTING))
+    if kind == "pairs":
+        return bool(settings.get(QUEST_PAIRS_SETTING))
+    return kind != "manual"
+
+
+def make_quest_objectives(giver, title, actions, statuses, remaining=None):
+    """remaining: what the quest log still asks for per row (None where it couldn't be read)."""
     objectives = []
     identity_title = tuple(actions) if giver == "brown bear" else title
     for row, (action, status) in enumerate(zip(actions, statuses)):
@@ -118,7 +160,8 @@ def make_quest_objectives(giver, title, actions, statuses):
                      "redability": "red", "redboost": "red", "rage": "red"}.get(target, "any")
         objectives.append({"id": (giver, identity_title, row), "giver": giver, "title": title,
                            "row": row, "action": action, "kind": kind, "field": field,
-                           "color": color, "status": status})
+                           "color": color, "status": status,
+                           "remaining": remaining[row] if remaining else None})
     return objectives
 
 
@@ -128,6 +171,10 @@ def quest_uses_ant_challenge(action, settings):
 
 
 def is_gather_objective(objective, settings=None):
+    if objective["kind"] == "use":
+        # Items used during a gather or conversion need that trip made; the hub trip stands alone.
+        return (QUEST_ITEMS[quest_item(objective)][2] != "hub"
+                and (settings is None or objective_allowed(objective, settings)))
     return (objective["kind"] in ("gather", "gathergoo", "gatherpetal", "pollen", "pollengoo", "token", "fieldtoken")
             and (settings is None or not quest_uses_ant_challenge(objective["action"], settings)))
 
@@ -163,6 +210,12 @@ def objective_matches_text(action, text):
         return set(re.findall(r"[a-z]+", target)).issubset(words)
     if kind == "fieldtoken":
         return target in words and bool(words.intersection(("collect", "token")))
+    if kind in ("use", "donate"):
+        item = QUEST_ITEMS[target.rpartition("_")[2]][0] if kind == "use" else target.partition("_")[2]
+        verbs = ("use", "share") if kind == "use" else ("donate",)
+        return {singular(word) for word in item.split()}.issubset(words) and bool(words.intersection(verbs))
+    if kind == "pairs":
+        return "pair" in words
     return False
 
 

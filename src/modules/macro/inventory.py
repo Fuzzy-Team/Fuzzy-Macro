@@ -209,7 +209,10 @@ class InventoryMixin:
     def _findItemInInventory(self, itemName):
         #for retina, just a regular image search
         #for built-in, a transparency search
-        itemImg = self.adjustImage("./images/inventory", itemName)
+        try:
+            itemImg = self.adjustImage("./images/inventory", itemName)
+        except FileNotFoundError:
+            return self._findItemInInventoryByText(itemName)
         #itemImg = cv2.cvtColor(itemImg, cv2.COLOR_RGB2GRAY)
 
         itemOCRName = itemName.lower().replace("planter", "") #the name of the item used to check with the ocr to verify its correct
@@ -255,6 +258,35 @@ class InventoryMixin:
         bestY //= self.robloxWindow.multi
         return (40, bestY+80)
 
+    def _findItemInInventoryByText(self, itemName):
+        """For items with no template image: read the inventory with OCR and return the click position
+        in the same form as _findItemInInventory (the click lands on the item's row)."""
+        def key(text):
+            return ''.join(c for c in text.lower() if c.isalnum())
+
+        query = key(itemName)
+        multi = self.robloxWindow.multi
+        self.toggleInventory("open")
+        time.sleep(0.3)
+        mouse.moveTo(self.robloxWindow.mx+312, self.robloxWindow.my+200)
+        mouse.click()
+        self._scrollInventoryToTop()
+        time.sleep(0.3)
+        prevHash = None
+        for _ in range(180):
+            page = mssScreenshot(self.robloxWindow.mx, self.robloxWindow.my+90, 310, self.robloxWindow.mh-180)
+            for bbox, (text, _conf) in ocr.ocrRead(page):
+                if query in key(text):
+                    rowCenter = sum(point[1] for point in bbox) / len(bbox) / multi
+                    return (40, int(90 + rowCenter - 15))
+            hash = average_hash(page)
+            if prevHash is not None and hash == prevHash:
+                break
+            prevHash = hash
+            mouse.scroll(-2, True)
+            time.sleep(0.15)
+        self.logger.webhook("", f"Could not find {itemName} in inventory", "dark brown")
+
     #click at the specified coordinates to use an item in the inventory
     #if x/y is not provided, find the item in inventory
     def useItemInInventory(self, itemName = None, x = None, y = None, closeInventoryAfter=True):
@@ -263,6 +295,8 @@ class InventoryMixin:
                 if itemName is None: raise Exception("tried searching for item but no item name is provided")
                 res = self._findItemInInventory(itemName)
                 if res is None:
+                    if closeInventoryAfter:
+                        self.toggleInventory("close")
                     return False
                 x, y = res
 

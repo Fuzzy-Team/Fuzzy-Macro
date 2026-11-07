@@ -43,6 +43,7 @@ class HiveMixin:
         self.logger.webhook("", "Converting", "brown", "screen")
         self.alreadyConverted = True
         self.converting = True
+        self.useQuestItems("convert")
         liveGatherReport = None
         if self.liveGatherReportEnabled():
             liveGatherReport = self.createLiveGatherReport("conversion_events")
@@ -243,7 +244,7 @@ class HiveMixin:
             #memory match
             if self.findText("badge", self.robloxWindow.mx+(self.robloxWindow.mw/4), self.robloxWindow.my+(self.robloxWindow.mh/4), self.robloxWindow.mw/4, self.robloxWindow.mh/3.5):
                 self.canDetectNight = False
-                self.memoryMatch.solveMemoryMatch(self.latestMM, self.setdat.get("memory_match_rewards", []))
+                self.memoryMatch.solveMemoryMatch(self.latestMM, self.memoryMatchRewards())
                 self.canDetectNight = True
             print(f"checked memory match popup: {time.time()-st}")
 

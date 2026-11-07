@@ -144,6 +144,72 @@
         })),
       ]);
 
+      buildStandardContainer(questsSettingsParent, "Quest Items", "Items quests may use up. Anything switched off stays yours to do, and you get a ping.", [
+        {
+          id: "quest_use_jelly_beans",
+          title: "Jelly Beans",
+          desc: "Share Jelly Beans at the hub when a quest asks for it",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "quest_use_magic_beans",
+          title: "Magic Beans",
+          desc: "Use Magic Beans while gathering when a quest asks for it",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "quest_use_field_dice",
+          title: "Field Dice",
+          desc: "Use Field Dice while converting when a quest asks for it",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "quest_use_cloud_vials",
+          title: "Cloud Vials",
+          desc: "Use Cloud Vials while gathering when a quest asks for it",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "quest_use_extracts",
+          title: "Red and Blue Extracts",
+          desc: "Use Extracts before gathering when a quest asks for it",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "quest_donate_wind_shrine",
+          title: "Wind Shrine Donations",
+          desc: "Donate to the Wind Shrine when a quest asks for it, instead of your Wind Shrine item",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "quest_play_memory_match",
+          title: "Memory Match",
+          desc: "Play Memory Match for quest pairs, even if the Memory Matches are off",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+      ]);
+
       buildStandardContainer(questsSettingsParent, "Petal Gather", "Petal objectives use BloomsAI by default. Individual objective settings take priority.", [
         {
           id: "petal_quest_gather_mins",
