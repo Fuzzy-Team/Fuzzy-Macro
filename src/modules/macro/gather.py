@@ -391,8 +391,10 @@ class GatherMixin:
         else:
             self.set_task_status(f"gather_{field}", task="gather", field=field)
 
+        # Before the quest watch opens the menu, since using an item closes it.
+        self.useQuestItems("gather")
         questMenuKeptOpen = False
-        questWatchGiver = questObjective["giver"] if questObjective else None
+        questWatchGiver =questObjective["giver"] if questObjective else None
         questWatchObjective = questObjective["action"] if questObjective else None
         lastQuestProgressCheck = time.time()
         questWatchFailures = 0
@@ -445,8 +447,6 @@ class GatherMixin:
             self.logger.webhook("Sprouts", f"Collecting drops in {field.title()} with AI Gathering", "light green", route_category="activities")
         else:
             self.logger.webhook(f"Gathering: {field.title()}", f"Limit: {gatherTimeLimit} - {fieldSetting['shape']} - Backpack: {backpackLimitLabel}{gooStatus}", "light green", route_category="gathering")
-
-        self.useQuestItems("gather")
 
         # Quest defaults and overrides are already resolved in fieldSetting.
         def gooTimerThread():

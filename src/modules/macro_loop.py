@@ -409,9 +409,9 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             objectives = macro.getNewQuest(questGiver, submitting)
             if submitting:
                 macro.hourlyReport.addHourlyStat("quests_completed", 1)
-                # A fixed list of quests ended: the giver has nothing more to hand out.
-                if objectives is None and questGiver in FIXED_LINE_GIVERS and macro.findQuest(questGiver) is None:
-                    switchOffQuestGiver(questGiver)
+            # A fixed list of quests ended: the giver was reached and has nothing more to hand out.
+            if objectives is None and questGiver in FIXED_LINE_GIVERS and macro.findQuest(questGiver) is None:
+                switchOffQuestGiver(questGiver)
             questCache.pop(questGiver, None)
             macro.completedQuestWatchTasks.clear()
             macro.completedQuestWatchObjectives.clear()
@@ -439,7 +439,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             elif kind == "feed":
                 amount, item = target.split("_", 1)
                 feeds.append((item, 25 if amount == "*" else int(amount)))
-                watchTask = "feed_" + item
+                watchTask = "feed_" + item.replace(" ", "_")
             elif quest_uses_ant_challenge(objective, macro.setdat):
                 tasks = ["ant_challenge", "ant_pass_dispenser"]
                 watchTask = objective
@@ -560,7 +560,9 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         return [objective for giver in quest_giver_order(macro.setdat)
                 for objective in (getattr(macro, "questObservations", {}).get(giver) or [])
                 if is_gather_objective(objective, macro.setdat) and objective["status"] != "complete"
-                and objective["id"] not in macro.deferredQuestObjectives and not macro.questItemIsShort(objective["id"])]
+                and objective["id"] not in macro.deferredQuestObjectives and not macro.questItemIsShort(objective["id"])
+                # Item rows only need a trip while there is something to use.
+                and (objective["kind"] != "use" or (objective["status"] == "incomplete" and macro.questItemsLeft(objective) > 0))]
 
     def runQuestGathers():
         nonlocal questScanScreens, taskCompleted
@@ -824,6 +826,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             for name in QUEST_COLLECTS:
                 if macro.questWantsCollect(name) and macro.hasRespawned(name, macro.collectCooldowns[name]):
                     runTask(macro.collect, args=(name,))
+                    macro.backOffFailedQuestCollect(name)
                     taskCompleted = True
             runQuestGathers()
             waitForReadyTask()
@@ -1071,6 +1074,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                             macro.logger.webhook("", "Honey Wreath ready, but backpack is not full yet. Deferring claim", "dark brown", "screen")
                             return False
                         runTask(macro.collect, args=(collectName,))
+                        macro.backOffFailedQuestCollect(collectName)
                         executedTasks.add(taskId)
                         return True
             

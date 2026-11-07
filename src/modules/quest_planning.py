@@ -193,7 +193,10 @@ def objective_matches_text(action, text):
     if kind in ("gather", "gathergoo", "gatherpetal"):
         return {singular(word) for word in target.replace("_", " ").split()}.issubset(words)
     if kind in ("pollen", "pollengoo"):
-        return (target == "any" or target in words) and ("pollen" in words or "goo" in words)
+        if target == "any":
+            # Any-colour pollen names no colour or field; otherwise every gather row would match it.
+            return ("pollen" if kind == "pollen" else "goo") in words and not words.intersection(("white", "blue", "red", "field", "from"))
+        return target in words and ("pollen" in words or "goo" in words)
     if kind == "token":
         names = {"blueboost": ("blue", "boost"), "redboost": ("red", "boost"),
                  "blueability": ("blue", "ability"), "redability": ("red", "ability")}
@@ -205,7 +208,7 @@ def objective_matches_text(action, text):
         return name in nouns and bool(words.intersection(("defeat", "kill", "slay", "destroy")))
     if kind == "feed":
         item = target.split("_", 1)[-1]
-        return set(item.split("_")).issubset(words) and bool(words.intersection(("feed", "give")))
+        return {singular(word) for word in item.replace("_", " ").split()}.issubset(words) and bool(words.intersection(("feed", "give")))
     if kind == "collect":
         return set(re.findall(r"[a-z]+", target)).issubset(words)
     if kind == "fieldtoken":

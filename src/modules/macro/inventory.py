@@ -1,5 +1,6 @@
 import cv2
 import queue
+import re
 import threading
 import time as raw_time
 from contextlib import contextmanager
@@ -275,10 +276,19 @@ class InventoryMixin:
         prevHash = None
         for _ in range(180):
             page = mssScreenshot(self.robloxWindow.mx, self.robloxWindow.my+90, 310, self.robloxWindow.mh-180)
+            partial = None
             for bbox, (text, _conf) in ocr.ocrRead(page):
-                if query in key(text):
-                    rowCenter = sum(point[1] for point in bbox) / len(bbox) / multi
-                    return (40, int(90 + rowCenter - 15))
+                rowText = key(text)
+                if query not in rowText:
+                    continue
+                rowCenter = sum(point[1] for point in bbox) / len(bbox) / multi
+                position = (40, int(90 + rowCenter - 15))
+                # "treat" must not pick "Star Treat": on a page, take a row named exactly that, else the first that contains it.
+                if re.sub(r"x?\d+$", "", rowText) in (query, query + "s"):
+                    return position
+                partial = partial or position
+            if partial:
+                return partial
             hash = average_hash(page)
             if prevHash is not None and hash == prevHash:
                 break

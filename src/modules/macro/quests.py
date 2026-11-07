@@ -30,7 +30,8 @@ class QuestMixin:
 
     def questItemsLeft(self, objective):
         """How many more of a row's item the quest asks for, counting what we used since the last read."""
-        left = objective["remaining"] if objective["remaining"] is not None else int(objective["action"].split("_")[1])
+        # An unread count could be anything, so spend one and look again rather than the whole amount.
+        left = objective["remaining"] if objective["remaining"] is not None else 1
         return max(0, left - self.questItemUses.get(objective["id"], 0))
 
     def questItemIsShort(self, objectiveId):
@@ -47,11 +48,18 @@ class QuestMixin:
 
     def questWantsCollect(self, name):
         """True when a quest row needs this collect even though its own setting is off."""
+        if time.time() - self.questCollectBackoff.get(name, 0) < 30 * 60:
+            return False
         if name == "wind_shrine":
             return bool(self.pendingQuestObjectives("donate"))
         if name in ("memory_match", "mega_memory_match", "extreme_memory_match"):
             return bool(self.pendingQuestObjectives("pairs"))
         return False
+
+    def backOffFailedQuestCollect(self, name):
+        """A collect only a quest asked for that left its cooldown unsaved did not happen; leave it alone for half an hour."""
+        if not self.setdat.get(name, False) and self.hasRespawned(name, self.collectCooldowns[name]):
+            self.questCollectBackoff[name] = time.time()
 
     def memoryMatchRewards(self):
         """Preferred rewards for the solver; none while a quest needs pairs, so it just matches as many as it can."""
@@ -92,6 +100,8 @@ class QuestMixin:
                 row = self.readQuestObjective(objective)
                 if row is None or row["status"] == "complete":
                     break
+                if row["remaining"] is None:
+                    break  # no count to follow; the next scan reads it again
                 after = self.questItemsLeft(row)
                 idle = 0 if after < before else idle + 1
                 objective = row
@@ -761,8 +771,12 @@ class QuestMixin:
         primaryScales = [1.0, 1.2, 1.1, 0.9, 0.8, 0.7, 1.3]
 
         questGiverTemplates = []
-        questGiverImg = Image.open(f"./images/quest/{questGiver}-{self.robloxWindow.display_type}.png").convert('RGBA')
-        questGiverTemplates.extend(buildScaledTemplates(questGiverImg, primaryScales, self.robloxWindow.display_type))
+        # The title image is only a fallback for OCR, so a giver without one just reads by OCR.
+        try:
+            questGiverImg = Image.open(f"./images/quest/{questGiver}-{self.robloxWindow.display_type}.png").convert('RGBA')
+            questGiverTemplates.extend(buildScaledTemplates(questGiverImg, primaryScales, self.robloxWindow.display_type))
+        except FileNotFoundError:
+            pass
 
         fallbackDisplayType = "built-in" if self.robloxWindow.display_type == "retina" else "retina"
         fallbackScales = primaryScales if fallbackDisplayType == "built-in" else [0.7]
@@ -1360,7 +1374,8 @@ class QuestMixin:
                     break
 
     def getNewQuest(self, questGiver, submitQuest):
-        if not self.goToQuestGiver(questGiver, "Submit Quest" if submitQuest else "Get New Quest"): return
+        # False: never reached the giver. None: reached, but no quest came out of it.
+        if not self.goToQuestGiver(questGiver, "Submit Quest" if submitQuest else "Get New Quest"): return False
         self.clickdialog()
         #player submitted a quest, then get a new one
         if True: #submitQuest:

@@ -38,11 +38,13 @@ class CollectiblesMixin:
         def getShrineItemAliases(value):
             normalizedValue = normalizeShrineItemName(value)
             aliases = {normalizedValue}
+            # A full item name must not also accept longer ones containing it ("treat" and "star treat").
+            isKnownItem = any(normalizeShrineItemName(knownItem) == normalizedValue for knownItem in windShrineDonationItems)
             for knownItem in windShrineDonationItems:
                 if normalizeShrineItemName(knownItem) == normalizedValue:
                     aliases.add(normalizeShrineItemName(knownItem))
                     continue
-                if normalizedValue and normalizedValue in normalizeShrineItemName(knownItem):
+                if normalizedValue and not isKnownItem and normalizedValue in normalizeShrineItemName(knownItem):
                     aliases.add(normalizeShrineItemName(knownItem))
             if normalizedValue.endswith("y"):
                 aliases.add(normalizedValue[:-1] + "ies")
@@ -168,8 +170,12 @@ class CollectiblesMixin:
         nextY = selectorCenterY - shrineScaleY(45)
         for _ in range(80):
             selectedItemText = readSelectedShrineItem(nameX, nameY, nameW, nameH)
+            knownNames = [normalizeShrineItemName(known) for known in windShrineDonationItems]
+            # "treat" is not the selected item when the shrine shows "star treat".
             if len(selectedItemText) >= 3 and any(
-                alias in selectedItemText or selectedItemText in alias for alias in itemAliases
+                (alias in selectedItemText or selectedItemText in alias)
+                and not any(alias in known and known != alias and known in selectedItemText for known in knownNames)
+                for alias in itemAliases
             ):
                 foundItem = True
                 break
@@ -185,6 +191,8 @@ class CollectiblesMixin:
         if not foundItem:
             self.logger.webhook("", f"Wind Shrine offering failed: could not find {item.title()} in shrine selector", "red", "screen")
             self.keyboard.press("e")
+            if questDonation:
+                self.questItemShort[questDonation["id"]] = time.time()
             return None
 
         addX = selectorCenterX + shrineScaleX(157)

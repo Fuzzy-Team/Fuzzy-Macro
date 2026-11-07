@@ -126,6 +126,7 @@ class macro(
         self.latestMM = "normal"
         self.questItemUses = {}
         self.questItemShort = {}
+        self.questCollectBackoff = {}
         self.lastBlueTextScan = 0
         self.guidingStarLastAnnounced = {}
         self.unusualSproutLastAnnounced = {}
