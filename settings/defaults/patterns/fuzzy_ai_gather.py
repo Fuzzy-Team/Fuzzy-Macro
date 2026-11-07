@@ -6,7 +6,7 @@ Width: Expands the leash radius and target clustering range.
 Size: Scales each movement step so the pattern still respects the GUI controls.
 
 Requirements:
-- coremltools
+- pyobjc-framework-CoreML
 - opencv-python
 - numpy
 - mss or Pillow
