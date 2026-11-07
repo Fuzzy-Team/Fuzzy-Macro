@@ -128,6 +128,11 @@
           ["honey_bee", "Honey Bee"],
           ["bucko_bee", "Bucko Bee"],
           ["riley_bee", "Riley Bee"],
+          ["panda_bear", "Panda Bear"],
+          ["science_bear", "Science Bear"],
+          ["mother_bear", "Mother Bear"],
+          ["onett", "Onett"],
+          ["spirit_bear", "Spirit Bear"],
         ].map(([key, label]) => ({
           id: `${key}_quest_gather_interrupt`,
           title: label,
@@ -232,6 +237,51 @@
           id: "riley_bee_quest",
           title: "Riley Bee",
           desc: "Complete Riley Bee's Quests",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "panda_bear_quest",
+          title: "Panda Bear",
+          desc: "Complete Panda Bear's Quests. Anything the macro can't do is left for you. Needs 5 bees in your hive (Bees in Config).",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "science_bear_quest",
+          title: "Science Bear",
+          desc: "Complete Science Bear's Quests. Anything the macro can't do is left for you. Needs 10 bees in your hive (Bees in Config).",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "mother_bear_quest",
+          title: "Mother Bear",
+          desc: "Complete Mother Bear's Quests. Anything the macro can't do is left for you.",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "onett_quest",
+          title: "Onett",
+          desc: "Complete Onett's Quests. Anything the macro can't do is left for you. Needs 30 bees in your hive (Bees in Config).",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "spirit_bear_quest",
+          title: "Spirit Bear",
+          desc: "Complete Spirit Bear's Quests. Anything the macro can't do is left for you. Needs 35 bees in your hive (Bees in Config).",
           type: {
             name: "checkbox",
             triggerFunction: saveProfileTriggerFunction,
