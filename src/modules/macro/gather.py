@@ -542,6 +542,8 @@ class GatherMixin:
         else:
             self.logger.webhook(f"Gathering: {field.title()}", f"Limit: {gatherTimeLimit} - {fieldSetting['shape']} - Backpack: {backpackLimitLabel}{gooStatus}", "light green", route_category="gathering")
 
+        self.useQuestItems("gather")
+
         # Quest defaults and overrides are already resolved in fieldSetting.
         def isGatherPaused():
             return self.run is not None and self.run.value == 6
