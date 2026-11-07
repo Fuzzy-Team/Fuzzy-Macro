@@ -10,4 +10,4 @@
 
 **Fixed-line giver**: A quest giver with a set list of quests that ends. After the last quest is handed in, the macro switches that giver off.
 
-**Locked giver**: A quest giver whose required number of bees is greater than the hive's bee count in config. It cannot be switched on.
+**Locked giver**: A quest giver whose required number of bees is greater than the hive's bee count in config. The macro skips it even when its switch is on; the switch's note says how many bees it needs.
