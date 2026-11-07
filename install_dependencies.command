@@ -236,6 +236,12 @@ if [ "$python_ver" = '3.9' ] || { [ "$python_ver" = '3.8' ] && version_at_least 
 		flask werkzeug jinja2 markupsafe itsdangerous blinker \
 		networkx fsspec filelock fonttools contourpy kiwisolver cycler python-dateutil \
 		anyio httpcore h11 websocket-client
+	# A venv from the older Intel path (a Mac updated from macOS 11) has opencv-python, which
+	# shares its cv2 files with the headless package. Remove all variants so the install below
+	# puts back one clean copy. A venv that only has the headless package is left alone.
+	if venv_pip list --format=freeze | grep -qiE '^opencv-(python|contrib-python|contrib-python-headless)=='; then
+		venv_pip uninstall -y opencv-python opencv-contrib-python opencv-python-headless opencv-contrib-python-headless
+	fi
 
 elif version_at_least "$os_ver" "10.15.0"; then
 	printf "\033[1;35mInstalling rust\n\n\033[0m"
