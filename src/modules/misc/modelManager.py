@@ -117,6 +117,13 @@ class CoreMLModel:
         return buffer
 
     def predict(self, inputs):
+        # The scanner calls this from a worker thread that has no autorelease pool, so every
+        # call leaked its pixel buffers and results (about 1.5 MB per call) until the pool existed.
+        import objc
+        with objc.autorelease_pool():
+            return self._predict(inputs)
+
+    def _predict(self, inputs):
         import numpy as np
         dtypes = {
             self._coreml.MLMultiArrayDataTypeFloat32: np.float32,
@@ -152,8 +159,9 @@ class CoreMLModel:
 def _supported_model_names():
     # Core ML is the native model format on supported macOS versions. Download
     # ONNX only as the cross-platform fallback; fetching both makes startup
-    # repeatedly restore ONNX models that the Core ML runtime later removes.
-    if _macos_version() >= COREML_MIN_MACOS:
+    # repeatedly restore ONNX models that the Core ML runtime later removes. If Core ML
+    # can't load (an old venv without pyobjc-framework-CoreML), keep the ONNX models.
+    if import_coreml() is not None:
         return COREML_MODELS + (VICIOUS_MODEL,)
     return ONNX_MODELS + (VICIOUS_MODEL,)
 
