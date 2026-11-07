@@ -50,7 +50,7 @@ class NavigationMixin:
     #run the path to go to a field
     #faceDir what direction to face after landing in a field (default, north, south)
     #returns False if the field couldn't be reached (joining Hive Hub failed)
-    def goToField(self, field, faceDir = "default", startLocation = "center"):
+    def goToField(self, field, faceDir = "default", startLocation = "center", usePrivateServer = None):
         # Accept a string or a list/tuple of tokens/words and normalize to a
         # single field name (e.g. ["blue", "flower"] -> "blue flower").
         if isinstance(field, (list, tuple)):
@@ -70,7 +70,7 @@ class NavigationMixin:
                 rejoinMsg="Travelling: Hive Hub",
                 placeId=HIVE_HUB_PLACE_ID,
                 claimHive=False,
-                usePrivateServer=bool(self.setdat.get("hive_hub_private_server", False)),
+                usePrivateServer=bool(self.setdat.get("hive_hub_private_server", False)) if usePrivateServer is None else usePrivateServer,
             ):
                 self.location = "spawn"
                 return False

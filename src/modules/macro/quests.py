@@ -12,7 +12,7 @@ import modules.misc.settingsManager as settingsManager
 import modules.screen.ocr as ocr
 from modules import bitmap_matcher
 from modules.controls.sleep import pause_aware_time as time, sleep
-from modules.macro.game_data import quest_data
+from modules.macro.game_data import quest_data, MAIN_GAME_PLACE_ID
 from modules.quest_planning import (make_quest_objectives, objective_matches_text, objective_allowed, quest_giver_order,
                                     quest_item, QUEST_ITEMS)
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP, mssScreenshotPillowRGBA
@@ -83,31 +83,24 @@ class QuestMixin:
                                     route_category="quests")
 
     def shareJellyBeans(self):
-        """Use Jelly Beans at the hub until the quest rows are done, the inventory runs out, or nobody picks them up."""
+        """Use Jelly Beans in a public Hive Hub server, where other players can pick them up, then check the quest log back in the game."""
         for objective in self.pendingQuestObjectives("use"):
             if QUEST_ITEMS[quest_item(objective)][2] != "hub":
                 continue
-            if not self.travelViaCannon("Jelly Beans"):
+            left = self.questItemsLeft(objective)
+            # Always public: a private server has nobody to share with.
+            if not self.goToField("hive hub", usePrivateServer=False):
                 return
-            self.runPath("quests/jelly_bean_hub")
-            idle = 0
-            while idle < 5:
+            for _ in range(left):
                 if not self.useItemInInventory(QUEST_ITEMS["jellybean"][0]):
                     self.questItemShort[objective["id"]] = time.time()
                     break
                 time.sleep(2)
-                before = self.questItemsLeft(objective)
-                row = self.readQuestObjective(objective)
-                if row is None or row["status"] == "complete":
-                    break
-                if row["remaining"] is None:
-                    break  # no count to follow; the next scan reads it again
-                after = self.questItemsLeft(row)
-                idle = 0 if after < before else idle + 1
-                objective = row
-            else:
+            self.rejoin(placeId=MAIN_GAME_PLACE_ID, claimHive=True)
+            # Nobody picked them up if the count did not drop; try again later.
+            row = self.readQuestObjective(objective)
+            if row and row["status"] == "incomplete" and (row["remaining"] is None or row["remaining"] >= left):
                 self.questItemShort[objective["id"]] = time.time()
-            self.reset()
 
     def readQuestObjective(self, objective):
         """Re-read the quest log and return this row as it now stands, or None if it couldn't be read."""
