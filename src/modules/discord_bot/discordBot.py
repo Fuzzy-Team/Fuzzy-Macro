@@ -1101,6 +1101,11 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         ("honey_bee_quest", "Honey Bee"),
         ("bucko_bee_quest", "Bucko Bee"),
         ("riley_bee_quest", "Riley Bee"),
+        ("panda_bear_quest", "Panda Bear"),
+        ("science_bear_quest", "Science Bear"),
+        ("mother_bear_quest", "Mother Bear"),
+        ("onett_quest", "Onett"),
+        ("spirit_bear_quest", "Spirit Bear"),
         ("quest_progress_watch", "Keep Quest Menu Open"),
     ]
 
@@ -3544,7 +3549,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
     async def quest_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice]:
         """Auto-complete function for quest names"""
-        quests = ["polar_bear", "brown_bear", "honey_bee", "bucko_bee", "riley_bee", "black_bear"]
+        quests = ["polar_bear", "brown_bear", "honey_bee", "bucko_bee", "riley_bee", "black_bear",
+                  "panda_bear", "science_bear", "mother_bear", "onett", "spirit_bear"]
         choices = []
 
         for quest in quests:
@@ -3717,7 +3723,12 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 "🐻 **Black Bear**": settings.get("black_bear_quest", False),
                 "🍯 **Honey Bee**": settings.get("honey_bee_quest", False),
                 "🐝 **Bucko Bee**": settings.get("bucko_bee_quest", False),
-                "🎯 **Riley Bee**": settings.get("riley_bee_quest", False)
+                "🎯 **Riley Bee**": settings.get("riley_bee_quest", False),
+                "🐻 **Panda Bear**": settings.get("panda_bear_quest", False),
+                "🐻 **Science Bear**": settings.get("science_bear_quest", False),
+                "🐻 **Mother Bear**": settings.get("mother_bear_quest", False),
+                "🐻 **Onett**": settings.get("onett_quest", False),
+                "🐻 **Spirit Bear**": settings.get("spirit_bear_quest", False)
             }
 
             embed = discord.Embed(title="📜 Quest Configuration", color=0x00ff00)
@@ -3733,7 +3744,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
     @bot.tree.command(name="quest", description="Enable or disable a specific quest")
     @requires_discord_permission("configuration")
-    @app_commands.describe(quest="Quest name (polar_bear, brown_bear, black_bear, honey_bee, bucko_bee, riley_bee)", enabled="Enable or disable")
+    @app_commands.describe(quest="Quest name (polar_bear, brown_bear, black_bear, honey_bee, bucko_bee, riley_bee, panda_bear, science_bear, mother_bear, onett, spirit_bear)", enabled="Enable or disable")
     @app_commands.autocomplete(quest=quest_autocomplete, enabled=boolean_autocomplete)
     async def set_quest(interaction: discord.Interaction, quest: str, enabled: str):
         """Enable or disable a specific quest"""
@@ -3743,12 +3754,17 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             "black_bear": "black_bear_quest",
             "honey_bee": "honey_bee_quest",
             "bucko_bee": "bucko_bee_quest",
-            "riley_bee": "riley_bee_quest"
+            "riley_bee": "riley_bee_quest",
+            "panda_bear": "panda_bear_quest",
+            "science_bear": "science_bear_quest",
+            "mother_bear": "mother_bear_quest",
+            "onett": "onett_quest",
+            "spirit_bear": "spirit_bear_quest"
         }
 
         quest_key = quest_mapping.get(quest.lower())
         if not quest_key:
-            await interaction.response.send_message("❌ Invalid quest name. Use: polar_bear, brown_bear, black_bear, honey_bee, bucko_bee, or riley_bee")
+            await interaction.response.send_message("❌ Invalid quest name. Use: polar_bear, brown_bear, black_bear, honey_bee, bucko_bee, riley_bee, panda_bear, science_bear, mother_bear, onett, or spirit_bear")
             return
 
         success, message = update_setting(quest_key, enabled.lower() == "true")

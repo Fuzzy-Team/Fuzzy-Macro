@@ -3,7 +3,8 @@ import json
 import time
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
-from modules.quest_planning import quest_giver_order, choose_quest_gather, is_gather_objective, allowed_fields, quest_uses_ant_challenge
+from modules.quest_planning import (quest_giver_order, choose_quest_gather, is_gather_objective, allowed_fields,
+                                    quest_uses_ant_challenge, manual_objective_name, FIXED_LINE_GIVERS)
 from modules.controls.sleep import (
     InterruptRequested,
     INTERRUPT_NONE,
@@ -106,6 +107,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
     macro.deferredQuestObjectives = set()
     macro.completedQuestWatchTasks = set()
     macro.completedQuestWatchObjectives = set()
+    macro.manualQuestNotices = {}
     
     macro.start()
     lastIdleClick = time.time()
@@ -360,6 +362,27 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         except Exception:
             return False
 
+    def switchOffQuestGiver(questGiver):
+        key = questGiver.replace(" ", "_") + "_quest"
+        macro.setdat[key] = False
+        settingsManager.saveProfileSetting(key, False)
+        macro.logger.webhook(f"{questGiver.title()}: no more quests", "Switched this quest giver off.", "light blue",
+                             ping_category="ping_quests", route_category="quests")
+
+    def noticeManualObjectives(questGiver):
+        """Tell the user once when everything left in a quest is theirs to do."""
+        rows = [row for row in (macro.questObservations.get(questGiver) or []) if row["status"] != "complete"]
+        if not rows or any(row["kind"] != "manual" for row in rows) or all(row["status"] == "unknown" for row in rows):
+            return
+        names = [manual_objective_name(row["action"]) for row in rows]
+        notice = (rows[0]["title"], tuple(names))
+        if macro.manualQuestNotices.get(questGiver) == notice:
+            return
+        macro.manualQuestNotices[questGiver] = notice
+        macro.logger.webhook(f"{questGiver.title()} - {rows[0]['title'].title()}",
+                             "Waiting on you for:\n" + "\n".join(names), "light blue",
+                             ping_category="ping_quests", route_category="quests")
+
     def handleQuest(questGiver, executeQuest=True, keepMenuOpen=False):
         nonlocal questCache, questScanScreens, taskCompleted
         cached = questGiver in questCache and questCache[questGiver] is not None and not taskCompleted
@@ -382,9 +405,13 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             objectives = macro.getNewQuest(questGiver, submitting)
             if submitting:
                 macro.hourlyReport.addHourlyStat("quests_completed", 1)
+                # A fixed list of quests ended: the giver has nothing more to hand out.
+                if objectives is None and questGiver in FIXED_LINE_GIVERS and macro.findQuest(questGiver) is None:
+                    switchOffQuestGiver(questGiver)
             questCache.pop(questGiver, None)
             macro.completedQuestWatchTasks.clear()
             macro.completedQuestWatchObjectives.clear()
+        noticeManualObjectives(questGiver)
         requiredTasks, feeds = [], []
         macro.questGatherInterruptMobs.pop(questGiver, None)
         for task, watchers in macro.questTaskWatchers.items():
@@ -394,6 +421,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             tasks = []
             if kind == "kill":
                 mob = target.split("_", 1)[1] if target.split("_", 1)[0].isdigit() else target
+                mob = {"kingbeetle": "king_beetle", "tunnelbear": "tunnel_bear"}.get(mob, mob)
                 if "ant" in mob and mob != "mantis":
                     tasks = ["ant_challenge", "ant_pass_dispenser"]
                 else:
@@ -449,6 +477,12 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 continue
 
             if taskName == "honeytoken":
+                continue
+
+            if taskName in ("king_beetle", "tunnel_bear"):
+                if macro.hasRespawned(taskName, bossCooldowns[taskName], applyMobRespawnBonus=True):
+                    runTask(macro.kingBeetle if taskName == "king_beetle" else macro.tunnelBear)
+                    taskCompleted = True
                 continue
 
             if taskName in regularMobData:

@@ -317,7 +317,10 @@ class MacroProfileStore:
 
         order = profile_data.get("task_priority_order")
         if isinstance(order, list):
-            for item, after in (("collect_sprouts", "collect_sticker_printer"), ("collect_sticker_sprout", "collect_sprouts")):
+            for item, after in (("collect_sprouts", "collect_sticker_printer"), ("collect_sticker_sprout", "collect_sprouts"),
+                                ("quest_panda_bear", "quest_riley_bee"), ("quest_science_bear", "quest_panda_bear"),
+                                ("quest_mother_bear", "quest_science_bear"), ("quest_onett", "quest_mother_bear"),
+                                ("quest_spirit_bear", "quest_onett")):
                 if item not in order:
                     index = order.index(after) + 1 if after in order else len(order)
                     order.insert(index, item)

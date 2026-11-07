@@ -257,7 +257,12 @@ class QuestMixin:
             "riley bee": "riley",
             "honey bee": "honey",
             "brown bear": "brown",
-            "black bear": "black"
+            "black bear": "black",
+            "panda bear": "panda",
+            "science bear": "science",
+            "mother bear": "mother",
+            "onett": "onett",
+            "spirit bear": "spirit"
         }
 
         #prevent the macro from false detecting beesmas quests

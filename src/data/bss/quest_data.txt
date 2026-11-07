@@ -329,3 +329,925 @@ gather_coconut
 
 -pepper patrol
 gather_pepper
+
+==panda bear==
+
+-lesson on ladybugs
+kill_1_ladybug
+
+-rhino rumble
+kill_2_rhinobeetle
+
+-beetle battle
+kill_3_rhinobeetle
+kill_3_ladybug
+
+-spider slayer
+kill_1_spider
+
+-ladybug bonker
+kill_15_ladybug
+
+-spider slayer 2
+kill_5_spider
+
+-rhino wrecking
+kill_20_rhinobeetle
+
+-final showdown
+kill_20_rhinobeetle
+kill_20_ladybug
+kill_10_spider
+
+-werewolf hunter
+kill_1_werewolf
+
+-skirmish with scorpions
+kill_15_scorpion
+
+-mantis massacre
+kill_20_mantis
+
+-the real final showdown
+kill_10_rhinobeetle
+kill_10_ladybug
+kill_10_scorpion
+kill_10_mantis
+kill_10_spider
+kill_5_werewolf
+
+-ant arrival
+kill_10_ant
+
+-winged wack attack
+kill_15_ant
+kill_10_flyingant
+
+-fire fighter
+kill_15_fireant
+
+-army ant assault
+kill_25_ant
+kill_15_armyant
+
+-colossal combat
+kill_10_giantant
+challenge_ant
+
+-eager exterminator
+kill_50_ant
+kill_15_ladybug
+kill_5_spider
+kill_1_werewolf
+
+-leaper lickin'
+kill_30_flyingant
+kill_15_mantis
+kill_3_werewolf
+
+-colossal combat 2
+kill_50_ant
+kill_20_giantant
+kill_20_scorpion
+kill_40_rhinobeetle
+
+-outrageous onslaught
+kill_100_ant
+kill_50_armyant
+kill_30_ladybug
+kill_20_mantis
+kill_5_werewolf
+
+-royal rumble
+kill_100_fireant
+kill_30_giantant
+kill_1_kingbeetle
+challenge_ant
+
+-ultimate ant annihilation 1
+kill_250_ant
+kill_10_spider
+kill_5_werewolf
+
+-ultimate ant annihilation 2
+kill_250_ant
+kill_150_flyingant
+kill_50_scorpion
+kill_1_kingbeetle
+
+-ultimate ant annihilation 3
+kill_500_ant
+kill_150_armyant
+kill_75_mantis
+kill_1_kingbeetle
+
+-ultimate ant annihilation 4
+kill_500_fireant
+kill_250_flyingant
+kill_250_ladybug
+kill_250_rhinobeetle
+kill_1_kingbeetle
+
+-ultimate ant annihilation 5
+kill_1000_ant
+kill_500_armyant
+kill_100_giantant
+kill_3_kingbeetle
+kill_1_tunnelbear
+challenge_ant
+
+==science bear==
+
+-preliminary research
+manual_discover 5 bee types
+pollen_white
+gather_strawberry
+gather_bamboo
+
+-biology study
+manual_discover 6 bee types
+pollen_red
+gather_clover
+kill_8_ladybug
+kill_8_rhinobeetle
+
+-proving the hypothesis
+manual_discover 7 bee types
+pollen_blue
+gather_pineapple
+kill_9_rhinobeetle
+kill_3_mantis
+
+-bear botany
+manual_discover 8 bee types
+gather_dandelion
+gather_sunflower
+gather_blue flower
+kill_2_spider
+
+-kingdom collection
+manual_discover 9 bee types
+gather_bamboo
+gather_mushroom
+kill_2_spider
+
+-defensive adaptions
+manual_discover 10 bee types
+gather_cactus
+gather_rose
+kill_6_rhinobeetle
+kill_4_scorpion
+
+-benefits of technology
+manual_discover 11 bee types
+gather_pumpkin
+gather_pine tree
+kill_2_mantis
+kill_1_werewolf
+
+-spider study
+manual_discover 12 bee types
+pollen_white
+kill_4_spider
+
+-roses and weeds
+manual_discover 13 bee types
+gather_rose
+gather_dandelion
+kill_10_ladybug
+kill_1_werewolf
+
+-blue review
+manual_discover 14 bee types
+gather_pine tree
+gather_blue flower
+kill_12_rhinobeetle
+kill_8_mantis
+
+-ongoing progress
+manual_discover 15 bee types
+pollen_white
+gather_strawberry
+gather_cactus
+kill_3_scorpion
+kill_3_spider
+
+-red / blue duality
+manual_discover 16 bee types
+pollen_red
+pollen_blue
+gather_clover
+token_redboost
+token_blueboost
+
+-costs of computation
+manual_discover 17 bee types
+pollen_red
+pollen_blue
+gather_pumpkin
+gather_spider
+kill_16_rhinobeetle
+kill_8_scorpion
+kill_2_werewolf
+
+-pollination practice
+manual_discover 18 bee types
+pollen_any
+gather_pineapple
+kill_13_mantis
+
+-optimizing abilities
+manual_discover 19 bee types
+pollen_blue
+pollen_white
+gather_sunflower
+manual_collect 100 haste tokens
+manual_collect 100 focus tokens
+kill_3_spider
+
+-ready for infrared
+manual_discover 20 bee types
+pollen_red
+gather_strawberry
+gather_mushroom
+token_redboost
+kill_16_ladybug
+kill_10_scorpion
+
+-breaking down badges
+manual_discover 21 bee types
+manual_earn 1 sunflower badge
+manual_earn 2 battle badges
+manual_earn 2 bamboo badges
+gather_bamboo
+token_blueboost
+kill_24_rhinobeetle
+
+-subsidized agriculture
+manual_discover 22 bee types
+manual_collect 150 sprout tokens
+fieldtoken_strawberry
+manual_collect 100 pineapple tokens
+
+-meticulously crafted
+manual_discover 23 bee types
+manual_earn 15 badges
+manual_craft 10 ingredients with the blender
+gather_pumpkin
+gather_cactus
+
+-smart, not hard
+manual_discover 24 bee types
+manual_use 1 field booster
+collect_red-booster
+collect_blue-booster
+manual_craft 14 ingredients with the blender
+pollen_white
+pollen_blue
+pollen_red
+
+-limits of language
+manual_discover 25 bee types
+manual_earn 10 hotshot badges
+manual_collect 250 token link tokens
+gather_dandelion
+manual_craft 50 ingredients with the blender
+kill_50_ant
+
+-patterns and probability
+manual_discover 26 bee types
+manual_collect 77 sparkles tokens
+gather_clover
+manual_defeat 7 vicious bees
+manual_craft 7 ingredients with the blender
+manual_use 7 royal jellies
+
+-chemical analysis
+manual_discover 27 bee types
+pollengoo_white
+pollengoo_red
+pollengoo_blue
+gathergoo_sunflower
+gather_sunflower
+gather_blue flower
+manual_craft 27 ingredients with the blender
+kill_27_ladybug
+
+-mark mechanics
+manual_discover 28 bee types
+manual_collect 282 mark tokens
+gather_pine tree
+gather_mushroom
+kill_28_fireant
+manual_craft 28 ingredients with the blender
+kill_2_werewolf
+
+-meditating on phenomenon
+manual_discover 29 bee types
+token_redability
+token_blueability
+token_redboost
+token_blueboost
+gather_clover
+gather_spider
+gather_bamboo
+gather_strawberry
+gather_pineapple
+gather_pumpkin
+gather_cactus
+gather_rose
+gather_pine tree
+gather_mountain top
+pollen_red
+pollen_blue
+manual_craft 20 ingredients with blender
+kill_20_rhinobeetle
+kill_20_ladybug
+
+-beesperanto
+manual_discover 30 bee types
+manual_obtain a carpenter bee
+manual_collect 200 sunflower seed tokens
+manual_collect 400 pineapple tokens
+pollen_white
+gathergoo_strawberry
+gathergoo_bamboo
+gathergoo_pineapple
+manual_collect 16,000 ability tokens
+manual_use 32 royal jellies
+manual_craft 64 ingredients with the blender
+manual_collect 1,280 focus tokens
+
+-hive minded bias
+manual_discover 31 bee types
+gather_cactus
+gather_spider
+manual_collect 444,444 pollen from the ant field
+manual_feed 44 moon charms to your bees
+manual_use 4 stingers
+manual_use 1 enzymes
+manual_use 1 oil
+manual_collect 44 inspire tokens
+kill_44_fireant
+manual_craft 44 ingredients with the blender
+kill_1_kingbeetle
+
+-mushroom measurement monotony
+manual_discover 32 bee types
+gather_mushroom
+
+-the power of information
+manual_discover 33 bee types
+pollen_white
+pollengoo_any
+kill_110_armyant
+token_bomb
+manual_collect 3,300 token link tokens
+manual_collect 880 mark tokens
+manual_collect 440 tokens from sparkles
+manual_use 3 strawberry dispenser
+manual_use 3 blueberry dispenser
+collect_glue-dispenser
+manual_craft 22 ingredients with the blender
+manual_defeat 5 vicious bees
+kill_1_tunnelbear
+
+-testing teamwork
+manual_discover 34 bee types
+gathergoo_clover
+manual_collect 500 sprout tokens
+manual_collect 50 tokens from stick bug defense totems
+manual_collect 500 tokens from stick nymphs
+manual_collect 500 tokens from festive gifts
+
+-epistemological endeavor
+manual_discover 35 bee types
+gather_sunflower
+gather_pineapple
+gather_pumpkin
+token_honey
+manual_collect 4,096 boost tokens
+manual_collect 4,096 focus tokens
+manual_collect 512 melody tokens
+token_rage
+manual_feed 101 moon charms to your bees
+manual_use 10 glue
+manual_use 10 blue extracts
+manual_use 10 red extracts
+manual_craft 101 ingredients with the blender
+kill_101_rhinobeetle
+kill_10_werewolf
+kill_1_tunnelbear
+
+==mother bear==
+
+-treat tutorial
+manual_raise a bee to level 2
+feed_1_treat
+
+-bonding with bees
+manual_raise a bee to level 3
+manual_raise 2 bees to level 2
+feed_5_treat
+
+-search for a sunflower seed
+manual_raise 3 bees to level 3
+feed_10_treat
+feed_1_sunflower seed
+
+-the gist of jellies
+manual_raise 3 bees to level 4
+feed_15_treat
+manual_use 1 royal jelly
+
+-search for strawberries
+manual_raise a bee to level 5
+manual_raise 5 bees to level 4
+feed_20_treat
+feed_5_strawberry
+
+-binging on blueberries
+manual_raise 3 bees to level 5
+feed_30_treat
+feed_10_blueberry
+
+-royal jelly jamboree
+manual_raise a bee to level 6
+manual_raise 5 bees to level 5
+feed_50_treat
+manual_use 3 royal jellies
+
+-search for sunflower seeds
+manual_raise 6 bees to level 6
+feed_100_treat
+feed_25_sunflower seed
+
+-picking out pineapples
+manual_raise a bee to level 7
+manual_raise 8 bees to level 6
+manual_raise 12 bees to level 5
+feed_250_treat
+feed_25_pineapple
+
+-seven to seven
+manual_raise 7 bees to level 7
+feed_500_treat
+feed_25_blueberry
+feed_25_strawberry
+
+-mother bear's midterm
+manual_raise 3 bees to level 8
+manual_raise 9 bees to level 7
+manual_raise 15 bees to level 6
+feed_1000_treat
+feed_30_sunflower seed
+feed_30_pineapple
+feed_30_strawberry
+feed_30_blueberry
+
+-eight to eight
+manual_raise 8 bees to level 8
+feed_2500_treat
+feed_100_sunflower seed
+manual_use 8 royal jellies
+
+-sights on the stars
+manual_raise 3 bees to level 9
+feed_5000_treat
+feed_200_strawberry
+
+-the family final
+manual_raise a bee to level 10
+manual_raise 5 bees to level 9
+manual_raise 15 bees to level 8
+feed_10000_treat
+feed_250_sunflower seed
+feed_250_pineapple
+feed_250_strawberry
+feed_250_blueberry
+
+==onett==
+
+-star journey 1
+pollen_white
+gather_pumpkin
+gather_pineapple
+gather_dandelion
+pollengoo_white
+manual_collect 2,500 haste tokens
+token_honey
+kill_10_giantant
+kill_5_werewolf
+
+-star journey 2
+pollen_red
+gather_rose
+gather_strawberry
+gather_mushroom
+pollengoo_red
+token_redboost
+fieldtoken_strawberry
+token_honey
+kill_100_fireant
+kill_100_ladybug
+manual_use 10 red portal
+manual_use 5 red field booster
+
+-star journey 3
+pollen_blue
+gather_pine tree
+gather_bamboo
+gather_blue flower
+pollengoo_blue
+token_blueboost
+fieldtoken_blueberry
+token_honey
+kill_200_flyingant
+kill_200_rhinobeetle
+kill_1_kingbeetle
+manual_use 20 blue portal
+manual_use 10 blue field booster
+
+-star journey 4
+pollen_white
+gathergoo_sunflower
+gathergoo_pineapple
+gathergoo_pumpkin
+manual_collect 5,000 focus tokens
+manual_collect 5,000 token links
+token_honey
+kill_150_armyant
+kill_30_mantis
+kill_30_scorpion
+kill_3_kingbeetle
+kill_1_tunnelbear
+
+-star journey 5
+pollen_white
+pollen_red
+pollen_blue
+gather_spider
+pollengoo_white
+gathergoo_cactus
+gathergoo_clover
+manual_collect 100,000 ability tokens
+token_bomb
+manual_collect 1,000 baby love tokens
+token_honey
+kill_50_spider
+kill_50_giantant
+kill_5_kingbeetle
+kill_5_tunnelbear
+
+==spirit bear==
+
+-spirit's starter
+pollen_white
+gather_mountain top
+gather_dandelion
+pollengoo_white
+token_honey
+manual_collect 100 sunflower seed tokens
+
+-the first offering
+pollen_white
+gather_pumpkin
+gather_clover
+pollengoo_blue
+fieldtoken_blueberry
+manual_collect 25 inspire tokens
+manual_donate 1 cloud vial to the wind shrine
+
+-rules of the road
+pollen_white
+gather_pineapple
+gather_rose
+pollengoo_red
+fieldtoken_strawberry
+manual_collect 50 tokens from leaves
+manual_donate 100 sunflower seeds to the wind shrine
+
+-qr quest
+pollen_white
+gather_bamboo
+gather_spider
+pollengoo_any
+manual_collect 5 gumdrops tokens
+manual_collect 25 tokens from sparkles
+manual_donate 150 blueberries to the wind shrine
+
+-pleasant pastimes
+manual_earn 15 ace badges
+pollen_white
+gather_pepper
+gather_sunflower
+pollengoo_white
+token_honey
+manual_share 50 jelly bean tokens
+manual_match 5 pairs in memory match games
+
+-nature's lessons
+manual_earn 1 master badge
+pollen_white
+gather_pine tree
+gather_mushroom
+pollengoo_blue
+manual_use 1 magic bean
+feed_250_blueberry
+manual_collect 25 moon charm tokens
+manual_donate 250 sunflower seeds to the wind shrine
+
+-the gifts of life
+manual_earn 2 master badges
+pollen_white
+gather_cactus
+gather_strawberry
+gathergoo_dandelion
+manual_collect 50 inspire tokens
+manual_collect 100 tokens from festive gifts
+manual_collect 300 treat tokens
+manual_collect 10 royal jelly tokens
+manual_donate 300 pineapples to the wind shrine
+
+-out-questing questions
+manual_earn 4 master badges
+pollen_white
+gather_pumpkin
+gather_blue flower
+pollengoo_any
+manual_collect 200 pineapple tokens
+manual_collect 80 tokens from sparkles
+manual_donate 5 oils to the wind shrine
+manual_match 10 pairs in memory match games
+
+-forcefully friendly
+manual_earn 6 master badges
+pollen_white
+gather_rose
+gather_pineapple
+gather_stump
+pollengoo_red
+manual_use 10 field dice
+feed_500_treat
+manual_complete 1 polar bear quest
+manual_collect 200 tokens from sprouts
+manual_donate 3 blue extracts to the wind shrine
+manual_donate 3 red extracts to the wind shrine
+
+-sway away
+manual_earn 10 master badges
+pollen_white
+gather_mountain top
+gather_clover
+gather_sunflower
+pollengoo_white
+manual_collect 250 tokens from wild windy bee
+manual_share 100 jelly bean tokens
+manual_donate 5 red extracts to the wind shrine
+manual_donate 5 blue extracts to the wind shrine
+
+-memories of memories
+manual_earn 11 master badges
+pollen_white
+gather_bamboo
+gather_spider
+pollengoo_blue
+token_honey
+manual_collect 100 tokens from leaves
+manual_donate 500 sunflower seeds to the wind shrine
+manual_use 3 wealth clock
+manual_match 10 pairs in memory match games
+
+-beans becoming
+manual_earn 12 master badges
+pollen_white
+gather_pumpkin
+gather_mushroom
+gathergoo_mushroom
+manual_collect 100 inspire tokens
+manual_use 1 magic bean
+manual_collect 400 tokens from sprouts
+manual_share 50 jelly bean tokens
+manual_donate 10 red extracts to the wind shrine
+
+-do you bee-lieve in magic?
+manual_earn 13 master badges
+pollen_white
+gather_pine tree
+gather_pineapple
+pollengoo_any
+manual_collect 150 tokens from sparkles
+manual_use 1 moon amulet generator
+manual_use 1 special sprout summoner
+collect_honeystorm
+manual_donate 10 blue extracts to the wind shrine
+
+-the ways of the winds / the wind and its ways
+manual_earn 14 master badges
+pollen_white
+gather_cactus
+gather_blue flower
+pollengoo_red
+fieldtoken_blueberry
+manual_use 3 cloud vials
+manual_donate 1 gold egg to the wind shrine
+
+-beauty duty
+manual_earn 15 master badges
+pollen_white
+gather_coconut
+gather_rose
+gather_dandelion
+gathergoo_dandelion
+manual_collect 500 treat tokens
+manual_collect 25 royal jelly tokens
+manual_collect 250 tokens from leaves
+manual_share 150 jelly bean tokens
+
+-witness grandeur
+pollen_white
+gather_mountain top
+gather_spider
+pollengoo_white
+manual_collect 150 inspire tokens
+token_honey
+manual_donate 500 blueberries to the wind shrine
+manual_donate 1 oil to the wind shrine
+
+-beeternity
+pollen_white
+gather_pepper
+gather_pumpkin
+pollengoo_red
+manual_use 5 red extracts
+manual_catch 20 falling coconuts
+manual_collect 300 sunflower seed tokens
+manual_collect 300 pineapple tokens
+manual_use 3 wealth clock
+manual_match 10 pairs in memory match games
+manual_donate 5 tropical drinks to the wind shrine
+
+-a breath of blue
+pollen_white
+gather_pine tree
+gather_bamboo
+gathergoo_stump
+manual_use 5 blue extracts
+manual_use 10 field dice
+manual_collect 600 tokens from sprouts
+manual_donate 1 basic egg to the wind shrine
+manual_donate 5,000 treats to the wind shrine
+
+-glory of goo
+pollen_white
+gather_mushroom
+gather_sunflower
+pollengoo_any
+pollengoo_white
+manual_collect 300 sunflower seed tokens
+manual_collect 30 gumdrops tokens
+manual_collect 200 tokens from sparkles
+manual_donate 3 glues to the wind shrine
+manual_donate 300 sunflower seeds to the wind shrine
+
+-tickle the wind
+pollen_white
+gather_mountain top
+gather_coconut
+gather_dandelion
+pollengoo_any
+token_honey
+manual_collect 500 tokens from wild windy bee
+manual_share 200 jelly bean tokens
+
+-rhubarb that could have been
+pollen_white
+gather_pineapple
+gather_clover
+pollengoo_blue
+manual_collect 1 oil token
+manual_collect 800 tokens from sprouts
+feed_250_blueberry
+manual_donate 1 gold egg to the wind shrine
+manual_donate 10 oils to the wind shrine
+manual_match 15 pairs in memory match games
+
+-dreams of being a bee
+pollen_white
+gather_strawberry
+gather_cactus
+pollengoo_red
+manual_collect 1 red extract token
+manual_collect 300 tokens from leaves
+manual_use 10 field dice
+manual_use 1 moon amulet generator
+manual_use 5 wealth clock
+manual_donate 50 royal jellies to the wind shrine
+manual_donate 10 red extracts to the wind shrine
+
+-the sky over the stump
+pollen_white
+gather_rose
+gather_stump
+pollengoo_white
+manual_collect 50 gumdrop tokens
+manual_collect 1 glue token
+manual_use 3 cloud vials
+manual_donate 3 cloud vials to the wind shrine
+manual_donate 10 glues to the wind shrine
+
+-space oblivion
+pollen_white
+gather_pumpkin
+gather_blue flower
+gathergoo_mountain top
+manual_collect 1,000 treat tokens
+manual_collect 250 tokens from sparkles
+manual_collect 250 inspire tokens
+manual_donate 1,000 sunflower seeds to the wind shrine
+manual_donate 10 red extracts to the wind shrine
+
+-pollenpalooza
+pollen_white
+gather_clover
+gather_coconut
+gather_sunflower
+gathergoo_sunflower
+manual_catch 50 falling coconuts
+feed_1000_sunflower seed
+manual_collect 350 tokens from leaves
+manual_share 250 jelly bean tokens
+manual_donate 1 basic egg to the wind shrine
+
+-dancing with stick bug
+manual_earn 1 grandmaster badge
+pollen_white
+gather_pine tree
+gather_cactus
+gather_spider
+pollengoo_blue
+manual_collect 2,000 tokens from stick nymphs
+token_honey
+feed_1000_pineapple
+manual_donate 25 oils to the wind shrine
+manual_match 25 pairs in memory match games
+
+-bear without despair
+manual_earn 2 grandmaster badges
+pollen_white
+gather_strawberry
+gather_pineapple
+gather_stump
+pollengoo_red
+feed_1000_strawberry
+manual_collect 5 enzymes tokens
+manual_collect 100 gumdrops tokens
+manual_collect 1,000 tokens from sprouts
+manual_use 1 moon amulet generator
+manual_use 5 wealth clock
+manual_donate 25 blue extracts to the wind shrine
+
+-spirit spree
+manual_earn 3 grandmaster badges
+pollen_white
+gather_pumpkin
+gather_mushroom
+gather_rose
+gathergoo_pumpkin
+feed_1000_sunflower seed
+manual_collect 5 oil tokens
+manual_catch 100 falling coconuts
+manual_collect 500 inspire tokens
+manual_donate 1,500 strawberries to the wind shrine
+manual_donate 1 basic egg to the wind shrine
+manual_donate 1 silver egg to the wind shrine
+manual_donate 1 gold egg to the wind shrine
+
+-echoing call
+manual_earn 4 grandmaster badges
+pollen_white
+gather_pepper
+gather_bamboo
+gather_blue flower
+pollengoo_any
+feed_1000_blueberry
+manual_use 20 field dice
+manual_collect 5 red extract tokens
+manual_collect 5 blue extract tokens
+manual_collect 500 tokens from leaves
+manual_donate 25 glues to the wind shrine
+manual_donate 25 tropical drinks to the wind shrine
+manual_match 25 pairs in memory match games
+
+-spring out of the mountain
+manual_earn 5 grandmaster badges
+pollen_white
+gather_mountain top
+gather_coconut
+gather_stump
+gather_dandelion
+pollengoo_white
+manual_share 500 jelly bean tokens
+manual_collect 100 royal jelly tokens
+manual_collect 1000 tokens from wild windy bee
+manual_donate 50 cloud vials to the wind shrine

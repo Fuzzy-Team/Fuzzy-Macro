@@ -956,6 +956,11 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
       quest_honey_bee: "Quest: Honey Bee",
       quest_bucko_bee: "Quest: Bucko Bee",
       quest_riley_bee: "Quest: Riley Bee",
+      quest_panda_bear: "Quest: Panda Bear",
+      quest_science_bear: "Quest: Science Bear",
+      quest_mother_bear: "Quest: Mother Bear",
+      quest_onett: "Quest: Onett",
+      quest_spirit_bear: "Quest: Spirit Bear",
       blender: "Blender",
       planters: "Planters",
     };

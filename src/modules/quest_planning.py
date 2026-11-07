@@ -4,7 +4,12 @@ import re
 from pathlib import Path
 
 
-QUEST_GIVERS = ("polar bear", "brown bear", "black bear", "honey bee", "bucko bee", "riley bee")
+QUEST_GIVERS = ("polar bear", "brown bear", "black bear", "honey bee", "bucko bee", "riley bee",
+                "panda bear", "science bear", "mother bear", "onett", "spirit bear")
+# Givers with a fixed list of quests that ends: they are switched off after the last one.
+FIXED_LINE_GIVERS = ("panda bear", "science bear", "mother bear", "onett", "spirit bear")
+# Hive bees needed before a giver talks to you; givers above the config's bee count stay locked.
+QUEST_GIVER_MIN_BEES = {"panda bear": 5, "science bear": 10, "onett": 30, "spirit bear": 35}
 BLUE_FIELDS = ("blue flower", "bamboo", "pine tree", "stump")
 RED_FIELDS = ("mushroom", "strawberry", "rose", "pepper")
 FIELDS = ("sunflower", "dandelion", "mushroom", "blue flower", "clover", "strawberry",
@@ -88,7 +93,13 @@ def quest_giver_order(settings):
                   if isinstance(settings.get(key), list)), [])
     ordered = [task[6:].replace("_", " ") for task in order if task.startswith("quest_")]
     return [giver for giver in dict.fromkeys(ordered + list(QUEST_GIVERS))
-            if giver in QUEST_GIVERS and settings.get(giver.replace(" ", "_") + "_quest", False)]
+            if giver in QUEST_GIVERS and settings.get(giver.replace(" ", "_") + "_quest", False)
+            and settings.get("bees", 50) >= QUEST_GIVER_MIN_BEES.get(giver, 0)]
+
+
+def manual_objective_name(action):
+    """'manual_use 10 red portal' -> 'Use 10 Red Portal'"""
+    return action.partition("_")[2].title()
 
 
 def make_quest_objectives(giver, title, actions, statuses):
@@ -112,7 +123,8 @@ def make_quest_objectives(giver, title, actions, statuses):
 
 
 def quest_uses_ant_challenge(action, settings):
-    return action == "token_rage" and settings.get("quest_objective_token_rage_field", "auto") == "auto"
+    return action == "challenge_ant" or (
+        action == "token_rage" and settings.get("quest_objective_token_rage_field", "auto") == "auto")
 
 
 def is_gather_objective(objective, settings=None):
@@ -134,7 +146,7 @@ def objective_matches_text(action, text):
     if kind in ("gather", "gathergoo", "gatherpetal"):
         return {singular(word) for word in target.replace("_", " ").split()}.issubset(words)
     if kind in ("pollen", "pollengoo"):
-        return target in words and ("pollen" in words or "goo" in words)
+        return (target == "any" or target in words) and ("pollen" in words or "goo" in words)
     if kind == "token":
         names = {"blueboost": ("blue", "boost"), "redboost": ("red", "boost"),
                  "blueability": ("blue", "ability"), "redability": ("red", "ability")}
