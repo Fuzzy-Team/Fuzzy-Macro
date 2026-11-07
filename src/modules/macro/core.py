@@ -138,6 +138,7 @@ class macro(
         self.latestMM = "normal"
         self.questItemUses = {}
         self.questItemShort = {}
+        self.questCollectBackoff = {}
         self.lastBlueTextScan = 0
         self.guidingStarLastAnnounced = {}
         # serverGeneration is bumped on each rejoin; a scan that began on the old server must not publish its detections
