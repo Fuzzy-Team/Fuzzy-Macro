@@ -15,6 +15,7 @@ PATTERN_FIELDS = {
     "pine_dupe_v12": {"pine tree"},
     "pepper_sense": {"pepper"},
     "rose_sense": {"rose"},
+    "strabry_sense": {"strawberry"},
     "target_sense": {"pepper", "rose", "strawberry"},
     "general_booster": {
         "sunflower", "dandelion", "mushroom", "blue flower", "clover",

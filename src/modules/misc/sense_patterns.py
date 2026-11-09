@@ -1,4 +1,4 @@
-"""Shared engine for the RoseSense and PepperSense gather patterns.
+"""Shared engine for the RoseSense, PepperSense and StrabrySense gather patterns.
 
 Ported from the Sense patterns (v19) in Zenith Macro's macro_patterns.py. Movement order,
 distances, colours, search rectangles and scan order follow that source. Where Zenith runs a
@@ -15,15 +15,24 @@ movement). Capital letters are the literal keys: "A+" is always the "a" key. "sp
 is the jump key.
 """
 import math
+import time
 
 from modules.controls.sleep import is_paused, sleep
-from modules.screen.imageSearch import findPixel
+from modules.screen.imageSearch import findPixel, locateImageOnScreen
 
 TARGET = 0xFFCD6B         # token target, searched outward from the middle row
 PURPLE_TARGET = 0xCD66FF
 HIT_TARGET = 0x01FF01     # shown when the backpack is full
 FULL_BACKPACK = 0xF70017
 SPRINKLER = 0x01D8FF
+
+SCORCHING_ACTIVE = "./images/buffs/scorching_active"
+# Zenith matches this icon exactly (variation 0). Fuzzy matches by similarity, so this is an
+# approximation. A quarter of the icon is transparent, so its score depends on the scene behind
+# it: on made-up strips it scored 0.57-0.85 with the icon and under 0.25 without it (other
+# buff icons included). 0.5 sits in that gap. It has not been checked against a real capture.
+SCORCHING_THRESHOLD = 0.5
+ICON_BAND_HEIGHT = 100
 
 
 class SenseStopped(Exception):
@@ -35,7 +44,7 @@ def round_half_up(value):
 
 
 class SensePattern:
-    """Everything the Sense patterns share. Subclasses supply targets_missing()."""
+    """Everything the three patterns share. Subclasses supply targets_missing()."""
 
     LOOPED_PARTS = 64   # source: LoopedPart() is called 64 times after its functions
 
@@ -112,6 +121,13 @@ class SensePattern:
         right, bottom = self.w - 1, self.h - 1
         return findPixel(self.macro.robloxWindow, min(x1, right), min(y1, bottom),
                          min(x2, right), min(y2, bottom), color, variation)
+
+    def icon_visible(self, path, threshold):
+        """ImageSearch in the buff row at the top of the window, by similarity."""
+        self.idle()
+        window = self.macro.robloxWindow
+        return locateImageOnScreen(path, window.mx, window.my, self.w, ICON_BAND_HEIGHT,
+                                   threshold, scales=[1.0]) is not None
 
     # --- walking toward a point ---
 
@@ -299,11 +315,15 @@ class SensePattern:
         self.go_to_sprinkler_corner(hit[0], hit[1], 0.2)
         self.keys("space-")
 
+    def after_circle_search(self):
+        """Runs between the first sprinkler search and acting on it (StrabrySense only)."""
+
     def circle_sprinkler_check(self, corner_scale, search_lost):
         """circle_line == 1: look for the sprinkler and stand on its corner. Two misses in a
         row call search_lost(), which must return where it found the sprinkler."""
         self.circle_line = 2
         hit = self.find_sprinkler()
+        self.after_circle_search()
         if hit:
             self.go_to_sprinkler_corner(hit[0], hit[1], corner_scale)
             self.missed_sprinkler = 0
@@ -397,3 +417,107 @@ class PepperSense(SensePattern):
         while not hit:
             hit = self.sweep()
         return hit
+
+
+class StrabrySense(SensePattern):
+    """Starts in "precise mark" mode for one second, which walks straight to marks instead
+    of the diagonal-first approach."""
+
+    PRECISION_SECONDS = 1
+
+    def start(self):
+        super().start()
+        self.precision_until = time.monotonic() + self.PRECISION_SECONDS
+
+    def looped_part(self):
+        precise = time.monotonic() < self.precision_until
+        if not precise:
+            super().looped_part()
+        elif self.circle_line <= 0:
+            purple = self.find_in_halves(PURPLE_TARGET)
+            if purple:
+                self.go_to(purple[0], self.shift_out(purple[1]))
+                return
+            hit = self.find_in_halves(HIT_TARGET)
+            if hit:
+                self.circle_line = -3
+                self.go_to_precise_mark(hit[0], self.shift_in(hit[1]))
+            else:
+                self.targets_missing()
+        else:
+            purple = self.find_in_halves(PURPLE_TARGET)
+            if purple:
+                self.circle_line = -3
+                self.go_to_precise_mark(purple[0], self.shift_out(purple[1]))
+            else:
+                self.targets_missing()
+
+    def go_to_precise_mark(self, x, y):
+        """One axis at a time, x first."""
+        for key, tiles in self._aim(x, y):
+            self.keys(key + "+")
+            self.walk(tiles)
+            self.keys(key + "-")
+
+    def after_circle_search(self):
+        # source: Precision 10x also sets the timer to 8, but that icon is not shipped, so
+        # nothing extends precise mode beyond its first second.
+        if self.icon_visible(SCORCHING_ACTIVE, SCORCHING_THRESHOLD):
+            self.precision_until = 0
+
+    def targets_missing(self):
+        if self.circle_line <= 0:
+            self.shake(20)
+            self.circle_line += 1
+        elif self.circle_line == 1:
+            self.circle_sprinkler_check(0.2, self.search_lost_sprinkler)
+        else:
+            self.circle_step()
+
+    def search_lost_sprinkler(self):
+        self.keys("s+")
+        self.walk(4)
+        self.keys("s- d+")
+        self.walk(10)
+        hit = self.find_sprinkler() or self.sprinkler_ladder((
+            ("", 10, ""), ("", 10, ""), ("d- w+", 11, ""), ("", 11, ""),
+        ))
+        if hit:
+            return hit
+        self.keys("w- space-")
+        while True:
+            self.keys("w+")
+            self.wait_ms(20)
+            self.keys("space+")
+            self.wait_ms(1000)
+            hit = self.find_sprinkler()
+            self.keys("w- s+ d+")
+            self.wait_ms(200)
+            self.keys("space-")
+            self.walk(5)
+            self.keys("s- d-")
+            if hit:
+                return hit
+            hit = self.find_sprinkler()
+            if hit:
+                return hit
+            self.keys("a+")
+            self.walk(4)
+            hit = self.find_sprinkler()
+            if hit:
+                return hit
+            self.keys("a-")
+            self.wait_ms(500)
+            hit = self.find_sprinkler()
+            if hit:
+                return hit
+            self.wait_ms(500)
+            hit = self.find_sprinkler()
+            if hit:
+                return hit
+            self.keys("d+")
+            self.walk(4)
+            hit = self.find_sprinkler()
+            if hit:
+                return hit
+            self.keys("d-")
