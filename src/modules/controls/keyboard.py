@@ -86,11 +86,6 @@ class keyboard:
             last_time = current_time
             #time.sleep(sleep_interval)
         
-        #calculate drift and update accumulated error
-        distance_error = traveled_distance - target_distance
-        
-        #self.accumulated_error = (self.accumulated_error * 0.9 + distance_error * self.error_correction_factor)
-    
     
     def walk(self, k, t, applyHaste=True, method='predictive'):
         if applyHaste and self.enableHasteCompensation:
@@ -186,8 +181,6 @@ class keyboard:
             prevTime = currentTime
             prevSpeed = speed
 
-        elapsed_time = time.perf_counter() - st
-        #print(f"current speed: {speed}, original time: {duration}, actual travel time: {elapsed_time}")
 
     #recreate natro's walk function
     def tileWait(self, n, hasteCap=0):
@@ -204,7 +197,6 @@ class keyboard:
         s, f, v = a()
         d += v * (f - s) 
 
-        st = time.time()
         while d < l and not is_stopped():
             _pausePoint()
             prev_v = v

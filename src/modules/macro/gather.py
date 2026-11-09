@@ -221,7 +221,7 @@ class GatherMixin:
                 if self.placeSprinkler():
                     landedInField = True
                     break
-                self.logger.webhook("", f"Failed to land in field", "red", "screen", ping_category="ping_critical_errors")
+                self.logger.webhook("", "Failed to land in field", "red", "screen", ping_category="ping_critical_errors")
                 self.reset()
         if not landedInField: #failed too many times
             return
@@ -763,7 +763,7 @@ class GatherMixin:
                             )
                             honeyWreathWaitLogged = True
                     else:
-                        self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Time Limit - Return: {returnType.title()}", "light green", "screen", route_category="gathering")
+                        self.logger.webhook("Gathering: Ended", f"Time: {gatherTime} - Time Limit - Return: {returnType.title()}", "light green", "screen", route_category="gathering")
                         keepGathering = False
                 #check backpack
                 elif isHiveHubField or infiniteGather:
@@ -790,7 +790,7 @@ class GatherMixin:
                                 )
                                 honeyWreathWaitLogged = True
                         else:
-                            self.logger.webhook(f"Gathering: Ended", f"Time: {gatherTime} - Backpack - Return: {returnType.title()}", "light green", "screen", route_category="gathering")
+                            self.logger.webhook("Gathering: Ended", f"Time: {gatherTime} - Backpack - Return: {returnType.title()}", "light green", "screen", route_category="gathering")
                             keepGathering = False
         except BaseException as error:
             # whatever raised, stop the gather's threads and reports before leaving

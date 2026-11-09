@@ -11,7 +11,6 @@ import subprocess
 import sys
 import ast
 import json
-import webbrowser
 import time
 import threading
 import plistlib
@@ -48,7 +47,6 @@ _model_download_lock = threading.Lock()
 
 
 def _refresh_tool_logger_settings():
-    global _tool_logger
     if _tool_logger is None:
         return
     try:
@@ -523,10 +521,6 @@ def configureToolRuntime(logger=None, status=None, presence=None, ssa_command=No
     _tool_status = status
     _tool_presence = presence
     _ssa_roller_runner.command = ssa_command
-@eel.expose
-def openLink(link):
-    webbrowser.open(link, autoraise = True)
-    
 @eel.expose
 def openLogFolder():
     subprocess.call(["open", logModule.getLogDir()])
@@ -1125,15 +1119,6 @@ def getMacroVersion():
 def usesLegacyDiscordBot():
     """True on macOS 10.12-10.14, where Python 3.7 can only install discord.py 1.x, so bot commands use the fuzz! prefix"""
     return sys.version_info < (3, 8)
-
-@eel.expose
-def autoClickerClick():
-    """Perform a single fast left click for the tools tab auto clicker."""
-    try:
-        mouseControl.fastClick()
-        return True
-    except Exception:
-        return False
 
 @eel.expose
 def startAutoClickerTool(interval_ms=100, start_delay_seconds=3):

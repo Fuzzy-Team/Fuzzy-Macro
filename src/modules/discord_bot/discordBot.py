@@ -10,6 +10,7 @@ else:
 from modules.screen.screenshot import screenshotRobloxWindow
 import io
 from modules.misc.appManager import closeApp
+from modules.misc.formatting import timestampedEmbedText
 from modules.controls.keyboard import keyboard
 import subprocess
 import sys
@@ -376,13 +377,6 @@ DISCORD_COMMAND_PERMISSION_CATEGORIES = {
     },
 }
 
-DISCORD_COMMAND_TO_PERMISSION_CATEGORY = {
-    command: category
-    for category, data in DISCORD_COMMAND_PERMISSION_CATEGORIES.items()
-    for command in data["commands"]
-}
-
-
 def _canonicalize_planter_name(name: str) -> str:
     if not name:
         return ""
@@ -716,24 +710,10 @@ def _read_performance():
     return system_cpu, ram.total - ram.available, ram.total, ram.percent, macro_cpu / (psutil.cpu_count() or 1), macro_ram
 
 
-def _format_logger_time(time_value, time_format=24):
-    if time_format == 12:
-        try:
-            return datetime.strptime(time_value, "%H:%M:%S").strftime("%I:%M:%S %p")
-        except Exception:
-            return time_value
-    return time_value
-
-
 def _build_logger_embed(data):
-    formatted_time = _format_logger_time(data.get("time", ""), data.get("time_format", 24))
-    title = data.get("title", "") or ""
-    desc = data.get("desc", "") or ""
+    title, desc = timestampedEmbedText(data.get("title", "") or "", data.get("desc", "") or "", data.get("time", ""), data.get("time_format", 24))
     color = int(str(data.get("color", "FFFFFF")).replace("#", ""), 16)
-    if title:
-        embed = discord.Embed(title=f"[{formatted_time}] {title}", description=desc, color=color)
-    else:
-        embed = discord.Embed(title="", description=f"[{formatted_time}] {desc}", color=color)
+    embed = discord.Embed(title=title, description=desc, color=color)
     for field in data.get("fields") or []:
         embed.add_field(name=field["name"], value=field["value"], inline=field.get("inline", False))
     if data.get("imagePath"):
@@ -1514,16 +1494,6 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         except Exception as e:
             return False, f"Failed to update field setting: {str(e)}"
 
-    def _parse_bool_input(value: str, default: bool = False) -> bool:
-        if value is None:
-            return default
-        normalized = str(value).strip().lower()
-        if normalized in {"1", "true", "yes", "y", "on", "enabled"}:
-            return True
-        if normalized in {"0", "false", "no", "n", "off", "disabled"}:
-            return False
-        return default
-
     def _parse_required_bool(value: str, field_label: str) -> Tuple[Optional[bool], Optional[str]]:
         normalized = str(value).strip().lower()
         if normalized in {"1", "true", "yes", "y", "on", "enabled"}:
@@ -1831,17 +1801,6 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             embed = _build_overview_embed(settings)
             await interaction.response.edit_message(embed=embed, view=view)
 
-    class CategoryBackButton(discord.ui.Button):
-        def __init__(self, category_key: str):
-            self.category_key = category_key
-            super().__init__(label="Back to Category", style=discord.ButtonStyle.secondary)
-
-        async def callback(self, interaction: discord.Interaction):
-            settings = get_cached_settings()
-            view = SettingsCategoryView(self.category_key, requester_id=interaction.user.id)
-            embed = _build_status_embed(self.category_key, settings)
-            await interaction.response.edit_message(embed=embed, view=view)
-
     class RefreshButton(discord.ui.Button):
         def __init__(self, category_key: str):
             self.category_key = category_key
@@ -1916,141 +1875,6 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             status_message = message if success else "Failed to update slot field."
             await _update_fields_message(interaction, slot_index=slot_index, section_key=self.view.section_key, status_message=status_message, dropdown_key=self.view.dropdown_key if hasattr(self.view, "dropdown_key") else None)
 
-    class FieldBasicToggleSelect(discord.ui.Select):
-        def __init__(self, task_enabled: bool, shift_lock: bool, drift: bool):
-            options = [
-                discord.SelectOption(label="Enable Task", value="task_enabled", default=task_enabled),
-                discord.SelectOption(label="Shift Lock", value="shift_lock", default=shift_lock),
-                discord.SelectOption(label="Drift Compensation", value="field_drift_compensation", default=drift),
-            ]
-            super().__init__(placeholder="Basic toggles", min_values=0, max_values=3, options=options)
-
-        async def callback(self, interaction: discord.Interaction):
-            slot_index = self.view.slot_index
-            selected = set(self.values)
-            settings = get_cached_settings()
-            fields, fields_enabled = _get_field_slots(settings)
-
-            fields_enabled[slot_index] = "task_enabled" in selected
-            success_enabled, _ = update_setting("fields_enabled", fields_enabled)
-
-            failures = [] if success_enabled else ["task_enabled"]
-            for key in ("shift_lock", "field_drift_compensation"):
-                success, _ = _save_slot_field_setting(slot_index, key, key in selected)
-                if not success:
-                    failures.append(key)
-
-            status_message = "Updated basic settings." if not failures else "Some basic settings failed to update."
-            await _update_fields_message(interaction, slot_index=slot_index, section_key=self.view.section_key, status_message=status_message)
-
-    class FieldShapeSelect(discord.ui.Select):
-        def __init__(self, current_shape: str):
-            patterns = _get_available_patterns(current_shape=current_shape)
-            options = [discord.SelectOption(label=p, value=p, default=(p == current_shape)) for p in patterns]
-            super().__init__(placeholder="Pattern shape", min_values=1, max_values=1, options=options)
-
-        async def callback(self, interaction: discord.Interaction):
-            success, message = _save_slot_field_setting(self.view.slot_index, "shape", self.values[0])
-            await _update_fields_message(interaction, slot_index=self.view.slot_index, section_key=self.view.section_key, status_message=(message if success else "Failed to update shape."))
-
-    class FieldSizeSelect(discord.ui.Select):
-        def __init__(self, current_size: str):
-            options = [
-                discord.SelectOption(label=size.upper(), value=size.lower(), default=(size.lower() == str(current_size).lower()))
-                for size in ["xs", "s", "m", "l", "xl"]
-            ]
-            super().__init__(placeholder="Pattern size", min_values=1, max_values=1, options=options)
-
-        async def callback(self, interaction: discord.Interaction):
-            success, message = _save_slot_field_setting(self.view.slot_index, "size", self.values[0])
-            await _update_fields_message(interaction, slot_index=self.view.slot_index, section_key=self.view.section_key, status_message=(message if success else "Failed to update size."))
-
-    class FieldWidthSelect(discord.ui.Select):
-        def __init__(self, current_width):
-            width_str = str(current_width)
-            options = [
-                discord.SelectOption(label=str(width), value=str(width), default=(str(width) == width_str))
-                for width in range(1, 9)
-            ]
-            super().__init__(placeholder="Pattern width", min_values=1, max_values=1, options=options)
-
-        async def callback(self, interaction: discord.Interaction):
-            success, message = _save_slot_field_setting(self.view.slot_index, "width", int(self.values[0]))
-            await _update_fields_message(interaction, slot_index=self.view.slot_index, section_key=self.view.section_key, status_message=(message if success else "Failed to update width."))
-
-    class FieldPatternToggleSelect(discord.ui.Select):
-        def __init__(self, invert_lr: bool, invert_fb: bool):
-            options = [
-                discord.SelectOption(label="Invert Left/Right", value="invert_lr", default=invert_lr),
-                discord.SelectOption(label="Invert Forward/Back", value="invert_fb", default=invert_fb),
-            ]
-            super().__init__(placeholder="Pattern invert toggles", min_values=0, max_values=2, options=options)
-
-        async def callback(self, interaction: discord.Interaction):
-            selected = set(self.values)
-            failures = []
-            for key in ("invert_lr", "invert_fb"):
-                success, _ = _save_slot_field_setting(self.view.slot_index, key, key in selected)
-                if not success:
-                    failures.append(key)
-            status_message = "Updated invert settings." if not failures else "Some invert settings failed to update."
-            await _update_fields_message(interaction, slot_index=self.view.slot_index, section_key=self.view.section_key, status_message=status_message)
-
-    class FieldTurnDirectionSelect(discord.ui.Select):
-        def __init__(self, current_turn: str):
-            turn_value = str(current_turn).lower()
-            options = [
-                discord.SelectOption(label="None", value="none", default=(turn_value == "none")),
-                discord.SelectOption(label="Left", value="left", default=(turn_value == "left")),
-                discord.SelectOption(label="Right", value="right", default=(turn_value == "right")),
-            ]
-            super().__init__(placeholder="Turn direction", min_values=1, max_values=1, options=options)
-
-        async def callback(self, interaction: discord.Interaction):
-            success, message = _save_slot_field_setting(self.view.slot_index, "turn", self.values[0])
-            await _update_fields_message(interaction, slot_index=self.view.slot_index, section_key=self.view.section_key, status_message=(message if success else "Failed to update turn direction."))
-
-    class FieldTurnTimesSelect(discord.ui.Select):
-        def __init__(self, current_turn_times):
-            current = str(current_turn_times)
-            options = [
-                discord.SelectOption(label=str(count), value=str(count), default=(str(count) == current))
-                for count in [1, 2, 3, 4]
-            ]
-            super().__init__(placeholder="Turn times", min_values=1, max_values=1, options=options)
-
-        async def callback(self, interaction: discord.Interaction):
-            success, message = _save_slot_field_setting(self.view.slot_index, "turn_times", int(self.values[0]))
-            await _update_fields_message(interaction, slot_index=self.view.slot_index, section_key=self.view.section_key, status_message=(message if success else "Failed to update turn count."))
-
-    class FieldMinsSelect(discord.ui.Select):
-        def __init__(self, current_mins):
-            values = [1, 2, 3, 5, 8, 10, 12, 15, 20, 30]
-            current = str(int(float(current_mins))) if str(current_mins).replace('.', '', 1).isdigit() else str(current_mins)
-            options = [
-                discord.SelectOption(label=str(v), value=str(v), default=(str(v) == current))
-                for v in values
-            ]
-            super().__init__(placeholder="Gather mins", min_values=1, max_values=1, options=options)
-
-        async def callback(self, interaction: discord.Interaction):
-            success, message = _save_slot_field_setting(self.view.slot_index, "mins", int(self.values[0]))
-            await _update_fields_message(interaction, slot_index=self.view.slot_index, section_key=self.view.section_key, status_message=(message if success else "Failed to update mins."))
-
-    class FieldBackpackSelect(discord.ui.Select):
-        def __init__(self, current_backpack):
-            values = [70, 80, 85, 90, 95, 98, 100]
-            current = str(int(float(current_backpack))) if str(current_backpack).replace('.', '', 1).isdigit() else str(current_backpack)
-            options = [
-                discord.SelectOption(label=f"{v}%", value=str(v), default=(str(v) == current))
-                for v in values
-            ]
-            super().__init__(placeholder="Backpack percent", min_values=1, max_values=1, options=options)
-
-        async def callback(self, interaction: discord.Interaction):
-            success, message = _save_slot_field_setting(self.view.slot_index, "backpack", int(self.values[0]))
-            await _update_fields_message(interaction, slot_index=self.view.slot_index, section_key=self.view.section_key, status_message=(message if success else "Failed to update backpack percent."))
-
     class FieldReturnSelect(discord.ui.Select):
         def __init__(self, current_return: str):
             normalized = _normalize_return_value(current_return)
@@ -2063,38 +1887,6 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         async def callback(self, interaction: discord.Interaction):
             success, message = _save_slot_field_setting(self.view.slot_index, "return", self.values[0])
             await _update_fields_message(interaction, slot_index=self.view.slot_index, section_key=self.view.section_key, status_message=(message if success else "Failed to update return method."), dropdown_key=self.view.dropdown_key if hasattr(self.view, "dropdown_key") else None)
-
-    class FieldWhirligigFallbackSelect(discord.ui.Select):
-        def __init__(self, enabled: bool):
-            options = [discord.SelectOption(label="Use Whirligig Fallback", value="enabled", default=enabled)]
-            super().__init__(placeholder="Whirligig fallback", min_values=0, max_values=1, options=options)
-
-        async def callback(self, interaction: discord.Interaction):
-            success, message = _save_slot_field_setting(self.view.slot_index, "use_whirlwig_fallback", "enabled" in self.values)
-            await _update_fields_message(interaction, slot_index=self.view.slot_index, section_key=self.view.section_key, status_message=(message if success else "Failed to update whirligig fallback."))
-
-    class FieldGooToggleSelect(discord.ui.Select):
-        def __init__(self, enabled: bool):
-            options = [discord.SelectOption(label="Use Goo", value="goo", default=enabled)]
-            super().__init__(placeholder="Goo toggle", min_values=0, max_values=1, options=options)
-
-        async def callback(self, interaction: discord.Interaction):
-            success, message = _save_slot_field_setting(self.view.slot_index, "goo", "goo" in self.values)
-            await _update_fields_message(interaction, slot_index=self.view.slot_index, section_key=self.view.section_key, status_message=(message if success else "Failed to update goo toggle."))
-
-    class FieldGooIntervalSelect(discord.ui.Select):
-        def __init__(self, current_interval):
-            values = [3, 5, 8, 10, 12, 15, 20, 30, 45, 60]
-            current = str(int(float(current_interval))) if str(current_interval).replace('.', '', 1).isdigit() else str(current_interval)
-            options = [
-                discord.SelectOption(label=f"{v}s", value=str(v), default=(str(v) == current))
-                for v in values
-            ]
-            super().__init__(placeholder="Goo interval", min_values=1, max_values=1, options=options)
-
-        async def callback(self, interaction: discord.Interaction):
-            success, message = _save_slot_field_setting(self.view.slot_index, "goo_interval", int(self.values[0]))
-            await _update_fields_message(interaction, slot_index=self.view.slot_index, section_key=self.view.section_key, status_message=(message if success else "Failed to update goo interval."))
 
     class FieldStartLocationSelect(discord.ui.Select):
         def __init__(self, current_location: str):
@@ -2316,18 +2108,6 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 source_channel_id=self.source_channel_id,
                 source_message_id=self.source_message_id,
             )
-
-    class StartFieldModal(discord.ui.Modal, title="Edit Start Settings"):
-        def __init__(self, slot_index: int, section_key: str, field_data: Dict):
-            super().__init__()
-            self.slot_index = slot_index
-            self.section_key = section_key
-            self.note_input = discord.ui.TextInput(label="No form fields needed", default="Start settings use dropdowns below.", required=False, max_length=64)
-            self.add_item(self.note_input)
-
-        async def on_submit(self, interaction: discord.Interaction):
-            status_message = "Start settings use dropdowns in the panel."
-            await _update_fields_message(interaction, slot_index=self.slot_index, section_key=self.section_key, status_message=status_message)
 
     class PatternDropdownSettingSelect(discord.ui.Select):
         def __init__(self, current_key: str):
@@ -3601,25 +3381,6 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         return choices[:25]
 
-    async def use_when_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice]:
-        """Auto-complete function for hotbar use_when options"""
-        options = [
-            app_commands.Choice(name="Never", value="never"),
-            app_commands.Choice(name="Always", value="always"),
-            app_commands.Choice(name="Field", value="field"),
-            app_commands.Choice(name="Quest", value="quest")
-        ]
-        return options
-
-    async def format_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice]:
-        """Auto-complete function for time format options"""
-        formats = [
-            app_commands.Choice(name="Seconds", value="secs"),
-            app_commands.Choice(name="Minutes", value="mins"),
-            app_commands.Choice(name="Hours", value="hours")
-        ]
-        return formats
-
     async def boolean_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice]:
         """Auto-complete function for boolean values"""
         booleans = [
@@ -3674,9 +3435,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
             settings = get_cached_settings()
 
-            # Get the fields list and fields_enabled array
             field_list = settings.get("fields", [])
-            fields_enabled = settings.get("fields_enabled", [])
 
             # Normalize field names for comparison
             normalized_fields = [f.lower().replace(" ", "_") for f in field_list]

@@ -2,8 +2,6 @@ import os
 import subprocess
 import pyautogui as pag
 from AppKit import NSWorkspace
-from ApplicationServices import AXUIElementCreateApplication, AXUIElementSetAttributeValue, AXUIElementCopyAttributeValue, AXValueCreate, kAXValueCGPointType, kAXValueCGSizeType, AXUIElementCopyAttributeNames
-from Quartz import CGPoint, CGSize
 mw,mh = pag.size()
 
 def runAppleScript(code):
@@ -78,39 +76,7 @@ def getWindowSize(windowName):
     return 0, 0, mw, mh
 
 
-def setAppFullscreenMac(app="Roblox", fullscreen=True):
-    workspace = NSWorkspace.sharedWorkspace()
-    for runningApp in workspace.runningApplications():
-        if runningApp.localizedName() == app:
-            pid = runningApp.processIdentifier()
-            break
-    else:
-        return
-    
-    appRef = AXUIElementCreateApplication(pid)
-    _, windowRef = AXUIElementCopyAttributeValue(appRef, "AXMainWindow", None)
-    AXUIElementSetAttributeValue(windowRef, "AXFullScreen", fullscreen)
-
-def maximiseAppWindowMac(app="Roblox"):
-    workspace = NSWorkspace.sharedWorkspace()
-    for runningApp in workspace.runningApplications():
-        if runningApp.localizedName() == app:
-            pid = runningApp.processIdentifier()
-            break
-    else:
-        return
-    
-    appRef = AXUIElementCreateApplication(pid)
-    _, windowRef = AXUIElementCopyAttributeValue(appRef, "AXMainWindow", None)
-    _, attributes = AXUIElementCopyAttributeNames(windowRef, None)
-    pos = AXValueCreate(kAXValueCGPointType, CGPoint(0, 0))
-    size = AXValueCreate(kAXValueCGSizeType, CGSize(mw, mh))
-    AXUIElementSetAttributeValue(windowRef, "AXPosition", pos)
-    AXUIElementSetAttributeValue(windowRef, "AXSize", size)
-
 # Set the functions to use macOS implementations
 openApp = openAppMac
 isAppOpen = isAppOpenMac
 isAppFocused = isAppFocusedMac
-maximiseAppWindow = maximiseAppWindowMac
-setAppFullscreen = setAppFullscreenMac

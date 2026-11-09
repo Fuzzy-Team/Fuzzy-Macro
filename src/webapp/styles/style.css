@@ -21,24 +21,12 @@
   gap: 0.2rem;
 }
 
-.gap-sm {
-  gap: 0.5rem;
-}
-
 .gap-md {
   gap: 1rem;
 }
 
-.gap-lg {
-  gap: 2rem;
-}
-
 .ml-auto {
   margin-left: auto;
-}
-
-.ml-05 {
-  margin-left: 0.5rem;
 }
 
 .w-100 {
@@ -267,7 +255,6 @@ select:focus {
 .sub-nav-bar .quests-tab-item,
 .sub-nav-bar .config-tab-item,
 .sub-nav-bar .collect-tab-item,
-.sub-nav-bar .planters-tab-item,
 .sub-nav-bar .tools-tab-item {
   padding: 0.45rem 0.75rem;
   border-radius: 8px;
@@ -285,7 +272,6 @@ select:focus {
 .sub-nav-bar .quests-tab-item:hover,
 .sub-nav-bar .config-tab-item:hover,
 .sub-nav-bar .collect-tab-item:hover,
-.sub-nav-bar .planters-tab-item:hover,
 .sub-nav-bar .tools-tab-item:hover {
   background-color: var(--surface-hover);
   color: var(--text-main);
@@ -298,7 +284,6 @@ select:focus {
 .sub-nav-bar .quests-tab-item.active,
 .sub-nav-bar .config-tab-item.active,
 .sub-nav-bar .collect-tab-item.active,
-.sub-nav-bar .planters-tab-item.active,
 .sub-nav-bar .tools-tab-item.active {
   background: rgba(var(--primary-rgb), 0.12);
   color: var(--primary);
@@ -1351,12 +1336,6 @@ select:focus {
   opacity: 0.55;
 }
 
-.drag-handle.locked-handle {
-  cursor: default;
-  opacity: 0.55;
-  letter-spacing: 0;
-}
-
 .priority-lock-badge {
   display: inline-flex;
   align-items: center;
@@ -1369,14 +1348,6 @@ select:focus {
   color: var(--text-main);
   background: rgba(var(--primary-rgb), 0.18);
   border: 1px solid rgba(var(--primary-rgb), 0.25);
-}
-
-.priority-lock-label {
-  margin-left: auto;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--text-dim);
-  white-space: nowrap;
 }
 
 .priority-lock-header {
@@ -1555,20 +1526,6 @@ select:focus {
   margin-right: 0.4rem;
 }
 
-/* Missing classes from original specific to functionality */
-.manual-planters-field,
-.manual-planters-planters {
-  width: 10rem;
-}
-
-.cycle-spacing {
-  display: flex;
-  gap: 5rem;
-  margin-left: 3rem;
-  margin-top: -0.7rem;
-  align-items: center;
-}
-
 .planter-hotbar-grid {
   display: flex;
   flex-wrap: wrap;
@@ -1625,11 +1582,6 @@ select:focus {
   color: var(--text-main);
   border: 1px solid var(--border);
   border-radius: 8px;
-}
-
-.emoji-text {
-  display: flex;
-  align-items: center;
 }
 
 /* Planter timers */
@@ -1945,15 +1897,6 @@ select:focus {
 
 .profile-btn-primary:hover {
   background-color: var(--primary-hover);
-}
-
-.profile-btn-success {
-  background-color: #43b581;
-  color: #fff;
-}
-
-.profile-btn-success:hover {
-  background-color: #3ca374;
 }
 
 .profile-btn-secondary {
