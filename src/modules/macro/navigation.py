@@ -1,15 +1,17 @@
 import os
 import modules.controls.mouse as mouse
 import modules.misc.appManager as appManager
-from modules.controls.sleep import pause_aware_time as time, sleep
+from modules.controls.sleep import INTERRUPT_HIVE_HUB_TRADE, INTERRUPT_NONE, pause_aware_time as time, sleep
 from modules.macro.game_data import (
     fieldFaceNorthKeys,
     HIVE_HUB_PLACE_ID,
     REJOIN_COLOR_PERCENT,
     REJOIN_COLOR_TOLERANCE,
+    TRADE_REQUEST_THRESHOLD,
     hiveHubStartLocationOffsets,
 )
 from modules.screen.color_check import get_sample_colors, percent_pixels_similar_to_color
+from modules.screen.imageSearch import locateImageOnScreen
 
 
 class NavigationMixin:
@@ -107,6 +109,55 @@ class NavigationMixin:
 
     def moveMouseToDefault(self):
         mouse.moveTo(self.robloxWindow.mx+370, self.robloxWindow.my+self.robloxWindow.yOffset+110)
+
+    # Hive Hub trading helper. Behavior is derived from the original's AltSync Hive Hub tab:
+    # a chat message before every route pass, and the trade request popup is accepted when it shows.
+    # The gather loop calls these while it walks the Hive Hub pattern.
+    def postHiveHubTradeMessage(self):
+        message = str(self.setdat.get("hive_hub_trade_message", "")).strip()[:200]
+        if not message:
+            return
+        self.hiveHubTradeBusy = True
+        try:
+            time.sleep(0.5)
+            self.keyboard.press("/")
+            time.sleep(0.8)
+            self.keyboard.write(message, 0.02)
+            time.sleep(0.8)
+            self.keyboard.press("enter")
+            time.sleep(1.2)
+        finally:
+            self.hiveHubTradeBusy = False
+
+    # Runs from the background loop. Only asks the gather loop to stop the route; it never touches input itself.
+    def scanTradeRequest(self):
+        if not (self.setdat.get("hive_hub_trading", False) and self.isGathering and self.location == "hive hub"):
+            return
+        if self.hiveHubTradeBusy or self.skipTask is None or self.skipTask.value != INTERRUPT_NONE:
+            return
+        w = self.robloxWindow
+        template = self.adjustImage("./images/menu", "traderequest")
+        # the original looks for the green "Accept" text in a band down the right edge, 60% of the way down.
+        if locateImageOnScreen(template, w.mx + w.mw - 300, w.my + w.mh * 0.6 - 100, 300, 200, TRADE_REQUEST_THRESHOLD, scales=[1.0]):
+            self.skipTask.value = INTERRUPT_HIVE_HUB_TRADE
+
+    def acceptHiveHubTrade(self):
+        self.skipTask.value = INTERRUPT_NONE  # sleeps raise while an interrupt is pending
+        self.hiveHubTradeBusy = True
+        try:
+            w = self.robloxWindow
+            mouse.mouseUp()
+            shiftLockWasOn = self.ensure_shift_lock_off("trade request")
+            mouse.moveTo(int(w.mx + w.mw - 200), int(w.my + w.mh * 0.6 + 80))
+            time.sleep(0.2)
+            for _ in range(8):
+                mouse.click()
+                time.sleep(0.1)
+            if shiftLockWasOn:
+                self.enableShiftLock()
+            self.logger.webhook("Hive Hub", "Accepted a trade request", "light blue", route_category="activities")
+        finally:
+            self.hiveHubTradeBusy = False
 
     def setCameraPitch(self, target_pitch, current_pitch=0):
         """

@@ -484,6 +484,25 @@
           },
         },
         {
+          id: "hive_hub_trading",
+          title: "Hive Hub Trading Helper",
+          desc: "While gathering in Hive Hub, post the trade message before every pass of the route and accept trade requests when they pop up.",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "hive_hub_trade_message",
+          title: "Hive Hub Trade Message",
+          desc: "The chat message the Hive Hub Trading Helper posts (up to 200 characters).",
+          type: {
+            name: "textbox",
+            inputType: "string",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
           id: "manage-fallback-private-servers-button",
           title: "Fallback Private Servers",
           desc: "Configure up to three backup servers. Fuzzy tries each one after the primary server fails, before trying public servers.",

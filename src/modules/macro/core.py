@@ -133,6 +133,7 @@ class macro(
         self.stickerSproutDetectedAt = 0
         self.stickerSproutLastAnnounced = 0
         self.stickerSproutInterruptRequested = False
+        self.hiveHubTradeBusy = False
         self.sproutBeansUsed = 0
         self.lastSproutBeanLimitLog = 0
 
@@ -338,6 +339,7 @@ class macro(
             self.detectNight()
         self.scanBlueTextAnnouncements()
         self.scanGummyballBuff()
+        self.scanTradeRequest()
 
         #hotbar
         for i in range(1,8):
