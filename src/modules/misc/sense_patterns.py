@@ -17,7 +17,7 @@ is the jump key.
 import math
 import time
 
-from modules.controls.sleep import is_paused, sleep
+from modules.controls.sleep import is_paused
 from modules.screen.imageSearch import findPixel, locateImageOnScreen
 
 TARGET = 0xFFCD6B         # token target, searched outward from the middle row
@@ -132,7 +132,7 @@ class SensePattern:
             remaining = end - time.monotonic()
             if remaining <= 0:
                 return
-            sleep(min(remaining, 0.05))
+            time.sleep(min(remaining, 0.05))   # not sleep(): it would wait out a pause itself
 
     def pixel(self, x1, y1, x2, y2, color, variation):
         """PixelSearch. Zenith searches up to x = w and y = h, one pixel past the client
