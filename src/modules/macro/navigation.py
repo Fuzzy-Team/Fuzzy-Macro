@@ -111,9 +111,8 @@ class NavigationMixin:
     def moveMouseToDefault(self):
         mouse.moveTo(self.robloxWindow.mx+370, self.robloxWindow.my+self.robloxWindow.yOffset+110)
 
-    # Hive Hub trading helper. Behavior is derived from the original's AltSync Hive Hub tab:
-    # a chat message before every route pass, and the trade request popup is accepted when it shows.
-    # The gather loop calls these while it walks the Hive Hub pattern.
+    # Hive Hub trading helper: a chat message before every route pass, and the trade request popup
+    # is accepted when it shows. The gather loop calls these while it walks the Hive Hub pattern.
     def postHiveHubTradeMessage(self):
         message = str(self.setdat.get("hive_hub_trade_message", "")).strip()[:200]
         if not message:
@@ -139,7 +138,8 @@ class NavigationMixin:
             return
         w = self.robloxWindow
         template = self.adjustImage("./images/menu", "traderequest")
-        # the original looks for the green "Accept" text in a band down the right edge, 60% of the way down.
+        # The green "Accept" text sits in a band down the right edge, 60% of the way down.
+        # The template is a 1x crop captured on Windows, so it is unverified on Retina.
         if locateImageOnScreen(template, w.mx + w.mw - 300, w.my + w.mh * 0.6 - 100, 300, 200, TRADE_REQUEST_THRESHOLD, scales=[1.0]):
             # the search is slow, so check again that nothing else started or ended in the meantime
             if self.isGathering and not self.hiveHubTradeBusy and self.skipTask.value == INTERRUPT_NONE:

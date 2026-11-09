@@ -600,7 +600,7 @@ class GatherMixin:
                     if not (tradingInHiveHub and interrupt.action == INTERRUPT_HIVE_HUB_TRADE):
                         stopGather()
                         raise
-                    # accept the trade, then the route starts over (the original reloads here)
+                    # accept the trade, then the route starts over
                     self.keyboard.releaseMovement()
                     self.acceptHiveHubTrade()
                     continue
