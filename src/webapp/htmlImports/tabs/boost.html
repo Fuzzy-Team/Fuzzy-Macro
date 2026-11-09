@@ -419,6 +419,12 @@
       ]);
       buildStandardContainer(tadAltSyncParent, "Timing & Glitter Extending", "Control alt restarts, boost duration, and optional host-side Glitter use.", [
         {
+          id: "tad_alt_buff_bar_boost",
+          title: "Follow Buff Bar Boosts",
+          desc: "Move the alts to a field boost shown on the host's buff bar, including boosts the macro did not use itself. Pick the boost colour to follow. Alts return after the Boost Duration, counted from when the boost is first seen. Spider and Pineapple boosts are not detected.",
+          type: { name: "dropdown", data: ["Off", "Blue", "White", "Red"], triggerFunction: saveProfileTriggerFunction },
+        },
+        {
           id: "tad_alt_restart_delay",
           title: "Restart Delay",
           desc: "Seconds to wait after stopping the alt macro before changing its field.",
