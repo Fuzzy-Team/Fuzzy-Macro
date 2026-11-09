@@ -556,15 +556,15 @@ class GatherMixin:
             finally:
                 self._inventoryInteractionLock.release()
             while keepGathering:
+                # a trade request that came in between passes; checkPauseAndWait would raise it as an interrupt
+                if tradingInHiveHub and self.skipTask.value == INTERRUPT_HIVE_HUB_TRADE:
+                    self.acceptHiveHubTrade()
                 # Check if paused and wait
                 if self.checkPauseAndWait():
                     # Stop was requested while paused
                     stopGather()
                     return
             
-                if tradingInHiveHub and self.skipTask.value == INTERRUPT_HIVE_HUB_TRADE:
-                    self.acceptHiveHubTrade()
-
                 try:
                     self.raiseIfInterrupted()
                 except InterruptRequested:
@@ -597,7 +597,8 @@ class GatherMixin:
                     if not (tradingInHiveHub and interrupt.action == INTERRUPT_HIVE_HUB_TRADE):
                         stopGather()
                         raise
-                    # the top of the loop accepts the trade, then the route starts over (the original reloads here)
+                    # accept the trade, then the route starts over (the original reloads here)
+                    self.acceptHiveHubTrade()
                     continue
                 except Exception:
                     # interrupts usually land inside a pattern's sleep, and e_lol failing ends the
