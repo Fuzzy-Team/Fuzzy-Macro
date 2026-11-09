@@ -925,6 +925,9 @@ def importFieldSettings(field_name, json_settings):
 
         if "shape" in settings:
             requested_pattern = settings["shape"]
+            if isinstance(requested_pattern, str):
+                requested_pattern = MacroProfileStore.PATTERN_RENAMES.get(requested_pattern, requested_pattern)
+            settings["shape"] = requested_pattern
             if requested_pattern not in available_patterns:
                 # Replace with first available pattern (default)
                 default_pattern = available_patterns[0] if available_patterns else "cornerxe_lol"
