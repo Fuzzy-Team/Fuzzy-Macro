@@ -3,10 +3,21 @@
 VENV_NAME="fuzzy-macro-env"
 VENV_PATH="$HOME/$VENV_NAME"
 
-# Stop only an existing Fuzzy Macro launched from this virtual environment.
-# The old implementation killed every Python process on the machine.
+# Stop any Fuzzy Macro that is already running, from any copy of the macro, including
+# Python child processes left behind by a macro that died. On macOS the venv's python
+# re-launches as the framework Python, so the process shows up as ".../Python main.py"
+# rather than under the venv path. A Fuzzy process is a Python main.py or
+# multiprocessing child running in a folder next to a run_macro.command, which leaves
+# other Python apps alone.
 stop_fuzzy_macro() {
-    fuzzy_pids=$(pgrep -f "$VENV_PATH/bin/python.*main\.py" 2>/dev/null || true)
+    fuzzy_pids=""
+    for pid in $(pgrep -f "[Pp]ython[0-9.]* (main\.py|-c from multiprocessing)" 2>/dev/null); do
+        cwd=$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')
+        if [ -n "$cwd" ] && [ -f "$cwd/../run_macro.command" ]; then
+            fuzzy_pids="$fuzzy_pids $pid"
+        fi
+    done
+    fuzzy_pids=$(echo $fuzzy_pids)
     if [ -z "$fuzzy_pids" ]; then
         return
     fi
