@@ -59,15 +59,30 @@ class SensePattern:
     # --- running ---
 
     def run(self):
-        """One cycle: the first call also does the setup. Held keys carry over to the next
-        cycle (the source keeps them held), so finish() releases them when the gather ends."""
+        """One cycle: the first call also does the setup. The source keeps keys held from one
+        repetition to the next. Fuzzy does drift compensation and other work between cycles,
+        so held keys are let go at the end of a cycle and pressed again at the start of the
+        next one. finish() releases everything when the gather ends or the cycle fails."""
         try:
             if not self.started:
                 self.start()
+            self.press_held()
             for _ in range(self.LOOPED_PARTS):
                 self.looped_part()
+            self.release_held()
         except SenseStopped:
             self.finish()
+        except BaseException:
+            self.finish()
+            raise
+
+    def press_held(self):
+        for key in self.held:
+            self.macro.keyboard.keyDown(key, False)
+
+    def release_held(self):
+        for key in self.held:
+            self.macro.keyboard.keyUp(key, False)
 
     def start(self):
         window = self.macro.robloxWindow
@@ -81,8 +96,7 @@ class SensePattern:
         self.started = True
 
     def finish(self):
-        for key in self.held:
-            self.macro.keyboard.keyUp(key, False)
+        self.release_held()
         self.held.clear()
 
     # --- input and searching; every one stops, pauses and resumes held keys first ---
@@ -111,16 +125,27 @@ class SensePattern:
         self.macro.keyboard.tileWait(tiles)
 
     def wait_ms(self, milliseconds):
-        self.idle()
-        sleep(int(milliseconds) / 1000)
+        """Sleep in slices, so a pause that lands mid-wait releases and re-presses held keys."""
+        end = time.monotonic() + int(milliseconds) / 1000
+        while True:
+            self.idle()
+            remaining = end - time.monotonic()
+            if remaining <= 0:
+                return
+            sleep(min(remaining, 0.05))
 
     def pixel(self, x1, y1, x2, y2, color, variation):
         """PixelSearch. Zenith searches up to x = w and y = h, one pixel past the client
-        area, so those are cut to the last pixel of the window."""
+        area. A rectangle with one end inside the window is cut to it; one wholly outside
+        finds nothing (so a token on the last or first row can't vouch for itself)."""
         self.idle()
         right, bottom = self.w - 1, self.h - 1
-        return findPixel(self.macro.robloxWindow, min(x1, right), min(y1, bottom),
-                         min(x2, right), min(y2, bottom), color, variation)
+        if (max(x1, x2) < 0 or min(x1, x2) > right
+                or max(y1, y2) < 0 or min(y1, y2) > bottom):
+            return None
+        clip = lambda value, limit: min(max(value, 0), limit)
+        return findPixel(self.macro.robloxWindow, clip(x1, right), clip(y1, bottom),
+                         clip(x2, right), clip(y2, bottom), color, variation)
 
     def icon_visible(self, path, threshold):
         """ImageSearch in the buff row at the top of the window, by similarity."""
@@ -177,7 +202,9 @@ class SensePattern:
 
     def find_target(self):
         """The 0xFFCD6B target: search up from the middle row, then down. A hit only counts
-        if the pixel above (or below) it, or the one next to that, has the colour too."""
+        if the pixel above (or below) it, or the one next to that, has the colour too.
+        source: a lone token pixel on the top row is found again and again (the row above it
+        is off the screen), so this loops until the pattern is stopped or the screen changes."""
         row = round_half_up(self.h / 2)
         while True:
             hit = self.pixel(0, row, self.w, 0, TARGET, 0)
