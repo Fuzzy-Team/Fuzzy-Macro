@@ -13,6 +13,8 @@ PATTERN_FIELDS = {
     "bambootiquev2": {"bamboo"},
     "hive_hub": {"hive hub"},
     "pine_dupe_v12": {"pine tree"},
+    "pepper_sense": {"pepper"},
+    "rose_sense": {"rose"},
     "target_sense": {"pepper", "rose", "strawberry"},
     "general_booster": {
         "sunflower", "dandelion", "mushroom", "blue flower", "clover",
