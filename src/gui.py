@@ -842,10 +842,15 @@ def resetManualPlanterTimer(index):
 
 @eel.expose
 def resetAutoPlanterTimer(index):
-    """Reset a specific auto planter timer by index (0-2)"""
+    """Reset one auto planter slot by index (0-2), or every slot with 'all'"""
     try:
         data = normalizeAutoPlanterData(settingsManager.loadUserJson("auto_planters.json"))
-        
+
+        if index == "all":
+            data["planters"] = [emptyAutoPlanterSlot() for _ in data["planters"]]
+            settingsManager.saveUserJson("auto_planters.json", data)
+            return True
+
         # Check if index is valid
         if index < 0 or index >= len(data.get("planters", [])):
             return False
