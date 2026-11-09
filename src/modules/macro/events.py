@@ -67,11 +67,20 @@ from modules.screen.imageSearch import captureRegionBGR, findColorObjectRGB, loc
 from modules.screen.screenshot import mssScreenshotNP
 
 
-# The Gummyball stack count sits in the buff row, inside the top 100px of the window.
+# The buff row sits inside the top 100px of the window.
 # The buff must stay unseen for 16 seconds (one background tick per second) before it can ping again.
-GUMMYBALL_BAND_HEIGHT = 100
+BUFF_BAND_HEIGHT = 100
 GUMMYBALL_HOLD_SECONDS = 16
 GUMMYBALL_THRESHOLD = 0.8
+
+# Field boost icons on the buff bar, in the order the original checks them (first match wins).
+# the original's AltSync follows one colour at a time and matches with a +-30 colour tolerance (AHK "*30").
+BUFF_BAR_BOOST_FIELDS = {
+    "blue": ("blue flower", "bamboo", "pine tree"),
+    "white": ("dandelion", "sunflower", "pumpkin"),
+    "red": ("strawberry", "rose", "pepper"),
+}
+BUFF_BAR_BOOST_TOLERANCE = 30
 
 
 class EventDetectionMixin:
@@ -238,7 +247,7 @@ class EventDetectionMixin:
         if not self.setdat.get("ping_gummyball", False) or self.status.value == "rejoining":
             return
         w = self.robloxWindow
-        screen = captureRegionBGR(w.mx, w.my, w.mw, GUMMYBALL_BAND_HEIGHT)
+        screen = captureRegionBGR(w.mx, w.my, w.mw, BUFF_BAND_HEIGHT)
         level = self.detectGummyballLevel(screen)
         now = time.time()
         if level:
@@ -256,6 +265,44 @@ class EventDetectionMixin:
             if locateImageInScreen(template, screen, GUMMYBALL_THRESHOLD, scales=[1.0]):
                 return level
         return None
+
+    def scanBuffBarBoost(self):
+        """Move the TAD alts to a field boost that shows up on the buff bar, like the original's AltSync.
+        The boost is handled once; it can trigger again after its icon has been gone for a while."""
+        color = str(self.setdat.get("tad_alt_buff_bar_boost", "off")).lower()
+        if color not in BUFF_BAR_BOOST_FIELDS or not self.setdat.get("tad_alt_sync_enabled", False) or self.status.value == "rejoining":
+            return
+        w = self.robloxWindow
+        screen = captureRegionBGR(w.mx, w.my, w.mw, BUFF_BAND_HEIGHT)
+        # Like the original, a boost on the default field is ignored because the alts are already there.
+        defaultField = str(self.setdat.get("tad_alt_default_field", "pine tree")).strip().lower()
+        field = next((f for f in BUFF_BAR_BOOST_FIELDS[color] if f != defaultField and self.boostIconVisible(screen, f)), None)
+        now = time.time()
+        if field:
+            self.buffBarBoostLastSeen = now
+            if field != self.buffBarBoostField:
+                self.buffBarBoostField = field
+                self.logger.webhook("", f"{field.title()} boost found on the buff bar", "light blue", "screen")
+                self.tadAltSync.sync_to_boost(field)
+        elif self.buffBarBoostField and now - self.buffBarBoostLastSeen >= GUMMYBALL_HOLD_SECONDS:
+            self.buffBarBoostField = None
+
+    def boostIconVisible(self, screen, field):
+        """True if every pixel of the field's boost icon matches somewhere in the screen within the colour tolerance."""
+        icon = self.adjustImage("./images/buffs", f"boost_{field.replace(' ', '_')}")[:, :, :3].astype(np.int16)
+        iconH, iconW = icon.shape[:2]
+        screen = screen[:, :, :3].astype(np.int16)
+        if screen.shape[0] < iconH or screen.shape[1] < iconW:
+            return False
+        # Start from the pixels matching the icon's first pixel, then drop positions as the other icon pixels disagree.
+        candidates = np.argwhere(np.all(np.abs(screen[:screen.shape[0] - iconH + 1, :screen.shape[1] - iconW + 1] - icon[0, 0]) <= BUFF_BAR_BOOST_TOLERANCE, axis=2))
+        for dy in range(iconH):
+            for dx in range(iconW):
+                if not len(candidates):
+                    return False
+                ys, xs = candidates[:, 0] + dy, candidates[:, 1] + dx
+                candidates = candidates[np.all(np.abs(screen[ys, xs] - icon[dy, dx]) <= BUFF_BAR_BOOST_TOLERANCE, axis=1)]
+        return len(candidates) > 0
 
     def detectGuidingStarAnnouncement(self, text, now):
         if "guiding" not in text or "star" not in text:

@@ -521,6 +521,9 @@ class CollectiblesMixin:
                 returnVal = boostedField
                 self.logger.webhook("", f"Collected: {displayName}, Boosted Field: {boostedField.title()}", "bright green", "screen")
                 if boostedField:
+                    #the buff bar scan would otherwise move the alts again for this same boost
+                    self.buffBarBoostField = boostedField
+                    self.buffBarBoostLastSeen = time.time()
                     extendFieldBooster = self.setdat.get("field_booster_glitter_extend_enabled", False)
                     self.tadAltSync.sync_to_boost(
                         boostedField,

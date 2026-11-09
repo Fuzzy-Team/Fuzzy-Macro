@@ -195,6 +195,7 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'tad_alt_boost_duration': 900,
  'tad_alt_glitter_extend_enabled': False,
  'tad_alt_glitter_slot': 1,
+ 'tad_alt_buff_bar_boost': 'off',
  'sticker_stack': False,
  'sticker_stack_item': 'sticker',
  'sticker_stack_interrupt_gathering': False,
