@@ -46,15 +46,14 @@ def webhook(url, title, desc, time, color, imagePath = None, ping_user_id = None
         for f in fields:
             embed.add_embed_field(name=f["name"], value=f["value"], inline=f.get("inline", False))
 
-    #if to add image
-    if imagePath:
-        with open(imagePath, "rb") as f:
-            webhook.add_file(file=f.read(), filename= "screenshot.png")
-        f.close()
-        embed.set_image(url='attachment://screenshot.png')
-    # add embed object to webhook
-    webhook.add_embed(embed)
     try:
+        #if to add image
+        if imagePath:
+            with open(imagePath, "rb") as f:
+                webhook.add_file(file=f.read(), filename= "screenshot.png")
+            embed.set_image(url='attachment://screenshot.png')
+        # add embed object to webhook
+        webhook.add_embed(embed)
         response = webhook.execute()
         # Store message ID and channel ID for potential pinning
         if response and hasattr(response, 'json'):
