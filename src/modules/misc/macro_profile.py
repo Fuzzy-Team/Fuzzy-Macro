@@ -366,8 +366,9 @@ class MacroProfileStore:
             for key, value in defaults.items():
                 current.setdefault(key, copy.deepcopy(value))
             fields_data[field] = self._normalize_field(field, current)
-            if fields_data[field].get("shape") in self.PATTERN_RENAMES:
-                fields_data[field]["shape"] = self.PATTERN_RENAMES[fields_data[field]["shape"]]
+            shape = fields_data[field].get("shape")
+            if isinstance(shape, str):
+                fields_data[field]["shape"] = self.PATTERN_RENAMES.get(shape, shape)
         return fields_data, fields_data != original
 
     def _normalize_field(self, field, settings):
