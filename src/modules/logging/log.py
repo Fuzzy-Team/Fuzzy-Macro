@@ -3,6 +3,8 @@ import sys
 import time as timeModule
 import threading
 import traceback
+import shutil
+import tempfile
 import queue
 from datetime import datetime
 import modules.misc.settingsManager as settingsManager
@@ -297,11 +299,23 @@ class webhookQueue:
             # Wait for a message from the queue
             data = self.queue.get()
             if data is None:
+                self.queue.task_done()
                 print("Webhook queue stopped.")
                 break
-            # Send the webhook
-            logWebhook.webhook(**data)
-            self.queue.task_done()
+            cleanupImage = None
+            try:
+                cleanupImage = data.pop("_temporaryImage", None)
+                # Send the webhook
+                logWebhook.webhook(**data)
+            except Exception as exc:
+                print(f"Webhook queue error: {exc}")
+            finally:
+                if cleanupImage:
+                    try:
+                        os.remove(cleanupImage)
+                    except OSError:
+                        pass
+                self.queue.task_done()
 
     def add_to_queue(self, data):
         self.queue.put(data)
@@ -362,6 +376,24 @@ class log:
                 timeModule.sleep(0.5)
         return None
 
+    @staticmethod
+    def _snapshot_image(imagePath):
+        if not imagePath or not os.path.exists(imagePath):
+            return imagePath
+        suffix = os.path.splitext(imagePath)[1] or ".png"
+        fd, snapshotPath = tempfile.mkstemp(prefix="fuzzy-webhook-", suffix=suffix)
+        os.close(fd)
+        try:
+            shutil.copyfile(imagePath, snapshotPath)
+            return snapshotPath
+        except Exception as exc:
+            print(f"Warning: Could not snapshot webhook image: {exc}")
+            try:
+                os.remove(snapshotPath)
+            except OSError:
+                pass
+            return imagePath
+
     def _ping_user_id(self, route_category, ping_category=None):
         ping_key = ping_category
         if not ping_key:
@@ -417,17 +449,20 @@ class log:
         if resolved_type == "webhook":
             if not self.enableWebhook and not self.enableDiscordBot:
                 return
+            webhookImagePath = self._snapshot_image(imagePath)
             webhookData = {
                 "url": route,
                 "title": title,
                 "desc": desc,
                 "time": time,
                 "color": colors[color],
-                "imagePath": imagePath,
+                "imagePath": webhookImagePath,
                 "ping_user_id": ping_user_id,
                 "time_format": time_format,
                 "fields": fields,
             }
+            if webhookImagePath != imagePath:
+                webhookData["_temporaryImage"] = webhookImagePath
             self.webhookQueue.add_to_queue(webhookData)
             return
         if resolved_type == "bot":
