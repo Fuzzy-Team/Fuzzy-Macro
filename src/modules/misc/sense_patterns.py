@@ -1,8 +1,8 @@
 """Shared engine for the RoseSense, PepperSense and StrabrySense gather patterns.
 
-Ported from the Sense patterns (v19) in the original's macro_patterns.py. Movement order,
-distances, colours, search rectangles and scan order follow that source. Where the original runs a
-timer, the pattern checks the clock instead. Odd source behaviour is kept and marked "source:".
+Movement order, distances, colours, search rectangles and scan order follow the original
+Sense patterns (v19). Where the original runs a timer, the pattern checks the clock instead.
+Odd behaviour from the original is kept and marked "source:".
 
 A pattern file builds one object per gather and calls run() every cycle:
 
@@ -27,7 +27,7 @@ FULL_BACKPACK = 0xF70017
 SPRINKLER = 0x01D8FF
 
 SCORCHING_ACTIVE = "./images/buffs/scorching_active"
-# the original matches this icon exactly (variation 0). Fuzzy matches by similarity, so this is an
+# The original matched this icon exactly (variation 0). Fuzzy matches by similarity, so this is an
 # approximation. A quarter of the icon is transparent, so its score depends on the scene behind
 # it: on made-up strips it scored 0.57-0.85 with the icon and under 0.25 without it (other
 # buff icons included). 0.5 sits in that gap. It has not been checked against a real capture.
@@ -135,7 +135,7 @@ class SensePattern:
             time.sleep(min(remaining, 0.05))   # not sleep(): it would wait out a pause itself
 
     def pixel(self, x1, y1, x2, y2, color, variation):
-        """PixelSearch. the original searches up to x = w and y = h, one pixel past the client
+        """PixelSearch. The original searches up to x = w and y = h, one pixel past the client
         area. A rectangle with one end inside the window is cut to it; one wholly outside
         finds nothing (so a token on the last or first row can't vouch for itself)."""
         self.idle()

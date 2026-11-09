@@ -1,7 +1,6 @@
-# target_sense: Precision, Scorching Star and X-Flame boosting, ported from the original's
-# "target sense" gather pattern (decision table, timers, colours and the X-Flame spin follow
-# its source). The pattern runs once per gather cycle with its state in globals; where the original
-# runs a buff-watcher loop and a target-finder loop, each cycle does both checks instead.
+# target_sense: Precision, Scorching Star and X-Flame boosting. The pattern runs once per
+# gather cycle with its state in globals; where the original ran a buff-watcher loop and a
+# target-finder loop, each cycle does both checks instead.
 # Timer lengths come from Windows timing and are unverified on macOS.
 import math
 import time
@@ -14,24 +13,24 @@ from modules.misc.sense_patterns import (
 )
 from modules.screen.imageSearch import captureRegionBGR, locateImageOnScreen
 
-# the original matches these icons exactly; Fuzzy matches by similarity, which approximates that.
+# The original matched these icons exactly; Fuzzy matches by similarity, which approximates that.
 # They are 3 px and 6 px crops captured on Windows, so a match on macOS is not guaranteed.
 ICON_THRESHOLD = 0.8
 PRECISION_ICONS = ("./images/buffs/precision_8x", "./images/buffs/precision_9x",
                    "./images/buffs/precision_10x")
 X_FLAME_ICON = "./images/buffs/x_flame"
 
-# Timer names are the original's. A timer exists while now < its end time.
+# Timer names follow the original. A timer exists while now < its end time.
 PRECISION_SECONDS = {"rose": 54.842, "strawberry": 52.842, "mushroom": 46.842}
 PRECISION_DEFAULT_SECONDS = 56.842
 SCORCHING_STAR_SECONDS = 45
 SCORCHING_STAR_COOLDOWN = 60
 X_FLAME_COOLDOWN = 20
-NEW_X_FLAME_SECONDS = 3     # the original: 5.2 with Flame Fuel; that icon is not in the reference, so never
+NEW_X_FLAME_SECONDS = 3     # The original used 5.2 with Flame Fuel; that icon is not in the reference, so never
 BAG_FULL_SECONDS = 10
-TARGETS_GRACE_SECONDS = 8 / 60   # the original: 8 frames, and a timer of 8 / max framerate (default 60)
+TARGETS_GRACE_SECONDS = 8 / 60   # The original used 8 frames, and a timer of 8 / max framerate (default 60)
 
-# Fuzzy walks this far (in tiles) per cycle, then looks again. the original walks the whole way
+# Fuzzy walks this far (in tiles) per cycle, then looks again. The original walks the whole way
 # on a second thread and is told to stop when a new target appears.
 STEP_TILES = 2
 AVOID_RADIUS = 2.2
@@ -67,7 +66,7 @@ def stop_timer(name):
 
 
 def target_priority():
-    """Which targets to chase, from which timers are running (the original's decision table, in
+    """Which targets to chase, from which timers are running (decision table, in
     order). Falling through to the last rule starts the no-hits and hits timers.
     Returns 'hit', 'prec', 'x_flame', 'marks', 'only_prec' or 'hits!o'."""
     if timer_running("full_bag"):
@@ -96,7 +95,7 @@ def nearest(points, centre):
 
 
 def choose_targets(priority, orange, violet, green, purple, hit_waiting, size):
-    """the original's target table. Each target is an (x, y) or None. Returns the targets to chase
+    """The target table. Each target is an (x, y) or None. Returns the targets to chase
     and the ones to steer around. Orange and violet are the Precision and mark tokens;
     green and purple are the hit tokens."""
     width, height = size
@@ -146,7 +145,7 @@ def run_of(mask, length):
 
 
 def pixel_search(shot, colour, safety=0, blob_length=0, blob_size=0, blob_safety=0):
-    """the original's pixel search over a whole window capture, in its "center" mode: the (x, y) of
+    """Pixel search over a whole window capture, in "center" mode: the (x, y) of
     the matching pixel nearest the middle of the window, or None.
 
     safety: a match needs |safety| more matching pixels after it (right if positive, below if
@@ -249,7 +248,7 @@ def read_fog(shot, yaw, new_shot):
 
 
 def detour(target, obstacle, radius):
-    """the original's tangent waypoint: where to aim first so the walk to target (tiles from the
+    """Tangent waypoint: where to aim first so the walk to target (tiles from the
     player) skirts a circle of radius around obstacle, or None if the way is clear."""
     tx, ty = target
     cx, cy = obstacle
@@ -280,7 +279,7 @@ def detour(target, obstacle, radius):
 
 
 class TargetSense(SensePattern):
-    """The Sense engine's input and pause helpers, running the original's buff watcher and target
+    """The Sense engine's input and pause helpers, running the buff watcher and target
     finder once per cycle."""
 
     def run(self):
@@ -322,7 +321,7 @@ class TargetSense(SensePattern):
     def scan(self):
         """The bag, then the Precision, Scorching Star and X-Flame icons start, restart and
         stop the timers."""
-        # full_bag runs for 10 s once the bag is full or nothing is being collected. the original
+        # full_bag runs for 10 s once the bag is full or nothing is being collected. The original
         # ends the gather when it runs out; Fuzzy's gather ends on its own backpack limit.
         full = self.macro.getBackpack() >= fieldSetting["backpack"]
         collecting = not full and self.pixel(round(self.w * 0.5 + 256), 39,
@@ -335,7 +334,7 @@ class TargetSense(SensePattern):
             stop_timer("full_bag")
             boost["bag_timer_started"] = False
 
-        # the original reads Scorching Star's stack icon in the bar above the hotbar and starts
+        # The original reads Scorching Star's stack icon in the bar above the hotbar and starts
         # these timers when it disappears. Fuzzy already has the buff icon in the top row
         # (the Sense patterns use it), which appears at that moment, so the timers start
         # when it shows up, and the star is ready again once it and its 45 s timer are gone.
@@ -349,7 +348,7 @@ class TargetSense(SensePattern):
         elif not scorching and not timer_running("scorching_star"):
             boost["scorching_ready"] = True
 
-        # X-Flame's icon (same bar as the original's: 520 x 26 px, 128 px above the bottom) is
+        # X-Flame's icon (same bar as the original: 520 x 26 px, 128 px above the bottom) is
         # shown while it is ready; when it goes, X-Flame is on cooldown.
         if self.icon_in(X_FLAME_ICON, round(self.w * 0.5 - 260), self.h - 128, 520, 26):
             stop_timer("x_flame_cd")
@@ -359,7 +358,7 @@ class TargetSense(SensePattern):
             start_timer("x_flame_cd", X_FLAME_COOLDOWN)
             start_timer("new_x_flame", NEW_X_FLAME_SECONDS)
 
-        # the original restarts the Precision timer on every look that finds the icon.
+        # The original restarts the Precision timer on every look that finds the icon.
         if any(self.icon_visible(path, ICON_THRESHOLD) for path in PRECISION_ICONS):
             seconds = PRECISION_SECONDS.get(str(field).replace("_", " ").lower(), PRECISION_DEFAULT_SECONDS)
             start_timer("precision", seconds - self.macro.setdat["target_sense_refresh_precision"])
@@ -406,14 +405,14 @@ class TargetSense(SensePattern):
         self.keys(" ".join(script))
 
     def tiles(self, x, y):
-        """the original's screen pixels to tiles from the player, for the camera pitch it gathers
+        """Screen pixels to tiles from the player, for the camera pitch it gathers
         at: the camera looks down at an angle, so a pixel is longer near the top."""
         scale = y / self.h or 0.001
         factor = (24.4 - 5.8 * scale) / self.h
         return (x - self.w * 0.5) * factor, (y - self.h * 0.5) * factor
 
     def go_to(self, target, avoid):
-        """the original's short walk: the diagonal and the straight part, in the order it picks,
+        """Short walk: the diagonal and the straight part, in the order the original picks,
         steering around the points to avoid. Stops after STEP_TILES so the next cycle can
         look again."""
         goal = self.tiles(*target)
@@ -459,9 +458,9 @@ class TargetSense(SensePattern):
         self.macro.keyboard.walk(key, seconds)
 
     def x_flame(self):
-        """the original's X-Flame move: the camera turns left eight times (one full circle) in
-        pairs, with two steps back between them. the original has this move but the source that
-        calls it is missing from the reference; it runs once per new X-Flame window."""
+        """X-Flame move: the camera turns left eight times (one full circle) in
+        pairs, with two steps back between them. The original has this move but the source that
+        calls it is missing; it runs once per new X-Flame window."""
         def turns(count):
             for i in range(count):
                 if i:

@@ -68,7 +68,7 @@ from modules.screen.screenshot import mssScreenshotNP
 
 
 # The Gummyball stack count sits in the buff row, inside the top 100px of the window.
-# 16 is the original's cooldown: the buff must stay unseen this long (one background tick per second) before it can ping again.
+# The buff must stay unseen for 16 seconds (one background tick per second) before it can ping again.
 GUMMYBALL_BAND_HEIGHT = 100
 GUMMYBALL_HOLD_SECONDS = 16
 GUMMYBALL_THRESHOLD = 0.8
@@ -250,7 +250,7 @@ class EventDetectionMixin:
             self.gummyballLevel = None
 
     def detectGummyballLevel(self, screen):
-        """Returns "9x", "8x" or None. 9x is checked first, like the original."""
+        """Returns "9x", "8x" or None. 9x is checked first."""
         for level in ("9x", "8x"):
             template = self.adjustImage("./images/buffs", f"gummy{level}")
             if locateImageInScreen(template, screen, GUMMYBALL_THRESHOLD, scales=[1.0]):
