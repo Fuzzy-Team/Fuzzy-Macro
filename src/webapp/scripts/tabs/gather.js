@@ -468,7 +468,7 @@ function updateGatherPatternUI() {
   }
   const pineDupeSection = document.getElementById("pine-dupe-section");
   if (pineDupeSection) {
-    pineDupeSection.style.display = pattern === "pine_dupe_v12" ? "block" : "none";
+    pineDupeSection.style.display = pattern === "pine_dupe" ? "block" : "none";
   }
   if (description) {
     description.innerText = isHiveHubGather

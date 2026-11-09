@@ -8,11 +8,11 @@ FALLBACK_PATTERN = "e_lol"
 # Keys are lowercase filenames without extensions. Unlisted patterns work everywhere.
 PATTERN_FIELDS = {
     "pineskirt": {"pine tree"},
-    "bamb_dupe_v11": {"bamboo"},
+    "bamb_dupe": {"bamboo"},
     "bambe": {"bamboo"},
     "bambootiquev2": {"bamboo"},
     "hive_hub": {"hive hub"},
-    "pine_dupe_v12": {"pine tree"},
+    "pine_dupe": {"pine tree"},
     "pepper_sense": {"pepper"},
     "rose_sense": {"rose"},
     "strabry_sense": {"strawberry"},
