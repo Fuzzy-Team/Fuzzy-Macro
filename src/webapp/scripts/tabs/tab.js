@@ -32,6 +32,33 @@ function setActiveSubtab(storageKey, tabId) {
 function getActiveSubtab(storageKey, fallbackTabId) {
     return localStorage.getItem(storageKey) || fallbackTabId
 }
+
+//subtab bar: items are ".{prefix}-tab-item" and each shows the panel "#{item id}-tab"
+function switchSubtab(prefix, target) {
+    setActiveSubtab(`active${prefix[0].toUpperCase()}${prefix.slice(1)}Subtab`, target.id)
+    const selector = document.getElementById(`${prefix}-select`)
+    if (selector) selector.remove()
+    Array.from(document.getElementsByClassName(`${prefix}-tab-item`)).forEach(x => {
+        x.classList.remove("active")
+        const panel = document.getElementById(`${x.id}-tab`)
+        if (panel) panel.style.display = "none"
+    })
+    target.classList.add("active")
+    target.innerHTML = `<div class = "select-indicator" id = "${prefix}-select"></div>` + target.innerHTML
+    const tab = document.getElementById(`${target.id}-tab`)
+    if (tab) {
+        tab.style.display = "block"
+        tab.scrollTo(0, 0)
+    }
+}
+
+//briefly mark a reset button active (ignoring clicks meanwhile) and run fn
+function flashButton(el, fn) {
+    if (el.classList.contains("active")) return
+    fn()
+    el.classList.add("active")
+    setTimeout(() => el.classList.remove("active"), 700)
+}
 //load and add event handlers
 $("#tabs-placeholder")
     .load("../htmlImports/persistent/tabs.html", function () {

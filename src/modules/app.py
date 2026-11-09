@@ -15,16 +15,9 @@ from modules.discord_bot.richPresence import RichPresenceManager
 from modules.misc import messageBox
 from modules.misc.ColorProfile import DisplayColorProfile
 from modules.misc.appManager import getWindowSize
+from modules.misc.formatting import millify
 from modules.misc.settings_defaults import BLENDER_ITEM_SLOTS
 from modules.submacros.tadAltSync import TadAltSync
-
-
-def millify(n):
-    """Format large numbers with suffixes"""
-    for limit, suffix in ((1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K")):
-        if n >= limit:
-            return f"{n/limit:.1f}{suffix}"
-    return str(int(n))
 
 
 def runApp(macroTarget):

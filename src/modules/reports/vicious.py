@@ -2,6 +2,7 @@
 import time
 from PIL import Image, ImageDraw, ImageFont
 from pathlib import Path
+from modules.misc.formatting import formatHMS
 
 FONT_PATH = Path(__file__).resolve().parents[2] / "hourly_report/Inter/static/Inter_18pt-Medium.ttf"
 
@@ -35,7 +36,7 @@ def send_report(logger, report, session=False):
     font = ImageFont.truetype(str(FONT_PATH), 18)
     start = hour.get("start_time", 0)
     seconds = max(0, int(time.time() - start)) if start else 0
-    elapsed = f"{seconds // 3600:02d}:{seconds % 3600 // 60:02d}:{seconds % 60:02d}"
+    elapsed = formatHMS(seconds)
     draw.text((24, 20), title, fill="white", font=font)
     draw.text((455, 20), f"Time elapsed: {elapsed}", fill="white", font=font)
     draw.text((455, 60), "This hour", fill="white", font=font)

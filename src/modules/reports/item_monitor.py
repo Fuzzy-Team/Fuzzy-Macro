@@ -14,6 +14,7 @@ from datetime import datetime
 import numpy as np
 from PIL import Image, ImageDraw
 
+from modules.misc.formatting import formatHMS, millify
 from modules.screen.screenshot import mssScreenshotPillowRGBA
 
 # Capture size (client pixels at 1x). Retina uses * multi.
@@ -260,7 +261,7 @@ def generate_item_report(snapshot, setdat=None, report_type="hourly", output_pat
 
     fields = []
     for item in ItemMonitor.sorted_items(collected)[:15]:
-        qty = drawer.millify(item["qty"]).replace(" ", "")
+        qty = millify(item["qty"], "compact")
         fields.append(f"+{qty} {item['name']}")
     embed_fields = [{"name": "Items Gained", "value": "\n".join(fields), "inline": False}] if fields else None
     return output_path, embed_fields
@@ -290,9 +291,6 @@ class ItemReportDrawer:
 
     def getFont(self, weight, fontSize):
         return self._base.getFont(weight, fontSize)
-
-    def millify(self, n):
-        return self._base.millify(n)
 
     def _fitText(self, text, maxWidth, weight="semibold", size=40, minSize=18):
         size = int(size)
@@ -345,7 +343,7 @@ class ItemReportDrawer:
         # Info panel
         ix, iy, iw, ih = info_region
         uptime = max(0, time.time() - float((snapshot or {}).get("start_time") or time.time()))
-        uptime_str = f"{int(uptime // 3600):02d}:{int((uptime % 3600) // 60):02d}:{int(uptime % 60):02d}"
+        uptime_str = formatHMS(uptime)
         qps = 0.0
         if uptime > 0:
             qps = float((snapshot or {}).get("query_total") or 0) / uptime
@@ -410,7 +408,7 @@ class ItemReportDrawer:
                 item["name"], font=name_font, fill=self.subtleColor,
             )
 
-            qty_text = f"+{self.millify(item['qty']).replace(' ', '')}"
+            qty_text = f"+{millify(item['qty'], 'compact')}"
             qty_font = self.getFont("bold", 36)
             qty_bbox = self.draw.textbbox((0, 0), qty_text, font=qty_font)
             self.draw.text(
@@ -512,7 +510,7 @@ class ItemReportDrawer:
                 item["name"], font=name_font, fill=self.bodyColor,
             )
 
-            qty_text = f"+{self.millify(item['qty']).replace(' ', '')}"
+            qty_text = f"+{millify(item['qty'], 'compact')}"
             qty_font = self.getFont("bold", 36)
             qty_bbox = self.draw.textbbox((0, 0), qty_text, font=qty_font)
             self.draw.text(
