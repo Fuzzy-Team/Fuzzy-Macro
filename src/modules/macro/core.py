@@ -13,6 +13,7 @@ from modules.controls.sleep import (
     get_interrupt_action,
     INTERRUPT_NONE,
     InterruptRequested,
+    is_paused,
     pause_aware_time as time,
     set_interrupt_action,
     set_resume_callback,
@@ -274,7 +275,7 @@ class macro(
         self.raiseIfInterrupted()
         # Wait while paused (state 6)
         wasPaused = False
-        while self.run.value == 6:
+        while is_paused():
             wasPaused = True
             self._inactiveHoneyResetResumeBlockUntil = time.monotonic() + 2
             # Keep inputs released while paused

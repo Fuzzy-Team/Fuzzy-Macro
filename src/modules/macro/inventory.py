@@ -10,7 +10,7 @@ from difflib import SequenceMatcher
 import modules.controls.mouse as mouse
 import modules.misc.appManager as appManager
 import modules.screen.ocr as ocr
-from modules.controls.sleep import pause_aware_time as time, sleep
+from modules.controls.sleep import is_paused, pause_aware_time as time, sleep
 from modules.screen.imageSearch import locateImageOnScreen
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP
 
@@ -63,7 +63,7 @@ class InventoryMixin:
             self._gatherInputLock.acquire()
             active = (self.isGathering
                       and (self.run is None or self.run.value != 0))
-            if not active or self.run is None or self.run.value != 6:
+            if not active or self.run is None or not is_paused():
                 break
             self._gatherInputLock.release()
             raw_time.sleep(0.1)

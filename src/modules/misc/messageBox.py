@@ -1,10 +1,12 @@
 import subprocess
+from modules.controls.sleep import pause_hang_watchdog
 
 def _escapeAppleScript(value):
     return str(value).replace("\\", "\\\\").replace('"', '\\"')
 
 def msgBox(title, text):
     script = f'''tell application "System Events" to display dialog "{_escapeAppleScript(text)}" with title "{_escapeAppleScript(title)}"'''
+    pause_hang_watchdog()
     subprocess.run(["osascript", "-e", script])
 
 def msgBoxOkCancel(title, text):
@@ -22,6 +24,7 @@ def msgBoxOkCancel(title, text):
     end tell
     '''
     
+    pause_hang_watchdog()
     try:
         result = subprocess.run(['osascript', '-e', script], 
                               capture_output=True, text=True, check=True)

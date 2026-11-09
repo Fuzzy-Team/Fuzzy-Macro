@@ -13,6 +13,9 @@ from modules.controls.sleep import (
     INTERRUPT_COLLECT_PLANTER,
     INTERRUPT_STICKER_SPROUT,
     INTERRUPT_FIND_ITEM,
+    HANG_FILE,
+    is_paused,
+    start_hang_watchdog,
 )
 
 
@@ -70,6 +73,7 @@ def canClaimTimedBearQuest(name):
 # (set_enabled moved into RichPresenceManager class)
 #controller for the macro
 def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMessageQueue=None, planterCommandQueue=None, skipServer=None):
+    start_hang_watchdog(settingsManager.getUserDataPath(HANG_FILE))
     # imported here so the GUI process, which only passes this function to the macro
     # process, doesn't load the macro package (OCR, cv2, Vision, pyautogui)
     import modules.macro as macroModule
@@ -676,7 +680,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
 
     while True:
         # Check for pause - wait while paused
-        while run.value == 6:  # 6 = paused
+        while is_paused():
             time.sleep(0.1)  # Wait while paused
         # Check if stop was requested while paused
         if run.value == 0:

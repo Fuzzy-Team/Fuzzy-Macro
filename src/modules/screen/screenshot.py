@@ -12,6 +12,7 @@ import tempfile
 import subprocess
 from modules.screen.screenData import getScreenData
 from modules.misc.appManager import getWindowSize
+from modules.controls.sleep import heartbeat
 
 mw, mh = pag.size()
 multi = 2 if getScreenData()["display_type"] == "retina" else 1
@@ -36,6 +37,7 @@ def pillowGrab(x,y,w,h):
 
 #returns an NP array, useful for cv2
 def mssScreenshotNP(x,y,w,h, save = False):
+    heartbeat()
     if usePillow:
         screen = pillowGrab(int(x*multi),int(y*multi),int(w*multi),int(h*multi))
         screen = np.array(screen)
@@ -53,6 +55,7 @@ def mssScreenshotNP(x,y,w,h, save = False):
 
 
 def mssScreenshot(x=0,y=0,w=mw,h=mh, save = False, filename=None):
+    heartbeat()
     if usePillow:
         return pillowGrab(int(x*multi),int(y*multi),int(w*multi),int(h*multi))
     else:
