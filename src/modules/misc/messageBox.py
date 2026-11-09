@@ -1,8 +1,11 @@
-import os
 import subprocess
 
+def _escapeAppleScript(value):
+    return str(value).replace("\\", "\\\\").replace('"', '\\"')
+
 def msgBox(title, text):
-    os.system(f'''osascript -e 'Tell application "System Events" to display dialog "{text}" with title "{title}"' ''')
+    script = f'''tell application "System Events" to display dialog "{_escapeAppleScript(text)}" with title "{_escapeAppleScript(title)}"'''
+    subprocess.run(["osascript", "-e", script])
 
 def msgBoxOkCancel(title, text):
     #message box with OK/Cancel buttons and callback functions
@@ -11,7 +14,7 @@ def msgBoxOkCancel(title, text):
     script = f'''
     tell application "System Events"
         try
-            display dialog "{text}" with title "{title}" buttons {{"Cancel", "OK"}} default button "OK"
+            display dialog "{_escapeAppleScript(text)}" with title "{_escapeAppleScript(title)}" buttons {{"Cancel", "OK"}} default button "OK"
             return "OK"
         on error
             return "Cancel"
