@@ -601,6 +601,7 @@ class GatherMixin:
                         stopGather()
                         raise
                     # accept the trade, then the route starts over (the original reloads here)
+                    self.keyboard.releaseMovement()
                     self.acceptHiveHubTrade()
                     continue
                 except Exception:

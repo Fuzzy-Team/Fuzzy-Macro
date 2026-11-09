@@ -1,7 +1,7 @@
 import os
 import modules.controls.mouse as mouse
 import modules.misc.appManager as appManager
-from modules.controls.sleep import INTERRUPT_HIVE_HUB_TRADE, INTERRUPT_NONE, pause_aware_time as time, sleep
+from modules.controls.sleep import INTERRUPT_HIVE_HUB_TRADE, INTERRUPT_NONE, is_paused, pause_aware_time as time, sleep
 from modules.macro.game_data import (
     fieldFaceNorthKeys,
     HIVE_HUB_PLACE_ID,
@@ -133,7 +133,8 @@ class NavigationMixin:
     def scanTradeRequest(self):
         if not (self.setdat.get("hive_hub_trading", False) and self.isGathering and self.location == "hive hub"):
             return
-        if self.hiveHubTradeBusy or self.skipTask is None or self.skipTask.value != INTERRUPT_NONE:
+        # a pending interrupt would escape the gather while it waits out a pause
+        if self.hiveHubTradeBusy or is_paused() or self.skipTask is None or self.skipTask.value != INTERRUPT_NONE:
             return
         w = self.robloxWindow
         template = self.adjustImage("./images/menu", "traderequest")
