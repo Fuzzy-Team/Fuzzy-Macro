@@ -1,6 +1,9 @@
 from modules.screen.screenshot import mssScreenshot, mw, mh
+import faulthandler
+import modules.misc.settingsManager as settingsManager
 import numpy as np
 import platform
+import threading
 
 ocrLib = None
 mac_version = tuple(int(part) for part in platform.mac_ver()[0].split(".")[:2] if part.isdigit())
@@ -84,7 +87,26 @@ def ocrRead(img):
         return [[[""],["",0]]]
     return out
 
+OCR_HANG_SECS = 90
+OCR_HANG_FILE = "ocr_hang.txt"
+ocrLock = threading.Lock()
+hangFile = None
+
+def guardedOcrMac(img):
+    """Vision sometimes never returns, which freezes every thread that reads text. Run one call at a
+    time under a timer: if a call takes longer than OCR_HANG_SECS, faulthandler writes every thread's
+    stack to OCR_HANG_FILE and exits with code 1, so the main app reports a crash and restarts the macro."""
+    global hangFile
+    with ocrLock:
+        if hangFile is None:
+            hangFile = open(settingsManager.getUserDataPath(OCR_HANG_FILE), "a")
+        faulthandler.dump_traceback_later(OCR_HANG_SECS, exit=True, file=hangFile)
+        try:
+            return ocrMac_(img)
+        finally:
+            faulthandler.cancel_dump_traceback_later()
+
 if ocrLib == "ocrmac":
-    ocrFunc = ocrMac_
+    ocrFunc = guardedOcrMac
 elif ocrLib == "easyocr":
     ocrFunc = ocrEasy
