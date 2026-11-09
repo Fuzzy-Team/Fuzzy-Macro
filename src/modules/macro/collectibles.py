@@ -490,6 +490,9 @@ class CollectiblesMixin:
             cooldownFormat = timedelta(seconds=cooldownSeconds)
             self.logger.webhook("", f"{displayName} is on cooldown ({cooldownFormat} remaining)", "dark brown", "screen")
         else: #not on cooldown
+            if objective in fieldBoosterData:
+                #the buff bar scan would otherwise move the alts for this booster before the field is read below
+                self.buffBarBoostPausedUntil = time.time() + 30
             for _ in range(1 if objective == "sticker_stack" else 2):
                 self.keyboard.press("e")
             #run the claim path (if it exists)

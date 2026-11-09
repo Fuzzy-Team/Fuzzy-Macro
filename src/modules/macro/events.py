@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import re
+import threading
 from pathlib import Path
 from functools import lru_cache
 
@@ -272,6 +273,8 @@ class EventDetectionMixin:
         color = str(self.setdat.get("tad_alt_buff_bar_boost", "off")).lower()
         if color not in BUFF_BAR_BOOST_FIELDS or not self.setdat.get("tad_alt_sync_enabled", False) or self.status.value == "rejoining":
             return
+        if time.time() < self.buffBarBoostPausedUntil:
+            return #the macro is claiming a booster and will move the alts itself
         w = self.robloxWindow
         screen = captureRegionBGR(w.mx, w.my, w.mw, BUFF_BAND_HEIGHT)
         # Like the original, a boost on the default field is ignored because the alts are already there.
@@ -283,7 +286,9 @@ class EventDetectionMixin:
             if field != self.buffBarBoostField:
                 self.buffBarBoostField = field
                 self.logger.webhook("", f"{field.title()} boost found on the buff bar", "light blue", "screen")
-                self.tadAltSync.sync_to_boost(field)
+                #on a thread because moving the alts waits over 10s, which would stall the rest of the background tick.
+                #The time left on the boost is unknown, so no Glitter extending.
+                threading.Thread(target=self.tadAltSync.sync_to_boost, args=(field,), kwargs={"extend_with_glitter": False}, daemon=True).start()
         elif self.buffBarBoostField and now - self.buffBarBoostLastSeen >= GUMMYBALL_HOLD_SECONDS:
             self.buffBarBoostField = None
 
