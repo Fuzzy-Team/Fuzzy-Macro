@@ -19,6 +19,15 @@ from modules.misc.settings_defaults import BLENDER_ITEM_SLOTS
 from modules.submacros.tadAltSync import TadAltSync
 
 
+CRASH_RESTART_DELAYS = (2, 5, 15, 30, 60)
+CRASH_STARTUP_WINDOW_SECONDS = 60
+
+
+def getCrashRestartDelay(consecutiveCrashes):
+    index = min(max(consecutiveCrashes, 1), len(CRASH_RESTART_DELAYS)) - 1
+    return CRASH_RESTART_DELAYS[index]
+
+
 def millify(n):
     """Format large numbers with suffixes"""
     for limit, suffix in ((1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K")):
@@ -46,6 +55,8 @@ def runApp(macroTarget):
         print("start method set to spawn")
         multiprocessing.set_start_method("spawn")
     macroProc = None
+    macroProcStartedAt = 0.0
+    crashRestartCount = 0
     #set screen data
     screenData.setScreenData()
     screenInfo = screenData.getScreenData()
@@ -595,6 +606,8 @@ def runApp(macroTarget):
 				                    Check the 'repeat' setting on your blender items and reset blender data.")
             #macro proc
             macroProc = startMacroProcess()
+            macroProcStartedAt = time.time()
+            crashRestartCount = 0
 
             macro_version = settingsManager.getMacroVersion()
             macro_mode = str(setdat.get("macro_mode", "normal") or "normal").strip().lower()
@@ -642,6 +655,8 @@ def runApp(macroTarget):
                 pass
 
             stopApp()
+            macroProcStartedAt = 0.0
+            crashRestartCount = 0
 
             run.value = 3
             showRunState(3)
@@ -719,6 +734,8 @@ def runApp(macroTarget):
             time.sleep(0.2)
             appManager.closeApp("Roblox")
             macroProc = startMacroProcess()
+            macroProcStartedAt = time.time()
+            crashRestartCount = 0
             run.value = 2
             showRunState(2)
         # Note: run.value == 6 (paused) is handled in the macro process loop - it waits for resume
@@ -745,14 +762,33 @@ def runApp(macroTarget):
                     hangDesc = "\nText reading froze, restarting.\n```\n" + hangTrace[:1800] + "\n```"
             logger.webhook("","Macro Crashed{0}{1}".format(extra, hangDesc), "red", "screen", ping_category="ping_critical_errors")
             macroProc.join()
+            macroProc = None
             keyboardModule.releaseMovement()
             mouse.mouseUp()
             time.sleep(0.2)
-            appManager.openApp("Roblox")
-            # restart macro process
-            macroProc = startMacroProcess()
-            run.value = 2
-            showRunState(2)
+            elapsedSinceStart = time.time() - macroProcStartedAt if macroProcStartedAt else 0
+            if elapsedSinceStart >= CRASH_STARTUP_WINDOW_SECONDS:
+                crashRestartCount = 0
+            crashRestartCount += 1
+            if crashRestartCount > len(CRASH_RESTART_DELAYS):
+                print(f"Macro crashed {crashRestartCount} times in a row; automatic restarts stopped.")
+                logger.webhook("", f"Macro stopped after {crashRestartCount} rapid crashes. Check the error log before starting again.", "red", ping_category="ping_critical_errors")
+                macroProcStartedAt = 0.0
+                run.value = 3
+                showRunState(3)
+            else:
+                restartDelay = getCrashRestartDelay(crashRestartCount)
+                print(f"Restarting macro in {restartDelay}s (crash {crashRestartCount}/{len(CRASH_RESTART_DELAYS)})")
+                restartDeadline = time.time() + restartDelay
+                while run.value == 2 and time.time() < restartDeadline:
+                    eel.sleep(0.5)
+                if run.value == 2:
+                    appManager.openApp("Roblox")
+                    # restart macro process
+                    macroProc = startMacroProcess()
+                    macroProcStartedAt = time.time()
+                    run.value = 2
+                    showRunState(2)
 
         #show every log message queued since the last tick
         while not logQueue.empty():
