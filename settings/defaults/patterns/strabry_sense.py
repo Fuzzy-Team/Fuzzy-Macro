@@ -1,4 +1,4 @@
-# StrabrySense (v19), ported from Zenith Macro's gather patterns.
+# StrabrySense (v19).
 # Size and width are not used. The pattern runs from modules.misc.sense_patterns.
 from modules.misc.sense_patterns import StrabrySense
 
