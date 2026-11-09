@@ -534,6 +534,9 @@ class GatherMixin:
                     questMenuKeptOpen = False
                 self.moveMouseToDefault()
             finally:
+                # a trade request that arrives as the gather ends must not interrupt the walk back
+                if tradingInHiveHub and self.skipTask.value == INTERRUPT_HIVE_HUB_TRADE:
+                    self.skipTask.value = INTERRUPT_NONE
                 self.robloxWindow.questMenuVisibleForAI = False
                 try:
                     self.clear_task_status()

@@ -139,12 +139,13 @@ class NavigationMixin:
         template = self.adjustImage("./images/menu", "traderequest")
         # the original looks for the green "Accept" text in a band down the right edge, 60% of the way down.
         if locateImageOnScreen(template, w.mx + w.mw - 300, w.my + w.mh * 0.6 - 100, 300, 200, TRADE_REQUEST_THRESHOLD, scales=[1.0]):
-            # the search is slow, so check again that nothing else started in the meantime
-            if not self.hiveHubTradeBusy and self.skipTask.value == INTERRUPT_NONE:
+            # the search is slow, so check again that nothing else started or ended in the meantime
+            if self.isGathering and not self.hiveHubTradeBusy and self.skipTask.value == INTERRUPT_NONE:
                 self.skipTask.value = INTERRUPT_HIVE_HUB_TRADE
 
     def acceptHiveHubTrade(self):
-        self.skipTask.value = INTERRUPT_NONE  # sleeps raise while an interrupt is pending
+        if self.skipTask.value == INTERRUPT_HIVE_HUB_TRADE:  # sleeps raise while an interrupt is pending
+            self.skipTask.value = INTERRUPT_NONE
         self.hiveHubTradeBusy = True
         shiftLockWasOn = False
         try:
