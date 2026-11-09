@@ -594,13 +594,13 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             runTask(macro.closeQuestMenu, resetAfter=False, allowAFB=False)
         return gathered
 
-    lastProfileCheck = 0
+    lastProfileCheck = float("-inf")
 
     def cooldownTaskReady():
         nonlocal lastProfileCheck
         #gather polls this every pattern loop; rereading the profile files that often is wasted disk work
-        if time.time() - lastProfileCheck >= 5:
-            lastProfileCheck = time.time()
+        if time.monotonic() - lastProfileCheck >= 5:
+            lastProfileCheck = time.monotonic()
             profile = settingsManager.loadMacroProfile()
             if (profile["profile"] != macro._loadedProfile["profile"]
                     or profile["settings"] != macro._loadedProfile["settings"]
