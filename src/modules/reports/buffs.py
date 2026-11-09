@@ -544,13 +544,15 @@ class BuffDetector():
         return []
 
         
-    def getNectar(self, nectar):
+    #screen: a screenshotBuffArea() image to reuse, so getNectars can read every nectar from one capture
+    def getNectar(self, nectar, screen=None):
         vals = self.nectars[nectar]
         col, offsetCoords = vals
         offsetX, offsetY = offsetCoords
 
         #find the buff
-        screen = self.screenshotBuffArea()
+        if screen is None:
+            screen = self.screenshotBuffArea()
         buffTemplate = adjustImage("./images/buffs", nectar, self.robloxWindow.display_type)
         res = locateTransparentImage(buffTemplate, screen, 0.5) #get the best match first. At high nectar levels, it becomes hard to detect the nectar icon
         if not res: 
@@ -584,6 +586,7 @@ class BuffDetector():
 
     def getNectars(self):
         nectarQuantity = []
+        screen = self.screenshotBuffArea()
         for nectar in self.nectars:
-            nectarQuantity.append(self.getNectar(nectar))
+            nectarQuantity.append(self.getNectar(nectar, screen))
         return nectarQuantity

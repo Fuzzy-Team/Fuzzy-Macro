@@ -1,7 +1,4 @@
 let autoClickerTimer = null;
-let autoClickerStatusTimer = null;
-let autoGiftedBasicBeeStatusTimer = null;
-let hotbarBuffStatusTimer = null;
 let toolSessionSynced = false;
 const TOOL_SESSION_ID = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const AUTOCLICKER_MIN_INTERVAL = 10;
@@ -544,10 +541,6 @@ function initializeAutoClickerTool() {
     startDelayInput.value = AUTOCLICKER_DEFAULT_START_DELAY;
   }
 
-  if (!autoClickerStatusTimer) {
-    autoClickerStatusTimer = setInterval(refreshAutoClickerStatus, 1000);
-  }
-
   refreshAutoClickerStatus();
 }
 
@@ -659,10 +652,6 @@ function initializeAutoGiftedBasicBeeTool() {
     delayInput.value = AUTO_GIFTED_BASIC_BEE_DEFAULT_DELAY;
   }
 
-  if (!autoGiftedBasicBeeStatusTimer) {
-    autoGiftedBasicBeeStatusTimer = setInterval(refreshAutoGiftedBasicBeeStatus, 1000);
-  }
-
   refreshAutoGiftedBasicBeeStatus();
 }
 
@@ -687,7 +676,6 @@ const SSA_STATS = {
   ability: ["Bee Ability Rate", "1-7"],
 };
 const SSA_STAT_ROWS = 5;
-let ssaRollerStatusTimer = null;
 
 function updateSsaSidePassives() {
   const main = document.getElementById("ssa-main-passive").value;
@@ -842,9 +830,6 @@ function initializeSsaRollerTool() {
   restoreSsaRollerSettings();
   document.getElementById("tools-ssa-roller-tab").addEventListener("change", saveSsaRollerSettings);
 
-  if (!ssaRollerStatusTimer) {
-    ssaRollerStatusTimer = setInterval(refreshSsaRollerStatus, 1000);
-  }
   refreshSsaRollerStatus();
 }
 
@@ -915,10 +900,6 @@ async function stopHotbarBuffTool() {
 }
 
 function initializeHotbarBuffTool() {
-  if (!hotbarBuffStatusTimer) {
-    hotbarBuffStatusTimer = setInterval(refreshHotbarBuffStatus, 1000);
-  }
-
   refreshHotbarBuffStatus();
   switchHotbarBuffToolSlot(1);
 }
@@ -940,23 +921,29 @@ function switchHotbarBuffToolSlot(slot) {
 }
 
 function switchToolsTab(target) {
-  setActiveSubtab("activeToolsSubtab", target.id);
-  const selector = document.getElementById("tools-select");
-  if (selector) selector.remove();
+  switchSubtab("tools", target);
+}
 
-  Array.from(document.getElementsByClassName("tools-tab-item")).forEach((x) => {
-    x.classList.remove("active");
-    const panel = document.getElementById(`${x.id}-tab`);
-    if (panel) panel.style.display = "none";
-  });
+//each tool's status refreshes every second, but only while its panel is on screen
+const TOOL_STATUS_POLLERS = [
+  ["tools-autoclicker-tab", refreshAutoClickerStatus],
+  ["tools-hotbar-buff-tab", refreshHotbarBuffStatus],
+  ["tools-auto-gifted-basic-bee-tab", refreshAutoGiftedBasicBeeStatus],
+  ["tools-ssa-roller-tab", refreshSsaRollerStatus],
+];
+const toolStatusTimers = {};
 
-  target.classList.add("active");
-  target.innerHTML = `<div class = "select-indicator" id = "tools-select"></div>` + target.innerHTML;
-
-  const tab = document.getElementById(`${target.id}-tab`);
-  if (tab) {
-    tab.style.display = "block";
-    tab.scrollTo(0, 0);
+//call after the main tab or tools subtab changes
+function syncToolStatusPollers() {
+  for (const [panelId, refresh] of TOOL_STATUS_POLLERS) {
+    const visible = !!document.getElementById(panelId)?.offsetParent;
+    if (visible && !toolStatusTimers[panelId]) {
+      refresh();
+      toolStatusTimers[panelId] = setInterval(refresh, 1000);
+    } else if (!visible && toolStatusTimers[panelId]) {
+      clearInterval(toolStatusTimers[panelId]);
+      delete toolStatusTimers[panelId];
+    }
   }
 }
 
@@ -973,8 +960,14 @@ function loadTools() {
   switchToolsTab(
     document.getElementById(getActiveSubtab("activeToolsSubtab", "tools-autoclicker"))
   );
+  syncToolStatusPollers();
 }
 
 $("#tools-placeholder")
   .load("../htmlImports/tabs/tools.html", loadTools)
-  .on("click", ".tools-tab-item", (event) => switchToolsTab(event.currentTarget));
+  .on("click", ".tools-tab-item", (event) => {
+    switchToolsTab(event.currentTarget);
+    syncToolStatusPollers();
+  });
+//runs after the sidebar's own switchTab handler, which tab.js registers first
+$("#tabs-placeholder").on("click", ".sidebar-item", syncToolStatusPollers);

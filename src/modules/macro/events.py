@@ -244,13 +244,18 @@ class EventDetectionMixin:
         for detect, _ in detectors:
             detect(text, now)
 
+    def captureBuffBand(self):
+        """The buff bar band at the top of the window. backgroundOnce clears it each tick so the scans share one capture."""
+        if self.buffBandScreen is None:
+            w = self.robloxWindow
+            self.buffBandScreen = captureRegionBGR(w.mx, w.my, w.mw, BUFF_BAND_HEIGHT)
+        return self.buffBandScreen
+
     def scanGummyballBuff(self):
         """Ping once when the 8x or 9x Gummyball buff shows up, and again if it changes between 8x and 9x."""
         if not self.setdat.get("ping_gummyball", False) or self.status.value == "rejoining":
             return
-        w = self.robloxWindow
-        screen = captureRegionBGR(w.mx, w.my, w.mw, BUFF_BAND_HEIGHT)
-        level = self.detectGummyballLevel(screen)
+        level = self.detectGummyballLevel(self.captureBuffBand())
         now = time.time()
         if level:
             self.gummyballLastSeen = now
@@ -277,8 +282,7 @@ class EventDetectionMixin:
             return #alt instances don't drive the TAD alts, same as at start
         if time.time() < self.buffBarBoostPausedUntil:
             return #the macro is claiming a booster and will move the alts itself
-        w = self.robloxWindow
-        screen = captureRegionBGR(w.mx, w.my, w.mw, BUFF_BAND_HEIGHT)
+        screen = self.captureBuffBand()
         # A boost on the default field is ignored because the alts are already there.
         defaultField = str(self.setdat.get("tad_alt_default_field", "pine tree")).strip().lower()
         field = next((f for f in BUFF_BAR_BOOST_FIELDS[color] if f != defaultField and self.boostIconVisible(screen, f)), None)

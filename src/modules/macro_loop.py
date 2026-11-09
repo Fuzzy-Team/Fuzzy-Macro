@@ -95,9 +95,6 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
     bossCooldowns = {"coconut_crab": 36*60*60, "king_beetle": 24*60*60,
                      "tunnel_bear": 48*60*60, "stump_snail": 96*60*60}
     
-    private_server_link = macro.setdat.get("private_server_link", "")
-    # Accept share links — the rejoin deeplink handler now supports the newer share link format.
-
     taskCompleted = True
     questCache = {}
     questScanScreens = None
@@ -361,7 +358,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             return False
 
     def handleQuest(questGiver, executeQuest=True, keepMenuOpen=False):
-        nonlocal questCache, questScanScreens, taskCompleted
+        nonlocal questScanScreens, taskCompleted
         cached = questGiver in questCache and questCache[questGiver] is not None and not taskCompleted
         if cached:
             objectives = questCache[questGiver]
@@ -597,12 +594,18 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             runTask(macro.closeQuestMenu, resetAfter=False, allowAFB=False)
         return gathered
 
+    lastProfileCheck = 0
+
     def cooldownTaskReady():
-        profile = settingsManager.loadMacroProfile()
-        if (profile["profile"] != macro._loadedProfile["profile"]
-                or profile["settings"] != macro._loadedProfile["settings"]
-                or profile["fields"] != macro._loadedProfile["fields"]):
-            return True
+        nonlocal lastProfileCheck
+        #gather polls this every pattern loop; rereading the profile files that often is wasted disk work
+        if time.time() - lastProfileCheck >= 5:
+            lastProfileCheck = time.time()
+            profile = settingsManager.loadMacroProfile()
+            if (profile["profile"] != macro._loadedProfile["profile"]
+                    or profile["settings"] != macro._loadedProfile["settings"]
+                    or profile["fields"] != macro._loadedProfile["fields"]):
+                return True
         if macro.hasScheduledRejoinArrived():
             return True
         mode = macro.setdat.get("macro_mode", "normal")
@@ -932,7 +935,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         
         # Helper function to execute a task by its ID
         def executeTask(taskId):
-            nonlocal planterDataRaw, executedTasks, taskCompleted
+            nonlocal planterDataRaw
             
             # Skip if already executed
             if taskId in executedTasks:
@@ -1056,11 +1059,9 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                     if macro.setdat[mob]:
                         # Check all fields for this mob and kill in each field where it has respawned
                         # We need to check ALL fields before moving to the next task
-                        killedInAnyField = False
                         for f in regularMobData[mob]:
                             if macro.hasMobRespawned(mob, f):
                                 runTask(macro.killMob, args=(mob, f,), convertAfter=False)
-                                killedInAnyField = True
                                 # After killing in one field, return True to trigger re-check
                                 # This allows the outer loop to iterate again and check remaining fields
                                 return True
@@ -1417,7 +1418,6 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                             pass
 
                     def savePlacedPlanter(slot, field, planterObj, nectar, placementPlan):
-                        nonlocal planterData, nectarLastFields
                         planterData[slot] = {
                             "planter": planterObj["name"],
                             "nectar": nectar,
@@ -1736,9 +1736,6 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
 
             return False
         
-        # Track quest task execution times to prevent spam
-        questTaskCooldowns = {}
-
         # Execute tasks in priority order
         if priorityOrder and len(priorityOrder) > 0:
             # Keep executing tasks until no more tasks can be executed
