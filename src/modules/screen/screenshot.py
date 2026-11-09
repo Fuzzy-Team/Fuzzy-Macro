@@ -76,9 +76,9 @@ def screenshotRobloxWindow(filename = None, regionMultipliers = None):
         h = mh
     if regionMultipliers:
         x = x*regionMultipliers[0] if regionMultipliers[0] <= 1 else regionMultipliers[0]
-        y *= y*regionMultipliers[1] if regionMultipliers[1] <= 1 else regionMultipliers[1]
-        w *= w*regionMultipliers[2] if regionMultipliers[2] <= 1 else regionMultipliers[2]
-        h *= h*regionMultipliers[3] if regionMultipliers[3] <= 1 else regionMultipliers[3]
+        y = y*regionMultipliers[1] if regionMultipliers[1] <= 1 else regionMultipliers[1]
+        w = w*regionMultipliers[2] if regionMultipliers[2] <= 1 else regionMultipliers[2]
+        h = h*regionMultipliers[3] if regionMultipliers[3] <= 1 else regionMultipliers[3]
     return mssScreenshot(x,y,w,h, save=bool(filename), filename=filename)
 
 def benchmarkMSS():
