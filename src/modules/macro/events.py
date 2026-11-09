@@ -271,7 +271,7 @@ class EventDetectionMixin:
     def scanBuffBarBoost(self):
         """Move the TAD alts to a field boost that shows up on the buff bar, unless they are already on that field."""
         color = str(self.setdat.get("tad_alt_buff_bar_boost", "off")).lower()
-        if color not in BUFF_BAR_BOOST_FIELDS or not self.setdat.get("tad_alt_sync_enabled", False) or self.status.value == "rejoining":
+        if color not in BUFF_BAR_BOOST_FIELDS or not self.tadAltSync._enabled_webhooks() or self.status.value == "rejoining":
             return
         if self.setdat.get("macro_mode", "normal") == "alt":
             return #alt instances don't drive the TAD alts, same as at start
