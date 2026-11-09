@@ -19,6 +19,15 @@ from modules.misc.settings_defaults import BLENDER_ITEM_SLOTS
 from modules.submacros.tadAltSync import TadAltSync
 
 
+CRASH_RESTART_DELAYS = (2, 5, 15, 30, 60)
+CRASH_STARTUP_WINDOW_SECONDS = 60
+
+
+def getCrashRestartDelay(consecutiveCrashes):
+    index = min(max(consecutiveCrashes, 1), len(CRASH_RESTART_DELAYS)) - 1
+    return CRASH_RESTART_DELAYS[index]
+
+
 def millify(n):
     """Format large numbers with suffixes"""
     for limit, suffix in ((1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K")):
@@ -46,6 +55,9 @@ def runApp(macroTarget):
         print("start method set to spawn")
         multiprocessing.set_start_method("spawn")
     macroProc = None
+    macroProcStartedAt = 0.0
+    nextRestartAt = 0.0
+    crashRestartCount = 0
     #set screen data
     screenData.setScreenData()
     screenInfo = screenData.getScreenData()
@@ -357,7 +369,7 @@ def runApp(macroTarget):
                     stream.stop()
 
     def processStandbyCommands():
-        nonlocal richPresenceManager
+        nonlocal richPresenceManager, nextRestartAt
         while not standbyCommandQueue.empty():
             try:
                 command = standbyCommandQueue.get_nowait()
@@ -411,6 +423,7 @@ def runApp(macroTarget):
                 stopApp()
                 run.value = 3
                 gui.setRunState(3)
+            nextRestartAt = 0.0
             appManager.closeApp("Roblox")
             duration_text = "until disabled" if duration_seconds is None else f"for {duration_seconds / 60:g} minute(s)"
             logger.webhook(
@@ -595,6 +608,9 @@ def runApp(macroTarget):
 				                    Check the 'repeat' setting on your blender items and reset blender data.")
             #macro proc
             macroProc = startMacroProcess()
+            macroProcStartedAt = time.time()
+            nextRestartAt = 0.0
+            crashRestartCount = 0
 
             macro_version = settingsManager.getMacroVersion()
             macro_mode = str(setdat.get("macro_mode", "normal") or "normal").strip().lower()
@@ -642,6 +658,9 @@ def runApp(macroTarget):
                 pass
 
             stopApp()
+            macroProcStartedAt = 0.0
+            nextRestartAt = 0.0
+            crashRestartCount = 0
 
             run.value = 3
             showRunState(3)
@@ -719,40 +738,67 @@ def runApp(macroTarget):
             time.sleep(0.2)
             appManager.closeApp("Roblox")
             macroProc = startMacroProcess()
+            macroProcStartedAt = time.time()
+            nextRestartAt = 0.0
+            crashRestartCount = 0
             run.value = 2
             showRunState(2)
         # Note: run.value == 6 (paused) is handled in the macro process loop - it waits for resume
         
         # Check for crash (non-zero exitcodes). Log signal name to aid diagnosis.
-        if macroProc and not macroProc.is_alive() and macroProc.exitcode:
-            extra = ""
-            if macroProc.exitcode < 0:
-                signum = -macroProc.exitcode
-                try:
-                    signame = signal.Signals(signum).name
-                except ValueError:
-                    signame = str(signum)
-                extra = f" (terminated by signal {signame})"
-            print(f"Macro process exited{extra}")
-            # a text read that never returned leaves the stacks of every thread here (see screen/ocr.py)
-            hangDesc = ""
-            hangPath = settingsManager.getUserDataPath("ocr_hang.txt")
-            if os.path.exists(hangPath):
-                with open(hangPath) as f:
-                    hangTrace = f.read()
-                open(hangPath, "w").close()
-                if hangTrace.strip():
-                    hangDesc = "\nText reading froze, restarting.\n```\n" + hangTrace[:1800] + "\n```"
-            logger.webhook("","Macro Crashed{0}{1}".format(extra, hangDesc), "red", "screen", ping_category="ping_critical_errors")
-            macroProc.join()
-            keyboardModule.releaseMovement()
-            mouse.mouseUp()
-            time.sleep(0.2)
-            appManager.openApp("Roblox")
-            # restart macro process
-            macroProc = startMacroProcess()
-            run.value = 2
-            showRunState(2)
+        # The dead process stays assigned until the scheduled restart so Stop,
+        # Pause and standby keep seeing a running session during the backoff.
+        # The restart itself is a deadline checked on later ticks; blocking here
+        # would hold up the logQueue, /standby and auto-stop handling.
+        elif run.value == 2 and macroProc and not macroProc.is_alive() and macroProc.exitcode:
+            if nextRestartAt == 0.0:
+                extra = ""
+                if macroProc.exitcode < 0:
+                    signum = -macroProc.exitcode
+                    try:
+                        signame = signal.Signals(signum).name
+                    except ValueError:
+                        signame = str(signum)
+                    extra = f" (terminated by signal {signame})"
+                print(f"Macro process exited{extra}")
+                # a text read that never returned leaves the stacks of every thread here (see screen/ocr.py)
+                hangDesc = ""
+                hangPath = settingsManager.getUserDataPath("ocr_hang.txt")
+                if os.path.exists(hangPath):
+                    with open(hangPath) as f:
+                        hangTrace = f.read()
+                    open(hangPath, "w").close()
+                    if hangTrace.strip():
+                        hangDesc = "\nText reading froze, restarting.\n```\n" + hangTrace[:1800] + "\n```"
+                logger.webhook("","Macro Crashed{0}{1}".format(extra, hangDesc), "red", "screen", ping_category="ping_critical_errors")
+                macroProc.join()
+                keyboardModule.releaseMovement()
+                mouse.mouseUp()
+                time.sleep(0.2)
+                elapsedSinceStart = time.time() - macroProcStartedAt if macroProcStartedAt else 0
+                if elapsedSinceStart >= CRASH_STARTUP_WINDOW_SECONDS:
+                    crashRestartCount = 0
+                crashRestartCount += 1
+                if crashRestartCount > len(CRASH_RESTART_DELAYS):
+                    print(f"Macro crashed {crashRestartCount} times in a row; automatic restarts stopped.")
+                    logger.webhook("", f"Macro stopped after {crashRestartCount} rapid crashes. Check the error log before starting again.", "red", ping_category="ping_critical_errors")
+                    macroProc = None
+                    macroProcStartedAt = 0.0
+                    nextRestartAt = 0.0
+                    run.value = 3
+                    showRunState(3)
+                else:
+                    restartDelay = getCrashRestartDelay(crashRestartCount)
+                    print(f"Restarting macro in {restartDelay}s (crash {crashRestartCount}/{len(CRASH_RESTART_DELAYS)})")
+                    nextRestartAt = time.time() + restartDelay
+            elif time.time() >= nextRestartAt:
+                nextRestartAt = 0.0
+                appManager.openApp("Roblox")
+                # restart macro process
+                macroProc = startMacroProcess()
+                macroProcStartedAt = time.time()
+                run.value = 2
+                showRunState(2)
 
         #show every log message queued since the last tick
         while not logQueue.empty():
@@ -771,7 +817,9 @@ def runApp(macroTarget):
             gui.updateGUI()
             updateGUI.value = 0
         
-        if run.value == 2 and time.time() > disconnectCooldownUntil:
+        # Only read the screen once a macro process is actually running; during a
+        # crash backoff Roblox may be gone and the pending restart owns the window.
+        if run.value == 2 and macroProc and macroProc.is_alive() and time.time() > disconnectCooldownUntil:
             # imported here so the GUI process only loads OCR once the macro runs
             from modules.screen import ocr
             from modules.screen.screenshot import mssScreenshot
