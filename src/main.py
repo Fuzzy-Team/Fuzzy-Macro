@@ -3778,7 +3778,16 @@ if __name__ == "__main__":
             except Exception:
                 extra = ""
             print(f"Macro process exited{extra}")
-            logger.webhook("","Macro Crashed{0}".format(extra), "red", "screen", ping_category="ping_critical_errors")
+            # a text read that never returned leaves the stacks of every thread here (see screen/ocr.py)
+            hangDesc = ""
+            hangPath = settingsManager.getUserDataPath("ocr_hang.txt")
+            if os.path.exists(hangPath):
+                with open(hangPath) as f:
+                    hangTrace = f.read()
+                open(hangPath, "w").close()
+                if hangTrace.strip():
+                    hangDesc = "\nText reading froze, restarting.\n```\n" + hangTrace[:1800] + "\n```"
+            logger.webhook("","Macro Crashed{0}{1}".format(extra, hangDesc), "red", "screen", ping_category="ping_critical_errors")
             macroProc.join()
             keyboardModule.releaseMovement()
             mouse.mouseUp()

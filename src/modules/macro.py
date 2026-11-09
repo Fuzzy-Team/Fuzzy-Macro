@@ -6961,7 +6961,9 @@ class macro:
             time.sleep(1)
 
     def getHoney(self):
-        cap = mssScreenshot(self.robloxWindow.mx+(self.robloxWindow.mw//2-241), self.robloxWindow.my+self.robloxWindow.yOffset+5, 140, 36)
+        # the bar starts about 270 points left of centre and the Pollen bar begins to the right of centre;
+        # a 14-digit number is ~145 points wide in the new font, so a narrow crop cuts off the leading digits
+        cap = mssScreenshot(self.robloxWindow.mx+(self.robloxWindow.mw//2-275), self.robloxWindow.my+self.robloxWindow.yOffset+5, 245, 36)
         ocrres = ocr.ocrFunc(cap)
         honeyText = ""
         try:
