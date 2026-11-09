@@ -384,18 +384,36 @@ def build_capture(viewport, capture_backend="auto"):
     raise RuntimeError(f"No supported capture backend found for '{backend}'. Install mss or Pillow.")
 
 
-def mss_grab_to_array(session, monitor):
+def normalize_capture_frame(frame, capture):
+    """Return a frame in the logical point space used by the AI geometry."""
+    if cv2 is None or getattr(frame, "shape", None) is None or len(frame.shape) < 2:
+        return frame
+    width_px = int(capture.get("width") or 0)
+    height_px = int(capture.get("height") or 0)
+    if width_px <= 0 or height_px <= 0:
+        return frame
+    if frame.shape[1] == width_px and frame.shape[0] == height_px:
+        return frame
+    return cv2.resize(frame, (width_px, height_px), interpolation=cv2.INTER_AREA)
+
+
+def mss_grab_to_array(session, monitor, capture=None):
     shot = session.grab(monitor)
-    return np.frombuffer(shot.raw, dtype=np.uint8).reshape((shot.height, shot.width, 4))
+    frame = np.frombuffer(shot.raw, dtype=np.uint8).reshape((shot.height, shot.width, 4))
+    if capture is not None:
+        frame = normalize_capture_frame(frame, capture)
+    return frame
 
 
 def grab_frame(runtime):
-    if runtime["capture"]["backend"] == "mss":
-        monitor = runtime["capture"]["monitor"]
-        return mss_grab_to_array(runtime["capture"]["session"], monitor)
+    capture = runtime["capture"]
+    if capture["backend"] == "mss":
+        monitor = capture["monitor"]
+        return mss_grab_to_array(capture["session"], monitor, capture=capture)
 
-    image = ImageGrab.grab(bbox=runtime["capture"].get("bbox"))
-    return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+    image = ImageGrab.grab(bbox=capture.get("bbox"))
+    frame = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+    return normalize_capture_frame(frame, capture)
 
 
 
@@ -477,10 +495,11 @@ def capture_loop(runtime, interval, debug_log_fn=None):
                 if not runtime.get("ready"):
                     return
                 if session is not None:
-                    frame = mss_grab_to_array(session, capture["monitor"])
+                    frame = mss_grab_to_array(session, capture["monitor"], capture=capture)
                 elif capture.get("backend") == "pil" and ImageGrab is not None:
                     image = ImageGrab.grab(bbox=capture.get("bbox"))
                     frame = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+                    frame = normalize_capture_frame(frame, capture)
                 else:
                     frame = grab_frame(runtime)
                 publish_frame(runtime, frame)
