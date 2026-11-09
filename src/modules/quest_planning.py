@@ -3,6 +3,8 @@
 import re
 from pathlib import Path
 
+from modules.misc.macro_profile import MacroProfileStore
+
 
 QUEST_GIVERS = ("polar bear", "brown bear", "black bear", "honey bee", "bucko bee", "riley bee")
 BLUE_FIELDS = ("blue flower", "bamboo", "pine tree", "stump")
@@ -178,7 +180,7 @@ def quest_gather_settings(objective, field, settings, field_settings):
     for setting, key in (("mins", "mins"), ("return", "return"), ("pattern", "shape"), ("backpack", "backpack")):
         value = settings.get(prefix + setting, 0 if setting == "mins" else "auto")
         if value not in (None, "auto", "no override", 0, ""):
-            resolved[key] = float(value) if key in ("mins", "backpack") else value
+            resolved[key] = float(value) if key in ("mins", "backpack") else MacroProfileStore.PATTERN_RENAMES.get(value, value)
     for setting in OBJECTIVE_SETTING_CHOICES:
         value = str(settings.get(prefix + setting, "auto"))
         if value in ("on", "off"):
