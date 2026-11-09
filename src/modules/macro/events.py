@@ -74,8 +74,9 @@ BUFF_BAND_HEIGHT = 100
 GUMMYBALL_HOLD_SECONDS = 16
 GUMMYBALL_THRESHOLD = 0.8
 
-# Field boost icons on the buff bar, in the order the original checks them (first match wins).
-# the original's AltSync follows one colour at a time and matches with a +-30 colour tolerance (AHK "*30").
+# Field boost icons on the buff bar, checked in this order (first match wins).
+# One colour is followed at a time, and an icon matches when every pixel is within +-30 per channel.
+# The icons were captured on Windows.
 BUFF_BAR_BOOST_FIELDS = {
     "blue": ("blue flower", "bamboo", "pine tree"),
     "white": ("dandelion", "sunflower", "pumpkin"),
@@ -269,7 +270,7 @@ class EventDetectionMixin:
         return None
 
     def scanBuffBarBoost(self):
-        """Move the TAD alts to a field boost that shows up on the buff bar, like the original's AltSync.
+        """Move the TAD alts to a field boost that shows up on the buff bar.
         The boost is handled once; it can trigger again after its icon has been gone for a while."""
         color = str(self.setdat.get("tad_alt_buff_bar_boost", "off")).lower()
         if color not in BUFF_BAR_BOOST_FIELDS or not self.setdat.get("tad_alt_sync_enabled", False) or self.status.value == "rejoining":
@@ -280,7 +281,7 @@ class EventDetectionMixin:
             return #the macro is claiming a booster and will move the alts itself
         w = self.robloxWindow
         screen = captureRegionBGR(w.mx, w.my, w.mw, BUFF_BAND_HEIGHT)
-        # Like the original, a boost on the default field is ignored because the alts are already there.
+        # A boost on the default field is ignored because the alts are already there.
         defaultField = str(self.setdat.get("tad_alt_default_field", "pine tree")).strip().lower()
         field = next((f for f in BUFF_BAR_BOOST_FIELDS[color] if f != defaultField and self.boostIconVisible(screen, f)), None)
         now = time.time()
