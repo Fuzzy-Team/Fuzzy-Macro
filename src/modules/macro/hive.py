@@ -243,8 +243,10 @@ class HiveMixin:
             #memory match
             if self.findText("badge", self.robloxWindow.mx+(self.robloxWindow.mw/4), self.robloxWindow.my+(self.robloxWindow.mh/4), self.robloxWindow.mw/4, self.robloxWindow.mh/3.5):
                 self.canDetectNight = False
-                self.memoryMatch.solveMemoryMatch(self.latestMM, self.setdat.get("memory_match_rewards", []))
-                self.canDetectNight = True
+                try:
+                    self.memoryMatch.solveMemoryMatch(self.latestMM, self.setdat.get("memory_match_rewards", []))
+                finally:
+                    self.canDetectNight = True
             print(f"checked memory match popup: {time.time()-st}")
 
             blenderImg = self.adjustImage("./images/menu", "blenderclose") #blender

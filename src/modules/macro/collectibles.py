@@ -507,8 +507,10 @@ class CollectiblesMixin:
                 time.sleep(2)
                 self.logger.webhook("", f"Solving: {displayName}", "dark brown", "screen")
                 self.canDetectNight = False
-                self.memoryMatch.solveMemoryMatch(mmType, self.setdat.get("memory_match_rewards", []))
-                self.canDetectNight = True
+                try:
+                    self.memoryMatch.solveMemoryMatch(mmType, self.setdat.get("memory_match_rewards", []))
+                finally:
+                    self.canDetectNight = True
                 time.sleep(2)
                 self.logger.webhook("", f"Completed: {displayName}", "bright green", "blue")
             elif objective in fieldBoosterData:
