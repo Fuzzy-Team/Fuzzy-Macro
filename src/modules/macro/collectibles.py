@@ -492,7 +492,7 @@ class CollectiblesMixin:
         else: #not on cooldown
             if objective in fieldBoosterData:
                 #the buff bar scan would otherwise move the alts for this booster before the field is read below
-                self.buffBarBoostPausedUntil = time.time() + 30
+                self.buffBarBoostPausedUntil = time.time() + 120 #safety cap, cleared once the field is handled below
             for _ in range(1 if objective == "sticker_stack" else 2):
                 self.keyboard.press("e")
             #run the claim path (if it exists)
@@ -537,6 +537,7 @@ class CollectiblesMixin:
                         self.scheduleFieldBoosterGlitterExtension()
                 else:
                     self.tadAltSync.initialize_alts()
+                self.buffBarBoostPausedUntil = 0
                 self.saveTiming("last_booster")
             elif objective == "sticker_stack":
                 if "your" in reached or "activated" in reached:

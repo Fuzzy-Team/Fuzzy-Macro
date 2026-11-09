@@ -82,6 +82,7 @@ BUFF_BAR_BOOST_FIELDS = {
     "red": ("strawberry", "rose", "pepper"),
 }
 BUFF_BAR_BOOST_TOLERANCE = 30
+BUFF_BAR_BOOST_HOLD_SECONDS = 16 #the icon must stay unseen this long before the same boost can sync again
 
 
 class EventDetectionMixin:
@@ -273,6 +274,8 @@ class EventDetectionMixin:
         color = str(self.setdat.get("tad_alt_buff_bar_boost", "off")).lower()
         if color not in BUFF_BAR_BOOST_FIELDS or not self.setdat.get("tad_alt_sync_enabled", False) or self.status.value == "rejoining":
             return
+        if self.setdat.get("macro_mode", "normal") == "alt":
+            return #alt instances don't drive the TAD alts, same as at start
         if time.time() < self.buffBarBoostPausedUntil:
             return #the macro is claiming a booster and will move the alts itself
         w = self.robloxWindow
@@ -289,7 +292,7 @@ class EventDetectionMixin:
                 #on a thread because moving the alts waits over 10s, which would stall the rest of the background tick.
                 #The time left on the boost is unknown, so no Glitter extending.
                 threading.Thread(target=self.tadAltSync.sync_to_boost, args=(field,), kwargs={"extend_with_glitter": False}, daemon=True).start()
-        elif self.buffBarBoostField and now - self.buffBarBoostLastSeen >= GUMMYBALL_HOLD_SECONDS:
+        elif self.buffBarBoostField and now - self.buffBarBoostLastSeen >= BUFF_BAR_BOOST_HOLD_SECONDS:
             self.buffBarBoostField = None
 
     def boostIconVisible(self, screen, field):
