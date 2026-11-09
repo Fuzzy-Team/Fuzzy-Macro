@@ -76,6 +76,7 @@ class NavigationMixin:
             ):
                 self.location = "spawn"
                 return False
+            self.location = normalized_field  # rejoin() resets it to spawn; the trade scan needs to know we're here
             #HIVE HUB PATH
             self.enableShiftLock()
             self.keyboard.keyDown("w")
