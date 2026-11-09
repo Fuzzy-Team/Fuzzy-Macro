@@ -22,7 +22,7 @@ PRECISION_ICONS = ("./images/buffs/precision_8x", "./images/buffs/precision_9x",
 X_FLAME_ICON = "./images/buffs/x_flame"
 
 # Timer names are Zenith's. A timer exists while now < its end time.
-PRECISION_SECONDS = {"rose": 54.842, "strawberry": 52.842}
+PRECISION_SECONDS = {"rose": 54.842, "strawberry": 52.842, "mushroom": 46.842}
 PRECISION_DEFAULT_SECONDS = 56.842
 SCORCHING_STAR_SECONDS = 45
 SCORCHING_STAR_COOLDOWN = 60
@@ -219,17 +219,33 @@ def find_targets(shot, search_all, fog, scorching):
     return found
 
 
-def read_fog(shot, yaw):
-    """The fog level from the sprinkler's colour (0 to 3), or None if it is not on screen."""
+def sprinkler_colour_index(shot, yaw, limit=2):
+    """The first sprinkler colour (up to index limit) found on screen, or None."""
     height = shot.shape[0]
     sign = -1 if yaw in (2, 6) else 1   # source: the checks run the other way for yaw 2 and 6
     safeties = (0.003, 0.003, 0.006)
     blob_safeties = (0.001, 0.001, 0.003)
-    for index, colour in enumerate(SPRINKLER_COLOURS):
+    for index, colour in enumerate(SPRINKLER_COLOURS[:limit + 1]):
         if pixel_search(shot, colour, sign * height * safeties[index], height * 0.02, height * 0.16,
                         -sign * height * blob_safeties[index]):
-            return 3 if index == 2 else index
+            return index
     return None
+
+
+def read_fog(shot, yaw, new_shot):
+    """The fog level from the sprinkler's colour, or None if it is not on screen. Like
+    Zenith, the third colour first reads as fog 3, and any fog above 0 is then searched again
+    on a fresh capture (new_shot()) for a colour at or below that level. So the third colour
+    settles on 2 and fog 3 only stands if that second look finds nothing."""
+    index = sprinkler_colour_index(shot, yaw)
+    if index is None:
+        return None
+    fog = 3 if index == 2 else index
+    if fog:
+        again = sprinkler_colour_index(new_shot(), yaw, fog)
+        if again is not None:
+            fog = again
+    return fog
 
 
 def detour(target, obstacle, radius):
@@ -277,7 +293,7 @@ class TargetSense(SensePattern):
                 boost["x_flame_window"] = boost["timers"]["new_x_flame"]
                 self.x_flame()
             shot = self.screenshot()
-            seen = read_fog(shot, self.yaw)
+            seen = read_fog(shot, self.yaw, self.screenshot)
             if seen is not None:
                 if boost["last_fog"] == seen:   # a change counts once it is seen twice in a row
                     boost["fog"] = seen
@@ -290,6 +306,9 @@ class TargetSense(SensePattern):
             self.hold()
         except SenseStopped:
             self.finish()
+        except Exception:
+            self.finish()   # the gather falls back to another pattern: don't leave keys held
+            raise
 
     # --- the buff watcher ---
 
