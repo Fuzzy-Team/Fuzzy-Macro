@@ -58,7 +58,36 @@
 }
 
 /* New Modern Dark Theme for Fuzzy Macro */
-@import url("https://fonts.googleapis.com/css2?family=Libre+Franklin:ital,wght@0,100..900;1,100..900&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap");
+@font-face {
+  font-family: "Poppins";
+  font-weight: 400;
+  font-display: swap;
+  src: url("../assets/fonts/Poppins-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Poppins";
+  font-weight: 500;
+  font-display: swap;
+  src: url("../assets/fonts/Poppins-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Poppins";
+  font-weight: 600;
+  font-display: swap;
+  src: url("../assets/fonts/Poppins-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Poppins";
+  font-weight: 700;
+  font-display: swap;
+  src: url("../assets/fonts/Poppins-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Libre Franklin";
+  font-weight: 700;
+  font-display: swap;
+  src: url("../assets/fonts/LibreFranklin-700.woff2") format("woff2");
+}
 
 :root {
   --background: #121212;
