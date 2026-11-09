@@ -604,8 +604,11 @@ class HourlyReport():
         path = settingsManager.getUserDataPath("hourly_report_stats.pkl")
         if not os.path.exists(path):
             return
-        with open(path, "rb") as f:
-            data = pickle.load(f)
+        try:
+            with open(path, "rb") as f:
+                data = pickle.load(f)
+            if not isinstance(data, dict):
+                raise ValueError("expected a dictionary")
             self.vicLastSession = data.get("vicLastSession", {})
             self.vicCompletedTotals = data.get("vicCompletedTotals", {})
             self.hourlyReportStats = data["hourlyReportStats"]
@@ -620,3 +623,25 @@ class HourlyReport():
             self.latestBuffKeys = data.get("latestBuffKeys", [])
             self.latestNectarQuantity = data.get("latestNectarQuantity", [])
             self.itemMonitorSnapshot = data.get("itemMonitorSnapshot")
+        except Exception as exc:
+            print(f"Warning: Could not load hourly report data: {exc}")
+            corruptPath = f"{path}.corrupt"
+            try:
+                os.replace(path, corruptPath)
+                print(f"Moved corrupt hourly report data to {corruptPath}")
+            except OSError as moveError:
+                print(f"Warning: Could not quarantine hourly report data: {moveError}")
+            self.vicLastSession = {}
+            self.vicCompletedTotals = {}
+            self.hourlyReportStats = {**self._defaultSessionReportStats(), "start_time": 0, "start_honey": 0}
+            self.sessionReportStats = self._defaultSessionReportStats()
+            self.uptimeBuffsValues = self._defaultHourlyUptimeBuffs()
+            self.buffGatherIntervals = [0]*600
+            self.sessionUptimeBuffsValues = self._defaultSessionUptimeBuffs()
+            self.sessionBuffGatherIntervals = []
+            self.sessionUptimeStride = 1
+            self.sessionUptimeSampleCount = 0
+            self.latestBuffQuantity = []
+            self.latestBuffKeys = []
+            self.latestNectarQuantity = []
+            self.itemMonitorSnapshot = None
