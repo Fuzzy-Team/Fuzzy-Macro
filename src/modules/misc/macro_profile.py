@@ -52,6 +52,8 @@ class MacroProfileStore:
     # One-time upgrades, in order. Append new ones to the end and never reorder or remove
     # them: each profile stores how many have run, so the version bumps by itself.
     MIGRATIONS = ("_migrate_legacy_settings",)
+    # Gather patterns that lost their version suffix. Saved and imported `shape` values are mapped on load.
+    PATTERN_RENAMES = {"bamb_dupe_v11": "bamb_dupe", "pine_dupe_v12": "pine_dupe", "octo_v4": "octo"}
 
     def __init__(self, profiles_dir, profile_defaults, general_defaults, field_defaults, field_normalizer=None):
         self._profiles_dir = os.path.abspath(profiles_dir)
@@ -364,6 +366,8 @@ class MacroProfileStore:
             for key, value in defaults.items():
                 current.setdefault(key, copy.deepcopy(value))
             fields_data[field] = self._normalize_field(field, current)
+            if fields_data[field].get("shape") in self.PATTERN_RENAMES:
+                fields_data[field]["shape"] = self.PATTERN_RENAMES[fields_data[field]["shape"]]
         return fields_data, fields_data != original
 
     def _normalize_field(self, field, settings):

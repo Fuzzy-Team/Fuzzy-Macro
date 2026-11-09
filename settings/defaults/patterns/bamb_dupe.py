@@ -1,4 +1,4 @@
-# BambDupe v11
+# BambDupe
 # Width is the source's reps; size and inverted movement keys are not used.
 
 def move(distance, *keys):
