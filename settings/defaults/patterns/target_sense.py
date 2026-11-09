@@ -171,10 +171,10 @@ def pixel_search(shot, colour, safety=0, blob_length=0, blob_size=0, blob_safety
     # so nothing farther than best + reach can win.
     reach = half * math.sqrt(2)
     best = None
-    best_distance = None
+    best_key = None   # (squared distance, scan position): a tie goes to the pixel scanned first
     for index in order:
         x, y = int(xs[index]), int(ys[index])
-        if best is not None and math.hypot(x - origin_x, y - origin_y) - reach > best_distance:
+        if best is not None and math.hypot(x - origin_x, y - origin_y) - reach > math.sqrt(best_key[0]) + 1e-6:
             break
         left, top = max(0, x - half), max(0, y - half)
         window = blob_mask[top:min(height - 1, y + half) + 1, left:min(width - 1, x + half) + 1]
@@ -188,9 +188,9 @@ def pixel_search(shot, colour, safety=0, blob_length=0, blob_size=0, blob_safety
         if (last_x - first_x) ** 2 + (last_y - first_y) ** 2 < blob_length ** 2:
             continue
         found = (left + (first_x + last_x) // 2, top + (first_y + last_y) // 2)
-        distance = math.hypot(found[0] - origin_x, found[1] - origin_y)
-        if best is None or distance < best_distance:
-            best, best_distance = found, distance
+        key = ((found[0] - origin_x) ** 2 + (found[1] - origin_y) ** 2, y * width + x)
+        if best is None or key < best_key:
+            best, best_key = found, key
     return best
 
 
