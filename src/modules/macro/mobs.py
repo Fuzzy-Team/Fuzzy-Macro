@@ -578,9 +578,13 @@ class MobMixin:
             self.died = False
             self.bossStatus = None
             self.runPath("boss/tunnel_bear")
-            
+            tunnelBearDeadline = time.time() + 150
+
             # Continue the movement pattern and check for defeat
             while self.bossStatus is None and not self.died:
+                if time.time() >= tunnelBearDeadline:
+                    self.bossStatus = "timelimit"
+                    break
                 screen = self.blueTextScreen()
                 # Check if defeated
                 if self.blueTextHas("defeated", screen=screen):
@@ -601,7 +605,9 @@ class MobMixin:
                 sleep(1)
             if self.died or self.bossStatus is not None: break
 
-        if self.died:
+        if self.bossStatus == "timelimit":
+            self.logger.webhook("", "Time Limit: Tunnel Bear", "dark brown", "screen", ping_category="ping_critical_errors")
+        elif self.died:
             self.logger.webhook("", "Died to Tunnel Bear", "dark brown", ping_category="ping_character_deaths")
             self.reset(convert=False)
             self.died = False
