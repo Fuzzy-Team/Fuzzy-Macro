@@ -144,7 +144,8 @@ def runApp(macroTarget):
             return True
         try:
             standbyCaffeinateProc = subprocess.Popen(
-                ["/usr/bin/caffeinate", "-di"],
+                # -w ends caffeinate when the macro exits, even if it is killed
+                ["/usr/bin/caffeinate", "-di", "-w", str(os.getpid())],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
@@ -233,7 +234,12 @@ def runApp(macroTarget):
             pass  # eel may not be ready yet
 
     atexit.register(onExit)
-        
+    # A signal (the launcher stopping an old copy, kill, a closed Terminal window)
+    # would end the process without running atexit, leaving the macro, Discord bot,
+    # Manager, stream and keep-awake processes behind. Exit normally instead.
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(sig, lambda signum, frame: sys.exit(0))
+
     #setup and launch gui
     gui.run = run
     gui.launch()

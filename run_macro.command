@@ -24,7 +24,12 @@ stop_fuzzy_macro() {
 
     printf "Stopping existing Fuzzy Macro process(es): %s\n" "$fuzzy_pids"
     kill $fuzzy_pids 2>/dev/null || true
-    sleep 1
+
+    # Give the macro up to 5 seconds to run its shutdown cleanup.
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        kill -0 $fuzzy_pids 2>/dev/null || break
+        sleep 0.5
+    done
 
     # Fall back to SIGKILL only if a stale process did not exit cleanly.
     for pid in $fuzzy_pids; do
