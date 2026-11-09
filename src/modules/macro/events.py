@@ -83,7 +83,6 @@ BUFF_BAR_BOOST_FIELDS = {
     "red": ("strawberry", "rose", "pepper"),
 }
 BUFF_BAR_BOOST_TOLERANCE = 30
-BUFF_BAR_BOOST_HOLD_SECONDS = 16 #the icon must stay unseen this long before the same boost can sync again
 
 
 class EventDetectionMixin:
@@ -270,8 +269,7 @@ class EventDetectionMixin:
         return None
 
     def scanBuffBarBoost(self):
-        """Move the TAD alts to a field boost that shows up on the buff bar.
-        The boost is handled once; it can trigger again after its icon has been gone for a while."""
+        """Move the TAD alts to a field boost that shows up on the buff bar, unless they are already on that field."""
         color = str(self.setdat.get("tad_alt_buff_bar_boost", "off")).lower()
         if color not in BUFF_BAR_BOOST_FIELDS or not self.setdat.get("tad_alt_sync_enabled", False) or self.status.value == "rejoining":
             return
@@ -284,17 +282,10 @@ class EventDetectionMixin:
         # A boost on the default field is ignored because the alts are already there.
         defaultField = str(self.setdat.get("tad_alt_default_field", "pine tree")).strip().lower()
         field = next((f for f in BUFF_BAR_BOOST_FIELDS[color] if f != defaultField and self.boostIconVisible(screen, f)), None)
-        now = time.time()
-        if field:
-            self.buffBarBoostLastSeen = now
-            if field != self.buffBarBoostField:
-                self.buffBarBoostField = field
-                self.logger.webhook("", f"{field.title()} boost found on the buff bar", "light blue", "screen")
-                #on a thread because moving the alts waits over 10s, which would stall the rest of the background tick.
-                #The time left on the boost is unknown, so no Glitter extending.
-                threading.Thread(target=self.tadAltSync.sync_to_boost, args=(field,), kwargs={"extend_with_glitter": False}, daemon=True).start()
-        elif self.buffBarBoostField and now - self.buffBarBoostLastSeen >= BUFF_BAR_BOOST_HOLD_SECONDS:
-            self.buffBarBoostField = None
+        if field and field != self.tadAltSync.current_field:
+            #on a thread because moving the alts waits over 10s, which would stall the rest of the background tick.
+            #The time left on the boost is unknown, so no Glitter extending.
+            threading.Thread(target=self.tadAltSync.sync_to_boost, args=(field,), kwargs={"extend_with_glitter": False}, daemon=True).start()
 
     def boostIconVisible(self, screen, field):
         """True if every pixel of the field's boost icon matches somewhere in the screen within the colour tolerance."""

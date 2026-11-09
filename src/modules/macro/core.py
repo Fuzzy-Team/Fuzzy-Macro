@@ -130,8 +130,6 @@ class macro(
         self.windyBeeLastAnnounced = {}
         self.gummyballLevel = None
         self.gummyballLastSeen = 0
-        self.buffBarBoostField = None
-        self.buffBarBoostLastSeen = 0
         self.buffBarBoostPausedUntil = 0
         self.stickerSproutDetectedAt = 0
         self.stickerSproutLastAnnounced = 0
