@@ -14,6 +14,7 @@ class TadAltSync:
         self.logger = logger
         self.use_glitter = use_glitter
         self._generation = 0
+        self.current_field = None  # boosted field the alts were last sent to; None once they are back on the default field
         self._lock = threading.Lock()
 
     def update_settings(self, settings):
@@ -119,6 +120,7 @@ class TadAltSync:
         with self._lock:
             self._generation += 1
             generation = self._generation
+            self.current_field = field
 
         failures = self._change_field(webhooks, field)
         if failures:
@@ -162,6 +164,7 @@ class TadAltSync:
         with self._lock:
             if generation != self._generation:
                 return
+            self.current_field = None
 
         webhooks = self._enabled_webhooks()
         if not webhooks:

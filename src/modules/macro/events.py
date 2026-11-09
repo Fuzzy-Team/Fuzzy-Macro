@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import re
+import threading
 from pathlib import Path
 from functools import lru_cache
 
@@ -67,11 +68,21 @@ from modules.screen.imageSearch import captureRegionBGR, findColorObjectRGB, loc
 from modules.screen.screenshot import mssScreenshotNP
 
 
-# The Gummyball stack count sits in the buff row, inside the top 100px of the window.
-# 16 is the original's cooldown: the buff must stay unseen this long (one background tick per second) before it can ping again.
-GUMMYBALL_BAND_HEIGHT = 100
+# The buff row sits inside the top 100px of the window.
+# The buff must stay unseen for 16 seconds (one background tick per second) before it can ping again.
+BUFF_BAND_HEIGHT = 100
 GUMMYBALL_HOLD_SECONDS = 16
 GUMMYBALL_THRESHOLD = 0.8
+
+# Field boost icons on the buff bar, checked in this order (first match wins).
+# One colour is followed at a time, and an icon matches when every pixel is within +-30 per channel.
+# The icons were captured on Windows.
+BUFF_BAR_BOOST_FIELDS = {
+    "blue": ("blue flower", "bamboo", "pine tree"),
+    "white": ("dandelion", "sunflower", "pumpkin"),
+    "red": ("strawberry", "rose", "pepper"),
+}
+BUFF_BAR_BOOST_TOLERANCE = 30
 
 
 class EventDetectionMixin:
@@ -238,7 +249,7 @@ class EventDetectionMixin:
         if not self.setdat.get("ping_gummyball", False) or self.status.value == "rejoining":
             return
         w = self.robloxWindow
-        screen = captureRegionBGR(w.mx, w.my, w.mw, GUMMYBALL_BAND_HEIGHT)
+        screen = captureRegionBGR(w.mx, w.my, w.mw, BUFF_BAND_HEIGHT)
         level = self.detectGummyballLevel(screen)
         now = time.time()
         if level:
@@ -250,12 +261,48 @@ class EventDetectionMixin:
             self.gummyballLevel = None
 
     def detectGummyballLevel(self, screen):
-        """Returns "9x", "8x" or None. 9x is checked first, like the original."""
+        """Returns "9x", "8x" or None. 9x is checked first."""
         for level in ("9x", "8x"):
             template = self.adjustImage("./images/buffs", f"gummy{level}")
             if locateImageInScreen(template, screen, GUMMYBALL_THRESHOLD, scales=[1.0]):
                 return level
         return None
+
+    def scanBuffBarBoost(self):
+        """Move the TAD alts to a field boost that shows up on the buff bar, unless they are already on that field."""
+        color = str(self.setdat.get("tad_alt_buff_bar_boost", "off")).lower()
+        if color not in BUFF_BAR_BOOST_FIELDS or not self.tadAltSync._enabled_webhooks() or self.status.value == "rejoining":
+            return
+        if self.setdat.get("macro_mode", "normal") == "alt":
+            return #alt instances don't drive the TAD alts, same as at start
+        if time.time() < self.buffBarBoostPausedUntil:
+            return #the macro is claiming a booster and will move the alts itself
+        w = self.robloxWindow
+        screen = captureRegionBGR(w.mx, w.my, w.mw, BUFF_BAND_HEIGHT)
+        # A boost on the default field is ignored because the alts are already there.
+        defaultField = str(self.setdat.get("tad_alt_default_field", "pine tree")).strip().lower()
+        field = next((f for f in BUFF_BAR_BOOST_FIELDS[color] if f != defaultField and self.boostIconVisible(screen, f)), None)
+        if field and field != self.tadAltSync.current_field:
+            #on a thread because moving the alts waits over 10s, which would stall the rest of the background tick.
+            #The time left on the boost is unknown, so no Glitter extending.
+            threading.Thread(target=self.tadAltSync.sync_to_boost, args=(field,), kwargs={"extend_with_glitter": False}, daemon=True).start()
+
+    def boostIconVisible(self, screen, field):
+        """True if every pixel of the field's boost icon matches somewhere in the screen within the colour tolerance."""
+        icon = self.adjustImage("./images/buffs", f"boost_{field.replace(' ', '_')}")[:, :, :3].astype(np.int16)
+        iconH, iconW = icon.shape[:2]
+        screen = screen[:, :, :3].astype(np.int16)
+        if screen.shape[0] < iconH or screen.shape[1] < iconW:
+            return False
+        # Start from the pixels matching the icon's first pixel, then drop positions as the other icon pixels disagree.
+        candidates = np.argwhere(np.all(np.abs(screen[:screen.shape[0] - iconH + 1, :screen.shape[1] - iconW + 1] - icon[0, 0]) <= BUFF_BAR_BOOST_TOLERANCE, axis=2))
+        for dy in range(iconH):
+            for dx in range(iconW):
+                if not len(candidates):
+                    return False
+                ys, xs = candidates[:, 0] + dy, candidates[:, 1] + dx
+                candidates = candidates[np.all(np.abs(screen[ys, xs] - icon[dy, dx]) <= BUFF_BAR_BOOST_TOLERANCE, axis=1)]
+        return len(candidates) > 0
 
     def detectGuidingStarAnnouncement(self, text, now):
         if "guiding" not in text or "star" not in text:

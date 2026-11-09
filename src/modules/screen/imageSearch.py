@@ -136,19 +136,39 @@ def locateImageOnScreen(target, x, y, w, h, threshold=0, scales=None, return_sca
     return locateImageInScreen(target, captureRegionBGR(x, y, w, h), threshold, scales, return_scale, resize_interp, early_exit_thresh)
 
 
+def findPixel(window, x1, y1, x2, y2, color=0x000000, variation=0):
+    """First pixel within `variation` per channel of 0xRRGGBB `color` in an inclusive
+    window-relative rectangle, as (x, y), or None.
+
+    Rows are scanned from y1 toward y2 and each row from x1 toward x2, so x2 < x1 or
+    y2 < y1 scans backwards. That decides which of several matches comes first.
+    Source patterns truncate coordinates before capturing, including rows just outside
+    the window. Retina captures are sampled in logical window pixels.
+    """
+    x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+    width, height = abs(x2 - x1) + 1, abs(y2 - y1) + 1
+    screen = captureRegionBGR(window.mx + min(x1, x2), window.my + min(y1, y2), width, height)
+    if screen.shape[:2] != (height, width):
+        screen = cv2.resize(screen, (width, height), interpolation=cv2.INTER_NEAREST_EXACT)
+    bgr = np.array([color & 255, color >> 8 & 255, color >> 16 & 255])
+    hits = cv2.inRange(screen, np.clip(bgr - variation, 0, 255).astype(np.uint8),
+                       np.clip(bgr + variation, 0, 255).astype(np.uint8)) > 0
+    if x2 < x1:
+        hits = hits[:, ::-1]
+    if y2 < y1:
+        hits = hits[::-1]
+    first = int(hits.argmax())
+    if not hits.flat[first]:
+        return None
+    row, col = divmod(first, width)
+    return (x1 - col if x2 < x1 else x1 + col), (y1 - row if y2 < y1 else y1 + row)
+
+
 def findBlackPixel(window, x1, x2, y):
     """First exact black pixel on an inclusive window-relative row, or None.
-
-    Source patterns truncate coordinates before capturing, including neighbour rows
-    just outside the window. Retina captures are sampled in logical window pixels.
-    """
-    x1, x2, y = int(x1), int(x2), int(y)
-    width = x2 - x1 + 1
-    screen = captureRegionBGR(window.mx + x1, window.my + y, width, 1)
-    if screen.shape[:2] != (1, width):
-        screen = cv2.resize(screen, (width, 1), interpolation=cv2.INTER_NEAREST_EXACT)
-    hits = np.flatnonzero(np.all(screen[0] == 0, axis=1))
-    return x1 + int(hits[0]) if hits.size else None
+    Kept for installed pattern files; new code calls findPixel."""
+    hit = findPixel(window, x1, y, x2, y)
+    return None if hit is None else hit[0]
 
 
 def captureRegionBGR(x, y, w, h):

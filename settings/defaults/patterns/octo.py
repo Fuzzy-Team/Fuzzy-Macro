@@ -1,4 +1,4 @@
-# Octo v4
+# Octo
 
 def key_down(*keys):
     for key in keys:

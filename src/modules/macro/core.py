@@ -130,6 +130,7 @@ class macro(
         self.windyBeeLastAnnounced = {}
         self.gummyballLevel = None
         self.gummyballLastSeen = 0
+        self.buffBarBoostPausedUntil = 0
         self.stickerSproutDetectedAt = 0
         self.stickerSproutLastAnnounced = 0
         self.stickerSproutInterruptRequested = False
@@ -338,6 +339,7 @@ class macro(
             self.detectNight()
         self.scanBlueTextAnnouncements()
         self.scanGummyballBuff()
+        self.scanBuffBarBoost()
 
         #hotbar
         for i in range(1,8):

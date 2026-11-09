@@ -1,4 +1,4 @@
-# PineDupe v12
+# PineDupe
 # Width is the source's reps; size and inverted movement keys are not used.
 
 def move(distance, *keys):
@@ -48,7 +48,7 @@ def pine_load_token_model():
         if not agc.coreml_available():
             candidates = candidates[1:]
         if not any(path.exists() for path, _ in candidates):
-            agc.check_missing_models("pine_dupe_v12", [path.name for path, _ in candidates])
+            agc.check_missing_models("pine_dupe", [path.name for path, _ in candidates])
         errors = []
         for path, kind in candidates:
             if not path.exists():
@@ -63,7 +63,7 @@ def pine_load_token_model():
                     "token_input": input_name, "token_output": output_name}
         raise RuntimeError("; ".join(errors) or f"no Standard token model in {agc.MODEL_DIR}")
     except Exception as exc:
-        print(f"[pine_dupe_v12] AI dupe detection unavailable, using pixel detection: {exc}")
+        print(f"[pine_dupe] AI dupe detection unavailable, using pixel detection: {exc}")
         return None
 
 

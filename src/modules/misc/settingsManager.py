@@ -196,7 +196,25 @@ def _writeJsonFile(path, value):
         f.write("\n")
 
 def _writeFieldsFile(path, fields_data):
-    _writeTextFile(path, str(fields_data))
+    abs_path = os.path.abspath(path)
+    directory = os.path.dirname(abs_path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    content = str(fields_data)
+    if content and not content.endswith("\n"):
+        content += "\n"
+    fd, tmp_path = tempfile.mkstemp(prefix=".fields_", suffix=".tmp", dir=directory or None)
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(content)
+        os.replace(tmp_path, abs_path)
+    except Exception:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
 
 def ensureProfileFiles(profile_name=None):
     """Create missing profile settings/general/fields files from hardcoded defaults."""
@@ -907,6 +925,9 @@ def importFieldSettings(field_name, json_settings):
 
         if "shape" in settings:
             requested_pattern = settings["shape"]
+            if isinstance(requested_pattern, str):
+                requested_pattern = MacroProfileStore.PATTERN_RENAMES.get(requested_pattern, requested_pattern)
+            settings["shape"] = requested_pattern
             if requested_pattern not in available_patterns:
                 # Replace with first available pattern (default)
                 default_pattern = available_patterns[0] if available_patterns else "cornerxe_lol"
