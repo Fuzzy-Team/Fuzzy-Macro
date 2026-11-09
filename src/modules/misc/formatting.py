@@ -26,8 +26,8 @@ def timestampedEmbedText(title, desc, time_value, time_format=24):
     if time_format == 12:
         try:
             time_value = datetime.strptime(time_value, "%H:%M:%S").strftime("%I:%M:%S %p")
-        except Exception:
-            pass
+        except (ValueError, TypeError):
+            pass #not an HH:MM:SS string, so show it as given
     if title:
         return f"[{time_value}] {title}", desc
     return "", f"[{time_value}] {desc}"
