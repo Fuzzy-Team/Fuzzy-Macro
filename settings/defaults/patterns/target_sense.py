@@ -1,6 +1,7 @@
 # target_sense: Precision, Scorching Star and X-Flame boosting. The pattern runs once per
 # gather cycle with its state in globals; where the original ran a buff-watcher loop and a
-# target-finder loop, each cycle does both checks instead.
+# target-finder loop, each cycle does both checks instead. The decision table, timers,
+# colours and X-Flame spin follow the original pattern.
 # Timer lengths come from Windows timing and are unverified on macOS.
 import math
 import time
@@ -66,7 +67,7 @@ def stop_timer(name):
 
 
 def target_priority():
-    """Which targets to chase, from which timers are running (decision table, in
+    """Which targets to chase, from which timers are running (the decision table, in
     order). Falling through to the last rule starts the no-hits and hits timers.
     Returns 'hit', 'prec', 'x_flame', 'marks', 'only_prec' or 'hits!o'."""
     if timer_running("full_bag"):
@@ -460,7 +461,7 @@ class TargetSense(SensePattern):
     def x_flame(self):
         """X-Flame move: the camera turns left eight times (one full circle) in
         pairs, with two steps back between them. The original has this move but the source that
-        calls it is missing; it runs once per new X-Flame window."""
+        calls it is missing from the reference; it runs once per new X-Flame window."""
         def turns(count):
             for i in range(count):
                 if i:
