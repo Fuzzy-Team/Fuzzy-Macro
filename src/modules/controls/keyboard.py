@@ -1,9 +1,17 @@
 from __future__ import annotations
 
 import pyautogui as pag
+import threading
 import time
 from typing import TYPE_CHECKING
-from modules.controls.sleep import is_paused, is_stopped, wait_while_paused
+from modules.controls.sleep import (
+    INTERRUPT_HIVE_HUB_TRADE,
+    InterruptRequested,
+    get_interrupt_action,
+    is_paused,
+    is_stopped,
+    wait_while_paused,
+)
 
 if TYPE_CHECKING:
     from modules.submacros.hasteCompensation import HasteCompensationRevamped
@@ -15,6 +23,10 @@ _held = []
 def _pausePoint():
     """If paused, release the held keys, wait for resume, then press them again.
     Returns the seconds spent paused so the caller can push its deadline back by that much."""
+    # Walking patterns never sleep(), so a Hive Hub trade request has to stop them from here.
+    # The background thread also presses keys, so only the macro's main thread raises.
+    if threading.current_thread() is threading.main_thread() and get_interrupt_action() == INTERRUPT_HIVE_HUB_TRADE:
+        raise InterruptRequested(INTERRUPT_HIVE_HUB_TRADE)
     if not is_paused():
         return 0
     start = time.perf_counter()

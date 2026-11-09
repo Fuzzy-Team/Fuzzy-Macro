@@ -3,6 +3,7 @@ import copy
 import json
 import threading
 import time as raw_time
+import traceback
 from datetime import datetime
 import modules.controls.mouse as mouse
 import modules.logging.log as logModule
@@ -133,6 +134,7 @@ class macro(
         self.stickerSproutDetectedAt = 0
         self.stickerSproutLastAnnounced = 0
         self.stickerSproutInterruptRequested = False
+        self.hiveHubTradeBusy = False
         self.sproutBeansUsed = 0
         self.lastSproutBeanLimitLog = 0
 
@@ -338,6 +340,10 @@ class macro(
             self.detectNight()
         self.scanBlueTextAnnouncements()
         self.scanGummyballBuff()
+        try:
+            self.scanTradeRequest()
+        except Exception:
+            traceback.print_exc()  # a failed scan must not stop the hotbar and the other background checks
 
         #hotbar
         for i in range(1,8):

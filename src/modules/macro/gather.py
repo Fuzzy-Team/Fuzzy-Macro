@@ -2,7 +2,7 @@ import threading
 import traceback
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
-from modules.controls.sleep import INTERRUPT_NONE, InterruptRequested, pause_aware_time as time, sleep
+from modules.controls.sleep import INTERRUPT_HIVE_HUB_TRADE, INTERRUPT_NONE, InterruptRequested, pause_aware_time as time, sleep
 from modules.gather_session import pattern_supports_field, field_pattern_variables, GatherPatternRunner, GatherSession
 from modules.quest_planning import quest_check_due
 import modules.macro.pattern_environment as patternEnvironment
@@ -74,6 +74,7 @@ class GatherMixin:
         normalized_field = field.replace('_', ' ')
         altMode = self.setdat.get("macro_mode", "normal") == "alt"
         isHiveHubField = normalized_field == "hive hub"
+        tradingInHiveHub = isHiveHubField and bool(self.setdat.get("hive_hub_trading", False))
         fieldSetting = {**self.fieldSettings[normalized_field], **settingsOverride}
         isSproutGather = not altMode and bool(fieldSetting.get("plant_sprout", False))
         skipTravel = bool(fieldSetting.get("skip_travel", False)) and self.location == normalized_field and not isHiveHubField
@@ -533,6 +534,9 @@ class GatherMixin:
                     questMenuKeptOpen = False
                 self.moveMouseToDefault()
             finally:
+                # a trade request that arrives as the gather ends must not interrupt the walk back
+                if tradingInHiveHub and self.skipTask.value == INTERRUPT_HIVE_HUB_TRADE:
+                    self.skipTask.value = INTERRUPT_NONE
                 self.robloxWindow.questMenuVisibleForAI = False
                 try:
                     self.clear_task_status()
@@ -555,6 +559,9 @@ class GatherMixin:
             finally:
                 self._inventoryInteractionLock.release()
             while keepGathering:
+                # a trade request that came in between passes; checkPauseAndWait would raise it as an interrupt
+                if tradingInHiveHub and self.skipTask.value == INTERRUPT_HIVE_HUB_TRADE:
+                    self.acceptHiveHubTrade()
                 # Check if paused and wait
                 if self.checkPauseAndWait():
                     # Stop was requested while paused
@@ -575,6 +582,8 @@ class GatherMixin:
                     break
 
                 patternStartTime = time.time()
+                if tradingInHiveHub:
+                    self.postHiveHubTradeMessage()
                 # wait for any inventory interaction to finish before clicking again
                 if not self.acquireInventoryForGather():
                     stopGather()
@@ -586,6 +595,15 @@ class GatherMixin:
 
                 try:
                     pattern = gatherSession.run_cycle(gatherNameSpace, owner=self)
+                except InterruptRequested as interrupt:
+                    mouse.mouseUp()
+                    if not (tradingInHiveHub and interrupt.action == INTERRUPT_HIVE_HUB_TRADE):
+                        stopGather()
+                        raise
+                    # accept the trade, then the route starts over
+                    self.keyboard.releaseMovement()
+                    self.acceptHiveHubTrade()
+                    continue
                 except Exception:
                     # interrupts usually land inside a pattern's sleep, and e_lol failing ends the
                     # gather too; either way stop the gather's threads and reports before leaving

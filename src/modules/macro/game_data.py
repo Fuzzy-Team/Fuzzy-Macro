@@ -229,6 +229,7 @@ blenderItems = ["red extract", "blue extract", "enzymes", "oil", "glue", "tropic
 
 MAIN_GAME_PLACE_ID = "1537690962"
 HIVE_HUB_PLACE_ID = "15579077077"
+TRADE_REQUEST_THRESHOLD = 0.8
 # Rejoin/loading screen detection: at least REJOIN_COLOR_PERCENT of the Roblox window must be
 # within REJOIN_COLOR_TOLERANCE of one sample color. If that lasts REJOIN_COLOR_DURATION seconds, the rejoin is retried.
 REJOIN_COLOR_PERCENT = 0.7754
