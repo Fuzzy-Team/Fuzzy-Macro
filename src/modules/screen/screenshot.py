@@ -14,6 +14,7 @@ import subprocess
 import Quartz.CoreGraphics as CG
 from modules.screen.screenData import getScreenData
 from modules.misc.appManager import getWindowSize
+from modules.controls.sleep import heartbeat
 
 mw, mh = pag.size()
 multi = 2 if getScreenData()["display_type"] == "retina" else 1
@@ -72,6 +73,7 @@ def cgGrab(region=None):
  
 #returns an NP array, useful for cv2
 def mssScreenshotNP(x,y,w,h, save = False):
+    heartbeat()
     #return cgGrab((x,y,w,h))
     if usePillow:
         screen = pillowGrab(int(x*multi),int(y*multi),int(w*multi),int(h*multi))
@@ -90,6 +92,7 @@ def mssScreenshotNP(x,y,w,h, save = False):
 
 
 def mssScreenshot(x=0,y=0,w=mw,h=mh, save = False, filename=None):
+    heartbeat()
     # img = cgGrab((x,y,w,h))
     # img = img[:, :, [2, 1, 0]]
     # img = Image.fromarray(img, 'RGB')

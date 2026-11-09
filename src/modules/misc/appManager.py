@@ -15,10 +15,18 @@ def isAppOpenMac(app="roblox"):
     tmp = os.popen("ps -Af").read()
     return app in tmp[:]
 
+def openWith(*args):
+    """Run macOS open. It can hang when Launch Services is stuck, so give up after 30 seconds
+    instead of freezing the main app's crash recovery or the macro's rejoin."""
+    try:
+        subprocess.run(["open", *args], timeout=30)
+    except subprocess.TimeoutExpired:
+        print("open timed out")
+
 def openAppMac(app="Roblox"):
     if not isAppOpenMac(app): return False
     runAppleScript('activate application "{}"'.format(app))
-    subprocess.run(["open", "-a", app])
+    openWith("-a", app)
     workspace = NSWorkspace.sharedWorkspace()
     for runningApp in workspace.runningApplications():
         if runningApp.localizedName() == app:
@@ -41,11 +49,11 @@ def isAppFocusedMac(app="Roblox"):
         return False
 
 def openDeeplink(link):
-    subprocess.call(["open", link])
+    openWith(link)
 
 def closeApp(app):
     try:
-        subprocess.call(["pkill", app], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.call(["pkill", app], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
     except Exception:
         pass
     cmd = """

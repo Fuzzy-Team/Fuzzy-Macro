@@ -7,6 +7,7 @@ import zipfile
 from io import BytesIO
 
 import requests
+from modules.controls.sleep import pause_hang_watchdog
 
 
 MODELS_API_URL = "https://api.github.com/repos/Fuzzy-Team/fuzzymacroaimodels/contents"
@@ -330,6 +331,8 @@ def ensure_missing_models(model_names):
         if os.path.exists(local_path):
             skipped.append(model_name)
             continue
+        # a large download on a slow connection can take minutes
+        pause_hang_watchdog()
         try:
             remote_files = _remote_tree(f"{MODELS_API_URL}/{model_name}")
             print(f"[models] Downloading missing {model_name}...")

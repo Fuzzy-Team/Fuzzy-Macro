@@ -1,5 +1,7 @@
 #custom sleep function with pause support
+import faulthandler
 import time
+import threading
 
 # Module-level reference to the run state (multiprocessing.Value)
 _run_state = None
@@ -60,14 +62,53 @@ def raise_if_interrupted():
     if action != INTERRUPT_NONE:
         raise InterruptRequested(action)
 
+# A screen capture, text read, window query or input event can hang inside macOS and never return.
+# The macro's main thread checks pause/stop, takes screenshots or clicks at least every few seconds
+# while it is healthy, and each of those calls heartbeat(). If HANG_SECS pass without one,
+# faulthandler writes every thread's stack to HANG_FILE and exits with code 1, and the main app
+# reports the crash and restarts the macro.
+HANG_SECS = 180
+HANG_FILE = "hang.txt"
+_hangFile = None
+_hangThread = None
+_lastBeat = 0.0
+
+def start_hang_watchdog(path):
+    """Call once from the macro process's main thread. Only that thread's heartbeats count."""
+    global _hangFile, _hangThread
+    _hangFile = open(path, "w")
+    _hangThread = threading.get_ident()
+
+def heartbeat(anyThread=False):
+    """Push the hang deadline back. Re-arms the timer at most once a second."""
+    global _lastBeat
+    if _hangFile is None or (not anyThread and threading.get_ident() != _hangThread):
+        return
+    now = time.monotonic()
+    if now - _lastBeat >= 1:
+        _lastBeat = now
+        faulthandler.dump_traceback_later(HANG_SECS, exit=True, file=_hangFile)
+
+def pause_hang_watchdog():
+    """Turn the timer off while the main thread waits on something with no time limit, such as a
+    dialog or a model download. The next heartbeat turns it back on."""
+    global _lastBeat
+    if _hangFile is None or threading.get_ident() != _hangThread:
+        return
+    faulthandler.cancel_dump_traceback_later()
+    _lastBeat = 0.0
+
 def is_paused():
     """Check if macro is currently paused (state 6)"""
-    if _run_state is None:
-        return False
-    return _run_state.value == 6
+    paused = _run_state is not None and _run_state.value == 6
+    # while paused every thread waits on purpose, even a main thread joining a worker,
+    # so any thread's check keeps the macro alive
+    heartbeat(anyThread=paused)
+    return paused
 
 def is_stopped():
     """Check if macro stop was requested (state 0)"""
+    heartbeat()
     if _run_state is None:
         return False
     return _run_state.value == 0

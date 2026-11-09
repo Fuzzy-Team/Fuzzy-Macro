@@ -10,6 +10,7 @@ from modules.screen.screenshot import mssScreenshot, mssScreenshotNP, benchmarkM
 from modules.controls.keyboard import keyboard
 from modules.controls.sleep import (
     sleep,
+    is_paused,
     set_run_state,
     pauseable_sleep,
     set_resume_callback,
@@ -1111,7 +1112,7 @@ class macro:
         self.raiseIfInterrupted()
         # Wait while paused (state 6)
         wasPaused = False
-        while self.run.value == 6:
+        while is_paused():
             wasPaused = True
             self._inactiveHoneyResetResumeBlockUntil = time.monotonic() + 2
             # Keep inputs released while paused

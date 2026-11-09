@@ -39,6 +39,9 @@ from modules.controls.sleep import (
     INTERRUPT_AFB_REROLL,
     INTERRUPT_COLLECT_PLANTER,
     INTERRUPT_STICKER_SPROUT,
+    HANG_FILE,
+    is_paused,
+    start_hang_watchdog,
 )
 # delete backup from previous update if pending
 try:
@@ -450,6 +453,7 @@ def canClaimTimedBearQuest(name):
 # (set_enabled moved into RichPresenceManager class)
 #controller for the macro
 def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMessageQueue=None, planterCommandQueue=None, skipServer=None):
+    start_hang_watchdog(settingsManager.getUserDataPath(HANG_FILE))
     macro = macroModule.macro(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, skipServer)
     altHostAuthorized = (
         macro.setdat.get("macro_mode", "normal") != "alt"
@@ -1028,7 +1032,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
     
     while True:
         # Check for pause - wait while paused
-        while run.value == 6:  # 6 = paused
+        while is_paused():
             time.sleep(0.1)  # Wait while paused
         # Check if stop was requested while paused
         if run.value == 0:
@@ -3778,15 +3782,15 @@ if __name__ == "__main__":
             except Exception:
                 extra = ""
             print(f"Macro process exited{extra}")
-            # a text read that never returned leaves the stacks of every thread here (see screen/ocr.py)
+            # a macro that froze leaves the stacks of every thread here (see controls/sleep.py)
             hangDesc = ""
-            hangPath = settingsManager.getUserDataPath("ocr_hang.txt")
+            hangPath = settingsManager.getUserDataPath(HANG_FILE)
             if os.path.exists(hangPath):
                 with open(hangPath) as f:
                     hangTrace = f.read()
                 open(hangPath, "w").close()
                 if hangTrace.strip():
-                    hangDesc = "\nText reading froze, restarting.\n```\n" + hangTrace[:1800] + "\n```"
+                    hangDesc = "\nThe macro froze, restarting.\n```\n" + hangTrace[:1800] + "\n```"
             logger.webhook("","Macro Crashed{0}{1}".format(extra, hangDesc), "red", "screen", ping_category="ping_critical_errors")
             macroProc.join()
             keyboardModule.releaseMovement()

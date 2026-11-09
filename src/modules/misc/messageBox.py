@@ -1,8 +1,10 @@
 import os
 import sys
 import subprocess
+from modules.controls.sleep import pause_hang_watchdog
 
 def msgBox(title, text):
+    pause_hang_watchdog()
     os.system(f'''osascript -e 'Tell application "System Events" to display dialog "{text}" with title "{title}"' ''')
 
 def msgBoxOkCancel(title, text):
@@ -20,6 +22,7 @@ def msgBoxOkCancel(title, text):
     end tell
     '''
     
+    pause_hang_watchdog()
     try:
         result = subprocess.run(['osascript', '-e', script], 
                               capture_output=True, text=True, check=True)
