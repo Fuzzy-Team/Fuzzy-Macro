@@ -53,10 +53,10 @@ def closeApp(app):
         subprocess.call(["pkill", app], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
     except Exception:
         pass
-    cmd = """
-        osascript -e 'quit application "Roblox"'
-    """
-    os.system(cmd)
+    try:
+        subprocess.run(["osascript", "-e", 'quit application "{}"'.format(app)], timeout=10)
+    except subprocess.TimeoutExpired:
+        print("quit application timed out")
 
 def getWindowSize(windowName):
     import Quartz
