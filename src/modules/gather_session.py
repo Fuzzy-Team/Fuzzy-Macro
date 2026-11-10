@@ -2,6 +2,7 @@
 
 import os
 
+from modules.controls.keyboard import keyboard
 from modules.controls.sleep import paused_seconds
 
 
@@ -140,6 +141,7 @@ class GatherPatternRunner:
         except Exception as exc:
             if self.active_pattern == FALLBACK_PATTERN:
                 raise
+            keyboard.releaseMovement()
             self._activate_fallback(self.active_pattern, exc)
             self._run(FALLBACK_PATTERN, namespace)
         return self.active_pattern

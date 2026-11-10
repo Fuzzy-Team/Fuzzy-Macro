@@ -589,6 +589,7 @@ class GatherMixin:
                 except Exception:
                     # interrupts usually land inside a pattern's sleep, and e_lol failing ends the
                     # gather too; either way stop the gather's threads and reports before leaving
+                    self.keyboard.releaseMovement()
                     mouse.mouseUp()
                     stopGather()
                     raise
