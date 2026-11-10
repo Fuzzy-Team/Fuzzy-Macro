@@ -2,6 +2,8 @@
 
 import os
 
+from modules.controls.sleep import paused_seconds
+
 
 AI_PATTERNS = {"fuzzy_ai_gather", "blooms_ai"}
 FALLBACK_PATTERN = "e_lol"
@@ -69,26 +71,19 @@ class GatherSession:
         self.pattern_runner = pattern_runner
         self._now = now
         self._started_at = None
-        self._pause_started = None
-        self._paused_duration = 0.0
+        self._paused_at_start = 0.0
         self._cleanup = []
         self._finished = False
 
     def start(self, started_at=None):
         self._started_at = self._now() if started_at is None else started_at
+        self._paused_at_start = paused_seconds()
 
-    def elapsed(self, paused=False):
-        now = self._now()
+    def elapsed(self):
+        """Seconds since start, leaving out time spent paused. Time stands still during a pause."""
         if self._started_at is None:
-            self.start(now)
-        if paused:
-            if self._pause_started is None:
-                self._pause_started = now
-            return self._pause_started - self._started_at - self._paused_duration
-        if self._pause_started is not None:
-            self._paused_duration += now - self._pause_started
-            self._pause_started = None
-        return now - self._started_at - self._paused_duration
+            self.start()
+        return self._now() - self._started_at - (paused_seconds() - self._paused_at_start)
 
     def run_cycle(self, namespace, owner=None):
         return self.pattern_runner.run_cycle(namespace, owner)
