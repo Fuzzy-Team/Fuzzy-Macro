@@ -373,9 +373,9 @@ class GatherMixin:
         pattern_preferred_tokens = fieldSetting.get("fuzzy_ai_preferred_tokens", fuzzyAITokenRanking.get("preferred_tokens", ""))
         pattern_ignored_tokens = fieldSetting.get("fuzzy_ai_ignored_tokens", fuzzyAITokenRanking.get("ignored_tokens", ""))
         pattern_sprout_idle_square = isSproutGather
-        st = time.time()
-        gatherSession = GatherSession(patternRunner, time.time)
-        gatherSession.start(st)
+        # monotonic, like the paused time it subtracts, so a clock change can't shorten a gather
+        gatherSession = GatherSession(patternRunner, time.monotonic)
+        gatherSession.start()
         keepGathering = True
         self.died = False
         #time to gather
