@@ -93,17 +93,20 @@ def runApp(macroTarget):
     #convert ahk pattern
     patterns_dir = settingsManager.getPatternsDir()
     if os.path.exists(patterns_dir):
-        ahkPatterns = [x for x in os.listdir(patterns_dir) if ".ahk" in x]
+        ahkPatterns = [x for x in os.listdir(patterns_dir) if x.endswith(".ahk")]
         for pattern in ahkPatterns:
             pattern_path = os.path.join(patterns_dir, pattern)
+            patternName = pattern.rsplit(".", 1)[0].lower()
+            output_path = os.path.join(patterns_dir, f"{patternName}.py")
+            # keep a converted pattern that is newer than its source, it may have been edited by hand
+            if os.path.exists(output_path) and os.path.getmtime(output_path) >= os.path.getmtime(pattern_path):
+                continue
             with open(pattern_path, "r") as f:
                 ahk = f.read()
             f.close()
             try:
                 python = ahkPatternToPython(ahk)
                 print(f"Converted: {pattern}")
-                patternName = pattern.rsplit(".", 1)[0].lower()
-                output_path = os.path.join(patterns_dir, f"{patternName}.py")
                 with open(output_path, "w") as f:
                     f.write(python)
                 f.close()
