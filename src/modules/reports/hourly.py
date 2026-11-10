@@ -432,7 +432,8 @@ class HourlyReport():
         else:
             onlyValidHourlyHoney = [x for x in self.hourlyReportStats["honey_per_min"] if x] #removes all zeroes
         sessionHoney = max(0, onlyValidHourlyHoney[-1]- self.hourlyReportStats["start_honey"])
-        sessionTime = time.time()-self.hourlyReportStats["start_time"]
+        startTime = self.hourlyReportStats["start_time"]
+        sessionTime = time.time()-startTime if startTime else 0
         honeyThisHour = max(0, onlyValidHourlyHoney[-1] - onlyValidHourlyHoney[0])
 
         hourlyReportStats = copy.deepcopy(self.hourlyReportStats)
