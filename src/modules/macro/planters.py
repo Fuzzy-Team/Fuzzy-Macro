@@ -225,45 +225,48 @@ class PlanterMixin:
             vmove = "s"
 
         i = 0
-        while hmove or vmove:
-            #check if reached saturator
-            if (hmove == "a" and x >= winLeft) or (hmove == "d" and x <= winRight):
-                keyboard.keyUp(hmove, False)
-                hmove = ""
+        try:
+            while hmove or vmove:
+                #check if reached saturator
+                if (hmove == "a" and x >= winLeft) or (hmove == "d" and x <= winRight):
+                    keyboard.keyUp(hmove, False)
+                    hmove = ""
                 
-            if (vmove == "w" and y >= winUp) or (vmove == "s" and y <= winDown):
-                keyboard.keyUp(vmove, False)
-                vmove = ""
+                if (vmove == "w" and y >= winUp) or (vmove == "s" and y <= winDown):
+                    keyboard.keyUp(vmove, False)
+                    vmove = ""
             
-            time.sleep(0.02)
-            #taking too long, just give up
-            if i >= 100:
-                print("give up")
-                keyboard.releaseMovement()
-                break
-            #update planter location
-            location = getPlanterLocation()
-            if location:
-                x,y = location
+                time.sleep(0.02)
+                #taking too long, just give up
+                if i >= 100:
+                    print("give up")
+                    keyboard.releaseMovement()
+                    break
+                #update planter location
+                location = getPlanterLocation()
+                if location:
+                    x,y = location
 
-            else: #cant find planter, pause
-                keyboard.releaseMovement()
-                #try to find planter
-                for _ in range(10):
-                    time.sleep(0.02)
-                    location = getPlanterLocation()
-                    #planter found
-                    if location:
-                        #move towards planter
-                        if hmove:
-                            keyboard.keyDown(hmove)
-                        if vmove:
-                            keyboard.keyDown(vmove)
-                        x,y = location
-                        break
-                else: #still cant find it, give up
-                    return
-            i += 1
+                else: #cant find planter, pause
+                    keyboard.releaseMovement()
+                    #try to find planter
+                    for _ in range(10):
+                        time.sleep(0.02)
+                        location = getPlanterLocation()
+                        #planter found
+                        if location:
+                            #move towards planter
+                            if hmove:
+                                keyboard.keyDown(hmove)
+                            if vmove:
+                                keyboard.keyDown(vmove)
+                            x,y = location
+                            break
+                    else: #still cant find it, give up
+                        return
+                i += 1
+        finally:
+            keyboard.releaseMovement()
 
     def collectPlanter(self, planter, field, returnToHive=True):
         field_key = field.replace(" ", "_")
