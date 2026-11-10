@@ -2818,8 +2818,12 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
                     # Draw background rectangle
                     padding = 8
-                    line_h = font.getsize("Tg")[1] + 4
-                    box_w = max(font.getsize(l)[0] for l in lines) + padding*2
+                    try:
+                        line_h = font.getbbox("Tg")[3] + 4
+                        box_w = max(font.getbbox(l)[2] for l in lines) + padding*2
+                    except AttributeError:
+                        line_h = font.getsize("Tg")[1] + 4
+                        box_w = max(font.getsize(l)[0] for l in lines) + padding*2
                     box_h = line_h * len(lines) + padding*2
                     draw.rectangle([(10,10),(10+box_w,10+box_h)], fill=(0,0,0,180))
                     for idx, l in enumerate(lines):
