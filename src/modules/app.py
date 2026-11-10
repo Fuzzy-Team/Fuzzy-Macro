@@ -21,7 +21,7 @@ from modules.submacros.tadAltSync import TadAltSync
 
 
 CRASH_RESTART_DELAYS = (2, 5, 15, 30, 60)
-CRASH_STARTUP_WINDOW_SECONDS = 60
+CRASH_STARTUP_WINDOW_SECONDS = 600
 
 
 def getCrashRestartDelay(consecutiveCrashes):
