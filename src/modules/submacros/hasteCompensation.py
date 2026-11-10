@@ -83,6 +83,7 @@ class HasteCompensationRevamped():
         screen = self.screenshotBuff()
         haste = 0
         hasteX = None
+        hasteIcons = 0
 
         x = 0
         #locate haste. It shares the same color as melody
@@ -93,13 +94,14 @@ class HasteCompensationRevamped():
             x = res[0]
             #can't find melody, so its haste
             if not bitmap_matcher.find_bitmap_cython(screen, self.melodyBitmap, x=x+2, w=16*self.robloxWindow.multi, variance=2):
-                hasteX = res[0]
-                break
-            #melody, skip this buff
+                if hasteX is None:
+                    hasteX = res[0]
+                hasteIcons += 1
+            #skip this buff, whether it is melody or haste
             x+= 40*self.robloxWindow.multi
 
         #haste found, get count
-        if hasteX:
+        if hasteIcons:
             for i, img in enumerate(self.countBitmaps):
                 res = bitmap_matcher.find_bitmap_cython(screen, img, x=hasteX, w=38*self.robloxWindow.multi, variance=0)
                 if res:
@@ -116,6 +118,9 @@ class HasteCompensationRevamped():
                 bearmorphSpeed = 4
                 break
 
+        #a second haste icon is Coconut Haste, which adds 10 flat movespeed
+        coconutHasteSpeed = 10 if hasteIcons >= 2 else 0
+
         #search for haste+
         hastePlus = bool(bitmap_matcher.find_bitmap_cython(screen, self.hastePlus, variance=20 if self.robloxWindow.isRetina else 2))
         #haste+ doubles movespeed; it is not another 10 haste stacks
@@ -131,4 +136,4 @@ class HasteCompensationRevamped():
         #print(end_time-start_time)
         #print(f"{(self.baseMoveSpeed + bearmorphSpeed) * (1 + (0.1 * haste))} --- {self.baseMoveSpeed}, {haste}")
         
-        return (self.baseMoveSpeed + bearmorphSpeed) * (1 + (0.1 * haste)) * speedMultiplier
+        return (self.baseMoveSpeed + bearmorphSpeed + coconutHasteSpeed) * (1 + (0.1 * haste)) * speedMultiplier
