@@ -125,11 +125,11 @@ class ReportMixin:
             if self.status.value != "rejoining":
                 #instead of using time.sleep, we want to run the code at the start of the min
                 if currMin != self.prevMin:
-                    self.prevMin = currMin
                     honey = self.getHoney()
                     print(honey)
                     backpack = self.getBackpack()
 
+                    self.prevMin = currMin
                     self.hourlyReport.addHourlyStat("honey_per_min", honey)
                     self.hourlyReport.addHourlyStat("backpack_per_min", backpack)
 
@@ -239,6 +239,9 @@ class ReportMixin:
                 isGathering = "gather_" in self.status.value
                 self.hourlyReport.recordUptimeSample(i, sampleValues, isGathering=isGathering, monitoredBuffs=monitoredBuffs)
                 self.hourlyReport.saveHourlyReportData()
+        except virtual_display.DisplayError:
+            # The macro's display-error handler reports the failure and stops input.
+            return
         except Exception:
             self.logger.webhook("Hourly Report Error", traceback.format_exc(), "red", ping_category="ping_critical_errors")
 
