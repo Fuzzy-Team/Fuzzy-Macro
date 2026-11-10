@@ -3162,7 +3162,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 with open(stream_url_file, 'r') as f:
                     stream_url = f.read().strip()
                 if stream_url:
-                    await interaction.response.send_message(f"🔗 **Current Stream URL:**\n{stream_url}")
+                    await interaction.response.send_message(f"🔗 **Current Stream URL:**\n{stream_url}", ephemeral=True)
                 else:
                     await interaction.response.send_message("❌ No active stream URL found. Make sure streaming is enabled and running.")
             else:
@@ -3194,7 +3194,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                         stream_url = f.read().strip()
 
                 if stream_url:
-                    await interaction.response.send_message(f"✅ Stream is enabled and active:\n{stream_url}")
+                    await interaction.response.send_message(f"✅ Stream is enabled and active:\n{stream_url}", ephemeral=True)
                 elif currently_enabled:
                     await interaction.response.send_message("✅ Stream is enabled, but no active URL is available yet.")
                 else:
@@ -3235,7 +3235,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             if link is None:
                 stored = settings.get("private_server_link", "")
                 if stored and str(stored).strip():
-                    await interaction.response.send_message(f"🔗 **Private Server Link:**\n{stored}")
+                    await interaction.response.send_message(f"🔗 **Private Server Link:**\n{stored}", ephemeral=True)
                 else:
                     await interaction.response.send_message("❌ No private server link is configured.")
                 return
@@ -3244,7 +3244,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
             success, message = update_setting("private_server_link", link)
             if success:
-                await interaction.response.send_message(f"✅ Private server link updated.\n🔗 {link}")
+                await interaction.response.send_message(f"✅ Private server link updated.\n🔗 {link}", ephemeral=True)
             else:
                 await interaction.response.send_message(message)
         except Exception as e:
