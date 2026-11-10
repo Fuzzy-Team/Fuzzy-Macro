@@ -23,6 +23,7 @@ class cloudflaredStream:
         self.serverThread = None
         self.publicURL = None
         self.cfProc = None
+        self.cfToken = None
         self.target_fps = 60
         self.last_frame_time = 0
         self.frame_count = 0
@@ -404,10 +405,13 @@ class cloudflaredStream:
         except FileNotFoundError:
             return False
 
-    def _run_cloudflared(self):
+    def _run_cloudflared(self, token):
         time.sleep(2)
+        # stop() or a newer start() during the wait cancels this launch
+        if self.cfToken is not token:
+            return
         print("Launching Cloudflare tunnel")
-        self.cfProc = subprocess.Popen(
+        proc = self.cfProc = subprocess.Popen(
             [self.cloudflaredPath, "tunnel", "--url", "http://localhost:8081"],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -415,8 +419,9 @@ class cloudflaredStream:
         )
         
         #extract the cloudflare link
-        for line in self.cfProc.stdout:
-            if "trycloudflare.com" in line and "https://" in line:
+        # keep reading after the URL is found so cloudflared never blocks on a full pipe
+        for line in proc.stdout:
+            if not self.publicURL:
                 match = re.search(r"https://[a-zA-Z0-9\-]+\.trycloudflare\.com", line)
                 if match:
                     url = match.group()
@@ -430,7 +435,27 @@ class cloudflaredStream:
                             f.write(url)
                     except Exception as e:
                         print(f"Failed to write stream URL to file: {e}")
-                    break
+
+        # cloudflared exited on its own, so the tunnel is gone
+        if self.cfProc is proc:
+            self.publicURL = None
+            self._clearStreamURLFile()
+
+    def _stopCloudflared(self):
+        self.cfToken = None
+        self.publicURL = None
+        if self.cfProc:
+            self.cfProc.terminate()
+            self.cfProc.wait()
+            self.cfProc = None
+
+    def _clearStreamURLFile(self):
+        try:
+            stream_url_file = os.path.join(os.path.dirname(__file__), '..', '..', 'stream_url.txt')
+            if os.path.exists(stream_url_file):
+                os.remove(stream_url_file)
+        except Exception as e:
+            print(f"Failed to remove stream URL file: {e}")
 
     def start(self, resolution=1.0):
         self.resolution = resolution
@@ -443,8 +468,10 @@ class cloudflaredStream:
             self.serverThread.start()
             print(f"Stream started on http://localhost:8081 (Target: {self.target_fps} FPS)")
             
-        #start the Cloudflare tunnel
-        threading.Thread(target=self._run_cloudflared, daemon=True).start()
+        #start the Cloudflare tunnel, replacing any earlier one
+        self._stopCloudflared()
+        self.cfToken = object()
+        threading.Thread(target=self._run_cloudflared, args=(self.cfToken,), daemon=True).start()
 
     def stop(self):
 
@@ -453,23 +480,13 @@ class cloudflaredStream:
         self.streaming = False
         self.publicURL = None
 
-        # Clear stream URL file
-        try:
-            stream_url_file = os.path.join(os.path.dirname(__file__), '..', '..', 'stream_url.txt')
-            if os.path.exists(stream_url_file):
-                os.remove(stream_url_file)
-        except Exception as e:
-            print(f"Failed to remove stream URL file: {e}")
+        self._clearStreamURLFile()
         
         #stop the capture thread
         if self.capture_thread and self.capture_thread.is_alive():
             self.capture_thread.join(timeout=1.0)
         
-        #stop Cloudflare tunnel
-        if self.cfProc:
-            self.cfProc.terminate()
-            self.cfProc.wait()
-            self.cfProc = None
+        self._stopCloudflared()
         
         #clear frame buffer
         with self.frame_lock:
