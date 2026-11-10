@@ -2525,6 +2525,9 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     @bot.tree.command(name = "rejoin", description = "Make the macro rejoin the game.")
     @requires_discord_permission("macro_control")
     async def rejoin(interaction: discord.Interaction):
+        if run.value != 2:
+            await interaction.response.send_message("Macro is not running")
+            return
         run.value = 4
         await interaction.response.send_message("Macro is rejoining")
 
