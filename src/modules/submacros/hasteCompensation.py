@@ -17,6 +17,9 @@ class HasteCompensationRevamped():
         self.bearMorphs = []
         self.hasteBitmap = Image.new('RGBA', (10, 1), '#f0f0f0ff')
         self.melodyBitmap = Image.new('RGBA', (3, 2), '#2b2b2bff')
+        #Natro's oil and super smoothie buff icons (one-pixel colour strips)
+        self.oilBitmap = self._loadNatroBuffBitmap("iVBORw0KGgoAAAANSUhEUgAAABQAAAABBAMAAAAsvJMWAAAALVBMVEVKRDlNRjlXTTpgVDtwXjhzXzV5ZDaDaziefjutiT3Gm0LWp0XsuEv8xE/+xlCsCySdAAAAFklEQVR4AQELAPT/AO7bl1MQACRorO4cdQTqnFFEXAAAAABJRU5ErkJggg==")
+        self.smoothieBitmap = self._loadNatroBuffBitmap("iVBORw0KGgoAAAANSUhEUgAAABgAAAABBAMAAAA2gHOYAAAAMFBMVEVKRDlKRTlYTjpjVjtvXjh1YDV2YTV5YzeNcjmkgzywiz3PokTotUr0vk36w0/+xlDRVtQJAAAAGElEQVR4AQENAPL/AP7JcxAAAAACRWir3x4xBISoIvpcAAAAAElFTkSuQmCC")
 
         if self.robloxWindow.isRetina:
             for i in range(6):
@@ -38,6 +41,16 @@ class HasteCompensationRevamped():
 
         self.prevHaste = 0
         self.endTime = 0
+
+    def _loadNatroBuffBitmap(self, encoded):
+        bitmap = bitmap_matcher.create_bitmap_from_base64(encoded)
+        scale = max(1, int(self.robloxWindow.multi)) if self.robloxWindow.isRetina else 1
+        if scale != 1:
+            bitmap = bitmap.resize(
+                (bitmap.width * scale, bitmap.height * scale),
+                Image.Resampling.NEAREST,
+            )
+        return bitmap
 
     def _loadCountBitmaps(self):
         if self.robloxWindow.isRetina:
@@ -107,6 +120,13 @@ class HasteCompensationRevamped():
         hastePlus = bool(bitmap_matcher.find_bitmap_cython(screen, self.hastePlus, variance=20 if self.robloxWindow.isRetina else 2))
         #haste+ doubles movespeed; it is not another 10 haste stacks
         speedMultiplier = 2 if hastePlus else 1
+
+        #oil and super smoothie multiply movespeed on top of haste and bear morphs
+        buffVariance = 20 if self.robloxWindow.isRetina else 4
+        if bitmap_matcher.find_bitmap_cython(screen, self.oilBitmap, variance=buffVariance):
+            speedMultiplier *= 1.2
+        if bitmap_matcher.find_bitmap_cython(screen, self.smoothieBitmap, variance=buffVariance):
+            speedMultiplier *= 1.25
             
         #print(end_time-start_time)
         #print(f"{(self.baseMoveSpeed + bearmorphSpeed) * (1 + (0.1 * haste))} --- {self.baseMoveSpeed}, {haste}")
