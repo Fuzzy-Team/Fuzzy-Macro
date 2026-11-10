@@ -90,13 +90,35 @@ def pause_hang_watchdog():
     faulthandler.cancel_dump_traceback_later()
     _lastBeat = 0.0
 
+# Total seconds spent paused. Every pause loop calls is_paused() about every 0.1s, so the start
+# and end of a pause are seen whichever loop is waiting, and overlapping waiters count once.
+_pausedTotal = 0.0
+_pausedSince = None
+_pauseLock = threading.Lock()
+
 def is_paused():
     """Check if macro is currently paused (state 6)"""
+    global _pausedTotal, _pausedSince
     paused = _run_state is not None and _run_state.value == 6
     # while paused every thread waits on purpose, even a main thread joining a worker,
     # so any thread's check keeps the macro alive
     heartbeat(anyThread=paused)
+    if paused != (_pausedSince is not None):
+        with _pauseLock:
+            now = time.monotonic()
+            if paused and _pausedSince is None:
+                _pausedSince = now
+            elif not paused and _pausedSince is not None:
+                _pausedTotal += now - _pausedSince
+                _pausedSince = None
     return paused
+
+def paused_seconds():
+    """Seconds spent paused so far, including a pause still going. Take two readings and subtract
+    to get the time paused in between, so timers can leave pauses out."""
+    is_paused()
+    with _pauseLock:
+        return _pausedTotal + (time.monotonic() - _pausedSince if _pausedSince is not None else 0)
 
 def is_stopped():
     """Check if macro stop was requested (state 0)"""

@@ -490,7 +490,7 @@ class GatherMixin:
             return self.run is not None and self.run.value == 6
 
         def getGatherTime():
-            return gatherSession.elapsed(isGatherPaused())
+            return gatherSession.elapsed()
 
         liveGatherReport = None
         if self.liveGatherReportEnabled() and not isSproutGather:
