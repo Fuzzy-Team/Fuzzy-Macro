@@ -121,16 +121,17 @@ def ahkPatternToPython(ahk):
                         key = "locals[f'" + nonVarString + ''.join(["{" + x + "}" for x in varNames]) + "']"
                 else:
                     key = f'"{key}"'
-                #get command
-                if args[1] == "up":
+                #get command, a key with no count is pressed once
+                command = args[1] if len(args) > 1 else "1"
+                if command == "up":
                     cmds.append(f"self.keyboard.keyUp({key}, False)")
-                elif args[1] == "down":
+                elif command == "down":
                     cmds.append(f"self.keyboard.keyDown({key}, False)")
-                elif args[1].isdigit():
-                    for _ in range(int(args[1])):
+                elif command.isdigit():
+                    for _ in range(int(command)):
                         cmds.append(f"self.keyboard.press({key})")
                 else: #its probably a variable
-                    var = args[1].replace('"', "").replace("%", "")
+                    var = command.replace('"', "").replace("%", "")
                     cmds.append(f"for _ in range({var}):")
                     cmds.append(f"\tself.keyboard.press({key})")
                 
