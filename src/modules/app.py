@@ -627,11 +627,13 @@ def runApp(macroTarget):
                     start_details.append("Alt Field: Waiting for Host")
             start_details.append(f'Display: {screenInfo["display_type"]}, {screenInfo["screen_width"]}x{screenInfo["screen_height"]}')
             logger.webhook("Macro Started", "\n".join(start_details), "purple", route_category="macro_status")
-            run.value = 2
             autoStopStartTime = time.time()
             autoStopHours = parseAutoStopHours(setdat)
             autoStopDeadline = autoStopStartTime + (autoStopHours * 3600) if autoStopHours > 0 else None
-            showRunState(2)
+            # a Stop pressed while the warnings above were open is handled on the next tick
+            if run.value == 1:
+                run.value = 2
+                showRunState(2)
         elif run.value == 0:
             had_macro_proc = bool(macroProc)
             autoStopStartTime = None
@@ -734,8 +736,10 @@ def runApp(macroTarget):
             macroProcStartedAt = time.time()
             nextRestartAt = 0.0
             crashRestartCount = 0
-            run.value = 2
-            showRunState(2)
+            # a Stop pressed while Roblox was closing is handled on the next tick
+            if run.value == 4:
+                run.value = 2
+                showRunState(2)
         # Note: run.value == 6 (paused) is handled in the macro process loop - it waits for resume
         
         # Check for crash (non-zero exitcodes). Log signal name to aid diagnosis.
@@ -790,8 +794,6 @@ def runApp(macroTarget):
                 # restart macro process
                 macroProc = startMacroProcess()
                 macroProcStartedAt = time.time()
-                run.value = 2
-                showRunState(2)
 
         #show every log message queued since the last tick
         while not logQueue.empty():
