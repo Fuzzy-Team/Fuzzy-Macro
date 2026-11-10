@@ -2704,6 +2704,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 "alt": "Alt",
                 "quest": "Quests",
                 "field": "Field",
+                "bug": "Bug Runs",
                 "vic": "Vic Hop",
             }.get(settings.get("macro_mode", "normal"), settings.get("macro_mode", "normal"))
 
@@ -3966,6 +3967,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         app_commands.Choice(name="alt", value="alt"),
         app_commands.Choice(name="quests", value="quest"),
         app_commands.Choice(name="field", value="field"),
+        app_commands.Choice(name="bug runs", value="bug"),
         app_commands.Choice(name="vic hop", value="vic"),
     ])
     async def macro_mode(interaction: discord.Interaction, mode: str):
@@ -3985,6 +3987,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 "alt": "Alt",
                 "quest": "Quest",
                 "field": "Field",
+                "bug": "Bug Runs",
                 "vic": "Vic Hop"
             }
 
