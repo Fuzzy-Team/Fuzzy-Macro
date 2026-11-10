@@ -11,6 +11,7 @@ from modules.controls.keyboard import keyboard
 from modules.controls.sleep import (
     sleep,
     is_paused,
+    paused_seconds,
     set_run_state,
     pauseable_sleep,
     set_resume_callback,
@@ -4623,6 +4624,7 @@ class macro:
         pattern_ignored_tokens = fieldSetting.get("fuzzy_ai_ignored_tokens", fuzzyAITokenRanking.get("ignored_tokens", ""))
         pattern_sprout_idle_square = isSproutGather
         st = time.time()
+        pausedAtStart = paused_seconds()
         keepGathering = True
         self.died = False
         #time to gather
@@ -4767,23 +4769,12 @@ class macro:
         mouse.moveBy(10,5)
         self.keyboard.releaseMovement()
 
-        pauseStarted = None
-        pausedDuration = 0
-
         def isGatherPaused():
             return self.run is not None and self.run.value == 6
 
         def getGatherTime():
-            nonlocal pauseStarted, pausedDuration
-            now = time.time()
-            if isGatherPaused():
-                if pauseStarted is None:
-                    pauseStarted = now
-                return pauseStarted - st - pausedDuration
-            if pauseStarted is not None:
-                pausedDuration += now - pauseStarted
-                pauseStarted = None
-            return now - st - pausedDuration
+            # time stands still while paused
+            return time.time() - st - (paused_seconds() - pausedAtStart)
 
         liveGatherReport = None
         if self.liveGatherReportEnabled() and not isSproutGather:
