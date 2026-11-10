@@ -313,8 +313,10 @@ class fieldDriftCompensation():
         
     def press(self, k,t):
         keyboard.keyDown(k, False)
-        time.sleep(t)
-        keyboard.keyUp(k, False)
+        try:
+            time.sleep(t)
+        finally:
+            keyboard.keyUp(k, False)
         
     @staticmethod
     def correctionBudget(fieldDimensions):
@@ -385,45 +387,48 @@ class fieldDriftCompensation():
                 keyboard.keyDown("s", False)
                 vmove = "s"
 
-            deadline = time.monotonic() + max_seconds
-            while hmove or vmove:
-                #check if reached saturator
-                if (hmove == "a" and x >= winLeft) or (hmove == "d" and x <= winRight):
-                    keyboard.keyUp(hmove, False)
-                    hmove = ""
+            try:
+                deadline = time.monotonic() + max_seconds
+                while hmove or vmove:
+                    #check if reached saturator
+                    if (hmove == "a" and x >= winLeft) or (hmove == "d" and x <= winRight):
+                        keyboard.keyUp(hmove, False)
+                        hmove = ""
                     
-                if (vmove == "w" and y >= winUp) or (vmove == "s" and y <= winDown):
-                    keyboard.keyUp(vmove, False)
-                    vmove = ""
+                    if (vmove == "w" and y >= winUp) or (vmove == "s" and y <= winDown):
+                        keyboard.keyUp(vmove, False)
+                        vmove = ""
                 
-                time.sleep(0.02)
-                #taking too long, just give up
-                if time.monotonic() >= deadline:
-                    print("give up")
-                    keyboard.releaseMovement()
-                    break
-                #update saturator location
-                saturatorLocation = locator()
-                if saturatorLocation is not None:
-                    x,y = saturatorLocation
+                    time.sleep(0.02)
+                    #taking too long, just give up
+                    if time.monotonic() >= deadline:
+                        print("give up")
+                        keyboard.releaseMovement()
+                        break
+                    #update saturator location
+                    saturatorLocation = locator()
+                    if saturatorLocation is not None:
+                        x,y = saturatorLocation
 
-                else: #cant find saturator, pause
-                    keyboard.releaseMovement()
-                    #try to find saturator
-                    for _ in range(10):
-                        time.sleep(0.02)
-                        saturatorLocation = locator()
-                        #saturator found
-                        if saturatorLocation:
-                            #move towards saturator
-                            if hmove:
-                                keyboard.keyDown(hmove)
-                            if vmove:
-                                keyboard.keyDown(vmove)
-                            x,y = saturatorLocation
-                            break
-                    else: #still cant find it, give up
-                        return
+                    else: #cant find saturator, pause
+                        keyboard.releaseMovement()
+                        #try to find saturator
+                        for _ in range(10):
+                            time.sleep(0.02)
+                            saturatorLocation = locator()
+                            #saturator found
+                            if saturatorLocation:
+                                #move towards saturator
+                                if hmove:
+                                    keyboard.keyDown(hmove)
+                                if vmove:
+                                    keyboard.keyDown(vmove)
+                                x,y = saturatorLocation
+                                break
+                        else: #still cant find it, give up
+                            return
+            finally:
+                keyboard.releaseMovement()
                 
     def run(self, fieldDimensions=None):
         try:
