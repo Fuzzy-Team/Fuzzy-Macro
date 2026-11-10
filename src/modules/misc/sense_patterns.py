@@ -36,7 +36,8 @@ ICON_BAND_HEIGHT = 100
 
 
 class SenseStopped(Exception):
-    """The macro was stopped while the pattern was running."""
+    """Ends the current cycle: the macro was stopped, or a lost-sprinkler search gave up.
+    run() releases held keys and returns, and the gather loop decides what happens next."""
 
 
 def round_half_up(value):
@@ -47,6 +48,7 @@ class SensePattern:
     """Everything the three patterns share. Subclasses supply targets_missing()."""
 
     LOOPED_PARTS = 64   # source: LoopedPart() is called 64 times after its functions
+    LOST_SPRINKLER_PASSES = 2   # laps of a lost-sprinkler search route before giving up
 
     def __init__(self, macro, tc_fb, tc_lr, af_cfb, af_clr, rot_up, space):
         self.macro = macro
@@ -347,7 +349,9 @@ class SensePattern:
 
     def circle_sprinkler_check(self, corner_scale, search_lost):
         """circle_line == 1: look for the sprinkler and stand on its corner. Two misses in a
-        row call search_lost(), which must return where it found the sprinkler."""
+        row call search_lost(), which returns where it found the sprinkler, or None once it
+        gives up. Giving up ends the cycle, so the gather can check its time limit and
+        backpack, and the next cycle starts over from a target search."""
         self.circle_line = 2
         hit = self.find_sprinkler()
         self.after_circle_search()
@@ -359,11 +363,16 @@ class SensePattern:
         if self.missed_sprinkler == 2:
             self.keys("space+")
             self.go_to_mirror_of_last_found()
-            self.finish_sprinkler_search(self.find_sprinkler() or search_lost())
+            hit = self.find_sprinkler() or search_lost()
+            if not hit:
+                self.missed_sprinkler = 0
+                self.circle_line = 0
+                raise SenseStopped()
+            self.finish_sprinkler_search(hit)
 
 
 class RoseSense(SensePattern):
-    LOOP = (   # the endless search loop, variation 4: keys before, tiles, keys after
+    LOOP = (   # one search lap, variation 4: keys before, tiles, keys after
         ("s+", 8, "s-"), ("d+", 8, "d-"), ("w+", 8, "w-"), ("d+", 8, "d-"),
         ("w+", 8, "w-"), ("d+", 8, "d-"), ("w+", 8, "w-"), ("d+", 8, "d-"),
         ("a+ s+ space+", 8, "a- s-"), ("a+ s+", 8, "a- s-"),
@@ -384,7 +393,9 @@ class RoseSense(SensePattern):
             ("d+", 10, ""), ("", 10, ""), ("", 8, ""), ("space- d- w+", 6, ""),
             ("", 6, "w-"), ("s+", 8, ""), ("d+", 8, "s- d-"),
         ))
-        while not hit:
+        for _ in range(self.LOST_SPRINKLER_PASSES):
+            if hit:
+                break
             hit = self.sprinkler_ladder(self.LOOP, 4)
         return hit
 
@@ -441,9 +452,11 @@ class PepperSense(SensePattern):
         self.keys("w+")
         self.walk(32)
         self.keys("space- w- a-")
-        while not hit:
+        for _ in range(self.LOST_SPRINKLER_PASSES):
             hit = self.sweep()
-        return hit
+            if hit:
+                return hit
+        return None
 
 
 class StrabrySense(SensePattern):
@@ -512,7 +525,7 @@ class StrabrySense(SensePattern):
         if hit:
             return hit
         self.keys("w- space-")
-        while True:
+        for _ in range(self.LOST_SPRINKLER_PASSES):
             self.keys("w+")
             self.wait_ms(20)
             self.keys("space+")
@@ -548,3 +561,4 @@ class StrabrySense(SensePattern):
             if hit:
                 return hit
             self.keys("d-")
+        return None
