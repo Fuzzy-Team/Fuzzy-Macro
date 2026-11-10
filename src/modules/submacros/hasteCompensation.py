@@ -104,10 +104,11 @@ class HasteCompensationRevamped():
                 break
 
         #search for haste+
-        if bitmap_matcher.find_bitmap_cython(screen, self.hastePlus, variance=20 if self.robloxWindow.isRetina else 2):
-            haste += 10
+        hastePlus = bool(bitmap_matcher.find_bitmap_cython(screen, self.hastePlus, variance=20 if self.robloxWindow.isRetina else 2))
+        #haste+ doubles movespeed; it is not another 10 haste stacks
+        speedMultiplier = 2 if hastePlus else 1
             
         #print(end_time-start_time)
         #print(f"{(self.baseMoveSpeed + bearmorphSpeed) * (1 + (0.1 * haste))} --- {self.baseMoveSpeed}, {haste}")
         
-        return (self.baseMoveSpeed + bearmorphSpeed) * (1 + (0.1 * haste))
+        return (self.baseMoveSpeed + bearmorphSpeed) * (1 + (0.1 * haste)) * speedMultiplier
