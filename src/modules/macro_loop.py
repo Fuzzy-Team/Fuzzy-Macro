@@ -140,8 +140,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                     planterData[key][index] = emptyValue
             if "harvestTimes" in planterData and index < len(planterData["harvestTimes"]):
                 planterData["harvestTimes"][index] = 0
-            with open(settingsManager.ensureUserFile("manualplanters.txt"), "w") as f:
-                f.write(str(planterData))
+            settingsManager.saveUserLiteral("manualplanters.txt", planterData)
         elif mode == 2:
             with open(settingsManager.ensureUserFile("auto_planters.json"), "r") as f:
                 autoData = json.load(f)
@@ -149,8 +148,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             if index < len(planters):
                 planters[index] = emptyAutoPlanterSlot()
             autoData["planters"] = planters
-            with open(settingsManager.ensureUserFile("auto_planters.json"), "w") as f:
-                json.dump(autoData, f, indent=3)
+            settingsManager.saveUserJson("auto_planters.json", autoData)
 
     def processPlanterCommandQueue():
         if planterCommandQueue is None:
@@ -924,8 +922,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             nonlocal planterDataRaw
             normalized = normalizeManualPlanterData(planterData)
             planterDataRaw = str(normalized)
-            with open(settingsManager.ensureUserFile("manualplanters.txt"), "w") as f:
-                f.write(planterDataRaw)
+            settingsManager.saveUserText("manualplanters.txt", planterDataRaw)
             return normalized
         
         # Get priority order from settings, or use empty list if not set
@@ -1250,9 +1247,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                             "gather": gatherFlag,
                             "field_degradation": fieldDegradation
                         }
-                        with open(settingsManager.ensureUserFile("auto_planters.json"), "w") as f:
-                            json.dump(data, f, indent=3)
-                        f.close()
+                        settingsManager.saveUserJson("auto_planters.json", data)
                         updateGUI.value = 1
 
                     def getPlanterRanking(field, planterName):
