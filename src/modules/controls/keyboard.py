@@ -207,8 +207,10 @@ class keyboard:
     def tileWalk(self, key, tiles, applyHaste = True):
         if applyHaste:
             self.keyDown(key, False)
-            self.tileWait(tiles)
-            self.keyUp(key, False)
+            try:
+                self.tileWait(tiles)
+            finally:
+                self.keyUp(key, False)
         else:
             self.press(key,(tiles/8.3)*28/self.ws)
 
