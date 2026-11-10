@@ -2442,17 +2442,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         if run.value != 3:
             await interaction.response.send_message("Macro is not fully stopped yet")
             return 
-        try:
-            # Press F1 to start the macro (simulating keyboard input)
-            from pynput.keyboard import Controller, Key
-            controller = Controller()
-            controller.press(Key.f1)
-            controller.release(Key.f1)
-            await interaction.response.send_message("Starting Macro")
-        except Exception as e:
-            # Fallback to setting run.value if key press fails
-            run.value = 1
-            await interaction.response.send_message(f"Starting Macro. Error: {str(e)}")
+        run.value = 1
+        await interaction.response.send_message("Starting Macro")
 
     @bot.tree.command(name = "stop", description = "Stop the macro")
     @requires_discord_permission("macro_control")
@@ -2460,17 +2451,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         if run.value == 3:
             await interaction.response.send_message("Macro is already stopped")
             return
-        try:
-            # Press F3 to stop the macro (simulating keyboard input)
-            from pynput.keyboard import Controller, Key
-            controller = Controller()
-            controller.press(Key.f3)
-            controller.release(Key.f3)
-            await interaction.response.send_message("Stopping Macro")
-        except Exception as e:
-            # Fallback to setting run.value if key press fails
-            run.value = 0
-            await interaction.response.send_message(f"Stopping Macro. Error: {str(e)}")
+        run.value = 0
+        await interaction.response.send_message("Stopping Macro")
 
     @bot.tree.command(name="standby", description="Stop the macro, quit Roblox, and keep the Mac awake")
     @app_commands.describe(duration="Optional: 30m, 2h, 1h 30m; omit to run until disabled")
