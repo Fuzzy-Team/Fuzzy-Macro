@@ -71,6 +71,7 @@ class PlanterMixin:
     def placePlanter(self, planter, field, glitter):
         st = time.time()
         self.lastPlanterPlacementFailure = None
+        self.glitterUsedOnPlanter = False
         name = planter.lower().replace(" ","").replace("-","")
         hotbarSlot = self.getPlanterHotbarSlot(planter)
 
@@ -156,7 +157,7 @@ class PlanterMixin:
                 self.logger.webhook("",f"Placed {planter.title()} Planter", "dark brown", "screen")
                 #use glitter
                 if glitter: 
-                    self.useItemInInventory("glitter")
+                    self.glitterUsedOnPlanter = self.useItemInInventory("glitter")
                 updateHourlyTime()
                 return True
             if placementError == "maxplanters" and recoverAlreadyPlacedPlanterState():
@@ -363,7 +364,7 @@ class PlanterMixin:
         if self.setdat["manual_planters_collect_full"]:
             baseGrowthTime, bonusFields, fieldGrowthBonus = planterGrowthData[planter]
             bonusTime = 0
-            if glitter: bonusTime += 0.25
+            if self.glitterUsedOnPlanter: bonusTime += 0.25
             if field in bonusFields: bonusTime += fieldGrowthBonus
             planterGrowthTime = (baseGrowthTime/(1+bonusTime))
 
