@@ -828,10 +828,13 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         except Exception as e:
             print(f"Failed to set Discord status: {e}")
         
-        # Start background task to process pin requests
-        if _pin_requests is not None:
+        # on_ready runs again after a reconnect, so start only one consumer
+        # for each shared queue.
+        if _pin_requests is not None and not getattr(bot, "_fuzzy_pin_task_started", False):
+            bot._fuzzy_pin_task_started = True
             bot.loop.create_task(process_pin_requests())
-        if _discord_message_queue is not None:
+        if _discord_message_queue is not None and not getattr(bot, "_fuzzy_message_task_started", False):
+            bot._fuzzy_message_task_started = True
             bot.loop.create_task(process_discord_messages())
 
     @bot.event
