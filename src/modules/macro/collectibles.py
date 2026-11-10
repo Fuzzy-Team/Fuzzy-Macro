@@ -421,6 +421,8 @@ class CollectiblesMixin:
                     if cd:
                         cooldownFormat = timedelta(seconds=cd)
                         self.logger.webhook("", f"Honey Storm is on cooldown ({cooldownFormat} remaining)", "dark brown", "screen")
+                        self.saveTiming(objective)
+                        self.collectCooldowns[objective] = cd
                         return
                 # Execute honey storm actions
                 self.keyboard.press("e")
@@ -479,6 +481,8 @@ class CollectiblesMixin:
                 if cd:
                     cooldownFormat = timedelta(seconds=cd)
                     self.logger.webhook("", f"{displayName} is on cooldown ({cooldownFormat} remaining)", "dark brown", "screen")
+                    self.saveTiming(objective)
+                    self.collectCooldowns[objective] = cd
                     updateHourlyTime()
                     return
         #player has reached, get cooldown info
