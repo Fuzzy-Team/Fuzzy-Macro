@@ -2845,11 +2845,13 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     async def amulet(interaction: discord.Interaction, option: str):
         if run.value != 2:
             await interaction.response.send_message("Macro is not running")
+            return
         option = option.lower()
         keepAlias = ["k", "keep"]
         replaceAlias = ["r", "replace"]
         if not option in keepAlias and not option in replaceAlias:
             await interaction.response.send_message("Unknown option. Enter either `keep` or `replace`")
+            return
         
         elif status.value != "amulet_wait":
             await interaction.response.send_message("There is no amulet to keep or replace")
