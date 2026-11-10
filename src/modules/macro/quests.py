@@ -281,6 +281,7 @@ class QuestMixin:
                 "dand": "dandelion",
                 "mush": "mushroom",
                 "bluf": "blue flower",
+                "clov": "clover",
                 "clove": "clover",
                 "bamb": "bamboo",
                 "spide": "spider",
