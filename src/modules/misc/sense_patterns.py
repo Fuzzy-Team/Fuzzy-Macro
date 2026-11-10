@@ -202,11 +202,9 @@ class SensePattern:
 
     def find_target(self):
         """The 0xFFCD6B target: search up from the middle row, then down. A hit only counts
-        if the pixel above (or below) it, or the one next to that, has the colour too.
-        source: a lone token pixel on the top row is found again and again (the row above it
-        is off the screen), so this loops until the pattern is stopped or the screen changes."""
+        if the pixel above (or below) it, or the one next to that, has the colour too."""
         row = round_half_up(self.h / 2)
-        while True:
+        while row >= 0:
             hit = self.pixel(0, row, self.w, 0, TARGET, 0)
             if hit is None:
                 break
