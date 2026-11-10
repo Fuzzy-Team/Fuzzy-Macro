@@ -410,6 +410,10 @@ class HourlyReport():
 
         if len(self.hourlyReportStats["honey_per_min"]) < 3:
             self.hourlyReportStats["honey_per_min"] = [0]*3 + self.hourlyReportStats["honey_per_min"]
+        #failed reads (0) repeat the previous value so they cannot create a gain spike
+        from modules.reports.final import FinalReport  # lazy: final imports this module
+        self.hourlyReportStats["honey_per_min"] = FinalReport._normalizeCumulativeHoneySeries(
+            self.hourlyReportStats["honey_per_min"], baseline=self.hourlyReportStats["start_honey"] or None)
         #filter out the honey/min
         print(self.hourlyReportStats["honey_per_min"])
         #self.hourlyReportStats["honey_per_min"] = [x for x in self.hourlyReportStats["honey_per_min"] if x]
