@@ -145,8 +145,9 @@ class PlanterMixin:
                     placementError = "notinfield"
                     placedPlanter = False
                     break
-                # hotbar placement only watches for "not in field", otherwise assume it was placed
-                if not hotbarSlot and self.blueTextHas("maxplanters"):
+                # The max-planters message appears for hotbar and inventory placement,
+                # so neither path may assume the planter was placed when it shows.
+                if self.blueTextHas("maxplanters"):
                     placementError = "maxplanters"
                     placedPlanter = False
                     break
