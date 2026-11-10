@@ -4068,38 +4068,42 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             # Load settings and prepare report objects
             setdat = get_cached_settings()
 
-            rw = RobloxWindowBounds()
-            try:
-                rw.setRobloxWindowBounds()
-            except Exception:
-                # Non-fatal: continue with default bounds
-                pass
+            def _generate():
+                rw = RobloxWindowBounds()
+                try:
+                    rw.setRobloxWindowBounds()
+                except Exception:
+                    # Non-fatal: continue with default bounds
+                    pass
 
-            bd = BuffDetector(rw)
-            hr = HourlyReport(buffDetector=bd, time_format=setdat.get("hourly_report_time_format", 24))
+                bd = BuffDetector(rw)
+                hr = HourlyReport(buffDetector=bd, time_format=setdat.get("hourly_report_time_format", 24))
 
-            # Try loading previously saved hourly data; if missing, initialize defaults
-            try:
-                hr.loadHourlyReportData()
-            except Exception:
-                hr.hourlyReportStats = {
-                    "honey_per_min": [],
-                    "backpack_per_min": [],
-                    "bugs": 0,
-                    "quests_completed": 0,
-                    "vicious_bees": 0,
-                    "gathering_time": 0,
-                    "converting_time": 0,
-                    "bug_run_time": 0,
-                    "misc_time": 0,
-                    "start_time": int(time.time()),
-                    "start_honey": 0,
-                }
-                hr.uptimeBuffsValues = {k: [0] * 600 for k in getattr(hr, "uptimeBuffsColors", {}).keys()}
-                hr.buffGatherIntervals = [0] * 600
+                # Try loading previously saved hourly data; if missing, initialize defaults
+                try:
+                    hr.loadHourlyReportData()
+                except Exception:
+                    hr.hourlyReportStats = {
+                        "honey_per_min": [],
+                        "backpack_per_min": [],
+                        "bugs": 0,
+                        "quests_completed": 0,
+                        "vicious_bees": 0,
+                        "gathering_time": 0,
+                        "converting_time": 0,
+                        "bug_run_time": 0,
+                        "misc_time": 0,
+                        "start_time": int(time.time()),
+                        "start_honey": 0,
+                    }
+                    hr.uptimeBuffsValues = {k: [0] * 600 for k in getattr(hr, "uptimeBuffsColors", {}).keys()}
+                    hr.buffGatherIntervals = [0] * 600
 
-            # Generate the image (saves to hourlyReport.png)
-            hr.generateHourlyReport(setdat)
+                # Generate the image (saves to hourlyReport.png)
+                hr.generateHourlyReport(setdat)
+                return hr
+
+            hr = await asyncio.get_running_loop().run_in_executor(None, _generate)
             embed_fields = getattr(hr, "lastEmbedFields", None)
             if embed_fields:
                 from discord import Embed
