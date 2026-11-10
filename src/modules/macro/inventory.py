@@ -230,7 +230,7 @@ class InventoryMixin:
         prevHash = None
         time.sleep(0.3)
         for _ in range(180):
-            max_val, max_loc = locateImageOnScreen(itemImg, self.robloxWindow.mx, self.robloxWindow.my+90, 100, self.robloxWindow.mh-180)
+            max_val, max_loc = locateImageOnScreen(itemImg, self.robloxWindow.mx, self.robloxWindow.my+90, 100, self.robloxWindow.mh-180) or (0, None)
             #most likely the correct item, stop searching
             if max_val > 0.7:
                 itemScreenshot = mssScreenshot(self.robloxWindow.mx+90, self.robloxWindow.my+(max_loc[1]//self.robloxWindow.multi)+60, 220, 60)
