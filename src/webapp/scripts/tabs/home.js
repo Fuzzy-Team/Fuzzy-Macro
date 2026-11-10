@@ -136,7 +136,13 @@ function log(time = "", msg = "", color = "") {
 
   const logEntry = document.createElement("div");
   logEntry.className = "log-msg";
-  logEntry.innerHTML = `<span style="background-color: #${color}; align-self: start"></span>${timeText} ${msg}`;
+  logEntry.innerHTML = `<span style="background-color: #${color}; align-self: start"></span>`;
+  // Python joins title and description with <br>; everything else is plain text.
+  logEntry.append(`${timeText} `);
+  msg.split("<br>").forEach((part, i) => {
+    if (i) logEntry.append(document.createElement("br"));
+    logEntry.append(part);
+  });
   logs.appendChild(logEntry);
 
   filterLogs();
