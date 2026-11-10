@@ -1,7 +1,7 @@
 import os
 import modules.controls.mouse as mouse
 import modules.misc.appManager as appManager
-from modules.controls.sleep import pause_aware_time as time, sleep
+from modules.controls.sleep import is_stopped, pause_aware_time as time, sleep
 from modules.macro.game_data import (
     fieldFaceNorthKeys,
     HIVE_HUB_PLACE_ID,
@@ -279,6 +279,8 @@ class NavigationMixin:
                 return False
         if self.cannon():
             return True
+        if is_stopped():
+            return False
         self.logger.webhook(
             f"{context}: aborted",
             "Could not confirm cannon access before travel",

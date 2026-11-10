@@ -10,7 +10,7 @@ from difflib import SequenceMatcher
 import modules.controls.mouse as mouse
 import modules.misc.appManager as appManager
 import modules.screen.ocr as ocr
-from modules.controls.sleep import is_paused, pause_aware_time as time, sleep
+from modules.controls.sleep import is_paused, is_stopped, pause_aware_time as time, sleep
 from modules.screen.imageSearch import locateImageOnScreen
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP
 
@@ -250,7 +250,8 @@ class InventoryMixin:
             prevHash = hash
 
         if bestY is None:
-            self.logger.webhook("", f"Could not find {itemName} in inventory", "dark brown")
+            if not is_stopped():
+                self.logger.webhook("", f"Could not find {itemName} in inventory", "dark brown")
             return
         bestY //= self.robloxWindow.multi
         return (40, bestY+80)

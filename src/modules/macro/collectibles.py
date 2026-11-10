@@ -8,7 +8,7 @@ import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
 from modules.misc.settings_defaults import glitter_slot, glitter_slot_label
 import modules.screen.ocr as ocr
-from modules.controls.sleep import pause_aware_time as time, sleep
+from modules.controls.sleep import is_stopped, pause_aware_time as time, sleep
 from modules.macro.game_data import (
     BLENDER_ITEM_SLOTS,
     blenderItems,
@@ -221,7 +221,8 @@ class CollectiblesMixin:
             try:
                 self.useGlitterFromSlot(glitterSlot)
             except RuntimeError as error:
-                self.logger.webhook("", f"Could not extend field booster: {error}", "red")
+                if not is_stopped():
+                    self.logger.webhook("", f"Could not extend field booster: {error}", "red")
                 return
             self.logger.webhook("", f"Used Glitter from {glitter_slot_label(glitterSlot)}; extending field booster", "bright green")
 
