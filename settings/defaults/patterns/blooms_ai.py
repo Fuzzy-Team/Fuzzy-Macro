@@ -623,12 +623,7 @@ def _idle_square_sides(side):
 
 def _bloom_seen_for_patrol(runtime):
     target = agc.latest_target(runtime)
-    if isinstance(target, dict) and target.get("name") == BLOOM_LABEL:
-        return True
-    candidates = runtime.get("latest_bloom_candidates", [])
-    if isinstance(candidates, list) and candidates:
-        return True
-    return False
+    return isinstance(target, dict) and target.get("name") == BLOOM_LABEL
 
 
 def _latest_sprinkler_offset(runtime):
