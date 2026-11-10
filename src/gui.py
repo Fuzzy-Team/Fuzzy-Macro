@@ -15,7 +15,7 @@ import time
 import threading
 import plistlib
 import platform
-from bottle import route, static_file
+from bottle import abort, hook, request, route, static_file
 from modules.submacros.autoGiftedBasicBee import AutoGiftedBasicBeeRunner
 from modules.submacros.ssaRoller import SsaRollerRunner
 import modules.controls.keyboard as keyboardModule
@@ -1458,6 +1458,14 @@ def launch():
 
     port = get_free_port(8000, 100)
     port_url = f"http://localhost:{port}"
+
+    # Browsers let any site open a websocket to localhost, so refuse requests sent from another page's origin
+    allowed_origins = {port_url, f"http://127.0.0.1:{port}"}
+    @hook("before_request")
+    def reject_foreign_origin():
+        origin = request.headers.get("Origin")
+        if origin and origin not in allowed_origins:
+            abort(403, "Forbidden origin")
 
     # Ensure important functions are exposed to the frontend before eel starts
     try:
