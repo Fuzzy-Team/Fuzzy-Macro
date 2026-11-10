@@ -421,7 +421,7 @@ class cloudflaredStream:
         #extract the cloudflare link
         # keep reading after the URL is found so cloudflared never blocks on a full pipe
         for line in proc.stdout:
-            if not self.publicURL and "trycloudflare.com" in line and "https://" in line:
+            if not self.publicURL:
                 match = re.search(r"https://[a-zA-Z0-9\-]+\.trycloudflare\.com", line)
                 if match:
                     url = match.group()
