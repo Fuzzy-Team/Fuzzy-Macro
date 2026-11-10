@@ -530,8 +530,13 @@ class MobMixin:
             self.bossStatus = None
             self.runPath("boss/king_beetle")
 
+            kingBeetleDeadline = time.time() + 15*60
+
             # Continue the movement pattern and check for defeat
             while self.bossStatus is None and not self.died:
+                if time.time() >= kingBeetleDeadline:
+                    self.bossStatus = "timelimit"
+                    break
                 screen = self.blueTextScreen()
                 # Check if defeated
                 if self.blueTextHas("defeated", screen=screen):
@@ -562,6 +567,8 @@ class MobMixin:
             self.logger.webhook("", "Died to King Beetle", "dark brown", ping_category="ping_character_deaths")
             self.reset(convert=False)
             self.died = False
+        elif self.bossStatus == "timelimit":
+            self.logger.webhook("", "Time Limit: King Beetle", "dark brown", "screen", ping_category="ping_critical_errors")
         elif self.bossStatus == "defeated":
             self.logger.webhook("", "Defeated: King Beetle", "bright green", "screen", ping_category="ping_mob_events")
         self.hourlyReport.addHourlyStat("bug_run_time", time.time()-st)
