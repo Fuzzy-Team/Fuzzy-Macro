@@ -129,8 +129,10 @@ class NavigationMixin:
         key = "pageup" if delta > 0 else "pagedown"
         for _ in range(abs(delta)):
             self.keyboard.keyDown(key, False)
-            time.sleep(0.01)
-            self.keyboard.keyUp(key, False)
+            try:
+                time.sleep(0.01)
+            finally:
+                self.keyboard.keyUp(key, False)
             time.sleep(0.01)
         return target_pitch
 
@@ -155,8 +157,10 @@ class NavigationMixin:
         key = "o" if delta > 0 else "i"
         for _ in range(abs(delta)):
             self.keyboard.keyDown(key, False)
-            time.sleep(0.01)
-            self.keyboard.keyUp(key, False)
+            try:
+                time.sleep(0.01)
+            finally:
+                self.keyboard.keyUp(key, False)
             time.sleep(0.01)
         return target_zoom
 
