@@ -1140,6 +1140,15 @@ def loadAllSettings():
     loadCurrentProfile()
     return _getMacroProfileStore().load_settings(profileName)["settings"]
 
+def isSensitiveSetting(key, value):
+    key = str(key)
+    return (
+        key in ("discord_bot_token", "webhook_link")
+        or (key.startswith("tad_alt_") and key.endswith("_webhook"))
+        or "private_server_link" in key
+        or (key.startswith("route_") and str(value).startswith("https://"))
+    )
+
 def exportProfile(profile_name):
     """Export a profile to JSON content for browser download"""
     profiles_dir = getProfilesDir()
@@ -1165,18 +1174,9 @@ def exportProfile(profile_name):
         fields_data = profile["fields"]
 
         # Ensure sensitive fields are removed from export
-        def isSensitive(key, value):
-            key = str(key)
-            return (
-                key in ("discord_bot_token", "webhook_link")
-                or (key.startswith("tad_alt_") and key.endswith("_webhook"))
-                or "private_server_link" in key
-                or (key.startswith("route_") and str(value).startswith("https://"))
-            )
-
         for data in (settings_data, generalsettings_data):
             for k, v in data.items():
-                if isSensitive(k, v):
+                if isSensitiveSetting(k, v):
                     data[k] = ""
 
         # Create export data structure
@@ -1254,12 +1254,18 @@ def _importProfileData(import_data, new_profile_name=None):
         if os.path.exists(new_profile_path):
             return False, f"Profile '{new_profile_name}' already exists"
 
+        # Imported files never set webhooks, tokens, or server links; defaults fill them in
+        settings_data, generalsettings_data = (
+            {k: v for k, v in import_data[key].items() if not isSensitiveSetting(k, v)}
+            for key in ("settings", "generalsettings")
+        )
+
         # Create profile directory
         os.makedirs(new_profile_path)
 
         # Write settings file
         settings_file = os.path.join(new_profile_path, "settings.txt")
-        saveDict(settings_file, import_data["settings"])
+        saveDict(settings_file, settings_data)
 
         # Write fields file
         fields_file = os.path.join(new_profile_path, "fields.txt")
@@ -1268,7 +1274,7 @@ def _importProfileData(import_data, new_profile_name=None):
 
         # Write generalsettings file
         generalsettings_file = os.path.join(new_profile_path, "generalsettings.txt")
-        saveDict(generalsettings_file, import_data["generalsettings"])
+        saveDict(generalsettings_file, generalsettings_data)
 
         # the export may come from an older version, so migrate it now like an installed profile
         _getMacroProfileStore().initialize(new_profile_name)
