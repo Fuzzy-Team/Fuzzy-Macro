@@ -444,10 +444,15 @@ class cloudflaredStream:
     def _stopCloudflared(self):
         self.cfToken = None
         self.publicURL = None
-        if self.cfProc:
-            self.cfProc.terminate()
-            self.cfProc.wait()
-            self.cfProc = None
+        proc = self.cfProc
+        self.cfProc = None
+        if proc:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
 
     def _clearStreamURLFile(self):
         try:
