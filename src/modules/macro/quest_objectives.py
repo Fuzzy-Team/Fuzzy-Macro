@@ -47,11 +47,11 @@ class QuestObjectiveMixin:
         # Pattern: number.number -> number,number
         text = re.sub(r'(\d{1,3})\.(\d{3})', r'\1,\2', text)
 
-        # Extract quantity - look for numbers
+        # Extract quantity - look for numbers, allowing thousands separators
         quantity = 1  # default
-        quantity_match = re.search(r'\b(\d+)\b', text)
+        quantity_match = re.search(r'\b(\d[\d,]*)\b', text)
         if quantity_match:
-            quantity = int(quantity_match.group(1))
+            quantity = int(quantity_match.group(1).replace(",", ""))
 
         # Define patterns for different action types
         patterns = [
