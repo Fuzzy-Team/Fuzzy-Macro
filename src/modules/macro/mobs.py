@@ -325,7 +325,8 @@ class MobMixin:
 
         def goToStump():
             for _ in range(3):
-                self.cannon()
+                if not self.cannon():
+                    return False
                 self.logger.webhook("", "Travelling: Stump Snail", "dark brown")
                 self.goToField("stump")
                 if self.placeSprinkler():
