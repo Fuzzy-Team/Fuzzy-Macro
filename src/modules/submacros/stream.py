@@ -381,13 +381,13 @@ class cloudflaredStream:
         try:
             # from waitress import serve
             # print("Starting server with Waitress WSGI server")
-            # serve(self.app, host='0.0.0.0', port=8081, threads=4)
+            # serve(self.app, host='127.0.0.1', port=8081, threads=4)
             raise ImportError
         except ImportError:
             # Fall back to Werkzeug server
             from werkzeug.serving import run_simple
             print("Starting server with Werkzeug (install waitress for better performance)")
-            run_simple('0.0.0.0', 8081, self.app, threaded=True, use_reloader=False)
+            run_simple('127.0.0.1', 8081, self.app, threaded=True, use_reloader=False)
     
     def isCloudflaredInstalled(self):
         return self.cloudflaredPath
