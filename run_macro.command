@@ -13,7 +13,18 @@ stop_fuzzy_macro() {
 
     printf "Stopping existing Fuzzy Macro process(es): %s\n" "$fuzzy_pids"
     kill $fuzzy_pids 2>/dev/null || true
-    sleep 1
+
+    # The app stops the macro and releases held keys before it exits, so give it time.
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        still_running=""
+        for pid in $fuzzy_pids; do
+            if kill -0 "$pid" 2>/dev/null; then
+                still_running=1
+            fi
+        done
+        [ -z "$still_running" ] && break
+        sleep 1
+    done
 
     # Fall back to SIGKILL only if a stale process did not exit cleanly.
     for pid in $fuzzy_pids; do

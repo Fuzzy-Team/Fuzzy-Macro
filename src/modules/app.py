@@ -167,6 +167,8 @@ def runApp(macroTarget):
     def onExit():
         stopStandbyKeepAwake()
         try:
+            # let the macro process see the stop and clean up before stopApp ends it
+            run.value = 0
             stopApp()
         except Exception as e:
             print(f"Error during shutdown cleanup: {e}")
@@ -182,7 +184,10 @@ def runApp(macroTarget):
         try:
             if discordBotProc and discordBotProc.is_alive():
                 discordBotProc.terminate()
-                discordBotProc.join()
+                discordBotProc.join(timeout=2)
+                if discordBotProc.is_alive():
+                    discordBotProc.kill()
+                    discordBotProc.join(timeout=2)
         except NameError:
             pass
         try:
@@ -229,7 +234,10 @@ def runApp(macroTarget):
             pass  # eel may not be ready yet
 
     atexit.register(onExit)
-        
+    # run_macro.command and the Discord /close command stop the app with SIGTERM.
+    # Exit through SystemExit so onExit still stops the macro and releases keys.
+    signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(0))
+
     #setup and launch gui
     gui.run = run
     gui.launch()
