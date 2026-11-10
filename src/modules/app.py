@@ -164,6 +164,8 @@ def runApp(macroTarget):
     def onExit():
         stopStandbyKeepAwake()
         try:
+            # let the macro process see the stop and clean up before stopApp ends it
+            run.value = 0
             stopApp()
         except Exception as e:
             print(f"Error during shutdown cleanup: {e}")
