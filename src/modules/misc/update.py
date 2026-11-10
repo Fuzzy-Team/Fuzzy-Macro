@@ -489,6 +489,7 @@ def _refresh_updater(destination, progress_callback=None):
     response.raise_for_status()
 
     target_update = os.path.join(destination, "src", "modules", "misc", "update.py")
+    compile(response.text, target_update, "exec")
     os.makedirs(os.path.dirname(target_update), exist_ok=True)
     tmp_path = target_update + ".tmp"
     try:
