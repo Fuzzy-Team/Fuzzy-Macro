@@ -55,6 +55,7 @@ ALLOWED_PING_KEYS = {
     "ping_unusual_sprouts",
     "ping_windy_bee",
     "ping_gummyball",
+    "ping_guiding_star",
     "ping_night",
 }
 
