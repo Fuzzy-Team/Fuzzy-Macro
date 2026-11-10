@@ -636,7 +636,7 @@ class CollectiblesMixin:
         time.sleep(1)
         #check if blender is done and click on end crafting
         doneImg = self.adjustImage("images/menu", "blenderdone")
-        res = locateImageOnScreen(doneImg, x, self.robloxWindow.my+(y), 560, 480, 0.75)
+        res = locateImageOnScreen(doneImg, x, y, 560, 480, 0.75)
         if res:
             print("done")
             clickOnBlenderElement(x + res[1][0]//self.robloxWindow.multi, y + res[1][1]//self.robloxWindow.multi)
@@ -649,7 +649,7 @@ class CollectiblesMixin:
 
         #check if still crafting and get cd
         notDoneImg = self.adjustImage("images/menu", "blenderend")
-        res = locateImageOnScreen(notDoneImg, x, self.robloxWindow.my+(y), 560, 480, 0.75)
+        res = locateImageOnScreen(notDoneImg, x, y, 560, 480, 0.75)
 
         def cancelCraft():
             self.logger.webhook("", "Unable to detect remaining crafting time, ending craft", "dark brown", "screen")
