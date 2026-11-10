@@ -200,7 +200,7 @@ class QuestMixin:
                 screenshotFunction = mssScreenshotPillowRGBA
             else:
                 screenshotFunction = mssScreenshotNP
-            screen = screenshotFunction(self.robloxWindow.mx, self.robloxWindow.my+150, 300, min(screenshotHeight, self.robloxWindow.mh-(self.robloxWindow.my+150)))
+            screen = screenshotFunction(self.robloxWindow.mx, self.robloxWindow.my+150, 300, min(screenshotHeight, self.robloxWindow.mh-150))
             if mode == "gray":
                 screen = cv2.cvtColor(screen, cv2.COLOR_BGRA2GRAY)
             return screen
@@ -590,7 +590,7 @@ class QuestMixin:
                 screenshotFunction = mssScreenshotPillowRGBA
             else:
                 screenshotFunction = mssScreenshotNP
-            screen = screenshotFunction(self.robloxWindow.mx, self.robloxWindow.my+150, 300, min(screenshotHeight, self.robloxWindow.mh-(self.robloxWindow.my+150)))
+            screen = screenshotFunction(self.robloxWindow.mx, self.robloxWindow.my+150, 300, min(screenshotHeight, self.robloxWindow.mh-150))
             if mode == "gray":
                 screen = cv2.cvtColor(screen, cv2.COLOR_BGRA2GRAY)
             return screen
