@@ -3432,20 +3432,29 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     async def swap_field(interaction: discord.Interaction, current: str, new: str):
         """Swap one field for another in the active fields list"""
         try:
-            current_field = current.lower().replace(" ", "_")
-            new_field = new.lower().replace(" ", "_")
+            current_field = current.lower().replace("_", " ").strip()
+            new_field = new.lower().replace("_", " ").strip()
 
             settings = get_cached_settings()
 
             field_list = settings.get("fields", [])
+            field_map = _load_field_map()
 
             # Normalize field names for comparison
-            normalized_fields = [f.lower().replace(" ", "_") for f in field_list]
+            normalized_fields = [f.lower().replace("_", " ").strip() for f in field_list]
 
             # Check if current field exists
             if current_field not in normalized_fields:
                 available = ', '.join([f.replace('_', ' ').title() for f in normalized_fields])
                 await interaction.response.send_message(f"❌ Current field '{current}' not found. Available fields: {available}")
+                return
+
+            # Settings store the field map's keys, which use spaces in names
+            # such as "blue flower". An unknown name would leave the macro
+            # unable to load settings for this gather slot.
+            if new_field not in field_map:
+                available = ', '.join(sorted(name.title() for name in field_map))
+                await interaction.response.send_message(f"❌ New field '{new}' not found. Available fields: {available}")
                 return
 
             # Find the field index
