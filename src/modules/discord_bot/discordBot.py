@@ -3405,7 +3405,10 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         """Enable or disable a specific field"""
         try:
             field = field.lower().replace(" ", "_")
-            enabled = enabled.lower() == "true"
+            enabled, enabled_error = _parse_required_bool(enabled, "enabled")
+            if enabled_error:
+                await interaction.response.send_message(f"❌ {enabled_error}")
+                return
             settings = get_cached_settings()
 
             field_list = settings.get("fields", [])
@@ -3527,7 +3530,11 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message("❌ Invalid quest name. Use: polar_bear, brown_bear, black_bear, honey_bee, bucko_bee, or riley_bee")
             return
 
-        success, message = update_setting(quest_key, enabled.lower() == "true")
+        enabled_value, enabled_error = _parse_required_bool(enabled, "enabled")
+        if enabled_error:
+            await interaction.response.send_message(f"❌ {enabled_error}")
+            return
+        success, message = update_setting(quest_key, enabled_value)
         await interaction.response.send_message(message)
 
     # === COLLECTIBLES MANAGEMENT COMMANDS ===
@@ -3597,7 +3604,11 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message("❌ Invalid collectible name")
             return
 
-        success, message = update_setting(collectible_key, enabled.lower() == "true")
+        enabled_value, enabled_error = _parse_required_bool(enabled, "enabled")
+        if enabled_error:
+            await interaction.response.send_message(f"❌ {enabled_error}")
+            return
+        success, message = update_setting(collectible_key, enabled_value)
         await interaction.response.send_message(message)
 
     # === PLANTER MANAGEMENT COMMANDS ===
@@ -3873,7 +3884,11 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             await interaction.response.send_message("❌ Invalid mob name")
             return
 
-        success, message = update_setting(mob_key, enabled.lower() == "true")
+        enabled_value, enabled_error = _parse_required_bool(enabled, "enabled")
+        if enabled_error:
+            await interaction.response.send_message(f"❌ {enabled_error}")
+            return
+        success, message = update_setting(mob_key, enabled_value)
         await interaction.response.send_message(message)
     
     @bot.tree.command(name="hiveslot", description = "Change the preferred hive slot (1-6)")
