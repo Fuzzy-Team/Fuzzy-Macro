@@ -87,11 +87,11 @@ class ViciousMixin:
     def detectViciousAnnouncement(self, text, now):
         """Remember a live attack notification, never old chat history."""
         import re
-        match = re.search(r"\bvicious bee is attacking\s+[^:]+?\s+in the\s+(pepper|mountain top|spider|cactus|rose)\s+(?:field|patch)\b", text.lower())
+        match = re.search(r"\bvicious bee is attacking\s+[^:]+?\s+in the\s+(pepper|mountain top|spider|cactus|rose|clover)\s+(?:field|patch)\b", text.lower())
         announcement = match.group(0) if match else None
         if announcement is not None and announcement != getattr(self, "_viciousLastAttack", None):
             field = match.group(1)
-            if self.setdat.get("macro_mode", "normal") == "vic" or field in self.vicFields:
+            if self.setdat.get("macro_mode", "normal") == "vic" or field in self.vicFields or (field == "clover" and self.vicFields):
                 self._viciousAttackTarget = (field, now)
         self._viciousLastAttack = announcement
 
@@ -101,7 +101,7 @@ class ViciousMixin:
         if target is None or time.time() - target[1] > 180:
             return None
         field = target[0]
-        if self.setdat.get("macro_mode", "normal") != "vic" and field not in self.vicFields:
+        if self.setdat.get("macro_mode", "normal") != "vic" and field not in self.vicFields and not (field == "clover" and self.vicFields):
             return None
         if self.checkPauseAndWait():
             return False
