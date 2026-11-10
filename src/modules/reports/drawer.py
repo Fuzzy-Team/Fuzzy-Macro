@@ -536,16 +536,15 @@ class HourlyReportDrawer:
         result = []
 
         for name, count in intervals:
+            if name not in units:
+                continue
             value = seconds // count
             if value:
                 seconds -= value * count
-                if value == 1:
-                    name = name.rstrip('s')
-                if name in units:
-                    value = int(value)
-                    if value < 10:
-                        value = "0"+str(value)
-                    result.append("{}{}".format(value, name))
+                value = int(value)
+                if value < 10:
+                    value = "0"+str(value)
+                result.append("{}{}".format(value, name))
         if not result:
             return "0s"
         return ' '.join(result)
