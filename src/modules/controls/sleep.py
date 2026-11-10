@@ -113,6 +113,8 @@ def is_paused():
     heartbeat(anyThread=paused)
     if paused != (_pausedSince is not None):
         with _pauseLock:
+            # another thread may have recorded a newer change while this one waited
+            paused = _run_state is not None and _run_state.value == 6
             now = time.monotonic()
             if paused and _pausedSince is None:
                 _pausedSince = now
