@@ -2,6 +2,7 @@ import ast
 import copy
 import json
 import threading
+import traceback
 import time as raw_time
 from datetime import datetime
 import modules.controls.mouse as mouse
@@ -394,7 +395,10 @@ class macro(
 
     def background(self):
         while True:
-            self.backgroundOnce()
+            try:
+                self.backgroundOnce()
+            except Exception:
+                print(traceback.format_exc())
             time.sleep(1)
 
     def startDetect(self):
