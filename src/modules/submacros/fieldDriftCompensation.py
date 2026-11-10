@@ -254,7 +254,6 @@ class fieldDriftCompensation():
                 output = [prediction[self._sprinkler_output_name]]
             detections = self._postprocess_sprinkler_output(output)
         except Exception as e:
-            self._sprinkler_model_failed = True
             self._warn_sprinkler_model(f"sprinkler detection failed ({e})")
             return None
 
@@ -432,7 +431,10 @@ class fieldDriftCompensation():
             settings = {}
 
         use_sprinkler_model = bool(settings.get("use_sprinkler_model_for_drift_compensation", False))
-        locator = self.getSprinklerLocation if use_sprinkler_model else self.getSaturatorLocation
+        if use_sprinkler_model and self._load_sprinkler_model():
+            locator = self.getSprinklerLocation
+        else:
+            locator = self.getSaturatorLocation
 
         #calculate how fast it takes to get the saturator and determine if the fast or slow version should be used
         st = time.time()
