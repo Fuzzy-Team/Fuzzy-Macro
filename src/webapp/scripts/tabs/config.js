@@ -499,7 +499,7 @@ async function loadProfileList() {
         profileItem.className = `profile-item ${isActive ? "active" : ""}`;
         profileItem.innerHTML = `
           <div style="display: flex; align-items: center;">
-            <span class="profile-item-name">${profile}</span>
+            <span class="profile-item-name"></span>
             ${
               isActive
                 ? '<span class="current-profile-badge">ACTIVE</span>'
@@ -509,16 +509,23 @@ async function loadProfileList() {
           <div class="profile-item-actions">
             ${
               !isActive
-                ? `<button class="profile-btn profile-btn-primary" onclick="switchToProfile('${profile}')">Switch</button>`
+                ? '<button class="profile-btn profile-btn-primary">Switch</button>'
                 : ""
             }
             ${
               !isActive && profiles.length > 1
-                ? `<button class="profile-btn profile-btn-danger" onclick="deleteProfileConfirm('${profile}')">Delete</button>`
+                ? '<button class="profile-btn profile-btn-danger">Delete</button>'
                 : ""
             }
           </div>
         `;
+        profileItem.querySelector(".profile-item-name").textContent = profile;
+        profileItem
+          .querySelector(".profile-btn-primary")
+          ?.addEventListener("click", () => switchToProfile(profile));
+        profileItem
+          .querySelector(".profile-btn-danger")
+          ?.addEventListener("click", () => deleteProfileConfirm(profile));
         profileList.appendChild(profileItem);
       });
     }
@@ -922,7 +929,10 @@ function setupFileInputListener() {
 function showProfileStatus(elementId, message, type) {
   const statusElement = document.getElementById(elementId);
   if (statusElement) {
-    statusElement.innerHTML = `<div class="profile-status ${type}">${message}</div>`;
+    const status = document.createElement("div");
+    status.className = `profile-status ${type}`;
+    status.textContent = message;
+    statusElement.replaceChildren(status);
     // Clear status after 5 seconds
     setTimeout(() => {
       statusElement.innerHTML = "";
