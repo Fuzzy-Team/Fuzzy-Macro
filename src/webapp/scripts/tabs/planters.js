@@ -360,39 +360,12 @@ async function toggleAutoPlantersGather(val){
 }
 
 function clearManualPlantersData(){
-    const btn = document.getElementById("manual-planters-reset-btn")
-    if (btn.classList.contains("active")) return
-    eel.clearManualPlanters()
-    btn.classList.add("active")
-    setTimeout(() => {
-        btn.classList.remove("active")
-      }, 700)
-}
-
-function clearAutoPlantersData(){
-    const btn = document.getElementById("auto-planters-reset-btn")
-    if (btn.classList.contains("active")) return
-    // This button used to clear auto-planter configuration; keep that behavior
-    eel.clearAutoPlanters()
-    btn.classList.add("active")
-    setTimeout(() => {
-        btn.classList.remove("active")
-      }, 700)
+    flashButton(document.getElementById("manual-planters-reset-btn"), () => eel.clearManualPlanters())
 }
 
 // Reset all auto-planter timers (harvest_time -> 0)
 function resetAutoPlantersTimersAll(){
-    const btn = document.getElementById("auto-planters-reset-btn")
-    if (btn.classList.contains("active")) return
-    try{
-        eel.resetAutoPlanterTimer('all')
-    }catch(e){
-        console.warn('Failed to reset all auto-planter timers', e)
-    }
-    btn.classList.add("active")
-    setTimeout(() => {
-        btn.classList.remove("active")
-      }, 700)
+    flashButton(document.getElementById("auto-planters-reset-btn"), () => eel.resetAutoPlanterTimer('all'))
 }
 
 // Update the displayed "Allowed fields: X" summary for each planter

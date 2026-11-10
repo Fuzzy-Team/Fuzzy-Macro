@@ -640,7 +640,6 @@ def listProfiles():
 
 def getCurrentProfile():
     """Get the current profile name"""
-    global profileName
     return profileName
 
 def switchProfile(name):
@@ -665,7 +664,6 @@ def switchProfile(name):
 
 def createProfile(name):
     """Create a new profile using hardcoded default settings."""
-    global profileName
     profiles_dir = getProfilesDir()
 
     # Sanitize the profile name
@@ -691,7 +689,6 @@ def createProfile(name):
 
 def deleteProfile(name):
     """Delete a profile (cannot delete current or last profile)"""
-    global profileName
     profiles_dir = getProfilesDir()
     
     # Cannot delete current profile

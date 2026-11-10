@@ -34,44 +34,6 @@ def scaleY(value, screen_data=None):
     return int(round(value * scale_y))
 
 
-def scaleRegion(left, top, width, height, anchor_x="left", anchor_y="top", screen_data=None):
-    if screen_data is None:
-        screen_data = getScreenData()
-
-    screen_width = screen_data.get("screen_width", BASE_SCREEN_WIDTH) or BASE_SCREEN_WIDTH
-    screen_height = screen_data.get("screen_height", BASE_SCREEN_HEIGHT) or BASE_SCREEN_HEIGHT
-    scaled_width = max(1, scaleX(width, screen_data))
-    scaled_height = max(1, scaleY(height, screen_data))
-
-    if anchor_x == "center":
-        base_center_x = left + width / 2
-        center_offset_x = base_center_x - (BASE_SCREEN_WIDTH / 2)
-        scaled_center_x = (screen_width / 2) + (center_offset_x * screen_width / BASE_SCREEN_WIDTH)
-        scaled_left = int(round(scaled_center_x - (scaled_width / 2)))
-    elif anchor_x == "right":
-        base_right_margin = BASE_SCREEN_WIDTH - (left + width)
-        scaled_right_margin = scaleX(base_right_margin, screen_data)
-        scaled_left = int(round(screen_width - scaled_right_margin - scaled_width))
-    else:
-        scaled_left = scaleX(left, screen_data)
-
-    if anchor_y == "center":
-        base_center_y = top + height / 2
-        center_offset_y = base_center_y - (BASE_SCREEN_HEIGHT / 2)
-        scaled_center_y = (screen_height / 2) + (center_offset_y * screen_height / BASE_SCREEN_HEIGHT)
-        scaled_top = int(round(scaled_center_y - (scaled_height / 2)))
-    elif anchor_y == "bottom":
-        base_bottom_margin = BASE_SCREEN_HEIGHT - (top + height)
-        scaled_bottom_margin = scaleY(base_bottom_margin, screen_data)
-        scaled_top = int(round(screen_height - scaled_bottom_margin - scaled_height))
-    else:
-        scaled_top = scaleY(top, screen_data)
-
-    scaled_left = max(0, min(int(screen_width - scaled_width), scaled_left))
-    scaled_top = max(0, min(int(screen_height - scaled_height), scaled_top))
-    return (scaled_left, scaled_top, scaled_width, scaled_height)
-
-
 def setScreenData():
     wwd, whd = pag.size()
     screenData = {

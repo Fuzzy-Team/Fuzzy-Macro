@@ -3,6 +3,7 @@ import math
 import time
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime, timedelta
+from modules.misc.formatting import formatHMS, millify
 from modules.misc.settingsManager import getCurrentProfile, getMacroVersion
 from modules.reports.buffs import (
     BUFF_RENDER_CONFIG,
@@ -76,6 +77,8 @@ class HourlyReportDrawer:
         else:
             self.hour -= 1
         self.assetPath = "hourly_report/assets"
+        #planter and nectar icons are the web app's copies
+        self.iconPath = "webapp/assets/icons"
 
     def normalizeUptimeBuffList(self, buffList):
         seen = set()
@@ -163,7 +166,7 @@ class HourlyReportDrawer:
         for i in range(count):
             seconds = round(duration * i / max(count - 1, 1))
             if duration >= 3600:
-                labels.append(self._durationHMS(seconds))
+                labels.append(formatHMS(seconds))
             else:
                 labels.append(f"{seconds // 60:02d}:{seconds % 60:02d}")
         return labels
@@ -218,13 +221,6 @@ class HourlyReportDrawer:
             bbox = self.draw.textbbox((0, 0), text, font=font)
             self.draw.text((x - 120 - (bbox[2] - bbox[0]), y + h * i / max(len(values) - 1, 1) - 28), text, font=font, fill=self.bodyColor)
 
-    def _durationHMS(self, seconds):
-        seconds = max(0, int(seconds or 0))
-        h = seconds // 3600
-        m = (seconds % 3600) // 60
-        s = seconds % 60
-        return f"{h:02d}:{m:02d}:{s:02d}"
-
     def _drawActivityCard(self, region, title, rows, honeyGraphData=None, honeyGraphLabels=None):
         self._drawPanel(region, title)
         x, y, w, h = region
@@ -247,7 +243,7 @@ class HourlyReportDrawer:
             labelFont = self._fitText(row["label"], 200, "bold", 48, 34)
             bbox = self.draw.textbbox((0, 0), row["label"], font=labelFont)
             self.draw.text((x + 620 - (bbox[2] - bbox[0]), ly - 13), row["label"], font=labelFont, fill=self.bodyColor)
-            self.draw.text((x + 735, ly - 13), self._durationHMS(row["seconds"]), font=font, fill=self.bodyColor)
+            self.draw.text((x + 735, ly - 13), formatHMS(row["seconds"]), font=font, fill=self.bodyColor)
             pct = f"{round(row['seconds'] / total * 100)}%"
             bbox = self.draw.textbbox((0, 0), pct, font=font)
             self.draw.text((x + w - 140 - (bbox[2] - bbox[0]), ly - 13), pct, font=font, fill=self.bodyColor)
@@ -257,7 +253,7 @@ class HourlyReportDrawer:
             minY = min(honeyGraphData)
             maxY = max(max(honeyGraphData), minY + 1)
             span = maxY - minY
-            labels = [self.millify(maxY - span * i / 4) for i in range(5)]
+            labels = [millify(maxY - span * i / 4, "report") for i in range(5)]
             self._drawYAxisLabels(graph, labels, 28)
             self._drawAreaSeries(graph, honeyGraphData, self.gatherColor, maxY=maxY, minY=minY, alpha=120)
             if honeyGraphLabels:
@@ -336,7 +332,7 @@ class HourlyReportDrawer:
             cx = x + slot * i + slot / 2
             asset = name.replace(" ", "_") + "_planter"
             try:
-                img = Image.open(f"{self.assetPath}/{asset}.png").convert("RGBA").resize((220, 220))
+                img = Image.open(f"{self.iconPath}/{asset}.png").convert("RGBA").resize((220, 220))
                 self.canvas.paste(img, (int(cx - 110), y + 110), img)
             except FileNotFoundError:
                 pass
@@ -383,7 +379,7 @@ class HourlyReportDrawer:
         lines = [
             (reportTitle, (255, 218, 61), 56),
             (f"Fuzzy Macro - {versionText}", (255, 255, 255), 56),
-            (f"Runtime: {self._durationHMS(sessionTime)}", (79, 223, 38), 56),
+            (f"Runtime: {formatHMS(sessionTime)}", (79, 223, 38), 56),
             (f"Profile: {profileText}", self.accentColor, 56),
             ("Made by Logan :)", (4, 180, 228), 56),
         ]
@@ -463,7 +459,7 @@ class HourlyReportDrawer:
         self._drawGraphGrid(honeyGraph, xTicks=6, yTicks=4)
         honeyData = honeyPerSec or [0]
         maxHoney = max(max(honeyData), 1)
-        self._drawYAxisLabels(honeyGraph, [self.millify(maxHoney - maxHoney * i / 4) for i in range(5)], 40)
+        self._drawYAxisLabels(honeyGraph, [millify(maxHoney - maxHoney * i / 4, "report") for i in range(5)], 40)
         self._drawAreaSeries(honeyGraph, honeyData, (254, 202, 64), maxY=maxHoney, alpha=125)
         self._drawTimeLabels(honeyGraph, regions["honey/sec"][1] + regions["honey/sec"][3] - 85, timeLabels)
 
@@ -495,20 +491,20 @@ class HourlyReportDrawer:
         x, y, w, _ = statRegions["lasthour"]
         topFont = self.getFont("bold", 60)
         self.draw.text((x + 200, y + 96), "Honey Earned", font=topFont, fill=self.bodyColor)
-        self.draw.text((x + 720, y + 96), self.millify(honeyThisHour), font=topFont, fill=self.bodyColor)
+        self.draw.text((x + 720, y + 96), millify(honeyThisHour, "report"), font=topFont, fill=self.bodyColor)
         self.draw.polygon([(x + 980, y + 119), (x + 955, y + 161), (x + 1005, y + 161)], fill=(0, 255, 0))
         avg = max(0, sessionHoney / (totalBreakdown / 3600)) if totalBreakdown else 0
         self.draw.text((x + 170, y + 180), "Hourly Average", font=topFont, fill=self.bodyColor)
-        self.draw.text((x + 720, y + 180), self.millify(avg), font=topFont, fill=self.bodyColor)
+        self.draw.text((x + 720, y + 180), millify(avg, "report"), font=topFont, fill=self.bodyColor)
 
         self._drawActivityCard(statRegions["session"], "SESSION", sessionRows, onlyValidHourlyHoney or [0], timeLabels)
         x, y, w, _ = statRegions["session"]
         currentHoney = onlyValidHourlyHoney[-1] if onlyValidHourlyHoney else 0
         sessionLines = [
-            ("Starting Honey", self.millify(hourlyReportStats.get("start_honey", 0))),
-            ("Current Honey", self.millify(currentHoney)),
-            ("Session Honey", self.millify(sessionHoney)),
-            ("Session Time", self._durationHMS(sessionTime)),
+            ("Starting Honey", millify(hourlyReportStats.get("start_honey", 0), "report")),
+            ("Current Honey", millify(currentHoney, "report")),
+            ("Session Honey", millify(sessionHoney, "report")),
+            ("Session Time", formatHMS(sessionTime)),
         ]
         for i, (label, value) in enumerate(sessionLines):
             yy = y + 96 + i * 84
@@ -528,15 +524,6 @@ class HourlyReportDrawer:
         self._drawLegacyInfoCard(statRegions["info"], reportTitle, sessionTime)
         return self.canvas
 
-
-    def millify(self, n):
-        if not n: return "0"
-        millnames = ['',' K',' M',' B',' T', 'Qd']
-        n = float(n)
-        millidx = max(0,min(len(millnames)-1,
-                            int(math.floor(0 if n == 0 else math.log10(abs(n))/3))))
-
-        return '{:.2f} {}'.format(n / 10**(3 * millidx), millnames[millidx])
 
     def displayTime(self, seconds, units = ['w','d','h','m','s']):
         intervals = (
@@ -803,53 +790,6 @@ class HourlyReportDrawer:
         text_height = text_bbox[3] - text_bbox[1]
         self.draw.text((x + (size - text_width) // 2, y + (size - text_height) // 2 - 10), text, fill=self.bodyColor, font=font)
 
-    def drawStatCard(self, x, y, statImage, statValue, statTitle, fontColor = None, imageColor = None, cardWidth = 700, cardHeight = 750):
-        leftPadding = x+100
-        self.draw.rounded_rectangle((x, y, x+cardWidth, y+cardHeight), fill=self.cardBackground, radius=55)
-        #load the image
-        img = Image.open(f"{self.assetPath}/{statImage}.png").convert("RGBA")
-        width, height = img.size
-        imageHeight = 190
-        imageWidth = int(width*(imageHeight/height))
-        img = img.resize((imageWidth, imageHeight))
-
-        #recolor the image
-        if imageColor:
-            r,g,b = imageColor
-            pixels = img.load()
-            for i in range(img.width):
-                for j in range(img.height):
-                    _, _, _, a = pixels[i, j]
-                    if a > 0:  #only recolor non-transparent pixels
-                        pixels[i, j] = (r,g,b, a)
-
-        self.canvas.paste(img, (leftPadding, y + 95), img)
-
-        self.draw.text((leftPadding, y+370), str(statValue), font=self.getFont("semibold", 80), fill=fontColor if fontColor else self.bodyColor)
-        self.draw.text((leftPadding, y+545), statTitle, font=self.getFont("medium", 52), fill=self.subtleColor)
-
-    def drawSessionStat(self, y, imageName, label, value, valueColor):
-        imgContainerDimension = 180
-        self.draw.rounded_rectangle((self.sidebarX, y, self.sidebarX+imgContainerDimension, y+imgContainerDimension), radius=50, fill=self.cardBackground)
-        img = Image.open(f"{self.assetPath}/{imageName}.png").convert("RGBA")
-        width, height = img.size
-        imageWidth = 120
-        imageHeight = int(height*(imageWidth/width))
-        img = img.resize((imageWidth, imageHeight))
-        #center the image in the container
-        self.canvas.paste(img, (self.sidebarX + (imgContainerDimension-imageWidth)//2 , y + (imgContainerDimension-imageHeight)//2), img)
-
-        #draw label and value
-        #make sure they are vertically centered with the image container
-        font = self.getFont("semibold", 68)
-        ascent, _ = font.getmetrics()
-        textY = y + (imgContainerDimension - ascent)//2
-        self.draw.text((self.sidebarX+imgContainerDimension+50, textY), label, self.bodyColor, font=font)
-        #value is right-aligned
-        bbox = self.draw.textbbox((0, 0), value, font=font)
-        textWidth = bbox[2] - bbox[0]
-        self.draw.text((self.canvasSize[0]-self.sidebarPadding-textWidth, textY), str(value), valueColor, font=font)
-
     def drawTaskTimes(self, y, datasets, totalTime=None):
         legendIconDimension = 80
         font = self.getFont("medium", 68)
@@ -902,7 +842,7 @@ class HourlyReportDrawer:
             bbox = self.draw.textbbox((0, 0), planterFields[i].title(), font=fieldFont)
             fieldTextWidth = bbox[2] - bbox[0]
 
-            nectarImg = Image.open(f'{self.assetPath}/{fieldNectarIcons[planterFields[i]]}.png')
+            nectarImg = Image.open(f'{self.iconPath}/{fieldNectarIcons[planterFields[i]]}.png')
             width, height = nectarImg.size
             nectarImageHeight = bbox[3] - bbox[1]
             nectarImageWidth = int(width*(nectarImageHeight/height))
@@ -910,7 +850,7 @@ class HourlyReportDrawer:
 
             fieldAndNectarWidth = fieldTextWidth + nectarImageWidth + 30
 
-            img = Image.open(f'{self.assetPath}/{planterNames[i].replace(" ","_")}_planter.png')
+            img = Image.open(f'{self.iconPath}/{planterNames[i].replace(" ","_")}_planter.png')
             width, height = img.size
             imageHeight = 250
             imageWidth = int(width*(imageHeight/height))
@@ -976,253 +916,11 @@ class HourlyReportDrawer:
             x = self.sidebarX + slotIndex * slot + (slot - progressChartSize) // 2
             self.drawProgressChart(x, y, progressChartSize, nectarData[dataIndex], nectarColors[i], 0.75)
 
-            img = Image.open(f"{self.assetPath}/{nectarNames[i]}.png").convert("RGBA")
+            img = Image.open(f"{self.iconPath}/{nectarNames[i]}.png").convert("RGBA")
             width, height = img.size
             imageWidth = int(width*(imageHeight/height))
             img = img.resize((imageWidth, imageHeight))
             self.canvas.paste(img, (x + (progressChartSize-imageWidth)//2, y+progressChartSize + 60), img)
-
-    def _drawHeaderBanner(self, title, subtitle):
-        """Full-width header banner with accent stripe, title (left) and macro identity (right). Returns bottom y."""
-        x0, y0 = self.leftPadding, 80
-        x1 = self.canvasW - self.leftPadding
-        bannerH = 360
-        y1 = y0 + bannerH
-        self.draw.rounded_rectangle((x0, y0, x1, y1), radius=55, fill=self.cardBackground)
-        # title + subtitle
-        self.draw.text((x0+90, y0+75), title, fill=self.bodyColor, font=self.getFont("bold", 120))
-        self.draw.text((x0+95, y0+235), subtitle, fill=self.subtleColor, font=self.getFont("medium", 58))
-
-        # macro identity on the right
-        try:
-            icon = Image.open(f"{self.assetPath}/macro_icon.png").convert("RGBA").resize((190, 190))
-            iconX = x1 - 230
-            iconY = y0 + (bannerH - 190) // 2
-            self.canvas.paste(icon, (iconX, iconY), icon)
-            textRight = iconX - 45
-        except FileNotFoundError:
-            textRight = x1 - 60
-
-        try:
-            profile_name = getCurrentProfile()
-        except Exception:
-            profile_name = None
-        try:
-            version_text = f"v{getMacroVersion()}"
-        except Exception:
-            version_text = None
-
-        lines = [("Fuzzy Macro", self.getFont("semibold", 68), self.bodyColor)]
-        if profile_name:
-            lines.append((f"Profile: {profile_name}", self.getFont("medium", 50), self.subtleColor))
-        if version_text:
-            lines.append((version_text, self.getFont("medium", 40), self.subtleColor))
-
-        total_h = sum((f.getmetrics()[0] + 14) for _, f, _ in lines) - 14
-        ty = y0 + (bannerH - total_h) // 2
-        for text, f, col in lines:
-            bbox = self.draw.textbbox((0, 0), text, font=f)
-            tw = bbox[2] - bbox[0]
-            self.draw.text((textRight - tw, ty), text, font=f, fill=col)
-            ty += f.getmetrics()[0] + 14
-
-        return y1
-
-    def _drawBuffRow(self, x, y, colW, rowH, buff_key, uptimeBuffsValues, getAverageBuff, xLabelFunc=None):
-        """Draw a single buff uptime cell: icon + name on the left, mini graph filling the rest."""
-        cfg = BUFF_RENDER_CONFIG.get(buff_key)
-        if not cfg:
-            return
-        chart_type, max_y, color_info, asset = cfg
-
-        iconDim = 150
-        iconX = x + 10
-        iconY = y + (rowH - iconDim) // 2 - 30
-        try:
-            img = Image.open(f"{self.assetPath}/{asset}.png").convert("RGBA").resize((iconDim, iconDim))
-            self.canvas.paste(img, (iconX, iconY), img)
-        except FileNotFoundError:
-            pass
-        # buff name under the icon
-        name = buff_key.replace("_", " ").title()
-        self.draw.text((iconX - 10, iconY + iconDim + 8), name, font=self.getFont("medium", 40), fill=self.subtleColor)
-
-        graphX = x + iconDim + 90
-        graphW = colW - iconDim - 110
-        graphH = rowH - 150
-        baseline = y + rowH - 70
-
-        if chart_type == "multi":
-            datasets, avgs = [], []
-            for dk, rgb in color_info:
-                data = uptimeBuffsValues.get(dk, [0] * 600)
-                r, g, b = rgb
-                datasets.append({"data": data, "lineColor": rgb, "gradientFill": {0: (r, g, b, 10), 1: (r, g, b, 120)}})
-                avgs.append((getAverageBuff(data), rgb))
-            my = max_y
-        elif chart_type == "stackable":
-            r, g, b = color_info
-            data = uptimeBuffsValues.get(buff_key, [0] * 600)
-            datasets = [{"data": data, "lineColor": color_info, "gradientFill": {0: (r, g, b, 10), 1: (r, g, b, 120)}}]
-            avgs = [(getAverageBuff(data), color_info)]
-            my = max_y
-        else:  # binary
-            r, g, b = color_info
-            data = uptimeBuffsValues.get(buff_key, [0] * 600)
-            datasets = [{"data": data, "lineColor": color_info, "gradientFill": {0: (r, g, b, 255), 1: (r, g, b, 255)}}]
-            avgs = [(getAverageBuff(data), color_info)]
-            my = 1
-
-        xData = list(range(max((len(d["data"]) for d in datasets), default=1)))
-        self.drawGraph(graphX, baseline, graphW, graphH, xData, datasets, maxY=my,
-                       showXAxisLabels=bool(xLabelFunc), showYAxisLabels=False, ticks=2, xLabelFunc=xLabelFunc)
-
-        # average values (top-right of graph)
-        ay = y + 18
-        avgFont = self.getFont("semibold", 46)
-        for avgText, col in avgs:
-            bbox = self.draw.textbbox((0, 0), avgText, font=avgFont)
-            tw = bbox[2] - bbox[0]
-            self.draw.text((graphX + graphW - tw, ay), avgText, font=avgFont, fill=col)
-            ay += 54
-
-    def _drawBuffGrid(self, x, y, totalWidth, buffList, uptimeBuffsValues, getAverageBuff, columns=2, colGap=110, rowH=400, xLabelFunc=None):
-        """Lay out buff uptime cells in a row-major grid (main buffs fill the top rows). Returns bottom y."""
-        buffList = [b for b in buffList if b in BUFF_RENDER_CONFIG]
-        n = len(buffList)
-        if not n:
-            return y
-        colW = (totalWidth - colGap * (columns - 1)) / columns
-        # bottom-most cell of each column gets the x-axis time labels
-        bottomCells = set()
-        for c in range(columns):
-            idxs = [i for i in range(n) if i % columns == c]
-            if idxs:
-                bottomCells.add(idxs[-1])
-        bottom = y
-        for idx, buff_key in enumerate(buffList):
-            row = idx // columns
-            col = idx % columns
-            cx = int(x + col * (colW + colGap))
-            cy = y + row * rowH
-            self._drawBuffRow(cx, cy, int(colW), rowH - 20, buff_key, uptimeBuffsValues, getAverageBuff,
-                              xLabelFunc if idx in bottomCells else None)
-            bottom = max(bottom, cy + rowH)
-        return bottom
-
-    def _drawFieldsSection(self, y, enabled_fields, field_patterns, draw=True):
-        """Draw a compact Fields card. Returns the new bottom y."""
-        if not enabled_fields:
-            return y
-        padding = 45
-        header_height = 105
-        column_gap = 35
-        row_gap = 30
-        columns = 2 if len(enabled_fields) > 1 else 1
-        container_x = self.sidebarX - 30
-        container_right = self.canvasSize[0] - self.sidebarPadding + 30
-        inner_x = container_x + padding
-        inner_right = container_right - padding
-        tile_width = (inner_right - inner_x - column_gap * (columns - 1)) // columns
-        tile_height = 180
-        rows = math.ceil(len(enabled_fields) / columns)
-        total_height = padding + header_height + rows * tile_height + max(0, rows - 1) * row_gap + padding
-        if draw:
-            self.draw.rounded_rectangle((container_x, y, container_right, y + total_height), radius=40, fill=self.cardBackground)
-            self.draw.rounded_rectangle((container_x, y, container_x + 18, y + total_height), radius=9, fill=self.accentColor)
-            header_y = y + padding - 5
-            self.draw.text((inner_x, header_y), "Fields", font=self.getFont("semibold", 85), fill=self.bodyColor)
-            count_text = f"{len(enabled_fields)} active"
-            count_font = self.getFont("medium", 46)
-            bbox = self.draw.textbbox((0, 0), count_text, font=count_font)
-            self.draw.text((inner_right - (bbox[2] - bbox[0]), header_y + 22), count_text, font=count_font, fill=self.subtleColor)
-
-            field_font = self.getFont("semibold", 54)
-            pattern_font = self.getFont("medium", 38)
-            for idx, fname in enumerate(enabled_fields):
-                pattern = field_patterns.get(fname, "unknown")
-                col = idx % columns
-                row = idx // columns
-                tile_x = int(inner_x + col * (tile_width + column_gap))
-                tile_y = int(y + padding + header_height + row * (tile_height + row_gap))
-                self.draw.rounded_rectangle((tile_x, tile_y, tile_x + tile_width, tile_y + tile_height), radius=28, fill=self.sideBarBackground)
-                self.draw.rounded_rectangle((tile_x + 24, tile_y + 36, tile_x + 44, tile_y + tile_height - 36), radius=10, fill=self.accentColorDim)
-                self.draw.text((tile_x + 70, tile_y + 34), fname.title(), font=field_font, fill=self.bodyColor)
-                pattern_text = pattern.replace("_", " ").title()
-                bbox = self.draw.textbbox((0, 0), pattern_text, font=pattern_font)
-                pill_w = min(tile_width - 90, (bbox[2] - bbox[0]) + 48)
-                pill_x = tile_x + 70
-                pill_y = tile_y + 110
-                self.draw.rounded_rectangle((pill_x, pill_y, pill_x + pill_w, pill_y + 48), radius=18, fill=self.backgroundColor)
-                self.draw.text((pill_x + 24, pill_y + 5), pattern_text, font=pattern_font, fill=self.subtleColor)
-        return y + total_height + 100
-
-    def _drawHourlySidebar(self, top, sessionTime, onlyValidHourlyHoney, sessionHoney, hourlyReportStats,
-                           planterNames, planterTimes, planterFields, buffQuantity, hourlyBuff_list,
-                           nectarQuantity, enabled_fields, field_patterns, draw=True):
-        """Draw (or measure, when draw=False) the right sidebar. Returns the bottom y."""
-        y2 = top
-
-        # planters (top)
-        if planterNames:
-            if draw:
-                self.draw.text((self.sidebarX, y2), "Planters", font=self.getFont("semibold", 85), fill=self.bodyColor)
-            y2 += 250
-            if draw:
-                self.drawPlanters(y2, planterNames, planterTimes, planterFields)
-            y2 += 650
-
-        # fields (beneath planters)
-        y2 = self._drawFieldsSection(y2, enabled_fields, field_patterns, draw=draw)
-
-        # snapshot buffs
-        if draw:
-            self.draw.text((self.sidebarX, y2), "Buffs", font=self.getFont("semibold", 85), fill=self.bodyColor)
-        y2 += 250
-        if draw:
-            self.drawBuffs(y2, buffQuantity, hourlyBuff_list)
-        buffRows = math.ceil(len(hourlyBuff_list) / 4) if hourlyBuff_list else 1
-        y2 += 300 * max(1, buffRows)
-
-        # nectars
-        y2 += 200
-        if draw:
-            self.draw.text((self.sidebarX, y2), "Nectars", font=self.getFont("semibold", 85), fill=self.bodyColor)
-        y2 += 250
-        if draw:
-            self.drawNectars(y2, nectarQuantity)
-        y2 += 500
-
-        # task times
-        y2 += 100
-        if draw:
-            self.draw.text((self.sidebarX, y2), "Task Times", font=self.getFont("semibold", 85), fill=self.bodyColor)
-        y2 += 250
-        if draw:
-            self.drawTaskTimes(y2, [
-                {"label": "Gathering",  "data": hourlyReportStats["gathering_time"],  "color": self.gatherColor},
-                {"label": "Converting", "data": hourlyReportStats["converting_time"], "color": self.convertColor},
-                {"label": "Bug Run",    "data": hourlyReportStats["bug_run_time"],    "color": self.otherColor},
-                {"label": "Other",      "data": hourlyReportStats["misc_time"],       "color": self.subtleColor},
-            ])
-        y2 += 1500
-
-        # session stats (bottom)
-        y2 += 100
-        if draw:
-            self.draw.text((self.sidebarX, y2), "Session", font=self.getFont("semibold", 85), fill=self.bodyColor)
-        y2 += 250
-        if draw:
-            self.drawSessionStat(y2, "time_icon", "Session Time", self.displayTime(sessionTime, ['d', 'h', 'm']), self.bodyColor)
-        y2 += 300
-        if draw:
-            self.drawSessionStat(y2, "honey_icon", "Current Honey", self.millify(onlyValidHourlyHoney[-1]), self.honeyColor)
-        y2 += 300
-        if draw:
-            self.drawSessionStat(y2, "session_honey_icon", "Session Honey", self.millify(sessionHoney), (253, 227, 149))
-        y2 += 300
-
-        return y2
 
     def drawHourlyReport(self, hourlyReportStats, sessionTime, honeyPerMin, sessionHoney, honeyThisHour, onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData, uptimeBuffsValues, buffGatherIntervals, enabled_fields=None, field_patterns=None, configuredUptimeBuffs=None, configuredHourlyBuffs=None):
         uptimeBuff_list = configuredUptimeBuffs if configuredUptimeBuffs is not None else DEFAULT_UPTIME_BUFFS

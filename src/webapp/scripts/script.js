@@ -228,8 +228,12 @@ async function loadSettings() {
   return await eel.loadSettings()();
 }
 
+//result of the most recent loadAllSettings call, for pollers that shouldn't reread the settings files every tick
+let cachedSettings = {};
+
 async function loadAllSettings() {
-  return await eel.loadAllSettings()();
+  cachedSettings = await eel.loadAllSettings()();
+  return cachedSettings;
 }
 
 // Refresh the currently visible tab content after backend-triggered profile swaps

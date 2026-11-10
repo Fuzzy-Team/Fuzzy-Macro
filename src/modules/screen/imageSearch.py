@@ -1,7 +1,6 @@
 import cv2
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP
 import numpy as np
-import time
 from functools import lru_cache
 from modules.screen.template_loader import load_template_for_display
 from modules.screen.screenData import getScreenData
@@ -83,41 +82,6 @@ def _cached_resized_from_path(path_base, scale_key, need_alpha):
         return None
     return resized
 
-
-@lru_cache(maxsize=128)
-def _cached_resized_mask_from_path(path_base, scale_key):
-    """
-    Return a binary single-channel mask (0/255) resized from `path_base`.
-    - Extract alpha if present, otherwise convert to gray then threshold.
-    - Use INTER_NEAREST to keep mask crisp.
-    """
-    try:
-        scale = scale_key / 1000.0
-        img = load_template_for_display(path_base)
-    except Exception:
-        return None
-
-    if img is None:
-        return None
-
-    # extract mask: prefer alpha channel if present
-    if img.ndim == 3 and img.shape[2] == 4:
-        mask = img[..., 3]
-    elif img.ndim == 3:
-        mask = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    else:
-        mask = img
-
-    h, w = mask.shape[:2]
-    new_w = max(1, int(round(w * scale)))
-    new_h = max(1, int(round(h * scale)))
-
-    try:
-        resized = cv2.resize(mask, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
-        _, bin_mask = cv2.threshold(resized, 0, 255, cv2.THRESH_BINARY)
-    except Exception:
-        return None
-    return bin_mask
 
 def locateImageOnScreen(target, x, y, w, h, threshold=0, scales=None, return_scale=False, resize_interp=cv2.INTER_AREA, early_exit_thresh=0.995):
     """
@@ -323,55 +287,6 @@ def locateTransparentImageOnScreen(target, x,y,w,h, threshold = 0):
     screen = mssScreenshotNP(x,y,w,h)
     return locateTransparentImage(target, screen, threshold)
 
-
-def findColorObjectHSL(img, hslRange, kernel=None, mode="point", best=1, draw=False):
-    """
-    Find objects of a specific color in the HSL range.
-
-    Args:
-        img (numpy.ndarray): Input image in BGR format.
-        hslRange (list): HSL range [(H_min, S_min, L_min), (H_max, S_max, L_max)].
-        kernel (numpy.ndarray): Kernel for erosion (optional).
-        mode (str): "point" to return center of bounding box, "box" to return bounding boxes.
-        best (int): Number of top contours to return (default 1).
-        draw (bool): Whether to draw bounding boxes on the image.
-
-    Returns:
-        tuple or list: Coordinates of the center or bounding boxes.
-    """
-    hLow, sLow, lLow = hslRange[0][0] / 2, hslRange[0][1] / 100 * 255, hslRange[0][2] / 100 * 255
-    hHigh, sHigh, lHigh = hslRange[1][0] / 2, hslRange[1][1] / 100 * 255, hslRange[1][2] / 100 * 255
-
-    binary_mask = cv2.inRange(
-        cv2.cvtColor(img, cv2.COLOR_BGR2HLS),
-        np.array([hLow, lLow, sLow], dtype=np.uint8),
-        np.array([hHigh, lHigh, sHigh], dtype=np.uint8)
-    )
-
-    if kernel is not None:
-        binary_mask = cv2.erode(binary_mask, kernel, iterations=1)
-
-    contours, _ = cv2.findContours(binary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    if not contours:
-        return None
-    
-    if best > 1:
-        contours = sorted(contours, key=cv2.contourArea, reverse=True)[:best]
-
-    results = []
-    for contour in (contours if best > 1 else [max(contours, key=cv2.contourArea)]):
-        x, y, w, h = cv2.boundingRect(contour)
-        results.append((x + w // 2, y + h // 2) if mode == "point" else (x, y, w, h))
-        if draw:
-            cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
-
-    if draw:
-        cv2.imwrite(f"{time.time()}.png", img)
-        cv2.imshow("Result", img)
-        cv2.waitKey(0)
-
-    return results if best > 1 else results[0]
 
 def findColorObjectRGB(img, rgbTarget, variance=0, kernel=None, mode="point", best=1, draw=False):
     """

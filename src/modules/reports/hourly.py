@@ -8,6 +8,7 @@ import tempfile
 import threading
 import time
 from modules.misc import settingsManager
+from modules.misc.formatting import millify
 from modules.misc.settingsManager import loadFields
 from modules.reports.buffs import (
     BuffDetector,
@@ -233,7 +234,7 @@ class HourlyReport():
     def generateEmbedFields(self, hourlyReportStats, sessionTime, sessionHoney, honeyThisHour, onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData, reportType="hourly", itemMonitorData=None):
         """Build old-style Discord embed text fields for hybrid embed+image output."""
         def fmt(n):
-            return self.hourlyReportDrawer.millify(n).replace(" ", "")
+            return millify(n, "compact")
         def fmtTime(s):
             return self.hourlyReportDrawer.displayTime(s, ['h', 'm', 's']).replace(" ", "")
         def pct(part, total):

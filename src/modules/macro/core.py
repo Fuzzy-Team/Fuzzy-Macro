@@ -331,17 +331,19 @@ class macro(
         return datetime.now().minute
 
     def backgroundOnce(self):
-        with open(settingsManager.ensureUserFile("hotbar_timings.txt"), "r") as f:
-            hotbarSlotTimings = ast.literal_eval(f.read())
-
         #night detection
         if self.enableNightDetection:
             self.detectNight()
         self.scanBlueTextAnnouncements()
+        self.buffBandScreen = None #captured on first use by captureBuffBand
         self.scanGummyballBuff()
         self.scanBuffBarBoost()
 
         #hotbar
+        if all(self.setdat[f"hotbar{i}_use_when"] == "never" for i in range(1,8)):
+            return
+        with open(settingsManager.ensureUserFile("hotbar_timings.txt"), "r") as f:
+            hotbarSlotTimings = ast.literal_eval(f.read())
         for i in range(1,8):
             slotUseWhen = self.setdat[f"hotbar{i}_use_when"]
             #check if use when is correct

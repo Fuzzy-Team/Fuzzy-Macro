@@ -1,4 +1,5 @@
 from discord_webhook import DiscordEmbed, DiscordWebhook
+from modules.misc.formatting import timestampedEmbedText
 from modules.misc.settingsManager import getMacroVersion
 
 # Global variable to store message ID for pinning
@@ -23,22 +24,8 @@ def webhook(url, title, desc, time, color, imagePath = None, ping_user_id = None
     if ping_user_id:
         webhook.content = f"<@{ping_user_id}>"
 
-    # Format time based on preference
-    if time_format == 12:
-        try:
-            # Parse the time string and convert to 12-hour format
-            from datetime import datetime
-            time_obj = datetime.strptime(time, "%H:%M:%S")
-            formatted_time = time_obj.strftime("%I:%M:%S %p")
-        except:
-            formatted_time = time  # fallback to original if parsing fails
-    else:
-        formatted_time = time
-
-    if title:
-        embed = DiscordEmbed(title="[{}] {}".format(formatted_time,title), description=desc, color=color)
-    else:
-        embed = DiscordEmbed(title="", description="[{}] {}".format(formatted_time,desc), color=color)
+    embedTitle, embedDesc = timestampedEmbedText(title, desc, time, time_format)
+    embed = DiscordEmbed(title=embedTitle, description=embedDesc, color=color)
     embed.set_footer(text=response_footer())
 
     # Add embed fields (for hourly/session report text summaries)

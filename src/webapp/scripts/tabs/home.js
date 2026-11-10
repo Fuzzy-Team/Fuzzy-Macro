@@ -4,11 +4,6 @@ Home Tab
 =============================================
 */
 
-//use a python function to open the link in the user's actual browser
-function ahref(link) {
-  eel.openLink(link);
-}
-
 //update the button text with current keybinds and state
 async function updateStartButtonText() {
   const settings = await loadAllSettings();
@@ -733,7 +728,8 @@ async function checkAndUpdateButtonState() {
     const runState = await eel.getRunState()();
     // 0 = stopping, 2 = running, 3 = stopped, 6 = paused
 
-    const settings = await loadAllSettings();
+    // keybind and macro mode changes reload settings, which refreshes this cache
+    const settings = cachedSettings;
     const startKey = settings.start_keybind || "F1";
     const pauseKey = settings.pause_keybind || "F2";
     const stopKey = settings.stop_keybind || "F3";
@@ -826,15 +822,8 @@ $("#home-placeholder")
     }
 
     // Start checking button state every 500ms
-    buttonStateInterval = setInterval(checkAndUpdateButtonState, 500);
+    if (!buttonStateInterval) buttonStateInterval = setInterval(checkAndUpdateButtonState, 500);
   }) //load home tab
-  .on("unload", () => {
-    // Stop polling when tab is unloaded
-    if (buttonStateInterval) {
-      clearInterval(buttonStateInterval);
-      buttonStateInterval = null;
-    }
-  })
   .on("click", "#log-btn", (event) => {
     //log button
     const result = purpleButtonToggle(event.currentTarget, [
@@ -957,10 +946,7 @@ $("#home-placeholder")
       // Handle macro mode dropdown
       const selectedValue = event.currentTarget.value;
 
-      await eel.saveGeneralSetting("macro_mode", selectedValue);
-
-      // Small delay before reloading tasks to ensure backend is updated
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await eel.saveGeneralSetting("macro_mode", selectedValue)();
 
       // Reload tasks to reflect the change
       await loadTasks();

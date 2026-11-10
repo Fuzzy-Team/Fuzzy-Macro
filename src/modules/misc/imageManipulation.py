@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
 import os
+from functools import lru_cache
 from PIL import Image
 
 
@@ -30,6 +31,8 @@ def pillowToCv2(img):
     return cv2.cvtColor(np.array(img), cv2.COLOR_BGR2RGB)
 
 #resize the image based on the user's screen coordinates
+#cached, so callers share the returned array and must not modify it in place
+@lru_cache(maxsize=None)
 def adjustImage(folder, imageName, display_type):
     #get a list of all images and find the name of the one that matches
     images = os.listdir(folder)
