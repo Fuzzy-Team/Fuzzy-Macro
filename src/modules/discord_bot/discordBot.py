@@ -1651,9 +1651,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             return False
         if macro_mode == "quest" and not task_id.startswith("quest_"):
             return False
-        if macro_mode == "bug" and not (task_id.startswith("kill_") or task_id == "ant_challenge"):
-            return False
-        if macro_mode == "bug" and not task_id.startswith("kill_"):
+        if macro_mode == "bug" and not (task_id.startswith("kill_") or task_id in ("ant_challenge", "stinger_hunt")):
             return False
 
         if task_id.startswith("quest_"):
