@@ -44,7 +44,8 @@ class FinalReport:
         self.lastItemReportPath = None
         self.lastItemEmbedFields = None
 
-    def _normalizeCumulativeHoneySeries(self, values, baseline=None):
+    @staticmethod
+    def _normalizeCumulativeHoneySeries(values, baseline=None):
         """Return a stable cumulative honey series while preserving sample count."""
         if not values:
             return [0]
