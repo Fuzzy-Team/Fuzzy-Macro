@@ -280,7 +280,7 @@ def runApp(macroTarget):
         )
         value = result.stdout.strip()
         if value == "1":
-            messageBox.msgBox(text = "Full Keyboard Access is enabled. The macro will not work properly\
+            messageBox.msgBox(title="Full Keyboard Access", text = "Full Keyboard Access is enabled. The macro will not work properly\
                 \nTo disable it, go to System Settings -> Accessibility -> Keyboard -> uncheck 'Full Keyboard Access'")
     except Exception as e:
         print("Error reading Full Keyboard Access:", e)
