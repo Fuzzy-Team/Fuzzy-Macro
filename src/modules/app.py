@@ -290,6 +290,7 @@ def runApp(macroTarget):
 
     discordBotProc = None
     prevDiscordBotToken = None
+    discordBotStartedAt = 0.0
     prevRunState = run.value  # Track previous run state for GUI updates
     autoStopStartTime = None
     autoStopDeadline = None
@@ -500,17 +501,21 @@ def runApp(macroTarget):
             )
             run.value = 0
 
-        #discord bot. Look for changes in the bot token
+        #discord bot. Restart it when the token changes or the process has died
         # Coerce to str: settings parser may turn digit-only values into ints
         currentDiscordBotToken = str(setdat.get("discord_bot_token") or "").strip()
         shouldRunDiscordBot = logModule.delivery_uses_bot_commands(setdat) and bool(currentDiscordBotToken)
-        if shouldRunDiscordBot and currentDiscordBotToken != prevDiscordBotToken:
+        discordBotDead = discordBotProc is None or not discordBotProc.is_alive()
+        # a bot that keeps dying (e.g. a bad token) is retried once a minute, not every tick
+        retryDeadDiscordBot = discordBotDead and current_time - discordBotStartedAt >= 60
+        if shouldRunDiscordBot and (currentDiscordBotToken != prevDiscordBotToken or retryDeadDiscordBot):
             if discordBotProc is not None and discordBotProc.is_alive():
                 print("Detected change in discord bot token, killing previous bot process")
                 discordBotProc.terminate()
                 discordBotProc.join()
             discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI, discordMessageQueue, planterCommandQueue, streamControlQueue, skipServer, standbyCommandQueue, standbyState, ssaCommand), daemon=True)
             prevDiscordBotToken = currentDiscordBotToken
+            discordBotStartedAt = current_time
             discordBotProc.start()
         elif not shouldRunDiscordBot and discordBotProc is not None and discordBotProc.is_alive():
             print("Discord bot mode disabled, stopping bot process")
