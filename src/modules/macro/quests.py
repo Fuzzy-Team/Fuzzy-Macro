@@ -715,7 +715,7 @@ class QuestMixin:
                 rx, ry = res
                 rw, rh = matchedTemplate.size
                 img = cv2.cvtColor(np.array(screen), cv2.COLOR_RGBA2GRAY) 
-                img = img[ry-10:ry+rh+20, rx-5:] 
+                img = img[max(ry-10, 0):ry+rh+20, max(rx-5, 0):]
                 img = cv2.threshold(img, 150, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
                 img = cv2.GaussianBlur(img, (5, 5), 0)
                 img = Image.fromarray(img)
