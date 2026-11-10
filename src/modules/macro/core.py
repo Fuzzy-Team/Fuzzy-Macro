@@ -389,9 +389,7 @@ class macro(
                 self.markSproutBeanUsed()
             #update the time pressed
             hotbarSlotTimings[i] = time.time()
-            with open(settingsManager.getUserDataPath("hotbar_timings.txt"), "w") as f:
-                f.write(str(hotbarSlotTimings))
-            f.close()
+            settingsManager.saveUserLiteral("hotbar_timings.txt", hotbarSlotTimings)
 
     def background(self):
         while True:

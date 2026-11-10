@@ -181,29 +181,13 @@ def loadDefaultFields():
     """Load default field settings from hardcoded defaults."""
     return deepcopy_default(DEFAULT_FIELDS)
 
-def _writeTextFile(path, content):
-    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-    with open(path, "w") as f:
-        f.write(content if content.endswith("\n") or content == "" else content + "\n")
-
-def _writeLiteralFile(path, value):
-    _writeTextFile(path, str(value))
-
-def _writeJsonFile(path, value):
-    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-    with open(path, "w") as f:
-        json.dump(value, f, indent=3)
-        f.write("\n")
-
-def _writeFieldsFile(path, fields_data):
+def _writeAtomic(path, content):
+    """Write to a temp file then replace, so a reader or a kill mid-write never sees a truncated file."""
     abs_path = os.path.abspath(path)
     directory = os.path.dirname(abs_path)
     if directory:
         os.makedirs(directory, exist_ok=True)
-    content = str(fields_data)
-    if content and not content.endswith("\n"):
-        content += "\n"
-    fd, tmp_path = tempfile.mkstemp(prefix=".fields_", suffix=".tmp", dir=directory or None)
+    fd, tmp_path = tempfile.mkstemp(prefix=".settings_", suffix=".tmp", dir=directory or None)
     try:
         with os.fdopen(fd, "w") as f:
             f.write(content)
@@ -215,6 +199,21 @@ def _writeFieldsFile(path, fields_data):
         except OSError:
             pass
         raise
+
+def _writeTextFile(path, content):
+    _writeAtomic(path, content if content.endswith("\n") or content == "" else content + "\n")
+
+def _writeLiteralFile(path, value):
+    _writeTextFile(path, str(value))
+
+def _writeJsonFile(path, value):
+    _writeAtomic(path, json.dumps(value, indent=3) + "\n")
+
+def _writeFieldsFile(path, fields_data):
+    content = str(fields_data)
+    if content and not content.endswith("\n"):
+        content += "\n"
+    _writeAtomic(path, content)
 
 def ensureProfileFiles(profile_name=None):
     """Create missing profile settings/general/fields files from hardcoded defaults."""
@@ -826,24 +825,7 @@ def saveDict(path, data):
     # Ensure file ends with a newline to avoid accidental concatenation
     if not out.endswith("\n"):
         out = out + "\n"
-    abs_path = os.path.abspath(path)
-    directory = os.path.dirname(abs_path)
-    if directory:
-        os.makedirs(directory, exist_ok=True)
-    # Write to a temp file then replace, so a concurrent reader never sees a
-    # truncated/empty settings file mid-save.
-    fd, tmp_path = tempfile.mkstemp(prefix=".settings_", suffix=".tmp", dir=directory or None)
-    try:
-        with os.fdopen(fd, "w") as f:
-            f.write(out)
-        os.replace(tmp_path, abs_path)
-    except Exception:
-        try:
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
-        except OSError:
-            pass
-        raise
+    _writeAtomic(path, out)
 
 #update one property of a setting
 def saveSettingFile(setting,value, path):
