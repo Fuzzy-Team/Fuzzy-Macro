@@ -15,6 +15,7 @@ from modules.controls.sleep import (
     INTERRUPT_FIND_ITEM,
     HANG_FILE,
     is_paused,
+    paused_seconds,
     start_hang_watchdog,
 )
 
@@ -1003,7 +1004,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                             if macro.setdat["gather_boosted"] and boostedField:
                                 # Gather in boosted field for 15 minutes
                                 st = time.time()
-                                while time.time() - st < 15*60:
+                                pausedAtStart = paused_seconds()
+                                while run.value != 0 and time.time() - st - (paused_seconds() - pausedAtStart) < 15*60:
                                     runTask(macro.gather, args=(boostedField,), resetAfter=False)
                             executedTasks.add(taskId)
                             return True
