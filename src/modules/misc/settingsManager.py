@@ -119,6 +119,13 @@ def _getMacroProfileStore():
         )
     return _macro_profile_store
 
+def _isValidProfileName(name):
+    try:
+        _getMacroProfileStore()._profile_dir(name)
+        return True
+    except MacroProfileValidationError:
+        return False
+
 def initializeMacroProfile(profile_name=None):
     """Create missing files and run pending migrations for a Macro Profile."""
     return _getMacroProfileStore().initialize(profile_name or profileName)
@@ -644,6 +651,8 @@ def getCurrentProfile():
 def switchProfile(name):
     """Switch to a different profile"""
     global profileName
+    if not _isValidProfileName(name):
+        return False, "Invalid profile name"
     profiles_dir = getProfilesDir()
     profile_path = os.path.join(profiles_dir, name)
 
@@ -669,6 +678,8 @@ def createProfile(name):
     name = name.strip().replace(' ', '_').lower()
     if not name:
         return False, "Profile name cannot be empty"
+    if not _isValidProfileName(name):
+        return False, "Invalid profile name"
 
     # Check if profile already exists
     new_profile_path = os.path.join(profiles_dir, name)
@@ -688,8 +699,10 @@ def createProfile(name):
 
 def deleteProfile(name):
     """Delete a profile (cannot delete current or last profile)"""
+    if not _isValidProfileName(name):
+        return False, "Invalid profile name"
     profiles_dir = getProfilesDir()
-    
+
     # Cannot delete current profile
     if name == profileName:
         return False, "Cannot delete the currently active profile"
@@ -718,7 +731,9 @@ def renameProfile(old_name, new_name):
     new_name = new_name.strip().replace(' ', '_').lower()
     if not new_name:
         return False, "New profile name cannot be empty"
-    
+    if not _isValidProfileName(old_name) or not _isValidProfileName(new_name):
+        return False, "Invalid profile name"
+
     old_path = os.path.join(profiles_dir, old_name)
     new_path = os.path.join(profiles_dir, new_name)
     
@@ -746,7 +761,9 @@ def duplicateProfile(source_name, new_name):
     new_name = new_name.strip().replace(' ', '_').lower()
     if not new_name:
         return False, "New profile name cannot be empty"
-    
+    if not _isValidProfileName(source_name) or not _isValidProfileName(new_name):
+        return False, "Invalid profile name"
+
     source_path = os.path.join(profiles_dir, source_name)
     new_path = os.path.join(profiles_dir, new_name)
     
@@ -1229,6 +1246,8 @@ def _importProfileData(import_data, new_profile_name=None):
         new_profile_name = new_profile_name.strip().replace(' ', '_').lower()
         if not new_profile_name:
             return False, "Profile name cannot be empty"
+        if not _isValidProfileName(new_profile_name):
+            return False, "Invalid profile name"
 
         # Check if profile already exists
         new_profile_path = os.path.join(getProfilesDir(), new_profile_name)
