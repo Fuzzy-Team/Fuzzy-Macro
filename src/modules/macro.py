@@ -4623,7 +4623,8 @@ class macro:
         pattern_preferred_tokens = fieldSetting.get("fuzzy_ai_preferred_tokens", fuzzyAITokenRanking.get("preferred_tokens", ""))
         pattern_ignored_tokens = fieldSetting.get("fuzzy_ai_ignored_tokens", fuzzyAITokenRanking.get("ignored_tokens", ""))
         pattern_sprout_idle_square = isSproutGather
-        st = time.time()
+        # monotonic, like the paused time it subtracts, so a clock change can't shorten a gather
+        st = time.monotonic()
         pausedAtStart = paused_seconds()
         keepGathering = True
         self.died = False
@@ -4774,7 +4775,7 @@ class macro:
 
         def getGatherTime():
             # time stands still while paused
-            return time.time() - st - (paused_seconds() - pausedAtStart)
+            return time.monotonic() - st - (paused_seconds() - pausedAtStart)
 
         liveGatherReport = None
         if self.liveGatherReportEnabled() and not isSproutGather:
