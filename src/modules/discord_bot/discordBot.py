@@ -861,6 +861,9 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 )
                 await message.channel.send(embed=_apply_embed_footer(embed))
                 return
+            # Only an alt takes commands from the host's webhook.
+            if get_cached_settings().get("macro_mode") != "alt":
+                return
             if action == "stop":
                 if run.value != 3:
                     run.value = 0
