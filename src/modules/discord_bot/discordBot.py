@@ -1356,8 +1356,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             _add_enabled_disabled(enabled, disabled)
 
         elif category_key == "hive_slot":
-            slot = settings.get("hive_number", "Unknown")
-            embed.add_field(name="Current", value=str(slot), inline=False)
+            embed.add_field(name="Preferred", value=str(settings.get("preferred_hive_slot", "Unknown")), inline=True)
+            embed.add_field(name="Claimed", value=str(settings.get("hive_number", "Unknown")), inline=True)
 
         if status_message:
             embed.set_footer(text=status_message)
@@ -2378,7 +2378,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
     class HiveSlotSelect(discord.ui.Select):
         def __init__(self, settings: Dict):
-            current = settings.get("hive_number", 1)
+            current = settings.get("preferred_hive_slot", 1)
             options = []
             for slot in range(1, 7):
                 options.append(discord.SelectOption(label=str(slot), value=str(slot), default=(slot == current)))
@@ -2386,7 +2386,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         async def callback(self, interaction: discord.Interaction):
             slot = int(self.values[0])
-            success, message = update_setting("hive_number", slot)
+            # hive_number is the slot the macro has claimed; this picks the one it should claim
+            success, message = update_setting("preferred_hive_slot", slot)
             if success and updateGUI is not None:
                 updateGUI.value = 1
             status_message = message if success else "Failed to update hive slot."
