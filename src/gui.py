@@ -591,7 +591,7 @@ def getPatterns():
     }
     patterns = []
     try:
-        for x in os.listdir("../settings/patterns"):
+        for x in os.listdir(settingsManager.getPatternsDir()):
             root, ext = os.path.splitext(x)
             if ext.lower() not in (".py", ".ahk"):
                 continue

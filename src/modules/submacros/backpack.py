@@ -26,9 +26,7 @@ def bpc(x,y):
     if col & 0xFF0000 <= 0x690000: # less or equal to 50%
         if(col & 0xFF0000 <= 0x4B0000) : #less or equal to 25%
             if(col & 0xFF0000 <= 0x420000) : #less or equal to 10%
-                if((col & 0xFF0000 <= 0x410000) and (col & 0x00FFFF <= 0x00FF80) and (col & 0x00FFFF > 0x00FF86)): #less or equal to 5%
-                    perc=0
-                elif((col & 0xFF0000 > 0x410000) and (col & 0x00FFFF <= 0x00FF80) and (col & 0x00FFFF > 0x00FC85)): #greater than 5%
+                if((col & 0xFF0000 > 0x410000) and (col & 0x00FFFF <= 0x00FF80) and (col & 0x00FFFF > 0x00FC85)): #greater than 5%
                     perc=5
                 else:
                     perc=0

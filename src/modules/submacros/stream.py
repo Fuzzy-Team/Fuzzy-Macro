@@ -378,32 +378,12 @@ class cloudflaredStream:
             time.sleep(0.0001)
 
     def _run_server(self):
-        #use the production WSGI server if available
-        try:
-            # from waitress import serve
-            # print("Starting server with Waitress WSGI server")
-            # serve(self.app, host='127.0.0.1', port=8081, threads=4)
-            raise ImportError
-        except ImportError:
-            # Fall back to Werkzeug server
-            from werkzeug.serving import run_simple
-            print("Starting server with Werkzeug (install waitress for better performance)")
-            run_simple('127.0.0.1', 8081, self.app, threaded=True, use_reloader=False)
+        from werkzeug.serving import run_simple
+        print("Starting server with Werkzeug")
+        run_simple('127.0.0.1', 8081, self.app, threaded=True, use_reloader=False)
     
     def isCloudflaredInstalled(self):
         return self.cloudflaredPath
-    
-        try:
-            result = subprocess.run(
-                [self.getCloudflaredPath(), "--version"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
-            if result.returncode == 0:
-                return True
-        except FileNotFoundError:
-            return False
 
     def _run_cloudflared(self, token):
         time.sleep(2)
