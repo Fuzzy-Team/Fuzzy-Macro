@@ -221,7 +221,7 @@ class QuestMixin:
         screens = []
         prevHash = None
         for _ in range(maxScreens):
-            screens.append(screenshotQuest(800, mode="RGBA"))
+            screens.append(screenshotQuest(self.robloxWindow.mh, mode="RGBA"))
             mouse.scroll(-1, True)
             time.sleep(0.06)
             currentHash = average_hash(Image.fromarray(screenshotQuest(100)))
@@ -238,7 +238,7 @@ class QuestMixin:
 
     def captureQuestWatchScreen(self):
         """Capture the visible quest section without scrolling or toggling its UI."""
-        screenshotHeight = max(1, min(800, self.robloxWindow.mh - 150))
+        screenshotHeight = max(1, self.robloxWindow.mh - 150)
         return mssScreenshotPillowRGBA(
             self.robloxWindow.mx,
             self.robloxWindow.my + 150,
@@ -596,9 +596,6 @@ class QuestMixin:
             return screen
 
         def ocrQuestTitleFromScreen(screen):
-            # A title in the top 300px has its whole quest on screen, so it wins. A title
-            # lower down is only used when there is none up top (the last quest never scrolls that high).
-            topBand = 300
             bestMatch = None
             questTitleNoise = ["talk", "complete", "compete", "competer", "collect", "field", "pollen", "tokens", "defeat", "catch"]
             for bbox, (text, _conf) in ocr.ocrRead(screen):
@@ -619,9 +616,8 @@ class QuestMixin:
                 if score < 0.65:
                     continue
                 yPos = int(min(point[1] for point in bbox))
-                rank = (yPos < topBand, score)
-                if bestMatch is None or rank > bestMatch[0]:
-                    bestMatch = (rank, line, yPos)
+                if bestMatch is None or score > bestMatch[0]:
+                    bestMatch = (score, line, yPos)
             return bestMatch
         
         manageQuestUi = questScreens is None
@@ -689,22 +685,20 @@ class QuestMixin:
         except Exception:
             pass
         prevHash = None
+        titleSighting = None
         screenSource = questScreens if questScreens is not None else range(150)
         for i, screenEntry in enumerate(screenSource):
-            screen = screenEntry if questScreens is not None else screenshotQuest(800, mode="RGBA")
+            # The whole quest menu, down to the bottom of the window
+            screen = screenEntry if questScreens is not None else screenshotQuest(self.robloxWindow.mh, mode="RGBA")
 
+            # A title is used once the divider below its quest is on screen, so every objective
+            # is read. The last quests in the list have no divider, so their latest sighting is used.
             ocrMatch = ocrQuestTitleFromScreen(screen)
             if ocrMatch:
-                _score, questTitleRaw, questTitleYPos = ocrMatch
-                if ":" in questTitleRaw:
-                    questTitleRaw = questTitleRaw.split(":", 1)[1].strip()
-                if questGiver == "brown bear":
-                    questTitle = questTitleRaw
-                else:
-                    questTitle, _ = fuzzywuzzy.process.extractOne(questTitleRaw, quest_data[questGiver].keys())
-                if logDetection:
-                    self.logger.webhook("", f"Quest Title: {questTitle}", "dark brown")
-                break
+                titleSighting = (screen, ocrMatch, i, self.questMenuStep)
+                belowTitle = cv2.cvtColor(np.array(screen), cv2.COLOR_RGBA2BGR)[ocrMatch[2]:]
+                if positioned or findQuestSectionEnd(belowTitle, 60*self.robloxWindow.multi):
+                    break
 
             res = None
             matchedTemplate = None
@@ -753,6 +747,18 @@ class QuestMixin:
                     break
                 prevHash = hash
 
+        sightingStep = self.questMenuStep
+        if questTitle is None and titleSighting:
+            screen, (_score, questTitleRaw, questTitleYPos), i, sightingStep = titleSighting
+            if ":" in questTitleRaw:
+                questTitleRaw = questTitleRaw.split(":", 1)[1].strip()
+            if questGiver == "brown bear":
+                questTitle = questTitleRaw
+            else:
+                questTitle, _ = fuzzywuzzy.process.extractOne(questTitleRaw, quest_data[questGiver].keys())
+            if logDetection:
+                self.logger.webhook("", f"Quest Title: {questTitle}", "dark brown")
+
         if questTitle is None:
             if logDetection:
                 self.logger.webhook("", f"Could not find {questGiver} quest", "dark brown")
@@ -762,7 +768,7 @@ class QuestMixin:
             return None
 
         # A scan shows many screens; a single watch screen is read where this giver was already recorded.
-        step = self.questMenuStep if manageQuestUi else (i if len(questScreens) > 1 else None)
+        step = sightingStep if manageQuestUi else (i if len(questScreens) > 1 else None)
         if step is not None:
             self.questGiverSteps[questGiver] = step
 
