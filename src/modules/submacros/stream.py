@@ -33,6 +33,9 @@ class cloudflaredStream:
         self.frame_lock = threading.Lock()
         self.frame_ready = threading.Event()
         self.capture_thread = None
+        # open /video_feed connections; capture runs only while this is above 0
+        self.viewers = 0
+        self.viewers_lock = threading.Lock()
         
         self.fps_history = deque(maxlen=60)
         self.last_fps_check = time.time()
@@ -236,27 +239,32 @@ class cloudflaredStream:
     def _generate_frames_with_restart(self):
         max_restarts = 5
         restart_count = 0
-        
-        while self.streaming and restart_count < max_restarts:
-            try:
-                yield from self.generateFrames()
-                #generator exited normally
-                time.sleep(0.5)
-                restart_count += 1
-                print(f"Restarting frame generator (attempt {restart_count}/{max_restarts})")
-            except Exception as e:
-                print(f"Frame generation error: {e}. Restarting capture...")
-                time.sleep(0.5)  # Brief pause before restart
-                restart_count += 1
-                self.restart_count += 1
-        
+        with self.viewers_lock:
+            self.viewers += 1
+        try:
+            # generateFrames only returns once streaming stops; only errors count as restarts
+            while self.streaming and restart_count < max_restarts:
+                try:
+                    yield from self.generateFrames()
+                except Exception as e:
+                    print(f"Frame generation error: {e}. Restarting capture...")
+                    time.sleep(0.5)  # Brief pause before restart
+                    restart_count += 1
+                    self.restart_count += 1
+        finally:
+            # runs when the viewer disconnects and the server closes this generator
+            with self.viewers_lock:
+                self.viewers -= 1
+
         print("Max restarts reached or streaming stopped.")
 
     def start_capture_thread(self):
-        if self.capture_thread is None or not self.capture_thread.is_alive():
-            self.capture_thread = threading.Thread(target=self._capture_screen, daemon=True)
-            self.capture_thread.start()
-            print("Capture thread started")
+        # under the lock so a viewer arriving while the thread exits still gets a new one
+        with self.viewers_lock:
+            if self.capture_thread is None or not self.capture_thread.is_alive():
+                self.capture_thread = threading.Thread(target=self._capture_screen, daemon=True)
+                self.capture_thread.start()
+                print("Capture thread started")
     
     def _capture_screen(self):
         # Optimize process priority on macOS
@@ -270,6 +278,11 @@ class cloudflaredStream:
             monitor = sct.monitors[1]
             
             while self.streaming:
+                with self.viewers_lock:
+                    if self.viewers == 0:
+                        # nobody is watching; the next viewer starts a new thread
+                        self.capture_thread = None
+                        break
                 try:
                     screen = np.array(sct.grab(monitor), dtype=np.uint8)
                     
@@ -289,34 +302,25 @@ class cloudflaredStream:
                 except Exception as e:
                     print(f"Capture error: {e}")
                 
-                #120 captures per second
-                time.sleep(1/120)
+                # no point capturing faster than frames are sent
+                time.sleep(1 / self.target_fps)
 
     def generateFrames(self):
         self.start_capture_thread()
         
         #timing variables
         frame_interval = 1.0 / self.target_fps
-        last_gc_time = time.time()
-        start_time = time.time()
         frames_since_gc = 0
         
         #JPEG encoding parameters
         encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), self.jpeg_quality,
                        int(cv2.IMWRITE_JPEG_OPTIMIZE), 1]
         
-        #restart after 30 seconds to prevent degradation
-        max_run_time = 30  # seconds
-        
         # Frame tracking
         self.frame_count = 0
         self.fps_history.clear()
         
         while self.streaming:
-            if time.time() - start_time > max_run_time:
-                print("Periodic capture restart for performance")
-                break
-            
             current_time = time.time()
             elapsed = current_time - self.last_frame_time
             
@@ -488,8 +492,10 @@ class cloudflaredStream:
         self._clearStreamURLFile()
         
         #stop the capture thread
-        if self.capture_thread and self.capture_thread.is_alive():
-            self.capture_thread.join(timeout=1.0)
+        # read once: the thread clears capture_thread itself when the last viewer leaves
+        thread = self.capture_thread
+        if thread and thread.is_alive():
+            thread.join(timeout=1.0)
         
         self._stopCloudflared()
         
