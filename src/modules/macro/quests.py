@@ -595,14 +595,13 @@ class QuestMixin:
                 screen = cv2.cvtColor(screen, cv2.COLOR_BGRA2GRAY)
             return screen
 
-        def ocrQuestTitleFromScreen(screen, wholeScreen=False):
-            # Titles are read in the top 300px so the whole quest is on screen. The last
-            # quest never scrolls that high, so the final screen is read in full.
-            cropHeight = screen.height if wholeScreen else min(300, screen.height)
-            crop = screen.crop((0, 0, screen.width, cropHeight))
+        def ocrQuestTitleFromScreen(screen):
+            # A title in the top 300px has its whole quest on screen, so it wins. A title
+            # lower down is only used when there is none up top (the last quest never scrolls that high).
+            topBand = 300
             bestMatch = None
             questTitleNoise = ["talk", "complete", "compete", "competer", "collect", "field", "pollen", "tokens", "defeat", "catch"]
-            for bbox, (text, _conf) in ocr.ocrRead(crop):
+            for bbox, (text, _conf) in ocr.ocrRead(screen):
                 line = self.convertCyrillic(text.lower().strip())
                 if not line:
                     continue
@@ -620,8 +619,9 @@ class QuestMixin:
                 if score < 0.65:
                     continue
                 yPos = int(min(point[1] for point in bbox))
-                if bestMatch is None or score > bestMatch[0]:
-                    bestMatch = (score, line, yPos)
+                rank = (yPos < topBand, score)
+                if bestMatch is None or rank > bestMatch[0]:
+                    bestMatch = (rank, line, yPos)
             return bestMatch
         
         manageQuestUi = questScreens is None
@@ -688,28 +688,22 @@ class QuestMixin:
             questGiverTemplates.extend(buildScaledTemplates(fallbackImg, fallbackScales, fallbackDisplayType))
         except Exception:
             pass
-        def readQuestTitle(screen, wholeScreen=False):
-            nonlocal questTitle, questTitleYPos
-            ocrMatch = ocrQuestTitleFromScreen(screen, wholeScreen)
-            if not ocrMatch:
-                return False
-            _score, questTitleRaw, questTitleYPos = ocrMatch
-            if ":" in questTitleRaw:
-                questTitleRaw = questTitleRaw.split(":", 1)[1].strip()
-            if questGiver == "brown bear":
-                questTitle = questTitleRaw
-            else:
-                questTitle, _ = fuzzywuzzy.process.extractOne(questTitleRaw, quest_data[questGiver].keys())
-            if logDetection:
-                self.logger.webhook("", f"Quest Title: {questTitle}", "dark brown")
-            return True
-
         prevHash = None
         screenSource = questScreens if questScreens is not None else range(150)
         for i, screenEntry in enumerate(screenSource):
             screen = screenEntry if questScreens is not None else screenshotQuest(800, mode="RGBA")
 
-            if readQuestTitle(screen):
+            ocrMatch = ocrQuestTitleFromScreen(screen)
+            if ocrMatch:
+                _score, questTitleRaw, questTitleYPos = ocrMatch
+                if ":" in questTitleRaw:
+                    questTitleRaw = questTitleRaw.split(":", 1)[1].strip()
+                if questGiver == "brown bear":
+                    questTitle = questTitleRaw
+                else:
+                    questTitle, _ = fuzzywuzzy.process.extractOne(questTitleRaw, quest_data[questGiver].keys())
+                if logDetection:
+                    self.logger.webhook("", f"Quest Title: {questTitle}", "dark brown")
                 break
 
             res = None
@@ -758,10 +752,6 @@ class QuestMixin:
                 if not prevHash is None and prevHash == hash:
                     break
                 prevHash = hash
-
-        # Only a full list scan ends on the last screen; a single watch screen is not the end.
-        if questTitle is None and (manageQuestUi or len(questScreens) > 1):
-            readQuestTitle(screen, wholeScreen=True)
 
         if questTitle is None:
             if logDetection:
