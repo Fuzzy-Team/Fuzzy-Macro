@@ -578,7 +578,8 @@ class HourlyReport():
         path = settingsManager.getUserDataPath("hourly_report_stats.pkl")
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with self._saveLock:
-            data = copy.deepcopy({
+            # dumps snapshots the stats in one pass; no separate deep copy needed
+            data = pickle.dumps({
                 "hourlyReportStats": self.hourlyReportStats,
                 "sessionReportStats": self.sessionReportStats,
                 "vicLastSession": self.vicLastSession,
@@ -598,7 +599,7 @@ class HourlyReport():
             try:
                 with tempfile.NamedTemporaryFile("wb", dir=os.path.dirname(path), prefix="hourly-report-", suffix=".tmp", delete=False) as f:
                     tmpPath = f.name
-                    pickle.dump(data, f)
+                    f.write(data)
                     f.flush()
                     os.fsync(f.fileno())
                 os.replace(tmpPath, path)
