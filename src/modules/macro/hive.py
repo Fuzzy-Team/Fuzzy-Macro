@@ -317,6 +317,7 @@ class HiveMixin:
                 if locateImageOnScreen(emptyHealth, self.robloxWindow.mx+(self.robloxWindow.mw-150), self.robloxWindow.my, 150, 60, 0.8):
                     healthBar = True
                     break
+                time.sleep(0.05)
             if healthBar: #check if the health bar has b detected. If it hasnt, just wait for a flat time
                 #if the empty health bar disappears, player has respawned
                 st = time.time()
