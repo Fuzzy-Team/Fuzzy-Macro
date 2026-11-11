@@ -683,8 +683,8 @@ def getManualPlanterData():
     planterDataRaw = settingsManager.loadUserText("manualplanters.txt")
     if planterDataRaw.strip():
         return ast.literal_eval(planterDataRaw)
-    else: 
-        return ""
+    # nothing planted yet; the home tab reads .planters
+    return {"planters": []}
 
 def emptyAutoPlanterSlot():
     return {
