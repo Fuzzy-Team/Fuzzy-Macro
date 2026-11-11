@@ -795,7 +795,7 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
       return settings.stinger_hunt || false;
     }
     if (taskId === "auto_field_boost") {
-      return settings.auto_field_boost || false;
+      return settings.Auto_Field_Boost || settings.auto_field_boost || false;
     }
     if (taskId === "ant_challenge") {
       return settings.ant_challenge || false;
