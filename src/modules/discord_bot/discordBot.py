@@ -1664,41 +1664,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         if macro_mode == "bug" and not (task_id.startswith("kill_") or task_id in ("ant_challenge", "stinger_hunt")):
             return False
 
-        if task_id.startswith("quest_"):
-            quest_key = f"{task_id.replace('quest_', '')}_quest"
-            return bool(settings.get(quest_key, False))
-
-        if task_id.startswith("collect_"):
-            collect_key = task_id.replace("collect_", "")
-            return bool(settings.get(collect_key, False))
-
-        if task_id.startswith("kill_"):
-            mob_key = task_id.replace("kill_", "")
-            return bool(settings.get(mob_key, False))
-
-        if task_id.startswith("gather_"):
-            field_name = task_id.replace("gather_", "").replace("_", " ")
-            fields = settings.get("fields", [])
-            fields_enabled = settings.get("fields_enabled", [])
-            for i, configured_field in enumerate(fields):
-                if configured_field == field_name:
-                    return i < len(fields_enabled) and bool(fields_enabled[i])
-            return False
-
-        if task_id == "blender":
-            return bool(settings.get("blender_enable", False))
-        if task_id == "planters":
-            return bool(settings.get("planters_mode", 0))
-        if task_id == "ant_challenge":
-            return bool(settings.get("ant_challenge", False))
-        if task_id == "stinger_hunt":
-            return bool(settings.get("stinger_hunt", False))
-        if task_id == "mondo_buff":
-            return bool(settings.get("mondo_buff", False))
-        if task_id == "auto_field_boost":
-            return bool(settings.get("Auto_Field_Boost", settings.get("auto_field_boost", False)))
-
-        return bool(settings.get(task_id, False))
+        return _is_task_toggle_enabled(task_id, settings)
 
     def _get_enabled_task_order(settings: Dict) -> List[str]:
         task_list_order = _get_task_list_order(settings)
@@ -3573,63 +3539,6 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         await interaction.response.send_message(message)
 
     # === PLANTER MANAGEMENT COMMANDS ===
-    '''
-    @bot.tree.command(name="planters", description="View planter configuration")
-    async def view_planters(interaction: discord.Interaction):
-        """View current planter configuration"""
-        try:
-            settings = get_cached_settings()
-
-            embed = discord.Embed(title="🌱 Planter Configuration", color=0x00ff00)
-
-            # Planter mode
-            mode = settings.get("planters_mode", 0)
-            mode_text = {0: "Disabled", 1: "Manual", 2: "Auto"}.get(mode, "Unknown")
-            embed.add_field(name="🎛️ **Mode**", value=mode_text, inline=True)
-
-            # Auto planter settings
-            if mode == 2:
-                embed.add_field(name="🔢 **Max Planters**", value=settings.get("auto_max_planters", 3), inline=True)
-                embed.add_field(name="🎨 **Preset**", value=settings.get("auto_preset", "blue"), inline=True)
-
-                # Show priority settings
-                priority_text = []
-                for i in range(5):
-                    nectar = settings.get(f"auto_priority_{i}_nectar", "none")
-                    min_val = settings.get(f"auto_priority_{i}_min", 0)
-                    if nectar != "none":
-                        priority_text.append(f"#{i+1}: {nectar} ({min_val}%)")
-
-                embed.add_field(name="📊 **Nectar Priorities**", value="\n".join(priority_text) if priority_text else "None", inline=False)
-
-            await interaction.response.send_message(embed=embed)
-
-        except Exception as e:
-            await interaction.response.send_message(f"❌ Error retrieving planter settings: {str(e)}")
-
-    @bot.tree.command(name="setplantermode", description="Set planter mode (0=disabled, 1=manual, 2=auto)")
-    @app_commands.describe(mode="Planter mode (0=disabled, 1=manual, 2=auto)")
-    @app_commands.autocomplete(mode=planter_mode_autocomplete)
-    async def set_planter_mode(interaction: discord.Interaction, mode: int):
-        """Set planter mode"""
-        if mode not in [0, 1, 2]:
-            await interaction.response.send_message("❌ Invalid mode. Use 0 (disabled), 1 (manual), or 2 (auto)")
-            return
-
-        success, message = update_setting("planters_mode", mode)
-        await interaction.response.send_message(message)
-
-    @bot.tree.command(name="setmaxplanters", description="Set maximum number of auto planters")
-    @app_commands.describe(count="Maximum number of planters (1-3)")
-    async def set_max_planters(interaction: discord.Interaction, count: int):
-        """Set maximum number of auto planters"""
-        if count < 1 or count > 3:
-            await interaction.response.send_message("❌ Count must be between 1 and 3")
-            return
-
-        success, message = update_setting("auto_max_planters", count)
-        await interaction.response.send_message(message)
-    '''
     @bot.tree.command(name="planterreset", description="Reset the timer for one active planter")
     @requires_discord_permission("task_interrupts")
     @app_commands.describe(planter="Choose one of the currently active enabled planters")
