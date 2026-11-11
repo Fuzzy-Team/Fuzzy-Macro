@@ -1691,7 +1691,11 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                             if gatherFlag:
                                 runTask(macro.gather, args=(candidate["field"],), resetAfter=False)
                         else:
-                            if getattr(macro, "lastPlanterPlacementFailure", None) == "missing_inventory":
+                            failure = getattr(macro, "lastPlanterPlacementFailure", None)
+                            if failure == "maxplanters":
+                                # The game already has 3 planters out, so every other placement would fail too
+                                break
+                            if failure == "missing_inventory":
                                 blockedPlanters.add(candidate["planter"])
                             else:
                                 blockedPlacements.add((candidate["planter"], candidate["field"]))

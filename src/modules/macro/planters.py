@@ -177,6 +177,9 @@ class PlanterMixin:
             self.logger.webhook("", failMsg, "red", "screen", ping_category="ping_critical_errors")
             self.lastPlanterPlacementFailure = placementError or "placement_failed"
             self.reset()
+            # The game's planter limit won't change on a retry
+            if placementError == "maxplanters":
+                break
             # If failed to place, wait before next attempt
             if attempt < max_attempts - 1:
                 time.sleep(cooldown_seconds)
