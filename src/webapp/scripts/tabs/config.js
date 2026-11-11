@@ -449,8 +449,8 @@ async function resetTaskPriorities() {
   }
 }
 
-$("#config-placeholder", loadConfig)
-  .load("../htmlImports/tabs/config.html") //load config tab
+$("#config-placeholder")
+  .load("../htmlImports/tabs/config.html", loadConfig) //load config tab
   .on("click", ".config-tab-item", (event) =>
     switchConfigTab(event.currentTarget)
   ) //navigate between fields
