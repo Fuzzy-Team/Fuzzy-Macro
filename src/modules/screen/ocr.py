@@ -79,12 +79,22 @@ def paddleBounding(b):
     #convert all values to int and unpack
     x1,y1,x2,y2 = [int(x) for x in b]
     return ([x1,y1],[x2,y1],[x2,y2],[x1,y2])
-    
+
+def accurateVisionWorks():
+    """On some Macs Vision's accurate mode fails (a Neural Engine error) and ocrmac hides it by
+    returning no text, so every read comes back empty. Fast mode still works there."""
+    from PIL import Image, ImageDraw, ImageFont
+    img = Image.new("RGB", (240, 80), "white")
+    ImageDraw.Draw(img).text((10, 10), "Claim Hive", fill="black", font=ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 40))
+    return bool(ocrmac.OCR(img, recognition_level="accurate").recognize())
+
+visionLevel = "accurate" if ocrLib != "ocrmac" or accurateVisionWorks() else "fast"
+
 def ocrMac_(img):
     if useLangPref:
-        result = ocrmac.OCR(img,language_preference=['en-US']).recognize(px=True)
+        result = ocrmac.OCR(img,language_preference=['en-US'],recognition_level=visionLevel).recognize(px=True)
     else:
-        result = ocrmac.OCR(img).recognize(px=True)
+        result = ocrmac.OCR(img,recognition_level=visionLevel).recognize(px=True)
     #convert it to the same format as paddleocr
     #[ ([x1,y1],[x2,y1],[x2,y2],[x1,y2]), (text, confidence) ]
     return [ [paddleBounding(x[2]),(x[0],x[1]) ] for x in result]
