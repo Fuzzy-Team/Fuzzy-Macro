@@ -24,9 +24,7 @@ def run(self):
     sleep(1.2)
     if not self.viciousRecoverCannon():
         return False
-    self.keyboard.keyDown('e', False)
-    sleep((50 + self.setdat['vicious_key_delay_ms']) / 1000)
-    self.keyboard.keyUp('e', False)
+    self.keyboard.press('e', (50 + self.setdat['vicious_key_delay_ms']) / 1000)
     sleep(1.8)
     self.viciousJump()
     sleep(0.05)
