@@ -63,6 +63,8 @@ def accurateVisionWorks():
     return bool(ocrmac.OCR(img, recognition_level="accurate").recognize())
 
 visionLevel = "accurate" if ocrLib != "ocrmac" or accurateVisionWorks() else "fast"
+if ocrLib == "ocrmac":
+    print(f"Text reading: Vision {visionLevel} mode")
 
 def ocrMac_(img):
     if useLangPref:
