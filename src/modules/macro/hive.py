@@ -122,7 +122,8 @@ class HiveMixin:
                 mouse.click()
 
             if (
-                self.setdat.get("macro_mode", "normal") not in ("quest", "alt", "vic")
+                self.vicFields
+                and self.setdat.get("macro_mode", "normal") not in ("quest", "alt", "vic")
                 and self.night
                 and self.setdat["stinger_hunt"]
             ):
@@ -132,10 +133,11 @@ class HiveMixin:
                 self.keyboard.press(".")
                 self.converting = False
                 if self.confirmNight():
-                    self.stingerHunt()
-                else:
+                    if self.stingerHunt(forced_convert_balloon=forced_convert_balloon):
+                        return True
+                if self.cannonFromHive:
                     return self.convert(forced_convert_balloon=forced_convert_balloon)
-                return
+                return self.reset(convert=True, forced_convert_balloon=forced_convert_balloon)
             
             #check if backpack is done
             if not convertedBackpack:
@@ -224,7 +226,7 @@ class HiveMixin:
         self.hourlyReport.addHourlyStat("converting_time", time.time()-st)
         return True
 
-    def reset(self, hiveCheck = False, convert = True, AFB = False):
+    def reset(self, hiveCheck = False, convert = True, AFB = False, forced_convert_balloon = False):
         self.closeQuestMenu()
         self.alreadyConverted = False
         self.keyboard.releaseMovement()
@@ -349,12 +351,14 @@ class HiveMixin:
                 self.keyboard.press("o")
             if atHive:
                 self.cannonFromHive = True
-                if convert: 
-                    self.convert()
+                result = True
+                if convert:
+                    result = bool(self.convert(forced_convert_balloon=forced_convert_balloon))
                 self.keyboard.releaseMovement()
-                return True
+                return result
             else:
                 self.keyboard.walk("w", 5)
+                result = True
                 if convert:
                     self.cannonFromHive = True
                     self.keyboard.walk("s", 0.55)
@@ -363,12 +367,12 @@ class HiveMixin:
                     else:
                         dir = "a"
                     self.walkHiveSlots(dir, abs(self.setdat["hive_number"]-3))
-                    self.convert()
+                    result = bool(self.convert(forced_convert_balloon=forced_convert_balloon))
                 else:
                     self.keyboard.walk("s", 0.15)
                     self.cannonFromHive = False
             self.keyboard.releaseMovement()
-            return True
+            return result
         
         else:
             self.logger.webhook("", "Unable to detect that player respawned at hive", "dark brown", "screen")
