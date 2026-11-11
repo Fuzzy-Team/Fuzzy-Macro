@@ -1212,7 +1212,8 @@ class QuestMixin:
         # Find dialog image and compute a click/sample location
         x = self.robloxWindow.mw // 2
         y = int(self.robloxWindow.mh * 2 / 3)
-        a = self.findText("clicktocontinue", self.robloxWindow.mx + (x), self.robloxWindow.my + (y), 300, self.robloxWindow.mh // 3)
+        # fast-mode OCR sometimes cuts the line short ("Click to contin"), so match only its start
+        a = self.findText("clickto", self.robloxWindow.mx + (x), self.robloxWindow.my + (y), 300, self.robloxWindow.mh // 3)
         if a:
             # the point just above the dialog box, as the old image match's top edge gave
             xr = a[0] - (self.robloxWindow.mx + x)
