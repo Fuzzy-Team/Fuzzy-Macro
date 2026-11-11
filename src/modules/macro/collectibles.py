@@ -8,7 +8,7 @@ import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
 from modules.misc.settings_defaults import glitter_slot, glitter_slot_label
 import modules.screen.ocr as ocr
-from modules.controls.sleep import is_stopped, pause_aware_time as time, sleep
+from modules.controls.sleep import is_stopped, pause_aware_time as time, paused_seconds, sleep
 from modules.macro.game_data import (
     BLENDER_ITEM_SLOTS,
     blenderItems,
@@ -288,24 +288,39 @@ class CollectiblesMixin:
                 time.sleep(0.2)
                 mouse.click()
 
-            while True:
-                keepOld = self.keepOldCheck()
-                if keepOld is not None:
-                    mouse.mouseUp()
-                    self.logger.webhook("","Ant Challenge Complete","bright green", "screen", ping_category="ping_ant_challenge")
-                    clickKeepOld(keepOld)
-                    return True
-                if self.blueTextHas("died"):
-                    mouse.mouseUp()
-                    self.logger.webhook("","Player died during Ant Challenge; resetting", "dark brown", "screen", ping_category="ping_character_deaths")
-                    self.reset(convert=False)
-                    return False
-                if time.time() - challengeStart > 8*60:
-                    mouse.mouseUp()
-                    self.logger.webhook("","Ant Challenge timed out waiting for score popup; pressing Keep Old and resetting", "red", "screen", ping_category="ping_critical_errors")
-                    clickKeepOld()
-                    self.reset(convert=False)
-                    return False
+            try:
+                while True:
+                    # checkPauseAndWait keeps the mouse released while paused and raises on interrupt
+                    pausedBefore = paused_seconds()
+                    checkStart = time.time()
+                    if self.checkPauseAndWait():
+                        return False
+                    wasPaused = paused_seconds() > pausedBefore
+                    if wasPaused:
+                        # paused wall-clock time does not count against the challenge timeout
+                        challengeStart += time.time() - checkStart
+                    keepOld = self.keepOldCheck()
+                    if keepOld is not None:
+                        mouse.mouseUp()
+                        self.logger.webhook("","Ant Challenge Complete","bright green", "screen", ping_category="ping_ant_challenge")
+                        clickKeepOld(keepOld)
+                        return True
+                    if self.blueTextHas("died"):
+                        mouse.mouseUp()
+                        self.logger.webhook("","Player died during Ant Challenge; resetting", "dark brown", "screen", ping_category="ping_character_deaths")
+                        self.reset(convert=False)
+                        return False
+                    if time.time() - challengeStart > 8*60:
+                        mouse.mouseUp()
+                        self.logger.webhook("","Ant Challenge timed out waiting for score popup; pressing Keep Old and resetting", "red", "screen", ping_category="ping_critical_errors")
+                        clickKeepOld()
+                        self.reset(convert=False)
+                        return False
+                    if wasPaused:
+                        # a pause was waited out: hold left click again once the checks above pass
+                        mouse.mouseDown()
+            finally:
+                mouse.mouseUp()
 
         self.logger.webhook("", "Cant start ant challenge", "red", "screen", ping_category="ping_critical_errors")
         return False
