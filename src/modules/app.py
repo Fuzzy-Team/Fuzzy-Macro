@@ -831,6 +831,8 @@ def runApp(macroTarget):
         # Only read the screen once a macro process is actually running; during a
         # crash backoff Roblox may be gone and the pending restart owns the window.
         if run.value == 2 and macroProc and macroProc.is_alive() and time.time() > disconnectCooldownUntil:
+            # OCR is costly; checking every few seconds is enough to catch a disconnect
+            disconnectCooldownUntil = time.time() + 5
             # imported here so the GUI process only loads OCR once the macro runs
             from modules.screen import ocr
             from modules.screen.screenshot import mssScreenshot
