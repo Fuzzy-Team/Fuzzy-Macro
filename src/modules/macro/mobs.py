@@ -2,7 +2,7 @@ import threading
 import traceback
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
-from modules.controls.sleep import InterruptRequested, pause_aware_time as time, sleep
+from modules.controls.sleep import InterruptRequested, is_paused, pause_aware_time as time, sleep
 from modules.gather_session import field_pattern_variables, GatherPatternRunner
 import modules.macro.pattern_environment as patternEnvironment
 from modules.macro.game_data import (
@@ -453,78 +453,100 @@ class MobMixin:
             self.keyboard.tileWalk("s", length)
             self.keyboard.tileWalk(dirKey, 1.5)
 
-    def coconutCrabBackground(self):
-        while self.bossStatus is None:
+    def coconutCrabBackground(self, stopEvent):
+        while not stopEvent.is_set() and self.bossStatus is None:
+            # While paused, defer screen capture/OCR; waiting on the event keeps stop responsive
+            while is_paused() and not stopEvent.wait(0.25):
+                pass
+            if stopEvent.is_set() or self.bossStatus is not None:
+                break
             screen = self.blueTextScreen()
-            if self.blueTextHas("died", screen=screen):
+            if stopEvent.is_set():
+                return
+            died = self.blueTextHas("died", screen=screen)
+            defeated = self.blueTextHas("coconutcrab_defeat", screen=screen)
+            if stopEvent.is_set():
+                return
+            if died:
                 self.died = True
-            if self.blueTextHas("coconutcrab_defeat", screen=screen):
+            if defeated:
                 self.bossStatus = "defeated"
             # OCR back to back would compete with the fight for CPU
-            time.sleep(0.25)
+            stopEvent.wait(0.25)
 
     def coconutCrab(self):
         self.bossStatus = None
         self.set_task_status("coconut_crab", activity="coconut_crab")
-        cocoThread = threading.Thread(target=self.coconutCrabBackground)
-        cocoThread.daemon = True
-        cocoThread.start()
         st = time.time()
-        for _ in range(2):
-            if not self.travelViaCannon("Coconut Crab"):
-                self.bossStatus = "travel_failed"
-                cocoThread.join()
-                return
-            self.logger.webhook("","Travelling: Coconut Crab","dark brown")
-            self.goToField("coconut")
-            self.keyboard.walk("s", 1)
-            self.keyboard.walk("d", 3)
-            self.died = False
-            self.bossStatus = None
-            st = time.time()
-            while True:
-                mouse.mouseDown()
-                #simplified version of natro's coco crab pattern
-                for i in range(2):
-                    self.keyboard.walk("a",6, False)
-                    self.keyboard.walk("d",6-i*1.8, False)
-                self.keyboard.walk("s",2)
-                time.sleep(4.5)
-                self.keyboard.walk("w",1)
-                mouse.mouseUp()
-                # Respect user-configurable max kill time (minutes)
-                max_kill_time = self.setdat.get("coconut_crab_max_kill_time", 15)
-                if time.time() - st > max_kill_time * 60:
-                    self.bossStatus = "timelimit"
-                if self.died or self.bossStatus is not None: break
-            
-            if self.died:
-                self.logger.webhook("", "Died to Coconut Crab", "dark brown", ping_category="ping_character_deaths")
-                self.reset(convert=False)
+        try:
+            for attempt in range(2):
+                if not self.travelViaCannon("Coconut Crab"):
+                    self.bossStatus = "travel_failed"
+                    return
+                self.logger.webhook("","Travelling: Coconut Crab","dark brown")
+                self.goToField("coconut")
+                self.keyboard.walk("s", 1)
+                self.keyboard.walk("d", 3)
                 self.died = False
-            elif self.bossStatus is not None:
-                break
-            
-        if self.bossStatus == "timelimit":
-            self.logger.webhook("", "Time Limit: Coconut Crab", "dark brown", ping_category="ping_critical_errors")
-        elif self.bossStatus == "defeated":
-            self.keyboard.walk("a", 2)
-            self.logger.webhook("", "Defeated: Coconut Crab", "bright green", "screen", ping_category="ping_mob_events")
-            self.nmLoot(9, 4, "d")
-            self.nmLoot(9, 4, "a")
-            self.nmLoot(9, 4, "d")
-            self.nmLoot(9, 4, "a")
-            self.nmLoot(9, 4, "d")
-            self.nmLoot(9, 4, "a")
-        cocoThread.join()
+                self.bossStatus = None
+                st = time.time()
+                # Each attempt gets its own detection worker, so it never runs during cannon
+                # travel or reset(), and a retry always has a live worker
+                stopEvent = threading.Event()
+                cocoThread = threading.Thread(target=self.coconutCrabBackground, args=(stopEvent,))
+                cocoThread.daemon = True
+                cocoThread.start()
+                try:
+                    while True:
+                        mouse.mouseDown()
+                        #simplified version of natro's coco crab pattern
+                        for i in range(2):
+                            self.keyboard.walk("a",6, False)
+                            self.keyboard.walk("d",6-i*1.8, False)
+                        self.keyboard.walk("s",2)
+                        time.sleep(4.5)
+                        self.keyboard.walk("w",1)
+                        mouse.mouseUp()
+                        # Respect user-configurable max kill time (minutes)
+                        max_kill_time = self.setdat.get("coconut_crab_max_kill_time", 15)
+                        if self.bossStatus is None and not self.died and time.time() - st > max_kill_time * 60:
+                            self.bossStatus = "timelimit"
+                        if self.died or self.bossStatus is not None:
+                            break
+                finally:
+                    stopEvent.set()
+                    mouse.mouseUp()
+                    # Bounded join so a stalled OCR call cannot block interrupt handling
+                    cocoThread.join(timeout=5)
+
+                if self.died:
+                    self.logger.webhook("", "Died to Coconut Crab", "dark brown", ping_category="ping_character_deaths")
+                    if attempt == 0:
+                        self.reset(convert=False)
+                    self.died = False
+                elif self.bossStatus is not None:
+                    break
+            if self.bossStatus == "timelimit":
+                self.logger.webhook("", "Time Limit: Coconut Crab", "dark brown", ping_category="ping_critical_errors")
+            elif self.bossStatus == "defeated":
+                self.keyboard.walk("a", 2)
+                self.logger.webhook("", "Defeated: Coconut Crab", "bright green", "screen", ping_category="ping_mob_events")
+                self.nmLoot(9, 4, "d")
+                self.nmLoot(9, 4, "a")
+                self.nmLoot(9, 4, "d")
+                self.nmLoot(9, 4, "a")
+                self.nmLoot(9, 4, "d")
+                self.nmLoot(9, 4, "a")
+        finally:
+            mouse.mouseUp()
+            self.clear_task_status()
         self.hourlyReport.addHourlyStat("bug_run_time", time.time()-st)
         self.saveTiming("coconut_crab")
-        self.clear_task_status()
         self.reset()
 
     def kingBeetle(self):
         st = time.time()
-        for _ in range(2):
+        for attempt in range(2):
             if not self.travelViaCannon("King Beetle"):
                 return
             self.logger.webhook("","Travelling: King Beetle","dark brown")
@@ -564,13 +586,15 @@ class MobMixin:
                     self.keyboard.walk("w", 2)
                 sleep(1)
 
-            if self.died or self.bossStatus is not None: break
+            if self.died:
+                self.logger.webhook("", "Died to King Beetle", "dark brown", ping_category="ping_character_deaths")
+                if attempt == 0:
+                    self.reset(convert=False)
+                self.died = False
+            elif self.bossStatus is not None:
+                break
 
-        if self.died:
-            self.logger.webhook("", "Died to King Beetle", "dark brown", ping_category="ping_character_deaths")
-            self.reset(convert=False)
-            self.died = False
-        elif self.bossStatus == "timelimit":
+        if self.bossStatus == "timelimit":
             self.logger.webhook("", "Time Limit: King Beetle", "dark brown", "screen", ping_category="ping_critical_errors")
         elif self.bossStatus == "defeated":
             self.logger.webhook("", "Defeated: King Beetle", "bright green", "screen", ping_category="ping_mob_events")
@@ -580,7 +604,7 @@ class MobMixin:
 
     def tunnelBear(self):
         st = time.time()
-        for _ in range(2):
+        for attempt in range(2):
             if not self.travelViaCannon("Tunnel Bear"):
                 return
             self.logger.webhook("","Travelling: Tunnel Bear","dark brown")
@@ -613,14 +637,17 @@ class MobMixin:
                 self.keyboard.walk("d", 2.5)
                 self.keyboard.walk("a", 5)
                 sleep(1)
-            if self.died or self.bossStatus is not None: break
+
+            if self.died:
+                self.logger.webhook("", "Died to Tunnel Bear", "dark brown", ping_category="ping_character_deaths")
+                if attempt == 0:
+                    self.reset(convert=False)
+                self.died = False
+            elif self.bossStatus is not None:
+                break
 
         if self.bossStatus == "timelimit":
             self.logger.webhook("", "Time Limit: Tunnel Bear", "dark brown", "screen", ping_category="ping_critical_errors")
-        elif self.died:
-            self.logger.webhook("", "Died to Tunnel Bear", "dark brown", ping_category="ping_character_deaths")
-            self.reset(convert=False)
-            self.died = False
         elif self.bossStatus == "defeated":
             self.logger.webhook("", "Defeated: Tunnel Bear", "bright green", "screen", ping_category="ping_mob_events")
         self.hourlyReport.addHourlyStat("bug_run_time", time.time()-st)
