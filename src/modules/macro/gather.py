@@ -261,14 +261,10 @@ class GatherMixin:
             patternYawApplied = True
         def configureAIGatherCamera():
             for _ in range(11):
-                self.keyboard.keyDown("pageup", False)
-                sleep(0.01)
-                self.keyboard.keyUp("pageup", False)
+                self.keyboard.press("pageup", 0.01)
                 sleep(0.01)
             for _ in range(3):
-                self.keyboard.keyDown("pagedown", False)
-                sleep(0.01)
-                self.keyboard.keyUp("pagedown", False)
+                self.keyboard.press("pagedown", 0.01)
                 sleep(0.01)
 
         aiCameraConfigured = False
