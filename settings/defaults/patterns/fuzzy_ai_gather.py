@@ -31,7 +31,6 @@ INPUT_HEIGHT = agc.INPUT_HEIGHT
 MODEL_DIR = agc.MODEL_DIR
 CONFIDENCE_THRESHOLD = 0.3
 SPRINKLER_CONFIDENCE_THRESHOLD = 0.6
-MIN_TOKEN_DISTANCE = 0.3
 IDLE_RETURN_INTERVAL = 1.5
 NO_TARGET_SWEEP_INTERVAL = 0.35
 NO_TOKEN_RECALIBRATION_TIMEOUT = 12.0
@@ -138,12 +137,26 @@ TOKEN_MODEL_OPTIONS = {
 }
 
 
-CONFIDENCE_THRESHOLD = agc.coerce_float(globals().get("pattern_confidence_threshold"), CONFIDENCE_THRESHOLD)
-SPRINKLER_CONFIDENCE_THRESHOLD = agc.coerce_float(
-    globals().get("pattern_sprinkler_confidence_threshold"),
+(
     SPRINKLER_CONFIDENCE_THRESHOLD,
+    MAX_SPRINKLER_DISTANCE,
+    TARGET_SPRINKLER_LABEL,
+    FIELD_DRIFT_COMPENSATION,
+    FIELD_DIMENSIONS,
+    USE_SPRINKLER_MODEL_FOR_DRIFT_COMPENSATION,
+    CAPTURE_BACKEND,
+    DEBUG_MODE,
+    RECORD_VIDEO,
+    RECORD_VIDEO_FPS,
+) = agc.common_pattern_settings(
+    globals(),
+    SPRINKLER_CONFIDENCE_THRESHOLD,
+    MAX_SPRINKLER_DISTANCE,
+    DEBUG_MODE,
+    RECORD_VIDEO,
+    RECORD_VIDEO_FPS,
 )
-MIN_TOKEN_DISTANCE = agc.coerce_float(globals().get("pattern_min_token_distance"), MIN_TOKEN_DISTANCE)
+CONFIDENCE_THRESHOLD = agc.coerce_float(globals().get("pattern_confidence_threshold"), CONFIDENCE_THRESHOLD)
 IDLE_RETURN_INTERVAL = agc.coerce_float(globals().get("pattern_idle_return_interval"), IDLE_RETURN_INTERVAL)
 NO_TARGET_SWEEP_INTERVAL = agc.coerce_float(
     globals().get("pattern_no_target_sweep_interval"),
@@ -161,10 +174,6 @@ SPRINKLER_ARRIVAL_THRESHOLD = agc.coerce_float(
     globals().get("pattern_sprinkler_arrival_threshold"),
     SPRINKLER_ARRIVAL_THRESHOLD,
 )
-MAX_SPRINKLER_DISTANCE = agc.coerce_float(
-    globals().get("pattern_max_sprinkler_distance"),
-    MAX_SPRINKLER_DISTANCE,
-)
 SPRINKLER_RESCAN_ATTEMPTS = agc.coerce_int(
     globals().get("pattern_sprinkler_rescan_attempts"),
     SPRINKLER_RESCAN_ATTEMPTS,
@@ -173,44 +182,13 @@ SPRINKLER_RESCAN_DELAY = agc.coerce_float(
     globals().get("pattern_sprinkler_rescan_delay"),
     SPRINKLER_RESCAN_DELAY,
 )
-TARGET_SPRINKLER_LABEL = agc.coerce_text(
-    globals().get("pattern_target_sprinkler_label"),
-    "",
-) or None
-FIELD_DRIFT_COMPENSATION = agc.coerce_bool(globals().get("pattern_field_drift_compensation"), False)
-FIELD_DIMENSIONS = globals().get("pattern_field_dimensions")
-USE_SPRINKLER_MODEL_FOR_DRIFT_COMPENSATION = agc.coerce_bool(
-    globals().get("pattern_use_sprinkler_model_for_drift_compensation"),
-    False,
-)
-CAPTURE_BACKEND = agc.coerce_text(globals().get("pattern_capture_backend"), "auto").lower()
-DEBUG_MODE = agc.coerce_bool(globals().get("pattern_debug_mode"), DEBUG_MODE)
-RECORD_VIDEO = agc.coerce_bool(globals().get("pattern_record_video"), RECORD_VIDEO)
-RECORD_VIDEO_FPS = agc.coerce_float(globals().get("pattern_record_video_fps"), RECORD_VIDEO_FPS)
 PREFERRED_TOKENS = agc.preferred_token_weights(globals().get("pattern_preferred_tokens"), PREFERRED_TOKENS)
 PREFERRED_TOKEN_RANKS = {name: index for index, name in enumerate(PREFERRED_TOKENS.keys())}
 IGNORED_TOKENS = agc.ignored_token_names(globals().get("pattern_ignored_tokens"), IGNORED_TOKENS)
 SPROUT_IDLE_SQUARE = agc.coerce_bool(globals().get("pattern_sprout_idle_square"), False)
 
 
-try:
-    size = float(size)
-except Exception:
-    if sizeword.lower() == "xs":
-        size = 0.25
-    elif sizeword.lower() == "s":
-        size = 0.5
-    elif sizeword.lower() == "l":
-        size = 1.5
-    elif sizeword.lower() == "xl":
-        size = 2
-    else:
-        size = 1
-
-try:
-    width = int(width)
-except Exception:
-    width = 1
+size, width = agc.parse_size_and_width(size, sizeword, width)
 
 
 def _debug_log(message, min_interval=0.0, key=None):
@@ -243,9 +221,7 @@ def _anchor_kwargs():
 
 
 def onGatherEnd():
-    runtime = _runtime_state()
-    agc.stop_all_scanner_threads(runtime)
-    agc.release_video_writer(runtime, debug_log_fn=_debug_log)
+    agc.shutdown_runtime(_runtime_state(), _debug_log)
 
 
 def _preprocess_token_frame(frame, runtime, already_cropped=False):
@@ -276,104 +252,38 @@ def _preprocess_token_frame(frame, runtime, already_cropped=False):
 
 
 def _record_debug_frame(runtime, frame, detections, target):
-    if runtime.get("video_writer") is None:
-        mailbox_frame, _, _ = agc.get_latest_frame(runtime, copy=True)
-        frame = mailbox_frame if mailbox_frame is not None else agc.grab_frame(runtime)
-
-    writer = agc.ensure_video_writer(
-        runtime,
-        frame,
-        filename_prefix="fuzzy_ai_gather",
-        record_video=RECORD_VIDEO,
-        record_video_fps=RECORD_VIDEO_FPS,
-        debug_log_fn=_debug_log,
-    )
-    if writer is None:
+    if not agc.prepare_recording(runtime, frame, "fuzzy_ai_gather", RECORD_VIDEO, RECORD_VIDEO_FPS, _debug_log):
         return
 
-    runtime["latest_recording_overlay"] = {
+    overlay = agc.recording_overlay_base(
+        runtime, target, TARGET_SPRINKLER_LABEL, FIELD_DRIFT_COMPENSATION, USE_SPRINKLER_MODEL_FOR_DRIFT_COMPENSATION
+    )
+    overlay.update({
         "detections": list(detections),
-        "target": dict(target) if isinstance(target, dict) else None,
         "token_model_label": runtime.get("token_model_label", "Standard"),
         "token_model_kind": runtime.get("token_model_kind", "unknown"),
-        "current_x": runtime.get("current_x", 0.0),
-        "current_y": runtime.get("current_y", 0.0),
-        "movement_count": runtime.get("movement_count", 0),
-        "detection_fps": runtime.get("detection_fps"),
-        "last_detection_ms": runtime.get("last_detection_ms"),
-        "last_timing_ms": dict(runtime.get("last_timing_ms", {})),
-        "candidate_count": runtime.get("last_candidate_count", 0),
         "rejected_tokens": list(runtime.get("last_rejected_tokens", [])),
-        "sprinkler": dict(runtime.get("last_sprinkler_detection", {})),
-        "anchor": dict(runtime.get("last_anchor", {})),
-        "sprinkler_status": runtime.get("last_sprinkler_status", ""),
-        "target_sprinkler_label": TARGET_SPRINKLER_LABEL or "",
-        "field_drift_compensation": FIELD_DRIFT_COMPENSATION,
-        "use_sprinkler_model_for_drift_compensation": USE_SPRINKLER_MODEL_FOR_DRIFT_COMPENSATION,
         "preferred_tokens": list(PREFERRED_TOKENS.keys())[:8],
         "ignored_count": len(IGNORED_TOKENS),
         "updated_at": time.time(),
-    }
+    })
+    runtime["latest_recording_overlay"] = overlay
 
 
 def _annotate_recording_frame(runtime, frame):
     annotated = agc.bgr_frame(frame)
-    frame_h, frame_w = annotated.shape[:2]
 
     overlay = runtime.get("latest_recording_overlay", {})
-    token_labels = runtime.get("token_labels", LABELS_TOKENS)
     detections = overlay.get("detections", [])
-    target = overlay.get("target")
-    target_box = target.get("box") if isinstance(target, dict) else None
+    agc.draw_detection_boxes(
+        annotated, runtime, detections, overlay.get("target"), runtime.get("token_labels", LABELS_TOKENS), IGNORED_TOKENS
+    )
+    agc.draw_sprinkler_box(annotated, overlay.get("sprinkler") or {})
 
-    for box, class_id, confidence in detections:
-        token_name = token_labels.get(class_id, f"class {class_id}")
-        x1, y1, x2, y2 = box
-        left_f, top_f = agc.model_point_to_capture(runtime, x1, y1)
-        right_f, bottom_f = agc.model_point_to_capture(runtime, x2, y2)
-        left = max(0, min(frame_w - 1, int(round(left_f))))
-        top = max(0, min(frame_h - 1, int(round(top_f))))
-        right = max(0, min(frame_w - 1, int(round(right_f))))
-        bottom = max(0, min(frame_h - 1, int(round(bottom_f))))
-        is_target = target_box == box
-        if token_name in IGNORED_TOKENS:
-            color = (120, 120, 120)
-        elif is_target:
-            color = (0, 255, 255)
-        else:
-            color = (80, 220, 80)
-        cv2.rectangle(annotated, (left, top), (right, bottom), color, 2 if is_target else 1)
-        agc.draw_label(annotated, f"{token_name} {confidence:.2f}", left, top - 4, color)
-
-    sprinkler = overlay.get("sprinkler") or {}
-    sprinkler_box = sprinkler.get("box")
-    if sprinkler_box:
-        x1, y1, x2, y2 = sprinkler_box
-        left = max(0, min(frame_w - 1, int(round(x1))))
-        top = max(0, min(frame_h - 1, int(round(y1))))
-        right = max(0, min(frame_w - 1, int(round(x2))))
-        bottom = max(0, min(frame_h - 1, int(round(y2))))
-        cv2.rectangle(annotated, (left, top), (right, bottom), (255, 180, 0), 3)
-        match_text = "match" if sprinkler.get("target_match") else "seen"
-        agc.draw_label(
-            annotated,
-            f"sprinkler {match_text} {sprinkler.get('label', '?')} {sprinkler.get('confidence', 0.0):.2f} d={sprinkler.get('distance', 0.0):.2f}",
-            left,
-            top - 4,
-            (255, 180, 0),
-        )
-
-    anchor = overlay.get("anchor") or {}
-    status_lines = [
+    status_lines = agc.base_status_lines(
+        overlay,
         f"token_model={overlay.get('token_model_label', 'Standard')} ({overlay.get('token_model_kind', 'unknown')}) tokens={len(detections)} candidates={overlay.get('candidate_count', 0)} pos=({overlay.get('current_x', 0.0):.2f},{overlay.get('current_y', 0.0):.2f}) moves={overlay.get('movement_count', 0)}",
-        f"target={target['name']} score={target['score']:.2f} move=({target['tx']:.2f},{target['ty']:.2f})" if target else "target=None",
-        f"sprinkler_status={overlay.get('sprinkler_status', '')} target={overlay.get('target_sprinkler_label', '') or 'any'} drift={overlay.get('field_drift_compensation')} model={overlay.get('use_sprinkler_model_for_drift_compensation')}",
-    ]
-    if anchor:
-        age = max(0.0, time.time() - float(anchor.get("time", time.time())))
-        status_lines.append(
-            f"anchor=({anchor.get('x', 0.0):.2f},{anchor.get('y', 0.0):.2f}) sprinkler=({anchor.get('sprinkler_tx', 0.0):.2f},{anchor.get('sprinkler_ty', 0.0):.2f}) age={age:.1f}s"
-        )
+    )
     rejected = overlay.get("rejected_tokens", [])
     if rejected:
         summary = []
@@ -387,27 +297,7 @@ def _annotate_recording_frame(runtime, frame):
             else:
                 summary.append(f"{name}:{reason}")
         status_lines.append("skip " + ", ".join(summary))
-    for index, line in enumerate(status_lines):
-        agc.draw_label(annotated, line, 10, 24 + (index * 24), (255, 255, 255))
-
-    detection_fps = overlay.get("detection_fps")
-    detection_ms = overlay.get("last_detection_ms")
-    fps_text = "detect FPS: --" if detection_fps is None else f"detect FPS: {detection_fps:.1f}"
-    if detection_ms is not None:
-        fps_text += f" ({detection_ms:.0f}ms)"
-    (text_w, _text_h), _baseline = cv2.getTextSize(fps_text, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
-    agc.draw_label(annotated, fps_text, max(10, frame_w - text_w - 18), 24, (255, 255, 255))
-    timing = overlay.get("last_timing_ms") or {}
-    if timing:
-        timing_text = (
-            f"cap {timing.get('screenshot', 0.0):.0f} "
-            f"prep {timing.get('preprocess', 0.0):.0f} "
-            f"infer {timing.get('inference', 0.0):.0f} "
-            f"post {timing.get('postprocess', 0.0):.0f} "
-            f"score {timing.get('scoring', 0.0):.0f}ms"
-        )
-        (timing_w, _timing_h), _timing_baseline = cv2.getTextSize(timing_text, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
-        agc.draw_label(annotated, timing_text, max(10, frame_w - timing_w - 18), 48, (255, 255, 255))
+    agc.draw_status_and_timing(annotated, status_lines, overlay)
 
     return annotated
 
@@ -415,18 +305,7 @@ def _annotate_recording_frame(runtime, frame):
 def _scan_tokens_once(runtime):
     detection_start = time.time()
     screenshot_start = time.time()
-    after_id = int(runtime.get("token_last_frame_id", 0))
-    full_frame, frame_id, _ = agc.wait_for_latest_frame(
-        runtime,
-        after_id=after_id,
-        timeout=max(CONTINUOUS_SCAN_INTERVAL, 0.02),
-        copy=True,
-    )
-    if full_frame is None:
-        full_frame = agc.grab_frame(runtime)
-        frame_id = after_id
-    else:
-        runtime["token_last_frame_id"] = frame_id
+    full_frame = agc.next_scan_frame(runtime, CONTINUOUS_SCAN_INTERVAL)
     token_frame = agc.crop_rect(full_frame, runtime["token_crop"])
     screenshot_elapsed = time.time() - screenshot_start
     preprocess_start = time.time()
@@ -448,45 +327,18 @@ def _scan_tokens_once(runtime):
         ]
     postprocess_elapsed = time.time() - postprocess_start
     scoring_start = time.time()
-    target = _find_best_token(runtime, detections)
-    if (
-        target is None
-        and not runtime.get("movement_active")
-        and any(item.get("reason") in ("leash", "hard_leash") for item in runtime.get("last_rejected_tokens", []))
-        and agc.refresh_sprinkler_anchor(runtime, force=True, **_anchor_kwargs())
-    ):
-        target = _find_best_token(runtime, detections)
+    target = agc.best_target_with_anchor_retry(runtime, detections, _find_best_token, _anchor_kwargs())
     scoring_elapsed = time.time() - scoring_start
     total_elapsed = time.time() - detection_start
 
-    runtime["last_timing_ms"] = {
-        "screenshot": screenshot_elapsed * 1000.0,
-        "preprocess": preprocess_elapsed * 1000.0,
-        "inference": inference_elapsed * 1000.0,
-        "postprocess": postprocess_elapsed * 1000.0,
-        "scoring": scoring_elapsed * 1000.0,
-        "total": total_elapsed * 1000.0,
-    }
-    _debug_log(
-        "timing "
-        f"screenshot={runtime['last_timing_ms']['screenshot']:.1f}ms "
-        f"preprocess={runtime['last_timing_ms']['preprocess']:.1f}ms "
-        f"inference={runtime['last_timing_ms']['inference']:.1f}ms "
-        f"postprocess={runtime['last_timing_ms']['postprocess']:.1f}ms "
-        f"scoring={runtime['last_timing_ms']['scoring']:.1f}ms "
-        f"total={runtime['last_timing_ms']['total']:.1f}ms",
-        min_interval=1.0,
-        key="timing",
+    agc.record_scan_timing(
+        runtime, _debug_log, screenshot_elapsed, preprocess_elapsed, inference_elapsed,
+        postprocess_elapsed, scoring_elapsed, total_elapsed,
     )
-    agc.update_detection_fps(runtime, total_elapsed)
     _record_debug_frame(runtime, full_frame, detections, target)
 
     now = time.time()
-    scan_lock = runtime.get("scan_lock")
-    if scan_lock is None:
-        scan_lock = threading.Lock()
-        runtime["scan_lock"] = scan_lock
-    with scan_lock:
+    with agc.scan_lock_for(runtime):
         runtime["latest_detections"] = detections
         runtime["latest_target"] = target
         runtime["latest_scan_time"] = now
@@ -509,24 +361,15 @@ def _candidate_priority_rank(candidate):
 
 
 def _token_metrics():
-    configured_leash = 4.0 + (0.45 * max(width - 1, 0)) + (0.35 * size)
-    field_radius = agc.field_safe_radius(FIELD_DIMENSIONS) if FIELD_DRIFT_COMPENSATION else None
-    max_leash = min(configured_leash, field_radius) if field_radius is not None else configured_leash
-    hard_leash = min(configured_leash + LEASH_HARD_MARGIN, field_radius) if field_radius is not None else configured_leash + LEASH_HARD_MARGIN
-    return {
-        "max_leash": max_leash,
-        "hard_leash": hard_leash,
-        "field_bounded": field_radius is not None,
-        "soft_leash": max_leash * 0.625,
-        "max_consider": max_leash + 1.0 + (0.15 * width),
+    metrics = agc.leash_metrics(width, size, FIELD_DRIFT_COMPENSATION, FIELD_DIMENSIONS, LEASH_HARD_MARGIN)
+    metrics.update({
+        "max_consider": metrics["max_leash"] + 1.0 + (0.15 * width),
         "cluster_radius": 1.6 + (0.1 * width),
-        "proximity_exp": 1.25,
         "toward_home_bonus": 1.4,
         "away_from_home_penalty": 0.8,
         "cluster_bonus_per_token": 0.25,
-        "leash_edge_penalty": 0.45,
-        "outside_leash_penalty": 0.35,
-    }
+    })
+    return metrics
 
 
 def _find_best_token(runtime, detections):
@@ -625,33 +468,15 @@ def _execute_movement(tx, ty, update_token_time=True):
     if magnitude <= 0.001:
         return False
 
-    moved = False
     runtime = _runtime_state()
-    runtime["movement_active"] = True
-    try:
-        for segment_type, keys, distance in agc.movement_segments(tx, ty, tcfbkey, afcfbkey, tclrkey, afclrkey):
-            if segment_type == "diagonal":
-                agc.tile_multi_walk(self.keyboard, keys, distance)
-            else:
-                agc.tile_walk(self.keyboard, keys[0], distance)
-            moved = True
-        if moved:
-            runtime["current_x"] += tx
-            runtime["current_y"] += ty
-            runtime["movement_count"] += 1
-            if update_token_time:
-                runtime["last_token_time"] = time.time()
-    finally:
-        runtime["movement_active"] = False
-
+    moved = agc.walk_tracked(runtime, self.keyboard, tx, ty, tcfbkey, afcfbkey, tclrkey, afclrkey)
+    if moved and update_token_time:
+        runtime["last_token_time"] = time.time()
     return moved
 
 
 def _execute_movement_to_target(tx, ty):
-    magnitude = math.hypot(tx, ty)
-    if magnitude <= CONTINUOUS_MIN_REPLAN_DISTANCE:
-        return False
-    return _execute_movement(tx, ty)
+    return agc.move_if_far_enough(tx, ty, CONTINUOUS_MIN_REPLAN_DISTANCE, _execute_movement)
 
 
 def _execute_idle_movement(tx, ty):
@@ -1071,10 +896,7 @@ def _initialise_runtime():
     return {
         "capture": capture,
         "token_crop": token_crop_info["rect"],
-        "token_monitor": token_monitor,
-        "token_bbox": token_bbox,
         "token_frame_is_crop": token_monitor is not None or token_bbox is not None,
-        "token_resize": token_crop_info["resize"],
         "token_session": token_session,
         "token_input": token_input,
         "token_output": token_output,
@@ -1123,18 +945,12 @@ def _initialise_runtime():
 
 runtime = _runtime_state()
 if not runtime.get("ready"):
-    try:
-        runtime.clear()
-        runtime.update(_initialise_runtime())
-        runtime["ready"] = True
-        runtime["error"] = ""
-        _debug_log(
-            f"runtime ready token_model={runtime['token_model_label']} kind={runtime['token_model_kind']} input={runtime['token_input']} output={runtime['token_output']} confidence={CONFIDENCE_THRESHOLD} ignored={sorted(IGNORED_TOKENS)} record={RECORD_VIDEO}"
-        )
-    except Exception as exc:
-        runtime["ready"] = False
-        runtime["error"] = str(exc)
-        _debug_log(f"initialisation failed: {exc}")
+    agc.start_runtime(
+        runtime,
+        _initialise_runtime,
+        _debug_log,
+        lambda: f"runtime ready token_model={runtime['token_model_label']} kind={runtime['token_model_kind']} input={runtime['token_input']} output={runtime['token_output']} confidence={CONFIDENCE_THRESHOLD} ignored={sorted(IGNORED_TOKENS)} record={RECORD_VIDEO}",
+    )
 
 
 warmup_only = agc.coerce_bool(globals().get("pattern_ai_warmup_only"), False)
@@ -1147,23 +963,8 @@ elif warmup_only:
     _debug_log("warmup complete; movement skipped", min_interval=0.5, key="warmup")
 else:
     try:
-        agc.ensure_capture_thread(runtime, interval=0.016, debug_log_fn=_debug_log)
-        agc.wait_for_capture_ready(runtime, timeout=1.0)
-        if not runtime.get("latest_scan_time"):
-            _scan_tokens_once(runtime)
-        agc.ensure_scanner_thread(
-            runtime,
-            _scan_tokens_once,
-            CONTINUOUS_SCAN_INTERVAL,
-            debug_log_fn=_debug_log,
-            on_error=lambda _exc: agc.release_video_writer(runtime, debug_log_fn=_debug_log),
-        )
-        agc.ensure_sprinkler_scanner_thread(
-            runtime,
-            CONTINUOUS_SCAN_INTERVAL,
-            _sprinkler_kwargs(),
-            _anchor_kwargs(),
-            debug_log_fn=_debug_log,
+        agc.start_scanners(
+            runtime, _scan_tokens_once, CONTINUOUS_SCAN_INTERVAL, _sprinkler_kwargs(), _anchor_kwargs(), _debug_log
         )
         agc.refresh_sprinkler_anchor(runtime, **_anchor_kwargs())
 
@@ -1189,7 +990,7 @@ else:
             now = time.time()
             rejected_reasons = {item.get("reason") for item in runtime.get("last_rejected_tokens", [])}
             recalibrated = False
-            if detections and rejected_reasons.intersection({"leash", "hard_leash"}) and _recalibrate(runtime):
+            if detections and "hard_leash" in rejected_reasons and _recalibrate(runtime):
                 runtime["last_token_time"] = time.time()
                 recalibrated = True
 

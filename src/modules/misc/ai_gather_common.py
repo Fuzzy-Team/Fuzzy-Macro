@@ -1505,3 +1505,338 @@ def require_coreml_or_raise():
     if Image is None:
         raise RuntimeError("Pillow is required for CoreML AI Gathering, please run install dependencies before continuing.")
     return ct
+
+
+# --- Helpers shared by the AI gather patterns (BloomsAI, Fuzzy AI Gather) ---
+
+
+def common_pattern_settings(
+    pattern_globals,
+    sprinkler_confidence_threshold,
+    max_sprinkler_distance,
+    debug_mode,
+    record_video,
+    record_video_fps,
+):
+    """Read the settings both patterns share from their `pattern_*` globals.
+
+    The arguments are the pattern's built-in defaults. Returns, in order:
+    sprinkler confidence, max sprinkler distance, target sprinkler label,
+    field drift compensation, field dimensions, sprinkler-model drift compensation,
+    capture backend, debug mode, record video, record video fps.
+    """
+    get = pattern_globals.get
+    return (
+        coerce_float(get("pattern_sprinkler_confidence_threshold"), sprinkler_confidence_threshold),
+        coerce_float(get("pattern_max_sprinkler_distance"), max_sprinkler_distance),
+        coerce_text(get("pattern_target_sprinkler_label"), "") or None,
+        coerce_bool(get("pattern_field_drift_compensation"), False),
+        get("pattern_field_dimensions"),
+        coerce_bool(get("pattern_use_sprinkler_model_for_drift_compensation"), False),
+        coerce_text(get("pattern_capture_backend"), "auto").lower(),
+        coerce_bool(get("pattern_debug_mode"), debug_mode),
+        coerce_bool(get("pattern_record_video"), record_video),
+        coerce_float(get("pattern_record_video_fps"), record_video_fps),
+    )
+
+
+def parse_size_and_width(size, sizeword, width):
+    """Turn the field's size/width pattern variables into a float size and int width."""
+    try:
+        size = float(size)
+    except Exception:
+        if sizeword.lower() == "xs":
+            size = 0.25
+        elif sizeword.lower() == "s":
+            size = 0.5
+        elif sizeword.lower() == "l":
+            size = 1.5
+        elif sizeword.lower() == "xl":
+            size = 2
+        else:
+            size = 1
+
+    try:
+        width = int(width)
+    except Exception:
+        width = 1
+    return size, width
+
+
+def shutdown_runtime(runtime, debug_log_fn):
+    stop_all_scanner_threads(runtime)
+    release_video_writer(runtime, debug_log_fn=debug_log_fn)
+
+
+def start_runtime(runtime, initialise_fn, debug_log_fn, ready_message_fn):
+    """Fill `runtime` from initialise_fn; on failure leave it not ready with the error text."""
+    try:
+        runtime.clear()
+        runtime.update(initialise_fn())
+        runtime["ready"] = True
+        runtime["error"] = ""
+        debug_log_fn(ready_message_fn())
+    except Exception as exc:
+        runtime["ready"] = False
+        runtime["error"] = str(exc)
+        debug_log_fn(f"initialisation failed: {exc}")
+
+
+def start_scanners(runtime, scan_fn, scan_interval, sprinkler_kwargs, anchor_kwargs, debug_log_fn, sprinkler_apply_fn=None):
+    """Start the capture, token and sprinkler threads, running one scan first if none has happened."""
+    ensure_capture_thread(runtime, interval=0.016, debug_log_fn=debug_log_fn)
+    wait_for_capture_ready(runtime, timeout=1.0)
+    if not runtime.get("latest_scan_time"):
+        scan_fn(runtime)
+    ensure_scanner_thread(
+        runtime,
+        scan_fn,
+        scan_interval,
+        debug_log_fn=debug_log_fn,
+        on_error=lambda _exc: release_video_writer(runtime, debug_log_fn=debug_log_fn),
+    )
+    ensure_sprinkler_scanner_thread(
+        runtime,
+        scan_interval,
+        sprinkler_kwargs,
+        anchor_kwargs,
+        debug_log_fn=debug_log_fn,
+        apply_fn=sprinkler_apply_fn,
+    )
+
+
+def next_scan_frame(runtime, scan_interval):
+    """Newest captured frame, or a direct grab when the capture thread has nothing new."""
+    after_id = int(runtime.get("token_last_frame_id", 0))
+    frame, frame_id, _ = wait_for_latest_frame(
+        runtime,
+        after_id=after_id,
+        timeout=max(scan_interval, 0.02),
+        copy=True,
+    )
+    if frame is None:
+        return grab_frame(runtime)
+    runtime["token_last_frame_id"] = frame_id
+    return frame
+
+
+def best_target_with_anchor_retry(runtime, detections, find_best_fn, anchor_kwargs):
+    """Pick a target; if every candidate was outside the hard leash, re-anchor on the sprinkler and pick again."""
+    target = find_best_fn(runtime, detections)
+    if (
+        target is None
+        and not runtime.get("movement_active")
+        and any(item.get("reason") == "hard_leash" for item in runtime.get("last_rejected_tokens", []))
+        and refresh_sprinkler_anchor(runtime, force=True, **anchor_kwargs)
+    ):
+        target = find_best_fn(runtime, detections)
+    return target
+
+
+def record_scan_timing(
+    runtime,
+    debug_log_fn,
+    screenshot_elapsed,
+    preprocess_elapsed,
+    inference_elapsed,
+    postprocess_elapsed,
+    scoring_elapsed,
+    total_elapsed,
+):
+    """Store per-stage scan timings (seconds in, milliseconds stored) and update the detection FPS."""
+    runtime["last_timing_ms"] = {
+        "screenshot": screenshot_elapsed * 1000.0,
+        "preprocess": preprocess_elapsed * 1000.0,
+        "inference": inference_elapsed * 1000.0,
+        "postprocess": postprocess_elapsed * 1000.0,
+        "scoring": scoring_elapsed * 1000.0,
+        "total": total_elapsed * 1000.0,
+    }
+    debug_log_fn(
+        "timing "
+        f"screenshot={runtime['last_timing_ms']['screenshot']:.1f}ms "
+        f"preprocess={runtime['last_timing_ms']['preprocess']:.1f}ms "
+        f"inference={runtime['last_timing_ms']['inference']:.1f}ms "
+        f"postprocess={runtime['last_timing_ms']['postprocess']:.1f}ms "
+        f"scoring={runtime['last_timing_ms']['scoring']:.1f}ms "
+        f"total={runtime['last_timing_ms']['total']:.1f}ms",
+        min_interval=1.0,
+        key="timing",
+    )
+    update_detection_fps(runtime, total_elapsed)
+
+
+def scan_lock_for(runtime):
+    """The runtime's scan lock, created on first use."""
+    scan_lock = runtime.get("scan_lock")
+    if scan_lock is None:
+        scan_lock = threading.Lock()
+        runtime["scan_lock"] = scan_lock
+    return scan_lock
+
+
+def leash_metrics(width, size, field_drift_compensation, field_dimensions, hard_margin):
+    """Leash limits and scoring penalties shared by both patterns; each pattern adds its own keys."""
+    configured_leash = 4.0 + (0.45 * max(width - 1, 0)) + (0.35 * size)
+    field_radius = field_safe_radius(field_dimensions) if field_drift_compensation else None
+    max_leash = min(configured_leash, field_radius) if field_radius is not None else configured_leash
+    hard_leash = min(configured_leash + hard_margin, field_radius) if field_radius is not None else configured_leash + hard_margin
+    return {
+        "max_leash": max_leash,
+        "hard_leash": hard_leash,
+        "field_bounded": field_radius is not None,
+        "soft_leash": max_leash * 0.625,
+        "proximity_exp": 1.25,
+        "leash_edge_penalty": 0.45,
+        "outside_leash_penalty": 0.35,
+    }
+
+
+def walk_tracked(runtime, keyboard, tx, ty, tcfbkey, afcfbkey, tclrkey, afclrkey):
+    """Walk the (tx, ty) tile offset and add it to the tracked position. Returns whether any key was walked."""
+    moved = False
+    runtime["movement_active"] = True
+    try:
+        for segment_type, keys, distance in movement_segments(tx, ty, tcfbkey, afcfbkey, tclrkey, afclrkey):
+            if segment_type == "diagonal":
+                tile_multi_walk(keyboard, keys, distance)
+            else:
+                tile_walk(keyboard, keys[0], distance)
+            moved = True
+        if moved:
+            runtime["current_x"] += tx
+            runtime["current_y"] += ty
+            runtime["movement_count"] += 1
+    finally:
+        runtime["movement_active"] = False
+    return moved
+
+
+def move_if_far_enough(tx, ty, min_distance, move_fn):
+    if math.hypot(tx, ty) <= min_distance:
+        return False
+    return move_fn(tx, ty)
+
+
+def prepare_recording(runtime, frame, filename_prefix, record_video, record_video_fps, debug_log_fn):
+    """Make sure a video writer exists for the debug recording. Returns False when not recording."""
+    if runtime.get("video_writer") is None:
+        mailbox_frame, _, _ = get_latest_frame(runtime, copy=True)
+        frame = mailbox_frame if mailbox_frame is not None else grab_frame(runtime)
+
+    writer = ensure_video_writer(
+        runtime,
+        frame,
+        filename_prefix=filename_prefix,
+        record_video=record_video,
+        record_video_fps=record_video_fps,
+        debug_log_fn=debug_log_fn,
+    )
+    return writer is not None
+
+
+def recording_overlay_base(runtime, target, target_sprinkler_label, field_drift_compensation, use_sprinkler_model):
+    """Overlay fields both patterns draw; each pattern adds its own keys and `updated_at`."""
+    return {
+        "target": dict(target) if isinstance(target, dict) else None,
+        "current_x": runtime.get("current_x", 0.0),
+        "current_y": runtime.get("current_y", 0.0),
+        "movement_count": runtime.get("movement_count", 0),
+        "detection_fps": runtime.get("detection_fps"),
+        "last_detection_ms": runtime.get("last_detection_ms"),
+        "last_timing_ms": dict(runtime.get("last_timing_ms", {})),
+        "candidate_count": runtime.get("last_candidate_count", 0),
+        "sprinkler": dict(runtime.get("last_sprinkler_detection", {})),
+        "anchor": dict(runtime.get("last_anchor", {})),
+        "sprinkler_status": runtime.get("last_sprinkler_status", ""),
+        "target_sprinkler_label": target_sprinkler_label or "",
+        "field_drift_compensation": field_drift_compensation,
+        "use_sprinkler_model_for_drift_compensation": use_sprinkler_model,
+    }
+
+
+def draw_detection_boxes(annotated, runtime, detections, target, labels, ignored_tokens):
+    frame_h, frame_w = annotated.shape[:2]
+    target_box = target.get("box") if isinstance(target, dict) else None
+    for box, class_id, confidence in detections:
+        token_name = labels.get(class_id, f"class {class_id}")
+        x1, y1, x2, y2 = box
+        left_f, top_f = model_point_to_capture(runtime, x1, y1)
+        right_f, bottom_f = model_point_to_capture(runtime, x2, y2)
+        left = max(0, min(frame_w - 1, int(round(left_f))))
+        top = max(0, min(frame_h - 1, int(round(top_f))))
+        right = max(0, min(frame_w - 1, int(round(right_f))))
+        bottom = max(0, min(frame_h - 1, int(round(bottom_f))))
+        is_target = target_box == box
+        if token_name in ignored_tokens:
+            color = (120, 120, 120)
+        elif is_target:
+            color = (0, 255, 255)
+        else:
+            color = (80, 220, 80)
+        cv2.rectangle(annotated, (left, top), (right, bottom), color, 2 if is_target else 1)
+        draw_label(annotated, f"{token_name} {confidence:.2f}", left, top - 4, color)
+
+
+def draw_sprinkler_box(annotated, sprinkler):
+    sprinkler_box = sprinkler.get("box")
+    if not sprinkler_box:
+        return
+    frame_h, frame_w = annotated.shape[:2]
+    x1, y1, x2, y2 = sprinkler_box
+    left = max(0, min(frame_w - 1, int(round(x1))))
+    top = max(0, min(frame_h - 1, int(round(y1))))
+    right = max(0, min(frame_w - 1, int(round(x2))))
+    bottom = max(0, min(frame_h - 1, int(round(y2))))
+    cv2.rectangle(annotated, (left, top), (right, bottom), (255, 180, 0), 3)
+    match_text = "match" if sprinkler.get("target_match") else "seen"
+    draw_label(
+        annotated,
+        f"sprinkler {match_text} {sprinkler.get('label', '?')} {sprinkler.get('confidence', 0.0):.2f} d={sprinkler.get('distance', 0.0):.2f}",
+        left,
+        top - 4,
+        (255, 180, 0),
+    )
+
+
+def base_status_lines(overlay, headline):
+    """The headline plus the target, sprinkler and anchor lines; patterns append their own after."""
+    target = overlay.get("target")
+    status_lines = [
+        headline,
+        f"target={target['name']} score={target['score']:.2f} move=({target['tx']:.2f},{target['ty']:.2f})" if target else "target=None",
+        f"sprinkler_status={overlay.get('sprinkler_status', '')} target={overlay.get('target_sprinkler_label', '') or 'any'} drift={overlay.get('field_drift_compensation')} model={overlay.get('use_sprinkler_model_for_drift_compensation')}",
+    ]
+    anchor = overlay.get("anchor") or {}
+    if anchor:
+        age = max(0.0, time.time() - float(anchor.get("time", time.time())))
+        status_lines.append(
+            f"anchor=({anchor.get('x', 0.0):.2f},{anchor.get('y', 0.0):.2f}) sprinkler=({anchor.get('sprinkler_tx', 0.0):.2f},{anchor.get('sprinkler_ty', 0.0):.2f}) age={age:.1f}s"
+        )
+    return status_lines
+
+
+def draw_status_and_timing(annotated, status_lines, overlay):
+    """Draw the status lines top-left and the detection FPS and stage timings top-right."""
+    frame_w = annotated.shape[1]
+    for index, line in enumerate(status_lines):
+        draw_label(annotated, line, 10, 24 + (index * 24), (255, 255, 255))
+
+    detection_fps = overlay.get("detection_fps")
+    detection_ms = overlay.get("last_detection_ms")
+    fps_text = "detect FPS: --" if detection_fps is None else f"detect FPS: {detection_fps:.1f}"
+    if detection_ms is not None:
+        fps_text += f" ({detection_ms:.0f}ms)"
+    (text_w, _text_h), _baseline = cv2.getTextSize(fps_text, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
+    draw_label(annotated, fps_text, max(10, frame_w - text_w - 18), 24, (255, 255, 255))
+    timing = overlay.get("last_timing_ms") or {}
+    if timing:
+        timing_text = (
+            f"cap {timing.get('screenshot', 0.0):.0f} "
+            f"prep {timing.get('preprocess', 0.0):.0f} "
+            f"infer {timing.get('inference', 0.0):.0f} "
+            f"post {timing.get('postprocess', 0.0):.0f} "
+            f"score {timing.get('scoring', 0.0):.0f}ms"
+        )
+        (timing_w, _timing_h), _timing_baseline = cv2.getTextSize(timing_text, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
+        draw_label(annotated, timing_text, max(10, frame_w - timing_w - 18), 48, (255, 255, 255))
