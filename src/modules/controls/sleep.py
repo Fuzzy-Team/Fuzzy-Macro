@@ -1,5 +1,7 @@
 #custom sleep function with pause support
 import faulthandler
+import os
+import re
 import time
 import threading
 
@@ -88,6 +90,36 @@ def heartbeat(anyThread=False):
     if now - _lastBeat >= 1:
         _lastBeat = now
         faulthandler.dump_traceback_later(HANG_SECS, exit=True, file=_hangFile)
+
+def hang_exit(reason):
+    """Write every thread's stack to HANG_FILE and exit with code 1, as the timer does. Does nothing
+    outside the macro process."""
+    if _hangFile is None:
+        return
+    _hangFile.write(reason + "\n")
+    _hangFile.flush()
+    faulthandler.dump_traceback(file=_hangFile)
+    _hangFile.flush()
+    os._exit(1)
+
+def summarize_hang(trace, limit=1800):
+    """Shrink a hang dump to fit a Discord message. faulthandler lists threads newest first and the
+    main thread last, so the start of the dump is mostly idle timer threads. Threads waiting in a
+    pause-aware sleep or an Event wait are left out; the stuck thread and the main thread stay."""
+    header, *blocks = re.split(r"(?m)^(?=(?:Current thread|Thread) 0x)", trace.strip())
+    if not blocks:
+        return header[:limit]
+    blocks = [re.sub(r'File "[^"]*/([^"/]+)"', r'File "\1"', b.strip()).split("\n") for b in blocks]
+    idle = lambda frames: len(frames) > 1 and re.search(r'(sleep.py", line \d+ in (sleep|wait_while_paused|is_paused)|threading.py", line \d+ in wait)$', frames[1])
+    kept = [b for b in blocks[:-1] if not idle(b)] + blocks[-1:]
+    notes = [header.strip()]
+    if len(kept) < len(blocks):
+        notes.append(f"({len(blocks) - len(kept)} idle threads left out)")
+    for frameCount in (12, 8, 5, 3):
+        out = "\n".join(notes) + "\n\n" + "\n\n".join("\n".join(b[:frameCount + 1]) for b in kept)
+        if len(out) <= limit:
+            return out
+    return out[:limit]
 
 def pause_hang_watchdog():
     """Turn the timer off while the main thread waits on something with no time limit, such as a

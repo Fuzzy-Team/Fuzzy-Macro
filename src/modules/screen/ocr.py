@@ -1,3 +1,4 @@
+from modules.controls.sleep import hang_exit
 from modules.screen.screenshot import mssScreenshot
 import pyautogui as pag
 import numpy as np
@@ -190,10 +191,15 @@ def ocrRead(img):
 ocrLock = threading.Lock()
 
 def lockedOcrMac(img):
-    """Vision runs one call at a time. If a call never returns, the next text read on the macro's
-    main thread waits here, and the hang watchdog in controls/sleep.py restarts the macro."""
-    with ocrLock:
+    """Vision runs one call at a time and can hang from any thread. If a call never returns, the
+    next read gives up waiting after 90s and restarts the macro (controls/sleep.py)."""
+    if not ocrLock.acquire(timeout=90):
+        hang_exit("Text reading froze: another read held the lock for 90 seconds")
+        ocrLock.acquire()  # not the macro process, so there is nothing to restart
+    try:
         return ocrMac_(img)
+    finally:
+        ocrLock.release()
 
 if ocrLib == "ocrmac":
     ocrFunc = lockedOcrMac

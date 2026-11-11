@@ -42,6 +42,7 @@ from modules.controls.sleep import (
     HANG_FILE,
     is_paused,
     start_hang_watchdog,
+    summarize_hang,
 )
 # delete backup from previous update if pending
 try:
@@ -3790,7 +3791,10 @@ if __name__ == "__main__":
                     hangTrace = f.read()
                 open(hangPath, "w").close()
                 if hangTrace.strip():
-                    hangDesc = "\nThe macro froze, restarting.\n```\n" + hangTrace[:1800] + "\n```"
+                    print(hangTrace)
+                    with open(settingsManager.getUserDataPath("hang_log.txt"), "a") as f:
+                        f.write(f"#### {time.strftime('%Y-%m-%d %H:%M:%S')} macro froze ####\n{hangTrace}\n")
+                    hangDesc = "\nThe macro froze, restarting.\n```\n" + summarize_hang(hangTrace) + "\n```"
             logger.webhook("","Macro Crashed{0}{1}".format(extra, hangDesc), "red", "screen", ping_category="ping_critical_errors")
             macroProc.join()
             keyboardModule.releaseMovement()
