@@ -110,7 +110,7 @@ def summarize_hang(trace, limit=1800):
     if not blocks:
         return header[:limit]
     blocks = [re.sub(r'File "[^"]*/([^"/]+)"', r'File "\1"', b.strip()).split("\n") for b in blocks]
-    idle = lambda frames: len(frames) > 1 and re.search(r'(sleep.py", line \d+ in (sleep|wait_while_paused|is_paused)|threading.py", line \d+ in wait)$', frames[1])
+    idle = lambda frames: len(frames) > 1 and re.search(r'(sleep.py", line \d+ in (sleep|pauseable_sleep|wait_while_paused|is_paused)|threading.py", line \d+ in wait)$', frames[1])
     kept = [b for b in blocks[:-1] if not idle(b)] + blocks[-1:]
     notes = [header.strip()]
     if len(kept) < len(blocks):
