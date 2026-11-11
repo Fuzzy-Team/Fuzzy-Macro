@@ -1278,25 +1278,18 @@ class QuestMixin:
             self.clickdialog()
         self.reset()
         questObjective = self.findQuest(questGiver)
-        # Timed bear quest handling: only start the 1-hour timer when the player
-        # submitted a quest and there is NOT a new quest shown in the menu.
+        # Timed bear quests: when the bear has no quest to give after talking to it
+        # (whether we just submitted one or were only asking for a new one), start the
+        # 1-hour timer. Otherwise the bear is visited and scanned again every cycle.
         if questGiver in ["brown bear", "black bear"]:
             state_key = f"{questGiver.replace(' ', '_')}_quest_state"
             timing_key = f"{questGiver.replace(' ', '_')}_quest_cd"
             try:
-                # If we were submitting a quest (submitQuest True), and after submit
-                # there's no new quest shown, start the timer and set state to 1
-                if submitQuest:
-                    if questObjective is None:
-                        self.saveTiming(timing_key)
-                        settingsManager.saveSettingFile(state_key, 1, settingsManager.getUserDataPath("timings.txt"))
-                    else:
-                        # A new quest appeared immediately after submitting - remain in state 0
-                        settingsManager.saveSettingFile(state_key, 0, settingsManager.getUserDataPath("timings.txt"))
+                if questObjective is None:
+                    self.saveTiming(timing_key)
+                    settingsManager.saveSettingFile(state_key, 1, settingsManager.getUserDataPath("timings.txt"))
                 else:
-                    # When simply getting a new quest, ensure state is 0
-                    if questObjective is not None:
-                        settingsManager.saveSettingFile(state_key, 0, settingsManager.getUserDataPath("timings.txt"))
+                    settingsManager.saveSettingFile(state_key, 0, settingsManager.getUserDataPath("timings.txt"))
             except Exception:
                 pass
         return questObjective
