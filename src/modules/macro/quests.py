@@ -221,7 +221,7 @@ class QuestMixin:
         screens = []
         prevHash = None
         for _ in range(maxScreens):
-            screens.append(screenshotQuest(800, mode="RGBA"))
+            screens.append(screenshotQuest(self.robloxWindow.mh, mode="RGBA"))
             mouse.scroll(-1, True)
             time.sleep(0.06)
             currentHash = average_hash(Image.fromarray(screenshotQuest(100)))
@@ -238,7 +238,7 @@ class QuestMixin:
 
     def captureQuestWatchScreen(self):
         """Capture the visible quest section without scrolling or toggling its UI."""
-        screenshotHeight = max(1, min(800, self.robloxWindow.mh - 150))
+        screenshotHeight = max(1, self.robloxWindow.mh - 150)
         return mssScreenshotPillowRGBA(
             self.robloxWindow.mx,
             self.robloxWindow.my + 150,
@@ -596,11 +596,9 @@ class QuestMixin:
             return screen
 
         def ocrQuestTitleFromScreen(screen):
-            cropHeight = min(300, screen.height)
-            crop = screen.crop((0, 0, screen.width, cropHeight))
             bestMatch = None
             questTitleNoise = ["talk", "complete", "compete", "competer", "collect", "field", "pollen", "tokens", "defeat", "catch"]
-            for bbox, (text, _conf) in ocr.ocrRead(crop):
+            for bbox, (text, _conf) in ocr.ocrRead(screen):
                 line = self.convertCyrillic(text.lower().strip())
                 if not line:
                     continue
@@ -689,7 +687,7 @@ class QuestMixin:
         prevHash = None
         screenSource = questScreens if questScreens is not None else range(150)
         for i, screenEntry in enumerate(screenSource):
-            screen = screenEntry if questScreens is not None else screenshotQuest(800, mode="RGBA")
+            screen = screenEntry if questScreens is not None else screenshotQuest(self.robloxWindow.mh, mode="RGBA")
 
             ocrMatch = ocrQuestTitleFromScreen(screen)
             if ocrMatch:
@@ -1012,6 +1010,8 @@ class QuestMixin:
         if sectionEnd:
             screen = screen[:sectionEnd, :]
         screen = screen[:min(screen.shape[0], maxObjectiveScanHeight), :]
+        # Rows touching the bottom edge may be cut off, unless that edge is where the quest ends.
+        bottomIsQuestEnd = bool(sectionEnd) or screen.shape[0] >= maxObjectiveScanHeight
 
         #convert to grayscale
         screenGray = cv2.cvtColor(screen, cv2.COLOR_BGR2GRAY)
@@ -1060,7 +1060,7 @@ class QuestMixin:
             matches = [row for row, action in enumerate(objectives) if objective_matches_text(action, text)]
             if len(matches) == 1:
                 observedStatuses[matches[0]] = status
-            elif len(objectivePanels) == len(objectives):
+            elif len(objectivePanels) >= len(objectives):
                 observedStatuses[index] = status
 
         if objectivePanels:
@@ -1096,7 +1096,7 @@ class QuestMixin:
                 if objectiveTextShowsIncompleteProgress(textChunk):
                     panel["status"] = "incomplete"
 
-                observeRow(i, completionText, panel["status"], y + h < screen.shape[0])
+                observeRow(i, completionText, panel["status"], bottomIsQuestEnd or y + h < screen.shape[0])
                 if panel["status"] == "complete":
                     completedObjectives.append(objectives[i])
                     color = (0, 255, 0)
@@ -1146,7 +1146,7 @@ class QuestMixin:
                         objectives[i] = "_".join(objectiveData)
 
                 if not objectiveTextShowsIncompleteProgress(textChunk) and re.search(r"\bcomplete(?:d)?\b", completionText, re.IGNORECASE):
-                    observeRow(i, completionText, "complete", y + h < screen.shape[0])
+                    observeRow(i, completionText, "complete", bottomIsQuestEnd or y + h < screen.shape[0])
                     completedObjectives.append(objectives[i])
                     color = (0, 255, 0)  #green
                 elif objectiveTextShowsIncompleteProgress(textChunk):
