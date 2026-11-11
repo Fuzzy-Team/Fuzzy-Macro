@@ -2742,73 +2742,39 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     @requires_discord_permission("observation")
     async def show_nectar(interaction: discord.Interaction):
         await interaction.response.defer()
-        try:
-            # Create a buff detector to read nectar values from screen
+
+        # screen reads and OCR block, so they run off the event loop
+        def read_nectar():
             from modules.screen.robloxWindow import RobloxWindowBounds
             from modules.reports.buffs import BuffDetector
+            from modules.screen.screenshot import screenshotRobloxWindow
+            from PIL import ImageDraw, ImageFont
+            import modules.macro as macroModule
 
             robloxWindow = RobloxWindowBounds()
             try:
                 robloxWindow.setRobloxWindowBounds()
             except Exception:
-                # proceed — setRobloxWindowBounds may fail if window not found
-                pass
-
+                pass  # the window may not be found; read with the default bounds
             bd = BuffDetector(robloxWindow)
-
-            # Get current nectar values
-            import modules.macro as macroModule
             nectar_names = getattr(macroModule, 'nectarNames', ["comforting","refreshing","satisfying","motivating","invigorating"])
-            current_vals = {}
+            values = {}
             for n in nectar_names:
                 try:
-                    current_vals[n] = round(float(bd.getNectar(n)), 1)
+                    values[n] = round(float(bd.getNectar(n)), 1)
                 except Exception:
-                    current_vals[n] = 0.0
+                    values[n] = 0.0
 
-            # Build embed using only detected nectar values
-            desc_lines = []
-            for n in nectar_names:
-                cur = current_vals.get(n, 0.0)
-                desc_lines.append(f"**{n.title()}**: {cur}%")
-
-            embed = discord.Embed(title="Nectar Percentages", description="\n".join(desc_lines), color=0x00ff00)
-
-            # Attach a screenshot of the game window if possible
+            png = None
             try:
-                from modules.screen.screenshot import screenshotRobloxWindow
-                # Take screenshot and overlay nectar percentages for clarity
                 img = screenshotRobloxWindow()
                 try:
-                    from PIL import ImageDraw, ImageFont
-                    import io as _io
-                    # Build text overlay
                     draw = ImageDraw.Draw(img)
                     try:
                         font = ImageFont.truetype("/Library/Fonts/Arial.ttf", 20)
                     except Exception:
                         font = ImageFont.load_default()
-
-                    # collect nectar values (use BuffDetector logic)
-                    from modules.screen.robloxWindow import RobloxWindowBounds
-                    from modules.reports.buffs import BuffDetector
-                    robloxWindow = RobloxWindowBounds()
-                    try:
-                        robloxWindow.setRobloxWindowBounds()
-                    except Exception:
-                        pass
-                    bd = BuffDetector(robloxWindow)
-
-                    nectar_names = getattr(__import__("modules.macro", fromlist=["nectarNames"]), 'nectarNames', ["comforting","refreshing","satisfying","motivating","invigorating"])
-                    lines = []
-                    for i, n in enumerate(nectar_names):
-                        try:
-                            val = round(float(bd.getNectar(n)), 1)
-                        except Exception:
-                            val = 0.0
-                        lines.append(f"{n.title()}: {val}%")
-
-                    # Draw background rectangle
+                    lines = [f"{n.title()}: {v}%" for n, v in values.items()]
                     padding = 8
                     try:
                         line_h = font.getbbox("Tg")[3] + 4
@@ -2820,23 +2786,25 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                     draw.rectangle([(10,10),(10+box_w,10+box_h)], fill=(0,0,0,180))
                     for idx, l in enumerate(lines):
                         draw.text((10+padding, 10+padding + idx*line_h), l, font=font, fill=(255,255,255))
-
-                    with _io.BytesIO() as imageBinary:
-                        img.save(imageBinary, "PNG")
-                        imageBinary.seek(0)
-                        await interaction.followup.send(embed=embed, file=discord.File(fp=imageBinary, filename="nectar.png"))
                 except Exception:
-                    # Fallback to sending raw screenshot if overlay fails
-                    with io.BytesIO() as imageBinary:
-                        img.save(imageBinary, "PNG")
-                        imageBinary.seek(0)
-                        await interaction.followup.send(embed=embed, file=discord.File(fp=imageBinary, filename="nectar.png"))
+                    pass  # send the screenshot without the overlay
+                with io.BytesIO() as imageBinary:
+                    img.save(imageBinary, "PNG")
+                    png = imageBinary.getvalue()
             except Exception:
-                # Fallback to sending without image
-                await interaction.followup.send(embed=embed)
+                pass  # send the values without a screenshot
+            return values, png
 
+        try:
+            values, png = await asyncio.get_running_loop().run_in_executor(None, read_nectar)
+            desc_lines = [f"**{n.title()}**: {v}%" for n, v in values.items()]
+            embed = discord.Embed(title="Nectar Percentages", description="\n".join(desc_lines), color=0x00ff00)
+            if png:
+                await interaction.followup.send(embed=embed, file=discord.File(fp=io.BytesIO(png), filename="nectar.png"))
+            else:
+                await interaction.followup.send(embed=embed)
         except Exception as e:
-            await interaction.response.send_message(f"❌ Error reading nectar: {str(e)}")
+            await interaction.followup.send(f"❌ Error reading nectar: {str(e)}")
 
     @bot.tree.command(name = "amulet", description = "Choose to keep or replace an amulet")
     @requires_discord_permission("task_interrupts")
