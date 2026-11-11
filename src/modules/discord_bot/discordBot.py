@@ -2438,7 +2438,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     @requires_discord_permission("observation")
     async def screenshot(interaction: discord.Interaction):
         await interaction.response.defer()
-        img = screenshotRobloxWindow()
+        img = await asyncio.get_running_loop().run_in_executor(None, screenshotRobloxWindow)
         with io.BytesIO() as imageBinary:
             img.save(imageBinary, "PNG")
             imageBinary.seek(0)
@@ -3891,32 +3891,34 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             src_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
             timings_path = os.path.join(src_dir, 'data', 'user', 'hotbar_timings.txt')
 
-            # Read existing timings or initialize
-            try:
-                with open(timings_path, 'r') as f:
-                    hotbarSlotTimings = ast.literal_eval(f.read())
-            except Exception:
-                hotbarSlotTimings = [0] * 8
+            def use_slot():
+                try:
+                    with open(timings_path, 'r') as f:
+                        hotbarSlotTimings = list(ast.literal_eval(f.read()))
+                except Exception:
+                    hotbarSlotTimings = []
+                hotbarSlotTimings += [0] * (8 - len(hotbarSlotTimings))
 
-            # Press the hotbar key twice (same behaviour as macro.backgroundOnce)
-            for _ in range(2):
-                keyboard.pagPress(str(slot))
-                time.sleep(0.4)
+                # Press the hotbar key twice (same behaviour as macro.backgroundOnce)
+                for _ in range(2):
+                    keyboard.pagPress(str(slot))
+                    time.sleep(0.4)
 
-            # Update the timing for this slot and save
-            try:
                 hotbarSlotTimings[slot] = time.time()
-            except Exception:
-                # If it's a dict-like structure, set the key
-                hotbarSlotTimings[slot] = time.time()
+                with open(timings_path, 'w') as f:
+                    f.write(str(hotbarSlotTimings))
 
-            with open(timings_path, 'w') as f:
-                f.write(str(hotbarSlotTimings))
+            # the key presses sleep, so keep them off the event loop
+            await interaction.response.defer()
+            await asyncio.get_running_loop().run_in_executor(None, use_slot)
 
-            await interaction.response.send_message(f"✅ Activated hotbar slot {slot}")
+            await interaction.followup.send(f"✅ Activated hotbar slot {slot}")
 
         except Exception as e:
-            await interaction.response.send_message(f"❌ Error using hotbar slot: {str(e)}")
+            if interaction.response.is_done():
+                await interaction.followup.send(f"❌ Error using hotbar slot: {str(e)}")
+            else:
+                await interaction.response.send_message(f"❌ Error using hotbar slot: {str(e)}")
 
     @bot.tree.command(name="shiftlock", description="Set or toggle shift lock")
     @requires_discord_permission("configuration")
@@ -3930,7 +3932,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         """Send shift input and optionally verify the resulting shift lock state."""
         await interaction.response.defer()
         try:
-            message = _set_shift_lock_mode(mode)
+            # presses keys and waits on screen checks, so keep it off the event loop
+            message = await asyncio.get_running_loop().run_in_executor(None, _set_shift_lock_mode, mode)
             await interaction.followup.send(message)
         except Exception as e:
             await interaction.followup.send(f"❌ Error controlling shift lock: {str(e)}")
@@ -4122,7 +4125,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
             setdat = get_cached_settings()
             finalReportObj = FinalReport()
-            sessionStats = finalReportObj.generateFinalReport(setdat)
+            sessionStats = await asyncio.get_running_loop().run_in_executor(None, finalReportObj.generateFinalReport, setdat)
 
             if sessionStats and os.path.exists("finalReport.png"):
                 embed_fields = getattr(finalReportObj, "lastEmbedFields", None)
