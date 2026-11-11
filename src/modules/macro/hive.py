@@ -160,7 +160,15 @@ class HiveMixin:
                 behavior = self.setdat.get("convert_timeout_behavior", "move on").lower()
                 if behavior == "rejoin":
                     self.rejoin(rejoinMsg=timeout_msg)
-                
+                    # the rejoin left the hive and reset the camera, so skip the finish steps.
+                    # True stops callers from retrying the convert after the rejoin.
+                    self.clear_task_status()
+                    if liveGatherReport:
+                        liveGatherReport.stop()
+                    self.converting = False
+                    self.hourlyReport.addHourlyStat("converting_time", time.time()-st)
+                    return True
+
                 # Default behavior is "move on"
                 break
 
