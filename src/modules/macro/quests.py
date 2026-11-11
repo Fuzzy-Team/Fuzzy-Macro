@@ -1282,6 +1282,10 @@ class QuestMixin:
         # (whether we just submitted one or were only asking for a new one), start the
         # 1-hour timer. Otherwise the bear is visited and scanned again every cycle.
         if questGiver in ["brown bear", "black bear"]:
+            # One missed title read must not skip the bear for an hour, so read again
+            # before treating the quest as absent.
+            if questObjective is None:
+                questObjective = self.findQuest(questGiver)
             state_key = f"{questGiver.replace(' ', '_')}_quest_state"
             timing_key = f"{questGiver.replace(' ', '_')}_quest_cd"
             try:
