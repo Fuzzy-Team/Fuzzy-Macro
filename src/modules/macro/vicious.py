@@ -185,9 +185,7 @@ class ViciousMixin:
         if result is not None:
             return result
         for _ in range(5):
-            self.keyboard.keyDown("pagedown", False)
-            sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
-            self.keyboard.keyUp("pagedown", False)
+            self.keyboard.press("pagedown", (10 + self.setdat["vicious_key_delay_ms"]) / 1000)
             sleep((10 + self.setdat["vicious_key_delay_ms"]) / 1000)
         result = search("Cactus back", "vic/kill_vic/cactus")
         if result is not None:
