@@ -124,7 +124,8 @@ class FinalReport:
 
         return stabilized
 
-    def _buildHoneyPerSec(self, cumulativeHoney):
+    @staticmethod
+    def _buildHoneyPerSec(cumulativeHoney):
         if not cumulativeHoney:
             return [0]
 

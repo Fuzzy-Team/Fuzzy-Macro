@@ -415,23 +415,18 @@ class HourlyReport():
         self.hourlyReportStats["honey_per_min"] = FinalReport._normalizeCumulativeHoneySeries(
             self.hourlyReportStats["honey_per_min"], baseline=self.hourlyReportStats["start_honey"] or None)
         #filter out the honey/min
-        print(self.hourlyReportStats["honey_per_min"])
-        #self.hourlyReportStats["honey_per_min"] = [x for x in self.hourlyReportStats["honey_per_min"] if x]
         self.hourlyReportStats["honey_per_min"] = self.filterOutliers(self.hourlyReportStats["honey_per_min"])
-        #calculate honey/min
-        honeyPerMin = [0]
-        prevHoney = self.hourlyReportStats["honey_per_min"][0]
-        for x in self.hourlyReportStats["honey_per_min"][1:]:
-            if x > prevHoney:
-                honeyPerMin.append((x-prevHoney)/60)
-            prevHoney = x
+        # one point per minute; minutes with no gain count as 0 so the chart keeps its time axis
+        honeyPerMin = FinalReport._buildHoneyPerSec(self.hourlyReportStats["honey_per_min"])
         
         #calculate some stats
         if len(set(self.hourlyReportStats["honey_per_min"])) <= 1:
             onlyValidHourlyHoney = self.hourlyReportStats["honey_per_min"].copy()
         else:
             onlyValidHourlyHoney = [x for x in self.hourlyReportStats["honey_per_min"] if x] #removes all zeroes
-        sessionHoney = max(0, onlyValidHourlyHoney[-1]- self.hourlyReportStats["start_honey"])
+        # a start honey of 0 means the first read failed, so there is no session total to report
+        startHoney = self.hourlyReportStats["start_honey"]
+        sessionHoney = max(0, onlyValidHourlyHoney[-1] - startHoney) if startHoney else 0
         startTime = self.hourlyReportStats["start_time"]
         sessionTime = time.time()-startTime if startTime else 0
         honeyThisHour = max(0, onlyValidHourlyHoney[-1] - onlyValidHourlyHoney[0])
