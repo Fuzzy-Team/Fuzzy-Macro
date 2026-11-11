@@ -1,13 +1,10 @@
 import time
 import copy
-import json
-import ast
 import statistics
-from modules.reports.hourly import HourlyReport
+from modules.reports.hourly import HourlyReport, enabledFieldPatterns, loadReportPlanterData, saveReportCanvas, sideBuffDetectors
 from modules.reports.drawer import HourlyReportDrawer
 from modules.reports.buffs import BuffDetector
 from modules.reports.theme import resolveReportTheme
-from modules.misc import settingsManager
 
 
 class FinalReportDrawer(HourlyReportDrawer):
@@ -163,12 +160,6 @@ class FinalReport:
             "misc_time": miscTime,
         }
 
-    def _settingsInt(self, settings, key, default=0):
-        try:
-            return int(settings.get(key, default)) if isinstance(settings, dict) else default
-        except (TypeError, ValueError):
-            return default
-
     def _deriveSessionTime(self, sourceStats, normalizedHoneyPerMin, originalHoneySampleCount=None, stop_time=None):
         """Use stop_time - start_time when available (live stop); fall back to sample count for historical reports."""
         startTime = self.hourlyReport.hourlyReportStats.get("start_time", 0)
@@ -237,16 +228,7 @@ class FinalReport:
         from modules.reports.buffs import DEFAULT_UPTIME_BUFFS, DEFAULT_HOURLY_BUFFS, normalizeHourlyBuffSelection, normalizeUptimeBuffSelection
         uptime_buffs = normalizeUptimeBuffSelection(raw_uptime, DEFAULT_UPTIME_BUFFS)
         hourly_buffs = normalizeHourlyBuffSelection(raw_hourly, DEFAULT_HOURLY_BUFFS)
-        sideBuffDetectorMap = {
-            "tabby_love":   ["top",    True, True],
-            "polar_power":  ["top",    True, True],
-            "wealth_clock": ["top",    True, True],
-            "blessing":     ["top",    True, True],
-            "bloat":        ["top",    True, True],
-            "tide_blessing":["top",    True, True],
-            "mondo":        ["top",    True, True],
-        }
-        sideBuffDetectorMap = {k: v for k, v in sideBuffDetectorMap.items() if k in hourly_buffs}
+        sideBuffDetectorMap = sideBuffDetectors(hourly_buffs)
         self.hourlyReport.hourBuffs = sideBuffDetectorMap
 
         # Always try to capture fresh buff values from the current screen.
@@ -293,32 +275,7 @@ class FinalReport:
         else:
             nectarQuantity = nectarQuantity[:5]
 
-        # Get planter data
-        planterData = ""
-        try:
-            plantersMode = self._settingsInt(setdat, "planters_mode", 0)
-            if plantersMode == 1:
-                try:
-                    planterData = settingsManager.loadUserText("manualplanters.txt")
-                    if planterData:
-                        planterData = ast.literal_eval(planterData)
-                except (FileNotFoundError, SyntaxError, ValueError):
-                    planterData = ""
-            elif plantersMode == 2:
-                try:
-                    planterData = settingsManager.loadUserJson("auto_planters.json")["planters"]
-                    planterData = {
-                        "planters": [p["planter"] for p in planterData],
-                        "harvestTimes": [p["harvest_time"] for p in planterData],
-                        "fields": [p["field"] for p in planterData],
-                    }
-                    if all(not p for p in planterData["planters"]):
-                        planterData = ""
-                except (FileNotFoundError, json.JSONDecodeError, KeyError):
-                    planterData = ""
-        except Exception as e:
-            print(f"Error loading planter data: {e}")
-            planterData = ""
+        planterData = loadReportPlanterData(setdat)
 
         # Ensure we have valid honey data and keep one point per minute.
         rawHoneyPerMin = sourceStats.get("honey_per_min", [])
@@ -392,25 +349,7 @@ class FinalReport:
         theme  = resolveReportTheme(gui_theme)
         send_embed_text = setdat.get("hourly_report_embed_text", True) if isinstance(setdat, dict) else True
 
-        # determine enabled gather fields and their patterns (shown beneath planters)
-        enabled_fields, field_patterns = [], {}
-        try:
-            from modules.misc.settingsManager import loadFields
-            profile_fields_settings = loadFields()
-        except Exception:
-            profile_fields_settings = {}
-        fields_list = setdat.get("fields", []) if isinstance(setdat, dict) else []
-        fields_enabled = setdat.get("fields_enabled", []) if isinstance(setdat, dict) else []
-        if len(fields_enabled) < len(fields_list):
-            fields_enabled += [False] * (len(fields_list) - len(fields_enabled))
-        for i, fname in enumerate(fields_list):
-            try:
-                if fields_enabled[i]:
-                    enabled_fields.append(fname)
-                    pattern = profile_fields_settings.get(fname, {}).get("shape") if isinstance(profile_fields_settings, dict) else None
-                    field_patterns[fname] = pattern or "unknown"
-            except Exception:
-                continue
+        enabled_fields, field_patterns = enabledFieldPatterns(setdat)
 
         self.drawer = FinalReportDrawer(theme=theme)
 
@@ -427,9 +366,7 @@ class FinalReport:
                 field_patterns=field_patterns,
             )
 
-            w, h = canvas.size
-            canvas = canvas.resize((int(w*1.2), int(h*1.2)))
-            canvas.convert("RGB").save("finalReport.png")
+            saveReportCanvas(canvas, "finalReport.png")
             print("Final report saved successfully to finalReport.png")
 
             # generate embed fields for session report

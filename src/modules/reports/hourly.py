@@ -22,6 +22,70 @@ from modules.reports.theme import resolveReportTheme
 # session uptime history is halved in resolution whenever it grows past this many samples
 MAX_SESSION_UPTIME_SAMPLES = 3600
 
+# buffs read from the top of the screen for the report sidebar: key → [position, transform, stackable]
+SIDE_BUFF_DETECTORS = {
+    key: ["top", True, True]
+    for key in ("tabby_love", "polar_power", "wealth_clock", "blessing", "bloat", "tide_blessing", "mondo")
+}
+
+
+def sideBuffDetectors(hourly_buffs):
+    """The side buff detectors for the buffs the report shows."""
+    return {k: list(v) for k, v in SIDE_BUFF_DETECTORS.items() if k in hourly_buffs}
+
+
+def loadReportPlanterData(setdat):
+    """Planters for the report sidebar, or "" when none are planted."""
+    try:
+        try:
+            plantersMode = int(setdat.get("planters_mode", 0)) if isinstance(setdat, dict) else 0
+        except (TypeError, ValueError):
+            plantersMode = 0
+        if plantersMode == 1:
+            planterData = settingsManager.loadUserText("manualplanters.txt")
+            return ast.literal_eval(planterData) if planterData else ""
+        if plantersMode == 2:
+            planters = settingsManager.loadUserJson("auto_planters.json")["planters"]
+            if all(not p["planter"] for p in planters):
+                return ""
+            return {
+                "planters": [p["planter"] for p in planters],
+                "harvestTimes": [p["harvest_time"] for p in planters],
+                "fields": [p["field"] for p in planters],
+            }
+    except Exception as e:
+        print(f"Error loading planter data: {e}")
+    return ""
+
+
+def enabledFieldPatterns(setdat):
+    """The enabled gather fields and the pattern each one uses, shown beneath the planters."""
+    enabled_fields, field_patterns = [], {}
+    try:
+        profile_fields_settings = loadFields()
+    except Exception:
+        profile_fields_settings = {}
+    fields_list = setdat.get("fields", []) if isinstance(setdat, dict) else []
+    fields_enabled = list(setdat.get("fields_enabled", [])) if isinstance(setdat, dict) else []
+    if len(fields_enabled) < len(fields_list):
+        fields_enabled += [False] * (len(fields_list) - len(fields_enabled))
+    for i, fname in enumerate(fields_list):
+        try:
+            if fields_enabled[i]:
+                enabled_fields.append(fname)
+                pattern = profile_fields_settings.get(fname, {}).get("shape") if isinstance(profile_fields_settings, dict) else None
+                field_patterns[fname] = pattern or "unknown"
+        except Exception:
+            continue
+    return enabled_fields, field_patterns
+
+
+def saveReportCanvas(canvas, path):
+    w, h = canvas.size
+    canvas = canvas.resize((int(w*1.2), int(h*1.2)))
+    # Flatten to RGB so Discord/webhooks never composite leftover alpha.
+    canvas.convert("RGB").save(path)
+
 
 class HourlyReport():
     def __init__(self, buffDetector: BuffDetector = None, time_format=24, theme="dark", configuredUptimeBuffs=None, configuredHourlyBuffs=None):
@@ -31,15 +95,7 @@ class HourlyReport():
         # hourly snapshot buff detection config (template-based)
         # key → [position, transform, stackable]
         self.hourBuffs = {k: ["top", True, True] for k in self.configuredHourlyBuffs if k not in ("tide_blessing", "mondo")}
-        self.hourBuffs.update({
-            "tabby_love":   ["top",    True, True],
-            "polar_power":  ["top",    True, True],
-            "wealth_clock": ["top",    True, True],
-            "blessing":     ["top",    True, True],
-            "bloat":        ["top",    True, True],
-            "tide_blessing":["top",    True, True],
-            "mondo":        ["top",    True, True],
-        })
+        self.hourBuffs.update({k: list(v) for k, v in SIDE_BUFF_DETECTORS.items()})
         # keep only the buffs that are actually configured
         self.hourBuffs = {k: v for k, v in self.hourBuffs.items() if k in self.configuredHourlyBuffs}
 
@@ -358,16 +414,7 @@ class HourlyReport():
         raw_hourly = setdat.get("hourly_report_hourly_buffs", "") if isinstance(setdat, dict) else ""
         hourly_buffs = normalizeHourlyBuffSelection(raw_hourly, self.configuredHourlyBuffs)
         self.configuredHourlyBuffs = hourly_buffs
-        self.hourBuffs = {
-            "tabby_love":   ["top",    True, True],
-            "polar_power":  ["top",    True, True],
-            "wealth_clock": ["top",    True, True],
-            "blessing":     ["top",    True, True],
-            "bloat":        ["top",    True, True],
-            "tide_blessing":["top",    True, True],
-            "mondo":        ["top",    True, True],
-        }
-        self.hourBuffs = {k: v for k, v in self.hourBuffs.items() if k in hourly_buffs}
+        self.hourBuffs = sideBuffDetectors(hourly_buffs)
         buffQuantity = self.buffDetector.getBuffsWithImage(self.hourBuffs)
         nectarQuantity = self.buffDetector.getNectars()
         self.latestBuffQuantity = list(buffQuantity)
@@ -377,31 +424,7 @@ class HourlyReport():
 
         #get the hourly report data
 
-        planterData = ""
-        #get planter data
-        try:
-            try:
-                plantersMode = int(setdat.get("planters_mode", 0)) if isinstance(setdat, dict) else 0
-            except (TypeError, ValueError):
-                plantersMode = 0
-            if plantersMode == 1:
-                planterData = settingsManager.loadUserText("manualplanters.txt")
-
-                if planterData:
-                    planterData = ast.literal_eval(planterData)
-            elif plantersMode == 2:
-                planterData = settingsManager.loadUserJson("auto_planters.json")["planters"]
-                planterData = {
-                    "planters": [p["planter"] for p in planterData],
-                    "harvestTimes": [p["harvest_time"] for p in planterData],
-                    "fields": [p["field"] for p in planterData],
-                }
-                if all(not p for p in planterData["planters"]):
-                    planterData = ""
-        except Exception as e:
-            print(f"Error loading planter data: {e}")
-            planterData = ""
-
+        planterData = loadReportPlanterData(setdat)
 
         #get history
         historyData = settingsManager.loadUserLiteral("hourly_report_history.txt")
@@ -433,28 +456,7 @@ class HourlyReport():
 
         hourlyReportStats = copy.deepcopy(self.hourlyReportStats)
 
-        # determine enabled fields and their patterns from profile settings
-        enabled_fields = []
-        field_patterns = {}
-        try:
-            profile_fields_settings = loadFields()
-        except Exception:
-            profile_fields_settings = {}
-
-        fields_list = setdat.get("fields", []) if isinstance(setdat, dict) else []
-        fields_enabled = setdat.get("fields_enabled", []) if isinstance(setdat, dict) else []
-        # normalize lengths
-        if len(fields_enabled) < len(fields_list):
-            fields_enabled += [False] * (len(fields_list) - len(fields_enabled))
-
-        for i, fname in enumerate(fields_list):
-            try:
-                if fields_enabled[i]:
-                    enabled_fields.append(fname)
-                    pattern = profile_fields_settings.get(fname, {}).get("shape") if isinstance(profile_fields_settings, dict) else None
-                    field_patterns[fname] = pattern or "unknown"
-            except Exception:
-                continue
+        enabled_fields, field_patterns = enabledFieldPatterns(setdat)
 
         # the report theme (colors and accent) follows the macro's GUI theme
         gui_theme = setdat.get("gui_theme", "Brown") if isinstance(setdat, dict) else "Brown"
@@ -482,10 +484,7 @@ class HourlyReport():
                                                           enabled_fields, field_patterns,
                                                           configuredUptimeBuffs=uptime_buffs,
                                                           configuredHourlyBuffs=hourly_buffs)
-        w, h = canvas.size
-        canvas = canvas.resize((int(w*1.2), int(h*1.2)))
-        # Flatten to RGB so Discord/webhooks never composite leftover alpha.
-        canvas.convert("RGB").save("hourlyReport.png")
+        saveReportCanvas(canvas, "hourlyReport.png")
 
         # generate embed text fields (stored as attribute for caller to use)
         if send_embed_text:
