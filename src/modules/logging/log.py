@@ -367,7 +367,6 @@ class log:
         }
         if ss not in screenshotRegions:
             return None
-        print(screenshotRegions["screen"])
 
         for _ in range(2):
             try:

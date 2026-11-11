@@ -604,6 +604,28 @@ def _resolve_update_pattern_source(extracted):
     return None
 
 
+def _clean_new_duplicates(dst_patterns):
+    """Resolve `.newN` files left by a pattern merge: drop the copy when the base
+    file exists, otherwise rename it to the base name."""
+    import re as _re
+    if not os.path.exists(dst_patterns):
+        return
+    for root, dirs, files in os.walk(dst_patterns):
+        for f in files:
+            m = _re.match(r"^(?P<base>.+?)\.new\d+(?P<ext>\..+)?$", f)
+            if not m:
+                continue
+            src_new = os.path.join(root, f)
+            target = os.path.join(root, m.group('base') + (m.group('ext') or ''))
+            try:
+                if os.path.exists(target):
+                    os.remove(src_new)
+                else:
+                    os.replace(src_new, target)
+            except Exception:
+                pass
+
+
 def _merge_patterns(src_patterns, dst_patterns, overwrite_exceptions=None):
     """
     Copy shipped patterns into the user's patterns folder.
@@ -931,30 +953,8 @@ def update(t="main", update_channel="stable", progress_callback=None):
         # non-fatal: don't interrupt whole update for pattern merge issues
         pass
 
-    # Clean up `.newN` duplicates: if corresponding base file exists, remove
-    # the `.newN` file; otherwise rename it to the base name (remove suffix).
     try:
-        import re as _re
-        if os.path.exists(dst_patterns):
-            for root, dirs, files in os.walk(dst_patterns):
-                for f in files:
-                    m = _re.match(r"^(?P<base>.+?)\.new\d+(?P<ext>\..+)?$", f)
-                    if not m:
-                        continue
-                    base = m.group('base')
-                    ext = m.group('ext') or ''
-                    candidate = base + ext
-                    src_new = os.path.join(root, f)
-                    target = os.path.join(root, candidate)
-                    try:
-                        if os.path.exists(target):
-                            # base exists — remove the .new file
-                            os.remove(src_new)
-                        else:
-                            # rename .newN -> base
-                            os.replace(src_new, target)
-                    except Exception:
-                        pass
+        _clean_new_duplicates(dst_patterns)
     except Exception:
         pass
 
@@ -1103,31 +1103,8 @@ def update_from_commit(commit_hash, progress_callback=None):
     except Exception:
         pass
 
-    # Clean up `.newN` duplicates created during merge: if corresponding
-    # base file exists, remove the `.newN` file; otherwise rename it to
-    # the base name (remove suffix).
     try:
-        import re as _re
-        if os.path.exists(dst_patterns):
-            for root, dirs, files in os.walk(dst_patterns):
-                for f in files:
-                    m = _re.match(r"^(?P<base>.+?)\.new\d+(?P<ext>\..+)?$", f)
-                    if not m:
-                        continue
-                    base = m.group('base')
-                    ext = m.group('ext') or ''
-                    candidate = base + ext
-                    src_new = os.path.join(root, f)
-                    target = os.path.join(root, candidate)
-                    try:
-                        if os.path.exists(target):
-                            # base exists — remove the .new file
-                            os.remove(src_new)
-                        else:
-                            # rename .newN -> base
-                            os.replace(src_new, target)
-                    except Exception:
-                        pass
+        _clean_new_duplicates(dst_patterns)
     except Exception:
         pass
 
