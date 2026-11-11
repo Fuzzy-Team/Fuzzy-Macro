@@ -169,9 +169,14 @@ def runApp(macroTarget):
         try:
             # let the macro process see the stop and clean up before stopApp ends it
             run.value = 0
+        except Exception:
+            # the shared-state process can be gone when the whole process group was signalled;
+            # stopApp below still has to stop the macro and release held keys
+            pass
+        try:
             stopApp()
         except Exception as e:
-            print(f"Error during shutdown cleanup: {e}")
+            print(f"Error during shutdown cleanup: {e!r}")
         # Reset timed bear quest states on exit so macro resumes checking next run
         try:
             settingsManager.saveSettingFile("brown_bear_quest_state", 0, settingsManager.getUserDataPath("timings.txt"))
