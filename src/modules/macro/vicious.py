@@ -470,7 +470,7 @@ class ViciousMixin:
         self._viciousAttackTarget = None
 
 
-    def stingerHunt(self):
+    def stingerHunt(self, forced_convert_balloon=False):
         if not self.vicFields:
             self.night = False
             return False
@@ -490,7 +490,7 @@ class ViciousMixin:
                 self.viciousResetCamera()
                 if not self.reset(convert=False):
                     return False
-            result = self.viciousSearchRoute()
+            self.viciousSearchRoute()
         finally:
             self._viciousAttackTarget = None
             self.night = False
@@ -504,5 +504,4 @@ class ViciousMixin:
             # This can re-raise a pending interrupt during its pause-aware wait.
             # All other cleanup must already be complete.
             self.ensure_shift_lock_off(reason="Stinger Hunt cleanup")
-        self.reset()
-        return result
+        return bool(self.reset(forced_convert_balloon=forced_convert_balloon))
