@@ -10,7 +10,7 @@ import time
 from threading import Thread
 import modules.controls.mouse as mouse
 from modules.controls.hotkeys import watch_for_hotkeys
-from modules.controls.sleep import HANG_FILE, INTERRUPT_NONE
+from modules.controls.sleep import HANG_FILE, INTERRUPT_NONE, summarize_hang
 from modules.discord_bot.richPresence import RichPresenceManager
 from modules.misc import messageBox
 from modules.misc.ColorProfile import DisplayColorProfile
@@ -782,7 +782,9 @@ def runApp(macroTarget):
                         hangTrace = f.read()
                     open(hangPath, "w").close()
                     if hangTrace.strip():
-                        hangDesc = "\nThe macro froze, restarting.\n```\n" + hangTrace[:1800] + "\n```"
+                        print(hangTrace)
+                        logModule.logHang(hangTrace)
+                        hangDesc = "\nThe macro froze, restarting.\n```\n" + summarize_hang(hangTrace) + "\n```"
                 logger.webhook("","Macro Crashed{0}{1}".format(extra, hangDesc), "red", "screen", ping_category="ping_critical_errors")
                 macroProc.join()
                 keyboardModule.releaseMovement()

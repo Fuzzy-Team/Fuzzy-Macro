@@ -262,6 +262,15 @@ def logException(excType, exc, tb):
         pass  # if the log can't be written there is nothing more to do
 
 
+def logHang(trace):
+    """Append a frozen macro's full thread dump to errors.log. The Discord post only has the useful part."""
+    try:
+        with open(os.path.join(getLogDir(), "errors.log"), "a", encoding="utf-8") as f:
+            f.write(f"#### {datetime.now():%Y-%m-%d %H:%M:%S} macro froze ####\n{trace}\n")
+    except Exception:
+        pass
+
+
 def installCrashLog():
     """Log uncaught exceptions in this process's main thread and in its threads."""
     def onException(excType, exc, tb):
