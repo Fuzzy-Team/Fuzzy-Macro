@@ -187,6 +187,7 @@ def locateImageInScreen(target, screen, threshold=0, scales=None, return_scale=F
     best_val = -1.0
     best_loc = None
     best_scale = None
+    direct_matched = False
 
     # If the chosen template file already matches display_type and no scaling needed,
     # try a quick direct match first (saves time).
@@ -197,6 +198,7 @@ def locateImageInScreen(target, screen, threshold=0, scales=None, return_scale=F
             if tt is None or ss is None:
                 raise Exception("Invalid images for direct match")
             _, val, _, loc = templateMatch(tt, ss)
+            direct_matched = True
             if val > best_val:
                 best_val, best_loc, best_scale = val, loc, 1.0
                 if best_val >= early_exit_thresh and best_val >= threshold:
@@ -210,6 +212,9 @@ def locateImageInScreen(target, screen, threshold=0, scales=None, return_scale=F
 
     # Try the list of scales (resizing the template as needed)
     for scale in scales:
+        # the direct match above already scored the unscaled template
+        if direct_matched and scale == 1.0:
+            continue
         new_w = max(1, int(round(t_w * scale)))
         new_h = max(1, int(round(t_h * scale)))
 
