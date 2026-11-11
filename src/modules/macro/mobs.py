@@ -460,6 +460,8 @@ class MobMixin:
                 self.died = True
             if self.blueTextHas("coconutcrab_defeat", screen=screen):
                 self.bossStatus = "defeated"
+            # OCR back to back would compete with the fight for CPU
+            time.sleep(0.25)
 
     def coconutCrab(self):
         self.bossStatus = None
