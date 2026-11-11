@@ -10,10 +10,12 @@ from modules.screen.screenshot import mssScreenshotNP
 
 
 class PlanterMixin:
-    def goToPlanter(self, planter, field, method):
+    def goToPlanter(self, planter, field, method, afterCannon=None):
         global finalKey
         if not self.travelViaCannon("Planters"):
             return False
+        if afterCannon:
+            afterCannon()
         self.logger.webhook("", f"Travelling: {planter.title()} Planter ({field.title()}), {method.title()}", "dark brown")
         self.goToField(field, "north")
         #move from center of field to planter spot
@@ -93,16 +95,18 @@ class PlanterMixin:
         cooldown_seconds = 3  # Wait 3 seconds before retrying if planter is missing
         for attempt in range(max_attempts):
             findPlanterInventoryThread = None
-            if hotbarSlot:
-                self.planterCoords = None
-            else:
-                # Invalidate cached planter coordinates before each attempt
-                self.planterCoords = None
+            # Invalidate cached planter coordinates before each attempt
+            self.planterCoords = None
+
+            # Search the inventory while walking to the field, but only once the cannon is
+            # done: the reset and cannon walk can't share the screen with an open inventory.
+            def startInventorySearch():
+                nonlocal findPlanterInventoryThread
                 findPlanterInventoryThread = threading.Thread(target=self.findPlanterInInventory, args=(name,))
                 findPlanterInventoryThread.daemon = True
                 findPlanterInventoryThread.start()
 
-            if not self.goToPlanter(planter, field, "place"):
+            if not self.goToPlanter(planter, field, "place", None if hotbarSlot else startInventorySearch):
                 updateHourlyTime()
                 return False
             if hotbarSlot:
