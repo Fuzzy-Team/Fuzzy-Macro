@@ -62,7 +62,7 @@ class fieldDriftCompensation():
 
         # Apply thresholds to each channel (H, L, S)
         binary_mask = cv2.inRange(
-            cv2.cvtColor(imgHLS, cv2.COLOR_BGR2HLS),
+            imgHLS,
             np.array([hLow, lLow, sLow], dtype=np.uint8),
             np.array([hHi, lHi, sHi], dtype=np.uint8)
             )
