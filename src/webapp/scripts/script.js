@@ -832,53 +832,9 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
     return badges[category] || "";
   }
 
-  // Expose a small helper globally so other code can update enabled/disabled states
-  window._isTaskEnabledForSettings = function (taskId, settingsObj) {
-    if (!taskId) return false;
-    // replicate isTaskEnabled logic from above
-    if (taskId.startsWith("gather_")) {
-      const fieldName = taskId.replace("gather_", "").replace("_", " ");
-      if (settingsObj.fields_enabled && settingsObj.fields) {
-        for (let i = 0; i < settingsObj.fields_enabled.length; i++) {
-          if (settingsObj.fields_enabled[i] && settingsObj.fields[i] === fieldName) {
-            return true;
-          }
-        }
-      }
-      return false;
-    }
-
-    if (taskId.startsWith("collect_")) {
-      const collectName = taskId.replace("collect_", "");
-      if (collectName === "sprouts") return settingsObj.sprouts_enable || false;
-      if (collectName === "sticker_sprout") return settingsObj.sticker_sprout_watch || false;
-      if (collectName === "sticker_printer") return settingsObj.sticker_printer || false;
-      if (collectName === "sticker_stack") return settingsObj.sticker_stack || false;
-      return settingsObj[collectName] || false;
-    }
-
-    if (taskId.startsWith("kill_")) {
-      const killName = taskId.replace("kill_", "");
-      return settingsObj[killName] || false;
-    }
-
-    if (taskId.startsWith("quest_")) {
-      const questName = taskId.replace("quest_", "").replace("_", "_");
-      return settingsObj[questName + "_quest"] || false;
-    }
-
-    if (taskId === "mondo_buff") return settingsObj.mondo_buff || false;
-    if (taskId === "stinger_hunt") return settingsObj.stinger_hunt || false;
-    if (taskId === "auto_field_boost") return settingsObj.auto_field_boost || false;
-    if (taskId === "ant_challenge") return settingsObj.ant_challenge || false;
-    if (taskId === "blender") return settingsObj.blender_enable || settingsObj.blender || false;
-    if (taskId === "planters") {
-      const mode = Number(settingsObj.planters_mode);
-      return settingsObj.planters || (Number.isFinite(mode) && mode > 0);
-    }
-
-    return false;
-  };
+  // Exposed so other code can update enabled/disabled states
+  window._isTaskEnabledForSettings = (taskId, settingsObj) =>
+    Boolean(taskId) && isTaskEnabled(taskId, settingsObj);
 
   // Create items in the specified order
   let questHeaderInserted = false;
@@ -2100,26 +2056,3 @@ if (document.readyState === "loading") {
   initializeImageZoom();
 }
 
-// Re-initialize when new content is loaded (for dynamically loaded tabs)
-// Use MutationObserver to detect when new images are added
-const observer = new MutationObserver((mutations) => {
-  mutations.forEach((mutation) => {
-    mutation.addedNodes.forEach((node) => {
-      if (node.nodeType === 1) { // Element node
-        // Check if the node or its children contain zoomable images
-        if (node.classList && node.classList.contains("zoomable-image")) {
-          // Image is already set up by event delegation
-        } else if (node.querySelectorAll) {
-          const images = node.querySelectorAll(".zoomable-image");
-          // Images will be handled by event delegation
-        }
-      }
-    });
-  });
-});
-
-// Start observing the document body for changes
-observer.observe(document.body, {
-  childList: true,
-  subtree: true
-});

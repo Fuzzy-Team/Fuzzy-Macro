@@ -478,12 +478,6 @@ function updateGatherPatternUI() {
   }
   updateInfiniteGatherUI();
 }
-//save the enabled status for the fields
-async function saveEnabled() {
-  const fields = (await loadSettings()).fields;
-  fields[fieldNo - 1] = ele.value;
-  await saveSettingValue("profile", "fields", fields);
-}
 
 //save the selected field's settings; if that fails, tell the user and show the saved ones again
 async function persistGatherField(fieldData) {
