@@ -267,6 +267,8 @@ class CollectiblesMixin:
             self.keyboard.press("e")
             time.sleep(1)
             self.placeSprinkler()
+            if is_stopped():
+                return False
             mouse.click()
             time.sleep(1)
             self.keyboard.walk("s",1.5)

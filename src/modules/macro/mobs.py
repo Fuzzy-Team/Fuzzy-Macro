@@ -2,7 +2,7 @@ import threading
 import traceback
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
-from modules.controls.sleep import InterruptRequested, is_paused, pause_aware_time as time, sleep
+from modules.controls.sleep import InterruptRequested, is_paused, is_stopped, pause_aware_time as time, sleep
 from modules.gather_session import field_pattern_variables, GatherPatternRunner
 import modules.macro.pattern_environment as patternEnvironment
 from modules.macro.game_data import (
@@ -325,12 +325,18 @@ class MobMixin:
 
         def goToStump():
             for _ in range(3):
+                if is_stopped():
+                    return False
                 if not self.cannon():
                     return False
                 self.logger.webhook("", "Travelling: Stump Snail", "dark brown")
                 self.goToField("stump")
                 if self.placeSprinkler():
+                    if is_stopped():
+                        return False
                     return True
+                if is_stopped():
+                    return False
                 self.logger.webhook("", "Failed to land in stump field", "red", "screen", ping_category="ping_critical_errors")
                 self.reset()
             return False
