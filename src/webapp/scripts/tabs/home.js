@@ -4,67 +4,58 @@ Home Tab
 =============================================
 */
 
-//update the button text with current keybinds and state
-async function updateStartButtonText() {
-  const settings = await loadAllSettings();
+//show the start/stop button for a run state (0 = stopping, 2 = running, 3 = stopped, 6 = paused)
+function renderRunButtons(runState, settings) {
   const startKey = settings.start_keybind || "F1";
   const pauseKey = settings.pause_keybind || "F2";
   const stopKey = settings.stop_keybind || "F3";
+  const startBtn = document.getElementById("start-btn");
+  const stopBtn = document.getElementById("stop-btn");
 
-  // Check current run state
-  try {
-    const runState = await eel.getRunState()();
-    // 0 = stopping, 2 = running, 3 = stopped, 6 = paused
-
-    const startBtn = document.getElementById("start-btn");
-    const stopBtn = document.getElementById("stop-btn");
-    // const pauseBtn = document.getElementById("pause-btn");
-
-    if (runState === 2) {
-      // Running: show Stop button
-      if (startBtn) startBtn.classList.add("d-none");
-      if (stopBtn) {
-        stopBtn.classList.remove("d-none");
-        stopBtn.disabled = false;
-        stopBtn.textContent = `Stop [${stopKey}]`;
-      }
-    } else if (runState === 0) {
-      // Stopping: keep controls disabled until backend cleanup finishes
-      if (startBtn) startBtn.classList.add("d-none");
-      if (stopBtn) {
-        stopBtn.classList.remove("d-none");
-        stopBtn.disabled = true;
-        stopBtn.textContent = "Stopping...";
-      }
-    } else if (runState === 6) {
-      // Paused: show Unpause button
-      if (startBtn) {
-        startBtn.classList.remove("d-none");
-        startBtn.classList.remove("active");
-        startBtn.disabled = false;
-        startBtn.textContent = `Unpause [${pauseKey}]`;
-      }
-      if (stopBtn) stopBtn.classList.add("d-none");
-    } else {
-      // Stopped: show Start button only
-      if (startBtn) {
-        startBtn.classList.remove("d-none");
-        startBtn.classList.remove("active");
-        startBtn.disabled = false;
-        startBtn.textContent = `Start [${startKey}]`;
-      }
-      if (stopBtn) stopBtn.classList.add("d-none");
+  if (runState === 2) {
+    // Running: show Stop button
+    if (startBtn) startBtn.classList.add("d-none");
+    if (stopBtn) {
+      stopBtn.classList.remove("d-none");
+      stopBtn.disabled = false;
+      stopBtn.textContent = `Stop [${stopKey}]`;
     }
-  } catch (error) {
-    // Fallback to just showing start button
-    const startBtn = document.getElementById("start-btn");
+  } else if (runState === 0) {
+    // Stopping: keep controls disabled until backend cleanup finishes
+    if (startBtn) startBtn.classList.add("d-none");
+    if (stopBtn) {
+      stopBtn.classList.remove("d-none");
+      stopBtn.disabled = true;
+      stopBtn.textContent = "Stopping...";
+    }
+  } else if (runState === 6) {
+    // Paused: show Unpause button
     if (startBtn) {
       startBtn.classList.remove("d-none");
+      startBtn.classList.remove("active");
+      startBtn.disabled = false;
+      startBtn.textContent = `Unpause [${pauseKey}]`;
+    }
+    if (stopBtn) stopBtn.classList.add("d-none");
+  } else {
+    // Stopped: show Start button only
+    if (startBtn) {
+      startBtn.classList.remove("d-none");
+      startBtn.classList.remove("active");
       startBtn.disabled = false;
       startBtn.textContent = `Start [${startKey}]`;
     }
-    const stopBtn = document.getElementById("stop-btn");
     if (stopBtn) stopBtn.classList.add("d-none");
+  }
+}
+
+//update the button text with current keybinds and state
+async function updateStartButtonText() {
+  const settings = await loadAllSettings();
+  try {
+    renderRunButtons(await eel.getRunState()(), settings);
+  } catch (error) {
+    renderRunButtons(3, settings); // run state unknown: show the start button
   }
 }
 
@@ -72,55 +63,8 @@ async function updateStartButtonText() {
 eel.expose(toggleStartStop);
 async function toggleStartStop() {
   const settings = await loadAllSettings();
-  const startKey = settings.start_keybind || "F1";
-  const pauseKey = settings.pause_keybind || "F2";
-  const stopKey = settings.stop_keybind || "F3";
-
-  // Check current run state
   try {
-    const runState = await eel.getRunState()();
-    // 0 = stopping, 2 = running, 3 = stopped, 6 = paused
-
-    const startBtn = document.getElementById("start-btn");
-    const stopBtn = document.getElementById("stop-btn");
-    // const pauseBtn = document.getElementById("pause-btn");
-
-    if (runState === 2) {
-      // Running: show Stop button
-      if (startBtn) startBtn.classList.add("d-none");
-      if (stopBtn) {
-        stopBtn.classList.remove("d-none");
-        stopBtn.disabled = false;
-        stopBtn.textContent = `Stop [${stopKey}]`;
-      }
-    } else if (runState === 0) {
-      // Stopping: keep controls disabled until backend cleanup finishes
-      if (startBtn) startBtn.classList.add("d-none");
-      if (stopBtn) {
-        stopBtn.classList.remove("d-none");
-        stopBtn.disabled = true;
-        stopBtn.textContent = "Stopping...";
-      }
-    } else if (runState === 6) {
-      // Paused: show Unpause button
-      if (startBtn) {
-        startBtn.classList.remove("d-none");
-        startBtn.classList.remove("active");
-        startBtn.disabled = false;
-        startBtn.textContent = `Unpause [${pauseKey}]`;
-      }
-      if (stopBtn) stopBtn.classList.add("d-none");
-    } else {
-      // Stopped: show Start button only
-      if (startBtn) {
-        startBtn.classList.remove("d-none");
-        startBtn.classList.remove("active");
-        startBtn.disabled = false;
-        startBtn.textContent = `Start [${startKey}]`;
-      }
-      if (stopBtn) stopBtn.classList.add("d-none");
-    }
-
+    renderRunButtons(await eel.getRunState()(), settings);
     return true; // Success
   } catch (error) {
     return false;
@@ -732,53 +676,9 @@ function closeWindow() {
 async function checkAndUpdateButtonState() {
   try {
     const runState = await eel.getRunState()();
-    // 0 = stopping, 2 = running, 3 = stopped, 6 = paused
-
     // keybind and macro mode changes reload settings, which refreshes this cache
     const settings = cachedSettings;
-    const startKey = settings.start_keybind || "F1";
-    const pauseKey = settings.pause_keybind || "F2";
-    const stopKey = settings.stop_keybind || "F3";
-
-    const startBtn = document.getElementById("start-btn");
-    const stopBtn = document.getElementById("stop-btn");
-    // const pauseBtn = document.getElementById("pause-btn");
-
-    if (runState === 2) {
-      // Running: show Stop button
-      if (startBtn) startBtn.classList.add("d-none");
-      if (stopBtn) {
-        stopBtn.classList.remove("d-none");
-        stopBtn.disabled = false;
-        stopBtn.textContent = `Stop [${stopKey}]`;
-      }
-    } else if (runState === 0) {
-      // Stopping: keep controls disabled until backend cleanup finishes
-      if (startBtn) startBtn.classList.add("d-none");
-      if (stopBtn) {
-        stopBtn.classList.remove("d-none");
-        stopBtn.disabled = true;
-        stopBtn.textContent = "Stopping...";
-      }
-    } else if (runState === 6) {
-      // Paused: show Unpause button
-      if (startBtn) {
-        startBtn.classList.remove("d-none");
-        startBtn.classList.remove("active");
-        startBtn.disabled = false;
-        startBtn.textContent = `Unpause [${pauseKey}]`;
-      }
-      if (stopBtn) stopBtn.classList.add("d-none");
-    } else {
-      // Stopped: show Start button only
-      if (startBtn) {
-        startBtn.classList.remove("d-none");
-        startBtn.classList.remove("active");
-        startBtn.disabled = false;
-        startBtn.textContent = `Start [${startKey}]`;
-      }
-      if (stopBtn) stopBtn.classList.add("d-none");
-    }
+    renderRunButtons(runState, settings);
 
     // Update field-only mode dropdown to match current settings
     const macroModeDropdown = document.getElementById("macro_mode");
@@ -830,14 +730,6 @@ $("#home-placeholder")
     // Start checking button state every 500ms
     if (!buttonStateInterval) buttonStateInterval = setInterval(checkAndUpdateButtonState, 500);
   }) //load home tab
-  .on("click", "#log-btn", (event) => {
-    //log button
-    const result = purpleButtonToggle(event.currentTarget, [
-      "Simple",
-      "Detailed",
-    ]);
-    document.getElementById("log-type").innerText = result;
-  })
   .on("click", "#start-btn", async (event) => {
     const settings = await loadAllSettings();
     const pauseKey = settings.pause_keybind || "F2";
@@ -894,15 +786,6 @@ $("#home-placeholder")
   //     eel.resume();
   //   }
   // })
-  .on("click", "#update-btn", async (event) => {
-    //start button
-    if (!event.currentTarget.classList.contains("active")) {
-      purpleButtonToggle(event.currentTarget, ["Update", "Updating"]);
-      event.currentTarget.disabled = true;
-      if (window.updateProgress) window.updateProgress(0, "Starting update");
-      await eel.update();
-    }
-  })
   .on("click", "#clear-timers-btn", async (event) => {
     const btn = event.currentTarget;
     if (btn.classList.contains("active")) return;
