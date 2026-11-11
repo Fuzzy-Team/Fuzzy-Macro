@@ -685,20 +685,22 @@ class QuestMixin:
         except Exception:
             pass
         prevHash = None
-        titleSighting = None
         screenSource = questScreens if questScreens is not None else range(150)
         for i, screenEntry in enumerate(screenSource):
-            # The whole quest menu, down to the bottom of the window
             screen = screenEntry if questScreens is not None else screenshotQuest(self.robloxWindow.mh, mode="RGBA")
 
-            # A title is used once the divider below its quest is on screen, so every objective
-            # is read. The last quests in the list have no divider, so their latest sighting is used.
             ocrMatch = ocrQuestTitleFromScreen(screen)
             if ocrMatch:
-                titleSighting = (screen, ocrMatch, i, self.questMenuStep)
-                belowTitle = cv2.cvtColor(np.array(screen), cv2.COLOR_RGBA2BGR)[ocrMatch[2]:]
-                if positioned or findQuestSectionEnd(belowTitle, 60*self.robloxWindow.multi):
-                    break
+                _score, questTitleRaw, questTitleYPos = ocrMatch
+                if ":" in questTitleRaw:
+                    questTitleRaw = questTitleRaw.split(":", 1)[1].strip()
+                if questGiver == "brown bear":
+                    questTitle = questTitleRaw
+                else:
+                    questTitle, _ = fuzzywuzzy.process.extractOne(questTitleRaw, quest_data[questGiver].keys())
+                if logDetection:
+                    self.logger.webhook("", f"Quest Title: {questTitle}", "dark brown")
+                break
 
             res = None
             matchedTemplate = None
@@ -747,18 +749,6 @@ class QuestMixin:
                     break
                 prevHash = hash
 
-        sightingStep = self.questMenuStep
-        if questTitle is None and titleSighting:
-            screen, (_score, questTitleRaw, questTitleYPos), i, sightingStep = titleSighting
-            if ":" in questTitleRaw:
-                questTitleRaw = questTitleRaw.split(":", 1)[1].strip()
-            if questGiver == "brown bear":
-                questTitle = questTitleRaw
-            else:
-                questTitle, _ = fuzzywuzzy.process.extractOne(questTitleRaw, quest_data[questGiver].keys())
-            if logDetection:
-                self.logger.webhook("", f"Quest Title: {questTitle}", "dark brown")
-
         if questTitle is None:
             if logDetection:
                 self.logger.webhook("", f"Could not find {questGiver} quest", "dark brown")
@@ -768,7 +758,7 @@ class QuestMixin:
             return None
 
         # A scan shows many screens; a single watch screen is read where this giver was already recorded.
-        step = sightingStep if manageQuestUi else (i if len(questScreens) > 1 else None)
+        step = self.questMenuStep if manageQuestUi else (i if len(questScreens) > 1 else None)
         if step is not None:
             self.questGiverSteps[questGiver] = step
 
@@ -1020,6 +1010,8 @@ class QuestMixin:
         if sectionEnd:
             screen = screen[:sectionEnd, :]
         screen = screen[:min(screen.shape[0], maxObjectiveScanHeight), :]
+        # Rows touching the bottom edge may be cut off, unless that edge is where the quest ends.
+        bottomIsQuestEnd = bool(sectionEnd) or screen.shape[0] >= maxObjectiveScanHeight
 
         #convert to grayscale
         screenGray = cv2.cvtColor(screen, cv2.COLOR_BGR2GRAY)
@@ -1068,7 +1060,7 @@ class QuestMixin:
             matches = [row for row, action in enumerate(objectives) if objective_matches_text(action, text)]
             if len(matches) == 1:
                 observedStatuses[matches[0]] = status
-            elif len(objectivePanels) == len(objectives):
+            elif len(objectivePanels) >= len(objectives):
                 observedStatuses[index] = status
 
         if objectivePanels:
@@ -1104,7 +1096,7 @@ class QuestMixin:
                 if objectiveTextShowsIncompleteProgress(textChunk):
                     panel["status"] = "incomplete"
 
-                observeRow(i, completionText, panel["status"], y + h < screen.shape[0])
+                observeRow(i, completionText, panel["status"], bottomIsQuestEnd or y + h < screen.shape[0])
                 if panel["status"] == "complete":
                     completedObjectives.append(objectives[i])
                     color = (0, 255, 0)
@@ -1154,7 +1146,7 @@ class QuestMixin:
                         objectives[i] = "_".join(objectiveData)
 
                 if not objectiveTextShowsIncompleteProgress(textChunk) and re.search(r"\bcomplete(?:d)?\b", completionText, re.IGNORECASE):
-                    observeRow(i, completionText, "complete", y + h < screen.shape[0])
+                    observeRow(i, completionText, "complete", bottomIsQuestEnd or y + h < screen.shape[0])
                     completedObjectives.append(objectives[i])
                     color = (0, 255, 0)  #green
                 elif objectiveTextShowsIncompleteProgress(textChunk):
