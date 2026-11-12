@@ -74,30 +74,29 @@ class NavigationMixin:
             ):
                 self.location = "spawn"
                 return False
+            if is_stopped():
+                return False
             #HIVE HUB PATH
             self.enableShiftLock()
-            self.keyboard.keyDown("w")
-            time.sleep(6)
-            self.keyboard.keyUp("w")
-            self.keyboard.keyDown("d")
-            time.sleep(0.5)
-            self.keyboard.keyUp("d")
-            self.keyboard.keyDown("w")
-            time.sleep(1.25)
-            self.keyboard.keyUp("w")
-            self.keyboard.keyDown("a")
-            time.sleep(0.5)
-            self.keyboard.keyUp("a")
-            self.keyboard.press(".")
-            self.keyboard.press(".")
-            self.keyboard.press("O")
-            self.keyboard.press("O")
-            self.keyboard.press("O")
-            self.keyboard.press("O")
+            for key, seconds in (
+                ("w", 6),
+                ("d", 0.5),
+                ("w", 1.25),
+                ("a", 0.5),
+            ):
+                if is_stopped():
+                    return False
+                self.keyboard.press(key, seconds)
+            for key in (".", ".", "O", "O", "O", "O"):
+                if is_stopped():
+                    return False
+                self.keyboard.press(key)
             for key, seconds in hiveHubStartLocationOffsets[startLocation]:
-                self.keyboard.keyDown(key)
-                time.sleep(seconds)
-                self.keyboard.keyUp(key)
+                if is_stopped():
+                    return False
+                self.keyboard.press(key, seconds)
+            if is_stopped():
+                return False
             self.keyboard.press("shift")
             return True
         self.runPath(f"cannon_to_field/{normalized_field}")
@@ -294,8 +293,8 @@ class NavigationMixin:
         )
         return False
 
-    #use the accurate sleep and sleep for ms
+    #pause-aware movement hold for the given milliseconds
     def sleepMSMove(self, key, time):
-        self.keyboard.keyDown(key, False)
-        sleep(time/1000)
-        self.keyboard.keyUp(key, False)
+        if is_stopped():
+            return
+        self.keyboard.press(key, time/1000)
