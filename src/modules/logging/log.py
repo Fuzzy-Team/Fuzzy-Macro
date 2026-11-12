@@ -25,7 +25,7 @@ colors = {
     "brown": "D27D2D",
     "purple": "954cf5",
     "orange": "FFA500",
-    "white": "FFFFFF",
+    "pink": "FF8FAB",
     "yellow": "FFFF00",
 }
 

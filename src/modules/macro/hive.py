@@ -334,7 +334,7 @@ class HiveMixin:
             self.keyboard.releaseMovement()
 
             if AFB: 
-                self.logger.webhook("", f"AFB: Cooldown: {self.setdat['AFB_wait']} seconds", "brown")
+                self.logger.webhook("", f"AFB: Cooldown: {self.setdat['AFB_wait']} seconds", "dark brown")
                 time.sleep(self.setdat["AFB_wait"])
                 self.died = False
 

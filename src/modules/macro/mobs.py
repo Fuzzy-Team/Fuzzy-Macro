@@ -199,7 +199,7 @@ class MobMixin:
         while time.time() - st < 20:
            if self.blueTextHas("tokenlink"):
             time.sleep(0.5) 
-            self.logger.webhook("","Collected Token Link", "white", "blue")
+            self.logger.webhook("","Collected Token Link", "pink", "blue")
             break
         self.mobRunStatus = "done"
 
