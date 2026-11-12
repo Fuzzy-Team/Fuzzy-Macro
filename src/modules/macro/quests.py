@@ -1219,11 +1219,13 @@ class QuestMixin:
             xr = a[0] - (self.robloxWindow.mx + x)
             yr = a[1] - (self.robloxWindow.my + y) - 12
         else:
-            xr = 0
-            yr = 0
             if mustFindDialog:
                 return
             print("unable to locate dialog position")
+            # fast-mode OCR can misread the line completely ("Cllck to ccfitlrxjg"). The dialog box
+            # always sits at the same place, with that line at 83% of the window height, so aim there
+            xr = 0
+            yr = int(self.robloxWindow.mh * 0.83) - y - 12
 
         # Adaptive sample size based on window size (try both small and larger samples)
         sample_w = max(40, min(160, int(self.robloxWindow.mw * 0.06)))
