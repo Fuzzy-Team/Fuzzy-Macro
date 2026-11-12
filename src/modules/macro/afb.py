@@ -2,7 +2,7 @@ import re
 import threading
 import modules.misc.settingsManager as settingsManager
 import modules.screen.ocr as ocr
-from modules.controls.sleep import pause_aware_time as time
+from modules.controls.sleep import InterruptRequested, is_stopped, pause_aware_time as time
 from modules.macro.game_data import startLocationDimensions
 
 
@@ -63,36 +63,66 @@ class AFBMixin:
         if glitterslot == 0:
             try:
                 glitterCoords = self.findItemInInventory("glitter")
+            except InterruptRequested:
+                raise
             except Exception:
                 glitterCoords = None
+            if is_stopped():
+                return False
 
         if not self.travelViaCannon("Auto Field Boost"):
             return False
 
         if glitterslot == 0 and glitterCoords:
+            if is_stopped():
+                return False
             self.useItemInInventory(x=glitterCoords[0], y=glitterCoords[1], closeInventoryAfter=False)
+            if is_stopped():
+                return False
             self.goToField(targetField)
+            if is_stopped():
+                return False
             self.clickYes()
+            if is_stopped():
+                return False
             self.toggleInventory("close")
         elif glitterslot == 0:
             glitterThread = threading.Thread(target=self.useItemInInventory, args=("glitter",))
             fieldThread = threading.Thread(target=self.goToField, args=(targetField,))
             glitterThread.start()
             fieldThread.start()
+            # Plain joins: goToField and useItemInInventory take longer than a timeout and
+            # handle stop internally, so a short timeout would cut a normal run short.
             fieldThread.join()
             glitterThread.join()
+            if is_stopped():
+                return False
             self.clickYes()
+            if is_stopped():
+                return False
         else:
+            if is_stopped():
+                return False
             self.goToField(targetField)
+            if is_stopped():
+                return False
             time.sleep(0.5)
+            if is_stopped():
+                return False
             self.keyboard.press(str(glitterslot))
+            if is_stopped():
+                return False
 
+        if is_stopped():
+            return False
         self.logger.webhook("", "Rebuffed: Glitter", "pink")
         self.saveAFB("AFB_dice_cd")
         self.saveAFB("AFB_glitter_cd")
         self.AFBglitter = False
         self.cAFBglitter = False
         self.afb = False
+        if is_stopped():
+            return False
         self.reset()
 
     def _normalizeAFBText(self, text):
@@ -223,6 +253,8 @@ class AFBMixin:
 
         if self._AFBTimeLimitReached():
             return False
+        if is_stopped():
+            return failedExit()
 
         attempts = max(1, int(self.setdat.get("AFB_attempts", 10) or self.setdat.get("attempts", 10) or 10))
         targetFields = self._getAFBTargetFields()
@@ -256,6 +288,8 @@ class AFBMixin:
             self.failed = False
             if self.setdat["Auto_Field_Boost"]:
                 if self.AFBglitter and glitterReady:
+                    if is_stopped():
+                        return failedExit()
                     if self._AFBApplyGlitter(targetFields[0], glitterslot) is False:
                         return failedExit()
                     return targetFields
@@ -266,15 +300,21 @@ class AFBMixin:
                     for _ in range(2):
                         self.keyboard.press("i")
                     self.keyboard.press("pageup")
+                    if is_stopped():
+                        return failedExit()
 
                     if "loaded" in dice:
                         if not self.travelViaCannon("Auto Field Boost"):
+                            return failedExit()
+                        if is_stopped():
                             return failedExit()
                         self.goToField(targetFields[0])
 
                     diceCoords = None
                     if diceslot == 0:
                         diceCoords = self.findItemInInventory(self.setdat['AFB_dice'])
+                        if is_stopped():
+                            return failedExit()
 
                     for attempt in range(attempts):
                         bluetexts = ""
@@ -283,11 +323,15 @@ class AFBMixin:
                         if diceslot == 0:
                             if diceCoords:
                                 self.useItemInInventory(x=diceCoords[0], y=diceCoords[1], closeInventoryAfter=False)
+                                if is_stopped():
+                                    return failedExit()
                         else:
                             self.keyboard.press(str(diceslot))
 
                         timeout = 0
                         for _ in range(300):
+                            if is_stopped():
+                                return failedExit()
                             if self.blueTextHas("boosted"):
                                 time.sleep(2)
                                 break
@@ -301,6 +345,9 @@ class AFBMixin:
 
                         for _ in range(8):
                             bluetexts += ocr.readBlueText() + "\n"
+
+                        if is_stopped():
+                            return failedExit()
 
                         allCandidateFields = list(startLocationDimensions.keys())
                         detectedBoostedFields = self._extractAFBBoostedFields(bluetexts, allCandidateFields)
@@ -359,6 +406,8 @@ class AFBMixin:
                                     return targetFields
 
             if returnVal is None:
+                if is_stopped():
+                    return failedExit()
                 self.failed = True
                 self.keyboard.press("pagedown")
                 for _ in range(3):
