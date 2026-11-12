@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
-from modules.controls.sleep import InterruptRequested, pause_aware_time as time
+from modules.controls.sleep import InterruptRequested, is_stopped, pause_aware_time as time
 from modules.hive_acquisition import confirm_claim, DetectionAfterWalkError
 from modules.macro.game_data import resetKernel, resetLower1, resetLower2, resetUpper1, resetUpper2
 from modules.misc.imageManipulation import pillowToCv2
@@ -21,6 +21,21 @@ def formatHoney(n):
 def hiveRedMask(hsv):
     """Bright pure red, the claim arrows' heads. Hive faces are more orange (hue 4-7) and avatar parts are dimmer."""
     return cv2.inRange(hsv, np.array([0, 130, 200]), np.array([3, 255, 255]))
+
+
+def _restore_reset_state_on_interrupt(func):
+    """Restore reset state if an interrupt escapes before a normal reset return."""
+    def wrapper(self, *args, **kwargs):
+        try:
+            return func(self, *args, **kwargs)
+        except InterruptRequested:
+            self.canDetectNight = True
+            self.clear_task_status()
+            raise
+
+    wrapper.__name__ = func.__name__
+    wrapper.__doc__ = func.__doc__
+    return wrapper
 
 
 class HiveMixin:
@@ -161,15 +176,25 @@ class HiveMixin:
                 
                 behavior = self.setdat.get("convert_timeout_behavior", "move on").lower()
                 if behavior == "rejoin":
-                    self.rejoin(rejoinMsg=timeout_msg)
-                    # the rejoin left the hive and reset the camera, so skip the finish steps.
-                    # True stops callers from retrying the convert after the rejoin.
-                    self.clear_task_status()
-                    if liveGatherReport:
-                        liveGatherReport.stop()
-                    self.converting = False
-                    self.hourlyReport.addHourlyStat("converting_time", time.time()-st)
-                    return True
+                    rejoined = False
+                    try:
+                        rejoined = self.rejoin(rejoinMsg=timeout_msg)
+                    finally:
+                        # the rejoin left the hive and reset the camera, so skip the finish steps.
+                        self.clear_task_status()
+                        if liveGatherReport:
+                            liveGatherReport.stop()
+                        self.converting = False
+                        self.hourlyReport.addHourlyStat("converting_time", time.time()-st)
+                        if not rejoined or is_stopped():
+                            self.alreadyConverted = False
+                    # True stops callers from retrying the convert after a successful rejoin.
+                    if rejoined and not is_stopped():
+                        self.alreadyConverted = True
+                        if hasattr(self, "convertFailCount"):
+                            self.convertFailCount = 0
+                        return True
+                    return False
 
                 # Default behavior is "move on"
                 break
@@ -226,7 +251,15 @@ class HiveMixin:
         self.hourlyReport.addHourlyStat("converting_time", time.time()-st)
         return True
 
+    @_restore_reset_state_on_interrupt
     def reset(self, hiveCheck = False, convert = True, AFB = False, forced_convert_balloon = False):
+        def _finish_reset(result):
+            self.canDetectNight = True
+            self.clear_task_status()
+            return result
+
+        if is_stopped():
+            return _finish_reset(False)
         self.closeQuestMenu()
         self.alreadyConverted = False
         self.keyboard.releaseMovement()
@@ -239,6 +272,8 @@ class HiveMixin:
 
         #reset until player is at hive
         for i in range(5):
+            if is_stopped():
+                return _finish_reset(False)
             self.logger.webhook("", f"Resetting character, Attempt: {i+1}", "orange")
             #set mouse and execute hotkeys
             #mouse.teleport(self.robloxWindow.mw/(self.xsm*4.11)+40,(self.robloxWindow.mh/(9*self.ysm))+yOffset)
@@ -247,6 +282,8 @@ class HiveMixin:
             closeImg = self.adjustImage("./images/menu", "close") #sticker printer
             print(f"adjusted sticker printer image: {time.time()-st}")
             if locateImageOnScreen(closeImg, self.robloxWindow.mx+(self.robloxWindow.mw/4), self.robloxWindow.my+(100), self.robloxWindow.mw/4, self.robloxWindow.mh/3.5, 0.7):
+                if is_stopped():
+                    return _finish_reset(False)
                 self.keyboard.press("e")
             print(f"check sticker printer popup: {time.time()-st}")
             
@@ -289,6 +326,8 @@ class HiveMixin:
             y = self.robloxWindow.my+110
             res = locateImageOnScreen(stickerBookImg, x, y, 100, 80, 0.8)
             if res:
+                if is_stopped():
+                    return _finish_reset(False)
                 x2, y2 = res[1]
                 mouse.moveTo(x+x2, y+y2)
                 time.sleep(0.08)
@@ -298,6 +337,8 @@ class HiveMixin:
             print(f"checked sticker book popup: {time.time()-st}")
 
             # ensure movement is released immediately before pressing reset keys
+            if is_stopped():
+                return _finish_reset(False)
             self.keyboard.releaseMovement()
             time.sleep(0.15)
             for _ in range(2):
@@ -333,10 +374,16 @@ class HiveMixin:
             print(f"respawn complete: {time.time()-st}")
             self.keyboard.releaseMovement()
 
+            if is_stopped():
+                return _finish_reset(False)
+
             if AFB: 
                 self.logger.webhook("", f"AFB: Cooldown: {self.setdat['AFB_wait']} seconds", "dark brown")
                 time.sleep(self.setdat["AFB_wait"])
                 self.died = False
+
+            if is_stopped():
+                return _finish_reset(False)
 
             if self.robloxWindow.contentYOffset == 0:
                 self.robloxWindow.setRobloxWindowBounds()
@@ -347,35 +394,48 @@ class HiveMixin:
             atHive = self.spinToFaceHive()
 
             self.keyboard.releaseMovement()
+            if is_stopped():
+                return _finish_reset(False)
             for _ in range(8):
+                if is_stopped():
+                    return _finish_reset(False)
                 self.keyboard.press("o")
             if atHive:
                 self.cannonFromHive = True
                 result = True
                 if convert:
+                    if is_stopped():
+                        return _finish_reset(False)
                     result = bool(self.convert(forced_convert_balloon=forced_convert_balloon))
                 self.keyboard.releaseMovement()
-                return result
+                return _finish_reset(result)
             else:
                 self.keyboard.walk("w", 5)
                 result = True
                 if convert:
+                    if is_stopped():
+                        return _finish_reset(False)
                     self.cannonFromHive = True
                     self.keyboard.walk("s", 0.55)
                     if self.setdat["hive_number"] < 3:
                         dir = "d"
                     else:
                         dir = "a"
+                    if is_stopped():
+                        return _finish_reset(False)
                     self.walkHiveSlots(dir, abs(self.setdat["hive_number"]-3))
+                    if is_stopped():
+                        return _finish_reset(False)
                     result = bool(self.convert(forced_convert_balloon=forced_convert_balloon))
                 else:
                     self.keyboard.walk("s", 0.15)
                     self.cannonFromHive = False
             self.keyboard.releaseMovement()
-            return result
+            return _finish_reset(result)
         
         else:
             self.logger.webhook("", "Unable to detect that player respawned at hive", "orange", "screen")
+            return _finish_reset(False)
 
     def spinToFaceHive(self):
         """Spin the camera up to 4 times until the hive's respawn pad or balloon shows at the bottom of the screen."""
