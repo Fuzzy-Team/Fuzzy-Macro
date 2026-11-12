@@ -7,7 +7,7 @@ import modules.misc.appManager as appManager
 import modules.misc.settingsManager as settingsManager
 import modules.screen.ocr as ocr
 from modules.controls.keyboard import keyboard
-from modules.controls.sleep import InterruptRequested, pause_aware_time as time
+from modules.controls.sleep import InterruptRequested, is_stopped, paused_seconds, pause_aware_time as time
 from modules.hive_acquisition import acquire_hive
 from modules.macro.game_data import (
     MAIN_GAME_PLACE_ID,
@@ -188,10 +188,22 @@ class RejoinMixin:
         self.set_task_status("rejoining", activity="rejoining")
         mouse.mouseUp()
         keyboard.releaseMovement()
+
+        def _finish_rejoin(result):
+            # Every exit path restores the rejoin-owned state, so a stopped or
+            # failed rejoin cannot leave night detection disabled.
+            if self.skipServer is not None:
+                self.skipServer.value = 0
+            self.canDetectNight = True
+            self.clear_task_status()
+            return result
+
         if not nightOnly and appManager.isAppOpen("roblox"):
             self.logger.webhook("", "Closing Roblox before rejoining", "dark brown")
             appManager.closeApp("Roblox")
             time.sleep(3)
+            if is_stopped():
+                return _finish_rejoin(False)
 
         # Retry each configured private server in failover order, then use a
         # public server. Skipping one link invalidates only that link, allowing
@@ -202,6 +214,8 @@ class RejoinMixin:
         invalidServerLinks = set()
         launchedAttempts = 0
         for i, (serverKey, psLink) in enumerate(attempts):
+            if is_stopped():
+                return _finish_rejoin(False)
             joinPS = bool(psLink)
             if joinPS and psLink in invalidServerLinks:
                 continue
@@ -261,7 +275,7 @@ class RejoinMixin:
             # see it disappear (loading) before the post-rejoin appearance counts.
             sawSprinklerGap = not clientAlreadyOpen
             softRejoinReadyAt = loadStartTime + (2 if clientAlreadyOpen else 0)
-            while time.time() - loadStartTime < 36:
+            while not is_stopped() and time.time() - loadStartTime < 36:
                 if joinPS and self.skipServer is not None and self.skipServer.value == 1:
                     self.skipServer.value = 0
                     invalidServerLinks.add(psLink)
@@ -313,12 +327,11 @@ class RejoinMixin:
                         if action == "abort":
                             if nightOnly and self.run is not None:
                                 self.run.value = 0
-                            if self.skipServer is not None:
-                                self.skipServer.value = 0
-                            self.clear_task_status()
-                            return False
+                            return _finish_rejoin(False)
                         if action == "cooldown":
                             time.sleep(30)
+                            if is_stopped():
+                                return _finish_rejoin(False)
                         rejoinSuccess = False
                         break
                 sprinklerVisible = bool(locateImageOnScreen(
@@ -382,10 +395,27 @@ class RejoinMixin:
                         sustained_start = 0
                 except Exception:
                     sustained_start = 0
+                pausedBefore = paused_seconds()
                 time.sleep(1)
+                pausedFor = paused_seconds() - pausedBefore
+                if pausedFor > 0:
+                    # Pause time must not count toward the load timeout, the
+                    # join-error delay or the sustained-color timer.
+                    loadStartTime += pausedFor
+                    joinErrorScanAfter += pausedFor
+                    softRejoinReadyAt += pausedFor
+                    if robloxOpenTime:
+                        robloxOpenTime += pausedFor
+                    if lastJoinErrorScan:
+                        lastJoinErrorScan += pausedFor
+                    if sustained_start:
+                        sustained_start += pausedFor
 
             if self.skipServer is not None:
                 self.skipServer.value = 0
+
+            if is_stopped():
+                return _finish_rejoin(False)
 
             if not gameLoaded and rejoinSuccess:
                 self.logger.webhook(
@@ -408,24 +438,22 @@ class RejoinMixin:
             if nightOnly:
                 self.recordVicStat("servers")
                 if self.checkPauseAndWait():
-                    self.clear_task_status()
-                    return False
+                    return _finish_rejoin(False)
                 if not self.viciousSkyIsNight():
                     self.logger.webhook("Vic Hop", "Daytime, moving to the next server", "dark brown", "screen")
-                    self.clear_task_status()
-                    return False
+                    return _finish_rejoin(False)
                 self.recordVicStat("nights")
                 self.logger.webhook("Vic Hop", "Night detected, claiming a hive", "dark brown", "screen")
             if not claimHive:
                 mouse.click()
-                self.canDetectNight = True
-                self.clear_task_status()
-                return True
+                return _finish_rejoin(True)
             # Every successful join lands at spawn. Always walk the hive route
             # from there — do not treat the player as already on a hive pad.
             self.location = "spawn"
             mouse.click()
             time.sleep(0.35)
+            if is_stopped():
+                return _finish_rejoin(False)
             self.setRobloxWindowInfo()
             preferredHiveSlot = self.setdat.get("preferred_hive_slot", 1)
             try:
@@ -462,28 +490,28 @@ class RejoinMixin:
 
             if not newHiveNumber:
                 if reason == "stopped":
-                    self.clear_task_status()
-                    return False
+                    return _finish_rejoin(False)
                 self.logger.webhook("", f"Failed to claim hive ({reason}); retrying rejoin", "dark brown", "screen")
                 continue
 
             self.logger.webhook("", f"Claimed hive {newHiveNumber}", "bright green", "screen", ping_category="ping_critical_errors")
             self.setdat["hive_number"] = newHiveNumber
             settingsManager.saveGeneralSetting("hive_number", newHiveNumber)
+            if is_stopped():
+                return _finish_rejoin(False)
             for _ in range(8):
                 self.keyboard.press("o")
             self.moveMouseToDefault()
             time.sleep(1)
+            if is_stopped():
+                return _finish_rejoin(False)
             if nightOnly:
                 # Start the reference field route at the hive, without running
                 # conversion's normal-mode night tasks before the hop callback.
                 if not self.reset(convert=False):
-                    return False
+                    return _finish_rejoin(False)
             else:
                 self.convert(bypass=True)
             self.cannonFromHive = True
-            self.canDetectNight = True
-            self.clear_task_status()
-            return True
-        self.clear_task_status()
-        return False
+            return _finish_rejoin(True)
+        return _finish_rejoin(False)
