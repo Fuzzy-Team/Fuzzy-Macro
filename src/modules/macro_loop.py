@@ -15,6 +15,7 @@ from modules.controls.sleep import (
     INTERRUPT_FIND_ITEM,
     HANG_FILE,
     is_paused,
+    is_stopped,
     paused_seconds,
     start_hang_watchdog,
 )
@@ -291,12 +292,12 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                     macro.markQuestTaskWatchCompleted(questWatchContext)
                 questWatchContext = None
             #task done
-            if resetAfter: 
+            if not is_stopped() and resetAfter:
                 macro.reset(convert=convertAfter)
             
             #do priority tasks
             # Quest and Alt modes stay isolated from priority tasks.
-            if (
+            if not is_stopped() and (
                 macro.setdat.get("macro_mode", "normal") not in ("quest", "alt", "vic")
                 and macro.setdat["stinger_hunt"]
                 and ((getattr(macro, "_viciousAttackTarget", None)
@@ -306,7 +307,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 macro.closeQuestMenu()
                 macro.stingerHunt()
                 taskCompleted = True
-            if (
+            if not is_stopped() and (
                 macro.setdat.get("macro_mode", "normal") not in ("quest", "alt", "vic")
                 and macro.setdat["mondo_buff"]
                 and macro.hasMondoRespawned()
@@ -314,13 +315,13 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 macro.closeQuestMenu()
                 macro.collectMondoBuff()
                 taskCompleted = True
-            if macro.setdat.get("macro_mode", "normal") not in ("alt", "vic") and macro.hasScheduledRejoinArrived():
+            if not is_stopped() and macro.setdat.get("macro_mode", "normal") not in ("alt", "vic") and macro.hasScheduledRejoinArrived():
                 if macro.rejoin("Rejoining (Scheduled)"):
                     macro.saveTiming("rejoin_every")
                 taskCompleted = True
             
             #auto field boost (can be disabled per-call via allowAFB)
-            if allowAFB and macro.setdat["Auto_Field_Boost"] and not macro.AFBLIMIT:
+            if not is_stopped() and allowAFB and macro.setdat["Auto_Field_Boost"] and not macro.AFBLIMIT:
                 if macro.hasAFBRespawned("AFB_dice_cd", macro.setdat["AFB_rebuff"]*60) or macro.hasAFBRespawned("AFB_glitter_cd", macro.setdat["AFB_rebuff"]*60-30):
                     macro.AFB(gatherInterrupt=False)
                     taskCompleted = True
