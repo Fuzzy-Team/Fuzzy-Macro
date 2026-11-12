@@ -2,7 +2,7 @@ import threading
 import traceback
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
-from modules.controls.sleep import INTERRUPT_NONE, InterruptRequested, pause_aware_time as time, sleep
+from modules.controls.sleep import INTERRUPT_NONE, InterruptRequested, is_stopped, pause_aware_time as time, paused_seconds, sleep
 from modules.gather_session import pattern_supports_field, field_pattern_variables, GatherPatternRunner, GatherSession
 from modules.quest_planning import quest_check_due
 import modules.macro.pattern_environment as patternEnvironment
@@ -26,19 +26,46 @@ class GatherMixin:
         }
         sprinklerSlot = str(self.setdat['sprinkler_slot'])
         times = sprinklerCount[self.setdat["sprinkler_type"]]
+        if is_stopped():
+            return False
         #place one sprinkler and check if its in field
         self.keyboard.press(sprinklerSlot)
         time.sleep(1)
+        if is_stopped():
+            return False
         if self.blueTextHas("notinfield"):
             return False
         #place the remaining sprinklers
         #hold jump and spam place sprinklers
         if times > 1:
-            self.keyboard.keyDown("space")
-            st = time.time()
-            while time.time() - st < times*2:
-                self.keyboard.press(sprinklerSlot)
-            self.keyboard.keyUp("space")
+            if is_stopped():
+                return False
+            try:
+                self.keyboard.keyDown("space")
+                st = time.time()
+                while time.time() - st < times*2:
+                    pausedBefore = paused_seconds()
+                    checkStart = time.time()
+                    if self.checkPauseAndWait():
+                        return False
+                    if paused_seconds() > pausedBefore:
+                        st += time.time() - checkStart
+                        if time.time() - st >= times*2:
+                            break
+                        if is_stopped():
+                            return False
+                        self.keyboard.keyDown("space")
+                    pausedBefore = paused_seconds()
+                    pressStart = time.time()
+                    self.keyboard.press(sprinklerSlot)
+                    if paused_seconds() > pausedBefore:
+                        st += time.time() - pressStart
+                    if is_stopped():
+                        return False
+            finally:
+                self.keyboard.keyUp("space")
+        if is_stopped():
+            return False
         return True
 
     def waitForBees(self):
@@ -184,7 +211,11 @@ class GatherMixin:
             self.logger.webhook("Sprouts", f"Planting next sprout from current position in {field.title()}", "light blue", "screen", route_category="activities")
         else:
             for i in range(3):
+                if is_stopped():
+                    return
                 self.waitForBees()
+                if is_stopped():
+                    return
                 #go to field
                 try:
                     self.set_task_status(f"travelling_{field}", activity="travelling", field=field)
@@ -218,12 +249,18 @@ class GatherMixin:
 
                 time.sleep(0.4)
                 #place sprinkler + check if in field
+                if is_stopped():
+                    return
                 if self.placeSprinkler():
                     landedInField = True
                     break
+                if is_stopped():
+                    return
                 self.logger.webhook("", "Failed to land in field", "red", "screen", ping_category="ping_critical_errors")
                 self.reset()
         if not landedInField: #failed too many times
+            return
+        if is_stopped():
             return
         # the AI warmup may already have switched to the fallback pattern
         pattern = patternRunner.active_pattern
@@ -829,37 +866,74 @@ class GatherMixin:
                 self.runPath(f"field_to_hive/{field}")
             #find hive and convert
             #self.keyboard.walk("a", (self.setdat["hive_number"]-1)*0.8)
-            self.keyboard.keyDown("a")
-            st = time.time()
             self.canDetectNight = True
-            while time.time()-st < 10:
-                #goo timer continues via background thread during hive search
-                if self.isMakeHoneyPrompt():
-                    break
-            self.keyboard.keyUp("a")
+            if is_stopped():
+                return False
+            try:
+                self.keyboard.keyDown("a")
+                st = time.time()
+                while time.time()-st < 10:
+                    #goo timer continues via background thread during hive search
+                    pausedBefore = paused_seconds()
+                    checkStart = time.time()
+                    if self.checkPauseAndWait():
+                        return False
+                    wasPaused = paused_seconds() > pausedBefore
+                    if wasPaused:
+                        st += time.time() - checkStart
+                    if self.isMakeHoneyPrompt():
+                        break
+                    if time.time() - st >= 10:
+                        break
+                    if wasPaused:
+                        if is_stopped():
+                            break
+                        self.keyboard.keyDown("a")
+            finally:
+                self.keyboard.keyUp("a")
             #in case we overrun
             time.sleep(0.4)
+            if is_stopped():
+                return False
             if self.isMakeHoneyPrompt():
+                if is_stopped():
+                    return False
                 if not convertAtHive:
                     return True
             elif not convertAtHive:
+                if is_stopped():
+                    return False
                 self.logger.webhook("","Can't find hive, resetting", "dark brown", "screen")
                 self.reset()
                 return False
 
             for _ in range(7):
+                if is_stopped():
+                    return False
                 #goo timer continues via background thread during conversion attempts
-                if self.convert(forced_convert_balloon=(str(self.setdat.get("convert_balloon","")).lower().replace(" ","_")=="every_gather")):
+                converted = self.convert(forced_convert_balloon=(str(self.setdat.get("convert_balloon","")).lower().replace(" ","_")=="every_gather"))
+                if is_stopped():
+                    return False
+                if converted:
                     return True
+                if is_stopped():
+                    return False
                 self.keyboard.walk("d",0.1)
                 time.sleep(0.2) #add a delay so that the E can popup
             else:
+                if is_stopped():
+                    return False
                 # If configured, attempt to use a whirligig before resetting
                 if fieldSetting.get("use_whirlwig_fallback", False):
                     self.logger.webhook("","Can't find hive, attempting whirligig fallback", "dark brown", "screen")
                     self.useItemInInventory("whirligig")
                     time.sleep(1)
-                    if not self.convert(forced_convert_balloon=(str(self.setdat.get("convert_balloon","")).lower().replace(" ","_")=="every_gather")):
+                    if is_stopped():
+                        return False
+                    converted = self.convert(forced_convert_balloon=(str(self.setdat.get("convert_balloon","")).lower().replace(" ","_")=="every_gather"))
+                    if is_stopped():
+                        return False
+                    if not converted:
                         self.logger.webhook("","Whirligig fallback failed, resetting", "dark brown", "screen")
                         self.reset()
                     else:
