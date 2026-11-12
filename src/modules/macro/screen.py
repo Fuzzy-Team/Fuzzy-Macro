@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import modules.controls.mouse as mouse
 import modules.screen.ocr as ocr
-from modules.controls.sleep import pause_aware_time as time
+from modules.controls.sleep import is_stopped, pause_aware_time as time
 from modules.macro.game_data import cyrillicToLatin
 from modules.misc.imageManipulation import adjustImage
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP
@@ -154,11 +154,20 @@ class ScreenMixin:
         return self._clickYesAt(x + (bx + bw // 2) // self.robloxWindow.multi, y + (by + bh // 2) // self.robloxWindow.multi, clickOnce)
 
     def _clickYesAt(self, x, y, clickOnce=False):
+        # Standalone commands have no run to stop, so only honor stop during a macro run
+        if self.run is not None and is_stopped():
+            return False
         mouse.moveTo(x, y)
         time.sleep(0.2)
+        if self.run is not None and is_stopped():
+            return False
         mouse.moveBy(2, 2)
         time.sleep(0.1)
+        if self.run is not None and is_stopped():
+            return False
         for _ in range(1 if clickOnce else 2):
+            if self.run is not None and is_stopped():
+                return False
             mouse.click()
         return True
 
@@ -166,6 +175,8 @@ class ScreenMixin:
         x = self.robloxWindow.mx+self.robloxWindow.mw//2-270
         y = self.robloxWindow.my+self.robloxWindow.mh//2-60
         time.sleep(0.4)
+        if self.run is not None and is_stopped():
+            return False
         pos = self.findText("yes", x, y, 580, 265, exact=True)
         # Yes is always left of center in this search region — reject right-side hits.
         if pos is None or pos[0] - x > 580 // 2:
