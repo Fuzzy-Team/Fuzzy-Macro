@@ -157,7 +157,7 @@ class HiveMixin:
             max_convert_time = self.setdat.get("max_convert_time", 5)
             if time.time()-st > max_convert_time*60:
                 timeout_msg = f"Converting timeout ({max_convert_time}mins max)"
-                self.logger.webhook("", timeout_msg, "brown", "screen")
+                self.logger.webhook("", timeout_msg, "orange", "screen")
                 
                 behavior = self.setdat.get("convert_timeout_behavior", "move on").lower()
                 if behavior == "rejoin":
@@ -192,7 +192,7 @@ class HiveMixin:
                     self.afb = True
                     self.stop = True
                     self.cAFBglitter = True
-                    self.logger.webhook("Converting: interrupted","AFB", "brown")
+                    self.logger.webhook("Converting: interrupted","AFB", "orange")
                     time.sleep(1)
                     self.AFB()
                     self.AFBglitter = False
@@ -239,7 +239,7 @@ class HiveMixin:
 
         #reset until player is at hive
         for i in range(5):
-            self.logger.webhook("", f"Resetting character, Attempt: {i+1}", "dark brown")
+            self.logger.webhook("", f"Resetting character, Attempt: {i+1}", "orange")
             #set mouse and execute hotkeys
             #mouse.teleport(self.robloxWindow.mw/(self.xsm*4.11)+40,(self.robloxWindow.mh/(9*self.ysm))+yOffset)
             self.canDetectNight = False
@@ -334,7 +334,7 @@ class HiveMixin:
             self.keyboard.releaseMovement()
 
             if AFB: 
-                self.logger.webhook("", f"AFB: Cooldown: {self.setdat['AFB_wait']} seconds", "brown")
+                self.logger.webhook("", f"AFB: Cooldown: {self.setdat['AFB_wait']} seconds", "dark brown")
                 time.sleep(self.setdat["AFB_wait"])
                 self.died = False
 
@@ -375,7 +375,7 @@ class HiveMixin:
             return result
         
         else:
-            self.logger.webhook("", "Unable to detect that player respawned at hive", "dark brown", "screen")
+            self.logger.webhook("", "Unable to detect that player respawned at hive", "orange", "screen")
 
     def spinToFaceHive(self):
         """Spin the camera up to 4 times until the hive's respawn pad or balloon shows at the bottom of the screen."""
@@ -554,7 +554,7 @@ class HiveMixin:
             if self.claimHivePromptVisible():
                 self.keyboard.keyUp("a", False)
                 self.keyboard.keyUp("d", False)
-                self.logger.webhook("", f"Hive {slot} detected as available", "dark brown")
+                self.logger.webhook("", f"Hive {slot} detected as available", "light green")
                 claimed = self.tryClaimHiveSlot(
                     slot, excluded_slots, prompt_confirmed=True
                 )
@@ -613,7 +613,7 @@ class HiveMixin:
         """Walk spawn → preferred hive, claim it, or scan neighboring pads if taken."""
         excluded_slots = set(excluded_slots or set())
         preferred_slot = max(1, min(6, int(preferred_slot)))
-        self.logger.webhook("", f"Walking spawn → hive {preferred_slot} (check)", "dark brown")
+        self.logger.webhook("", f"Walking spawn → hive {preferred_slot} (check)", "light blue")
         self.spinToFaceHive()
         self.walkSpawnToHiveSlot(preferred_slot)
         prompt = self.waitForHivePrompt(preferred_slot, max_attempts=3)
@@ -631,7 +631,7 @@ class HiveMixin:
             preferred_slot, excluded_slots, prompt_confirmed=(prompt == "claim")
         )
         if claimed:
-            self.logger.webhook("", f"Hive {claimed} detected as available", "dark brown")
+            self.logger.webhook("", f"Hive {claimed} detected as available", "light green")
             self.walkStuds("s", 4)
             return claimed
 
@@ -750,9 +750,9 @@ class HiveMixin:
                     "dark brown",
                 )
                 for slot in available:
-                    self.logger.webhook("", f"Hive {slot} detected as available", "dark brown")
+                    self.logger.webhook("", f"Hive {slot} detected as available", "light green")
             else:
-                self.logger.webhook("", "no open hives were detected from spawn", "dark brown")
+                self.logger.webhook("", "no open hives were detected from spawn", "orange")
 
             target = self.chooseDetectedHiveSlot(available, preferred_slot, excluded_slots)
         except BaseException:
@@ -788,9 +788,9 @@ class HiveMixin:
                 # First pick was wrong/occupied — try other spawn-detected pads before a full scan.
                 failed = {target}
                 if self.occupiedHivePromptVisible():
-                    self.logger.webhook("", f"Hive {target} occupied after walk", "dark brown")
+                    self.logger.webhook("", f"Hive {target} occupied after walk", "orange")
                 else:
-                    self.logger.webhook("", f"Hive {target} prompt missing after walk", "dark brown")
+                    self.logger.webhook("", f"Hive {target} prompt missing after walk", "orange")
 
                 current = target
                 while True:
@@ -819,7 +819,7 @@ class HiveMixin:
             except Exception as exc:
                 raise DetectionAfterWalkError(exc) from exc
 
-        self.logger.webhook("", "Spawn detection found no claimable hive", "dark brown")
+        self.logger.webhook("", "Spawn detection found no claimable hive", "red")
         self.setCameraPitch(0, pitch)
         self.setCameraZoom(0, zoom)
         return None  # still at spawn: Hive Acquisition falls back to checking slots
@@ -852,7 +852,7 @@ class HiveMixin:
                 break
             self.stepBackOntoHivePad()
         else:
-            self.logger.webhook("", "Could not find hive prompts while rechecking hive slot", "dark brown", "screen")
+            self.logger.webhook("", "Could not find hive prompts while rechecking hive slot", "orange", "screen")
             return False
 
         hiveNumber = 0
@@ -864,7 +864,7 @@ class HiveMixin:
                 break
 
         if hiveNumber == 0:
-            self.logger.webhook("", "Could not find Make Honey while rechecking hive slot", "dark brown", "screen")
+            self.logger.webhook("", "Could not find Make Honey while rechecking hive slot", "orange", "screen")
             return False
 
         self.setdat["hive_number"] = hiveNumber

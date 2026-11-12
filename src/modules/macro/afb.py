@@ -55,7 +55,7 @@ class AFBMixin:
         return time.time() - timing >= cooldown*mobRespawnBonus
 
     def _AFBApplyGlitter(self, targetField, glitterslot):
-        self.logger.webhook("", "Rebuffing: Glitter", "white")
+        self.logger.webhook("", "Rebuffing: Glitter", "pink")
 
         # slot 0 finds Glitter in the inventory. AFB always ends the gather before this, so it
         # never opens the inventory mid-pattern.
@@ -87,7 +87,7 @@ class AFBMixin:
             time.sleep(0.5)
             self.keyboard.press(str(glitterslot))
 
-        self.logger.webhook("", "Rebuffed: Glitter", "white")
+        self.logger.webhook("", "Rebuffed: Glitter", "pink")
         self.saveAFB("AFB_dice_cd")
         self.saveAFB("AFB_glitter_cd")
         self.AFBglitter = False
@@ -245,7 +245,7 @@ class AFBMixin:
                 self.afb = True
                 if turnOffShiftLock:
                     self.disableShiftLock()
-                self.logger.webhook("Gathering: interrupted", "Automatic Field Boost", "brown")
+                self.logger.webhook("Gathering: interrupted", "Automatic Field Boost", "orange")
                 if self.AFBglitter:
                     self.reset(convert=False)
                 else:
@@ -262,7 +262,7 @@ class AFBMixin:
 
                 if self.cAFBDice or (diceReady and not self.AFBglitter):
                     self.cAFBDice = False
-                    self.logger.webhook("", "Auto Field Boost", "white")
+                    self.logger.webhook("", "Auto Field Boost", "pink")
                     for _ in range(2):
                         self.keyboard.press("i")
                     self.keyboard.press("pageup")
@@ -278,7 +278,7 @@ class AFBMixin:
 
                     for attempt in range(attempts):
                         bluetexts = ""
-                        self.logger.webhook("", f"{str(dice).title()}, Attempt: {attempt+1}/{attempts}", "white")
+                        self.logger.webhook("", f"{str(dice).title()}, Attempt: {attempt+1}/{attempts}", "pink")
 
                         if diceslot == 0:
                             if diceCoords:
@@ -293,7 +293,7 @@ class AFBMixin:
                                 break
                             timeout += 1
                             if timeout == 300:
-                                self.logger.webhook("", "Auto Field Boost: Timeout", "white")
+                                self.logger.webhook("", "Auto Field Boost: Timeout", "pink")
                                 self.toggleInventory("close")
                                 self.saveAFB("AFB_dice_cd")
                                 self.AFBglitter = False
@@ -309,7 +309,7 @@ class AFBMixin:
                         self.logger.webhook(
                             "",
                             f"{str(dice).title()}, Attempt: {attempt+1}/{attempts} - Detected: {detectedBoostText}",
-                            "white"
+                            "pink"
                         )
 
                         if "field" in dice:

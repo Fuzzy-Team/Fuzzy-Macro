@@ -224,7 +224,7 @@ class GatherMixin:
                 if not isHiveHubField:
                     if not self.travelViaCannon("Gathering", resetIfAway=False):
                         return
-                self.logger.webhook("",f"Travelling: {field.title()}, Attempt {i+1}", "dark brown")
+                self.logger.webhook("",f"Travelling: {field.title()}, Attempt {i+1}", "light blue")
                 if not self.goToField(
                     field,
                     startLocation=fieldSetting.get("start_location", "center"),
@@ -720,7 +720,7 @@ class GatherMixin:
                 ):
                     #rely on task function in main to execute the stinger hunt
                     stopGather()
-                    self.logger.webhook("Gathering: interrupted","Stinger Hunt","dark brown")
+                    self.logger.webhook("Gathering: interrupted","Stinger Hunt","orange")
                     self.reset(convert=False)
                     break
                 elif (
@@ -730,7 +730,7 @@ class GatherMixin:
                     and self.setdat["mondo_buff_interrupt_gathering"]
                 ):
                     stopGather()
-                    self.logger.webhook("Gathering: interrupted","Mondo Buff","dark brown")
+                    self.logger.webhook("Gathering: interrupted","Mondo Buff","orange")
                     self.reset(convert=False)
                     self.collectMondoBuff()
                     break
@@ -741,7 +741,7 @@ class GatherMixin:
                     and self.hasStickerStackRespawned()
                 ):
                     stopGather()
-                    self.logger.webhook("Gathering: interrupted", "Sticker Stack", "dark brown")
+                    self.logger.webhook("Gathering: interrupted", "Sticker Stack", "orange")
                     self.reset(convert=False)
                     self.collect("sticker_stack")
                     break
@@ -762,7 +762,7 @@ class GatherMixin:
                     if respawnedQuestMobs:
                         stopGather()
                         mobNames = ", ".join(sorted({mob.replace("_", " ").title() for mob, _ in respawnedQuestMobs}))
-                        self.logger.webhook("Gathering: interrupted", f"Quest mobs ready: {mobNames}", "dark brown")
+                        self.logger.webhook("Gathering: interrupted", f"Quest mobs ready: {mobNames}", "orange")
                         self.reset(convert=False)
                         for mob, mobField in respawnedQuestMobs:
                             # Recheck because another field run can update shared mob timings.
@@ -772,7 +772,7 @@ class GatherMixin:
                 if self.died:
                     self.clear_task_status()
                     stopGather()
-                    self.logger.webhook("","Player died", "dark brown","screen", ping_category="ping_character_deaths")
+                    self.logger.webhook("","Player died", "red","screen", ping_category="ping_character_deaths")
                     time.sleep(0.4)
                     self.reset()
                     break
@@ -859,7 +859,7 @@ class GatherMixin:
                 self.set_task_status("travelling_hive", activity="travelling", field="hive")
             except Exception:
                 pass
-            self.logger.webhook("",f"Walking back to hive: {field.title()}", "dark brown")
+            self.logger.webhook("",f"Walking back to hive: {field.title()}", "light blue")
             if field == "pine tree" and self.setdat.get("pine_tree_fast_return", False):
                 self.runPath("field_to_hive/pine tree fast")
             else:
@@ -903,7 +903,7 @@ class GatherMixin:
             elif not convertAtHive:
                 if is_stopped():
                     return False
-                self.logger.webhook("","Can't find hive, resetting", "dark brown", "screen")
+                self.logger.webhook("","Can't find hive, resetting", "orange", "screen")
                 self.reset()
                 return False
 
@@ -925,7 +925,7 @@ class GatherMixin:
                     return False
                 # If configured, attempt to use a whirligig before resetting
                 if fieldSetting.get("use_whirlwig_fallback", False):
-                    self.logger.webhook("","Can't find hive, attempting whirligig fallback", "dark brown", "screen")
+                    self.logger.webhook("","Can't find hive, attempting whirligig fallback", "orange", "screen")
                     self.useItemInInventory("whirligig")
                     time.sleep(1)
                     if is_stopped():
@@ -934,13 +934,13 @@ class GatherMixin:
                     if is_stopped():
                         return False
                     if not converted:
-                        self.logger.webhook("","Whirligig fallback failed, resetting", "dark brown", "screen")
+                        self.logger.webhook("","Whirligig fallback failed, resetting", "orange", "screen")
                         self.reset()
                     else:
                         # whirligig succeeded — perform non-converting reset behavior
                         self.reset(convert=False)
                 else:
-                    self.logger.webhook("","Can't find hive, resetting", "dark brown", "screen")
+                    self.logger.webhook("","Can't find hive, resetting", "orange", "screen")
                     self.reset()
                 return False
             return True
@@ -964,7 +964,7 @@ class GatherMixin:
             self.useItemInInventory("whirligig")
             time.sleep(1)
             if not self.convert(forced_convert_balloon=(str(self.setdat.get("convert_balloon","")).lower().replace(" ","_")=="every_gather")):
-                self.logger.webhook("","Whirligigs failed, walking to hive", "dark brown", "screen")
+                self.logger.webhook("","Whirligigs failed, walking to hive", "orange", "screen")
                 walkToHive()
                 gooTimerActive = False
                 return

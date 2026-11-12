@@ -460,7 +460,7 @@ class macro(
                 self.setRobloxWindowInfo()
     
         if not benchmarkMSS():
-            self.logger.webhook("", "MSS is too slow, switching to pillow", "dark brown")
+            self.logger.webhook("", "MSS is too slow, switching to pillow", "orange")
         
         if not vicHop and (not self.hourlyReport.hourlyReportStats["start_time"] or not self.hourlyReport.hourlyReportStats["start_honey"]):
             self.hourlyReport.setSessionStats(self.getHoney(), time.time())

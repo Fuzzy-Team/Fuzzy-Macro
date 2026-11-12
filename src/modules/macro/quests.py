@@ -699,7 +699,7 @@ class QuestMixin:
                 else:
                     questTitle, _ = fuzzywuzzy.process.extractOne(questTitleRaw, quest_data[questGiver].keys())
                 if logDetection:
-                    self.logger.webhook("", f"Quest Title: {questTitle}", "dark brown")
+                    self.logger.webhook("", f"Quest Title: {questTitle}", "light blue")
                 break
 
             res = None
@@ -732,7 +732,7 @@ class QuestMixin:
                     else:
                         questTitle, _ = fuzzywuzzy.process.extractOne(text, quest_data[questGiver].keys())
                     if logDetection:
-                        self.logger.webhook("", f"Quest Title: {questTitle}", "dark brown")
+                        self.logger.webhook("", f"Quest Title: {questTitle}", "light blue")
                     break
                 
             if manageQuestUi and positioned:
@@ -751,7 +751,7 @@ class QuestMixin:
 
         if questTitle is None:
             if logDetection:
-                self.logger.webhook("", f"Could not find {questGiver} quest", "dark brown")
+                self.logger.webhook("", f"Could not find {questGiver} quest", "orange")
             if manageQuestUi:
                 self.toggleQuest()
                 self.moveMouseToDefault()
@@ -1191,20 +1191,20 @@ class QuestMixin:
         for _ in range(3):
             if not self.travelViaCannon(questGiver.title()):
                 return False
-            self.logger.webhook("",f"Travelling: {questGiver} ({reason}) ","brown")
+            self.logger.webhook("",f"Travelling: {questGiver} ({reason}) ","light blue")
             self.runPath(f"quests/{questGiver}")
             self.location = "quest"
             time.sleep(0.5)
 
             #check if player reached the quest giver
             if self.isBesideE(["talk"] + questGiver.lower().split(" "), log=True):
-                self.logger.webhook("",f"Reached {questGiver}","brown", "screen")
+                self.logger.webhook("",f"Reached {questGiver}","light green", "screen")
                 self.keyboard.press("e")
                 sleep(0.2)
                 self.keyboard.press("e")
                 return True
             else:
-                self.logger.webhook("",f"Failed to reach {questGiver}","brown", "screen")
+                self.logger.webhook("",f"Failed to reach {questGiver}","orange", "screen")
                 self.reset()
         return False
 

@@ -16,7 +16,7 @@ class PlanterMixin:
             return False
         if afterCannon:
             afterCannon()
-        self.logger.webhook("", f"Travelling: {planter.title()} Planter ({field.title()}), {method.title()}", "dark brown")
+        self.logger.webhook("", f"Travelling: {planter.title()} Planter ({field.title()}), {method.title()}", "light blue")
         self.goToField(field, "north")
         #move from center of field to planter spot
         finalKey = None
@@ -158,7 +158,7 @@ class PlanterMixin:
                     break
                 time.sleep(0.3)
             if placedPlanter: 
-                self.logger.webhook("",f"Placed {planter.title()} Planter", "dark brown", "screen")
+                self.logger.webhook("",f"Placed {planter.title()} Planter", "light green", "screen")
                 #use glitter
                 if glitter: 
                     self.glitterUsedOnPlanter = self.useItemInInventory("glitter")
@@ -315,7 +315,7 @@ class PlanterMixin:
                 if self.planterCoords is not None:
                     self.logger.webhook("", f"{planter.title()} not found in field, but found in inventory. Marking as collected.", "orange", "screen")
                     return finishCollected()
-                self.logger.webhook("", f"Unable to find Planter: {planter.title()}", "dark brown", "screen")
+                self.logger.webhook("", f"Unable to find Planter: {planter.title()}", "red", "screen")
                 self.reset()
                 # if this was the last attempt, update time and return False
                 if attempt == attempts - 1:

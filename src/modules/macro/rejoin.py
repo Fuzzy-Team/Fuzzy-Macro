@@ -369,7 +369,7 @@ class RejoinMixin:
                         break
 
                 if self.findText("disconnected", self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw, self.robloxWindow.mh):
-                    self.logger.webhook("", "Roblox disconnected while loading; retrying rejoin", "dark brown", "screen")
+                    self.logger.webhook("", "Roblox disconnected while loading; retrying rejoin", "orange", "screen")
                     rejoinSuccess = False
                     break
 
@@ -386,7 +386,7 @@ class RejoinMixin:
                             if sustained_start == 0:
                                 sustained_start = time.time()
                             elif time.time() - sustained_start >= sustain_seconds:
-                                self.logger.webhook("","Detected sustained screen color — retrying rejoin","dark brown","screen")
+                                self.logger.webhook("","Detected sustained screen color — retrying rejoin","orange","screen")
                                 rejoinSuccess = False
                                 break
                         else:
@@ -440,7 +440,7 @@ class RejoinMixin:
                 if self.checkPauseAndWait():
                     return _finish_rejoin(False)
                 if not self.viciousSkyIsNight():
-                    self.logger.webhook("Vic Hop", "Daytime, moving to the next server", "dark brown", "screen")
+                    self.logger.webhook("Vic Hop", "Daytime, moving to the next server", "light blue", "screen")
                     return _finish_rejoin(False)
                 self.recordVicStat("nights")
                 self.logger.webhook("Vic Hop", "Night detected, claiming a hive", "dark brown", "screen")
@@ -491,7 +491,7 @@ class RejoinMixin:
             if not newHiveNumber:
                 if reason == "stopped":
                     return _finish_rejoin(False)
-                self.logger.webhook("", f"Failed to claim hive ({reason}); retrying rejoin", "dark brown", "screen")
+                self.logger.webhook("", f"Failed to claim hive ({reason}); retrying rejoin", "orange", "screen")
                 continue
 
             self.logger.webhook("", f"Claimed hive {newHiveNumber}", "bright green", "screen", ping_category="ping_critical_errors")

@@ -480,7 +480,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             return False
 
         mobNames = ", ".join(sorted({mob.replace("_", " ").title() for mob, _ in readyMobs}))
-        macro.logger.webhook("Quest mobs ready", f"Running before quest gathering: {mobNames}", "dark brown")
+        macro.logger.webhook("Quest mobs ready", f"Running before quest gathering: {mobNames}", "light blue")
         for mob, field in readyMobs:
             # Recheck because an earlier field run can update shared mob timings.
             if macro.hasMobRespawned(mob, field):
@@ -1414,11 +1414,11 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                                         draw.text((10 + padding, 10 + padding + idx * line_h), line, font=font, fill=(255, 255, 255))
 
                                     img.save(img_path)
-                                    macro.logger.webhook("Nectar Percentages", menuText, "white", imagePath=img_path)
+                                    macro.logger.webhook("Nectar Percentages", menuText, "pink", imagePath=img_path)
                                 except Exception:
-                                    macro.logger.webhook("Nectar Percentages", menuText, "white")
+                                    macro.logger.webhook("Nectar Percentages", menuText, "pink")
                             except Exception:
-                                macro.logger.webhook("Nectar Percentages", menuText, "white")
+                                macro.logger.webhook("Nectar Percentages", menuText, "pink")
                         except Exception:
                             pass
 
