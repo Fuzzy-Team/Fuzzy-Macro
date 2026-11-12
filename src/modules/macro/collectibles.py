@@ -498,13 +498,14 @@ class CollectiblesMixin:
             if objectiveData[1] is None:
                 reached = self.isBesideE(objectiveData[0])
             else:
+                reached = self.isBesideE(objectiveData[0])
                 for _ in range(6):
+                    if reached: break
                     if is_stopped():
                         updateHourlyTime()
                         return
                     self.keyboard.walk(objectiveData[1], 0.2)
                     reached = self.isBesideE(objectiveData[0])
-                    if reached: break
             if reached: break
             self.logger.webhook("", f"Failed to reach {displayName}", "orange", "screen")
             if objective in ("ant_pass_dispenser", "buy_ant_pass"):
