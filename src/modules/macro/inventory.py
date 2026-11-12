@@ -88,26 +88,45 @@ class InventoryMixin:
 
     def toggleInventory(self, mode):
         def clickInv():
+            if self.checkPauseAndWait():
+                return False
             mouse.moveTo(self.robloxWindow.mx+30, self.robloxWindow.my+113)
             time.sleep(0.1)
+            if self.checkPauseAndWait():
+                return False
             mouse.moveBy(0,3)
             time.sleep(0.1)
+            if self.checkPauseAndWait():
+                return False
             mouse.click()
             time.sleep(0.1)
+            return True
 
+        if self.checkPauseAndWait():
+            return
         if mode == "open": #already open
             #click the system settings
             mouse.moveTo(self.robloxWindow.mx+245, self.robloxWindow.my+113)
             time.sleep(0.1)
+            if self.checkPauseAndWait():
+                return
             mouse.moveBy(0,3)
             time.sleep(0.1)
+            if self.checkPauseAndWait():
+                return
             mouse.click()
-            clickInv()
+            if not clickInv():
+                return
             time.sleep(0.1)
         else:
-            clickInv()
+            if not clickInv():
+                return
+        if self.checkPauseAndWait():
+            return
         self.moveMouseToDefault()
         time.sleep(0.3)
+        if self.checkPauseAndWait():
+            return
         # Cleared only once every pause is done, so an interrupt mid-close still lets reset close the panel.
         self.questMenuOpen = False
         '''
@@ -137,13 +156,20 @@ class InventoryMixin:
 
     def findItemInInventory(self, itemName):
         with self.inventoryInteraction():
-            return self._findItemInInventory(itemName)
+            result = self._findItemInInventory(itemName)
+            if self.checkPauseAndWait():
+                return None
+            return result
 
     def _scrollInventoryToTop(self):
         hashes = []
         for _ in range(9):
+            if self.checkPauseAndWait():
+                return
             mouse.scroll(100)
             sleep(0.05)
+            if self.checkPauseAndWait():
+                return
             screen = cv2.cvtColor(mssScreenshotNP(self.robloxWindow.mx, self.robloxWindow.my+120, 100, 200), cv2.COLOR_BGRA2RGB)
             hashes.append(average_hash(Image.fromarray(screen)))
             #stop once the list hasn't moved over the last 3 scrolls (150ms+), so a frame
@@ -154,6 +180,8 @@ class InventoryMixin:
     def findItemReport(self, query):
         """findItemByName as (message, screenshot of the row or None)."""
         result = self.findItemByName(query)
+        if self.run is not None and is_stopped():
+            return "Inventory search stopped", None
         if result is None:
             return f"Could not find an item matching \"{query}\" in the inventory", None
         return f"Found {result[0]}", result[1]
@@ -161,6 +189,8 @@ class InventoryMixin:
     def findItemByName(self, query):
         """Read every row of the inventory with OCR and return (row text, screenshot of the row)
         for the closest match to a possibly misspelled name, or None if nothing is close."""
+        if self.checkPauseAndWait():
+            return None
         def key(text):
             return ''.join(c for c in text.lower() if c.isalnum())
 
@@ -173,13 +203,21 @@ class InventoryMixin:
             self.toggleInventory("open")
             try:
                 time.sleep(0.3)
+                if self.checkPauseAndWait():
+                    return None
                 mouse.moveTo(self.robloxWindow.mx+312, self.robloxWindow.my+200)
                 mouse.click()
                 self._scrollInventoryToTop()
+                if self.checkPauseAndWait():
+                    return None
                 time.sleep(0.3)
+                if self.checkPauseAndWait():
+                    return None
                 prevHash = None
                 unchanged = 0
                 for _ in range(180):
+                    if self.checkPauseAndWait():
+                        return None
                     page = mssScreenshot(self.robloxWindow.mx, self.robloxWindow.my+90, 310, self.robloxWindow.mh-180)
                     for bbox, (text, _conf) in ocr.ocrRead(page):
                         name = key(text)
@@ -198,15 +236,22 @@ class InventoryMixin:
                     if unchanged >= 3:
                         break
                     prevHash = hash
+                    if self.checkPauseAndWait():
+                        return None
                     mouse.scroll(-2, True)
                     time.sleep(0.15)
+                    if self.checkPauseAndWait():
+                        return None
             finally:
-                self.toggleInventory("close")
+                if not (self.run is not None and is_stopped()):
+                    self.toggleInventory("close")
         if best[0] < 0.7:
             return None
         return best[1], best[2]
 
     def _findItemInInventory(self, itemName):
+        if self.checkPauseAndWait():
+            return None
         #for retina, just a regular image search
         #for built-in, a transparency search
         itemImg = self.adjustImage("./images/inventory", itemName)
@@ -220,17 +265,25 @@ class InventoryMixin:
         #open inventory
         self.toggleInventory("open")
         time.sleep(0.3)
+        if self.checkPauseAndWait():
+            return None
         mouse.moveTo(self.robloxWindow.mx+312, self.robloxWindow.my+200)
         mouse.click()
         #scroll to top
         self._scrollInventoryToTop()
+        if self.checkPauseAndWait():
+            return None
         #scroll down until the item is found
         bestY = None
 
         prevHash = None
         time.sleep(0.3)
         for _ in range(180):
+            if self.checkPauseAndWait():
+                return None
             max_val, max_loc = locateImageOnScreen(itemImg, self.robloxWindow.mx, self.robloxWindow.my+90, 100, self.robloxWindow.mh-180) or (0, None)
+            if self.checkPauseAndWait():
+                return None
             #most likely the correct item, stop searching
             if max_val > 0.7:
                 itemScreenshot = mssScreenshot(self.robloxWindow.mx+90, self.robloxWindow.my+(max_loc[1]//self.robloxWindow.multi)+60, 220, 60)
@@ -240,8 +293,12 @@ class InventoryMixin:
                     bestY = max_loc[1]
                     break
 
+            if self.checkPauseAndWait():
+                return None
             mouse.scroll(-2, True)
             time.sleep(0.06)
+            if self.checkPauseAndWait():
+                return None
 
             screen = cv2.cvtColor(mssScreenshotNP(self.robloxWindow.mx, self.robloxWindow.my+100, 100, 200), cv2.COLOR_BGRA2RGB)
             hash = average_hash(Image.fromarray(screen))
@@ -250,7 +307,7 @@ class InventoryMixin:
             prevHash = hash
 
         if bestY is None:
-            if not is_stopped():
+            if not (self.run is not None and is_stopped()):
                 self.logger.webhook("", f"Could not find {itemName} in inventory", "dark brown")
             return
         bestY //= self.robloxWindow.multi
@@ -263,17 +320,27 @@ class InventoryMixin:
             if x is None or y is None:
                 if itemName is None: raise Exception("tried searching for item but no item name is provided")
                 res = self._findItemInInventory(itemName)
+                if self.checkPauseAndWait():
+                    return False
                 if res is None:
                     return False
                 x, y = res
 
+            if self.checkPauseAndWait():
+                return False
             mouse.moveTo(self.robloxWindow.mx+x, self.robloxWindow.my+y)
             mouse.moveBy(10,15)
             for _ in range(3):
+                if self.checkPauseAndWait():
+                    return False
                 mouse.click()
                 mouse.moveBy(0,15, pause=False)
                 time.sleep(0.03)
+            if self.checkPauseAndWait():
+                return False
             self.clickYes()
+            if self.checkPauseAndWait():
+                return False
             #close inventory
             if closeInventoryAfter:
                 self.toggleInventory("close")
