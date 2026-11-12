@@ -1,4 +1,4 @@
-from modules.controls.sleep import hang_exit
+from modules.controls.sleep import InterruptRequested, hang_exit
 from modules.screen.screenshot import mssScreenshot, mw, mh
 import numpy as np
 import platform
@@ -61,22 +61,36 @@ def accurateVisionWorks():
     from PIL import Image, ImageDraw, ImageFont
     img = Image.new("RGB", (240, 80), "white")
     ImageDraw.Draw(img).text((10, 10), "Claim Hive", fill="black", font=ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 40))
-    return bool(ocrmac.OCR(img, recognition_level="accurate").recognize())
+    try:
+        return bool(ocrmac.OCR(img, recognition_level="accurate").recognize())
+    except InterruptRequested:
+        raise
+    except Exception:
+        return False
 
 visionLevel = "accurate" if ocrLib != "ocrmac" or accurateVisionWorks() else "fast"
 if ocrLib == "ocrmac":
     print(f"Text reading: Vision {visionLevel} mode")
 
 def readVision(img):
-    if useLangPref:
-        return ocrmac.OCR(img,language_preference=['en-US'],recognition_level=visionLevel).recognize(px=True)
-    return ocrmac.OCR(img,recognition_level=visionLevel).recognize(px=True)
+    try:
+        if useLangPref:
+            return ocrmac.OCR(img,language_preference=['en-US'],recognition_level=visionLevel).recognize(px=True)
+        return ocrmac.OCR(img,recognition_level=visionLevel).recognize(px=True)
+    except InterruptRequested:
+        raise
+    except Exception:
+        return None
 
 lastVisionCheck = float("-inf")
 
 def ocrMac_(img):
     global visionLevel, lastVisionCheck
     result = readVision(img)
+    if result is None and visionLevel == "accurate":
+        visionLevel = "fast"
+        print("Text reading: Vision accurate mode stopped working, switched to fast mode")
+        result = readVision(img)
     # Accurate mode can start failing minutes into a run, after the check at load passed. Empty reads
     # are normal when no text is on screen, so test it again on an empty read, at most every 5 seconds.
     if not result and visionLevel == "accurate" and time.monotonic() - lastVisionCheck > 5:
@@ -85,6 +99,8 @@ def ocrMac_(img):
             visionLevel = "fast"
             print("Text reading: Vision accurate mode stopped working, switched to fast mode")
             result = readVision(img)
+    if result is None:
+        return None
     #convert it to the paddleocr format used across the macro
     #[ ([x1,y1],[x2,y1],[x2,y2],[x1,y2]), (text, confidence) ]
     return [ [paddleBounding(x[2]),(x[0],x[1]) ] for x in result]
