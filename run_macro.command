@@ -71,6 +71,23 @@ runPython() {
     $1 main.py
 }
 
+# The app opens a Chrome window that stays open after the app exits. Close only the one this
+# launch started: it is still in this script's process group, so a Chrome of your own is left alone.
+close_macro_window() {
+    my_group=$(ps -o pgid= -p $$ | tr -d ' ')
+    ps -axo pid=,pgid=,command= | while read -r pid group command; do
+        case "$command" in
+            *"--app=http://localhost"*)
+                if [ "$group" = "$my_group" ]; then
+                    kill "$pid" 2>/dev/null || true
+                fi
+                ;;
+        esac
+    done
+}
+trap close_macro_window EXIT
+trap 'exit 1' INT TERM HUP
+
 cd src
 if [ -d "$VENV_PATH" ]; then
     source "$VENV_PATH/bin/activate"
