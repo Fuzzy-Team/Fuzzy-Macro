@@ -924,7 +924,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                                 try:
                                     os.remove(data["_temporaryImage"])
                                 except OSError:
-                                    pass
+                                    pass  # the copy is already gone
                     except Exception as e:
                         print(f"Error processing Discord logger message: {e}")
             except Exception as e:
