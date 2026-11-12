@@ -336,12 +336,20 @@ class CollectiblesMixin:
         self.set_task_status("sticker_printer", activity="sticker_printer")
         reached = False
         for _ in range(2):
+            if is_stopped():
+                return
             self.logger.webhook("",f"Travelling: Sticker Printer","light blue")
             if not self.travelViaCannon("Sticker Printer"):
                 return
+            if is_stopped():
+                return
             self.runPath("collect/sticker_printer")
+            if is_stopped():
+                return
             self.location = "collect"
             for _ in range(6):
+                if is_stopped():
+                    return
                 self.keyboard.walk("w", 0.2)
                 reached = self.isBesideE(["inspect", "stick", "print"])
                 if reached: break
@@ -350,6 +358,8 @@ class CollectiblesMixin:
             self.reset(convert=False)
         else: return
 
+        if is_stopped():
+            return
         self.keyboard.press("e")
         #claim sticker
         eggPosData = {
@@ -381,7 +391,11 @@ class CollectiblesMixin:
         mouse.click()
         time.sleep(0.2)
         #click yes
+        if is_stopped():
+            return
         if not self.clickYes():
+            if is_stopped():
+                return
             egg = self.setdat["sticker_printer_egg"]
             self.logger.webhook("", f"No {egg} eggs left, Sticker Printer has been disabled", "red", "screen", ping_category="ping_critical_errors")
             self.updateGUI.value = 1
@@ -391,6 +405,8 @@ class CollectiblesMixin:
             return
         #wait for sticker to generate
         time.sleep(7)
+        if is_stopped():
+            return
         self.logger.webhook(f"", "Claimed sticker", "bright green", "sticker", ping_category="ping_sticker_events")
         self.saveTiming("sticker_printer")
         #close the inventory
@@ -407,6 +423,9 @@ class CollectiblesMixin:
             self.hourlyReport.addHourlyStat("misc_time", time.time()-st)
         #go to collect and check that player has reached
         for i in range(3):
+            if is_stopped():
+                updateHourlyTime()
+                return
             self.logger.webhook("",f"Travelling: {displayName}","light blue")
             if objective in ["honey_dispenser", "gingerbread"]:
                 self.reset(convert=False)
@@ -414,16 +433,25 @@ class CollectiblesMixin:
                 if not self.travelViaCannon(displayName):
                     updateHourlyTime()
                     return
+            if is_stopped():
+                updateHourlyTime()
+                return
             self.location = "collect"
             # Special-case: run a bespoke sequence for Honey Storm instead of the
             # default path/walk system.
             if objective == "honeystorm":
                 self.runPath("collect/stockings")
+                if is_stopped():
+                    updateHourlyTime()
+                    return
                 self.keyboard.walk("a",1.25, False)
                 self.keyboard.walk("s",1.5)
                 self.keyboard.walk("d",0.45)
                 reached = self.isBesideE(objectiveData[0])
                 for _ in range(10):
+                    if is_stopped():
+                        updateHourlyTime()
+                        return
                     if reached or self.checkPauseAndWait():
                         break
                     self.keyboard.walk("s", 0.4)
@@ -442,6 +470,9 @@ class CollectiblesMixin:
                         self.collectCooldowns[objective] = cd
                         return
                 # Execute honey storm actions
+                if is_stopped():
+                    updateHourlyTime()
+                    return
                 self.keyboard.press("e")
                 time.sleep(0.5)
                 self.keyboard.walk("s", 3)
@@ -451,6 +482,9 @@ class CollectiblesMixin:
                     self.keyboard.walk("d", 0.25)
                     self.keyboard.walk("s", 2.25)
                     self.keyboard.walk("d", 0.25)
+                if is_stopped():
+                    updateHourlyTime()
+                    return
                 self.saveTiming("honeystorm")
                 self.logger.webhook("", "Honey storm collected", "bright green", "screen")
                 self.reset(convert=True)
@@ -458,10 +492,16 @@ class CollectiblesMixin:
             # Some collects (memory_match variants, sticker_stack) don't have
             # a path file — allow missing files and continue to per-objective handling.
             self.runPath(f"collect/{objective}", fileMustExist=False)
+            if is_stopped():
+                updateHourlyTime()
+                return
             if objectiveData[1] is None:
                 reached = self.isBesideE(objectiveData[0])
             else:
                 for _ in range(6):
+                    if is_stopped():
+                        updateHourlyTime()
+                        return
                     self.keyboard.walk(objectiveData[1], 0.2)
                     reached = self.isBesideE(objectiveData[0])
                     if reached: break
@@ -518,7 +558,13 @@ class CollectiblesMixin:
             for _ in range(1 if objective == "sticker_stack" else 2):
                 self.keyboard.press("e")
             #run the claim path (if it exists)
+            if is_stopped():
+                updateHourlyTime()
+                return
             self.runPath(f"collect/claim/{objective}", fileMustExist=False)
+            if is_stopped():
+                updateHourlyTime()
+                return
             #memory match
             if "memory_match" in objective:
                 if objective == "memory_match":
@@ -558,6 +604,9 @@ class CollectiblesMixin:
                         self.scheduleFieldBoosterGlitterExtension()
                 else:
                     self.tadAltSync.initialize_alts()
+                if is_stopped():
+                    updateHourlyTime()
+                    return
                 self.buffBarBoostPausedUntil = 0
                 self.saveTiming("last_booster")
             elif objective == "sticker_stack":
@@ -577,6 +626,9 @@ class CollectiblesMixin:
                 time.sleep(0.1)
                 self.logger.webhook("", f"Collected: {displayName}", "bright green", "screen")
         #update the internal cooldown
+        if is_stopped():
+            updateHourlyTime()
+            return
         self.saveTiming(objective)
         self.collectCooldowns[objective] = cooldownSeconds
         updateHourlyTime()
@@ -612,6 +664,36 @@ class CollectiblesMixin:
             else:
                 return 0 #no items to craft
 
+        def skipUnavailableCraft(reason):
+            # Do not confirm a craft that the blender rejected or whose quantity
+            # could not be read. Moving to another configured slot leaves this
+            # slot's repeat count and the craft timer untouched so it can retry.
+            if is_stopped():
+                return
+            self.logger.webhook("", reason, "orange", "screen")
+            self.closeBlenderGUI()
+            if is_stopped():
+                return
+            nextItem = getNextItem()
+            if nextItem and nextItem != itemNo:
+                blenderData["item"] = nextItem
+                # On a first run collectTime is still 0, which makes the next
+                # blender() call re-run its initialization getNextItem() and
+                # advance past the slot just selected. Mark the blender as due
+                # so blenderData["item"] is preserved on the next dispatch.
+                if blenderData["collectTime"] == 0:
+                    blenderData["collectTime"] = time.time()
+                saveBlenderData()
+            else:
+                if not is_stopped():
+                    # A single configured slot, or one with no repeats left,
+                    # would otherwise be retried on every macro loop. Back off
+                    # for five minutes whether collectTime was 0 or expired.
+                    blenderData["collectTime"] = time.time() + 5 * 60
+                    saveBlenderData()
+                else:
+                    updateHourlyTime()
+
         #check if item is none (settings got changed but user did not reset the blender data)
         #or first blender of the reset
         if blenderData["collectTime"] == 0 or (itemNo and self.setdat[f"blender_item_{itemNo}"] == "none"): 
@@ -623,13 +705,25 @@ class CollectiblesMixin:
                 return
 
         for _ in range(2):
+            if is_stopped():
+                updateHourlyTime()
+                return
             self.logger.webhook("","Travelling: Blender","light blue")
             if not self.travelViaCannon("Blender"):
                 updateHourlyTime()
                 return
+            if is_stopped():
+                updateHourlyTime()
+                return
             self.runPath("collect/blender")
+            if is_stopped():
+                updateHourlyTime()
+                return
             self.location = "collect"
             for _ in range(6):
+                if is_stopped():
+                    updateHourlyTime()
+                    return
                 self.keyboard.walk("d", 0.2)
                 reached = self.isBesideE(["open"])
                 if reached: break
@@ -655,6 +749,9 @@ class CollectiblesMixin:
             time.sleep(0.3)
             self.keyboard.press("e")
 
+        if is_stopped():
+            updateHourlyTime()
+            return
         self.keyboard.press("e")
         time.sleep(1)
         #check if blender is done and click on end crafting
@@ -689,6 +786,9 @@ class CollectiblesMixin:
                 self.logger.webhook("", f"Blender is currently crafting an item ({cooldownFormat} remaining)", "dark brown", "screen")
                 #set the target time and quit
                 self.closeBlenderGUI()
+                if is_stopped():
+                    updateHourlyTime()
+                    return
                 blenderData["collectTime"] = time.time() + cd
                 saveBlenderData()
                 return
@@ -698,6 +798,9 @@ class CollectiblesMixin:
         #time to craft
         if not itemNo: #if itemNo is 0, there are no items to craft. The macro has collected the last item to craft
             self.closeBlenderGUI()
+            if is_stopped():
+                updateHourlyTime()
+                return
             blenderData["collectTime"] = -1 #set collectTime to -1 (disable blender)
             saveBlenderData()
             return
@@ -706,12 +809,19 @@ class CollectiblesMixin:
         itemDisplay = item.title()
         mouse.moveTo(self.robloxWindow.mx+(self.robloxWindow.mw/2+240), self.robloxWindow.my+(math.floor(self.robloxWindow.mh*0.48))+128)
         for _ in range(blenderItems.index(item)):
+            if is_stopped():
+                updateHourlyTime()
+                return
             mouse.click()
             sleep(0.06)
         #check if the item can be crafted
         if not self.findText("make", x, y, 560, 480):
-            self.logger.webhook("", f"Unable to craft {itemDisplay}", "orange", "screen")
+            skipUnavailableCraft(f"Unable to craft {itemDisplay}")
+            return
         #open the crafting menu
+        if is_stopped():
+            updateHourlyTime()
+            return
         mouse.moveTo(self.robloxWindow.mx+(self.robloxWindow.mw/2), self.robloxWindow.my+(math.floor(self.robloxWindow.mh*0.48))+130)
         time.sleep(0.1)
         mouse.click()
@@ -728,7 +838,13 @@ class CollectiblesMixin:
                 return average_hash(mssScreenshot(self.robloxWindow.mx+(self.robloxWindow.mw/2-60-140), self.robloxWindow.my+(math.floor(self.robloxWindow.mh*0.48)+140-20), 110, 20*2, save))
             quantity1Img = quantityScreenshot()
             while True:
+                if is_stopped():
+                    updateHourlyTime()
+                    return
                 for _ in range(5): #add 5 quantity
+                    if is_stopped():
+                        updateHourlyTime()
+                        return
                     mouse.click()
                     sleep(0.03)
                 quantity2Img = quantityScreenshot()
@@ -747,9 +863,15 @@ class CollectiblesMixin:
             #normal quantity
             quantity = self.setdat[f"blender_quantity_{itemNo}"]
             for _ in range(quantity-1): #-1 because the quantity starts from 1
+                if is_stopped():
+                    updateHourlyTime()
+                    return
                 mouse.click()
                 sleep(0.03)
         #confirm
+        if is_stopped():
+            updateHourlyTime()
+            return
         mouse.moveTo(self.robloxWindow.mx+(self.robloxWindow.mw/2 + 70), self.robloxWindow.my+(math.floor(self.robloxWindow.mh*0.48))+130)
         time.sleep(0.1)
         mouse.click()
@@ -763,6 +885,9 @@ class CollectiblesMixin:
         craftTime = quantity*5*60 #5mins per item
         blenderData["collectTime"] = time.time() + craftTime
         time.sleep(1) #add a delay here before taking a screenshot, since bss displays the crafting screen with default values for a bit
+        if is_stopped():
+            updateHourlyTime()
+            return
         self.logger.webhook("", f"Crafted: {itemDisplay} x{quantity}, Ready in: {timedelta(seconds=craftTime)}", "bright green", "screen", ping_category="ping_conversion_events")
         #store the data
         saveBlenderData()
@@ -770,6 +895,8 @@ class CollectiblesMixin:
 
     def claimStickerStack(self):
         time.sleep(1)
+        if is_stopped():
+            return False
         x = self.robloxWindow.mw//2-275
         y = 4*self.robloxWindow.mh//10
 
@@ -806,6 +933,8 @@ class CollectiblesMixin:
             if stickerLoc: #found a available sticker
                 xr, yr = [j//self.robloxWindow.multi for j in stickerLoc[1]]
 
+                if is_stopped():
+                    return False
                 mouse.moveTo(self.robloxWindow.mx+(x+xr), self.robloxWindow.my+(y+yr))
                 time.sleep(0.1)
                 mouse.moveBy(3,-3)
@@ -813,6 +942,8 @@ class CollectiblesMixin:
                 mouse.click()
                 stickerUsed = True
             elif not "/" in self.setdat["sticker_stack_item"]:
+                if is_stopped():
+                    return False
                 self.logger.webhook("", "No Stickers left to stack, Sticker Stack has been disabled", "red", "screen", ping_category="ping_critical_errors")
                 self.updateGUI.value = 1
                 self.setdat["sticker_stack"] = False
@@ -830,6 +961,8 @@ class CollectiblesMixin:
         #click yes (regular stickers have 2 confirms; cub/hive skins can have 4)
         yesPopup = False
         for _ in range(4):
+            if is_stopped():
+                return False
             if not self.clickYes(clickOnce=True):
                 break
             yesPopup = True
@@ -837,11 +970,15 @@ class CollectiblesMixin:
             time.sleep(0.7)
         else: #4 yes/no popups, either cub/hive skin
             if not self.setdat["hive_skin"] and not self.setdat["cub_skin"]: #do not use cub and hive stickers
+                if is_stopped():
+                    return False
                 self.logger.webhook("", "A hive/cub sticker has been wrongly selected, aborting", "red", "screen", ping_category="ping_critical_errors")
                 self.keyboard.press("e")
                 return False
         
         if "ticket" in self.setdat["sticker_stack_item"] and not yesPopup: #if no popup appears, ran out of tickets
+            if is_stopped():
+                return False
             self.logger.webhook("", "No Tickets left, Sticker Stack has been disabled", "red", "screen", ping_category="ping_critical_errors")
             self.setdat["sticker_stack"] = False
             settingsManager.saveProfileSetting("sticker_stack", False)
@@ -860,6 +997,8 @@ class CollectiblesMixin:
             else:
                 finalTime = 60*60 #default to 1hr
             self.logger.webhook("", f"Activated Sticker Stack, Buff Duration: {timedelta(seconds=finalTime)} (Defaulted to 1hr)", "bright green")
+        if is_stopped():
+            return False
         self.keyboard.press("e")
         with open(settingsManager.ensureUserFile("sticker_stack.txt"), "w") as f:
             f.write(str(finalTime))
