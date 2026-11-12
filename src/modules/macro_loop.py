@@ -381,6 +381,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             submitting = objectives == []
             taskCompleted = True
             objectives = macro.getNewQuest(questGiver, submitting)
+            if objectives is False:
+                # Stop or an unreachable giver aborted before the hand-in; keep
+                # the cached quest and do not count it as completed.
+                return [], []
             if submitting:
                 macro.hourlyReport.addHourlyStat("quests_completed", 1)
             questCache.pop(questGiver, None)

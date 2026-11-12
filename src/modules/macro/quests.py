@@ -11,7 +11,7 @@ import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
 import modules.screen.ocr as ocr
 from modules import bitmap_matcher
-from modules.controls.sleep import pause_aware_time as time, sleep
+from modules.controls.sleep import is_stopped, pause_aware_time as time, sleep
 from modules.macro.game_data import quest_data
 from modules.quest_planning import make_quest_objectives, objective_matches_text
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP, mssScreenshotPillowRGBA
@@ -206,10 +206,14 @@ class QuestMixin:
             return screen
 
         self.toggleInventory("close")
+        if is_stopped():
+            return []
         self.toggleQuest()
 
         prevHash = None
         for _ in range(200):
+            if is_stopped():
+                break
             mouse.scroll(100)
             sleep(0.08)
             currentHash = average_hash(Image.fromarray(screenshotQuest(100)))
@@ -221,6 +225,8 @@ class QuestMixin:
         screens = []
         prevHash = None
         for _ in range(maxScreens):
+            if is_stopped():
+                break
             screens.append(screenshotQuest(self.robloxWindow.mh, mode="RGBA"))
             mouse.scroll(-1, True)
             time.sleep(0.06)
@@ -229,6 +235,8 @@ class QuestMixin:
                 break
             prevHash = currentHash
 
+        if is_stopped():
+            return screens
         if keepOpen:
             self.questMenuStep = len(screens) - 1
         else:
@@ -626,6 +634,8 @@ class QuestMixin:
         if manageQuestUi and not reuseMenu:
             #open inventory to ensure quest page is closed
             self.toggleInventory("close")
+            if is_stopped():
+                return None
             self.toggleQuest()
         elif reuseMenu:
             # The last read parked the mouse outside the panel; scrolling needs it over the list.
@@ -635,6 +645,8 @@ class QuestMixin:
             #stop scrolling when the quest page remains unchanged
             prevHash = None
             for _ in range(200):
+                if is_stopped():
+                    return
                 mouse.scroll(100)
                 sleep(0.08)
                 hash = average_hash(Image.fromarray(screenshotQuest(100)))
@@ -649,7 +661,7 @@ class QuestMixin:
         positioned = recordedStep is not None
         if manageQuestUi and not positioned:
             scrollToTop()
-        while positioned and self.questMenuStep != recordedStep:
+        while positioned and not is_stopped() and self.questMenuStep != recordedStep:
             direction = -1 if recordedStep > self.questMenuStep else 1
             mouse.scroll(direction, True)
             time.sleep(0.06)
@@ -687,6 +699,8 @@ class QuestMixin:
         prevHash = None
         screenSource = questScreens if questScreens is not None else range(150)
         for i, screenEntry in enumerate(screenSource):
+            if is_stopped():
+                break
             screen = screenEntry if questScreens is not None else screenshotQuest(self.robloxWindow.mh, mode="RGBA")
 
             ocrMatch = ocrQuestTitleFromScreen(screen)
@@ -741,6 +755,8 @@ class QuestMixin:
                 sleep(0.4)
                 prevHash = None
             elif manageQuestUi:
+                if is_stopped():
+                    break
                 mouse.scroll(-1, True)
                 self.questMenuStep += 1
                 time.sleep(0.06)
@@ -752,7 +768,7 @@ class QuestMixin:
         if questTitle is None:
             if logDetection:
                 self.logger.webhook("", f"Could not find {questGiver} quest", "orange")
-            if manageQuestUi:
+            if manageQuestUi and not is_stopped():
                 self.toggleQuest()
                 self.moveMouseToDefault()
             return None
@@ -946,11 +962,11 @@ class QuestMixin:
             except Exception:
                 pass
 
-            if manageQuestUi and not keepQuestMenuOpen:
+            if manageQuestUi and not keepQuestMenuOpen and not is_stopped():
                 self.toggleQuest()
                 self.moveMouseToDefault()
             if not titleObjectives:
-                if manageQuestUi and keepQuestMenuOpen:
+                if manageQuestUi and keepQuestMenuOpen and not is_stopped():
                     self.toggleQuest()
                 return None
             return self.recordQuestObjectives(questGiver, questTitle, titleObjectives,
@@ -1182,33 +1198,49 @@ class QuestMixin:
                                     '\n'.join(completedObjectives) if completedObjectives else "None",
                                     '\n'.join(incompleteObjectives) if incompleteObjectives else "None"),
                                 "light blue", imagePath=questImgPath)
-        if manageQuestUi and not keepQuestMenuOpen:
+        if manageQuestUi and not keepQuestMenuOpen and not is_stopped():
             self.toggleQuest()
             self.moveMouseToDefault()
         return self.recordQuestObjectives(questGiver, questTitle, objectives, observedStatuses)
 
     def goToQuestGiver(self, questGiver, reason):
         for _ in range(3):
+            if is_stopped():
+                return False
             if not self.travelViaCannon(questGiver.title()):
+                return False
+            if is_stopped():
                 return False
             self.logger.webhook("",f"Travelling: {questGiver} ({reason}) ","light blue")
             self.runPath(f"quests/{questGiver}")
+            if is_stopped():
+                return False
             self.location = "quest"
             time.sleep(0.5)
+            if is_stopped():
+                return False
 
             #check if player reached the quest giver
             if self.isBesideE(["talk"] + questGiver.lower().split(" "), log=True):
                 self.logger.webhook("",f"Reached {questGiver}","light green", "screen")
+                if is_stopped():
+                    return False
                 self.keyboard.press("e")
                 sleep(0.2)
+                if is_stopped():
+                    return False
                 self.keyboard.press("e")
                 return True
             else:
+                if is_stopped():
+                    return False
                 self.logger.webhook("",f"Failed to reach {questGiver}","orange", "screen")
                 self.reset()
         return False
 
     def clickdialog(self, mustFindDialog=False):
+        if is_stopped():
+            return
         # Find dialog image and compute a click/sample location
         x = self.robloxWindow.mw // 2
         y = int(self.robloxWindow.mh * 2 / 3)
@@ -1259,6 +1291,8 @@ class QuestMixin:
         mouse.moveTo(self.robloxWindow.mx + (self.robloxWindow.mw // 2), self.robloxWindow.my + (y + yr - 20))
         change_threshold = 30
         for _ in range(80):
+            if is_stopped():
+                break
             mouse.click()
             time.sleep(0.12)
             img = screenshotDialog()
@@ -1270,17 +1304,29 @@ class QuestMixin:
                     break
 
     def getNewQuest(self, questGiver, submitQuest):
-        if not self.goToQuestGiver(questGiver, "Submit Quest" if submitQuest else "Get New Quest"): return
+        if not self.goToQuestGiver(questGiver, "Submit Quest" if submitQuest else "Get New Quest"):
+            return False
+        if is_stopped():
+            return False
         self.clickdialog()
+        # When submitting, the first dialog click hands in the completed quest.
+        # If Stop lands before it finishes, the submission may not have
+        # completed, so report failure.
+        if is_stopped():
+            return False
         #player submitted a quest, then get a new one
         if True: #submitQuest:
             sleep(1)
+            if is_stopped(): return
             self.keyboard.press("e")
             sleep(0.2)
+            if is_stopped(): return
             self.keyboard.press("e")
             self.clickdialog()
+        if is_stopped(): return
         self.reset()
         questObjective = self.findQuest(questGiver)
+        if is_stopped(): return
         # Timed bear quests: when the bear has no quest to give after talking to it
         # (whether we just submitted one or were only asking for a new one), start the
         # 1-hour timer. Otherwise the bear is visited and scanned again every cycle.
@@ -1289,6 +1335,7 @@ class QuestMixin:
             # before treating the quest as absent.
             if questObjective is None:
                 questObjective = self.findQuest(questGiver)
+                if is_stopped(): return
             state_key = f"{questGiver.replace(' ', '_')}_quest_state"
             timing_key = f"{questGiver.replace(' ', '_')}_quest_cd"
             try:
