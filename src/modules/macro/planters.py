@@ -3,7 +3,7 @@ import os
 import threading
 from modules.controls.keyboard import keyboard
 # path files run by goToPlanter use time and sleep
-from modules.controls.sleep import pause_aware_time as time, sleep
+from modules.controls.sleep import is_stopped, pause_aware_time as time, sleep
 from modules.macro.game_data import planterGrowthData
 from modules.screen.imageSearch import findColorObjectRGB
 from modules.screen.screenshot import mssScreenshotNP
@@ -12,17 +12,26 @@ from modules.screen.screenshot import mssScreenshotNP
 class PlanterMixin:
     def goToPlanter(self, planter, field, method, afterCannon=None):
         global finalKey
+        if is_stopped():
+            return False
         if not self.travelViaCannon("Planters"):
+            return False
+        if is_stopped():
             return False
         if afterCannon:
             afterCannon()
         self.logger.webhook("", f"Travelling: {planter.title()} Planter ({field.title()}), {method.title()}", "light blue")
-        self.goToField(field, "north")
+        if not self.goToField(field, "north"):
+            return False
+        if is_stopped():
+            return False
         #move from center of field to planter spot
         finalKey = None
         path = f"../paths/planters/{field}.py"
         if os.path.isfile(path): #not all fields have a planter path
             exec(open(path).read())
+        if is_stopped():
+            return False
         #go to the planter
         if method == "collect": #return true if the planter can be found
             time.sleep(1)
@@ -30,20 +39,28 @@ class PlanterMixin:
                 st = time.time()
                 while time.time()-st < (finalKey[1]+1):
                     self.keyboard.walk(finalKey[0],0.25)
+                    if is_stopped():
+                        return False
                     if self.isBesideE(["harvest", "planter"]): 
                         return True
             else:
                 time.sleep(1)
                 if self.isBesideE(["harvest", "planter"]): 
                     return True
+            if is_stopped():
+                return False
             #can't find it, try detecting and moving to it
             self.moveToPlanter()
+            if is_stopped():
+                return False
             if self.isBesideE(["harvest", "planter"]):
                 return True
             return False
                 
         else: #place, just walk there
             if finalKey is not None: self.keyboard.walk(finalKey[0], finalKey[1])
+            if is_stopped():
+                return False
             return True
 
     def findPlanterInInventory(self, name):
@@ -94,6 +111,9 @@ class PlanterMixin:
         max_attempts = 2
         cooldown_seconds = 3  # Wait 3 seconds before retrying if planter is missing
         for attempt in range(max_attempts):
+            if is_stopped():
+                updateHourlyTime()
+                return False
             findPlanterInventoryThread = None
             # Invalidate cached planter coordinates before each attempt
             self.planterCoords = None
@@ -109,12 +129,18 @@ class PlanterMixin:
             if not self.goToPlanter(planter, field, "place", None if hotbarSlot else startInventorySearch):
                 updateHourlyTime()
                 return False
+            if is_stopped():
+                updateHourlyTime()
+                return False
             if hotbarSlot:
                 self.logger.webhook("", f"Placing {planter.title()} (slot {hotbarSlot})", "dark brown")
                 self.keyboard.press(str(hotbarSlot))
             else:
                 #wait for thread to finish
                 findPlanterInventoryThread.join()
+                if is_stopped():
+                    updateHourlyTime()
+                    return False
 
             #Couldn't find planter
             if not hotbarSlot and self.planterCoords is None:
@@ -139,6 +165,9 @@ class PlanterMixin:
                     return False
             #place planter
             if not hotbarSlot:
+                if is_stopped():
+                    updateHourlyTime()
+                    return False
                 self.useItemInInventory(x=self.planterCoords[0], y=self.planterCoords[1])
 
             #check if planter is placed
@@ -146,6 +175,9 @@ class PlanterMixin:
             placedPlanter = True
             placementError = None
             for _ in range(7):
+                if is_stopped():
+                    updateHourlyTime()
+                    return False
                 if self.blueTextHas("notinfield"):
                     placementError = "notinfield"
                     placedPlanter = False
@@ -157,10 +189,16 @@ class PlanterMixin:
                     placedPlanter = False
                     break
                 time.sleep(0.3)
+            if is_stopped():
+                updateHourlyTime()
+                return False
             if placedPlanter: 
                 self.logger.webhook("",f"Placed {planter.title()} Planter", "light green", "screen")
                 #use glitter
                 if glitter: 
+                    if is_stopped():
+                        updateHourlyTime()
+                        return False
                     self.glitterUsedOnPlanter = self.useItemInInventory("glitter")
                 updateHourlyTime()
                 return True
@@ -174,8 +212,14 @@ class PlanterMixin:
                 failMsg = f"Already at max planters, couldn't place {planter.title()}"
             else:
                 failMsg = f"Failed to place {planter.title()}"
+            if is_stopped():
+                updateHourlyTime()
+                return False
             self.logger.webhook("", failMsg, "red", "screen", ping_category="ping_critical_errors")
             self.lastPlanterPlacementFailure = placementError or "placement_failed"
+            if is_stopped():
+                updateHourlyTime()
+                return False
             self.reset()
             # The game's planter limit won't change on a retry
             if placementError == "maxplanters":
@@ -284,7 +328,7 @@ class PlanterMixin:
 
         def finishCollected():
             updateHourlyTime()
-            if returnToHive:
+            if returnToHive and not is_stopped():
                 self.reset()
             return True
         # Determine whether planter-check retry behavior is enabled for current mode
@@ -307,15 +351,27 @@ class PlanterMixin:
         name = planter.lower().replace(" ", "").replace("-", "")
 
         for attempt in range(attempts):
+            if is_stopped():
+                updateHourlyTime()
+                return False
             if not self.goToPlanter(planter, field, "collect"):
+                if is_stopped():
+                    updateHourlyTime()
+                    return False
                 # If we cannot find the planter in-field, verify inventory before failing.
                 # If it is already in inventory, treat this as collected so callers reset timers/state.
                 self.planterCoords = None
                 self.findPlanterInInventory(name)
                 if self.planterCoords is not None:
+                    if is_stopped():
+                        updateHourlyTime()
+                        return False
                     self.logger.webhook("", f"{planter.title()} not found in field, but found in inventory. Marking as collected.", "orange", "screen")
                     return finishCollected()
                 self.logger.webhook("", f"Unable to find Planter: {planter.title()}", "red", "screen")
+                if is_stopped():
+                    updateHourlyTime()
+                    return False
                 self.reset()
                 # if this was the last attempt, update time and return False
                 if attempt == attempts - 1:
@@ -324,15 +380,27 @@ class PlanterMixin:
                 continue
 
             # Loot the planter
+            if is_stopped():
+                updateHourlyTime()
+                return False
             self.keyboard.press("e")
             self.clickYes()
+            if is_stopped():
+                updateHourlyTime()
+                return False
             self.logger.webhook("", f"Looting: {planter.title()} planter", "bright green", "screen", ping_category="ping_conversion_events")
             if collect_loot_enabled:
                 self.keyboard.multiWalk(["s","d"], 0.87)
                 self.nmLoot(9, 5, "a")
             else:
                 self.logger.webhook("", f"Skipping loot collection for {planter.title()} planter", "orange")
+            if is_stopped():
+                updateHourlyTime()
+                return False
             self.setMobTimer(field)
+            if is_stopped():
+                updateHourlyTime()
+                return False
 
             # If planter-check not enabled, we're done
             if not check_enabled:
@@ -342,6 +410,9 @@ class PlanterMixin:
             # findPlanterInInventory will set self.planterCoords if found
             self.planterCoords = None
             self.findPlanterInInventory(name)
+            if is_stopped():
+                updateHourlyTime()
+                return False
             if self.planterCoords is not None:
                 # found the planter in inventory — success
                 self.logger.webhook("", f"Found {planter.title()} in inventory after collect", "bright green", "screen", ping_category="ping_conversion_events")
@@ -349,6 +420,9 @@ class PlanterMixin:
 
             # Not found: log and retry (if attempts remain)
             self.logger.webhook("", f"Planter {planter.title()} not found in inventory after looting (attempt {attempt+1}/{attempts}), retrying.", "red", "screen")
+            if is_stopped():
+                updateHourlyTime()
+                return False
             self.reset()
             time.sleep(1)
 
@@ -370,6 +444,8 @@ class PlanterMixin:
         #set the cooldown for planters and place them
         if not self.placePlanter(planter,field, glitter): #make sure the planter was placed
             return
+        if is_stopped():
+            return
         
         if self.setdat["manual_planters_collect_full"]:
             baseGrowthTime, bonusFields, fieldGrowthBonus = planterGrowthData[planter]
@@ -386,6 +462,8 @@ class PlanterMixin:
 
         planterCompleteTime = time.time() + planterGrowthTime
 
+        if is_stopped():
+            return
         self.reset()
 
         return (planter, field, planterCompleteTime, gather)
