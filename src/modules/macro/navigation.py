@@ -241,12 +241,12 @@ class NavigationMixin:
                     if self.isBesideE(["fire"]):
                         return True
                     self.keyboard.tileWalk("a", 1.5)
-            self.logger.webhook("Notice", f"Could not find cannon (attempt {i + 1}/{max_attempts})", "dark brown", "screen")
+            self.logger.webhook("Notice", f"Could not find cannon (attempt {i + 1}/{max_attempts})", "orange", "screen")
             detected_color = detect_rejoin_mode_color()
             if allowHiveResync and hive_resync_attempts and i + 1 >= hive_resync_attempts:
                 if self.resyncHiveSlotFromHive():
                     return self.cannon(allowHiveResync=False, allowRejoin=allowRejoin)
-                self.logger.webhook("", "Hive slot recheck failed; rejoining", "dark brown", "screen")
+                self.logger.webhook("", "Hive slot recheck failed; rejoining", "orange", "screen")
                 if allowRejoin and self.rejoin():
                     return self.cannon(allowHiveResync=False, allowRejoin=False)
                 return False
@@ -256,14 +256,14 @@ class NavigationMixin:
                 if detected_color is not None:
                     retries_left = max_attempts - (i + 1)
                     retry_label = "time" if retries_left == 1 else "times"
-                    self.logger.webhook("", f"Detected light/dark-mode screen while searching for cannon. Resetting and retrying cannon search ({retries_left} {retry_label} remaining).", "dark brown", "screen")
+                    self.logger.webhook("", f"Detected light/dark-mode screen while searching for cannon. Resetting and retrying cannon search ({retries_left} {retry_label} remaining).", "orange", "screen")
                 self.reset(convert=False)
                 continue
 
             if detected_color is not None and first_attempt_color is not None and tuple(detected_color) == tuple(first_attempt_color):
-                self.logger.webhook("", "Detected the same light/dark-mode color again after reset while searching for cannon. Rejoining.", "dark brown", "screen")
+                self.logger.webhook("", "Detected the same light/dark-mode color again after reset while searching for cannon. Rejoining.", "orange", "screen")
             elif detected_color is not None:
-                self.logger.webhook("", "Detected light/dark-mode screen again while searching for cannon. Rejoining.", "dark brown", "screen")
+                self.logger.webhook("", "Detected light/dark-mode screen again while searching for cannon. Rejoining.", "orange", "screen")
             self.logger.webhook(
                 "Notice",
                 f"Failed to reach cannon after {max_attempts} attempts" + ("; rejoining" if allowRejoin else "; aborting travel"),
@@ -277,7 +277,7 @@ class NavigationMixin:
 
     def travelViaCannon(self, context="Travel", resetIfAway=True, convertOnReset=False):
         if resetIfAway and self.location != "spawn":
-            self.logger.webhook("", f"Returning to hive before {context.lower()}", "dark brown")
+            self.logger.webhook("", f"Returning to hive before {context.lower()}", "light blue")
             if not self.reset(convert=convertOnReset):
                 return False
         if self.cannon():

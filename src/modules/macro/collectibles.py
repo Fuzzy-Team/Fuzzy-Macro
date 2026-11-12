@@ -28,7 +28,7 @@ class CollectiblesMixin:
         elapsed = time.time() - self.getTiming("wind_shrine")
         if elapsed < cooldownSeconds:
             remaining = int(cooldownSeconds - elapsed)
-            self.logger.webhook("", f"{displayName} is on cooldown ({timedelta(seconds=remaining)} remaining)", "dark brown", "screen")
+            self.logger.webhook("", f"{displayName} is on cooldown ({timedelta(seconds=remaining)} remaining)", "orange", "screen")
             return None
 
         def normalizeShrineItemName(value):
@@ -239,7 +239,7 @@ class CollectiblesMixin:
 
 
     def antChallenge(self):
-        self.logger.webhook("","Travelling: Ant Challenge","dark brown")
+        self.logger.webhook("","Travelling: Ant Challenge","light blue")
         if not self.travelViaCannon("Ant Challenge"):
             return False
         self.runPath("boss/ant_challenge")
@@ -256,7 +256,7 @@ class CollectiblesMixin:
                 self.logger.webhook("", "Failed to collect ant pass","red", "screen", ping_category="ping_critical_errors")
             else:
                 # the player is at the dispenser now, so walk back before reading the challenge prompt
-                self.logger.webhook("","Travelling: Ant Challenge","dark brown")
+                self.logger.webhook("","Travelling: Ant Challenge","light blue")
                 if not self.travelViaCannon("Ant Challenge"):
                     return False
                 self.runPath("boss/ant_challenge")
@@ -309,7 +309,7 @@ class CollectiblesMixin:
                         return True
                     if self.blueTextHas("died"):
                         mouse.mouseUp()
-                        self.logger.webhook("","Player died during Ant Challenge; resetting", "dark brown", "screen", ping_category="ping_character_deaths")
+                        self.logger.webhook("","Player died during Ant Challenge; resetting", "red", "screen", ping_category="ping_character_deaths")
                         self.reset(convert=False)
                         return False
                     if time.time() - challengeStart > 8*60:
@@ -336,7 +336,7 @@ class CollectiblesMixin:
         self.set_task_status("sticker_printer", activity="sticker_printer")
         reached = False
         for _ in range(2):
-            self.logger.webhook("",f"Travelling: Sticker Printer","dark brown")
+            self.logger.webhook("",f"Travelling: Sticker Printer","light blue")
             if not self.travelViaCannon("Sticker Printer"):
                 return
             self.runPath("collect/sticker_printer")
@@ -346,7 +346,7 @@ class CollectiblesMixin:
                 reached = self.isBesideE(["inspect", "stick", "print"])
                 if reached: break
             if reached: break
-            self.logger.webhook("", f"Failed to reach sticker printer", "dark brown", "screen")
+            self.logger.webhook("", f"Failed to reach sticker printer", "orange", "screen")
             self.reset(convert=False)
         else: return
 
@@ -367,7 +367,7 @@ class CollectiblesMixin:
         mouse.click()
         time.sleep(1)
         if not self.findText("confirm", self.robloxWindow.mx+(self.robloxWindow.mw//2+150), self.robloxWindow.my+(4*self.robloxWindow.mh//10+160), 120, 60):
-            self.logger.webhook(f"", "Sticker printer on cooldown", "dark brown", "screen")
+            self.logger.webhook(f"", "Sticker printer on cooldown", "orange", "screen")
             self.keyboard.press("e")
             self.saveTiming("sticker_printer")
             return
@@ -407,7 +407,7 @@ class CollectiblesMixin:
             self.hourlyReport.addHourlyStat("misc_time", time.time()-st)
         #go to collect and check that player has reached
         for i in range(3):
-            self.logger.webhook("",f"Travelling: {displayName}","dark brown")
+            self.logger.webhook("",f"Travelling: {displayName}","light blue")
             if objective in ["honey_dispenser", "gingerbread"]:
                 self.reset(convert=False)
             else:
@@ -429,7 +429,7 @@ class CollectiblesMixin:
                     self.keyboard.walk("s", 0.4)
                     reached = self.isBesideE(objectiveData[0])
                 if not reached:
-                    self.logger.webhook("", "Failed to reach Honey Storm summon point", "dark brown", "screen")
+                    self.logger.webhook("", "Failed to reach Honey Storm summon point", "orange", "screen")
                     updateHourlyTime()
                     return
                 if "(" in reached and ":" in reached:
@@ -437,7 +437,7 @@ class CollectiblesMixin:
                     cd = self.cdTextToSecs(reached, True, cooldownSeconds)
                     if cd:
                         cooldownFormat = timedelta(seconds=cd)
-                        self.logger.webhook("", f"Honey Storm is on cooldown ({cooldownFormat} remaining)", "dark brown", "screen")
+                        self.logger.webhook("", f"Honey Storm is on cooldown ({cooldownFormat} remaining)", "orange", "screen")
                         self.saveTiming(objective)
                         self.collectCooldowns[objective] = cd
                         return
@@ -466,9 +466,9 @@ class CollectiblesMixin:
                     reached = self.isBesideE(objectiveData[0])
                     if reached: break
             if reached: break
-            self.logger.webhook("", f"Failed to reach {displayName}", "dark brown", "screen")
+            self.logger.webhook("", f"Failed to reach {displayName}", "orange", "screen")
             if objective in ("ant_pass_dispenser", "buy_ant_pass"):
-                self.logger.webhook("", "Maybe you have maxed out ant passes?", "dark brown")
+                self.logger.webhook("", "Maybe you have maxed out ant passes?", "orange")
             if i != 2: self.reset(convert=False)
         
         if not reached: 
@@ -480,24 +480,24 @@ class CollectiblesMixin:
                 ("already" in reachedText and "robo" in reachedText and "pass" in reachedText)
                 or ("10" in reachedText and "more" in reachedText and "robo" in reachedText)
             ):
-                self.logger.webhook("", "Maybe you have maxed out robo passes?", "dark brown", "screen")
+                self.logger.webhook("", "Maybe you have maxed out robo passes?", "orange", "screen")
                 updateHourlyTime()
                 return
         if objective == "gummy_beacon":
             reachedText = str(reached).lower()
             if "siege" in reachedText and "progress" in reachedText:
-                self.logger.webhook("", "Gummy Beacon is already active", "dark brown", "screen")
+                self.logger.webhook("", "Gummy Beacon is already active", "orange", "screen")
                 updateHourlyTime()
                 return
             if ("satellite" in reachedText or "satelite" in reachedText) and "vibes" in reachedText:
-                self.logger.webhook("", "Gummy Beacon is not unlocked", "dark brown", "screen")
+                self.logger.webhook("", "Gummy Beacon is not unlocked", "orange", "screen")
                 updateHourlyTime()
                 return
             if "(" in reachedText and ":" in reachedText:
                 cd = self.cdTextToSecs(reachedText, True, self.collectCooldowns[objective])
                 if cd:
                     cooldownFormat = timedelta(seconds=cd)
-                    self.logger.webhook("", f"{displayName} is on cooldown ({cooldownFormat} remaining)", "dark brown", "screen")
+                    self.logger.webhook("", f"{displayName} is on cooldown ({cooldownFormat} remaining)", "orange", "screen")
                     self.saveTiming(objective)
                     self.collectCooldowns[objective] = cd
                     updateHourlyTime()
@@ -510,7 +510,7 @@ class CollectiblesMixin:
             cd = self.cdTextToSecs(reached, True, self.collectCooldowns[objective])
             if cd: cooldownSeconds = cd
             cooldownFormat = timedelta(seconds=cooldownSeconds)
-            self.logger.webhook("", f"{displayName} is on cooldown ({cooldownFormat} remaining)", "dark brown", "screen")
+            self.logger.webhook("", f"{displayName} is on cooldown ({cooldownFormat} remaining)", "orange", "screen")
         else: #not on cooldown
             if objective in fieldBoosterData:
                 #the buff bar scan would otherwise move the alts for this booster before the field is read below
@@ -562,7 +562,7 @@ class CollectiblesMixin:
                 self.saveTiming("last_booster")
             elif objective == "sticker_stack":
                 if "your" in reached or "activated" in reached:
-                    self.logger.webhook("", "Sticker Stack on cooldown", "dark brown", "screen")
+                    self.logger.webhook("", "Sticker Stack on cooldown", "orange", "screen")
                     return
                 if not self.claimStickerStack():
                     updateHourlyTime()
@@ -623,7 +623,7 @@ class CollectiblesMixin:
                 return
 
         for _ in range(2):
-            self.logger.webhook("","Travelling: Blender","dark brown")
+            self.logger.webhook("","Travelling: Blender","light blue")
             if not self.travelViaCannon("Blender"):
                 updateHourlyTime()
                 return
@@ -635,7 +635,7 @@ class CollectiblesMixin:
                 if reached: break
             if reached: break
         else:
-            self.logger.webhook("","Failed to reach Blender", "dark brown", "screen")
+            self.logger.webhook("","Failed to reach Blender", "orange", "screen")
             updateHourlyTime()
             return
         
@@ -675,7 +675,7 @@ class CollectiblesMixin:
         res = locateImageOnScreen(notDoneImg, x, y, 560, 480, 0.75)
 
         def cancelCraft():
-            self.logger.webhook("", "Unable to detect remaining crafting time, ending craft", "dark brown", "screen")
+            self.logger.webhook("", "Unable to detect remaining crafting time, ending craft", "orange", "screen")
             #mouse.moveTo(self.robloxWindow.mx+(self.robloxWindow.mw/2-120), self.robloxWindow.my+(math.floor(self.robloxWindow.mh*0.48))+120)
             clickOnBlenderElement(x + res[1][0]//self.robloxWindow.multi, y + res[1][1]//self.robloxWindow.multi)
 
@@ -710,7 +710,7 @@ class CollectiblesMixin:
             sleep(0.06)
         #check if the item can be crafted
         if not self.findText("make", x, y, 560, 480):
-            self.logger.webhook("", f"Unable to craft {itemDisplay}", "dark brown", "screen")
+            self.logger.webhook("", f"Unable to craft {itemDisplay}", "orange", "screen")
         #open the crafting menu
         mouse.moveTo(self.robloxWindow.mx+(self.robloxWindow.mw/2), self.robloxWindow.my+(math.floor(self.robloxWindow.mh*0.48))+130)
         time.sleep(0.1)
@@ -741,7 +741,7 @@ class CollectiblesMixin:
             if quantity:
                 quantity = int(quantity)
             else:
-                self.logger.webhook("", "Failed to detect the quantity of items crafted. The macro will get the crafting time on the next visit", "dark brown")
+                self.logger.webhook("", "Failed to detect the quantity of items crafted. The macro will get the crafting time on the next visit", "orange")
                 quantity = 0
         else: 
             #normal quantity

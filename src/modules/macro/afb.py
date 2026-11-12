@@ -245,7 +245,7 @@ class AFBMixin:
                 self.afb = True
                 if turnOffShiftLock:
                     self.disableShiftLock()
-                self.logger.webhook("Gathering: interrupted", "Automatic Field Boost", "brown")
+                self.logger.webhook("Gathering: interrupted", "Automatic Field Boost", "orange")
                 if self.AFBglitter:
                     self.reset(convert=False)
                 else:

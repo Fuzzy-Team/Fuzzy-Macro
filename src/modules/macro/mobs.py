@@ -22,7 +22,7 @@ class MobMixin:
 
     def collectMondoBuff(self, gatherInterrupt = False):
         self.set_task_status("mondo_buff", activity="mondo")
-        self.logger.webhook("","Travelling: Mondo Buff","dark brown")
+        self.logger.webhook("","Travelling: Mondo Buff","light blue")
         #go to mondo buff
         if not self.travelViaCannon("Mondo Buff"):
             return False
@@ -207,7 +207,7 @@ class MobMixin:
         mobName = mob
         if mob == "rhinobeetle": mobName = "rhino beetle"
         self.set_task_status("bugrun", activity=mob, details=f"Attacking in {field.title()}")
-        self.logger.webhook("","{}: {} ({})".format("Travelling" if walkPath is None else "Walking", mobName.title(),field.title()),"dark brown")
+        self.logger.webhook("","{}: {} ({})".format("Travelling" if walkPath is None else "Walking", mobName.title(),field.title()),"light blue")
         self.mobRunStatus = "attacking"
         attackThread = threading.Thread(target=self.mobRunAttackingBackground)
         attackThread.daemon = True
@@ -257,12 +257,12 @@ class MobMixin:
 
         attackThread.join()
         if self.mobRunStatus == "dead":
-            self.logger.webhook("","Player died", "dark brown","screen", ping_category="ping_character_deaths")
+            self.logger.webhook("","Player died", "red","screen", ping_category="ping_character_deaths")
             updateHourlyTime()
             return
         elif self.mobRunStatus == "timeout":
             self.setMobTimer(field)
-            self.logger.webhook("","Could not kill {} in time. Maybe it hasn't respawned?".format(mobName.title()), "dark brown", "screen")
+            self.logger.webhook("","Could not kill {} in time. Maybe it hasn't respawned?".format(mobName.title()), "orange", "screen")
             updateHourlyTime()
             return
         time.sleep(1.5)
@@ -329,7 +329,7 @@ class MobMixin:
                     return False
                 if not self.cannon():
                     return False
-                self.logger.webhook("", "Travelling: Stump Snail", "dark brown")
+                self.logger.webhook("", "Travelling: Stump Snail", "light blue")
                 self.goToField("stump")
                 if self.placeSprinkler():
                     if is_stopped():
@@ -489,7 +489,7 @@ class MobMixin:
                 if not self.travelViaCannon("Coconut Crab"):
                     self.bossStatus = "travel_failed"
                     return
-                self.logger.webhook("","Travelling: Coconut Crab","dark brown")
+                self.logger.webhook("","Travelling: Coconut Crab","light blue")
                 self.goToField("coconut")
                 self.keyboard.walk("s", 1)
                 self.keyboard.walk("d", 3)
@@ -526,14 +526,14 @@ class MobMixin:
                     cocoThread.join(timeout=5)
 
                 if self.died:
-                    self.logger.webhook("", "Died to Coconut Crab", "dark brown", ping_category="ping_character_deaths")
+                    self.logger.webhook("", "Died to Coconut Crab", "red", ping_category="ping_character_deaths")
                     if attempt == 0:
                         self.reset(convert=False)
                     self.died = False
                 elif self.bossStatus is not None:
                     break
             if self.bossStatus == "timelimit":
-                self.logger.webhook("", "Time Limit: Coconut Crab", "dark brown", ping_category="ping_critical_errors")
+                self.logger.webhook("", "Time Limit: Coconut Crab", "red", ping_category="ping_critical_errors")
             elif self.bossStatus == "defeated":
                 self.keyboard.walk("a", 2)
                 self.logger.webhook("", "Defeated: Coconut Crab", "bright green", "screen", ping_category="ping_mob_events")
@@ -555,7 +555,7 @@ class MobMixin:
         for attempt in range(2):
             if not self.travelViaCannon("King Beetle"):
                 return
-            self.logger.webhook("","Travelling: King Beetle","dark brown")
+            self.logger.webhook("","Travelling: King Beetle","light blue")
             self.goToField("blue_flower")
             self.died = False
             self.bossStatus = None
@@ -593,7 +593,7 @@ class MobMixin:
                 sleep(1)
 
             if self.died:
-                self.logger.webhook("", "Died to King Beetle", "dark brown", ping_category="ping_character_deaths")
+                self.logger.webhook("", "Died to King Beetle", "red", ping_category="ping_character_deaths")
                 if attempt == 0:
                     self.reset(convert=False)
                 self.died = False
@@ -601,7 +601,7 @@ class MobMixin:
                 break
 
         if self.bossStatus == "timelimit":
-            self.logger.webhook("", "Time Limit: King Beetle", "dark brown", "screen", ping_category="ping_critical_errors")
+            self.logger.webhook("", "Time Limit: King Beetle", "red", "screen", ping_category="ping_critical_errors")
         elif self.bossStatus == "defeated":
             self.logger.webhook("", "Defeated: King Beetle", "bright green", "screen", ping_category="ping_mob_events")
         self.hourlyReport.addHourlyStat("bug_run_time", time.time()-st)
@@ -613,7 +613,7 @@ class MobMixin:
         for attempt in range(2):
             if not self.travelViaCannon("Tunnel Bear"):
                 return
-            self.logger.webhook("","Travelling: Tunnel Bear","dark brown")
+            self.logger.webhook("","Travelling: Tunnel Bear","light blue")
             self.goToField("pineapple")
             self.died = False
             self.bossStatus = None
@@ -645,7 +645,7 @@ class MobMixin:
                 sleep(1)
 
             if self.died:
-                self.logger.webhook("", "Died to Tunnel Bear", "dark brown", ping_category="ping_character_deaths")
+                self.logger.webhook("", "Died to Tunnel Bear", "red", ping_category="ping_character_deaths")
                 if attempt == 0:
                     self.reset(convert=False)
                 self.died = False
@@ -653,7 +653,7 @@ class MobMixin:
                 break
 
         if self.bossStatus == "timelimit":
-            self.logger.webhook("", "Time Limit: Tunnel Bear", "dark brown", "screen", ping_category="ping_critical_errors")
+            self.logger.webhook("", "Time Limit: Tunnel Bear", "red", "screen", ping_category="ping_critical_errors")
         elif self.bossStatus == "defeated":
             self.logger.webhook("", "Defeated: Tunnel Bear", "bright green", "screen", ping_category="ping_mob_events")
         self.hourlyReport.addHourlyStat("bug_run_time", time.time()-st)

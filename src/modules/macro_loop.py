@@ -480,7 +480,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             return False
 
         mobNames = ", ".join(sorted({mob.replace("_", " ").title() for mob, _ in readyMobs}))
-        macro.logger.webhook("Quest mobs ready", f"Running before quest gathering: {mobNames}", "dark brown")
+        macro.logger.webhook("Quest mobs ready", f"Running before quest gathering: {mobNames}", "light blue")
         for mob, field in readyMobs:
             # Recheck because an earlier field run can update shared mob timings.
             if macro.hasMobRespawned(mob, field):
