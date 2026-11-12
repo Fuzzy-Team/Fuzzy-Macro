@@ -54,6 +54,8 @@ class MemoryMatch:
         # Optional templates for identifying selected reward types.
         self.reward_templates_by_type = self._load_reward_templates()
         self.reward_templates = {}
+        # Whether the last attempt count came from OCR or the DEFAULT_ATTEMPTS fallback.
+        self.used_default_attempts = False
 
     def _click_tile(self, x: int, y: int) -> None:
         """Click on a tile at the given coordinates."""
@@ -226,11 +228,17 @@ class MemoryMatch:
             return None
 
     def _get_attempts_count(self, middle_x: int, middle_y: int, offset_x: int) -> int:
-        """Read the number of attempts from the screen."""
+        """Read the number of attempts from the screen.
+
+        Sets `used_default_attempts` so callers know whether the count came from
+        OCR or fell back to DEFAULT_ATTEMPTS.
+        """
         attempts_ocr = self._read_chances(middle_x, middle_y, offset_x)
         if attempts_ocr is not None and self.MIN_ATTEMPTS <= attempts_ocr <= self.MAX_ATTEMPTS:
             print(f"Number of attempts: {attempts_ocr}")
+            self.used_default_attempts = False
             return attempts_ocr
+        self.used_default_attempts = True
         return self.DEFAULT_ATTEMPTS
 
     def solveMemoryMatch(self, mm_type: str, preferred_rewards: Optional[List[str]] = None) -> None:
@@ -255,15 +263,29 @@ class MemoryMatch:
         if wait_while_paused() or is_stopped():
             return
         attempts = self._get_attempts_count(middle_x, middle_y, offset_x)
+        used_default_attempts = self.used_default_attempts
+        if is_stopped():
+            return
+
+        # Base attempts are guaranteed (5 for extreme/winter, 3 otherwise). When OCR
+        # cannot read the count we fall back to DEFAULT_ATTEMPTS, so the board must be
+        # re-verified once the base attempts are used. A valid OCR count already
+        # includes badge bonuses, so it can be trusted without the board check.
+        min_attempts = 5 if self._normalize_mm_type(mm_type) in ("extreme", "winter") else 3
         
         # Game loop
         current_attempt = 0
-        while current_attempt <= attempts and not is_stopped():
+        while current_attempt < attempts and not is_stopped():
             print(f"Attempt {current_attempt}")
 
-            # Check if game is still active
-            if current_attempt > attempts:
-                self._check_game_active()
+            # Only the fallback count can outlast the real board, so verify it is
+            # still open before clicking any tile. Trust a valid OCR count directly.
+            if used_default_attempts and current_attempt >= min_attempts:
+                game_active = self._check_game_active()
+                if is_stopped():
+                    break
+                if not game_active:
+                    break
             
             target_pair = self._find_known_preferred_pair(tile_rewards, preferred_rewards, claimed_coords)
             if target_pair is not None:
@@ -307,14 +329,14 @@ class MemoryMatch:
                 break
             
             # Second tile
-            self._click_second_tile(
+            consumed_attempts = self._click_second_tile(
                 grid_coords, checked_coords, mm_data, tile_rewards, claimed_coords, preferred_rewards,
                 first_tile_index, first_tile_hash, offset_x, offset_y, 
-                middle_x, middle_y, current_attempt
+                middle_x, middle_y, current_attempt, attempts, used_default_attempts, min_attempts
             )
-            
-            
-            current_attempt += 1
+            if is_stopped():
+                break
+            current_attempt += consumed_attempts
             time.sleep(self.TURN_DELAY)
             if is_stopped():
                 break
@@ -396,20 +418,19 @@ class MemoryMatch:
             pass
         return False
 
-    def _check_game_active(self) -> None:
-        """Check if the memory match game is still active."""
+    def _check_game_active(self) -> bool:
+        """Return whether the memory match board is still on screen."""
         if wait_while_paused() or is_stopped():
-            return
+            return False
         mm_img = adjustImage("./images/menu", "mmopen", self.robloxWindow.display_type)
-        if not locateImageOnScreen(
+        return bool(locateImageOnScreen(
             mm_img, 
             self.robloxWindow.mx + self.robloxWindow.mw / 4, 
             self.robloxWindow.my + self.robloxWindow.mh / 4, 
             self.robloxWindow.mw / 4, 
             self.robloxWindow.mh / 3.5, 
             0.8
-        ):
-            pass  # Game might have ended
+        ))
 
     def _click_first_tile(self, grid_coords: List[Tuple[int, int]], checked_coords: Set[Tuple[int, int]], 
                           mm_data: List[Optional[ImageHash]], tile_rewards: List[Optional[str]],
@@ -464,15 +485,21 @@ class MemoryMatch:
                           claimed_coords: Set[int], preferred_rewards: Set[str],
                           first_tile_index: int, first_tile_hash: ImageHash, 
                           offset_x: int, offset_y: int, middle_x: int, middle_y: int, 
-                          current_attempt: int) -> None:
-        """Click the second tile and handle matching logic."""
+                          current_attempt: int, attempts: int, used_default_attempts: bool,
+                          min_attempts: int) -> int:
+        """Click the second tile and handle matching logic.
+
+        Returns the number of attempts consumed: 0 when stopped, 1 for a normal
+        turn, or 2 when it also claims the known match on the following turn.
+        """
         if is_stopped():
-            return
+            return 0
+        consumed_attempts = 1
         # If we found a match on first tile, click the matching tile
         match_found = self._lookup_seen(first_tile_hash, claimed_coords, exclude_index=first_tile_index)
         if match_found is not None:
             if wait_while_paused() or is_stopped():
-                return
+                return 0
             # On the last chance there is nothing left to save the pair for, so take it even if not preferred.
             if (not self._should_claim_match(tile_rewards[first_tile_index], tile_rewards[match_found], preferred_rewards)
                     and self._read_chances(middle_x, middle_y, offset_x) != 1):
@@ -482,15 +509,15 @@ class MemoryMatch:
                 x, y = grid_coords[match_found]
                 self._click_tile(x - offset_x, y - offset_y)
                 if is_stopped():
-                    return
+                    return 0
                 claimed_coords.add(first_tile_index)
                 claimed_coords.add(match_found)
-                return
+                return 1
 
         # Otherwise, click a new tile
         for i, (x_raw, y_raw) in enumerate(grid_coords):
             if is_stopped():
-                return
+                return 0
             if (x_raw, y_raw) in checked_coords:
                 continue
 
@@ -499,10 +526,10 @@ class MemoryMatch:
 
             self._click_tile(x, y)
             if is_stopped():
-                return
+                return 0
             time.sleep(0.1)
             if wait_while_paused() or is_stopped():
-                return
+                return 0
             mouse.moveTo(middle_x, middle_y - self.MOUSE_MOVE_OFFSET)  # Move mouse out of the way
 
             tile_image = self._capture_tile(x, y)
@@ -510,7 +537,7 @@ class MemoryMatch:
             if self._are_images_similar(tile_hash, self.blank_tile_hash):
                 tile_hash = self._wait_for_tile_flip(x, y)
                 if is_stopped():
-                    return
+                    return 0
                 tile_image = self._capture_tile(x, y)
             tile_reward = self._classify_reward(tile_image)
             checked_coords.add((x_raw, y_raw))
@@ -534,28 +561,44 @@ class MemoryMatch:
                         mm_data[i] = tile_hash
                         tile_rewards[i] = tile_reward
                         self._record_seen(tile_hash, i)
-                        break
-                    # Handle the match in the next turn
-                    time.sleep(2)
-                    if is_stopped():
-                        return
-                    self._click_tile(x, y)  # Click the second tile again
-                    if is_stopped():
-                        return
-                    time.sleep(1)
-                    if is_stopped():
-                        return
-                    x2, y2 = grid_coords[match_found]
-                    self._click_tile(x2 - offset_x, y2 - offset_y)  # Click the matching tile
-                    if is_stopped():
-                        return
-                    claimed_coords.add(i)
-                    claimed_coords.add(match_found)
+                        return 1
+                    # Claiming this pair needs another turn. Only start it if the
+                    # board has an attempt left to spend.
+                    if current_attempt + 1 < attempts:
+                        # Let the mismatched tiles flip back before checking the
+                        # board: with the fallback attempt count the last chance
+                        # can close it during that animation.
+                        time.sleep(2)
+                        if is_stopped():
+                            return 0
+                        can_claim_extra_turn = True
+                        if used_default_attempts and current_attempt + 1 >= min_attempts:
+                            if not self._check_game_active():
+                                can_claim_extra_turn = False
+                            if is_stopped():
+                                return 0
+                        if can_claim_extra_turn:
+                            # Handle the match on the next turn
+                            self._click_tile(x, y)  # Click the second tile again
+                            if is_stopped():
+                                return 0
+                            consumed_attempts = 2
+                            time.sleep(1)
+                            if is_stopped():
+                                return 0
+                            x2, y2 = grid_coords[match_found]
+                            self._click_tile(x2 - offset_x, y2 - offset_y)  # Click the matching tile
+                            if is_stopped():
+                                return 0
+                            claimed_coords.add(i)
+                            claimed_coords.add(match_found)
             mm_data[i] = tile_hash
             tile_rewards[i] = tile_reward
             # Record seen tile for future matches (hash-bucket)
             self._record_seen(tile_hash, i)
-            break
+            return consumed_attempts
+
+        return consumed_attempts
 
     def _record_seen(self, tile_hash: ImageHash, index: int) -> None:
         """Record a seen tile hash into buckets for the current game."""
