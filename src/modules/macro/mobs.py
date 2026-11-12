@@ -2,7 +2,7 @@ import threading
 import traceback
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
-from modules.controls.sleep import InterruptRequested, is_paused, is_stopped, pause_aware_time as time, sleep
+from modules.controls.sleep import InterruptRequested, is_paused, is_stopped, pause_aware_time as time, paused_seconds, sleep, wait_while_paused
 from modules.gather_session import field_pattern_variables, GatherPatternRunner
 import modules.macro.pattern_environment as patternEnvironment
 from modules.macro.game_data import (
@@ -174,6 +174,7 @@ class MobMixin:
     #time limit of 20s
     def mobRunAttackingBackground(self):
         st = time.time()
+        pausedAtStart = paused_seconds()
         if self.setdat["bees"] > 40:
             timeout = 20
         elif self.setdat["bees"] > 30:
@@ -181,26 +182,41 @@ class MobMixin:
         else:
             timeout = 40
 
-        while True:
+        while self.mobRunStatus == "attacking" and not is_stopped():
+            if wait_while_paused():
+                break
             screen = self.blueTextScreen()
+            if is_stopped():
+                break
             if self.blueTextHas("died", screen=screen):
                 self.mobRunStatus = "dead"
                 break
             elif self.blueTextHas("defeated", screen=screen):
                 self.mobRunStatus = "looting"
                 break
-            elif time.time() - st > timeout:
+            elif time.time() - st - (paused_seconds() - pausedAtStart) > timeout:
                 self.mobRunStatus = "timeout"
                 break
+        if is_stopped():
+            self.mobRunStatus = "done"
 
     #background thread to check if token link is collected or the macro runs out of time (max 15s)
     def mobRunLootingBackground(self):
         st = time.time()
-        while time.time() - st < 20:
-           if self.blueTextHas("tokenlink"):
-            time.sleep(0.5) 
-            self.logger.webhook("","Collected Token Link", "pink", "blue")
-            break
+        pausedAtStart = paused_seconds()
+        while (
+            self.mobRunStatus == "looting"
+            and not is_stopped()
+            and time.time() - st - (paused_seconds() - pausedAtStart) < 20
+        ):
+            if wait_while_paused():
+                break
+            if self.blueTextHas("tokenlink"):
+                time.sleep(0.5)
+                if is_stopped():
+                    break
+                self.logger.webhook("","Collected Token Link", "pink", "blue")
+                break
         self.mobRunStatus = "done"
 
     def killMob(self, mob, field, walkPath = None):
@@ -212,18 +228,46 @@ class MobMixin:
         attackThread = threading.Thread(target=self.mobRunAttackingBackground)
         attackThread.daemon = True
         if walkPath is None:
-            self.waitForBees()
-            if not self.travelViaCannon(f"{mobName.title()}"):
+            try:
+                self.waitForBees()
+                if is_stopped():
+                    self.clear_task_status()
+                    return
+                if not self.travelViaCannon(f"{mobName.title()}"):
+                    self.clear_task_status()
+                    return
+                if is_stopped():
+                    self.clear_task_status()
+                    return
+                self.goToField(field, "north")
+            except InterruptRequested:
+                self.mobRunStatus = "done"
+                if attackThread.is_alive(): attackThread.join()
+                self.clear_task_status()
+                raise
+            if is_stopped():
+                self.clear_task_status()
                 return
-            self.goToField(field, "north")
             #attack the mob
             attackThread.start()
         else:
             #attack the mob
             #attack thread will start in the path
             self.canDetectNight = False
-            exec(walkPath)
-            self.canDetectNight = True
+            try:
+                exec(walkPath)
+            except InterruptRequested:
+                self.mobRunStatus = "done"
+                if attackThread.is_alive(): attackThread.join()
+                self.clear_task_status()
+                raise
+            finally:
+                self.canDetectNight = True
+            if is_stopped():
+                self.mobRunStatus = "done"
+                if attackThread.is_alive(): attackThread.join()
+                self.clear_task_status()
+                return
         self.location = field
         self.logger.webhook("","Attacking: {} ({})".format(mobName.title(),field.title()),"dark brown")
         
@@ -240,32 +284,58 @@ class MobMixin:
             if k in ["w", "s"]: lastFrontKey = k
             elif k in ["a","d"]: lastSideKey = k
             self.keyboard.walk(k, t)
-        while True:
-            # Check if paused and wait
-            if self.checkPauseAndWait():
-                # Stop was requested while paused
-                self.mobRunStatus = "done"
-                break
-            dodgeWalk("s", distance*1.2)
-            if self.mobRunStatus != "attacking": break
-            dodgeWalk("a", distance*1.8)
-            if self.mobRunStatus != "attacking": break
-            dodgeWalk("w", distance*1.2)
-            if self.mobRunStatus != "attacking": break
-            dodgeWalk("d", distance*1.8)
-            if self.mobRunStatus != "attacking": break
+        walkPattern = (
+            ("s", distance*1.2),
+            ("a", distance*1.8),
+            ("w", distance*1.2),
+            ("d", distance*1.8),
+        )
+        try:
+            while True:
+                if is_stopped():
+                    self.mobRunStatus = "done"
+                    break
+                # Check if paused and wait
+                if self.checkPauseAndWait():
+                    # Stop was requested while paused
+                    self.mobRunStatus = "done"
+                    break
+                for k, t in walkPattern:
+                    if is_stopped():
+                        self.mobRunStatus = "done"
+                        break
+                    dodgeWalk(k, t)
+                    if self.mobRunStatus != "attacking": break
+                if is_stopped() or self.mobRunStatus != "attacking": break
+        except InterruptRequested:
+            self.mobRunStatus = "done"
+            if attackThread.is_alive(): attackThread.join()
+            self.clear_task_status()
+            raise
 
         attackThread.join()
+        if is_stopped():
+            self.clear_task_status()
+            return
         if self.mobRunStatus == "dead":
             self.logger.webhook("","Player died", "red","screen", ping_category="ping_character_deaths")
             updateHourlyTime()
+            self.clear_task_status()
             return
         elif self.mobRunStatus == "timeout":
             self.setMobTimer(field)
             self.logger.webhook("","Could not kill {} in time. Maybe it hasn't respawned?".format(mobName.title()), "orange", "screen")
             updateHourlyTime()
+            self.clear_task_status()
             return
-        time.sleep(1.5)
+        try:
+            time.sleep(1.5)
+        except InterruptRequested:
+            self.clear_task_status()
+            raise
+        if is_stopped():
+            self.clear_task_status()
+            return
         #loot
         self.logger.webhook("", "Looting: {}".format(mobName.title()), "bright green", "screen")
         #start another background thread to check for token link/time limit
@@ -305,10 +375,24 @@ class MobMixin:
                     if self.mobRunStatus == "done": return
                     self.keyboard.walk(lastSideKey, 0.1*s)
                     if self.mobRunStatus == "done": return
-        lootPattern(1.35, 2.5)
+        try:
+            lootPattern(1.35, 2.5)
+        except InterruptRequested:
+            self.mobRunStatus = "done"
+            if lootThread.is_alive(): lootThread.join()
+            self.clear_task_status()
+            raise
+        if is_stopped():
+            self.mobRunStatus = "done"
+            lootThread.join()
+            self.clear_task_status()
+            return
         self.setMobTimer(field)
         self.clear_task_status()
         lootThread.join()
+        if is_stopped():
+            self.mobRunStatus = "done"
+            return
         #check if there are paths for the macro to walk to other fields for mob runs
         #run a path in the field format
         updateHourlyTime()
