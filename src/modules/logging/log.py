@@ -416,17 +416,21 @@ class log:
     def _send_discord_bot(self, channel_id, title, desc, time, color, imagePath=None, ping_user_id=None, time_format=None, fields=None):
         if not self.enableDiscordBot or not self.discordMessageQueue:
             return None
+        # the bot reads the file after the macro has moved on, so give it its own copy
+        imageCopy = self._snapshot_image(imagePath)
         data = {
             "channel_id": str(channel_id),
             "title": title,
             "desc": desc,
             "time": time,
             "color": color,
-            "imagePath": imagePath,
+            "imagePath": imageCopy,
             "ping_user_id": ping_user_id,
             "time_format": time_format if time_format is not None else self.webhookTimeFormat,
             "fields": fields,
         }
+        if imageCopy != imagePath:
+            data["_temporaryImage"] = imageCopy
         try:
             self.discordMessageQueue.put(data)
         except Exception as e:

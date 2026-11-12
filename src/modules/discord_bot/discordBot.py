@@ -917,7 +917,14 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 while _discord_message_queue and not _discord_message_queue.empty():
                     try:
                         data = _discord_message_queue.get_nowait()
-                        await send_logger_message(data)
+                        try:
+                            await send_logger_message(data)
+                        finally:
+                            if data.get("_temporaryImage"):
+                                try:
+                                    os.remove(data["_temporaryImage"])
+                                except OSError:
+                                    pass
                     except Exception as e:
                         print(f"Error processing Discord logger message: {e}")
             except Exception as e:
