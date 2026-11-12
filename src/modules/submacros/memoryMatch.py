@@ -1,5 +1,4 @@
 import os
-import time
 import random
 from typing import Dict, List, Tuple, Set, Optional
 
@@ -8,6 +7,7 @@ import numpy as np
 from PIL import Image
 
 import modules.controls.mouse as mouse
+from modules.controls.sleep import is_stopped, pause_aware_time as time, paused_seconds, wait_while_paused
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP
 from modules.screen.ocr import ocrRead, readBlueText
 from modules.misc.imageManipulation import adjustImage, average_hash, ImageHash
@@ -57,19 +57,31 @@ class MemoryMatch:
 
     def _click_tile(self, x: int, y: int) -> None:
         """Click on a tile at the given coordinates."""
+        if wait_while_paused() or is_stopped():
+            return
         mouse.moveTo(x, y, self.MOVE_DELAY)
         time.sleep(self.CLICK_DELAY)
+        if is_stopped():
+            return
         mouse.click()
 
     def _wait_for_tile_flip(self, x: int, y: int) -> ImageHash:
         """Wait for a tile to flip over, compensating for lag."""
         start_time = time.time()
-        while time.time() - start_time < self.MAX_WAIT_TIME:
+        tile_hash = self.blank_tile_hash
+        while not is_stopped() and time.time() - start_time < self.MAX_WAIT_TIME:
+            paused_before = paused_seconds()
+            if wait_while_paused():
+                break
             tile_hash = self._screenshot_tile(x, y)
             if not self._are_images_similar(tile_hash, self.blank_tile_hash):
                 time.sleep(self.TILE_FLIP_DELAY)
+                if is_stopped():
+                    break
                 tile_hash = self._screenshot_tile(x, y)
                 break
+            # Time spent paused is not spent waiting for the flip, so it doesn't count against MAX_WAIT_TIME.
+            start_time += paused_seconds() - paused_before
         return tile_hash
     
     def _are_images_similar(self, img1: ImageHash, img2: ImageHash) -> bool:
@@ -240,11 +252,13 @@ class MemoryMatch:
         # Get attempts count
         middle_x = self.robloxWindow.mx + self.robloxWindow.mw // 2
         middle_y = self.robloxWindow.my + self.robloxWindow.mh // 2
+        if wait_while_paused() or is_stopped():
+            return
         attempts = self._get_attempts_count(middle_x, middle_y, offset_x)
         
         # Game loop
         current_attempt = 0
-        while current_attempt <= attempts:
+        while current_attempt <= attempts and not is_stopped():
             print(f"Attempt {current_attempt}")
 
             # Check if game is still active
@@ -258,18 +272,26 @@ class MemoryMatch:
                 x1, y1 = grid_coords[first_idx]
                 x2, y2 = grid_coords[second_idx]
                 self._click_tile(x1 - offset_x, y1 - offset_y)
+                if is_stopped():
+                    break
                 time.sleep(self.TURN_DELAY)
+                if is_stopped():
+                    break
                 self._click_tile(x2 - offset_x, y2 - offset_y)
+                if is_stopped():
+                    break
                 claimed_coords.add(first_idx)
                 claimed_coords.add(second_idx)
                 current_attempt += 1
                 time.sleep(self.TURN_DELAY)
+                if is_stopped():
+                    break
                 try:
-                    if self._check_for_winnings():
-                        self._wait_for_winnings_text()
-                        return
+                    won = self._check_for_winnings()
                 except Exception:
-                    pass
+                    won = False
+                if won:
+                    break
                 continue
 
             # First tile
@@ -281,6 +303,8 @@ class MemoryMatch:
                 break
                 
             time.sleep(self.TURN_DELAY)
+            if is_stopped():
+                break
             
             # Second tile
             self._click_second_tile(
@@ -292,21 +316,26 @@ class MemoryMatch:
             
             current_attempt += 1
             time.sleep(self.TURN_DELAY)
+            if is_stopped():
+                break
             # After each match attempt, do a quick check for winnings/payout UI
             try:
-                if self._check_for_winnings():
-                    self._wait_for_winnings_text()
-                    return
+                won = self._check_for_winnings()
             except Exception:
-                pass
+                won = False
+            if won:
+                break
 
-        self._wait_for_winnings_text()
+        if not is_stopped():
+            self._wait_for_winnings_text()
 
     def _wait_for_winnings_text(self) -> None:
         """Wait for winnings text or payout background to appear."""
         bluetexts = ""
         found = False
         for _ in range(6):
+            if wait_while_paused() or is_stopped():
+                return
             try:
                 txt = readBlueText().lower()
             except Exception:
@@ -333,7 +362,10 @@ class MemoryMatch:
             except Exception:
                 pass
             time.sleep(0.4)
-        time.sleep(0.2)
+            if is_stopped():
+                return
+        if not is_stopped():
+            time.sleep(0.2)
 
     def _check_for_winnings(self) -> bool:
         """Quick non-blocking check for winnings/payout UI.
@@ -366,6 +398,8 @@ class MemoryMatch:
 
     def _check_game_active(self) -> None:
         """Check if the memory match game is still active."""
+        if wait_while_paused() or is_stopped():
+            return
         mm_img = adjustImage("./images/menu", "mmopen", self.robloxWindow.display_type)
         if not locateImageOnScreen(
             mm_img, 
@@ -383,6 +417,8 @@ class MemoryMatch:
                           offset_x: int, offset_y: int, middle_x: int, middle_y: int) -> Tuple[Optional[int], Optional[ImageHash]]:
         """Click the first tile and return its index and hash."""
         for i, (x_raw, y_raw) in enumerate(grid_coords):
+            if is_stopped():
+                return None, None
             if (x_raw, y_raw) in checked_coords:
                 continue
                 
@@ -390,13 +426,19 @@ class MemoryMatch:
             y = y_raw - offset_y
             
             self._click_tile(x, y)
+            if is_stopped():
+                return None, None
             time.sleep(0.1)
+            if wait_while_paused() or is_stopped():
+                return None, None
             mouse.moveTo(middle_x, middle_y - self.MOUSE_MOVE_OFFSET)  # Move mouse out of the way
             
             tile_image = self._capture_tile(x, y)
             tile_hash = average_hash(tile_image)
             if self._are_images_similar(tile_hash, self.blank_tile_hash):
                 tile_hash = self._wait_for_tile_flip(x, y)
+                if is_stopped():
+                    return None, None
                 tile_image = self._capture_tile(x, y)
             tile_reward = self._classify_reward(tile_image)
             checked_coords.add((x_raw, y_raw))
@@ -424,9 +466,13 @@ class MemoryMatch:
                           offset_x: int, offset_y: int, middle_x: int, middle_y: int, 
                           current_attempt: int) -> None:
         """Click the second tile and handle matching logic."""
+        if is_stopped():
+            return
         # If we found a match on first tile, click the matching tile
         match_found = self._lookup_seen(first_tile_hash, claimed_coords, exclude_index=first_tile_index)
         if match_found is not None:
+            if wait_while_paused() or is_stopped():
+                return
             # On the last chance there is nothing left to save the pair for, so take it even if not preferred.
             if (not self._should_claim_match(tile_rewards[first_tile_index], tile_rewards[match_found], preferred_rewards)
                     and self._read_chances(middle_x, middle_y, offset_x) != 1):
@@ -435,12 +481,16 @@ class MemoryMatch:
                 print("Match found, clicking matching tile")
                 x, y = grid_coords[match_found]
                 self._click_tile(x - offset_x, y - offset_y)
+                if is_stopped():
+                    return
                 claimed_coords.add(first_tile_index)
                 claimed_coords.add(match_found)
                 return
 
         # Otherwise, click a new tile
         for i, (x_raw, y_raw) in enumerate(grid_coords):
+            if is_stopped():
+                return
             if (x_raw, y_raw) in checked_coords:
                 continue
 
@@ -448,13 +498,19 @@ class MemoryMatch:
             y = y_raw - offset_y
 
             self._click_tile(x, y)
+            if is_stopped():
+                return
             time.sleep(0.1)
+            if wait_while_paused() or is_stopped():
+                return
             mouse.moveTo(middle_x, middle_y - self.MOUSE_MOVE_OFFSET)  # Move mouse out of the way
 
             tile_image = self._capture_tile(x, y)
             tile_hash = average_hash(tile_image)
             if self._are_images_similar(tile_hash, self.blank_tile_hash):
                 tile_hash = self._wait_for_tile_flip(x, y)
+                if is_stopped():
+                    return
                 tile_image = self._capture_tile(x, y)
             tile_reward = self._classify_reward(tile_image)
             checked_coords.add((x_raw, y_raw))
@@ -481,10 +537,18 @@ class MemoryMatch:
                         break
                     # Handle the match in the next turn
                     time.sleep(2)
+                    if is_stopped():
+                        return
                     self._click_tile(x, y)  # Click the second tile again
+                    if is_stopped():
+                        return
                     time.sleep(1)
+                    if is_stopped():
+                        return
                     x2, y2 = grid_coords[match_found]
                     self._click_tile(x2 - offset_x, y2 - offset_y)  # Click the matching tile
+                    if is_stopped():
+                        return
                     claimed_coords.add(i)
                     claimed_coords.add(match_found)
             mm_data[i] = tile_hash
