@@ -25,6 +25,66 @@ from modules.controls.sleep import (
 HARDCODED_PETAL_IGNORE_TITLES = {"petal tabbouleh", "petals", "mashed blooms"}
 
 
+def loadBlenderData():
+    """Load blender state, falling back to defaults if it is missing or malformed."""
+    try:
+        blenderData = settingsManager.loadUserLiteral("blender.txt")
+        item = blenderData.get("item") if isinstance(blenderData, dict) else None
+        collectTime = blenderData.get("collectTime") if isinstance(blenderData, dict) else None
+        if (isinstance(item, (int, float)) and not isinstance(item, bool)
+                and isinstance(collectTime, (int, float)) and not isinstance(collectTime, bool)):
+            return blenderData
+    except Exception:
+        pass
+    return {"item": 1, "collectTime": 0}
+
+
+def emptyManualPlanterData():
+    return {
+        "cycles": [1, 1, 1],
+        "planters": ["", "", ""],
+        "fields": ["", "", ""],
+        "gatherFields": ["", "", ""],
+        "harvestTimes": [0, 0, 0]
+    }
+
+
+def normalizeManualPlanterData(rawData):
+    normalized = emptyManualPlanterData()
+    if not isinstance(rawData, dict):
+        return normalized
+
+    for key, defaultValues in normalized.items():
+        values = rawData.get(key, defaultValues)
+        if not isinstance(values, list):
+            values = defaultValues
+
+        cleaned = list(values[:3])
+        while len(cleaned) < 3:
+            cleaned.append(defaultValues[len(cleaned)])
+
+        if key == "cycles":
+            normalized[key] = []
+            for value in cleaned:
+                try:
+                    cycle = int(value)
+                except Exception:
+                    cycle = 1
+                normalized[key].append(min(5, max(1, cycle)))
+        elif key == "harvestTimes":
+            normalized[key] = []
+            for value in cleaned:
+                try:
+                    harvestTime = float(value or 0)
+                except Exception:
+                    harvestTime = 0
+                normalized[key].append(harvestTime)
+        else:
+            normalized[key] = [str(value or "") for value in cleaned]
+
+    return normalized
+
+
 def canClaimTimedBearQuest(name):
     """Return True if the given quest giver can be claimed for timed bear quests.
 
@@ -646,18 +706,32 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                     if item != "wreath" or isBackpackReadyForWreath():
                         return True
             elif task == "blender" and mode == "normal" and macro.setdat.get("blender_enable", False):
-                blender = ast.literal_eval(settingsManager.loadUserText("blender.txt"))
-                if blender["collectTime"] != -1 and time.time() > blender["collectTime"]:
+                blender = loadBlenderData()
+                if blender["collectTime"] > -1 and time.time() > blender["collectTime"]:
                     return True
             elif task == "planters" and mode == "normal" and macro.setdat.get("planters_mode", 0):
                 if macro.setdat["planters_mode"] == 1:
-                    planters = settingsManager.loadUserLiteral("manualplanters.txt") or {"planters": [], "harvestTimes": []}
+                    try:
+                        planters = normalizeManualPlanterData(settingsManager.loadUserLiteral("manualplanters.txt"))
+                    except Exception:
+                        planters = emptyManualPlanterData()
                     if any(planter and time.time() > harvest for planter, harvest
                            in zip(planters["planters"], planters["harvestTimes"])):
                         return True
                 else:
-                    planters = settingsManager.loadUserJson("auto_planters.json")["planters"]
-                    if any(planter["planter"] and time.time() > planter["harvest_time"] for planter in planters):
+                    try:
+                        data = settingsManager.loadUserJson("auto_planters.json")
+                    except Exception:
+                        data = {}
+                    planters = data.get("planters", []) if isinstance(data, dict) else []
+                    if not isinstance(planters, list):
+                        planters = []
+                    if any(
+                        isinstance(planter, dict)
+                        and planter.get("planter")
+                        and time.time() > planter.get("harvest_time", 0)
+                        for planter in planters
+                    ):
                         return True
         return False
 
@@ -880,50 +954,6 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             else: 
                 return False
 
-        def emptyManualPlanterData():
-            return {
-                "cycles": [1, 1, 1],
-                "planters": ["", "", ""],
-                "fields": ["", "", ""],
-                "gatherFields": ["", "", ""],
-                "harvestTimes": [0, 0, 0]
-            }
-
-        def normalizeManualPlanterData(rawData):
-            normalized = emptyManualPlanterData()
-            if not isinstance(rawData, dict):
-                return normalized
-
-            for key, defaultValues in normalized.items():
-                values = rawData.get(key, defaultValues)
-                if not isinstance(values, list):
-                    values = defaultValues
-
-                cleaned = list(values[:3])
-                while len(cleaned) < 3:
-                    cleaned.append(defaultValues[len(cleaned)])
-
-                if key == "cycles":
-                    normalized[key] = []
-                    for value in cleaned:
-                        try:
-                            cycle = int(value)
-                        except Exception:
-                            cycle = 1
-                        normalized[key].append(min(5, max(1, cycle)))
-                elif key == "harvestTimes":
-                    normalized[key] = []
-                    for value in cleaned:
-                        try:
-                            harvestTime = float(value or 0)
-                        except Exception:
-                            harvestTime = 0
-                        normalized[key].append(harvestTime)
-                else:
-                    normalized[key] = [str(value or "") for value in cleaned]
-
-            return normalized
-
         def saveManualPlanterData(planterData):
             nonlocal planterDataRaw
             normalized = normalizeManualPlanterData(planterData)
@@ -1102,9 +1132,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             # Handle special tasks
             if taskId == "blender":
                 if macro.setdat["blender_enable"]:
-                    with open(settingsManager.ensureUserFile("blender.txt"), "r") as f:
-                        blenderData = ast.literal_eval(f.read())
-                    f.close()
+                    blenderData = loadBlenderData()
                     if blenderData["collectTime"] > -1 and time.time() > blenderData["collectTime"]:
                         runTask(macro.blender, args=(blenderData,))
                         executedTasks.add(taskId)
@@ -1803,9 +1831,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             
             #blender
             if macro.setdat["blender_enable"]:
-                with open(settingsManager.ensureUserFile("blender.txt"), "r") as f:
-                    blenderData = ast.literal_eval(f.read())
-                f.close()
+                blenderData = loadBlenderData()
                 if blenderData["collectTime"] > -1 and time.time() > blenderData["collectTime"]:
                     runTask(macro.blender, args=(blenderData,))
 
