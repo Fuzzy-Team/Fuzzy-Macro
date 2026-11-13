@@ -11,7 +11,7 @@ import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
 import modules.screen.ocr as ocr
 from modules import bitmap_matcher
-from modules.controls.sleep import is_stopped, pause_aware_time as time, sleep
+from modules.controls.sleep import InterruptRequested, is_stopped, pause_aware_time as time, sleep
 from modules.macro.game_data import quest_data
 from modules.quest_planning import make_quest_objectives, objective_matches_text
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP, mssScreenshotPillowRGBA
@@ -52,15 +52,19 @@ class QuestMixin:
         if not watchers:
             return None
 
-        completedObjectives = getattr(self, "completedQuestWatchObjectives", set())
+        if not hasattr(self, "completedQuestWatchObjectives"):
+            self.completedQuestWatchObjectives = set()
+        if not hasattr(self, "completedQuestWatchTasks"):
+            self.completedQuestWatchTasks = set()
+        if not hasattr(self, "deferredQuestObjectives"):
+            self.deferredQuestObjectives = set()
+        completedObjectives = self.completedQuestWatchObjectives
         for questGiver, objective in watchers:
             identity = (normalizedTask, questGiver, objective)
             if identity in completedObjectives:
                 continue
 
-            menuOpen = False
             try:
-                menuOpen = True
                 visibleObjectives = self.findQuest(
                     questGiver,
                     keepQuestMenuOpen=True,
@@ -104,9 +108,11 @@ class QuestMixin:
                     "watched_objective": watchedObjective,
                     "report": report,
                 }
+            except InterruptRequested:
+                raise
             except Exception:
                 print(traceback.format_exc())
-                if menuOpen:
+                if self.questMenuOpen and not is_stopped():
                     self.toggleQuest()
                     self.moveMouseToDefault()
                 return None
@@ -120,7 +126,7 @@ class QuestMixin:
         identity = (taskKey, context["quest_giver"], context["objective"])
         self.completedQuestWatchObjectives.add(identity)
         watchers = (getattr(self, "questTaskWatchers", {}) or {}).get(taskKey, [])
-        allComplete = all(
+        allComplete = bool(watchers) and all(
             (taskKey, questGiver, objective) in self.completedQuestWatchObjectives
             for questGiver, objective in watchers
         )
@@ -156,12 +162,15 @@ class QuestMixin:
             if checkCompletion and self.questMenuOpen:
                 time.sleep(0.5)
                 completed = self.readWatchedQuestObjective(context["watched_objective"]) == "complete"
+        except InterruptRequested:
+            raise
         except Exception:
             print(traceback.format_exc())
         finally:
-            if self.questMenuOpen:
-                self.toggleQuest()
-            self.moveMouseToDefault()
+            if not is_stopped():
+                if self.questMenuOpen:
+                    self.toggleQuest()
+                self.moveMouseToDefault()
 
         return completed
 
