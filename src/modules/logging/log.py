@@ -360,7 +360,6 @@ class log:
         if not ss:
             return None
 
-        webhookImgPath = "webhookScreenshot.png"
         if self.robloxWindow:
             robloxWindow = self.robloxWindow
         else:
@@ -377,16 +376,19 @@ class log:
         if ss not in screenshotRegions:
             return None
 
+        fd, webhookImgPath = tempfile.mkstemp(prefix="fuzzy-webhook-capture-", suffix=".png")
+        os.close(fd)
         for _ in range(2):
             try:
                 mssScreenshot(*screenshotRegions[ss], save=True, filename=webhookImgPath)
                 return webhookImgPath
             except mss.exception.ScreenShotError:
                 timeModule.sleep(0.5)
+        self._cleanup_temp_image(webhookImgPath)
         return None
 
     @staticmethod
-    def _snapshot_image(imagePath):
+    def _snapshot_image(imagePath, fallback=True):
         if not imagePath or not os.path.exists(imagePath):
             return imagePath
         suffix = os.path.splitext(imagePath)[1] or ".png"
@@ -401,7 +403,15 @@ class log:
                 os.remove(snapshotPath)
             except OSError:
                 pass
-            return imagePath
+            return imagePath if fallback else None
+
+    @staticmethod
+    def _cleanup_temp_image(imagePath):
+        if imagePath:
+            try:
+                os.remove(imagePath)
+            except OSError:
+                pass
 
     def _ping_user_id(self, route_category, ping_category=None):
         ping_key = ping_category
@@ -413,11 +423,11 @@ class log:
             return self.discordUserID
         return None
 
-    def _send_discord_bot(self, channel_id, title, desc, time, color, imagePath=None, ping_user_id=None, time_format=None, fields=None):
+    def _send_discord_bot(self, channel_id, title, desc, time, color, imagePath=None, ping_user_id=None, time_format=None, fields=None, temporaryImage=False):
         if not self.enableDiscordBot or not self.discordMessageQueue:
             return None
         # the bot reads the file after the macro has moved on, so give it its own copy
-        imageCopy = self._snapshot_image(imagePath)
+        imageCopy = self._snapshot_image(imagePath, fallback=not temporaryImage)
         data = {
             "channel_id": str(channel_id),
             "title": title,
@@ -437,7 +447,7 @@ class log:
             print(f"Discord bot queue error: {e}")
         return None
 
-    def _deliver(self, title, desc, color, imagePath=None, ping_category=None, route_category=None, time_format=None, allow_hourly_only_filter=True, fields=None):
+    def _deliver(self, title, desc, color, imagePath=None, ping_category=None, route_category=None, time_format=None, allow_hourly_only_filter=True, fields=None, temporaryImage=False):
         if allow_hourly_only_filter and self.hourlyReportOnly:
             return
 
@@ -462,7 +472,7 @@ class log:
         if resolved_type == "webhook":
             if not self.enableWebhook and not self.enableDiscordBot:
                 return
-            webhookImagePath = self._snapshot_image(imagePath)
+            webhookImagePath = self._snapshot_image(imagePath, fallback=not temporaryImage)
             webhookData = {
                 "url": route,
                 "title": title,
@@ -479,7 +489,7 @@ class log:
             self.webhookQueue.add_to_queue(webhookData)
             return
         if resolved_type == "bot":
-            self._send_discord_bot(route, title, desc, time, colors[color], imagePath, ping_user_id, time_format, fields)
+            self._send_discord_bot(route, title, desc, time, colors[color], imagePath, ping_user_id, time_format, fields, temporaryImage=temporaryImage)
             return
         print(f"Warning: Invalid Discord route '{route}'. Expected https:// webhook or numeric channel ID.")
 
@@ -498,7 +508,12 @@ class log:
         print(f"[{time}] {title} {desc}")
 
         webhookImgPath = self._capture_image(ss, imagePath)
-        self._deliver(title, desc, color, webhookImgPath, ping_category, route_category, self.webhookTimeFormat)
+        temporaryImage = bool(webhookImgPath and webhookImgPath != imagePath)
+        try:
+            self._deliver(title, desc, color, webhookImgPath, ping_category, route_category, self.webhookTimeFormat, temporaryImage=temporaryImage)
+        finally:
+            if temporaryImage:
+                self._cleanup_temp_image(webhookImgPath)
 
     def hourlyReport(self, title, desc, color, time_format=None, fields=None):
         self._deliver(title, desc, color, "hourlyReport.png", "ping_hourly_reports", "reports", time_format, allow_hourly_only_filter=False, fields=fields)
