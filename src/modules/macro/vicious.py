@@ -279,9 +279,11 @@ class ViciousMixin:
             self._viciousOpenedChat = (win.mx + point[0], win.my + point[1])
             mouse.moveTo(*self._viciousOpenedChat)
             sleep(0.05)
-            mouse.mouseDown()
-            sleep(0.06)
-            mouse.mouseUp()
+            try:
+                mouse.mouseDown()
+                sleep(0.06)
+            finally:
+                mouse.mouseUp()
             sleep(0.2)
         mouse.moveTo(win.mx + 350, win.my + 100)
         if point is not None:
