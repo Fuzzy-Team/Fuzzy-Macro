@@ -323,6 +323,8 @@ class InventoryMixin:
                 if self.checkPauseAndWait():
                     return False
                 if res is None:
+                    if closeInventoryAfter:
+                        self.toggleInventory("close")
                     return False
                 x, y = res
 
