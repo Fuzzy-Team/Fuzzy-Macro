@@ -3803,17 +3803,18 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 await interaction.response.send_message("❌ Hotbar slot must be between 1 and 7")
                 return
 
-            # Determine path to src and hotbar timings file (same as macro)
-            src_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-            timings_path = os.path.join(src_dir, 'data', 'user', 'hotbar_timings.txt')
-
             def use_slot():
                 try:
-                    with open(timings_path, 'r') as f:
-                        hotbarSlotTimings = list(ast.literal_eval(f.read()))
+                    hotbarSlotTimings = settingsManager.loadUserLiteral("hotbar_timings.txt")
+                    if isinstance(hotbarSlotTimings, dict):
+                        # Current format: per-slot timestamps keyed by slot number.
+                        hotbarSlotTimings = {i: hotbarSlotTimings.get(i, 0) for i in range(1, 8)}
+                    else:
+                        # Legacy format: an 8-item list indexed by slot number.
+                        hotbarSlotTimings = list(hotbarSlotTimings or [])
+                        hotbarSlotTimings += [0] * (8 - len(hotbarSlotTimings))
                 except Exception:
-                    hotbarSlotTimings = []
-                hotbarSlotTimings += [0] * (8 - len(hotbarSlotTimings))
+                    hotbarSlotTimings = [0] * 8
 
                 # Press the hotbar key twice (same behaviour as macro.backgroundOnce)
                 for _ in range(2):
@@ -3821,8 +3822,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                     time.sleep(0.4)
 
                 hotbarSlotTimings[slot] = time.time()
-                with open(timings_path, 'w') as f:
-                    f.write(str(hotbarSlotTimings))
+                settingsManager.saveUserLiteral("hotbar_timings.txt", hotbarSlotTimings)
 
             # the key presses sleep, so keep them off the event loop
             await interaction.response.defer()
