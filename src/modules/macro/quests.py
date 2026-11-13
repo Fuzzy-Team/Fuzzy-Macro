@@ -766,7 +766,8 @@ class QuestMixin:
                 prevHash = hash
 
         if questTitle is None:
-            if logDetection:
+            # A stop ends the scan early, so the quest was not looked for and is not missing.
+            if logDetection and not is_stopped():
                 self.logger.webhook("", f"Could not find {questGiver} quest", "orange")
             if manageQuestUi and not is_stopped():
                 self.toggleQuest()
