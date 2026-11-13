@@ -1165,9 +1165,11 @@ def tile_walk(keyboard, key, tiles):
     if tiles <= 0:
         return False
 
-    keyboard.keyDown(key, False)
-    keyboard.tileWait(tiles)
-    keyboard.keyUp(key, False)
+    try:
+        keyboard.keyDown(key, False)
+        keyboard.tileWait(tiles)
+    finally:
+        keyboard.keyUp(key, False)
     return True
 
 
@@ -1175,11 +1177,16 @@ def tile_multi_walk(keyboard, keys, tiles):
     if tiles <= 0:
         return False
 
-    for key in keys:
-        keyboard.keyDown(key, False)
-    keyboard.tileWait(tiles)
-    for key in reversed(keys):
-        keyboard.keyUp(key, False)
+    try:
+        for key in keys:
+            keyboard.keyDown(key, False)
+        keyboard.tileWait(tiles)
+    finally:
+        for key in reversed(keys):
+            try:
+                keyboard.keyUp(key, False)
+            except Exception:
+                pass
     return True
 
 
