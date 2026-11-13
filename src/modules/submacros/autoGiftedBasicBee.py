@@ -286,14 +286,17 @@ class AutoGiftedBasicBeeRunner:
                     return True
         return False
 
+    def _coordinate_scale(self):
+        """OCR boxes are in screenshot pixels, which are twice the screen points the window
+        bounds and the mouse use on Retina, so bbox coordinates must be divided by this."""
+        return getattr(self._roblox_window, "multi", 1) or 1
+
     def _inventory_icon_point_from_bbox(self, bbox, crop_x, crop_y):
-        xs = [point[0] for point in bbox]
-        ys = [point[1] for point in bbox]
-        min_x = min(xs)
-        min_y = min(ys)
-        max_y = max(ys)
-        icon_center_y = int((min_y + max_y) / 2) + 18
-        icon_x = max(12, min_x - 100)
+        multi = self._coordinate_scale()
+        xs = [point[0] / multi for point in bbox]
+        ys = [point[1] / multi for point in bbox]
+        icon_center_y = int((min(ys) + max(ys)) / 2) + 18
+        icon_x = max(12, int(min(xs)) - 100)
         return (
             (crop_x - self._roblox_window.mx) + icon_x,
             (crop_y - self._roblox_window.my) + icon_center_y,
@@ -385,8 +388,9 @@ class AutoGiftedBasicBeeRunner:
         return x, y, ocr.ocrRead(prompt_image)
 
     def _bbox_center(self, bbox, offset_x, offset_y):
-        xs = [point[0] for point in bbox]
-        ys = [point[1] for point in bbox]
+        multi = self._coordinate_scale()
+        xs = [point[0] / multi for point in bbox]
+        ys = [point[1] / multi for point in bbox]
         return offset_x + int((min(xs) + max(xs)) / 2), offset_y + int((min(ys) + max(ys)) / 2)
 
     def _find_confirm_prompt(self):
