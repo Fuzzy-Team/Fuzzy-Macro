@@ -63,18 +63,23 @@ class PlanterMixin:
                 return False
             return True
 
-    def findPlanterInInventory(self, name):
+    def findPlanterInInventory(self, name, stop_event=None):
         # Always invalidate cached planter coordinates before searching
         self.planterCoords = None
         for attempt in range(2):
-            res = self.findItemInInventory(f"{name}planter")
+            if is_stopped() or (stop_event is not None and stop_event.is_set()):
+                return
+            res = self.findItemInInventory(f"{name}planter", stop_event=stop_event)
+            if is_stopped() or (stop_event is not None and stop_event.is_set()):
+                return
             if res:
                 self.planterCoords = res
                 return
-            else:
-                self.logger.webhook("", f"Could not find {name}planter in inventory (attempt {attempt+1}) - retrying", "red")
-                self.planterCoords = None
-                time.sleep(1)
+            if is_stopped() or (stop_event is not None and stop_event.is_set()):
+                return
+            self.logger.webhook("", f"Could not find {name}planter in inventory (attempt {attempt+1}) - retrying", "red")
+            self.planterCoords = None
+            time.sleep(1)
 
     def getPlanterHotbarSlot(self, planter):
         settingName = planter.lower().replace(" ", "_")
@@ -119,6 +124,7 @@ class PlanterMixin:
                 updateHourlyTime()
                 return False
             findPlanterInventoryThread = None
+            stopInventorySearch = threading.Event()
             # Invalidate cached planter coordinates before each attempt
             self.planterCoords = None
 
@@ -126,25 +132,42 @@ class PlanterMixin:
             # done: the reset and cannon walk can't share the screen with an open inventory.
             def startInventorySearch():
                 nonlocal findPlanterInventoryThread
-                findPlanterInventoryThread = threading.Thread(target=self.findPlanterInInventory, args=(name,))
+                findPlanterInventoryThread = threading.Thread(target=self.findPlanterInInventory, args=(name, stopInventorySearch))
                 findPlanterInventoryThread.daemon = True
                 findPlanterInventoryThread.start()
 
-            if not self.goToPlanter(planter, field, "place", None if hotbarSlot else startInventorySearch):
-                updateHourlyTime()
-                return False
-            if is_stopped():
-                updateHourlyTime()
-                return False
-            if hotbarSlot:
-                self.logger.webhook("", f"Placing {planter.title()} (slot {hotbarSlot})", "dark brown")
-                self.keyboard.press(str(hotbarSlot))
-            else:
-                #wait for thread to finish
-                findPlanterInventoryThread.join()
+            def joinInventorySearch(stop=False):
+                # Signal before joining so a failed run cannot start another scan, then
+                # wait for any in-flight scan to release the inventory lock. Join in
+                # bounded slices so a pause longer than one timeout cannot leak the thread.
+                thread = findPlanterInventoryThread
+                if stop:
+                    stopInventorySearch.set()
+                while thread is not None and thread.is_alive():
+                    if is_stopped():
+                        stopInventorySearch.set()
+                    thread.join(timeout=1.0)
+
+            try:
+                if not self.goToPlanter(planter, field, "place", None if hotbarSlot else startInventorySearch):
+                    updateHourlyTime()
+                    return False
                 if is_stopped():
                     updateHourlyTime()
                     return False
+                if hotbarSlot:
+                    self.logger.webhook("", f"Placing {planter.title()} (slot {hotbarSlot})", "dark brown")
+                    self.keyboard.press(str(hotbarSlot))
+                else:
+                    #wait for thread to finish; a legitimate scan may take >5 s
+                    joinInventorySearch()
+                    if is_stopped():
+                        updateHourlyTime()
+                        return False
+            finally:
+                # An early return, stop, or InterruptRequested from goToPlanter must not
+                # leave the inventory thread scrolling after the macro moves on.
+                joinInventorySearch(stop=True)
 
             #Couldn't find planter
             if not hotbarSlot and self.planterCoords is None:

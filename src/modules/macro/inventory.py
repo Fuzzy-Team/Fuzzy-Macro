@@ -154,21 +154,21 @@ class InventoryMixin:
     def getStringSimilarity(self, str1, str2):
         return SequenceMatcher(None, str1, str2).ratio()
 
-    def findItemInInventory(self, itemName):
+    def findItemInInventory(self, itemName, stop_event=None):
         with self.inventoryInteraction():
-            result = self._findItemInInventory(itemName)
-            if self.checkPauseAndWait():
+            result = self._findItemInInventory(itemName, stop_event=stop_event)
+            if self.checkPauseAndWait(stop_event=stop_event):
                 return None
             return result
 
-    def _scrollInventoryToTop(self):
+    def _scrollInventoryToTop(self, stop_event=None):
         hashes = []
         for _ in range(9):
-            if self.checkPauseAndWait():
+            if self.checkPauseAndWait(stop_event=stop_event):
                 return
             mouse.scroll(100)
             sleep(0.05)
-            if self.checkPauseAndWait():
+            if self.checkPauseAndWait(stop_event=stop_event):
                 return
             screen = cv2.cvtColor(mssScreenshotNP(self.robloxWindow.mx, self.robloxWindow.my+120, 100, 200), cv2.COLOR_BGRA2RGB)
             hashes.append(average_hash(Image.fromarray(screen)))
@@ -249,8 +249,8 @@ class InventoryMixin:
             return None
         return best[1], best[2]
 
-    def _findItemInInventory(self, itemName):
-        if self.checkPauseAndWait():
+    def _findItemInInventory(self, itemName, stop_event=None):
+        if self.checkPauseAndWait(stop_event=stop_event):
             return None
         #for retina, just a regular image search
         #for built-in, a transparency search
@@ -265,13 +265,13 @@ class InventoryMixin:
         #open inventory
         self.toggleInventory("open")
         time.sleep(0.3)
-        if self.checkPauseAndWait():
+        if self.checkPauseAndWait(stop_event=stop_event):
             return None
         mouse.moveTo(self.robloxWindow.mx+312, self.robloxWindow.my+200)
         mouse.click()
         #scroll to top
-        self._scrollInventoryToTop()
-        if self.checkPauseAndWait():
+        self._scrollInventoryToTop(stop_event=stop_event)
+        if self.checkPauseAndWait(stop_event=stop_event):
             return None
         #scroll down until the item is found
         bestY = None
@@ -279,10 +279,10 @@ class InventoryMixin:
         prevHash = None
         time.sleep(0.3)
         for _ in range(180):
-            if self.checkPauseAndWait():
+            if self.checkPauseAndWait(stop_event=stop_event):
                 return None
             max_val, max_loc = locateImageOnScreen(itemImg, self.robloxWindow.mx, self.robloxWindow.my+90, 100, self.robloxWindow.mh-180) or (0, None)
-            if self.checkPauseAndWait():
+            if self.checkPauseAndWait(stop_event=stop_event):
                 return None
             #most likely the correct item, stop searching
             if max_val > 0.7:
@@ -293,11 +293,11 @@ class InventoryMixin:
                     bestY = max_loc[1]
                     break
 
-            if self.checkPauseAndWait():
+            if self.checkPauseAndWait(stop_event=stop_event):
                 return None
             mouse.scroll(-2, True)
             time.sleep(0.06)
-            if self.checkPauseAndWait():
+            if self.checkPauseAndWait(stop_event=stop_event):
                 return None
 
             screen = cv2.cvtColor(mssScreenshotNP(self.robloxWindow.mx, self.robloxWindow.my+100, 100, 200), cv2.COLOR_BGRA2RGB)
@@ -307,7 +307,7 @@ class InventoryMixin:
             prevHash = hash
 
         if bestY is None:
-            if not (self.run is not None and is_stopped()):
+            if not (self.run is not None and is_stopped()) and not (stop_event is not None and stop_event.is_set()):
                 self.logger.webhook("", f"Could not find {itemName} in inventory", "orange")
             return
         bestY //= self.robloxWindow.multi

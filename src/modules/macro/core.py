@@ -269,8 +269,10 @@ class macro(
         if action != INTERRUPT_NONE:
             raise InterruptRequested(action)
 
-    def checkPauseAndWait(self):
+    def checkPauseAndWait(self, stop_event=None):
         """Check if macro is paused and wait until resumed. Returns True if stop was requested."""
+        if stop_event is not None and stop_event.is_set():
+            return True
         if self.run is None:
             return False
         self.raiseIfInterrupted()
@@ -283,11 +285,15 @@ class macro(
             self.keyboard.releaseMovement()
             mouse.mouseUp()
             raw_time.sleep(0.1)
+            if stop_event is not None and stop_event.is_set():
+                return True
             self.raiseIfInterrupted()
         if wasPaused:
             self._inactiveHoneyResetResumeBlockUntil = time.monotonic() + 2
             self._redetect_y_offset_after_resume()
         # Check if stop was requested (state 0)
+        if stop_event is not None and stop_event.is_set():
+            return True
         return self.run.value == 0
 
     def isInactiveHoneyResetPaused(self):
