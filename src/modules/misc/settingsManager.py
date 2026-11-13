@@ -798,7 +798,15 @@ def readSettingsFile(path, defaults=None):
     # insert a newline before it so it becomes its own setting line.
     raw = re.sub(r'(?<!\n)max_convert_time=', r'\nmax_convert_time=', raw)
 
-    data = [[x.strip() for x in y.split("=", 1)] for y in raw.split("\n") if y]
+    data = []
+    for y in raw.split("\n"):
+        line = y.strip()
+        if not line or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        if not key.strip():
+            continue
+        data.append([key.strip(), value.strip()])
     #convert to a dict
     resolved_defaults = defaults if defaults is not None else _defaultsForSettingsPath(path)
     out = {}
