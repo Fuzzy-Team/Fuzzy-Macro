@@ -94,7 +94,7 @@ def ahkPatternToPython(ahk):
             lineCopy = line
             while True:
                 openB = lineCopy.find("{")
-                closeB = lineCopy.find("}")
+                closeB = lineCopy.find("}", openB + 1) if openB != -1 else -1
                 if openB == -1 or closeB == -1:
                     identation = leading_spaces = len(e) - len(e.lstrip())
                     out[i] = e.replace(line, "\n{}".format(identation*"\t").join(cmds))
@@ -102,6 +102,8 @@ def ahkPatternToPython(ahk):
                 add = lineCopy[openB:closeB+1]
                 lineCopy = lineCopy.replace(add,"",1)
                 add = add[1:-1].strip()
+                if not add:
+                    continue
                 #remove whitespace between quotations
                 add = re.sub(r'"\s*([^"]*?)\s*"', r'"\1"', add)
                 #split into parameters
