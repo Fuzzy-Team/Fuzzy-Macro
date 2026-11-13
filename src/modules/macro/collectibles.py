@@ -521,16 +521,22 @@ class CollectiblesMixin:
                 or ("10" in reachedText and "more" in reachedText and "robo" in reachedText)
             ):
                 self.logger.webhook("", "Maybe you have maxed out robo passes?", "orange", "screen")
+                if not is_stopped():
+                    self.saveTiming(objective)
                 updateHourlyTime()
                 return
         if objective == "gummy_beacon":
             reachedText = str(reached).lower()
             if "siege" in reachedText and "progress" in reachedText:
                 self.logger.webhook("", "Gummy Beacon is already active", "orange", "screen")
+                if not is_stopped():
+                    self.saveTiming(objective)
                 updateHourlyTime()
                 return
             if ("satellite" in reachedText or "satelite" in reachedText) and "vibes" in reachedText:
                 self.logger.webhook("", "Gummy Beacon is not unlocked", "orange", "screen")
+                if not is_stopped():
+                    self.saveTiming(objective)
                 updateHourlyTime()
                 return
             if "(" in reachedText and ":" in reachedText:
