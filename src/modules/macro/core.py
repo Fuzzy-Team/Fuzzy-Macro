@@ -1,4 +1,3 @@
-import ast
 import copy
 import json
 import threading
@@ -15,6 +14,7 @@ from modules.controls.sleep import (
     INTERRUPT_NONE,
     InterruptRequested,
     is_paused,
+    is_stopped,
     pause_aware_time as time,
     set_interrupt_action,
     set_resume_callback,
@@ -339,6 +339,8 @@ class macro(
         return datetime.now().minute
 
     def backgroundOnce(self):
+        if is_stopped() or is_paused():
+            return
         #night detection
         if self.enableNightDetection:
             self.detectNight()
@@ -350,8 +352,12 @@ class macro(
         #hotbar
         if all(self.setdat[f"hotbar{i}_use_when"] == "never" for i in range(1,8)):
             return
-        with open(settingsManager.ensureUserFile("hotbar_timings.txt"), "r") as f:
-            hotbarSlotTimings = ast.literal_eval(f.read())
+        try:
+            hotbarSlotTimings = settingsManager.loadUserLiteral("hotbar_timings.txt")
+        except Exception:
+            hotbarSlotTimings = None
+        if not isinstance(hotbarSlotTimings, dict):
+            hotbarSlotTimings = {}
         for i in range(1,8):
             slotUseWhen = self.setdat[f"hotbar{i}_use_when"]
             #check if use when is correct
@@ -374,7 +380,10 @@ class macro(
             cdSecs = self.setdat[f"hotbar{i}_use_every_value"]
             if self.setdat[f"hotbar{i}_use_every_format"] == "mins": 
                 cdSecs *= 60
-            if time.time() - hotbarSlotTimings[i] < cdSecs: continue
+            slotTiming = hotbarSlotTimings.get(i, 0)
+            if not isinstance(slotTiming, (int, float)):
+                slotTiming = 0
+            if time.time() - slotTiming < cdSecs: continue
             if not self.canUseSproutBeanSlot(i):
                 continue
             sproutHotbarSlot = False
@@ -385,14 +394,18 @@ class macro(
                     sproutHotbarSlot = False
                 if sproutHotbarSlot and self.sproutBeansUsed + 2 > self._sproutBeanLimit():
                     continue
+            if is_stopped() or is_paused():
+                return
             print(f"pressed hotbar {i}")
             #press the key
             for _ in range(2):
                 keyboard.pagPress(str(i))
+                # One bean is used per press that actually went out, so count it now.
+                if sproutHotbarSlot:
+                    self.markSproutBeanUsed()
                 time.sleep(0.4)
-            if sproutHotbarSlot:
-                self.markSproutBeanUsed()
-                self.markSproutBeanUsed()
+                if is_stopped() or is_paused():
+                    break
             #update the time pressed
             hotbarSlotTimings[i] = time.time()
             settingsManager.saveUserLiteral("hotbar_timings.txt", hotbarSlotTimings)
@@ -403,7 +416,7 @@ class macro(
                 self.backgroundOnce()
             except Exception:
                 print(traceback.format_exc())
-            time.sleep(1)
+            raw_time.sleep(1)
 
     def startDetect(self):
         #disable game mode
@@ -460,10 +473,19 @@ class macro(
         # explicitly disabled Always Rejoin.
         if not vicHop:
             if self.setdat.get("always_rejoin", True) or not appManager.openApp("Roblox"):
-                self.rejoin()
+                if not self.rejoin():
+                    # A failed rejoin must stop the macro instead of entering the task
+                    # loop with run.value still set, which keeps the loop running.
+                    if not is_stopped() and self.run is not None:
+                        self.run.value = 0
+                    return False
             else:
                 self.startDetect()
+                if is_stopped():
+                    return False
                 self.setRobloxWindowInfo()
+        if is_stopped():
+            return False
     
         if not benchmarkMSS():
             self.logger.webhook("", "MSS is too slow, switching to pillow", "orange")
@@ -471,6 +493,11 @@ class macro(
         if not vicHop and (not self.hourlyReport.hourlyReportStats["start_time"] or not self.hourlyReport.hourlyReportStats["start_honey"]):
             self.hourlyReport.setSessionStats(self.getHoney(), time.time())
 
+        if is_stopped():
+            return False
         if not vicHop:
             self.reset(convert=True)
+            if is_stopped():
+                return False
         self.saveTiming("rejoin_every")
+        return True
