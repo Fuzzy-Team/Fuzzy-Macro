@@ -576,18 +576,27 @@ class MobMixin:
         elif amulet == "replace":
             replace()
         elif amulet == "stop":
+            # Anti-AFK clicks must not land on the Keep Old / Replace buttons in the center
+            self.moveMouseToDefault()
             while not is_stopped():
-                if not self.keepOldCheck() or is_stopped():
+                if not self.keepOldCheck():
+                    break
+                if self.checkPauseAndWait():
                     break
                 mouse.click()
         elif amulet == "wait for command":
             self.set_task_status("amulet_wait", update_presence=False)
             #wait for user to send command to bot
-            while self.status.value == "amulet_wait" and not is_stopped(): mouse.click()
-            if self.status.value == "amulet_keep":
-                keepOld()
-            elif self.status.value == "amulet_replace":
-                replace()
+            self.moveMouseToDefault()
+            while self.status.value == "amulet_wait" and not is_stopped():
+                if self.checkPauseAndWait():
+                    break
+                mouse.click()
+            if not is_stopped():
+                if self.status.value == "amulet_keep":
+                    keepOld()
+                elif self.status.value == "amulet_replace":
+                    replace()
 
         self.clear_task_status()
 
