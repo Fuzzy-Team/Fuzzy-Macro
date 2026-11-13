@@ -10,7 +10,7 @@ def runAppleScript(code):
 
 def isAppOpenMac(app="roblox"):
     tmp = os.popen("ps -Af").read()
-    return app in tmp[:]
+    return app.lower() in tmp.lower()
 
 def openWith(*args):
     """Run macOS open. It can hang when Launch Services is stuck, so give up after 30 seconds
