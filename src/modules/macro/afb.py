@@ -315,6 +315,13 @@ class AFBMixin:
                         diceCoords = self.findItemInInventory(self.setdat['AFB_dice'])
                         if is_stopped():
                             return failedExit()
+                        if diceCoords is None:
+                            self.toggleInventory("close")
+                            if not is_stopped():
+                                self.saveAFB("AFB_dice_cd")
+                            self.AFBglitter = False
+                            self.logger.webhook("", f"{str(dice).title()}: Dice not found in inventory", "red")
+                            return failedExit()
 
                     for attempt in range(attempts):
                         bluetexts = ""
@@ -338,8 +345,10 @@ class AFBMixin:
                             timeout += 1
                             if timeout == 300:
                                 self.logger.webhook("", "Auto Field Boost: Timeout", "pink")
-                                self.toggleInventory("close")
-                                self.saveAFB("AFB_dice_cd")
+                                if diceslot == 0:
+                                    self.toggleInventory("close")
+                                if not is_stopped():
+                                    self.saveAFB("AFB_dice_cd")
                                 self.AFBglitter = False
                                 return failedExit()
 
