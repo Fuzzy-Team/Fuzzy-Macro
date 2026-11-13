@@ -28,6 +28,9 @@ class cloudflaredStream:
         
         self.frame_buffer = None
         self.frame_lock = threading.Lock()
+        # Every /video_feed viewer waits on this same condition, so the capture thread's
+        # wakeup is broadcast instead of being consumed (and cleared) by one viewer.
+        self.frame_condition = threading.Condition(self.frame_lock)
         self.frame_ready = threading.Event()
         self.capture_thread = None
         # open /video_feed connections; capture runs only while this is above 0
@@ -186,19 +189,23 @@ class cloudflaredStream:
                 .replace("%%VIDEO%%", self.HTML_STREAMING if self.streaming else self.HTML_STOPPED)
                 .replace("%%REFRESH_BUTTON%%", self.HTML_REFRESH_BUTTON if self.streaming else ""))
 
-    def update_fps(self):
+    def update_fps(self, fps_history=None):
 
         now = time.time()
-        self.fps_history.append(now)
+        # /video_feed viewers pass their own history so concurrent viewers do not share samples
+        if fps_history is None:
+            fps_history = self.fps_history
+
+        fps_history.append(now)
         
         # Calculate FPS over recent history
-        if len(self.fps_history) >= 10:
-            time_diff = self.fps_history[-1] - self.fps_history[0]
+        if len(fps_history) >= 10:
+            time_diff = fps_history[-1] - fps_history[0]
             if time_diff > 0:  # Avoid division by zero
-                self.current_fps = (len(self.fps_history) - 1) / time_diff
+                self.current_fps = (len(fps_history) - 1) / time_diff
         
         # Adjust quality if enabled and we have enough data
-        if self.adaptive_quality and len(self.fps_history) >= 30:
+        if self.adaptive_quality and len(fps_history) >= 30:
             self._adjust_quality()
     
     def _adjust_quality(self):
@@ -276,9 +283,10 @@ class cloudflaredStream:
                     #drop alpha channel
                     screen = screen[:, :, :3]
 
-                    with self.frame_lock:
+                    with self.frame_condition:
                         self.frame_buffer = screen
                         self.frame_ready.set()
+                        self.frame_condition.notify_all()
                         
                 except Exception as e:
                     print(f"Capture error: {e}")
@@ -297,13 +305,15 @@ class cloudflaredStream:
         encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), self.jpeg_quality,
                        int(cv2.IMWRITE_JPEG_OPTIMIZE), 1]
         
-        # Frame tracking
-        self.frame_count = 0
-        self.fps_history.clear()
+        # Frame tracking is per viewer: concurrent /video_feed clients share the capture
+        # thread, so keeping these local stops one viewer from resetting another's stats.
+        last_frame_time = 0
+        last_frame_obj = None
+        fps_history = deque(maxlen=60)
         
         while self.streaming:
             current_time = time.time()
-            elapsed = current_time - self.last_frame_time
+            elapsed = current_time - last_frame_time
             
             if elapsed < frame_interval:
                 sleep_time = frame_interval - elapsed
@@ -311,30 +321,29 @@ class cloudflaredStream:
                     time.sleep(sleep_time - 0.001)  #slightly less to account for processing
                 continue
             
-            #wait for a frame to be ready
-            if not self.frame_ready.is_set():
-                self.frame_ready.wait(timeout=0.5)
-                if not self.frame_ready.is_set():
-                    continue
-            
-            #get the latest frame
-            with self.frame_lock:
-                if self.frame_buffer is None:
+            #get the latest frame if this viewer has not sent it yet
+            with self.frame_condition:
+                frame = self.frame_buffer
+                if frame is None or frame is last_frame_obj:
+                    # Block (rather than poll) until the capture thread publishes a frame.
+                    # Waiting on the shared condition wakes every viewer, so no viewer can
+                    # clear the signal out from under the others.
+                    self.frame_condition.wait(timeout=0.5)
                     continue
                 
-                frame = self.frame_buffer.copy()
-                self.frame_ready.clear()
+                last_frame_obj = frame
+                frame = frame.copy()
             
             try:
                 #update timing and counters
-                self.last_frame_time = time.time()
+                last_frame_time = time.time()
                 self.frame_count += 1
                 frames_since_gc += 1
                 
-                #update FPS calculation
-                self.update_fps()
+                #update FPS for /stats from this viewer's own frame history
+                self.update_fps(fps_history)
                 
-                #apply adaptive quality changes to this frame
+                #apply quality changes to this frame
                 encode_param[1] = int(self.jpeg_quality)
                 
                 #encode frame
@@ -414,6 +423,9 @@ class cloudflaredStream:
         # stop() or a newer start() during the wait cancels this launch
         if self.cfToken is not token:
             return
+        if not self.cloudflaredPath:
+            print("Cloudflare tunnel unavailable: cloudflared binary not found, skipping")
+            return
         print("Launching Cloudflare tunnel")
         proc = self.cfProc = subprocess.Popen(
             [self.cloudflaredPath, "tunnel", "--url", "http://localhost:8081"],
@@ -479,6 +491,9 @@ class cloudflaredStream:
             
         #start the Cloudflare tunnel, replacing any earlier one
         self._stopCloudflared()
+        if not self.cloudflaredPath:
+            print("Cloudflare tunnel not started: cloudflared is not installed (local stream still works)")
+            return
         self.cfToken = object()
         threading.Thread(target=self._run_cloudflared, args=(self.cfToken,), daemon=True).start()
 
@@ -500,6 +515,7 @@ class cloudflaredStream:
         self._stopCloudflared()
         
         #clear frame buffer
-        with self.frame_lock:
+        with self.frame_condition:
             self.frame_buffer = None
             self.frame_ready.clear()
+            self.frame_condition.notify_all()
