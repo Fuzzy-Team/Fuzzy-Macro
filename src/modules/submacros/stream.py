@@ -1,8 +1,8 @@
-from flask import Flask, Response, render_template_string
 import cv2
 import numpy as np
 import mss
 import mss.darwin
+import json
 import threading
 import subprocess
 import time
@@ -11,14 +11,11 @@ import os
 import gc
 import sys
 from collections import deque
-import logging
-log = logging.getLogger('werkzeug')
-log.setLevel(logging.ERROR)
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
 class cloudflaredStream:
     def __init__(self):
-        self.app = Flask(__name__)
         self.streaming = False
         self.serverThread = None
         self.publicURL = None
@@ -155,24 +152,17 @@ class cloudflaredStream:
         <body>
             <h1>Fuzzy Macro Stream</h1>
             <div class="video-container">
-                {% if streaming %}
-                    <img src="/video_feed" alt="Live Stream">
-                    <div class="stats">FPS: <span id="fps-counter">0.0</span></div>
-                {% else %}
-                    <p style="text-align:center; font-size:1.2rem;">🔘 Macro Stopped</p>
-                {% endif %}
+                %%VIDEO%%
             </div>
-            {% if streaming %}
-            <button id="refresh-stream" class="refresh-btn">Refresh Stream</button>
-            {% endif %}
+            %%REFRESH_BUTTON%%
         </body>
         </html>
         """
+        self.HTML_STREAMING = """<img src="/video_feed" alt="Live Stream">
+                    <div class="stats">FPS: <span id="fps-counter">0.0</span></div>"""
+        self.HTML_STOPPED = """<p style="text-align:center; font-size:1.2rem;">🔘 Macro Stopped</p>"""
+        self.HTML_REFRESH_BUTTON = """<button id="refresh-stream" class="refresh-btn">Refresh Stream</button>"""
 
-        self.app.add_url_rule('/', 'index', self.index)
-        self.app.add_url_rule('/video_feed', 'video_feed', self.videoFeed)
-        self.app.add_url_rule('/fps', 'fps', self.get_fps, methods=['GET'])
-        
         #enable garbage collection
         gc.enable()
         gc.set_threshold(700, 10, 5)
@@ -192,19 +182,10 @@ class cloudflaredStream:
             self.cloudflaredPath = None
 
     def index(self):
-        return render_template_string(self.HTML_PAGE, streaming=self.streaming)
+        return (self.HTML_PAGE
+                .replace("%%VIDEO%%", self.HTML_STREAMING if self.streaming else self.HTML_STOPPED)
+                .replace("%%REFRESH_BUTTON%%", self.HTML_REFRESH_BUTTON if self.streaming else ""))
 
-    def get_fps(self):
-        """API endpoint to report current FPS"""
-        from flask import jsonify
-        return jsonify({'fps': self.current_fps})
-
-    def videoFeed(self):
-        if not self.streaming:
-            return "", 204
-        return Response(self._generate_frames_with_restart(), 
-                        mimetype='multipart/x-mixed-replace; boundary=frame')
-    
     def update_fps(self):
 
         now = time.time()
@@ -385,9 +366,45 @@ class cloudflaredStream:
             time.sleep(0.0001)
 
     def _run_server(self):
-        from werkzeug.serving import run_simple
-        print("Starting server with Werkzeug")
-        run_simple('127.0.0.1', 8081, self.app, threaded=True, use_reloader=False)
+        stream = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def _send(self, status, contentType, body=b""):
+                self.send_response(status)
+                self.send_header("Content-Type", contentType)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def do_GET(self):
+                path = self.path.split("?", 1)[0]
+                if path == "/":
+                    self._send(200, "text/html; charset=utf-8", stream.index().encode("utf-8"))
+                elif path == "/fps":
+                    self._send(200, "application/json", json.dumps({"fps": stream.current_fps}).encode())
+                elif path == "/video_feed":
+                    if not stream.streaming:
+                        self.send_response(204)
+                        self.send_header("Content-Length", "0")
+                        self.end_headers()
+                        return
+                    # No Content-Length: HTTP/1.0 ends the stream when the connection closes
+                    self.send_response(200)
+                    self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+                    self.send_header("Cache-Control", "no-cache")
+                    self.end_headers()
+                    try:
+                        for chunk in stream._generate_frames_with_restart():
+                            self.wfile.write(chunk)
+                    except (BrokenPipeError, ConnectionResetError):
+                        pass  # viewer closed the page
+                else:
+                    self._send(404, "text/plain", b"Not found")
+
+            def log_message(self, *args):
+                pass
+
+        ThreadingHTTPServer(("127.0.0.1", 8081), Handler).serve_forever()
     
     def isCloudflaredInstalled(self):
         return self.cloudflaredPath

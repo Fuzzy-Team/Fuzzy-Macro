@@ -52,46 +52,117 @@ def _macos_version():
     return tuple(parts[:2])
 
 
-_coremltools = False  # not imported yet
-_coremltools_lock = threading.Lock()
+# Reading a Core ML output array needs MLMultiArray.getBytesWithHandler, added in macOS 12.3.
+# Older systems use the ONNX models.
+COREML_MIN_MACOS = (12, 3)
+
+_coreml = False  # not imported yet
+_coreml_lock = threading.Lock()
 
 
-def import_coremltools():
-    """Return coremltools, or None where Core ML isn't used (before macOS 12) or it fails to load.
-
-    coremltools imports torch when it is installed, which takes ~1s and ~240MB, but it only
-    needs torch to convert PyTorch models. Running models doesn't, so hide torch during the import.
-    Pre-Monterey systems use the ONNX models, and a stale coremltools wheel there emits dyld
-    errors on import, so it isn't imported at all.
-    """
-    global _coremltools
-    with _coremltools_lock:
-        if _coremltools is not False:
-            return _coremltools
-        _coremltools = None
-        if _macos_version() < (12, 0):
+def import_coreml():
+    """Return the PyObjC CoreML module, or None where Core ML isn't used (before macOS 12.3) or it fails to load."""
+    global _coreml
+    with _coreml_lock:
+        if _coreml is not False:
+            return _coreml
+        _coreml = None
+        if _macos_version() < COREML_MIN_MACOS:
             return None
-        import sys
-        hidden = [name for name in ("torch", "torchvision") if name not in sys.modules]
-        for name in hidden:
-            sys.modules[name] = None
         try:
-            import coremltools
-            _coremltools = coremltools
+            import CoreML
+            _coreml = CoreML
         except Exception as exc:
-            print(f"[models] Could not load coremltools, so Core ML models are unavailable: {exc}")
+            print(f"[models] Could not load Core ML, so Core ML models are unavailable: {exc}")
+        return _coreml
+
+
+class CoreMLModel:
+    """Runs a compiled .mlmodelc through the system Core ML framework.
+
+    predict({input_name: PIL image}) returns {output_name: numpy array}, matching what
+    coremltools did, so the macro doesn't need coremltools (and its sympy dependency).
+    """
+
+    def __init__(self, path):
+        import Foundation
+        coreml = import_coreml()
+        if coreml is None:
+            raise RuntimeError("Core ML needs macOS 12.3 or later")
+        config = coreml.MLModelConfiguration.alloc().init()
+        config.setComputeUnits_(coreml.MLComputeUnitsAll)
+        url = Foundation.NSURL.fileURLWithPath_(str(path))
+        model, error = coreml.MLModel.modelWithContentsOfURL_configuration_error_(url, config, None)
+        if model is None:
+            raise RuntimeError(f"Core ML could not load {path}: {error}")
+        self._coreml = coreml
+        self._model = model
+
+    def _pixelBuffer(self, image):
+        import numpy as np
+        import Quartz
+        bgr = np.asarray(image.convert("RGB"))[..., ::-1]
+        height, width = bgr.shape[:2]
+        status, buffer = Quartz.CVPixelBufferCreate(None, width, height, Quartz.kCVPixelFormatType_32BGRA, None, None)
+        if status != 0:
+            raise RuntimeError(f"Could not create a {width}x{height} pixel buffer ({status})")
+        Quartz.CVPixelBufferLockBaseAddress(buffer, 0)
+        try:
+            rowBytes = Quartz.CVPixelBufferGetBytesPerRow(buffer)
+            raw = Quartz.CVPixelBufferGetBaseAddress(buffer).as_buffer(rowBytes * height)
+            pixels = np.frombuffer(raw, dtype=np.uint8).reshape(height, rowBytes)[:, :width * 4].reshape(height, width, 4)
+            pixels[..., :3] = bgr
+            pixels[..., 3] = 255
         finally:
-            for name in hidden:
-                if sys.modules.get(name) is None:
-                    del sys.modules[name]
-        return _coremltools
+            Quartz.CVPixelBufferUnlockBaseAddress(buffer, 0)
+        return buffer
+
+    def predict(self, inputs):
+        # The scanner calls this from a worker thread that has no autorelease pool, so every
+        # call leaked its pixel buffers and results (about 1.5 MB per call) until the pool existed.
+        import objc
+        with objc.autorelease_pool():
+            return self._predict(inputs)
+
+    def _predict(self, inputs):
+        import numpy as np
+        dtypes = {
+            self._coreml.MLMultiArrayDataTypeFloat32: np.float32,
+            self._coreml.MLMultiArrayDataTypeFloat16: np.float16,
+            self._coreml.MLMultiArrayDataTypeDouble: np.float64,
+            self._coreml.MLMultiArrayDataTypeInt32: np.int32,
+        }
+        features = {
+            name: self._coreml.MLFeatureValue.featureValueWithPixelBuffer_(self._pixelBuffer(image))
+            for name, image in inputs.items()
+        }
+        provider, error = self._coreml.MLDictionaryFeatureProvider.alloc().initWithDictionary_error_(features, None)
+        result, error = self._model.predictionFromFeatures_error_(provider, None)
+        if result is None:
+            raise RuntimeError(f"Core ML prediction failed: {error}")
+        outputs = {}
+        for name in result.featureNames():
+            array = result.featureValueForName_(name).multiArrayValue()
+            if array is None:
+                continue
+            dtype = dtypes[array.dataType()]
+            shape = tuple(int(s) for s in array.shape())
+            strides = tuple(int(s) * np.dtype(dtype).itemsize for s in array.strides())
+
+            def copyOut(pointer, _strides, name=name, dtype=dtype, shape=shape, strides=strides):
+                flat = np.frombuffer(pointer, dtype=dtype)
+                outputs[name] = np.lib.stride_tricks.as_strided(flat, shape=shape, strides=strides).copy()
+
+            array.getBytesWithHandler_(copyOut)
+        return outputs
 
 
 def _supported_model_names():
     # Core ML is the native model format on supported macOS versions. Download
     # ONNX only as the cross-platform fallback; fetching both makes startup
-    # repeatedly restore ONNX models that the Core ML runtime later removes.
-    if _macos_version() >= (12, 0):
+    # repeatedly restore ONNX models that the Core ML runtime later removes. If Core ML
+    # can't load (an old venv without pyobjc-framework-CoreML), keep the ONNX models.
+    if import_coreml() is not None:
         return COREML_MODELS + (VICIOUS_MODEL,)
     return ONNX_MODELS + (VICIOUS_MODEL,)
 
