@@ -305,8 +305,13 @@ class webhookQueue:
         self.worker_thread.start()
 
     def _process_queue(self):
-        # A None sentinel stops the worker; iter() keeps the same blocking queue semantics.
-        for data in iter(self.queue.get, None):
+        while True:
+            # Wait for a message from the queue
+            data = self.queue.get()
+            if data is None:
+                self.queue.task_done()
+                print("Webhook queue stopped.")
+                break
             cleanupImage = None
             try:
                 cleanupImage = data.pop("_temporaryImage", None)
@@ -321,8 +326,6 @@ class webhookQueue:
                     except OSError:
                         pass
                 self.queue.task_done()
-        self.queue.task_done()
-        print("Webhook queue stopped.")
 
     def add_to_queue(self, data):
         self.queue.put(data)
