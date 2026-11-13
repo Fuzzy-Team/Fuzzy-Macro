@@ -115,7 +115,7 @@ def readBlueText():
     cap = mssScreenshot(mw*3//4, mh//3*2, mw//4,mh//3)
     result = ocrFunc(cap)
     try:
-        result = sorted(result, key = lambda x: x[1][1], reverse = True)
+        result = sorted(result, key = lambda x: (min(point[1] for point in x[0]), min(point[0] for point in x[0])))
         out = ''.join([x[1][0] for x in result])
     except:
         out = ""
