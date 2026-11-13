@@ -315,6 +315,9 @@ class AFBMixin:
                         diceCoords = self.findItemInInventory(self.setdat['AFB_dice'])
                         if is_stopped():
                             return failedExit()
+                        if diceCoords is None:
+                            self.logger.webhook("", f"{str(dice).title()}: Not found in inventory", "red")
+                            attempts = 0 # skip the attempts, the failure path below puts the camera back and starts the cooldown
 
                     for attempt in range(attempts):
                         bluetexts = ""
