@@ -353,6 +353,9 @@ class cloudflaredStream:
                 #update FPS calculation
                 self.update_fps()
                 
+                #apply adaptive quality changes to this frame
+                encode_param[1] = int(self.jpeg_quality)
+                
                 #encode frame
                 ret, buffer = cv2.imencode('.jpg', frame, encode_param)
                 
