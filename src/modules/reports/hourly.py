@@ -437,8 +437,8 @@ class HourlyReport():
         from modules.reports.final import FinalReport  # lazy: final imports this module
         self.hourlyReportStats["honey_per_min"] = FinalReport._normalizeCumulativeHoneySeries(
             self.hourlyReportStats["honey_per_min"], baseline=self.hourlyReportStats["start_honey"] or None)
-        #filter out the honey/min
-        self.hourlyReportStats["honey_per_min"] = self.filterOutliers(self.hourlyReportStats["honey_per_min"])
+        # Keep the normalized cumulative series intact: it must remain one sample per
+        # minute. Filtering cumulative levels drops legitimate samples and breaks rates.
         # one point per minute; minutes with no gain count as 0 so the chart keeps its time axis
         honeyPerMin = FinalReport._buildHoneyPerSec(self.hourlyReportStats["honey_per_min"])
         
