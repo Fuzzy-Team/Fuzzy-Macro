@@ -89,7 +89,7 @@ class NavigationMixin:
                 if is_stopped():
                     return False
                 self.keyboard.press(key, seconds)
-            for key in (".", ".", "O", "O", "O", "O"):
+            for key in (".", ".", "o", "o", "o", "o"):
                 if is_stopped():
                     return False
                 self.keyboard.press(key)
@@ -101,7 +101,10 @@ class NavigationMixin:
                 return False
             self.keyboard.press("shift")
             return True
-        self.runPath(f"cannon_to_field/{normalized_field}")
+        if self.runPath(f"cannon_to_field/{normalized_field}") is False:
+            return False
+        if is_stopped():
+            return False
         if faceDir != "default":
             self.faceDirection(normalized_field, faceDir)
         return True
@@ -211,8 +214,8 @@ class NavigationMixin:
                 self.keyboard.tileWalk("w", 1.4)
                 self.keyboard.tileWalk("d", 9.2 * 3 - 4)
             #jump onto the ramp and keep walking right until the cannon prompt shows
-            self.keyboard.keyDown("d", False)
             try:
+                self.keyboard.keyDown("d", False)
                 self.keyboard.keyDown("space", False)
                 time.sleep(0.1)
                 self.keyboard.keyUp("space", False)
