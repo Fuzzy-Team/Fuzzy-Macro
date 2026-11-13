@@ -25,6 +25,10 @@ class MobMixin:
         self.logger.webhook("","Travelling: Mondo Buff","light blue")
         #go to mondo buff
         if not self.travelViaCannon("Mondo Buff"):
+            self.clear_task_status()
+            return False
+        if is_stopped():
+            self.clear_task_status()
             return False
         self.keyboard.press("e")
         sleep(2.5)
@@ -36,7 +40,7 @@ class MobMixin:
             end_time = time.perf_counter() + mondo_buff_wait * 60
             self.logger.webhook("", f"Damaging Mondo for {mondo_buff_wait:g} minutes", "yellow")
             self.enableShiftLock()
-            while time.perf_counter() < end_time and self.getCurrentMinute() < 15:
+            while time.perf_counter() < end_time and self.getCurrentMinute() < 15 and not is_stopped():
                 screen = self.blueTextScreen()
                 if self.blueTextHas("defeated", screen=screen) and self.blueTextHas("mondo", screen=screen):
                     break
@@ -47,12 +51,15 @@ class MobMixin:
                         time.sleep(0.035)
                 mouse.click()
                 time.sleep(1.5)
+            if is_stopped():
+                self.clear_task_status()
+                return False
             self.saveTiming("mondo")
             self.logger.webhook("","Collected: Mondo Buff","light green", ping_category="ping_mondo_buff")
         elif self.setdat["mondo_buff_loot"]: # If looting is enabled, wait until mondo is defeated
             self.logger.webhook("", "Waiting for Mondo to be defeated", "light green")
             self.enableShiftLock() #moves slightly up (or down) when hitting wall, so this reduces that
-            while True:
+            while not is_stopped():
                 screen = self.blueTextScreen()
                 #defeat
                 if self.blueTextHas("defeated", screen=screen) and self.blueTextHas("mondo", screen=screen):
@@ -64,6 +71,9 @@ class MobMixin:
                     self.keyboard.press("shift")
                     self.logger.webhook("", "Player Died", "red", "screen", ping_category="ping_character_deaths")
                     self.reset(convert=False)
+                    if is_stopped():
+                        self.clear_task_status()
+                        return
                     #sev recursion here is pretty weird
                     #TODO: not make it recursive
                     self.collectMondoBuff()
@@ -87,6 +97,9 @@ class MobMixin:
                 mouse.click()
                 time.sleep(1.5)
 
+            if is_stopped():
+                self.clear_task_status()
+                return False
             #loot
             mondo_loot_times = self.setdat["mondo_loot_times"] #how many loops based on what the user inputted
             time.sleep(0.1)
@@ -101,12 +114,20 @@ class MobMixin:
                 self.logger.webhook("", f"Looping {mondo_loot_times} times", "light green")
             self.keyboard.walk("a",3.55)
             for loops in range(mondo_loot_times): 
+                if is_stopped():
+                    break
                 for looting in range(6):
+                    if is_stopped():
+                        break
                     self.keyboard.walk("w",0.20)
                     self.keyboard.walk("d",2.65)
                     self.keyboard.walk("w",0.20)
                     self.keyboard.walk("a",2.65)
+                if is_stopped():
+                    break
                 for looting in range(6):
+                    if is_stopped():
+                        break
                     self.keyboard.walk("s",0.20)
                     self.keyboard.walk("d",2.65)
                     self.keyboard.walk("s",0.20)
@@ -120,7 +141,7 @@ class MobMixin:
             if self.setdat["mondo_collect_token"]:
                 # enable shiftlock
                 self.enableShiftLock()
-                while time.perf_counter() < end_time: 
+                while time.perf_counter() < end_time and not is_stopped():
                     self.keyboard.walk("a", 0.45)
                     for slowmove in range(9):
                         self.keyboard.walk("d", 0.048, False) #move JUST EVER SO SLIGHTLY, maybe bumps in to wall less
@@ -128,10 +149,16 @@ class MobMixin:
                     time.sleep(3) #longer since we are not detecting anything
             else:
                 time.sleep(mondo_buff_wait * 60)
+            if is_stopped():
+                self.clear_task_status()
+                return False
             self.saveTiming("mondo") 
             self.logger.webhook("","Collected: Mondo Buff","light green", ping_category="ping_mondo_buff")
         #done
         self.reset(convert=True)
+        if is_stopped():
+            self.clear_task_status()
+            return False
         return True
 
     #accept mob and field and return them in the format used for timings.txt file
@@ -415,6 +442,8 @@ class MobMixin:
                     return False
                 self.logger.webhook("", "Travelling: Stump Snail", "light blue")
                 self.goToField("stump")
+                if is_stopped():
+                    return False
                 if self.placeSprinkler():
                     if is_stopped():
                         return False
@@ -423,6 +452,8 @@ class MobMixin:
                     return False
                 self.logger.webhook("", "Failed to land in stump field", "red", "screen", ping_category="ping_critical_errors")
                 self.reset()
+                if is_stopped():
+                    return False
             return False
 
         def runGatherPattern(patternName, field, duration):
@@ -467,10 +498,18 @@ class MobMixin:
         def runSideTask():
             self.logger.webhook("", "Stump Snail: Running periodic side task", "dark brown")
             self.reset(convert=False)
+            if is_stopped():
+                return False
             if self.travelViaCannon("Stump Snail side task", resetIfAway=False):
                 self.goToField("pine tree")
+                if is_stopped():
+                    return False
                 runGatherPattern("skillet", "pine tree", patternDuration)
+                if is_stopped():
+                    return False
                 self.reset(convert=True)
+                if is_stopped():
+                    return False
             return goToStump()
 
         if not goToStump():
@@ -480,12 +519,18 @@ class MobMixin:
         self.set_task_status("attacking", activity="stump_snail")
         try:
             keepOldData = None
-            while keepOldData is None:
+            while keepOldData is None and not is_stopped():
                 cycleStart = time.time()
                 if self.checkPauseAndWait():
+                    self.clear_task_status()
                     return
                 while True:
                     if self.checkPauseAndWait():
+                        self.clear_task_status()
+                        return
+                    if is_stopped():
+                        mouse.mouseUp()
+                        self.clear_task_status()
                         return
                     mouse.click()
                     keepOldData = self.keepOldCheck()
@@ -497,19 +542,27 @@ class MobMixin:
                         break
 
                 if keepOldData is None and sideTaskInterval > 0 and not runSideTask():
+                    self.clear_task_status()
                     return
         finally:
             self.set_task_status(None, update_presence=False)  # Reset status after attack
+        if is_stopped():
+            self.clear_task_status()
+            return
         #handle the other stump snail
         self.logger.webhook("","Stump Snail Killed","bright green", "screen", ping_category="ping_mob_events")
         self.saveTiming("stump_snail")
         def keepOld():
             time.sleep(0.5)
+            if is_stopped():
+                return
             mouse.moveTo(*keepOldData)
             mouse.click()
 
         def replace():
             res = self.findText("replace", self.robloxWindow.mx + self.robloxWindow.mw/2-300, self.robloxWindow.my, 650, self.robloxWindow.mh)
+            if is_stopped():
+                return
             if res is not None:
                 mouse.moveTo(*res)
                 mouse.click()
@@ -523,11 +576,14 @@ class MobMixin:
         elif amulet == "replace":
             replace()
         elif amulet == "stop":
-            while self.keepOldCheck(): mouse.click()
+            while not is_stopped():
+                if not self.keepOldCheck() or is_stopped():
+                    break
+                mouse.click()
         elif amulet == "wait for command":
             self.set_task_status("amulet_wait", update_presence=False)
             #wait for user to send command to bot
-            while self.status.value == "amulet_wait": mouse.click()
+            while self.status.value == "amulet_wait" and not is_stopped(): mouse.click()
             if self.status.value == "amulet_keep":
                 keepOld()
             elif self.status.value == "amulet_replace":
@@ -572,9 +628,13 @@ class MobMixin:
             for attempt in range(2):
                 if not self.travelViaCannon("Coconut Crab"):
                     self.bossStatus = "travel_failed"
+                    self.clear_task_status()
                     return
                 self.logger.webhook("","Travelling: Coconut Crab","light blue")
                 self.goToField("coconut")
+                if is_stopped():
+                    self.clear_task_status()
+                    return
                 self.keyboard.walk("s", 1)
                 self.keyboard.walk("d", 3)
                 self.died = False
@@ -587,7 +647,7 @@ class MobMixin:
                 cocoThread.daemon = True
                 cocoThread.start()
                 try:
-                    while True:
+                    while not is_stopped():
                         mouse.mouseDown()
                         #simplified version of natro's coco crab pattern
                         for i in range(2):
@@ -609,10 +669,16 @@ class MobMixin:
                     # Bounded join so a stalled OCR call cannot block interrupt handling
                     cocoThread.join(timeout=5)
 
+                if is_stopped():
+                    self.clear_task_status()
+                    return
                 if self.died:
                     self.logger.webhook("", "Died to Coconut Crab", "red", ping_category="ping_character_deaths")
                     if attempt == 0:
                         self.reset(convert=False)
+                        if is_stopped():
+                            self.clear_task_status()
+                            return
                     self.died = False
                 elif self.bossStatus is not None:
                     break
@@ -630,6 +696,9 @@ class MobMixin:
         finally:
             mouse.mouseUp()
             self.clear_task_status()
+        if is_stopped():
+            self.clear_task_status()
+            return
         self.hourlyReport.addHourlyStat("bug_run_time", time.time()-st)
         self.saveTiming("coconut_crab")
         self.reset()
@@ -641,14 +710,20 @@ class MobMixin:
                 return
             self.logger.webhook("","Travelling: King Beetle","light blue")
             self.goToField("blue_flower")
+            if is_stopped():
+                self.clear_task_status()
+                return
             self.died = False
             self.bossStatus = None
             self.runPath("boss/king_beetle")
+            if is_stopped():
+                self.clear_task_status()
+                return
 
             kingBeetleDeadline = time.time() + 15*60
 
             # Continue the movement pattern and check for defeat
-            while self.bossStatus is None and not self.died:
+            while self.bossStatus is None and not self.died and not is_stopped():
                 if time.time() >= kingBeetleDeadline:
                     self.bossStatus = "timelimit"
                     break
@@ -665,6 +740,10 @@ class MobMixin:
                 self.keyboard.walk("d", 0.25)
                 sleep(0.75)
 
+            if is_stopped():
+                self.clear_task_status()
+                return
+
             # Collect rewards if defeated
             if self.bossStatus == "defeated":
                 self.keyboard.walk("a", 1)
@@ -680,10 +759,16 @@ class MobMixin:
                 self.logger.webhook("", "Died to King Beetle", "red", ping_category="ping_character_deaths")
                 if attempt == 0:
                     self.reset(convert=False)
+                    if is_stopped():
+                        self.clear_task_status()
+                        return
                 self.died = False
             elif self.bossStatus is not None:
                 break
 
+        if is_stopped():
+            self.clear_task_status()
+            return
         if self.bossStatus == "timelimit":
             self.logger.webhook("", "Time Limit: King Beetle", "red", "screen", ping_category="ping_critical_errors")
         elif self.bossStatus == "defeated":
@@ -699,13 +784,19 @@ class MobMixin:
                 return
             self.logger.webhook("","Travelling: Tunnel Bear","light blue")
             self.goToField("pineapple")
+            if is_stopped():
+                self.clear_task_status()
+                return
             self.died = False
             self.bossStatus = None
             self.runPath("boss/tunnel_bear")
+            if is_stopped():
+                self.clear_task_status()
+                return
             tunnelBearDeadline = time.time() + 150
 
             # Continue the movement pattern and check for defeat
-            while self.bossStatus is None and not self.died:
+            while self.bossStatus is None and not self.died and not is_stopped():
                 if time.time() >= tunnelBearDeadline:
                     self.bossStatus = "timelimit"
                     break
@@ -722,6 +813,10 @@ class MobMixin:
                 self.keyboard.walk("d", 0.25)
                 sleep(0.75)
 
+            if is_stopped():
+                self.clear_task_status()
+                return
+
             # Collect rewards if defeated
             if self.bossStatus == "defeated":
                 self.keyboard.walk("d", 2.5)
@@ -732,10 +827,16 @@ class MobMixin:
                 self.logger.webhook("", "Died to Tunnel Bear", "red", ping_category="ping_character_deaths")
                 if attempt == 0:
                     self.reset(convert=False)
+                    if is_stopped():
+                        self.clear_task_status()
+                        return
                 self.died = False
             elif self.bossStatus is not None:
                 break
 
+        if is_stopped():
+            self.clear_task_status()
+            return
         if self.bossStatus == "timelimit":
             self.logger.webhook("", "Time Limit: Tunnel Bear", "red", "screen", ping_category="ping_critical_errors")
         elif self.bossStatus == "defeated":
