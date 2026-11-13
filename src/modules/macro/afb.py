@@ -316,12 +316,8 @@ class AFBMixin:
                         if is_stopped():
                             return failedExit()
                         if diceCoords is None:
-                            self.toggleInventory("close")
-                            if not is_stopped():
-                                self.saveAFB("AFB_dice_cd")
-                            self.AFBglitter = False
-                            self.logger.webhook("", f"{str(dice).title()}: Dice not found in inventory", "red")
-                            return failedExit()
+                            self.logger.webhook("", f"{str(dice).title()}: Not found in inventory", "red")
+                            attempts = 0 # skip the attempts, the failure path below puts the camera back and starts the cooldown
 
                     for attempt in range(attempts):
                         bluetexts = ""
@@ -345,10 +341,8 @@ class AFBMixin:
                             timeout += 1
                             if timeout == 300:
                                 self.logger.webhook("", "Auto Field Boost: Timeout", "pink")
-                                if diceslot == 0:
-                                    self.toggleInventory("close")
-                                if not is_stopped():
-                                    self.saveAFB("AFB_dice_cd")
+                                self.toggleInventory("close")
+                                self.saveAFB("AFB_dice_cd")
                                 self.AFBglitter = False
                                 return failedExit()
 
