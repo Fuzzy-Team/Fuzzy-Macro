@@ -16,6 +16,7 @@ class TadAltSync:
         self._generation = 0
         self.current_field = None  # boosted field the alts were last sent to; None once they are back on the default field
         self._lock = threading.Lock()
+        self._command_lock = threading.Lock()
 
     def update_settings(self, settings):
         self.settings = settings
@@ -74,17 +75,47 @@ class TadAltSync:
             "goo_interval": int(self.settings.get("tad_alt_gather_goo_interval", 3) or 3),
         }
 
-    def _change_field(self, webhooks, field, apply_default_settings=False):
+    def _generation_is_current(self, generation):
+        if generation is None:
+            return True
+        with self._lock:
+            return generation == self._generation
+
+    def _wait_for_command_delay(self, seconds, generation):
+        deadline = time.monotonic() + max(0.0, float(seconds))
+        while self._generation_is_current(generation):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return True
+            time.sleep(min(0.25, remaining))
+        return False
+
+    def _change_field(self, webhooks, field, apply_default_settings=False, generation=None):
+        """Send stop/set/start as one command block; return None if a newer generation takes over."""
         field = " ".join(str(field or "").replace("_", " ").split())
-        failures = self._send_all(webhooks, "?stop")
-        time.sleep(max(0, float(self.settings.get("tad_alt_restart_delay", 10) or 0)))
-        failures.extend(self._send_all(webhooks, f"?set FieldName1 {field.title()}"))
-        if apply_default_settings:
-            payload = json.dumps(self._default_gather_settings(), separators=(",", ":"))
-            failures.extend(self._send_all(webhooks, f"?set AltGatherSettings {payload}"))
-        time.sleep(2)
-        failures.extend(self._send_all(webhooks, "?start"))
-        return sorted(set(failures))
+        with self._command_lock:
+            if not self._generation_is_current(generation):
+                return None
+            failures = self._send_all(webhooks, "?stop")
+            restart_delay = max(0, float(self.settings.get("tad_alt_restart_delay", 10) or 0))
+            if not self._wait_for_command_delay(restart_delay, generation):
+                return None
+            if not self._generation_is_current(generation):
+                return None
+            failures.extend(self._send_all(webhooks, f"?set FieldName1 {field.title()}"))
+            if not self._generation_is_current(generation):
+                return None
+            if apply_default_settings:
+                payload = json.dumps(self._default_gather_settings(), separators=(",", ":"))
+                failures.extend(self._send_all(webhooks, f"?set AltGatherSettings {payload}"))
+                if not self._generation_is_current(generation):
+                    return None
+            if not self._wait_for_command_delay(2, generation):
+                return None
+            if not self._generation_is_current(generation):
+                return None
+            failures.extend(self._send_all(webhooks, "?start"))
+            return sorted(set(failures))
 
     def initialize_alts(self):
         """Schedule enabled alts to start without blocking host startup."""
@@ -92,18 +123,24 @@ class TadAltSync:
         if not webhooks:
             return False
         default_field = str(self.settings.get("tad_alt_default_field", "pine tree") or "pine tree").strip()
+        with self._lock:
+            generation = self._generation
         thread = threading.Thread(
             target=self._initialize_alts,
-            args=(webhooks, default_field),
+            args=(webhooks, default_field, generation),
             name="tad-alt-sync-initialize",
             daemon=True,
         )
         thread.start()
         return True
 
-    def _initialize_alts(self, webhooks, default_field):
+    def _initialize_alts(self, webhooks, default_field, generation):
         try:
-            failures = self._change_field(webhooks, default_field, apply_default_settings=True)
+            failures = self._change_field(
+                webhooks, default_field, apply_default_settings=True, generation=generation
+            )
+            if failures is None:
+                return
             if failures:
                 self._log("TAD Alt Sync", f"Could not initialize TAD alt(s): {', '.join(map(str, failures))}", "red")
             else:
@@ -122,7 +159,9 @@ class TadAltSync:
             generation = self._generation
             self.current_field = field
 
-        failures = self._change_field(webhooks, field)
+        failures = self._change_field(webhooks, field, generation=generation)
+        if failures is None:
+            return False
         if failures:
             self._log("TAD Alt Sync", f"Could not update TAD alt(s): {', '.join(map(str, failures))}", "red")
         else:
@@ -170,7 +209,11 @@ class TadAltSync:
         if not webhooks:
             return
         default_field = str(self.settings.get("tad_alt_default_field", "pine tree") or "pine tree").strip()
-        failures = self._change_field(webhooks, default_field, apply_default_settings=True)
+        failures = self._change_field(
+            webhooks, default_field, apply_default_settings=True, generation=generation
+        )
+        if failures is None:
+            return
         if failures:
             self._log("TAD Alt Sync", f"Could not restore TAD alt(s): {', '.join(map(str, failures))}", "red")
         else:
