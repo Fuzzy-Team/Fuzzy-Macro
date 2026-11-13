@@ -293,21 +293,21 @@ class PlanterMixin:
         #move towards saturator
         if x >= winLeft and x <= winRight and y >= winUp and y <= winDown: 
             return
-        if x < winLeft:
-            keyboard.keyDown("a", False)
-            hmove = "a"
-        elif x > winRight:
-            keyboard.keyDown("d", False)
-            hmove = "d"
-        if y < winUp:
-            keyboard.keyDown("w", False)
-            vmove = "w"
-        elif y > winDown:
-            keyboard.keyDown("s", False)
-            vmove = "s"
-
-        i = 0
         try:
+            if x < winLeft:
+                keyboard.keyDown("a", False)
+                hmove = "a"
+            elif x > winRight:
+                keyboard.keyDown("d", False)
+                hmove = "d"
+            if y < winUp:
+                keyboard.keyDown("w", False)
+                vmove = "w"
+            elif y > winDown:
+                keyboard.keyDown("s", False)
+                vmove = "s"
+
+            i = 0
             while hmove or vmove:
                 if is_stopped():
                     return False
@@ -397,6 +397,8 @@ class PlanterMixin:
                 # If it is already in inventory, treat this as collected so callers reset timers/state.
                 self.planterCoords = None
                 self.findPlanterInInventory(name)
+                if not is_stopped():
+                    self.toggleInventory("close")
                 if self.planterCoords is not None:
                     if is_stopped():
                         updateHourlyTime()
@@ -445,6 +447,8 @@ class PlanterMixin:
             # findPlanterInInventory will set self.planterCoords if found
             self.planterCoords = None
             self.findPlanterInInventory(name)
+            if not is_stopped():
+                self.toggleInventory("close")
             if is_stopped():
                 updateHourlyTime()
                 return False
