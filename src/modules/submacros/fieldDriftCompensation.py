@@ -2,6 +2,7 @@ from modules.misc.imageManipulation import pillowToCv2
 from modules.screen.screenshot import mssScreenshot
 import modules.misc.settingsManager as settingsManager
 from modules.controls.keyboard import keyboard
+from modules.controls.sleep import InterruptRequested
 import numpy as np
 import cv2
 import time
@@ -253,7 +254,13 @@ class fieldDriftCompensation():
                 prediction = self._sprinkler_session.predict({self._sprinkler_input_name: tensor})
                 output = [prediction[self._sprinkler_output_name]]
             detections = self._postprocess_sprinkler_output(output)
+        except InterruptRequested:
+            raise
         except Exception as e:
+            # A failed inference must disable the model, not just skip detections,
+            # or run() keeps selecting this locator for the rest of the gather.
+            self._sprinkler_model_failed = True
+            self._sprinkler_session = None
             self._warn_sprinkler_model(f"sprinkler detection failed ({e})")
             return None
 
@@ -292,6 +299,8 @@ class fieldDriftCompensation():
         return best
 
     def getSprinklerLocation(self):
+        if self._sprinkler_model_failed:
+            return self.getSaturatorLocation()
         screenshot = pillowToCv2(
             mssScreenshot(
                 self.robloxWindow.mx,
@@ -301,6 +310,10 @@ class fieldDriftCompensation():
             )
         )
         sprinklerLocation = self.getSprinklerInImage(screenshot)
+        if self._sprinkler_model_failed:
+            # Loaded model failed during inference: use saturator detection now,
+            # matching the warning's fallback promise for this and later iterations.
+            return self.getSaturatorLocation()
         if sprinklerLocation is None:
             return None
         x, y = sprinklerLocation
