@@ -525,7 +525,10 @@ def runApp(macroTarget):
             if discordBotProc is not None and discordBotProc.is_alive():
                 print("Detected change in discord bot token, killing previous bot process")
                 discordBotProc.terminate()
-                discordBotProc.join()
+                discordBotProc.join(timeout=2)
+                if discordBotProc.is_alive():
+                    discordBotProc.kill()
+                    discordBotProc.join(timeout=1)
             discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI, discordMessageQueue, planterCommandQueue, streamControlQueue, skipServer, standbyCommandQueue, standbyState, ssaCommand), daemon=True)
             prevDiscordBotToken = currentDiscordBotToken
             discordBotStartedAt = current_time
@@ -533,7 +536,10 @@ def runApp(macroTarget):
         elif not shouldRunDiscordBot and discordBotProc is not None and discordBotProc.is_alive():
             print("Discord bot mode disabled, stopping bot process")
             discordBotProc.terminate()
-            discordBotProc.join()
+            discordBotProc.join(timeout=2)
+            if discordBotProc.is_alive():
+                discordBotProc.kill()
+                discordBotProc.join(timeout=1)
             discordBotProc = None
             prevDiscordBotToken = None
 
