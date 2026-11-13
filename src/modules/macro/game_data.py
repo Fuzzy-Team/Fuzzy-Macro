@@ -38,7 +38,7 @@ STICKER_SPROUT_COLLECTION_WINDOW_SECONDS = 12 * 60
 #[besideE text, movement key, max cooldowns]
 collectData = { 
     "wealth_clock": [["use"], "w", 1*60*60], #1hr
-    "honey_dispenser": [["use", "honey"], None, 1*60*60], #1hr
+    "honey_dispenser": [["use", "honey"], "a", 1*60*60], #1hr
     "blueberry_dispenser": [["use", "dispenser"], "a", 4*60*60], #4hr
     "strawberry_dispenser": [["use", "dispenser"], None, 4*60*60], #4hr
     "coconut_dispenser": [["use", "dispenser"], "s", 4*60*60], #4hr
