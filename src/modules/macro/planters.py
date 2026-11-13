@@ -98,11 +98,15 @@ class PlanterMixin:
             self.hourlyReport.addHourlyStat("misc_time", time.time()-st)
 
         def recoverAlreadyPlacedPlanterState():
+            if is_stopped():
+                return False
             try:
                 promptText = self.getTextBesideE()
                 if self.isSpecificPlanterPrompt(planter, promptText):
                     return True
                 self.moveToPlanter()
+                if is_stopped():
+                    return False
                 promptText = self.getTextBesideE()
                 return self.isSpecificPlanterPrompt(planter, promptText)
             except Exception:
@@ -232,6 +236,8 @@ class PlanterMixin:
 
     #locate the planter's growth bar and move there
     def moveToPlanter(self):
+        if is_stopped():
+            return False
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(2,2))
         def getPlanterLocation():
             screen = mssScreenshotNP(self.robloxWindow.mx,self.robloxWindow.my,self.robloxWindow.mw,self.robloxWindow.mh)
@@ -251,6 +257,8 @@ class PlanterMixin:
 
         hmove, vmove = "", ""
         for _ in range(10):
+            if is_stopped():
+                return False
             location = getPlanterLocation()
             if location:
                 break
@@ -278,6 +286,8 @@ class PlanterMixin:
         i = 0
         try:
             while hmove or vmove:
+                if is_stopped():
+                    return False
                 #check if reached saturator
                 if (hmove == "a" and x >= winLeft) or (hmove == "d" and x <= winRight):
                     keyboard.keyUp(hmove, False)
@@ -303,6 +313,8 @@ class PlanterMixin:
                     #try to find planter
                     for _ in range(10):
                         time.sleep(0.02)
+                        if is_stopped():
+                            return False
                         location = getPlanterLocation()
                         #planter found
                         if location:
