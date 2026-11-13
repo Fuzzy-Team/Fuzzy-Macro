@@ -74,6 +74,8 @@ class NavigationMixin:
             ):
                 self.location = "spawn"
                 return False
+            # rejoin() resets location to "spawn"; we are in Hive Hub now.
+            self.location = normalized_field
             if is_stopped():
                 return False
             #HIVE HUB PATH
