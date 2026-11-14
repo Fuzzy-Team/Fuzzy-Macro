@@ -378,12 +378,16 @@ class log:
 
         fd, webhookImgPath = tempfile.mkstemp(prefix="fuzzy-webhook-capture-", suffix=".png")
         os.close(fd)
-        for _ in range(2):
-            try:
-                mssScreenshot(*screenshotRegions[ss], save=True, filename=webhookImgPath)
-                return webhookImgPath
-            except mss.exception.ScreenShotError:
-                timeModule.sleep(0.5)
+        try:
+            for _ in range(2):
+                try:
+                    mssScreenshot(*screenshotRegions[ss], save=True, filename=webhookImgPath)
+                    return webhookImgPath
+                except mss.exception.ScreenShotError:
+                    timeModule.sleep(0.5)
+        except BaseException:
+            self._cleanup_temp_image(webhookImgPath)
+            raise
         self._cleanup_temp_image(webhookImgPath)
         return None
 
@@ -445,6 +449,8 @@ class log:
             self.discordMessageQueue.put(data)
         except Exception as e:
             print(f"Discord bot queue error: {e}")
+            if imageCopy != imagePath:
+                self._cleanup_temp_image(imageCopy)
         return None
 
     def _deliver(self, title, desc, color, imagePath=None, ping_category=None, route_category=None, time_format=None, allow_hourly_only_filter=True, fields=None, temporaryImage=False):
@@ -456,9 +462,7 @@ class log:
         if self.enableWebhook and not self.enableDiscordBot:
             route, resolved_category, resolved_type = resolve_webhook_route(self.routeSettings, category, self.webhookURL)
         elif self.enableDiscordBot and not self.enableWebhook:
-            route, resolved_category, resolved_type = resolve_route(self.routeSettings, category, "")
-            if not route:
-                route, resolved_category, resolved_type = resolve_bot_route(self.routeSettings, category, self.webhookURL)
+            route, resolved_category, resolved_type = resolve_bot_route(self.routeSettings, category, self.webhookURL)
         else:
             route, resolved_category, resolved_type = resolve_route(self.routeSettings, category, "")
             if not route:
@@ -470,7 +474,7 @@ class log:
             print(f"Warning: No Discord route configured. Skipping message: {title} {desc}")
             return
         if resolved_type == "webhook":
-            if not self.enableWebhook and not self.enableDiscordBot:
+            if not self.enableWebhook:
                 return
             webhookImagePath = self._snapshot_image(imagePath, fallback=not temporaryImage)
             webhookData = {
@@ -478,7 +482,7 @@ class log:
                 "title": title,
                 "desc": desc,
                 "time": time,
-                "color": colors[color],
+                "color": colors.get(color, colors["light blue"]),
                 "imagePath": webhookImagePath,
                 "ping_user_id": ping_user_id,
                 "time_format": time_format,
@@ -489,7 +493,7 @@ class log:
             self.webhookQueue.add_to_queue(webhookData)
             return
         if resolved_type == "bot":
-            self._send_discord_bot(route, title, desc, time, colors[color], imagePath, ping_user_id, time_format, fields, temporaryImage=temporaryImage)
+            self._send_discord_bot(route, title, desc, time, colors.get(color, colors["light blue"]), imagePath, ping_user_id, time_format, fields, temporaryImage=temporaryImage)
             return
         print(f"Warning: Invalid Discord route '{route}'. Expected https:// webhook or numeric channel ID.")
 
@@ -501,7 +505,7 @@ class log:
             "time": time,
             "title": title,
             "desc": desc,
-            "color": colors[color]
+            "color": colors.get(color, colors["light blue"])
         }
         self.logQueue.put(logData)
 
