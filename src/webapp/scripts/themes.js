@@ -14,6 +14,7 @@ const GUI_THEMES = [
   { id: "tadpole", value: "Tadpole", label: "Tadpole Theme" },
   { id: "gifted-tad", value: "Gifted Tad", label: "Gifted Tad Theme", aliases: ["gifted tadpole"] },
   { id: "spicy-bee", value: "Spicy Bee", label: "Spicy Bee Theme" },
+  { id: "beesmas", value: "Beesmas", label: "Beesmas Theme" },
 ];
 
 function applyTheme(value) {
