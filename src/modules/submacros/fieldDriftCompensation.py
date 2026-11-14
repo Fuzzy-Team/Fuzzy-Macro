@@ -2,7 +2,7 @@ from modules.misc.imageManipulation import pillowToCv2
 from modules.screen.screenshot import mssScreenshot
 import modules.misc.settingsManager as settingsManager
 from modules.controls.keyboard import keyboard
-from modules.controls.sleep import InterruptRequested
+from modules.controls.sleep import InterruptRequested, is_stopped
 import numpy as np
 import cv2
 import time
@@ -362,22 +362,24 @@ class fieldDriftCompensation():
             #move towards saturator
             if x >= winLeft and x <= winRight and y >= winUp and y <= winDown: 
                 return
-            if x < winLeft:
-                keyboard.keyDown("a", False)
-                hmove = "a"
-            elif x > winRight:
-                keyboard.keyDown("d", False)
-                hmove = "d"
-            if y < winUp:
-                keyboard.keyDown("w", False)
-                vmove = "w"
-            elif y > winDown:
-                keyboard.keyDown("s", False)
-                vmove = "s"
-
             try:
+                if x < winLeft:
+                    keyboard.keyDown("a", False)
+                    hmove = "a"
+                elif x > winRight:
+                    keyboard.keyDown("d", False)
+                    hmove = "d"
+                if y < winUp:
+                    keyboard.keyDown("w", False)
+                    vmove = "w"
+                elif y > winDown:
+                    keyboard.keyDown("s", False)
+                    vmove = "s"
+
                 deadline = time.monotonic() + max_seconds
                 while hmove or vmove:
+                    if is_stopped():
+                        return
                     #check if reached saturator
                     if (hmove == "a" and x >= winLeft) or (hmove == "d" and x <= winRight):
                         keyboard.keyUp(hmove, False)
@@ -403,6 +405,8 @@ class fieldDriftCompensation():
                         #try to find saturator
                         for _ in range(10):
                             time.sleep(0.02)
+                            if is_stopped():
+                                return
                             saturatorLocation = locator()
                             #saturator found
                             if saturatorLocation:
