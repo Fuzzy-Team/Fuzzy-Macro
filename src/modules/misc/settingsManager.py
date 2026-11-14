@@ -86,8 +86,7 @@ def loadCurrentProfile():
 def saveCurrentProfile():
     """Save the current profile to persistent storage"""
     try:
-        with open(CURRENT_PROFILE_FILE, "w") as f:
-            f.write(profileName)
+        _writeAtomic(CURRENT_PROFILE_FILE, profileName)
     except Exception as e:
         print(f"Warning: Could not save current profile: {e}")
 
@@ -577,8 +576,7 @@ def loadFuzzyAITokenRankings():
 
 def saveFuzzyAITokenRankings(data):
     os.makedirs(os.path.dirname(FUZZY_AI_TOKEN_RANKINGS_FILE), exist_ok=True)
-    with open(FUZZY_AI_TOKEN_RANKINGS_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+    _writeAtomic(FUZZY_AI_TOKEN_RANKINGS_FILE, json.dumps(data, indent=2))
 
 def _normalizeFuzzyAIModel(model):
     value = str(model or "standard").strip().lower()
@@ -1045,8 +1043,7 @@ def _writeAutoPlanterGatherFlag(value):
 
     data["gather"] = bool(value)
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w") as f:
-        json.dump(data, f, indent=3)
+    _writeAtomic(path, json.dumps(data, indent=3))
 
 def exportPlanterSettings():
     """Export planter profile settings as JSON string with metadata."""
@@ -1277,8 +1274,7 @@ def _importProfileData(import_data, new_profile_name=None):
 
         # Write fields file
         fields_file = os.path.join(new_profile_path, "fields.txt")
-        with open(fields_file, 'w') as f:
-            f.write(str(import_data["fields"]))
+        _writeAtomic(fields_file, str(import_data["fields"]))
 
         # Write generalsettings file
         generalsettings_file = os.path.join(new_profile_path, "generalsettings.txt")
@@ -1306,4 +1302,4 @@ def clearFile(filePath):
     directory = os.path.dirname(os.path.abspath(filePath))
     if directory:
         os.makedirs(directory, exist_ok=True)
-    open(filePath, 'w').close()
+    _writeAtomic(filePath, "")
