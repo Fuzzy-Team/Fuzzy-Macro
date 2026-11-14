@@ -95,7 +95,7 @@ class EventDetectionMixin:
         def isNightSky(bgr):
             y = 30*self.robloxWindow.multi
             #crop the image to only the area above buff
-            bgr = bgr[0:y, 180*self.robloxWindow.multi:int(self.robloxWindow.mw)]
+            bgr = bgr[0:y, 180*self.robloxWindow.multi:int(self.robloxWindow.mw * self.robloxWindow.multi)]
             rows, cols = bgr.shape[:2]
             if rows <= 15 or cols <= 15:
                 return False
