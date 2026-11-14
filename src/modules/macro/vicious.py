@@ -1,5 +1,5 @@
 import modules.controls.mouse as mouse
-from modules.controls.sleep import pause_aware_time as time, sleep
+from modules.controls.sleep import is_stopped, pause_aware_time as time, sleep
 
 
 class ViciousMixin:
@@ -78,7 +78,8 @@ class ViciousMixin:
         if not (self.reset(convert=False) and self.cannon(allowHiveResync=False, allowRejoin=False)):
             self.logger.webhook("Vic Hop", f"Could not return to {field.title()} after dying, ending the hunt", "orange", "screen", ping_category="ping_vicious_bee")
             return False
-        self.goToField(field, "north")
+        if not self.goToField(field, "north"):
+            return False
         self.recordVicStat("returns")
         self.logger.webhook("Vic Hop", f"Back in {field.title()}, fighting the Vicious Bee again", "yellow", "screen", ping_category="ping_vicious_bee")
         return True
@@ -117,7 +118,8 @@ class ViciousMixin:
         self.viciousResetCamera()
         if not self.reset(convert=False) or not self.cannon(allowHiveResync=False, allowRejoin=False):
             return False
-        self.goToField(field, "north")
+        if not self.goToField(field, "north"):
+            return False
         result = self.viciousKillPattern()
         self.logger.webhook("Vicious Bee", "Vicious Bee defeated" if result else "Vicious Bee hunt ended without a confirmed defeat", "light green" if result else "orange", "screen", ping_category="ping_vicious_bee")
         return result
@@ -456,6 +458,7 @@ class ViciousMixin:
                 self.run.value = 0
             return
         self._viciousAttackTarget = None
+        self._viciousOpenedChat = None
         self._viciousLastAttack = None
         if not self.rejoin(rejoinMsg="Vic Hop", usePrivateServer=False, nightOnly=True):
             return
@@ -468,8 +471,17 @@ class ViciousMixin:
             honey = self.getHoney()
             if honey > 0:
                 self.hourlyReport.setSessionStats(honey, stats["start_time"])
-        self.viciousSearchRoute()
-        self._viciousAttackTarget = None
+        try:
+            self.viciousSearchRoute()
+        finally:
+            self._viciousAttackTarget = None
+            point = self._viciousOpenedChat
+            self._viciousOpenedChat = None
+            if not is_stopped():
+                if point is not None:
+                    mouse.moveTo(*point)
+                    mouse.click()
+                self.ensure_shift_lock_off(reason="Vic Hop cleanup")
 
 
     def stingerHunt(self, forced_convert_balloon=False):
@@ -496,14 +508,15 @@ class ViciousMixin:
         finally:
             self._viciousAttackTarget = None
             self.night = False
-            self.viciousResetCamera()
             point = self._viciousOpenedChat
-            if point is not None:
-                mouse.moveTo(*point)
-                mouse.click()
-                self._viciousOpenedChat = None
+            self._viciousOpenedChat = None
             self.hourlyReport.addHourlyStat("bug_run_time", time.time() - started)
-            # This can re-raise a pending interrupt during its pause-aware wait.
-            # All other cleanup must already be complete.
-            self.ensure_shift_lock_off(reason="Stinger Hunt cleanup")
+            if not is_stopped():
+                self.viciousResetCamera()
+                if point is not None:
+                    mouse.moveTo(*point)
+                    mouse.click()
+                # This can re-raise a pending interrupt during its pause-aware wait.
+                # All state cleanup above is already complete.
+                self.ensure_shift_lock_off(reason="Stinger Hunt cleanup")
         return bool(self.reset(forced_convert_balloon=forced_convert_balloon))
