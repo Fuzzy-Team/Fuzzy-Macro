@@ -504,21 +504,25 @@ class HiveMixin:
             return
 
         overlap = min(async_studs, sync_studs)
-        self.keyboard.keyDown(async_key, False)
-        self.keyboard.keyDown(sync_key, False)
-        self.keyboard.tileWait(overlap / self._STUDS_PER_TILE)
-        if async_studs <= sync_studs:
-            self.keyboard.keyUp(async_key, False)
-            remaining = sync_studs - overlap
-            if remaining > 0:
-                self.keyboard.tileWait(remaining / self._STUDS_PER_TILE)
-            self.keyboard.keyUp(sync_key, False)
-        else:
-            self.keyboard.keyUp(sync_key, False)
-            remaining = async_studs - overlap
-            if remaining > 0:
-                self.keyboard.tileWait(remaining / self._STUDS_PER_TILE)
-            self.keyboard.keyUp(async_key, False)
+        try:
+            self.keyboard.keyDown(async_key, False)
+            self.keyboard.keyDown(sync_key, False)
+            self.keyboard.tileWait(overlap / self._STUDS_PER_TILE)
+            if async_studs <= sync_studs:
+                self.keyboard.keyUp(async_key, False)
+                remaining = sync_studs - overlap
+                if remaining > 0:
+                    self.keyboard.tileWait(remaining / self._STUDS_PER_TILE)
+            else:
+                self.keyboard.keyUp(sync_key, False)
+                remaining = async_studs - overlap
+                if remaining > 0:
+                    self.keyboard.tileWait(remaining / self._STUDS_PER_TILE)
+        finally:
+            try:
+                self.keyboard.keyUp(async_key, False)
+            finally:
+                self.keyboard.keyUp(sync_key, False)
 
     def walkSpawnToHiveSlot(self, slot):
         """Walk from spawn to the given hive pad using _HIVE_SPAWN_PATHS."""
@@ -597,34 +601,37 @@ class HiveMixin:
     def moveToNextHiveSlot(self, slot, direction, excluded_slots=None):
         """Leave the current pad and stop when the next hive prompt appears."""
         excluded_slots = excluded_slots or set()
-        self.keyboard.keyDown(direction, False)
-        # Wait until the current pad's prompt disappears.
-        for _ in range(40):
-            if self._hiveAcquisitionControlStatus() == "stopped":
-                self.keyboard.keyUp(direction, False)
-                return 0
-            if not self.anyHivePromptVisible():
-                break
-            time.sleep(0.01)
-        # Walk until the next pad's claim/occupied prompt appears.
         claimed = 0
-        for _ in range(200):
-            if self._hiveAcquisitionControlStatus() == "stopped":
-                break
-            if self.claimHivePromptVisible():
+        try:
+            self.keyboard.keyDown(direction, False)
+            # Wait until the current pad's prompt disappears.
+            for _ in range(40):
+                if self._hiveAcquisitionControlStatus() == "stopped":
+                    return 0
+                if not self.anyHivePromptVisible():
+                    break
+                time.sleep(0.01)
+            # Walk until the next pad's claim/occupied prompt appears.
+            for _ in range(200):
+                if self._hiveAcquisitionControlStatus() == "stopped":
+                    break
+                if self.claimHivePromptVisible():
+                    self.keyboard.keyUp("a", False)
+                    self.keyboard.keyUp("d", False)
+                    self.logger.webhook("", f"Hive {slot} detected as available", "light green")
+                    claimed = self.tryClaimHiveSlot(
+                        slot, excluded_slots, prompt_confirmed=True
+                    )
+                    break
+                if self.occupiedHivePromptVisible():
+                    self.logger.webhook("", f"Hive {slot} occupied", "dark brown")
+                    break
+                time.sleep(0.01)
+        finally:
+            try:
                 self.keyboard.keyUp("a", False)
+            finally:
                 self.keyboard.keyUp("d", False)
-                self.logger.webhook("", f"Hive {slot} detected as available", "light green")
-                claimed = self.tryClaimHiveSlot(
-                    slot, excluded_slots, prompt_confirmed=True
-                )
-                break
-            if self.occupiedHivePromptVisible():
-                self.logger.webhook("", f"Hive {slot} occupied", "dark brown")
-                break
-            time.sleep(0.01)
-        self.keyboard.keyUp("a", False)
-        self.keyboard.keyUp("d", False)
         time.sleep(0.1)
         return claimed
 
