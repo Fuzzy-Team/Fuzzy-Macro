@@ -45,13 +45,17 @@ def rightDragBy(x, y):
 
 
 def click():
-    mouseDown()
-    time.sleep(0.04)
-    mouseUp()
+    try:
+        mouseDown()
+        time.sleep(0.04)
+    finally:
+        mouseUp()
 
 def fastClick():
-    pynputMouse.press(Button.left)
-    pynputMouse.release(Button.left)
+    try:
+        pynputMouse.press(Button.left)
+    finally:
+        pynputMouse.release(Button.left)
 
 def scroll(clicks, pause = False):
     pag.scroll(clicks, _pause = pause)
