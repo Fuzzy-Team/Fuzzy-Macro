@@ -654,9 +654,7 @@ class CollectiblesMixin:
             self.hourlyReport.addHourlyStat("misc_time", time.time()-st)
 
         def saveBlenderData():
-            with open(settingsManager.ensureUserFile("blender.txt"), "w") as f:
-                f.write(str(blenderData))
-            f.close()
+            settingsManager.saveUserLiteral("blender.txt", blenderData)
             updateHourlyTime()
         
         def getNextItem():
@@ -1007,9 +1005,7 @@ class CollectiblesMixin:
         if is_stopped():
             return False
         self.keyboard.press("e")
-        with open(settingsManager.ensureUserFile("sticker_stack.txt"), "w") as f:
-            f.write(str(finalTime))
-        f.close()
+        settingsManager.saveUserText("sticker_stack.txt", str(finalTime))
         return True
 
     def feedBee(self, item, quantity):
