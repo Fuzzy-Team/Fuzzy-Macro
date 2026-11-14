@@ -23,6 +23,7 @@ from modules.controls.sleep import (
 from modules.macro.game_data import mergedCollectData, PING_SETTING_KEYS
 from modules.misc import messageBox
 from modules.screen.robloxWindow import RobloxWindowBounds
+from modules.screen import virtual_display
 from modules.screen.screenshot import benchmarkMSS, mssScreenshot
 from modules.submacros.fieldDriftCompensation import (
     fieldDriftCompensation as fieldDriftCompensationClass,
@@ -341,6 +342,8 @@ class macro(
     def backgroundOnce(self):
         if is_stopped() or is_paused():
             return
+        if virtual_display.active() and (self.status.value == "rejoining" or not virtual_display.state().get("window_ready")):
+            return
         #night detection
         if self.enableNightDetection:
             self.detectNight()
@@ -414,6 +417,13 @@ class macro(
         while True:
             try:
                 self.backgroundOnce()
+            except virtual_display.DisplayError as error:
+                self.keyboard.releaseMovement()
+                mouse.mouseUp()
+                self.logger.webhook("1080p Display Error", str(error), "red")
+                if self.run is not None:
+                    self.run.value = 0
+                return
             except Exception:
                 print(traceback.format_exc())
             raw_time.sleep(1)
@@ -480,10 +490,14 @@ class macro(
                         self.run.value = 0
                     return False
             else:
-                self.startDetect()
-                if is_stopped():
-                    return False
-                self.setRobloxWindowInfo()
+                if virtual_display.active():
+                    self.setRobloxWindowInfo()
+                    self.startDetect()
+                else:
+                    self.startDetect()
+                    if is_stopped():
+                        return False
+                    self.setRobloxWindowInfo()
         if is_stopped():
             return False
     

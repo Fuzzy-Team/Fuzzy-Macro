@@ -8,6 +8,7 @@ from modules.macro.game_data import resetKernel, resetLower1, resetLower2, reset
 from modules.misc.imageManipulation import pillowToCv2
 from modules.screen.imageSearch import locateImageOnScreen
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP
+from modules.screen import virtual_display
 
 
 def formatHoney(n):
@@ -881,7 +882,7 @@ class HiveMixin:
                 # The player is on the hive row now, so check the remaining pads from here.
                 self.logger.webhook("", "Scanning remaining hives", "dark brown")
                 return self.scanHivesForClaim(current, excluded_slots | failed)
-            except InterruptRequested:
+            except (InterruptRequested, virtual_display.DisplayError):
                 raise
             except Exception as exc:
                 raise DetectionAfterWalkError(exc) from exc

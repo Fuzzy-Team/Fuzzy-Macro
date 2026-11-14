@@ -135,6 +135,28 @@ def canClaimTimedBearQuest(name):
 # (set_enabled moved into RichPresenceManager class)
 #controller for the macro
 def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMessageQueue=None, planterCommandQueue=None, skipServer=None):
+    from modules.screen.virtual_display import DisplayError
+    try:
+        _run_macro(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer)
+    except DisplayError as error:
+        run.value = 0
+        from modules.controls.keyboard import keyboard
+        from modules.logging import log as logModule
+        keyboard.releaseMovement()
+        mouse.mouseUp()
+        settings = settingsManager.loadMacroProfile()["settings"]
+        logger = logModule.log(
+            logQueue, logModule.delivery_uses_webhook(settings),
+            logModule.get_default_delivery_route(settings), False,
+            enableDiscordBot=logModule.delivery_uses_bot_messages(settings),
+            discordMessageQueue=discordMessageQueue,
+            routeSettings=logModule.build_route_settings(settings),
+            webhookTimeFormat=settings.get("webhook_time_format", 24),
+        )
+        logger.webhook("1080p Display Error", str(error), "red", ping_category="ping_critical_errors")
+
+
+def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMessageQueue=None, planterCommandQueue=None, skipServer=None):
     start_hang_watchdog(settingsManager.getUserDataPath(HANG_FILE))
     # imported here so the GUI process, which only passes this function to the macro
     # process, doesn't load the macro package (OCR, cv2, Vision, pyautogui)

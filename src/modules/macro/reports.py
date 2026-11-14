@@ -65,6 +65,7 @@ class ReportMixin:
         return 0
 
     def hourlyReportBackgroundOnce(self):
+        from modules.screen import virtual_display
         try:
             currMin = datetime.now().minute
             currSec = datetime.now().second
@@ -113,15 +114,22 @@ class ReportMixin:
                     self.hourlyReport.resetHourlyStats()
                     self.itemMonitor.reset_hourly()
 
+            if virtual_display.active():
+                try:
+                    if self.status.value == "rejoining" or not virtual_display.state().get("window_ready"):
+                        return
+                except virtual_display.DisplayError:
+                    return
+
             #Hourly report
             if self.status.value != "rejoining":
                 #instead of using time.sleep, we want to run the code at the start of the min
                 if currMin != self.prevMin:
-                    self.prevMin = currMin
                     honey = self.getHoney()
                     print(honey)
                     backpack = self.getBackpack()
 
+                    self.prevMin = currMin
                     self.hourlyReport.addHourlyStat("honey_per_min", honey)
                     self.hourlyReport.addHourlyStat("backpack_per_min", backpack)
 
@@ -231,6 +239,9 @@ class ReportMixin:
                 isGathering = "gather_" in self.status.value
                 self.hourlyReport.recordUptimeSample(i, sampleValues, isGathering=isGathering, monitoredBuffs=monitoredBuffs)
                 self.hourlyReport.saveHourlyReportData()
+        except virtual_display.DisplayError:
+            # The macro's display-error handler reports the failure and stops input.
+            return
         except Exception:
             self.logger.webhook("Hourly Report Error", traceback.format_exc(), "red", ping_category="ping_critical_errors")
 
