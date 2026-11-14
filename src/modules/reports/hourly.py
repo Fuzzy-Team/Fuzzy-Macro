@@ -88,7 +88,7 @@ def saveReportCanvas(canvas, path):
 
 
 class HourlyReport():
-    def __init__(self, buffDetector: BuffDetector = None, time_format=24, theme="dark", configuredUptimeBuffs=None, configuredHourlyBuffs=None):
+    def __init__(self, buffDetector: BuffDetector = None, time_format=24, theme="brown", configuredUptimeBuffs=None, configuredHourlyBuffs=None):
         self.configuredUptimeBuffs = normalizeUptimeBuffSelection(configuredUptimeBuffs)
         self.configuredHourlyBuffs = normalizeHourlyBuffSelection(configuredHourlyBuffs)
 
