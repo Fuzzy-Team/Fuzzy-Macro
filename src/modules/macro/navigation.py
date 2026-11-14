@@ -50,7 +50,7 @@ class NavigationMixin:
     #run the path to go to a field
     #faceDir what direction to face after landing in a field (default, north, south)
     #returns False if the field couldn't be reached (joining Hive Hub failed)
-    def goToField(self, field, faceDir = "default", startLocation = "center"):
+    def goToField(self, field, faceDir = "default", startLocation = "center", fromRamp = False):
         # Accept a string or a list/tuple of tokens/words and normalize to a
         # single field name (e.g. ["blue", "flower"] -> "blue flower").
         if isinstance(field, (list, tuple)):
@@ -101,7 +101,8 @@ class NavigationMixin:
                 return False
             self.keyboard.press("shift")
             return True
-        if self.runPath(f"cannon_to_field/{normalized_field}") is False:
+        #fromRamp paths start at the foot of the ramp instead of at the cannon
+        if self.runPath(f"{'ramp' if fromRamp else 'cannon'}_to_field/{normalized_field}") is False:
             return False
         if is_stopped():
             return False
@@ -168,6 +169,16 @@ class NavigationMixin:
             time.sleep(0.01)
         return target_zoom
 
+    #walk from the hive to the foot of the ramp (distances in tiles)
+    def walkToRamp(self):
+        if self.cannonFromHive:
+            self.keyboard.tileWalk("w", 5)
+            self.keyboard.tileWalk("d", 9.2 * self.setdat["hive_number"] - 4)
+        else:
+            #reset couldn't find the hive and left us in front of slot 3, already a little forward
+            self.keyboard.tileWalk("w", 1.4)
+            self.keyboard.tileWalk("d", 9.2 * 3 - 4)
+
     def cannon(self, allowHiveResync = True, allowRejoin = True):
         def detect_rejoin_mode_color():
             try:
@@ -205,14 +216,7 @@ class NavigationMixin:
             hive_resync_attempts = max(0, max_attempts - 1)
         first_attempt_color = None
         for i in range(max_attempts):
-            #ported from Natro's nm_gotoRamp and nm_gotoCannon (walk distances in tiles)
-            if self.cannonFromHive:
-                self.keyboard.tileWalk("w", 5)
-                self.keyboard.tileWalk("d", 9.2 * self.setdat["hive_number"] - 4)
-            else:
-                #reset couldn't find the hive and left us in front of slot 3, already a little forward
-                self.keyboard.tileWalk("w", 1.4)
-                self.keyboard.tileWalk("d", 9.2 * 3 - 4)
+            self.walkToRamp()
             #jump onto the ramp and keep walking right until the cannon prompt shows
             try:
                 self.keyboard.keyDown("d", False)

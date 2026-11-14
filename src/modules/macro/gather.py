@@ -224,13 +224,18 @@ class GatherMixin:
                     self.set_task_status(f"travelling_{field}", activity="travelling", field=field)
                 except Exception:
                     pass
-                if not isHiveHubField:
+                #Mushroom is reached on foot from the ramp. The cannon lands in the wrong place.
+                fromRamp = field == "mushroom"
+                if fromRamp:
+                    self.walkToRamp()
+                elif not isHiveHubField:
                     if not self.travelViaCannon("Gathering", resetIfAway=False):
                         return
                 self.logger.webhook("",f"Travelling: {field.title()}, Attempt {i+1}", "light blue")
                 if not self.goToField(
                     field,
                     startLocation=fieldSetting.get("start_location", "center"),
+                    fromRamp=fromRamp,
                 ):
                     continue
                 if isHiveHubField:
