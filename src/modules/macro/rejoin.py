@@ -51,7 +51,10 @@ class RejoinMixin:
                 second=rejoinTime[2],
                 microsecond=0,
             )
-            return self.getTiming("rejoin_every") < target.timestamp() <= now.timestamp()
+            lastRejoin = self.getTiming("rejoin_every")
+            if isinstance(lastRejoin, bool) or not isinstance(lastRejoin, (int, float)):
+                lastRejoin = 0
+            return lastRejoin < target.timestamp() <= now.timestamp()
 
         rejoinEvery = self.setdat.get("rejoin_every", 0)
         return bool(rejoinEvery) and self.hasRespawned("rejoin_every", rejoinEvery*60*60)
@@ -244,6 +247,8 @@ class RejoinMixin:
                     continue
             elif not usePrivateServer:
                 deeplink = self._publicServerDeeplink(placeId)
+            if is_stopped():
+                return _finish_rejoin(False)
             # If the client is already in Bee Swarm, the sprinkler UI can still
             # be visible while the deeplink teleport finishes. Accepting that
             # immediately starts the spawn→hive walk too early (inputs are
@@ -325,7 +330,7 @@ class RejoinMixin:
                         mouse.mouseUp()
                         keyboard.releaseMovement()
                         if action == "abort":
-                            if nightOnly and self.run is not None:
+                            if self.run is not None:
                                 self.run.value = 0
                             return _finish_rejoin(False)
                         if action == "cooldown":
@@ -478,15 +483,19 @@ class RejoinMixin:
                 # exclusions.
                 excludedHiveSlots.discard(preferredHiveSlot)
 
-            newHiveNumber, reason = acquire_hive(
-                str(self.setdat.get("hive_claim_method", "detect")).strip().lower(),
-                preferredHiveSlot,
-                excludedHiveSlots,
-                detect=self.claimHiveByDetectMethod,
-                check=self.claimHiveByCheckMethod,
-                stopped=lambda: self._hiveAcquisitionControlStatus() == "stopped",
-                fatal_exceptions=(InterruptRequested,),
-            )
+            try:
+                newHiveNumber, reason = acquire_hive(
+                    str(self.setdat.get("hive_claim_method", "detect")).strip().lower(),
+                    preferredHiveSlot,
+                    excludedHiveSlots,
+                    detect=self.claimHiveByDetectMethod,
+                    check=self.claimHiveByCheckMethod,
+                    stopped=lambda: self._hiveAcquisitionControlStatus() == "stopped",
+                    fatal_exceptions=(InterruptRequested,),
+                )
+            except BaseException:
+                _finish_rejoin(False)
+                raise
 
             if not newHiveNumber:
                 if reason == "stopped":
@@ -505,13 +514,17 @@ class RejoinMixin:
             time.sleep(1)
             if is_stopped():
                 return _finish_rejoin(False)
-            if nightOnly:
-                # Start the reference field route at the hive, without running
-                # conversion's normal-mode night tasks before the hop callback.
-                if not self.reset(convert=False):
-                    return _finish_rejoin(False)
-            else:
-                self.convert(bypass=True)
+            try:
+                if nightOnly:
+                    # Start the reference field route at the hive, without running
+                    # conversion's normal-mode night tasks before the hop callback.
+                    if not self.reset(convert=False):
+                        return _finish_rejoin(False)
+                else:
+                    self.convert(bypass=True)
+            except BaseException:
+                _finish_rejoin(False)
+                raise
             self.cannonFromHive = True
             return _finish_rejoin(True)
         return _finish_rejoin(False)
