@@ -111,7 +111,8 @@ def ahkPatternToPython(ahk):
         if indentLine:
             e = "\t" + e
             out[i] = e
-            indentLine = False
+            #a comment line leaves the indent pending for the statement after it
+            indentLine = e.strip().startswith("#")
             
         line = e.strip()
         noSpaces = line.replace(" ","")
