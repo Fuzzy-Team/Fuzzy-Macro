@@ -1779,6 +1779,11 @@ select:focus {
   text-align: right;
 }
 
+/* No reserved space until a search is typed, so the input spans the full row */
+.log-search-status:empty {
+  display: none;
+}
+
 /* Drag Action Buttons */
 .drag-actions {
   margin-left: auto;
