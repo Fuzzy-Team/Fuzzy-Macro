@@ -272,7 +272,7 @@ class ItemReportDrawer:
 
     VERSION = "0.1"
 
-    def __init__(self, time_format=24, theme="dark"):
+    def __init__(self, time_format=24, theme="brown"):
         from modules.reports.drawer import HourlyReportDrawer
         # Reuse theme/palette construction from the hourly drawer
         base = HourlyReportDrawer(time_format=time_format, theme=theme)

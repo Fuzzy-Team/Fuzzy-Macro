@@ -95,9 +95,10 @@
   --surface-hover: #2C2C2C;
   --surface-dim: #141414;
   --primary: #ab8062;
-  /* Default Brown */
   --primary-hover: #cd9975;
   --primary-rgb: 171, 128, 98;
+  /* text and icons drawn on top of --primary */
+  --on-primary: #121212;
   --text-main: #E0E0E0;
   --text-dim: #A0A0A0;
   --border: #333333;
@@ -105,74 +106,70 @@
   --active-img: none;
   --drag-item-bg: #262626;
   --textbox-bg: #2b2b2b;
-  /* Reset filter */
 }
 
-/* Purple Theme Overrides */
-.theme-purple {
+/*
+  GUI themes. themes.js sets <html data-theme="id"> from the theme list there.
+  A theme overrides any of the :root tokens above, and can add its own rules
+  under [data-theme="id"] for anything tokens can't express (background art,
+  decorations, one-off component tweaks). Brown is the :root default.
+*/
+
+[data-theme="purple"] {
   --primary: #9d8ec3;
   --primary-hover: #b4a6d6;
   --primary-rgb: 157, 142, 195;
 }
 
-/* Cream/Sunny Theme Overrides (main color: #efda98) */
-.theme-cream {
+[data-theme="cream"] {
   --primary: #efda98;
   --primary-hover: #f4e3b2;
   --primary-rgb: 239, 218, 152;
 }
 
-/* Red Theme Overrides (main color: #840909) */
-.theme-red {
+[data-theme="red"] {
   --primary: #cb4144;
   --primary-hover: #9f1a1a;
   --primary-rgb: 132, 9, 9;
 }
 
-/* Blue Theme Overrides (main color: #3fc1c3) */
-.theme-blue {
+[data-theme="blue"] {
   --primary: #3fc1c3;
   --primary-hover: #3ab0b2;
   --primary-rgb: 63, 193, 195;
 }
 
-/* Commander Theme Overrides (main color: #5ad172) */
-.theme-commander {
+[data-theme="commander"] {
   --primary: #5ad172;
   --primary-hover: #3d9c50;
   --primary-rgb: 50, 190, 78;
 }
 
-/* Basic Black Theme Overrides */
-.theme-basic-black {
+[data-theme="basic-black"] {
   --primary: #ffc800;
   --primary-hover: #ffd640;
   --primary-rgb: 255, 200, 0;
 }
 
-/* Gummy Theme Overrides */
-.theme-gummy {
+[data-theme="gummy"] {
   --primary: #ff00ff;
   --primary-hover: #0ceb4f;
   --primary-rgb: 255, 0, 255;
 }
 
-/* Tadpole Theme Overrides */
-.theme-tadpole {
+[data-theme="tadpole"] {
   --primary: #20bd96;
   --primary-hover: #3e8075;
   --primary-rgb: 32, 189, 150;
 }
 
-/* Gifted Tadpole Theme Overrides */
-.theme-gifted-tadpole {
+[data-theme="gifted-tad"] {
   --primary: #90f0e0;
   --primary-hover: #5ebdad;
   --primary-rgb: 144, 240, 224;
 }
 
-/* Spicy Bee Theme (main color: #cf2013, highlight: #eb1909) */
-.theme-spicy-bee {
+[data-theme="spicy-bee"] {
   --primary: #cf2013;
   --primary-hover: #eb1909;
   --primary-rgb: 207, 32, 19;
@@ -620,7 +617,7 @@ select:focus {
 /* Components */
 .purple-button {
   background-color: var(--primary);
-  color: #121212;
+  color: var(--on-primary);
   border: none;
   border-radius: 6px;
   padding: 0.6rem 1.2rem;
@@ -1007,7 +1004,7 @@ select:focus {
 
 .custom-select .option.selected {
   background-color: var(--primary);
-  color: #121212;
+  color: var(--on-primary);
   font-weight: 600;
 }
 
@@ -1018,7 +1015,7 @@ select:focus {
 
 .custom-select .option.selected.hovered {
   background-color: var(--primary);
-  color: #121212;
+  color: var(--on-primary);
 }
 
 .custom-select .chevron {
@@ -1109,7 +1106,7 @@ select:focus {
 
 .btn-confirm {
   background: var(--primary);
-  color: #121212;
+  color: var(--on-primary);
   border: 1px solid var(--primary);
   padding: 0.5rem 0.9rem;
   border-radius: 6px;
@@ -1168,7 +1165,7 @@ select:focus {
   top: 2px;
   width: 4px;
   height: 9px;
-  border: solid #121212;
+  border: solid var(--on-primary);
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }
@@ -1306,7 +1303,7 @@ select:focus {
   top: 0.28rem;
   bottom: auto;
   background: color-mix(in srgb, var(--primary) 84%, #000000 16%);
-  color: #121212;
+  color: var(--on-primary);
 }
 
 .multi-checklist-report-buffs .multi-check-option input:checked~.multi-check-tile {
@@ -1791,7 +1788,7 @@ select:focus {
 
 .drag-action-btn {
   background-color: var(--primary);
-  color: #121212;
+  color: var(--on-primary);
   border: none;
   border-radius: 4px;
   padding: 0.3rem 0.6rem;
@@ -1908,7 +1905,7 @@ select:focus {
 
 .current-profile-badge {
   background-color: var(--primary);
-  color: #121212;
+  color: var(--on-primary);
   border-radius: 4px;
   padding: 0.2rem 0.4rem;
   font-size: 0.75rem;
@@ -1921,7 +1918,7 @@ select:focus {
 
 .profile-btn-primary {
   background-color: var(--primary);
-  color: #121212;
+  color: var(--on-primary);
 }
 
 .profile-btn-primary:hover {

@@ -10,7 +10,7 @@ from modules.reports.theme import resolveReportTheme
 class FinalReportDrawer(HourlyReportDrawer):
     """Drawer for final session reports, inherits from HourlyReportDrawer"""
 
-    def __init__(self, time_format=24, theme="dark"):
+    def __init__(self, time_format=24, theme="brown"):
         super().__init__(time_format=time_format, theme=theme)
 
     def drawFinalReport(self, hourlyReportStats, sessionStats, honeyPerSec, sessionHoney, onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData, uptimeBuffsValues, buffGatherIntervals, configuredUptimeBuffs=None, configuredHourlyBuffs=None, enabled_fields=None, field_patterns=None):

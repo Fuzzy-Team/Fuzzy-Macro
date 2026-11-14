@@ -14,19 +14,12 @@ from modules.reports.buffs import (
     MAX_UPTIME_BUFF_OPTIONS,
     normalizeHourlyBuffSelection,
 )
-from modules.reports.theme import (
-    LEGACY_THEME_ACCENT,
-    MACRO_BASE_BG_MIX,
-    MACRO_TINT_SATURATION,
-    mixColor,
-    saturate,
-    THEMES,
-)
+from modules.reports.theme import DEFAULT_THEME, THEMES
 
 
 class HourlyReportDrawer:
-    def __init__(self, time_format=24, theme="dark"):
-        t = THEMES.get(theme, THEMES["dark"])
+    def __init__(self, time_format=24, theme=DEFAULT_THEME):
+        t = THEMES.get(theme, THEMES[DEFAULT_THEME])
         self.backgroundColor = t["bg"]
         self.sideBarBackground = t["sidebar_bg"]
         self.cardBackground = t["card_bg"]
@@ -37,30 +30,14 @@ class HourlyReportDrawer:
         self.convertColor = t["convert"]
         self.otherColor = t["other"]
         self.honeyColor = t["honey"]
-        # Macro themes bake in their own accent (the webapp --primary), so reports match the GUI theme.
-        self.accentColor = t.get("accent", LEGACY_THEME_ACCENT)
+        self.accentColor = t["accent"]
         self.accentColorDim = tuple(max(0, int(c * 0.35)) for c in self.accentColor)
-
-        # Panel / graph chrome. For macro themes this is tinted toward the accent
-        # so the whole report (panels, graph backgrounds, gridlines) reflects the
-        # theme, not just the highlight line. The canvas base (behind/between the
-        # panels) gets only a very faint tint so it reads as a dark backdrop.
-        # Legacy themes keep the neutral look.
-        if "accent" in t:
-            tint = saturate(self.accentColor, MACRO_TINT_SATURATION)
-            self.baseBackgroundColor = mixColor((18, 18, 18), tint, MACRO_BASE_BG_MIX)
-            self.panelColor     = mixColor((32, 30, 32), tint, 0.15)
-            self.panelOutline   = mixColor((40, 38, 40), tint, 0.20)
-            self.graphBgColor   = mixColor((20, 20, 20), tint, 0.10)
-            self.graphGridColor = mixColor((47, 47, 55), tint, 0.22)
-            self.graphTickColor = mixColor((64, 60, 78), tint, 0.22)
-        else:
-            self.baseBackgroundColor = (18, 18, 18)
-            self.panelColor     = (32, 30, 32)
-            self.panelOutline   = (40, 38, 40)
-            self.graphBgColor   = (20, 20, 20)
-            self.graphGridColor = (47, 47, 55)
-            self.graphTickColor = (64, 60, 78)
+        self.baseBackgroundColor = t["canvas"]
+        self.panelColor     = t["panel"]
+        self.panelOutline   = t["panel_outline"]
+        self.graphBgColor   = t["graph_bg"]
+        self.graphGridColor = t["graph_grid"]
+        self.graphTickColor = t["graph_tick"]
 
         # canvas width is fixed; height is dynamic (cropped to content at the end)
         self.canvasW = 5800
