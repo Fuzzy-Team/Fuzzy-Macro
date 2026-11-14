@@ -130,10 +130,19 @@ def ahkPatternToPython(ahk):
         #convert nm_walk, nm_cameraRotation and sleep, including several on one line separated by commas
         elif re.match(r"(nm_walk|nm_camerarotation|sleep)\(", line):
             indent = e[:len(e) - len(e.lstrip())]
+            #keep a trailing comment out of the call match
+            code, comment = line, ""
+            quoted = False
+            for pos, char in enumerate(line):
+                if char == '"':
+                    quoted = not quoted
+                elif char == "#" and not quoted:
+                    code, comment = line[:pos].rstrip(), "  " + line[pos:]
+                    break
             converted = []
-            for statement in splitTopLevel(line):
+            for statement in splitTopLevel(code):
                 converted += convertCall(statement) or [statement]
-            out[i] = e.replace(line, ("\n" + indent).join(converted))
+            out[i] = e.replace(line, ("\n" + indent).join(converted) + comment)
         #convert send
         elif line.startswith("send"):
             cmds = []
