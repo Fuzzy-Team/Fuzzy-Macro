@@ -104,6 +104,8 @@ class MemoryMatch:
     def _load_reward_templates(self) -> Dict[str, Dict[str, List[np.ndarray]]]:
         """Load reward icon templates used to identify preferred rewards."""
         templates_by_type = {}
+        if not os.path.isdir(REWARD_TEMPLATE_DIR):
+            return templates_by_type
         for mm_type in sorted(os.listdir(REWARD_TEMPLATE_DIR)):
             type_dir = os.path.join(REWARD_TEMPLATE_DIR, mm_type)
             if not os.path.isdir(type_dir):
@@ -501,10 +503,16 @@ class MemoryMatch:
             if wait_while_paused() or is_stopped():
                 return 0
             # On the last chance there is nothing left to save the pair for, so take it even if not preferred.
-            if (not self._should_claim_match(tile_rewards[first_tile_index], tile_rewards[match_found], preferred_rewards)
-                    and self._read_chances(middle_x, middle_y, offset_x) != 1):
-                match_found = None
-            else:
+            if not self._should_claim_match(tile_rewards[first_tile_index], tile_rewards[match_found], preferred_rewards):
+                is_last_chance = (current_attempt + 1 >= attempts)
+                if not is_last_chance:
+                    chances_left = self._read_chances(middle_x, middle_y, offset_x)
+                    if wait_while_paused() or is_stopped():
+                        return 0
+                    is_last_chance = (chances_left == 1) or (chances_left is None and used_default_attempts and current_attempt + 1 >= min_attempts)
+                if not is_last_chance:
+                    match_found = None
+            if match_found is not None:
                 print("Match found, clicking matching tile")
                 x, y = grid_coords[match_found]
                 self._click_tile(x - offset_x, y - offset_y)
