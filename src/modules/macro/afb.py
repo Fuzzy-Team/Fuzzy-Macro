@@ -33,6 +33,7 @@ class AFBMixin:
             data = settingsManager.readSettingsFile(settingsManager.getUserDataPath("AFB.txt"))
             if data: break #most likely another process is writing to the file
             time.sleep(0.1)
+        data = data or {}
         if name is not None:
             if not name in data:
                 print(f"could not find timing for {name}, setting a new one")
@@ -71,6 +72,8 @@ class AFBMixin:
                 return False
 
         if not self.travelViaCannon("Auto Field Boost"):
+            if glitterslot == 0 and not is_stopped():
+                self.toggleInventory("close")
             return False
 
         if glitterslot == 0 and glitterCoords:
@@ -79,7 +82,10 @@ class AFBMixin:
             self.useItemInInventory(x=glitterCoords[0], y=glitterCoords[1], closeInventoryAfter=False)
             if is_stopped():
                 return False
-            self.goToField(targetField)
+            if self.goToField(targetField) is False:
+                if not is_stopped():
+                    self.toggleInventory("close")
+                return False
             if is_stopped():
                 return False
             self.clickYes()
@@ -103,7 +109,8 @@ class AFBMixin:
         else:
             if is_stopped():
                 return False
-            self.goToField(targetField)
+            if self.goToField(targetField) is False:
+                return False
             if is_stopped():
                 return False
             time.sleep(0.5)
@@ -305,10 +312,19 @@ class AFBMixin:
 
                     if "loaded" in dice:
                         if not self.travelViaCannon("Auto Field Boost"):
+                            if not is_stopped():
+                                self.keyboard.press("pagedown")
+                                for _ in range(3):
+                                    self.keyboard.press("o")
                             return failedExit()
                         if is_stopped():
                             return failedExit()
-                        self.goToField(targetFields[0])
+                        if self.goToField(targetFields[0]) is False:
+                            if not is_stopped():
+                                self.keyboard.press("pagedown")
+                                for _ in range(3):
+                                    self.keyboard.press("o")
+                            return failedExit()
 
                     diceCoords = None
                     if diceslot == 0:
@@ -341,7 +357,11 @@ class AFBMixin:
                             timeout += 1
                             if timeout == 300:
                                 self.logger.webhook("", "Auto Field Boost: Timeout", "pink")
-                                self.toggleInventory("close")
+                                self.keyboard.press("pagedown")
+                                for _ in range(3):
+                                    self.keyboard.press("o")
+                                if diceslot == 0:
+                                    self.toggleInventory("close")
                                 self.saveAFB("AFB_dice_cd")
                                 self.AFBglitter = False
                                 return failedExit()
