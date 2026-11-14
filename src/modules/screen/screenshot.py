@@ -25,21 +25,25 @@ usePillow = False
 def pillowGrab(x,y,w,h):
     fh, filepath = tempfile.mkstemp(".png")
     os.close(fh)
-    args = ["screencapture"]
-    subprocess.call(args + ["-x", filepath])
-    im = Image.open(filepath)
-    im.load()
-    os.unlink(filepath)
-    bbox = (x, y, x + w, y + h)
-    im_cropped = im.crop(bbox)
-    im.close()
-    return im_cropped
+    try:
+        args = ["screencapture"]
+        subprocess.call(args + ["-x", filepath])
+        with Image.open(filepath) as im:
+            im.load()
+            bbox = (x, y, x + w, y + h)
+            return im.crop(bbox)
+    finally:
+        try:
+            os.unlink(filepath)
+        except OSError:
+            pass
 
 #returns an NP array, useful for cv2
 def mssScreenshotNP(x,y,w,h, save = False):
     heartbeat()
     if usePillow:
         screen = pillowGrab(int(x*multi),int(y*multi),int(w*multi),int(h*multi))
+        if save: screen.save(f"screen-{time.time()}.png")
         screen = np.array(screen)
         screen_bgra = cv2.cvtColor(screen, cv2.COLOR_RGB2BGRA)
         return screen_bgra
@@ -57,7 +61,9 @@ def mssScreenshotNP(x,y,w,h, save = False):
 def mssScreenshot(x=0,y=0,w=mw,h=mh, save = False, filename=None):
     heartbeat()
     if usePillow:
-        return pillowGrab(int(x*multi),int(y*multi),int(w*multi),int(h*multi))
+        img = pillowGrab(int(x*multi),int(y*multi),int(w*multi),int(h*multi))
+        if save: img.save(filename if filename else f"screen-{time.time()}.png")
+        return img
     else:
         with mss.mss() as sct:
             # The screen part to capture
