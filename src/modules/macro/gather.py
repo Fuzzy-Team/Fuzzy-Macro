@@ -21,11 +21,14 @@ class GatherMixin:
             "basic":1,
             "silver":2,
             "golden":3,
+            "gold":3,
             "diamond":4,
-            "saturator":1
+            "saturator":1,
+            "supreme":1,
         }
         sprinklerSlot = str(self.setdat['sprinkler_slot'])
-        times = sprinklerCount[self.setdat["sprinkler_type"]]
+        sprinklerType = str(self.setdat.get("sprinkler_type", "")).strip().lower()
+        times = sprinklerCount.get(sprinklerType, 1)
         if is_stopped():
             return False
         #place one sprinkler and check if its in field
@@ -480,13 +483,16 @@ class GatherMixin:
             self.logger.webhook(f"Gathering: {field.title()}", f"Limit: {gatherTimeLimit} - {fieldSetting['shape']} - Backpack: {backpackLimitLabel}{gooStatus}", "light green", route_category="gathering")
 
         # Quest defaults and overrides are already resolved in fieldSetting.
+        def isGatherPaused():
+            return self.run is not None and self.run.value == 6
+
         def gooTimerThread():
             nonlocal lastGooTime
             useGoo = fieldSetting.get("goo", False)
             gooInterval = int(fieldSetting.get("goo_interval", 3))
             while gooTimerActive:
                 currentTime = time.time()
-                if useGoo and (currentTime - lastGooTime) >= gooInterval:
+                if useGoo and not is_stopped() and not isGatherPaused() and (currentTime - lastGooTime) >= gooInterval:
                     self.keyboard.press(str(self.setdat["goo_slot"]))
                     time.sleep(0.05)
                     lastGooTime = currentTime
@@ -518,9 +524,6 @@ class GatherMixin:
             inactiveHoneyThread.start()
         mouse.moveBy(10,5)
         self.keyboard.releaseMovement()
-
-        def isGatherPaused():
-            return self.run is not None and self.run.value == 6
 
         def getGatherTime():
             return gatherSession.elapsed()
@@ -844,6 +847,8 @@ class GatherMixin:
 
         #go back to hive
         def walkToHive(convertAtHive=True):
+            if is_stopped():
+                return False
             #walk to hive
             #face correct direction (towards hive)
             if fieldSetting["turn"] == "left":
@@ -856,19 +861,21 @@ class GatherMixin:
             #start walk
             self.canDetectNight = False
             try:
-                self.set_task_status("travelling_hive", activity="travelling", field="hive")
-            except Exception:
-                pass
-            self.logger.webhook("",f"Walking back to hive: {field.title()}", "light blue")
-            if field == "pine tree" and self.setdat.get("pine_tree_fast_return", False):
-                self.runPath("field_to_hive/pine tree fast")
-            else:
-                self.runPath(f"field_to_hive/{field}")
+                try:
+                    self.set_task_status("travelling_hive", activity="travelling", field="hive")
+                except Exception:
+                    pass
+                self.logger.webhook("",f"Walking back to hive: {field.title()}", "light blue")
+                if field == "pine tree" and self.setdat.get("pine_tree_fast_return", False):
+                    pathResult = self.runPath("field_to_hive/pine tree fast")
+                else:
+                    pathResult = self.runPath(f"field_to_hive/{field}")
+            finally:
+                self.canDetectNight = True
+            if pathResult is False or is_stopped():
+                return False
             #find hive and convert
             #self.keyboard.walk("a", (self.setdat["hive_number"]-1)*0.8)
-            self.canDetectNight = True
-            if is_stopped():
-                return False
             try:
                 self.keyboard.keyDown("a")
                 st = time.time()
