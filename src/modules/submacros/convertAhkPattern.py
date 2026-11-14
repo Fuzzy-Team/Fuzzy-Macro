@@ -14,6 +14,42 @@ generalReplace = {
     "dir": "direc",
 }
 
+rotationKeys = {"left": "rotleft", "right": "rotright", "up": "rotup", "down": "rotdown"}
+
+def splitTopLevel(text):
+    """Split on commas that are outside parentheses and quotes."""
+    parts, depth, quoted, start = [], 0, False, 0
+    for i, char in enumerate(text):
+        if char == '"':
+            quoted = not quoted
+        elif quoted:
+            continue
+        elif char in "([{":
+            depth += 1
+        elif char in ")]}":
+            depth -= 1
+        elif char == "," and depth == 0:
+            parts.append(text[start:i].strip())
+            start = i + 1
+    parts.append(text[start:].strip())
+    return parts
+
+def convertCall(statement):
+    """Python lines for one nm_walk, nm_camerarotation or sleep call. None for any other statement."""
+    match = re.fullmatch(r"(nm_walk|nm_camerarotation|sleep)\((.*)\)", statement)
+    if not match:
+        return None
+    name, args = match.group(1), splitTopLevel(match.group(2))
+    if name == "sleep":
+        return [f"sleep(({args[0]}) / 1000)"]
+    if name == "nm_camerarotation":
+        return [f"for _ in range({args[1]}):", f"\tself.keyboard.press({rotationKeys[args[0].strip(chr(34))]})"]
+    #keys are split on spaces too, so a missing comma between two keys still holds both
+    keys = " ".join(args[1:]).split()
+    return ([f"self.keyboard.keyDown({key}, False)" for key in keys]
+        + [f"self.keyboard.tileWait({args[0]})"]
+        + [f"self.keyboard.keyUp({key}, False)" for key in keys])
+
 def ahkPatternToPython(ahk):
 
     def checkOrder(string, pattern):
@@ -75,7 +111,8 @@ def ahkPatternToPython(ahk):
         if indentLine:
             e = "\t" + e
             out[i] = e
-            indentLine = False
+            #a comment line leaves the indent pending for the statement after it
+            indentLine = e.strip().startswith("#")
             
         line = e.strip()
         noSpaces = line.replace(" ","")
@@ -88,6 +125,25 @@ def ahkPatternToPython(ahk):
             digits = ''.join([x for x in line if x.isdigit()])
             if digits: 
                 out[i] = e.replace(line, f'for i in range({int(digits)}):')
+                #a loop without braces repeats only the next line
+                if not line.endswith("{"):
+                    indentLine = True
+        #convert nm_walk, nm_cameraRotation and sleep, including several on one line separated by commas
+        elif re.match(r"(nm_walk|nm_camerarotation|sleep)\(", line):
+            indent = e[:len(e) - len(e.lstrip())]
+            #keep a trailing comment out of the call match
+            code, comment = line, ""
+            quoted = False
+            for pos, char in enumerate(line):
+                if char == '"':
+                    quoted = not quoted
+                elif char == "#" and not quoted:
+                    code, comment = line[:pos].rstrip(), "  " + line[pos:]
+                    break
+            converted = []
+            for statement in splitTopLevel(code):
+                converted += convertCall(statement) or [statement]
+            out[i] = e.replace(line, ("\n" + indent).join(converted) + comment)
         #convert send
         elif line.startswith("send"):
             cmds = []

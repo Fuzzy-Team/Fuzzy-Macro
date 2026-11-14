@@ -16,6 +16,7 @@ PATTERN_FIELDS = {
     "bambootiquev2": {"bamboo"},
     "hive_hub": {"hive hub"},
     "pine_dupe": {"pine tree"},
+    "pine_drift": {"pine tree"},
     "pepper_sense": {"pepper"},
     "rose_sense": {"rose"},
     "strabry_sense": {"strawberry"},
