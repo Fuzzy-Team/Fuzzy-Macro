@@ -475,19 +475,42 @@ class CollectiblesMixin:
                     return
                 self.keyboard.press("e")
                 time.sleep(0.5)
-                self.keyboard.walk("s", 3)
-                self.keyboard.walk("d", 2)
-                for i in range(4):
-                    self.keyboard.walk("w", 2.25)
-                    self.keyboard.walk("d", 0.25)
-                    self.keyboard.walk("s", 2.25)
-                    self.keyboard.walk("d", 0.25)
+                self.saveTiming("honeystorm")
+                self.logger.webhook("", "Honey Storm summoned", "bright green", "screen")
+                if not self.setdat.get("honeystorm_collect_tokens", False):
+                    self.reset(convert=True)
+                    return
+                # Clover is right next to the summon pad. Walk in and gather from here. The distances are 3s right
+                # then 0.75s forward at 27 walkspeed, and walk() takes seconds at 28 walkspeed.
+                self.keyboard.walk("d", 3 * 27 / 28)
+                self.keyboard.walk("w", 0.75 * 27 / 28)
                 if is_stopped():
                     updateHourlyTime()
                     return
-                self.saveTiming("honeystorm")
-                self.logger.webhook("", "Honey storm collected", "bright green", "screen")
-                self.reset(convert=True)
+                self.location = "clover"
+                if not self.placeSprinkler():
+                    self.logger.webhook("", "Failed to land in Clover", "orange", "screen")
+                    self.reset(convert=True)
+                    return
+                # The storm drops Honey Tokens, which the default token lists ignore. Allow them for this
+                # gather only, on top of the user's Clover token lists.
+                honeyTokens = ["Honey Token", "Duped Honey Token"]
+                ranking = settingsManager.loadFuzzyAITokenRanking("clover", self.setdat.get("ai_gather_model", "Standard"))
+                ignored = [t for t in ranking["ignored_tokens"].split(",") if t.strip() not in honeyTokens]
+                self.gather("clover", {
+                    "shape": "fuzzy_ai_gather",
+                    "shift_lock": False,
+                    "field_drift_compensation": True,
+                    "skip_travel": True,
+                    "honey_wreath_return": False,
+                    "size": "s",
+                    "width": 5,
+                    "turn": "none",
+                    "turn_times": 0,
+                    "mins": 1,
+                    "fuzzy_ai_preferred_tokens": ",".join(honeyTokens + [ranking["preferred_tokens"]]),
+                    "fuzzy_ai_ignored_tokens": ",".join(ignored),
+                })
                 return
             # Some collects (memory_match variants, sticker_stack) don't have
             # a path file — allow missing files and continue to per-objective handling.
