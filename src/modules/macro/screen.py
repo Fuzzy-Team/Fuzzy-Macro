@@ -5,6 +5,7 @@ import modules.screen.ocr as ocr
 from modules.controls.sleep import is_stopped, pause_aware_time as time
 from modules.macro.game_data import cyrillicToLatin
 from modules.misc.imageManipulation import adjustImage
+from modules.screen.imageSearch import captureRegionBGR, locateImageInScreen, locateImageOnScreen, locateTransparentImageOnScreen
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP
 from modules.submacros.backpack import bpc
 
@@ -82,35 +83,18 @@ class ScreenMixin:
             return True
         return compactPlanter in compactPrompt
 
+    def isBesideEImage(self, name):
+        template = self.adjustImage("./images/menu",name)
+        return locateTransparentImageOnScreen(template, self.robloxWindow.mx+(self.robloxWindow.mw//2-200), self.robloxWindow.my+self.robloxWindow.yOffset+34, 400, 140, 0.75)
+
     def isMakeHoneyPrompt(self, log=False):
         text = self.getTextBesideE()
         if log: print(f"output text: {text}")
-        return "make" in text and "honey" in text
-
-    def ocrLines(self, x, y, w, h):
-        """OCR a screen region. Returns [(text, cx, cy)]: each line's letters and digits in lowercase,
-        and the centre of its box in screen points."""
-        multi = self.robloxWindow.multi
-        lines = []
-        for box, (text, _conf) in ocr.ocrRead(mssScreenshot(x, y, w, h)):
-            text = self._compactPromptText(self.convertCyrillic(text.lower()))
-            if not text:
-                continue
-            cx = sum(p[0] for p in box) / len(box) / multi + x
-            cy = sum(p[1] for p in box) / len(box) / multi + y
-            lines.append((text, cx, cy))
-        return lines
-
-    def findText(self, word, x, y, w, h, exact=False):
-        """Centre (screen points) of the first OCR line in the region that contains word, or equals it
-        when exact. word is lowercase letters and digits only. None if the text isn't there."""
-        for text, cx, cy in self.ocrLines(x, y, w, h):
-            if (text == word) if exact else (word in text):
-                return int(cx), int(cy)
-        return None
+        return ("make" in text and "honey" in text) or self.isBesideEImage("makehoney")
 
     #click the yes popup
-    #if detectOnly is set to true, the macro will only check that the yes button is there and not click
+    #if detect is set to true, the macro will check if the yes button is there
+    #if detectOnly is set to true, the macro will not click
     def _clickYesByColor(self, detectOnly=False, clickOnce=False):
         """
         Fallback for Yes/No dialogs: click the green Yes button by color.
@@ -153,7 +137,7 @@ class ScreenMixin:
             return True
         return self._clickYesAt(x + (bx + bw // 2) // self.robloxWindow.multi, y + (by + bh // 2) // self.robloxWindow.multi, clickOnce)
 
-    def _clickYesAt(self, x, y, clickOnce=False):
+    def _clickYesAt(self, x, y, clickOnce=False, nudge=(2, 2)):
         # Standalone commands have no run to stop, so only honor stop during a macro run
         if self.run is not None and is_stopped():
             return False
@@ -161,7 +145,7 @@ class ScreenMixin:
         time.sleep(0.2)
         if self.run is not None and is_stopped():
             return False
-        mouse.moveBy(2, 2)
+        mouse.moveBy(*nudge)
         time.sleep(0.1)
         if self.run is not None and is_stopped():
             return False
@@ -171,47 +155,53 @@ class ScreenMixin:
             mouse.click()
         return True
 
-    def clickYes(self, detectOnly = False, clickOnce=False):
+    def clickYes(self, detect = False, detectOnly = False, clickOnce=False):
+        yesImg = self.adjustImage("./images/menu", "yes")
         x = self.robloxWindow.mx+self.robloxWindow.mw//2-270
         y = self.robloxWindow.my+self.robloxWindow.mh//2-60
         time.sleep(0.4)
         if self.run is not None and is_stopped():
             return False
-        pos = self.findText("yes", x, y, 580, 265, exact=True)
+        threshold = 0
+        if detect or detectOnly: threshold = 0.75
+        res = locateImageOnScreen(yesImg, x, y, 580, 265, threshold)
+        # Template match can land on the No button under some Retina/scale mismatches.
         # Yes is always left of center in this search region — reject right-side hits.
-        if pos is None or pos[0] - x > 580 // 2:
+        matchOk = False
+        bestX = bestY = None
+        if res is not None:
+            bestX, bestY = [v // self.robloxWindow.multi for v in res[1]]
+            if bestX <= 580 // 2:
+                matchOk = True
+        if not matchOk:
             return self._clickYesByColor(detectOnly=detectOnly, clickOnce=clickOnce)
         if detectOnly: return True
-        return self._clickYesAt(*pos, clickOnce=clickOnce)
-
-    # Key = name used by callers, value = the letters and digits to look for in the blue text.
-    BLUE_TEXT = {
-        "notinfield": "youmust",
-        "maxplanters": "planters",
-        "died": "died",
-        "defeated": "defeated",
-        "mondo": "mondo",
-        "boosted": "boosted",
-        "tokenlink": "tokenlink",
-        "coconutcrab_defeat": "coconutcrab",
-    }
+        # Nudge into the Yes button body (template is only the "Y") without reaching No
+        return self._clickYesAt(bestX+x, bestY+y, clickOnce, nudge=(15, 5))
 
     def blueTextScreen(self):
-        """OCR the blue text area once, to check several messages against the same frame."""
-        return ''.join(text for text, _, _ in self.ocrLines(*self._blueTextRegion()))
+        """Screenshot the blue text area once, to check several messages against the same frame."""
+        return captureRegionBGR(*self._blueTextRegion())
 
     def _blueTextRegion(self):
         w = self.robloxWindow
         return w.mx+(w.mw*3/4), w.my+(w.mh*3/5), w.mw/4, w.mh-w.mh*3/5
 
-    def blueTextHas(self, name, screen=None):
+    def blueTextImageSearch(self, text, threshold=0.7, screen=None):
+        target = self.adjustImage("./images/blue", text)
         if screen is None:
-            screen = self.blueTextScreen()
-        return self.BLUE_TEXT[name] in screen
+            return locateImageOnScreen(target, *self._blueTextRegion(), threshold)
+        return locateImageInScreen(target, screen, threshold)
 
     #returns the coordinates of the keep old text
     def keepOldCheck(self):
-        return self.findText("keep", self.robloxWindow.mx + self.robloxWindow.mw/2-300, self.robloxWindow.my, 650, self.robloxWindow.mh)
+        noImg = self.adjustImage("./images/menu", "keep") #yes/no popup
+        x = self.robloxWindow.mx + self.robloxWindow.mw/2-300
+        y = self.robloxWindow.my
+        res = locateImageOnScreen(noImg, x, y, 650, self.robloxWindow.mh, 0.8)
+        if res:
+            ix, iy = [j//self.robloxWindow.multi for j in res[1]]
+            return x+ix+5, y+iy+5
 
     #convert bss' cooldown text into seconds
     #brackets: account for brackets in the text, where the cooldown value is between said brackets

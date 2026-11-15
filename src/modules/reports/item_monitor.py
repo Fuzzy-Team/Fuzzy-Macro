@@ -1,7 +1,7 @@
 """
 BSS loot-toast item monitor.
 
-Watches the bottom-right "+N Item" popup, reads it with OCR,
+Watches the bottom-right "+N Item" popup, template-matches item labels + digits,
 accumulates hourly totals, and feeds Fuzzy's hourly/session reports.
 """
 
@@ -10,10 +10,12 @@ from __future__ import annotations
 import re
 import time
 from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageDraw
 
+from modules import bitmap_matcher
 from modules.misc.formatting import formatHMS, millify
 from modules.screen.screenshot import mssScreenshotPillowRGBA
 
@@ -53,19 +55,19 @@ ITEM_META = {
 }
 
 CATEGORY_ORDER = ("Currency", "Material", "Consumable")
+ASSET_DIR = Path("images/itemmonitor")
 
 
 def _slug(name: str) -> str:
     return name.replace(" ", "_").replace("-", "_").lower()
 
 
-def _compact(text: str) -> str:
-    return "".join(ch for ch in text.lower() if ch.isalnum())
+def _scale_image(img: Image.Image, scale: int) -> Image.Image:
+    if scale <= 1:
+        return img.convert("RGBA")
+    return img.convert("RGBA").resize((img.width * scale, img.height * scale), Image.Resampling.NEAREST)
 
 
-# letters-only item name -> ITEM_META key
-ITEM_BY_NAME = {_compact(meta["display"]): key for key, meta in ITEM_META.items() if key != "Battle Points"}
-TOAST_RE = re.compile(r"\+\s*(\d[\d,]*)\s*([A-Za-z][A-Za-z \-]*)")
 BATTLE_POINTS_RE = re.compile(r"\+\s*(\d[\d,]*)\s*Battle\s*Points?", re.IGNORECASE)  # "Point" when it is +1
 
 
@@ -81,11 +83,37 @@ class ItemMonitor:
         self.start_time = time.time()
         self.query_total = 0
         self.total_items_detected = 0
+        self._templates_loaded_for = None
+        self.item_templates = {}
+        self.digit_templates = {}
+        self.plus_template = None
+        self._load_templates()
 
     def _scale(self) -> int:
         return 2 if getattr(self.robloxWindow, "isRetina", False) else max(
             1, int(round(getattr(self.robloxWindow, "multi", 1) or 1))
         )
+
+    def _load_templates(self):
+        scale = self._scale()
+        if self._templates_loaded_for == scale and self.item_templates:
+            return
+
+        self.item_templates = {}
+        for key in ITEM_META:
+            path = ASSET_DIR / f"item_{_slug(key)}.png"
+            if path.exists():
+                self.item_templates[key] = _scale_image(Image.open(path), scale)
+
+        self.digit_templates = {}
+        for n in range(10):
+            path = ASSET_DIR / f"digit_{n}.png"
+            if path.exists():
+                self.digit_templates[n] = _scale_image(Image.open(path), scale)
+
+        plus_path = ASSET_DIR / "plus.png"
+        self.plus_template = _scale_image(Image.open(plus_path), scale) if plus_path.exists() else None
+        self._templates_loaded_for = scale
 
     def reset_hourly(self):
         self.collected_items = {}
@@ -153,16 +181,45 @@ class ItemMonitor:
             return None
         return haystack.crop((x1, y1, x2 + 1, y2 + 1))
 
-    def _read_toast(self, banner: Image.Image):
-        """OCR the banner. Returns (item key, amount shown) or None."""
-        #imported here because the main process imports this module for reports and shouldn't load the OCR models
-        import modules.screen.ocr as ocr
-        text = " ".join(t for _box, (t, _conf) in ocr.ocrRead(banner.convert("RGB")))
-        for amount, name in TOAST_RE.findall(text):
-            key = ITEM_BY_NAME.get(_compact(name))
-            if key:
-                return key, int(amount.replace(",", ""))
-        return None
+    def _isolate_digits(self, haystack: Image.Image, item_needle: Image.Image):
+        if self.plus_template is None:
+            return None
+        plus_hit = bitmap_matcher.find_bitmap_cython(haystack, self.plus_template, variance=6)
+        item_hit = bitmap_matcher.find_bitmap_cython(haystack, item_needle, variance=0)
+        if not plus_hit or not item_hit:
+            return None
+        plus_w = self.plus_template.size[0]
+        digit_x = plus_hit[0] + plus_w
+        digit_w = item_hit[0] - digit_x
+        if digit_w <= 0 or digit_x < 0 or digit_x >= haystack.size[0]:
+            return None
+        return haystack.crop((digit_x, 0, digit_x + digit_w, haystack.size[1]))
+
+    def _detect_digits(self, digits_img: Image.Image) -> int:
+        """Read toast quantity via digit templates; special-case 1 vs 4 and 3 vs 8."""
+        found = {}
+        scale = self._scale()
+
+        def search_digit(n: int):
+            needle = self.digit_templates.get(n)
+            if needle is None:
+                return
+            hits = bitmap_matcher.find_all_bitmap_cython(digits_img, needle, variance=1, max_matches=8) or []
+            for x, _y in hits:
+                if n == 1 and found.get(x - 5 * scale) == 4:
+                    continue
+                if n == 3 and found.get(x - 1 * scale) == 8:
+                    continue
+                found[x] = n
+
+        for n in (0, 2, 4, 5, 6, 7, 8, 9):
+            search_digit(n)
+        for n in (1, 3):
+            search_digit(n)
+
+        if not found:
+            return 0
+        return int("".join(str(found[x]) for x in sorted(found)))
 
     def _read_battle_points(self):
         """Count the new "Defeated Mantis! (+5 Battle Points)" lines in the whole blue feed.
@@ -193,9 +250,10 @@ class ItemMonitor:
 
     def detect_once(self):
         """One detection pass. Safe to call ~every second from the hourly background loop."""
+        self._load_templates()
         haystack = self._create_haystack()
         self.query_total += 1
-        if haystack is None:
+        if haystack is None or not self.item_templates:
             return None
 
         banner = self._isolate_haystack(haystack)
@@ -203,10 +261,22 @@ class ItemMonitor:
             return None
 
         self._read_battle_points()  # only while the feed is showing, to skip the extra OCR the rest of the time
-        toast = self._read_toast(banner)
-        if toast is None:
+        matched_key = None
+        matched_needle = None
+        for key, needle in self.item_templates.items():
+            if bitmap_matcher.find_bitmap_cython(banner, needle, variance=0):
+                matched_key = key
+                matched_needle = needle
+                break
+
+        if not matched_key:
             return None
-        matched_key, n = toast
+
+        digits_img = self._isolate_digits(banner, matched_needle)
+        if digits_img is None:
+            return None
+
+        n = self._detect_digits(digits_img)
         if n <= 0:
             return None
 

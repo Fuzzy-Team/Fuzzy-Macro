@@ -69,6 +69,7 @@ class CollectiblesMixin:
             return math.floor(value * (self.robloxWindow.mh / 1080))
 
         def clickWindShrineDialogsUntilGone():
+            dialogImg = self.adjustImage("./images/menu", "dialog")
             searchX = self.robloxWindow.mx + math.floor(0.25 * self.robloxWindow.mw)
             searchY = self.robloxWindow.my + math.floor(0.55 * self.robloxWindow.mh)
             searchW = math.floor(0.5 * self.robloxWindow.mw)
@@ -78,16 +79,18 @@ class CollectiblesMixin:
             consecutiveMisses = 0
 
             for _ in range(80):
-                try:
-                    lines = self.ocrLines(searchX, searchY, searchW, searchH)
-                except Exception:
-                    lines = []
-                dialogText = ''.join(text for text, _, _ in lines)
-                dialogVisible = any(text in dialogText for text in ("windshrine", "clicktocontinue", "blown", "whirlwind"))
-                for text, _, cy in lines:
-                    if "clicktocontinue" in text:
-                        clickY = int(cy)
-                        break
+                dialogVisible = False
+                result = locateTransparentImageOnScreen(dialogImg, searchX, searchY, searchW, searchH, 0.65)
+                if result:
+                    dialogVisible = True
+                    _score, loc = result
+                    clickY = searchY + loc[1] + shrineScaleY(35)
+                else:
+                    try:
+                        dialogText = ''.join([x[1][0] for x in ocr.ocrRead(mssScreenshot(searchX, searchY, searchW, searchH))]).lower()
+                        dialogVisible = any(text in dialogText for text in ("wind shrine", "click to continue", "blown", "whirlwind"))
+                    except Exception:
+                        dialogVisible = False
 
                 if not dialogVisible:
                     consecutiveMisses += 1
@@ -104,10 +107,11 @@ class CollectiblesMixin:
             # One final generic dialog pass catches any follow-up line that appears
             # after the Wind Shrine-specific text has advanced.
             for _ in range(3):
-                result = self.findText("clicktocontinue", searchX, searchY, searchW, searchH)
+                result = locateTransparentImageOnScreen(dialogImg, searchX, searchY, searchW, searchH, 0.65)
                 if not result:
                     break
-                mouse.moveTo(clickX, result[1])
+                _score, loc = result
+                mouse.moveTo(clickX, searchY + loc[1] + shrineScaleY(35))
                 mouse.click()
                 time.sleep(0.2)
 
@@ -307,7 +311,7 @@ class CollectiblesMixin:
                         self.logger.webhook("","Ant Challenge Complete","bright green", "screen", ping_category="ping_ant_challenge")
                         clickKeepOld(keepOld)
                         return True
-                    if self.blueTextHas("died"):
+                    if self.blueTextImageSearch("died", 0.8):
                         mouse.mouseUp()
                         self.logger.webhook("","Player died during Ant Challenge; resetting", "red", "screen", ping_category="ping_character_deaths")
                         self.reset(convert=False)
@@ -376,7 +380,8 @@ class CollectiblesMixin:
         time.sleep(0.2)
         mouse.click()
         time.sleep(1)
-        if not self.findText("confirm", self.robloxWindow.mx+(self.robloxWindow.mw//2+150), self.robloxWindow.my+(4*self.robloxWindow.mh//10+160), 120, 60):
+        confirmImg = self.adjustImage("./images/menu", "confirm")
+        if not locateImageOnScreen(confirmImg, self.robloxWindow.mx+(self.robloxWindow.mw//2+150), self.robloxWindow.my+(4*self.robloxWindow.mh//10+160), 120, 60, 0.7):
             self.logger.webhook(f"", "Sticker printer on cooldown", "orange", "screen")
             self.keyboard.press("e")
             self.saveTiming("sticker_printer")
@@ -393,7 +398,7 @@ class CollectiblesMixin:
         #click yes
         if is_stopped():
             return
-        if not self.clickYes():
+        if not self.clickYes(detect=True):
             if is_stopped():
                 return
             egg = self.setdat["sticker_printer_egg"]
@@ -765,7 +770,9 @@ class CollectiblesMixin:
         y = self.robloxWindow.my + self.robloxWindow.mh//2 - 240
 
         def clickOnBlenderElement(cx, cy):
-            mouse.moveTo(cx, cy)
+            cx //= self.robloxWindow.multi
+            cy //= self.robloxWindow.multi
+            mouse.moveTo(cx+x, cy+y)
             time.sleep(0.1)
             mouse.click()
             mouse.moveBy(2,2)
@@ -787,13 +794,14 @@ class CollectiblesMixin:
         res = locateImageOnScreen(doneImg, x, y, 560, 480, 0.75)
         if res:
             print("done")
-            clickOnBlenderElement(x + res[1][0]//self.robloxWindow.multi, y + res[1][1]//self.robloxWindow.multi)
+            clickOnBlenderElement(*res[1])
 
         #check for cancel button
-        res = self.findText("cancel", x, y, 560, 480)
+        cancelImg = self.adjustImage("images/menu", "blendercancel")
+        res = locateImageOnScreen(cancelImg, x, y, 560, 480, 0.75)
         if res:
             print("cancel")
-            clickOnBlenderElement(*res)
+            clickOnBlenderElement(*res[1])
 
         #check if still crafting and get cd
         notDoneImg = self.adjustImage("images/menu", "blenderend")
@@ -802,7 +810,7 @@ class CollectiblesMixin:
         def cancelCraft():
             self.logger.webhook("", "Unable to detect remaining crafting time, ending craft", "orange", "screen")
             #mouse.moveTo(self.robloxWindow.mx+(self.robloxWindow.mw/2-120), self.robloxWindow.my+(math.floor(self.robloxWindow.mh*0.48))+120)
-            clickOnBlenderElement(x + res[1][0]//self.robloxWindow.multi, y + res[1][1]//self.robloxWindow.multi)
+            clickOnBlenderElement(*res[1])
 
         if res:
             cdImg = mssScreenshot(self.robloxWindow.mx+(self.robloxWindow.mw/2-130),self.robloxWindow.my+(math.floor(self.robloxWindow.mh*0.48)-70), 400, 65)
@@ -843,7 +851,8 @@ class CollectiblesMixin:
             mouse.click()
             sleep(0.06)
         #check if the item can be crafted
-        if not self.findText("make", x, y, 560, 480):
+        canMake = self.adjustImage("images/menu", "blendermake")
+        if not locateImageOnScreen(canMake, x, y, 560, 480, 0.8):
             skipUnavailableCraft(f"Unable to craft {itemDisplay}")
             return
         #open the crafting menu
@@ -991,7 +1000,7 @@ class CollectiblesMixin:
         for _ in range(4):
             if is_stopped():
                 return False
-            if not self.clickYes(clickOnce=True):
+            if not self.clickYes(detect=True, clickOnce=True):
                 break
             yesPopup = True
             # Second confirm can take a beat to replace the first; wait before re-scanning
@@ -1051,15 +1060,18 @@ class CollectiblesMixin:
 
         #interact with feed menu
         time.sleep(1)
+        feedButtonImg = self.adjustImage("./images/menu", "feed")
         fx = self.robloxWindow.mx + (54*self.robloxWindow.mw)//100-300
         fy = self.robloxWindow.my + self.robloxWindow.yOffset + (46*self.robloxWindow.mh)//100-59
-        fres = self.findText("feed", fx, fy, 300, 120)
+        fres = locateImageOnScreen(feedButtonImg, fx, fy, 300, 120, 0.75)
         if not fres:
             self.moveMouseToDefault()
             return
 
-        #change quantity: the field sits to the right of the feed button
-        mouse.moveTo(fres[0]+120, fres[1])
+        frx, fry = [x//self.robloxWindow.multi for x in fres[1]]
+
+        #change quantity
+        mouse.moveTo(fx+frx+150, fy+fry+8)
         time.sleep(0.1)
         for _ in range(2):
             mouse.click()
@@ -1067,7 +1079,7 @@ class CollectiblesMixin:
         self.keyboard.write(str(quantity))
 
         #click feed button
-        mouse.moveTo(*fres)
+        mouse.moveTo(fx+frx, fy+fry)
         time.sleep(0.1)
         for _ in range(2):
             mouse.click()

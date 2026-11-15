@@ -42,7 +42,7 @@ class HiveMixin:
     def convert(self, bypass = False, forced_convert_balloon=None):
         self.location = "spawn"
         if not bypass:
-            if not self.isMakeHoneyPrompt(): 
+            if not self.isBesideEImage("makehoney"): 
                 self.alreadyConverted = False
                 return False
         #start convert
@@ -287,8 +287,8 @@ class HiveMixin:
                 self.keyboard.press("e")
             print(f"check sticker printer popup: {time.time()-st}")
             
-            #memory match
-            if self.findText("badge", self.robloxWindow.mx+(self.robloxWindow.mw/4), self.robloxWindow.my+(self.robloxWindow.mh/4), self.robloxWindow.mw/4, self.robloxWindow.mh/3.5):
+            mmImg = self.adjustImage("./images/menu", "mmopen") #memory match
+            if locateImageOnScreen(mmImg, self.robloxWindow.mx+(self.robloxWindow.mw/4), self.robloxWindow.my+(self.robloxWindow.mh/4), self.robloxWindow.mw/4, self.robloxWindow.mh/3.5, 0.8):
                 self.canDetectNight = False
                 try:
                     self.memoryMatch.solveMemoryMatch(self.latestMM, self.setdat.get("memory_match_rewards", []))
@@ -311,11 +311,14 @@ class HiveMixin:
                 time.sleep(0.2)
                 mouse.click()
 
-            #yes/no popup
-            res = self.findText("no", self.robloxWindow.mx + self.robloxWindow.mw/2-300, self.robloxWindow.my, 650, self.robloxWindow.mh, exact=True)
+            noImg = self.adjustImage("./images/menu", "no") #yes/no popup
+            x = self.robloxWindow.mx + self.robloxWindow.mw/2-300
+            y = self.robloxWindow.my
+            res = locateImageOnScreen(noImg, x, y, 650, self.robloxWindow.mh, 0.8)
             print(f"checked yes/no popup: {time.time()-st}")
             if res:
-                mouse.moveTo(*res)
+                x2, y2 = [j//self.robloxWindow.multi for j in res[1]]
+                mouse.moveTo(x+x2, y+y2)
                 time.sleep(0.08)
                 mouse.moveBy(1,1)
                 time.sleep(0.1)
@@ -546,9 +549,20 @@ class HiveMixin:
         time.sleep(0.25)
 
     def claimHivePromptVisible(self):
+        try:
+            if self.isBesideEImage("claimhive"):
+                return True
+        except Exception:
+            pass
         return bool(self.isBesideE(["claim"], ["send", "trad", "trade"], log=True))
 
     def occupiedHivePromptVisible(self):
+        for name in ("sendtrade", "tradedisabled", "tradelocked"):
+            try:
+                if self.isBesideEImage(name):
+                    return True
+            except Exception:
+                pass
         return bool(self.isBesideE(["send", "trad", "trade"], ["claim"], log=True))
 
     def anyHivePromptVisible(self):
