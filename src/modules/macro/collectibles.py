@@ -480,11 +480,21 @@ class CollectiblesMixin:
                 if not self.setdat.get("honeystorm_collect_tokens", False):
                     self.reset(convert=True)
                     return
-                # The storm drops Honey Tokens, which the default token lists ignore. Allow them for this
-                # gather only, on top of the user's Clover token lists.
-                if not self.reset(convert=False):
+                # Clover is right next to the summon pad. Walk in, turn around to face the field and gather from here.
+                self.keyboard.walk("s", 2)
+                self.keyboard.walk("a", 5)
+                for _ in range(4):
+                    self.keyboard.press(".")
+                if is_stopped():
                     updateHourlyTime()
                     return
+                self.location = "clover"
+                if not self.placeSprinkler():
+                    self.logger.webhook("", "Failed to land in Clover", "orange", "screen")
+                    self.reset(convert=True)
+                    return
+                # The storm drops Honey Tokens, which the default token lists ignore. Allow them for this
+                # gather only, on top of the user's Clover token lists.
                 honeyTokens = ["Honey Token", "Duped Honey Token"]
                 ranking = settingsManager.loadFuzzyAITokenRanking("clover", self.setdat.get("ai_gather_model", "Standard"))
                 ignored = [t for t in ranking["ignored_tokens"].split(",") if t.strip() not in honeyTokens]
@@ -492,8 +502,7 @@ class CollectiblesMixin:
                     "shape": "fuzzy_ai_gather",
                     "shift_lock": False,
                     "field_drift_compensation": True,
-                    "start_location": "center",
-                    "distance": 1,
+                    "skip_travel": True,
                     "width": 5,
                     "turn": "none",
                     "turn_times": 0,

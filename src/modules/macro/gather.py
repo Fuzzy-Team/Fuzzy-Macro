@@ -211,7 +211,8 @@ class GatherMixin:
         landedInField = False
         if skipTravel:
             landedInField = True
-            self.logger.webhook("Sprouts", f"Planting next sprout from current position in {field.title()}", "light blue", "screen", route_category="activities")
+            if isSproutGather:
+                self.logger.webhook("Sprouts", f"Planting next sprout from current position in {field.title()}", "light blue", "screen", route_category="activities")
         else:
             for i in range(3):
                 if is_stopped():
