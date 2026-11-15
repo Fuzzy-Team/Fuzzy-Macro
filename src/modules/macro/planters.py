@@ -24,10 +24,7 @@ class PlanterMixin:
             afterCannon()
         self.logger.webhook("", f"Travelling: {planter.title()} Planter ({field.title()}), {method.title()}", "light blue")
         if direct:
-            self.runPath(f"planter_to_center/{self.location}", fileMustExist=False)
-            self.runPath(direct)
-            self.location = field
-            self.faceDirection(field, "north")
+            self.walkDirectToField(field)
         elif not self.goToField(field, "north"):
             return False
         if is_stopped():
@@ -68,6 +65,7 @@ class PlanterMixin:
             if finalKey is not None: self.keyboard.walk(finalKey[0], finalKey[1])
             if is_stopped():
                 return False
+            self.location = f"planter {field}"
             return True
 
     def findPlanterInInventory(self, name, stop_event=None):

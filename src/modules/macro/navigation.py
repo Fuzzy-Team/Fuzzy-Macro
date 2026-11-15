@@ -110,11 +110,24 @@ class NavigationMixin:
             self.faceDirection(normalized_field, faceDir)
         return True
 
-    #the path for walking from the field we're standing in straight to another field, or None
+    #after a planter is placed the player stands at its spot and location is "planter <field>".
     #paths/field_to_field/<from>/<to>.py starts at the center of <from> facing north and ends like cannon_to_field/<to>.py
+    #returns None unless the player just placed a planter and a path exists for the pair
     def directPath(self, field, start=None):
-        path = f"field_to_field/{start or self.location}/{field}"
+        if start is None:
+            if not self.location.startswith("planter "):
+                return None
+            start = self.location[len("planter "):]
+        path = f"field_to_field/{start}/{field}"
         return path if os.path.isfile(f"../paths/{path}.py") else None
+
+    #walk from the planter spot to the center of its field, then straight to another field
+    def walkDirectToField(self, field):
+        start = self.location[len("planter "):]
+        self.runPath(f"planter_to_center/{start}", fileMustExist=False)
+        self.runPath(f"field_to_field/{start}/{field}")
+        self.location = field
+        self.faceDirection(field, "north")
 
     def moveMouseToDefault(self):
         mouse.moveTo(self.robloxWindow.mx+370, self.robloxWindow.my+self.robloxWindow.yOffset+110)

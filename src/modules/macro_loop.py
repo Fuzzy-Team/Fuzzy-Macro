@@ -1825,7 +1825,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                     # Execute the task
                     taskExecuted = executeTask(taskId)
                     # Planters can leave the player in the last field when the next planter is a direct walk away
-                    if taskId == "planters" and not is_stopped() and macro.location != "spawn":
+                    if taskId == "planters" and taskExecuted and not is_stopped() and macro.location != "spawn":
                         runTask(macro.reset, resetAfter=False, allowAFB=False)
                     if taskExecuted:
                         anyTaskExecuted = True
