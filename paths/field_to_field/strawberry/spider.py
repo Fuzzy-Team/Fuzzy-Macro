@@ -1,8 +1,8 @@
 # strawberry to spider. Starts at the center of strawberry facing north (the gather facing).
 # Ends where cannon_to_field/spider.py ends, so goToField can finish with faceDirection.
-# center to corner
-self.keyboard.multiWalk(["w", "d"], (70 + 10)/28)
-self.keyboard.walk("w", (20 + 10)/28)
+# run into the top right corner from anywhere in the field
+self.keyboard.walk("w", 5)
+self.keyboard.walk("d", 5)
 # corner to corner
 self.keyboard.press("space", 0.1)
 sleep(0.2)
