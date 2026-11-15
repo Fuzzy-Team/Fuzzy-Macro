@@ -62,7 +62,7 @@ function updateBoostHotbarIcons() {
 
 //save the picked item and set the slot's timer to the item's buff time. The timer can still be edited afterwards.
 async function pickBoostHotbarItem(dropdown) {
-    await saveSetting(dropdown, "profile")
+    if (!(await saveSetting(dropdown, "profile"))) return
     const slot = dropdown.id.match(/\d+/)[0]
     const item = boostHotbarItems.find((x) => x.value === getDropdownValue(dropdown))
     if (!item || !item.every) return
@@ -70,8 +70,7 @@ async function pickBoostHotbarItem(dropdown) {
     const formatEle = document.getElementById(`hotbar${slot}_use_every_format`)
     valueEle.value = item.every
     setDropdownValue(formatEle, item.unit)
-    await saveSetting(valueEle, "profile")
-    await saveSetting(formatEle, "profile")
+    if (await saveSetting(valueEle, "profile")) await saveSetting(formatEle, "profile")
 }
 
 function switchBoostHotbarSlot(slot) {
