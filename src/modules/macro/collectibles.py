@@ -481,9 +481,9 @@ class CollectiblesMixin:
                     self.reset(convert=True)
                     return
                 # Clover is right next to the summon pad. Walk in and gather from here. The distances are 3s right
-                # then 2s forward at 27 walkspeed, and walk() takes seconds at 28 walkspeed.
+                # then 0.75s forward at 27 walkspeed, and walk() takes seconds at 28 walkspeed.
                 self.keyboard.walk("d", 3 * 27 / 28)
-                self.keyboard.walk("w", 2 * 27 / 28)
+                self.keyboard.walk("w", 0.75 * 27 / 28)
                 if is_stopped():
                     updateHourlyTime()
                     return
@@ -503,6 +503,7 @@ class CollectiblesMixin:
                     "field_drift_compensation": True,
                     "skip_travel": True,
                     "honey_wreath_return": False,
+                    "size": "s",
                     "width": 5,
                     "turn": "none",
                     "turn_times": 0,
