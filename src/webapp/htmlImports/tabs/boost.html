@@ -55,6 +55,18 @@
             </div>
             <form class="boost-hotbar-form-row">
               <div class="boost-hotbar-form-copy">
+                <label>Item</label>
+                <p>Choose what is in this slot. Picking one sets Use Every to how long its buff lasts.</p>
+              </div>
+              ${buildInput(`hotbar${slot}_item`, {
+                name: "dropdown",
+                data: boostHotbarItemOptions,
+                triggerFunction: "pickBoostHotbarItem(this)",
+                length: 12,
+              })}
+            </form>
+            <form class="boost-hotbar-form-row">
+              <div class="boost-hotbar-form-copy">
                 <label>Use When</label>
                 <p>Choose the condition that allows this slot to be used.</p>
               </div>

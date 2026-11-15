@@ -3,6 +3,61 @@ function switchBoostTab(target){
     switchSubtab("boost", target)
 }
 
+//items that can be picked for a hotbar slot. mins is how long the item's buff lasts and becomes the
+//slot's Use Every timer when picked. Glitter and Gumdrops have no buff time to suggest, so they only label the slot.
+const boostHotbarItems = [
+    { name: "Oil", icon: "oil", mins: 10 },
+    { name: "Super Smoothie", icon: "super_smoothie", mins: 20 },
+    { name: "Red Extract", icon: "red_extract", mins: 10 },
+    { name: "Blue Extract", icon: "blue_extract", mins: 10 },
+    { name: "Glue", icon: "glue", mins: 10 },
+    { name: "Enzymes", icon: "enzymes", mins: 10 },
+    { name: "Tropical Drink", icon: "tropical_drink", mins: 10 },
+    { name: "Purple Potion", icon: "purple_potion", mins: 15 },
+    { name: "Glitter", icon: "glitter" },
+    { name: "Gumdrops", icon: "gumdrops" },
+].map((item) => ({ ...item, value: item.name.toLowerCase() }))
+
+const boostHotbarItemOptions = [
+    { label: "None", value: "none" },
+    ...boostHotbarItems.map((item) => ({
+        label: `<img src="./assets/icons/${item.icon}.png" class="icon-img">${item.name}`,
+        value: item.value,
+    })),
+]
+
+//show the picked item's icon on the slot button and the slot panel
+function updateBoostHotbarIcons() {
+    for (let slot = 1; slot <= 7; slot++) {
+        const dropdown = document.getElementById(`hotbar${slot}_item`)
+        const frame = document.querySelector(`#boost-slot-${slot} .boost-hotbar-slot-frame`)
+        const icon = document.querySelector(`#boost-hotbar-slot-${slot}-panel .boost-hotbar-panel-icon`)
+        if (!dropdown || !frame || !icon) continue
+        const item = boostHotbarItems.find((x) => x.value === getDropdownValue(dropdown))
+        const html = item
+            ? `<img src="./assets/icons/${item.icon}.png" alt="${item.name}">`
+            : `<span class="boost-hotbar-slot-empty"></span>`
+        frame.innerHTML = html
+        icon.innerHTML = html
+        icon.classList.toggle("boost-hotbar-panel-icon-empty", !item)
+        document.getElementById(`boost-slot-${slot}`).title = item ? `Slot ${slot}: ${item.name}` : `Slot ${slot}`
+    }
+}
+
+//save the picked item and set the slot's timer to the item's buff time. The timer can still be edited afterwards.
+async function pickBoostHotbarItem(dropdown) {
+    await saveSetting(dropdown, "profile")
+    const slot = dropdown.id.match(/\d+/)[0]
+    const item = boostHotbarItems.find((x) => x.value === getDropdownValue(dropdown))
+    if (!item || !item.mins) return
+    const valueEle = document.getElementById(`hotbar${slot}_use_every_value`)
+    const formatEle = document.getElementById(`hotbar${slot}_use_every_format`)
+    valueEle.value = item.mins
+    setDropdownValue(formatEle, "mins")
+    await saveSetting(valueEle, "profile")
+    await saveSetting(formatEle, "profile")
+}
+
 function switchBoostHotbarSlot(slot) {
     Array.from(document.getElementsByClassName("boost-hotbar-slot")).forEach((button) => {
         button.classList.remove("active")
