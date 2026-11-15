@@ -3,6 +3,74 @@ function switchBoostTab(target){
     switchSubtab("boost", target)
 }
 
+//items that can be picked for a hotbar slot, in the order the game lists them. every/unit is the item's cooldown
+//or buff time and becomes the slot's Use Every timer when picked. Sprinkler Builder has none: it is used once when
+//gathering starts, not on an interval.
+const boostHotbarItems = [
+    { name: "Sprinkler Builder", icon: "./assets/icons/sprinkler_builder.png" },
+    { name: "Black Balloon", icon: "./assets/icons/black_balloon.png", every: 5, unit: "mins" },
+    { name: "Blue Extract", icon: "./assets/icons/blue_extract.png", every: 10, unit: "mins" },
+    { name: "Box-O-Frogs", icon: "./assets/icons/box_o_frogs.png", every: 3, unit: "mins" },
+    { name: "Coconut", icon: "/memory-match-icons/extreme/coconuts.webp", every: 10, unit: "secs" },
+    { name: "Enzymes", icon: "./assets/icons/enzymes.png", every: 10, unit: "mins" },
+    { name: "Field Dice", icon: "./assets/icons/field_dice.png", every: 15, unit: "mins" },
+    { name: "Glitter", icon: "./assets/icons/glitter.png", every: 905, unit: "secs" },
+    { name: "Glue", icon: "./assets/icons/glue.png", every: 10, unit: "mins" },
+    { name: "Gumdrops", icon: "./assets/icons/gumdrops.png", every: 2, unit: "secs" },
+    { name: "Jelly Beans", icon: "/memory-match-icons/normal/jelly%20beans.webp", every: 30, unit: "secs" },
+    { name: "Micro-Converter", icon: "/memory-match-icons/normal/micro-converter.webp", every: 5, unit: "secs" },
+    { name: "Oil", icon: "./assets/icons/oil.png", every: 10, unit: "mins" },
+    { name: "Pink Balloon", icon: "./assets/icons/pink_balloon.png", every: 3, unit: "mins" },
+    { name: "Purple Potion", icon: "./assets/icons/purple_potion.png", every: 15, unit: "mins" },
+    { name: "Red Balloon", icon: "./assets/icons/red_balloon.png", every: 3, unit: "mins" },
+    { name: "Red Extract", icon: "./assets/icons/red_extract.png", every: 10, unit: "mins" },
+    { name: "Snowflake", icon: "./assets/icons/snowflake.png", every: 3, unit: "secs" },
+    { name: "Stinger", icon: "/memory-match-icons/extreme/stingers.webp", every: 30, unit: "secs" },
+    { name: "Super Smoothie", icon: "./assets/icons/super_smoothie.png", every: 20, unit: "mins" },
+    { name: "Tropical Drink", icon: "./assets/icons/tropical_drink.png", every: 10, unit: "mins" },
+    { name: "Whirligig", icon: "./assets/icons/whirligig.png", every: 3, unit: "mins" },
+    { name: "White Balloon", icon: "./assets/icons/white_balloon.png", every: 5, unit: "mins" },
+    { name: "Other", icon: "./assets/icons/other_item.svg" }, //any item that is not listed
+].map((item) => ({ ...item, value: item.name.toLowerCase() }))
+
+const boostHotbarItemOptions = [
+    { label: "None", value: "none" },
+    ...boostHotbarItems.map((item) => ({
+        label: `<img src="${item.icon}" class="icon-img">${item.name}`,
+        value: item.value,
+    })),
+]
+
+//show the picked item's icon on the slot button and the slot panel
+function updateBoostHotbarIcons() {
+    for (let slot = 1; slot <= 7; slot++) {
+        const dropdown = document.getElementById(`hotbar${slot}_item`)
+        const frame = document.querySelector(`#boost-slot-${slot} .boost-hotbar-slot-frame`)
+        const icon = document.querySelector(`#boost-hotbar-slot-${slot}-panel .boost-hotbar-panel-icon`)
+        if (!dropdown || !frame || !icon) continue
+        const item = boostHotbarItems.find((x) => x.value === getDropdownValue(dropdown))
+        const html = item ? `<img src="${item.icon}" alt="${item.name}">` : `<span class="boost-hotbar-slot-empty"></span>`
+        frame.innerHTML = html
+        icon.innerHTML = html
+        icon.classList.toggle("boost-hotbar-panel-icon-empty", !item)
+        document.getElementById(`boost-slot-${slot}`).title = item ? `Slot ${slot}: ${item.name}` : `Slot ${slot}`
+    }
+}
+
+//save the picked item and set the slot's timer to the item's buff time. The timer can still be edited afterwards.
+async function pickBoostHotbarItem(dropdown) {
+    if (!(await saveSetting(dropdown, "profile"))) return
+    const slot = dropdown.id.match(/\d+/)[0]
+    const item = boostHotbarItems.find((x) => x.value === getDropdownValue(dropdown))
+    if (!item || !item.every) return
+    const valueEle = document.getElementById(`hotbar${slot}_use_every_value`)
+    const formatEle = document.getElementById(`hotbar${slot}_use_every_format`)
+    valueEle.value = item.every
+    if (!(await saveSetting(valueEle, "profile"))) return
+    setDropdownValue(formatEle, item.unit)
+    await saveSetting(formatEle, "profile")
+}
+
 function switchBoostHotbarSlot(slot) {
     Array.from(document.getElementsByClassName("boost-hotbar-slot")).forEach((button) => {
         button.classList.remove("active")

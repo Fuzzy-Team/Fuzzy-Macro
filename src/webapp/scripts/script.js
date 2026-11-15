@@ -1047,6 +1047,7 @@ function updateDependentFields() {
   updateReturnDependentFields();
   updateScheduledRejoinDependentFields();
   updateQuestProgressFields();
+  updateBoostHotbarIcons();
 }
 
 function updateReturnDependentFields() {
