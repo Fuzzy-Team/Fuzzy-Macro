@@ -480,11 +480,10 @@ class CollectiblesMixin:
                 if not self.setdat.get("honeystorm_collect_tokens", False):
                     self.reset(convert=True)
                     return
-                # Clover is right next to the summon pad. Walk in, turn around to face the field and gather from here.
-                self.keyboard.walk("s", 2)
-                self.keyboard.walk("a", 5)
-                for _ in range(4):
-                    self.keyboard.press(".")
+                # Clover is right next to the summon pad. Walk in and gather from here. The distances are 5s right
+                # then 2s forward at 27 walkspeed, and walk() takes seconds at 28 walkspeed.
+                self.keyboard.walk("d", 5 * 27 / 28)
+                self.keyboard.walk("w", 2 * 27 / 28)
                 if is_stopped():
                     updateHourlyTime()
                     return
