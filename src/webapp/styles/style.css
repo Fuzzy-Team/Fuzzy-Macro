@@ -175,6 +175,39 @@
   --primary-rgb: 207, 32, 19;
 }
 
+/* Beesmas: winter blue with a candy-cane accent and a light snowfall */
+[data-theme="beesmas"] {
+  --background: #0d1f3c;
+  --surface: #15305a;
+  --surface-hover: #1d3c6e;
+  --surface-dim: #0b1a33;
+  --primary: #ff6b6b;
+  --primary-hover: #ff8a8a;
+  --primary-rgb: 255, 107, 107;
+  --on-primary: #0d1f3c;
+  --text-main: #eef4ff;
+  --text-dim: #a8bcdc;
+  --border: #2b4b7c;
+  --drag-item-bg: #183463;
+  --textbox-bg: #1a3765;
+}
+
+[data-theme="beesmas"] body {
+  background-image: url("../assets/themes/snowflakes.svg");
+}
+
+[data-theme="beesmas"] .main-content-container {
+  background-color: transparent;
+}
+
+[data-theme="beesmas"] .app-title::before,
+[data-theme="beesmas"] .app-title::after {
+  content: "\2744\FE0E";
+  color: #dcecff;
+  font-size: 0.8em;
+  margin: 0 0.35em;
+}
+
 body {
   margin: 0;
   padding: 0;

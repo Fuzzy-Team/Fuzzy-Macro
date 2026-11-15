@@ -73,6 +73,21 @@ REPORT_THEMES = {
     "tadpole":     {"accent": (32,  189, 150)},  # Tadpole      #20bd96
     "gifted_tad":  {"accent": (144, 240, 224)},  # Gifted Tad   #90f0e0
     "spicy_bee":   {"accent": (207, 32,  19)},   # Spicy Bee    #cf2013
+    "beesmas": {                                 # Beesmas      #ff6b6b on winter blue
+        "accent":         (255, 107, 107),
+        "bg":             (13,  31,  60),
+        "sidebar_bg":     (17,  38,  72),
+        "card_bg":        (21,  48,  90),
+        "text_primary":   (238, 244, 255),
+        "text_secondary": (168, 188, 220),
+        "grid":           (52,  78,  120),
+        "canvas":         (11,  26,  51),
+        "panel":          (21,  48,  90),
+        "panel_outline":  (43,  75,  124),
+        "graph_bg":       (15,  35,  66),
+        "graph_grid":     (40,  66,  108),
+        "graph_tick":     (60,  88,  132),
+    },
 }
 
 DEFAULT_THEME = "brown"
