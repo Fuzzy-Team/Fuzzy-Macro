@@ -432,6 +432,7 @@ class MobMixin:
             sideTaskInterval = max(0, int(sideTaskIntervalMinutes)) * 60
         except (TypeError, ValueError):
             sideTaskInterval = 0
+        convertWhenFull = self.setdat.get("stump_snail_convert", False)
         patternDuration = 120
 
         def goToStump():
@@ -447,6 +448,8 @@ class MobMixin:
                 if self.placeSprinkler():
                     if is_stopped():
                         return False
+                    # Set status to attacking for hotbar logic; resets clear it
+                    self.set_task_status("attacking", activity="stump_snail")
                     return True
                 if is_stopped():
                     return False
@@ -512,15 +515,21 @@ class MobMixin:
                     return False
             return goToStump()
 
+        def runConvert():
+            self.logger.webhook("", "Stump Snail: Backpack full, converting", "dark brown")
+            self.reset(convert=True)
+            if is_stopped():
+                return False
+            return goToStump()
+
         if not goToStump():
             return
 
-        # Set status to attacking for hotbar logic
-        self.set_task_status("attacking", activity="stump_snail")
         try:
             keepOldData = None
+            cycleStart = time.time()
             while keepOldData is None and not is_stopped():
-                cycleStart = time.time()
+                backpackFull = False
                 if self.checkPauseAndWait():
                     self.clear_task_status()
                     return
@@ -537,11 +546,20 @@ class MobMixin:
                     if keepOldData is not None:
                         mouse.mouseUp()
                         break
-                    if sideTaskInterval <= 0 or time.time() - cycleStart >= sideTaskInterval:
+                    backpackFull = convertWhenFull and self.getBackpack() >= 100
+                    if backpackFull or sideTaskInterval <= 0 or time.time() - cycleStart >= sideTaskInterval:
                         mouse.mouseUp()
                         break
 
-                if keepOldData is None and sideTaskInterval > 0 and not runSideTask():
+                if keepOldData is not None:
+                    break
+                # The periodic side task already converts, so it covers a full backpack too
+                if sideTaskInterval > 0 and time.time() - cycleStart >= sideTaskInterval:
+                    if not runSideTask():
+                        self.clear_task_status()
+                        return
+                    cycleStart = time.time()
+                elif backpackFull and not runConvert():
                     self.clear_task_status()
                     return
         finally:
