@@ -26,6 +26,7 @@ from typing import List, Optional, Dict, Tuple
 from modules.controls.sleep import INTERRUPT_SKIP, INTERRUPT_RESET, INTERRUPT_AFB_REROLL, INTERRUPT_COLLECT_PLANTER, INTERRUPT_FIND_ITEM
 
 from modules.misc import settingsManager
+from modules.misc.cooldowns import get_cooldown_rows
 from modules.screen.shiftLock import detect_shift_lock, detect_shift_lock_with_retries
 
 # Hourly report dependencies
@@ -405,25 +406,6 @@ def _format_planter_time(seconds_remaining: float) -> str:
     if minutes:
         return f"{minutes}m {seconds}s"
     return f"{seconds}s"
-
-
-def _get_cooldown_rows(settings: Dict, timings: Dict, sticker_stack_cooldown: int) -> List[Tuple[str, float]]:
-    """(name, ready-at unix time) for each enabled item the macro tracks in timings.txt."""
-    from modules.macro.game_data import collectData, fieldBoosterData
-
-    cooldowns = {name: data[2] for name, data in {**collectData, **fieldBoosterData}.items() if data[2]}
-    cooldowns["sticker_printer"] = 60 * 60  # same value as Macro._applySettingsState
-    cooldowns["sticker_stack"] = sticker_stack_cooldown
-
-    rows = []
-    for name, cooldown in cooldowns.items():
-        if not settings.get(name):
-            continue
-        ready_at = timings.get(name, 0) + cooldown
-        if name in fieldBoosterData:
-            ready_at = max(ready_at, timings.get("last_booster", 0) + settings.get("boost_seperate", 0) * 60)
-        rows.append((name, ready_at))
-    return sorted(rows, key=lambda row: row[1])
 
 
 def _load_manual_planter_data() -> Dict:
@@ -3677,9 +3659,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     @requires_discord_permission("observation")
     async def cooldowns(interaction: discord.Interaction):
         try:
-            timings = settingsManager.readSettingsFile(settingsManager.getUserDataPath("timings.txt"))
-            sticker_stack_cooldown = int(settingsManager.loadUserText("sticker_stack.txt"))
-            rows = _get_cooldown_rows(get_cached_settings(), timings, sticker_stack_cooldown)
+            rows = get_cooldown_rows(get_cached_settings())
 
             if not rows:
                 await interaction.response.send_message("❌ No collectibles are enabled.")

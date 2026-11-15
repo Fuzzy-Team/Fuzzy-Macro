@@ -12,6 +12,7 @@ import gc
 import sys
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from modules.misc.cooldowns import get_cooldown_rows
 
 
 class cloudflaredStream:
@@ -111,6 +112,35 @@ class cloudflaredStream:
                 .refresh-btn:hover {
                     background-color: #45a049;
                 }
+                #cooldowns {
+                    width: 90%;
+                    max-width: 960px;
+                    margin: 20px 0;
+                    display: grid;
+                    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+                    gap: 8px;
+                }
+                #cooldowns:empty {
+                    display: none;
+                }
+                .cooldown {
+                    background-color: #1e1e1e;
+                    border-radius: 5px;
+                    padding: 6px 10px;
+                    font-size: 0.8rem;
+                    display: flex;
+                    justify-content: space-between;
+                    gap: 8px;
+                }
+                .cooldown-time {
+                    font-family: monospace;
+                    font-variant-numeric: tabular-nums;
+                    white-space: nowrap;
+                }
+                .cooldown.ready .cooldown-time {
+                    color: #4CAF50;
+                    font-weight: bold;
+                }
             </style>
             <script>
                 // JavaScript for auto-reconnect and FPS display
@@ -144,6 +174,49 @@ class cloudflaredStream:
                         }, 1000);
                     }
                     
+                    // Cooldowns: refetch ready times every 5s, count down locally every second
+                    const cooldownList = document.getElementById('cooldowns');
+                    let cooldowns = [];
+
+                    function formatCooldown(secs) {
+                        if (secs <= 0) return 'Ready!';
+                        const h = Math.floor(secs / 3600), m = Math.floor(secs % 3600 / 60), s = Math.floor(secs % 60);
+                        if (h) return h + 'h ' + m + 'm';
+                        if (m) return m + 'm ' + s + 's';
+                        return s + 's';
+                    }
+
+                    function renderCooldowns() {
+                        const now = Date.now();
+                        cooldownList.replaceChildren(...cooldowns.map(c => {
+                            const secs = (c.readyAt - now) / 1000;
+                            const row = document.createElement('div');
+                            row.className = 'cooldown' + (secs <= 0 ? ' ready' : '');
+                            const name = document.createElement('span');
+                            name.textContent = c.name;
+                            const time = document.createElement('span');
+                            time.className = 'cooldown-time';
+                            time.textContent = formatCooldown(secs);
+                            row.append(name, time);
+                            return row;
+                        }));
+                    }
+
+                    function loadCooldowns() {
+                        fetch('/cooldowns')
+                            .then(response => response.json())
+                            .then(data => {
+                                const now = Date.now();
+                                cooldowns = data.map(c => ({name: c.name, readyAt: now + c.ready_in * 1000}));
+                                renderCooldowns();
+                            })
+                            .catch(err => console.log('Error fetching cooldowns'));
+                    }
+
+                    loadCooldowns();
+                    setInterval(loadCooldowns, 5000);
+                    setInterval(renderCooldowns, 1000);
+
                     document.getElementById('refresh-stream').addEventListener('click', function() {
                         if (img) {
                             img.src = "/video_feed?t=" + new Date().getTime();
@@ -158,6 +231,7 @@ class cloudflaredStream:
                 %%VIDEO%%
             </div>
             %%REFRESH_BUTTON%%
+            <div id="cooldowns"></div>
         </body>
         </html>
         """
@@ -188,6 +262,16 @@ class cloudflaredStream:
         return (self.HTML_PAGE
                 .replace("%%VIDEO%%", self.HTML_STREAMING if self.streaming else self.HTML_STOPPED)
                 .replace("%%REFRESH_BUTTON%%", self.HTML_REFRESH_BUTTON if self.streaming else ""))
+
+    def cooldowns(self):
+        # same rows as the Discord /cooldowns command; empty when nothing is enabled or the files are unreadable
+        try:
+            now = time.time()
+            return [{"name": name.replace("_", " ").title(), "ready_in": max(0, ready_at - now)}
+                    for name, ready_at in get_cooldown_rows()]
+        except Exception as e:
+            print(f"Cooldowns unavailable: {e}")
+            return []
 
     def update_fps(self, fps_history=None):
 
@@ -391,6 +475,8 @@ class cloudflaredStream:
                     self._send(200, "text/html; charset=utf-8", stream.index().encode("utf-8"))
                 elif path == "/fps":
                     self._send(200, "application/json", json.dumps({"fps": stream.current_fps}).encode())
+                elif path == "/cooldowns":
+                    self._send(200, "application/json", json.dumps(stream.cooldowns()).encode())
                 elif path == "/video_feed":
                     if not stream.streaming:
                         self.send_response(204)
