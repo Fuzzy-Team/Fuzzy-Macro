@@ -36,7 +36,7 @@ class GatherMixin:
         time.sleep(1)
         if is_stopped():
             return False
-        if self.blueTextHas("notinfield"):
+        if self.blueTextImageSearch("notinfield"):
             return False
         #place the remaining sprinklers
         #hold jump and spam place sprinklers
@@ -894,7 +894,7 @@ class GatherMixin:
                     wasPaused = paused_seconds() > pausedBefore
                     if wasPaused:
                         st += time.time() - checkStart
-                    if self.isMakeHoneyPrompt():
+                    if self.isBesideEImage("makehoney"):
                         break
                     if time.time() - st >= 10:
                         break
@@ -908,7 +908,7 @@ class GatherMixin:
             time.sleep(0.4)
             if is_stopped():
                 return False
-            if self.isMakeHoneyPrompt():
+            if self.isBesideEImage("makehoney"):
                 if is_stopped():
                     return False
                 if not convertAtHive:

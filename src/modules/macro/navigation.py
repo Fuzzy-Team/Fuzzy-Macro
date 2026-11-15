@@ -237,7 +237,7 @@ class NavigationMixin:
                     if wasPaused:
                         startTime += time.time() - pauseStart
                         self.keyboard.keyDown("d", False)
-                    if self.isBesideE(["fire"]):
+                    if self.isBesideEImage("cannon"):
                         foundCannon = True
                         break
             finally:
@@ -247,7 +247,7 @@ class NavigationMixin:
             if foundCannon:
                 for _ in range(9):
                     time.sleep(0.5)
-                    if self.isBesideE(["fire"]):
+                    if self.isBesideEImage("cannon"):
                         return True
                     self.keyboard.tileWalk("a", 1.5)
             self.logger.webhook("Notice", f"Could not find cannon (attempt {i + 1}/{max_attempts})", "orange", "screen")

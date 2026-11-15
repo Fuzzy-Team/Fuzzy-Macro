@@ -351,7 +351,7 @@ class AFBMixin:
                         for _ in range(300):
                             if is_stopped():
                                 return failedExit()
-                            if self.blueTextHas("boosted"):
+                            if self.blueTextImageSearch("boosted"):
                                 time.sleep(2)
                                 break
                             timeout += 1

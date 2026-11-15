@@ -41,11 +41,11 @@ class PlanterMixin:
                     self.keyboard.walk(finalKey[0],0.25)
                     if is_stopped():
                         return False
-                    if self.isBesideE(["harvest", "planter"]): 
+                    if self.isBesideEImage("ebutton"): 
                         return True
             else:
                 time.sleep(1)
-                if self.isBesideE(["harvest", "planter"]): 
+                if self.isBesideEImage("ebutton"): 
                     return True
             if is_stopped():
                 return False
@@ -205,13 +205,13 @@ class PlanterMixin:
                 if is_stopped():
                     updateHourlyTime()
                     return False
-                if self.blueTextHas("notinfield"):
+                if self.blueTextImageSearch("notinfield"):
                     placementError = "notinfield"
                     placedPlanter = False
                     break
                 # The max-planters message appears for hotbar and inventory placement,
                 # so neither path may assume the planter was placed when it shows.
-                if self.blueTextHas("maxplanters"):
+                if self.blueTextImageSearch("maxplanters"):
                     placementError = "maxplanters"
                     placedPlanter = False
                     break

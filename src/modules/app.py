@@ -16,7 +16,9 @@ from modules.misc import messageBox
 from modules.misc.ColorProfile import DisplayColorProfile
 from modules.misc.appManager import getWindowSize
 from modules.misc.formatting import millify
+from modules.misc.imageManipulation import adjustImage
 from modules.misc.settings_defaults import BLENDER_ITEM_SLOTS
+from modules.screen.imageSearch import locateImageOnScreen
 from modules.submacros.tadAltSync import TadAltSync
 
 
@@ -844,14 +846,11 @@ def runApp(macroTarget):
         # Only read the screen once a macro process is actually running; during a
         # crash backoff Roblox may be gone and the pending restart owns the window.
         if run.value == 2 and macroProc and macroProc.is_alive() and time.time() > disconnectCooldownUntil:
-            # OCR is costly; checking every few seconds is enough to catch a disconnect
+            # checking every few seconds is enough to catch a disconnect
             disconnectCooldownUntil = time.time() + 5
-            # imported here so the GUI process only loads OCR once the macro runs
-            from modules.screen import ocr
-            from modules.screen.screenshot import mssScreenshot
+            img = adjustImage("./images/menu", "disconnect", screenInfo["display_type"])
             wmx, wmy, wmw, wmh = getWindowSize("roblox roblox")
-            screenText = ''.join(x[1][0] for x in ocr.ocrRead(mssScreenshot(wmx+wmw/3, wmy+wmh/2.8, wmw/2.3, wmh/5))).lower()
-            if "disconnected" in screenText.replace(" ", ""):
+            if locateImageOnScreen(img, wmx+wmw/3, wmy+wmh/2.8, wmw/2.3, wmh/5, 0.7):
                 print("disconnected")
                 run.value = 4
                 disconnectCooldownUntil = time.time() + 300  # 5 min cooldown
