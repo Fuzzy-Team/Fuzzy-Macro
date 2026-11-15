@@ -3,31 +3,32 @@ function switchBoostTab(target){
     switchSubtab("boost", target)
 }
 
-//items that can be picked for a hotbar slot, in the order the game lists them. every/unit is how long the
-//item's effect lasts and becomes the slot's Use Every timer when picked. Items without it only label the slot.
+//items that can be picked for a hotbar slot, in the order the game lists them. every/unit is the item's cooldown
+//or buff time and becomes the slot's Use Every timer when picked. Sprinkler Builder has none: it is used once when
+//gathering starts, not on an interval.
 const boostHotbarItems = [
     { name: "Sprinkler Builder", icon: "./assets/icons/sprinkler_builder.png" },
     { name: "Black Balloon", icon: "./assets/icons/black_balloon.png", every: 5, unit: "mins" },
     { name: "Blue Extract", icon: "./assets/icons/blue_extract.png", every: 10, unit: "mins" },
     { name: "Box-O-Frogs", icon: "./assets/icons/box_o_frogs.png", every: 3, unit: "mins" },
-    { name: "Coconut", icon: "/memory-match-icons/extreme/coconuts.webp" },
+    { name: "Coconut", icon: "/memory-match-icons/extreme/coconuts.webp", every: 10, unit: "secs" },
     { name: "Enzymes", icon: "./assets/icons/enzymes.png", every: 10, unit: "mins" },
     { name: "Field Dice", icon: "./assets/icons/field_dice.png", every: 15, unit: "mins" },
-    { name: "Glitter", icon: "./assets/icons/glitter.png" },
+    { name: "Glitter", icon: "./assets/icons/glitter.png", every: 905, unit: "secs" },
     { name: "Glue", icon: "./assets/icons/glue.png", every: 10, unit: "mins" },
-    { name: "Gumdrops", icon: "./assets/icons/gumdrops.png" },
-    { name: "Jelly Beans", icon: "/memory-match-icons/normal/jelly%20beans.webp" },
-    { name: "Micro-Converter", icon: "/memory-match-icons/normal/micro-converter.webp" },
+    { name: "Gumdrops", icon: "./assets/icons/gumdrops.png", every: 2, unit: "secs" },
+    { name: "Jelly Beans", icon: "/memory-match-icons/normal/jelly%20beans.webp", every: 30, unit: "secs" },
+    { name: "Micro-Converter", icon: "/memory-match-icons/normal/micro-converter.webp", every: 5, unit: "secs" },
     { name: "Oil", icon: "./assets/icons/oil.png", every: 10, unit: "mins" },
     { name: "Pink Balloon", icon: "./assets/icons/pink_balloon.png", every: 3, unit: "mins" },
     { name: "Purple Potion", icon: "./assets/icons/purple_potion.png", every: 15, unit: "mins" },
     { name: "Red Balloon", icon: "./assets/icons/red_balloon.png", every: 3, unit: "mins" },
     { name: "Red Extract", icon: "./assets/icons/red_extract.png", every: 10, unit: "mins" },
-    { name: "Snowflake", icon: "./assets/icons/snowflake.png" },
+    { name: "Snowflake", icon: "./assets/icons/snowflake.png", every: 3, unit: "secs" },
     { name: "Stinger", icon: "/memory-match-icons/extreme/stingers.webp", every: 30, unit: "secs" },
     { name: "Super Smoothie", icon: "./assets/icons/super_smoothie.png", every: 20, unit: "mins" },
     { name: "Tropical Drink", icon: "./assets/icons/tropical_drink.png", every: 10, unit: "mins" },
-    { name: "Whirligig", icon: "./assets/icons/whirligig.png" },
+    { name: "Whirligig", icon: "./assets/icons/whirligig.png", every: 3, unit: "mins" },
     { name: "White Balloon", icon: "./assets/icons/white_balloon.png", every: 5, unit: "mins" },
 ].map((item) => ({ ...item, value: item.name.toLowerCase() }))
 
