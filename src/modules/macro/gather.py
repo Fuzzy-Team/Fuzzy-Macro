@@ -130,7 +130,7 @@ class GatherMixin:
             "blooms_ai": "BloomsAI",
         }
         def shouldUseHoneyWreathReturn():
-            if altMode:
+            if altMode or not fieldSetting.get("honey_wreath_return", True):
                 return False
             if not self.setdat.get("wreath", False):
                 return False

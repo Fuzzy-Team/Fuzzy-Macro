@@ -503,6 +503,7 @@ class CollectiblesMixin:
                     "shift_lock": False,
                     "field_drift_compensation": True,
                     "skip_travel": True,
+                    "honey_wreath_return": False,
                     "width": 5,
                     "turn": "none",
                     "turn_times": 0,
