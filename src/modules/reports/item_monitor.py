@@ -172,7 +172,9 @@ class ItemMonitor:
         now = time.time() * 1000
         old = [line for line in self.battle_point_lines if now - line[1] < QUICK_DETECTION_WINDOW_MS]
         seen = []
-        for amount in BATTLE_POINTS_RE.findall(ocr.readBlueText()):
+        win = self.robloxWindow
+        feed = (win.mx + win.mw * 3 // 4, win.my + win.mh // 3 * 2, win.mw // 4, win.mh // 3)  # bottom-right of the Roblox window
+        for amount in BATTLE_POINTS_RE.findall(ocr.readBlueText(feed)):
             n = int(amount.replace(",", ""))
             same = next((line for line in old if line[0] == n), None)
             if same:
