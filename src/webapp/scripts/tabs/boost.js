@@ -30,6 +30,7 @@ const boostHotbarItems = [
     { name: "Tropical Drink", icon: "./assets/icons/tropical_drink.png", every: 10, unit: "mins" },
     { name: "Whirligig", icon: "./assets/icons/whirligig.png", every: 3, unit: "mins" },
     { name: "White Balloon", icon: "./assets/icons/white_balloon.png", every: 5, unit: "mins" },
+    { name: "Other", icon: "./assets/icons/other_item.svg" }, //any item that is not listed
 ].map((item) => ({ ...item, value: item.name.toLowerCase() }))
 
 const boostHotbarItemOptions = [
