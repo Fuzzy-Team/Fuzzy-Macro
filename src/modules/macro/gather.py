@@ -14,23 +14,84 @@ from modules.macro.game_data import (
 )
 
 
+#how many sprinklers each sprinkler type places
+sprinklerCount = {
+    "basic":1,
+    "silver":2,
+    "golden":3,
+    "gold":3,
+    "diamond":4,
+    "saturator":1,
+    "supreme":1,
+}
+
+#studs a field dimension covers per millisecond (the dimensions are walk times at 18 studs/s), and studs per tile
+STUDS_PER_MS = 18/1000
+STUDS_PER_TILE = 4
+
+#where to place each sprinkler so every one covers its own part of the field
+#the field is split into equal zones, one per sprinkler: 2 and 3 sprinklers are strips along the longer side, 4 is a square
+#fieldDimensions is the [length, width] from startLocationDimensions
+#spots and start are (right, up) tile offsets from the field center. The spots are ordered to walk the shortest way from start
+def sprinklerSpots(count, fieldDimensions, start=(0, 0)):
+    halfUp, halfRight = [ms*STUDS_PER_MS/STUDS_PER_TILE for ms in fieldDimensions]
+    rows, cols = {2:(2, 1), 3:(3, 1), 4:(2, 2)}.get(count, (1, 1))
+    if halfRight > halfUp:
+        rows, cols = cols, rows
+    #the center of each zone, from -half to +half
+    ups = [((2*i+1)/rows - 1)*halfUp for i in range(rows)]
+    rights = [((2*i+1)/cols - 1)*halfRight for i in range(cols)]
+    remaining = [(right, up) for up in ups for right in rights]
+    ordered = []
+    here = start
+    while remaining:
+        nearest = min(remaining, key=lambda spot: abs(spot[0] - here[0]) + abs(spot[1] - here[1]))
+        remaining.remove(nearest)
+        ordered.append(nearest)
+        here = nearest
+    return ordered
+
+
 class GatherMixin:
+    #hold jump and spam place sprinklers for the given seconds
+    def jumpAndPlaceSprinklers(self, sprinklerSlot, seconds):
+        try:
+            self.keyboard.keyDown("space")
+            st = time.time()
+            while time.time() - st < seconds:
+                pausedBefore = paused_seconds()
+                checkStart = time.time()
+                if self.checkPauseAndWait():
+                    return False
+                if paused_seconds() > pausedBefore:
+                    st += time.time() - checkStart
+                    if time.time() - st >= seconds:
+                        break
+                    if is_stopped():
+                        return False
+                    self.keyboard.keyDown("space")
+                pausedBefore = paused_seconds()
+                pressStart = time.time()
+                self.keyboard.press(sprinklerSlot)
+                if paused_seconds() > pausedBefore:
+                    st += time.time() - pressStart
+                if is_stopped():
+                    return False
+        finally:
+            self.keyboard.keyUp("space")
+        return True
+
     #place sprinklers by jumping up and down and placing them middair
-    def placeSprinkler(self):
-        sprinklerCount = {
-            "basic":1,
-            "silver":2,
-            "golden":3,
-            "gold":3,
-            "diamond":4,
-            "saturator":1,
-            "supreme":1,
-        }
+    #fieldDimensions and startOffset (right, up tiles from the field center) spread sprinklers that place more than one
+    #across the field. Without them, they are all placed where the player stands
+    def placeSprinkler(self, fieldDimensions=None, startOffset=(0, 0)):
         sprinklerSlot = str(self.setdat['sprinkler_slot'])
         sprinklerType = str(self.setdat.get("sprinkler_type", "")).strip().lower()
         times = sprinklerCount.get(sprinklerType, 1)
         if is_stopped():
             return False
+        if times > 1 and fieldDimensions:
+            return self.placeSprinklersSpread(sprinklerSlot, sprinklerSpots(times, fieldDimensions, startOffset), startOffset)
         #place one sprinkler and check if its in field
         self.keyboard.press(sprinklerSlot)
         time.sleep(1)
@@ -43,33 +104,42 @@ class GatherMixin:
         if times > 1:
             if is_stopped():
                 return False
-            try:
-                self.keyboard.keyDown("space")
-                st = time.time()
-                while time.time() - st < times*2:
-                    pausedBefore = paused_seconds()
-                    checkStart = time.time()
-                    if self.checkPauseAndWait():
-                        return False
-                    if paused_seconds() > pausedBefore:
-                        st += time.time() - checkStart
-                        if time.time() - st >= times*2:
-                            break
-                        if is_stopped():
-                            return False
-                        self.keyboard.keyDown("space")
-                    pausedBefore = paused_seconds()
-                    pressStart = time.time()
-                    self.keyboard.press(sprinklerSlot)
-                    if paused_seconds() > pausedBefore:
-                        st += time.time() - pressStart
-                    if is_stopped():
-                        return False
-            finally:
-                self.keyboard.keyUp("space")
+            if not self.jumpAndPlaceSprinklers(sprinklerSlot, times*2):
+                return False
         if is_stopped():
             return False
         return True
+
+    #walk right and up by the given tiles (left and down when negative)
+    def walkTiles(self, right, up):
+        for key, tiles in (("d" if right > 0 else "a", abs(right)), ("w" if up > 0 else "s", abs(up))):
+            if is_stopped():
+                return False
+            if tiles > 0.01:
+                self.keyboard.tileWalk(key, tiles)
+        return not is_stopped()
+
+    #walk to each spot and place one sprinkler there, then walk back to where the player started
+    def placeSprinklersSpread(self, sprinklerSlot, spots, startOffset):
+        x, y = startOffset
+        for i, (spotX, spotY) in enumerate(spots):
+            if not self.walkTiles(spotX - x, spotY - y):
+                return False
+            x, y = spotX, spotY
+            if i == 0:
+                #the first one goes on the ground, and checks if its in field
+                self.keyboard.press(sprinklerSlot)
+                time.sleep(1)
+                if is_stopped():
+                    return False
+                if self.blueTextImageSearch("notinfield"):
+                    return False
+            #the rest are placed middair. Sprinklers have a 1 second cooldown, so a 1 second window places only
+            #one here and never pushes out the previous spot's sprinkler
+            elif not self.jumpAndPlaceSprinklers(sprinklerSlot, 1):
+                return False
+        #walk back to the start location, where gathering begins
+        return self.walkTiles(startOffset[0] - x, startOffset[1] - y)
 
     def waitForBees(self):
         if self.alreadyConverted:
@@ -258,21 +328,27 @@ class GatherMixin:
                 startLocation = fieldSetting["start_location"]
                 moveSpeedFactor = 18/self.setdat["movespeed"]
                 flen, fwid = [x*fieldSetting["distance"]/10 for x in startLocationDimensions[normalized_field]]
+                startUp = startRight = 0 #start location in ms from the field center
                 if "upper" in startLocation or "top" in startLocation:
                     self.sleepMSMove("w", flen*moveSpeedFactor)
+                    startUp = flen
                 elif "lower" in startLocation or "bottom" in startLocation:
                      self.sleepMSMove("s", flen*moveSpeedFactor)
+                     startUp = -flen
 
                 if "left" in startLocation:
                      self.sleepMSMove("a", fwid*moveSpeedFactor)
+                     startRight = -fwid
                 elif "right" in startLocation:
                      self.sleepMSMove("d", fwid*moveSpeedFactor)
+                     startRight = fwid
 
                 time.sleep(0.4)
-                #place sprinkler + check if in field
+                #place sprinkler + check if in field. Sprinklers that place more than one are spread across the field
                 if is_stopped():
                     return
-                if self.placeSprinkler():
+                startTiles = (startRight*STUDS_PER_MS/STUDS_PER_TILE, startUp*STUDS_PER_MS/STUDS_PER_TILE)
+                if self.placeSprinkler(startLocationDimensions[normalized_field], startTiles):
                     landedInField = True
                     break
                 if is_stopped():
