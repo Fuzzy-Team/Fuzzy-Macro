@@ -258,6 +258,7 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'mondo_collect_token': False,
  'mondo_loot_times': 1,
  'honeystorm': False,
+ 'honeystorm_collect_tokens': False,
  'sprouts_enable': False,
  'sprouts_magic_bean_slot': 1,
  'sprouts_max_beans': 20,
