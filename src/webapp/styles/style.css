@@ -399,6 +399,15 @@ select:focus {
   object-fit: contain;
 }
 
+.boost-hotbar-item-name {
+  font-size: 0.6rem;
+  line-height: 1.1;
+  text-align: center;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+  padding: 0 0.2rem;
+}
+
 .boost-hotbar-slot-empty {
   width: 2rem;
   height: 2rem;

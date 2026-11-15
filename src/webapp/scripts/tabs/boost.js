@@ -3,25 +3,39 @@ function switchBoostTab(target){
     switchSubtab("boost", target)
 }
 
-//items that can be picked for a hotbar slot. mins is how long the item's buff lasts and becomes the
-//slot's Use Every timer when picked. Glitter and Gumdrops have no buff time to suggest, so they only label the slot.
+//items that can be picked for a hotbar slot, in the order the game lists them. every/unit is how long the
+//item's effect lasts and becomes the slot's Use Every timer when picked. Items without it only label the slot.
+//Items without an icon show their name instead.
 const boostHotbarItems = [
-    { name: "Oil", icon: "oil", mins: 10 },
-    { name: "Super Smoothie", icon: "super_smoothie", mins: 20 },
-    { name: "Red Extract", icon: "red_extract", mins: 10 },
-    { name: "Blue Extract", icon: "blue_extract", mins: 10 },
-    { name: "Glue", icon: "glue", mins: 10 },
-    { name: "Enzymes", icon: "enzymes", mins: 10 },
-    { name: "Tropical Drink", icon: "tropical_drink", mins: 10 },
-    { name: "Purple Potion", icon: "purple_potion", mins: 15 },
-    { name: "Glitter", icon: "glitter" },
-    { name: "Gumdrops", icon: "gumdrops" },
+    { name: "Sprinkler Builder" },
+    { name: "Black Balloon", every: 5, unit: "mins" },
+    { name: "Blue Extract", icon: "./assets/icons/blue_extract.png", every: 10, unit: "mins" },
+    { name: "Box-O-Frogs", every: 3, unit: "mins" },
+    { name: "Coconut", icon: "/memory-match-icons/extreme/coconuts.webp" },
+    { name: "Enzymes", icon: "./assets/icons/enzymes.png", every: 10, unit: "mins" },
+    { name: "Field Dice", icon: "./assets/icons/field_dice.png", every: 15, unit: "mins" },
+    { name: "Glitter", icon: "./assets/icons/glitter.png" },
+    { name: "Glue", icon: "./assets/icons/glue.png", every: 10, unit: "mins" },
+    { name: "Gumdrops", icon: "./assets/icons/gumdrops.png" },
+    { name: "Jelly Beans", icon: "/memory-match-icons/normal/jelly%20beans.webp" },
+    { name: "Micro-Converter", icon: "/memory-match-icons/normal/micro-converter.webp" },
+    { name: "Oil", icon: "./assets/icons/oil.png", every: 10, unit: "mins" },
+    { name: "Pink Balloon", every: 3, unit: "mins" },
+    { name: "Purple Potion", icon: "./assets/icons/purple_potion.png", every: 15, unit: "mins" },
+    { name: "Red Balloon", every: 3, unit: "mins" },
+    { name: "Red Extract", icon: "./assets/icons/red_extract.png", every: 10, unit: "mins" },
+    { name: "Snowflake" },
+    { name: "Stinger", icon: "/memory-match-icons/extreme/stingers.webp", every: 30, unit: "secs" },
+    { name: "Super Smoothie", icon: "./assets/icons/super_smoothie.png", every: 20, unit: "mins" },
+    { name: "Tropical Drink", icon: "./assets/icons/tropical_drink.png", every: 10, unit: "mins" },
+    { name: "Whirligig" },
+    { name: "White Balloon", every: 5, unit: "mins" },
 ].map((item) => ({ ...item, value: item.name.toLowerCase() }))
 
 const boostHotbarItemOptions = [
     { label: "None", value: "none" },
     ...boostHotbarItems.map((item) => ({
-        label: `<img src="./assets/icons/${item.icon}.png" class="icon-img">${item.name}`,
+        label: `${item.icon ? `<img src="${item.icon}" class="icon-img">` : `<span class="icon-img" style="display:inline-block"></span>`}${item.name}`,
         value: item.value,
     })),
 ]
@@ -34,9 +48,11 @@ function updateBoostHotbarIcons() {
         const icon = document.querySelector(`#boost-hotbar-slot-${slot}-panel .boost-hotbar-panel-icon`)
         if (!dropdown || !frame || !icon) continue
         const item = boostHotbarItems.find((x) => x.value === getDropdownValue(dropdown))
-        const html = item
-            ? `<img src="./assets/icons/${item.icon}.png" alt="${item.name}">`
-            : `<span class="boost-hotbar-slot-empty"></span>`
+        const html = !item
+            ? `<span class="boost-hotbar-slot-empty"></span>`
+            : item.icon
+                ? `<img src="${item.icon}" alt="${item.name}">`
+                : `<span class="boost-hotbar-item-name">${item.name}</span>`
         frame.innerHTML = html
         icon.innerHTML = html
         icon.classList.toggle("boost-hotbar-panel-icon-empty", !item)
@@ -49,11 +65,11 @@ async function pickBoostHotbarItem(dropdown) {
     await saveSetting(dropdown, "profile")
     const slot = dropdown.id.match(/\d+/)[0]
     const item = boostHotbarItems.find((x) => x.value === getDropdownValue(dropdown))
-    if (!item || !item.mins) return
+    if (!item || !item.every) return
     const valueEle = document.getElementById(`hotbar${slot}_use_every_value`)
     const formatEle = document.getElementById(`hotbar${slot}_use_every_format`)
-    valueEle.value = item.mins
-    setDropdownValue(formatEle, "mins")
+    valueEle.value = item.every
+    setDropdownValue(formatEle, item.unit)
     await saveSetting(valueEle, "profile")
     await saveSetting(formatEle, "profile")
 }
