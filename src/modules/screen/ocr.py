@@ -111,8 +111,8 @@ def ocrEasy(img):
     return [[(x[0]), (x[1], x[2])] for x in result]
 
 #read the blue notification text in the bottom right of the screen
-def readBlueText():
-    cap = mssScreenshot(mw*3//4, mh//3*2, mw//4,mh//3)
+def readBlueText(region=None):
+    cap = mssScreenshot(*(region or (mw*3//4, mh//3*2, mw//4, mh//3)))
     result = ocrFunc(cap)
     try:
         result = sorted(result, key = lambda x: (min(point[1] for point in x[0]), min(point[0] for point in x[0])))

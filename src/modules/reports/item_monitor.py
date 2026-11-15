@@ -48,6 +48,8 @@ ITEM_META = {
     "Tropical Drink": {"display": "Tropical Drink", "category": "Consumable", "icon": "tropical_drink"},
     "Bitterberry": {"display": "Bitterberry", "category": "Material", "icon": "bitterberry"},
     "Super Smoothie": {"display": "Super Smoothie", "category": "Consumable", "icon": "super_smoothie"},
+    # Counted from the "Defeated Mantis! (+5 Battle Points)" lines (see _read_battle_points). The game has no icon for it.
+    "Battle Points": {"display": "Battle Points", "category": "Currency"},
 }
 
 CATEGORY_ORDER = ("Currency", "Material", "Consumable")
@@ -62,8 +64,9 @@ def _compact(text: str) -> str:
 
 
 # letters-only item name -> ITEM_META key
-ITEM_BY_NAME = {_compact(meta["display"]): key for key, meta in ITEM_META.items()}
+ITEM_BY_NAME = {_compact(meta["display"]): key for key, meta in ITEM_META.items() if key != "Battle Points"}
 TOAST_RE = re.compile(r"\+\s*(\d[\d,]*)\s*([A-Za-z][A-Za-z \-]*)")
+BATTLE_POINTS_RE = re.compile(r"\+\s*(\d[\d,]*)\s*Battle\s*Points?", re.IGNORECASE)  # "Point" when it is +1
 
 
 class ItemMonitor:
@@ -74,6 +77,7 @@ class ItemMonitor:
         self.item_timeline = {}  # clock minute -> total amount this hour
         self.last_detection_time = {}
         self.last_detected_value = {}
+        self.battle_point_lines = []  # (amount, last seen ms) of kill lines still on screen
         self.start_time = time.time()
         self.query_total = 0
         self.total_items_detected = 0
@@ -160,6 +164,33 @@ class ItemMonitor:
                 return key, int(amount.replace(",", ""))
         return None
 
+    def _read_battle_points(self):
+        """Count the new "Defeated Mantis! (+5 Battle Points)" lines in the whole blue feed.
+        A kill pushes its line several rows up within a second, out of the toast crop, so the whole feed is read.
+        A line already seen in the last few seconds is still the same kill."""
+        import modules.screen.ocr as ocr
+        now = time.time() * 1000
+        old = [line for line in self.battle_point_lines if now - line[1] < QUICK_DETECTION_WINDOW_MS]
+        seen = []
+        win = self.robloxWindow
+        feed = (win.mx + win.mw * 3 // 4, win.my + win.mh // 3 * 2, win.mw // 4, win.mh // 3)  # bottom-right of the Roblox window
+        for amount in BATTLE_POINTS_RE.findall(ocr.readBlueText(feed)):
+            n = int(amount.replace(",", ""))
+            same = next((line for line in old if line[0] == n), None)
+            if same:
+                old.remove(same)
+            else:
+                self._record("Battle Points", n)
+            seen.append((n, now))
+        self.battle_point_lines = seen + old
+
+    def _record(self, key, amount):
+        self.collected_items[key] = self.collected_items.get(key, 0) + amount
+        self.session_collected_items[key] = self.session_collected_items.get(key, 0) + amount
+        minute_slot = datetime.now().minute
+        self.item_timeline[minute_slot] = self.item_timeline.get(minute_slot, 0) + amount
+        self.total_items_detected += 1
+
     def detect_once(self):
         """One detection pass. Safe to call ~every second from the hourly background loop."""
         haystack = self._create_haystack()
@@ -171,6 +202,7 @@ class ItemMonitor:
         if banner is None:
             return None
 
+        self._read_battle_points()  # only while the feed is showing, to skip the extra OCR the rest of the time
         toast = self._read_toast(banner)
         if toast is None:
             return None
@@ -191,11 +223,7 @@ class ItemMonitor:
         if amount <= 0:
             return None
 
-        self.collected_items[matched_key] = self.collected_items.get(matched_key, 0) + amount
-        self.session_collected_items[matched_key] = self.session_collected_items.get(matched_key, 0) + amount
-        minute_slot = datetime.now().minute
-        self.item_timeline[minute_slot] = self.item_timeline.get(minute_slot, 0) + amount
-        self.total_items_detected += 1
+        self._record(matched_key, amount)
         return matched_key, amount
 
     @staticmethod
@@ -222,7 +250,7 @@ class ItemMonitor:
         return result
 
     @staticmethod
-    def top_items(collected_items, limit=3, exclude=("Honey", "Treat")):
+    def top_items(collected_items, limit=3, exclude=("Honey", "Treat", "Battle Points")):
         items = [
             {
                 "key": k,
