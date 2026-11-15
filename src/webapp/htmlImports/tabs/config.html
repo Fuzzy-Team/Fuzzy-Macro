@@ -1,19 +1,22 @@
 <div class="main-content-container">
   <div id="config-nav" class="sub-nav-bar poppins-regular" style="margin-bottom: 2rem;">
     <div id="setting-bss" class="config-tab-item active">
-      Bee Swarm Config
+      Bee Swarm
     </div>
     <div id="setting-priorities" class="config-tab-item">
       Task Priorities
     </div>
+    <div id="setting-rejoin" class="config-tab-item">
+      Rejoin &amp; Recovery
+    </div>
     <div id="setting-other" class="config-tab-item">
-      Other Settings
+      App Settings
     </div>
     <div id="setting-discord" class="config-tab-item" style="display: flex; align-items: center">
-      Discord Config
+      Discord
     </div>
     <div id="setting-stream" class="config-tab-item" style="display: flex; align-items: center">
-      Stream Config
+      Stream
     </div>
     <div id="setting-profiles" class="config-tab-item">
       User Profiles
@@ -93,6 +96,15 @@
             inputType: "int",
             inputLimit: 2,
             triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "haste_compensation",
+          title: "Enable Haste Compensation",
+          desc: "Adjust the macro's movements based on the amount of haste the player has. This is done by searching for haste and bear morph buffs on the screen",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
           },
         },
       ]);
@@ -451,10 +463,10 @@
       }, 100);
     </script>
   </div>
-  <div id="other" class="standard-container sub-tab-panel" style="display: none">
+  <div id="rejoin" class="standard-container sub-tab-panel" style="display: none">
     <script>
-      const parentOther = document.getElementById("other");
-      buildStandardContainer(parentOther, "Rejoining", "", [
+      const parentRejoin = document.getElementById("rejoin");
+      buildStandardContainer(parentRejoin, "Joining", "", [
         {
           id: "always_rejoin",
           title: "Always Rejoin",
@@ -494,6 +506,20 @@
             triggerFunction: "openFallbackPrivateServersPopup()",
           },
         },
+        {
+          id: "rejoin_attempts",
+          title: "Rejoin Attempts Per Private Server",
+          desc: "Number of attempts the macro makes on each private server link before moving on to the next one, then to a public server. Raise it if your connection can stay down for a while.",
+          type: {
+            name: "textbox",
+            inputType: "int",
+            inputLimit: 2,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+      ]);
+
+      buildStandardContainer(parentRejoin, "Scheduled Rejoin", "", [
         {
           id: "rejoin_schedule_type",
           title: "Scheduled Rejoin Mode",
@@ -542,17 +568,9 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
-        {
-          id: "rejoin_attempts",
-          title: "Rejoin Attempts Per Private Server",
-          desc: "Number of attempts the macro makes on each private server link before moving on to the next one, then to a public server. Raise it if your connection can stay down for a while.",
-          type: {
-            name: "textbox",
-            inputType: "int",
-            inputLimit: 2,
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
+      ]);
+
+      buildStandardContainer(parentRejoin, "Failsafes", "", [
         {
           id: "max_cannon_attempts",
           title: "Max Cannon Attempts Before Rejoin",
@@ -575,9 +593,29 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
+        {
+          id: "inactive_honey_reset",
+          title: "Inactive Honey Reset (Beta)",
+          desc: "Reset and retry when the macro detects no active honey gain for an extended period while gathering or converting.",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "auto_stop_after",
+          title: "Stop Macro After X Hours",
+          desc: "Automatically stop the macro after this many hours from startup. Set to 0 to disable auto stop.",
+          type: {
+            name: "textbox",
+            inputType: "float",
+            inputLimit: 5,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
       ]);
 
-      parentOther.insertAdjacentHTML("beforeend", `
+      parentRejoin.insertAdjacentHTML("beforeend", `
         <div id="fallback-private-servers-modal" class="modal-overlay" style="display:none;">
           <div class="modal-dialog poppins-regular" style="max-width:42rem;">
             <h3>Fallback Private Servers</h3>
@@ -595,46 +633,12 @@
           </div>
         </div>
       `);
-
-      buildStandardContainer(parentOther, "Auto Stop", "", [
-        {
-          id: "auto_stop_after",
-          title: "Stop Macro After X Hours",
-          desc: "Automatically stop the macro after this many hours from startup. Set to 0 to disable auto stop.",
-          type: {
-            name: "textbox",
-            inputType: "float",
-            inputLimit: 5,
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-      ]);
-
-      buildStandardContainer(parentOther, "Inactive Honey Reset", "", [
-        {
-          id: "inactive_honey_reset",
-          title: "Inactive Honey Reset (Beta)",
-          desc: "Reset and retry when the macro detects no active honey gain for an extended period while gathering or converting.",
-          type: {
-            name: "checkbox",
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-      ]);
-
-      buildStandardContainer(parentOther, "Haste Compensation", "", [
-        {
-          id: "haste_compensation",
-          title: "Enable Haste Compensation",
-          desc: "Adjust the macro's movements based on the amount of haste the player has. This is done by searching for haste and bear morph buffs on the screen",
-          type: {
-            name: "checkbox",
-            triggerFunction: saveProfileTriggerFunction,
-          },
-        },
-      ]);
-
-      buildStandardContainer(parentOther, "Macro Theme", "", [
+    </script>
+  </div>
+  <div id="other" class="standard-container sub-tab-panel" style="display: none">
+    <script>
+      const parentOther = document.getElementById("other");
+      buildStandardContainer(parentOther, "Appearance", "", [
         {
           id: "gui_theme",
           title: "GUI Theme",
@@ -645,9 +649,6 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
-      ]);
-
-      buildStandardContainer(parentOther, "Gather Patterns", "", [
         {
           id: "hidden_patterns",
           title: "Hidden Patterns",
@@ -658,22 +659,6 @@
             data: [],
             length: 16,
             triggerFunction: "saveHiddenPatterns(this)",
-          },
-        },
-      ]);
-
-      buildStandardContainer(parentOther, "Update Settings", "", [
-        {
-          id: "update_channel",
-          title: "Update Channel",
-          desc: "Stable: Only stable releases | Beta: Includes pre-release versions for testing",
-          type: {
-            name: "dropdown",
-            data: [
-              { label: "Stable Releases", value: "stable" },
-              { label: "Beta Releases", value: "beta" },
-            ],
-            triggerFunction: saveGeneralTriggerFunction,
           },
         },
       ]);
@@ -788,6 +773,38 @@
         },
       ]);
 
+      buildStandardContainer(parentOther, "Updates", "", [
+        {
+          id: "update_channel",
+          title: "Update Channel",
+          desc: "Stable: Only stable releases | Beta: Includes pre-release versions for testing",
+          type: {
+            name: "dropdown",
+            data: [
+              { label: "Stable Releases", value: "stable" },
+              { label: "Beta Releases", value: "beta" },
+            ],
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "beta_update_row",
+          title: "Beta Testing",
+          desc: "Enter a 7-character code from the Fuzzy Macro Discord server.",
+          type: {
+            name: "textbox_with_button",
+            inputId: "beta_commit_hash",
+            inputType: "string",
+            inputLimit: 7,
+            inputWidth: 12,
+            buttonId: "beta_update_button",
+            buttonText: "Test Update",
+            buttonWidth: 7,
+            buttonFunction: "triggerBetaUpdate()",
+          },
+        },
+      ]);
+
       // Standalone Export Debug container
       buildStandardContainer(parentOther, "Export Debug", "Create a zip with your exported profile, recent logs, macOS + macro version and chip info.", [
         {
@@ -812,26 +829,6 @@
         },
       ]);
       
-      // Advanced: Beta Testing (input + button on same row)
-      buildStandardContainer(parentOther, "Advanced", "", [
-        {
-          id: "beta_update_row",
-          title: "Beta Testing",
-          desc: "Enter a 7-character code from the Fuzzy Macro Discord server.",
-          type: {
-            name: "textbox_with_button",
-            inputId: "beta_commit_hash",
-            inputType: "string",
-            inputLimit: 7,
-            inputWidth: 12,
-            buttonId: "beta_update_button",
-            buttonText: "Test Update",
-            buttonWidth: 7,
-            buttonFunction: "triggerBetaUpdate()",
-          },
-        },
-      ]);
-
       parentOther.insertAdjacentHTML("beforeend", `
         <details class="model-downloads">
           <summary>
