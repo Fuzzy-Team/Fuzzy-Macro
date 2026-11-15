@@ -274,6 +274,8 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'sprouts_pattern_width': 5,
  'sprouts_field': 'sunflower',
  'sprouts_ai_model': 'standard',
+ 'moon_sprouts_enable': False,
+ 'moon_sprouts_count': 5,
  'sprouts_preferred_tokens': 'Token Link,Coconut,Pineapple,Blueberry,Strawberry,Sunflower Seed,Jelly '
                              'Bean,Snowflake,Beesmas Cheer Token,Festive Blessing Token,Treat,Honey Token',
  'sprouts_ignored_tokens': 'Activated Target,Baby Love,Beamstorm,Black Bear Morph,Bloom,Blue Bomb Sync,Blue '

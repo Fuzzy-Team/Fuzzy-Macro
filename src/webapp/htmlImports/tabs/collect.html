@@ -636,6 +636,27 @@
           },
         },
         {
+          id: "moon_sprouts_enable",
+          title: "Moon Sprouts",
+          desc: "Only plant sprouts at night, to collect Moon Charms. Night is detected the same way as Stinger Hunt, and the macro waits until then.",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "moon_sprouts_count",
+          title: "Moon Sprouts Amount",
+          desc: "How many Magic Beans to plant each time night is detected.",
+          type: {
+            name: "textbox",
+            inputType: "int",
+            inputLimit: 3,
+            length: 6,
+            triggerFunction: "saveSetting(this, 'profile')",
+          },
+        },
+        {
           id: "sprouts_ai_model",
           title: "AI Model",
           desc: "Model used to search for sprout drops. Loot models chase loot drops; token models use the token priority list.",

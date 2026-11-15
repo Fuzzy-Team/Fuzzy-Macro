@@ -120,6 +120,7 @@ class macro(
         self._applySettingsState()
         self.canDetectNight = True
         self.night = False
+        self.moonSproutsStart = 0 #sproutBeansUsed when the current night was detected
         self.location = "spawn"
 
         self.planterCooldowns = {}
@@ -231,7 +232,7 @@ class macro(
         """State derived from settings, rebuilt whenever settings reload."""
         self.collectCooldowns = {k: v[2] for k, v in mergedCollectData.items()}
         self.collectCooldowns["sticker_printer"] = 1*60*60
-        self.enableNightDetection = bool(self.setdat["stinger_hunt"])
+        self.enableNightDetection = bool(self.setdat["stinger_hunt"] or self.setdat.get("moon_sprouts_enable", False))
         #fields vic can appear in, filtered to the ones the player enabled
         vicFields = ["pepper", "mountain top", "rose", "cactus", "spider"]
         self.vicFields = [x for x in vicFields if self.setdat["stinger_{}".format(x.replace(" ","_"))]]
