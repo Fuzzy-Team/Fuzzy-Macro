@@ -69,8 +69,9 @@ async function pickBoostHotbarItem(dropdown) {
     const valueEle = document.getElementById(`hotbar${slot}_use_every_value`)
     const formatEle = document.getElementById(`hotbar${slot}_use_every_format`)
     valueEle.value = item.every
+    if (!(await saveSetting(valueEle, "profile"))) return
     setDropdownValue(formatEle, item.unit)
-    if (await saveSetting(valueEle, "profile")) await saveSetting(formatEle, "profile")
+    await saveSetting(formatEle, "profile")
 }
 
 function switchBoostHotbarSlot(slot) {
