@@ -48,6 +48,8 @@ ITEM_META = {
     "Tropical Drink": {"display": "Tropical Drink", "category": "Consumable", "icon": "tropical_drink"},
     "Bitterberry": {"display": "Bitterberry", "category": "Material", "icon": "bitterberry"},
     "Super Smoothie": {"display": "Super Smoothie", "category": "Consumable", "icon": "super_smoothie"},
+    # Shown as "Defeated Mantis! (+5 Battle Points)". The game has no icon for it, so its card has none.
+    "Battle Points": {"display": "Battle Points", "category": "Currency"},
 }
 
 CATEGORY_ORDER = ("Currency", "Material", "Consumable")
@@ -181,7 +183,12 @@ class ItemMonitor:
         now = time.time() * 1000
         last_t = self.last_detection_time.get(matched_key)
         if last_t is not None and (now - last_t) < QUICK_DETECTION_WINDOW_MS:
-            amount = max(0, n - self.last_detected_value.get(matched_key, 0))
+            last_n = self.last_detected_value.get(matched_key, 0)
+            if matched_key == "Battle Points":
+                # Every kill is its own line, not a running total: a different amount is a new kill.
+                amount = 0 if n == last_n else n
+            else:
+                amount = max(0, n - last_n)
         else:
             amount = n
 
@@ -222,7 +229,7 @@ class ItemMonitor:
         return result
 
     @staticmethod
-    def top_items(collected_items, limit=3, exclude=("Honey", "Treat")):
+    def top_items(collected_items, limit=3, exclude=("Honey", "Treat", "Battle Points")):
         items = [
             {
                 "key": k,
