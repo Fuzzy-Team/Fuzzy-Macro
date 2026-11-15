@@ -211,9 +211,13 @@ class RejoinMixin:
         # Retry each configured private server in failover order, then use a
         # public server. Skipping one link invalidates only that link, allowing
         # the next configured backup to begin immediately.
-        attempts = [server for server in privateServerLinks for _ in range(5)]
+        try:
+            privateAttempts = max(1, int(self.setdat.get("rejoin_attempts", 5)))
+        except (TypeError, ValueError):
+            privateAttempts = 5
+        attempts = [server for server in privateServerLinks for _ in range(privateAttempts)]
         attempts.extend([("public", "")] * (5 if privateServerLinks else 10))
-        firstPublicAttempt = len(privateServerLinks) * 5
+        firstPublicAttempt = len(privateServerLinks) * privateAttempts
         invalidServerLinks = set()
         launchedAttempts = 0
         for i, (serverKey, psLink) in enumerate(attempts):

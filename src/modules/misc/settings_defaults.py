@@ -817,6 +817,7 @@ DEFAULT_GENERAL_SETTINGS = {'hive_number': 1,
  'ignore_petal_quests': False,
  # values below match the fallbacks the macro already used for these settings
  'max_cannon_attempts': 3,
+ 'rejoin_attempts': 5,
  'gui_theme': 'Brown',
  'update_channel': 'stable',
  'auto_update_check_disabled': False,
