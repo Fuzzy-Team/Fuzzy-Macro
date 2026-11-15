@@ -543,6 +543,17 @@
           },
         },
         {
+          id: "rejoin_attempts",
+          title: "Rejoin Attempts Per Private Server",
+          desc: "Number of attempts the macro makes on each private server link before moving on to the next one, then to a public server. Raise it if your connection can stay down for a while.",
+          type: {
+            name: "textbox",
+            inputType: "int",
+            inputLimit: 2,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
           id: "max_cannon_attempts",
           title: "Max Cannon Attempts Before Rejoin",
           desc: "Number of attempts the macro will try to reach the cannon before rejoining.",
