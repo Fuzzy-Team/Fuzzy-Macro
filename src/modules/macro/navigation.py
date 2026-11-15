@@ -110,6 +110,12 @@ class NavigationMixin:
             self.faceDirection(normalized_field, faceDir)
         return True
 
+    #the path for walking from the field we're standing in straight to another field, or None
+    #paths/field_to_field/<from>/<to>.py starts at the center of <from> facing north and ends like cannon_to_field/<to>.py
+    def directPath(self, field, start=None):
+        path = f"field_to_field/{start or self.location}/{field}"
+        return path if os.path.isfile(f"../paths/{path}.py") else None
+
     def moveMouseToDefault(self):
         mouse.moveTo(self.robloxWindow.mx+370, self.robloxWindow.my+self.robloxWindow.yOffset+110)
 

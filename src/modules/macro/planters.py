@@ -14,14 +14,21 @@ class PlanterMixin:
         global finalKey
         if is_stopped():
             return False
-        if not self.travelViaCannon("Planters"):
+        #still standing at the last planter: walk straight to this field when there is a path for the pair
+        direct = self.directPath(field)
+        if not direct and not self.travelViaCannon("Planters"):
             return False
         if is_stopped():
             return False
         if afterCannon:
             afterCannon()
         self.logger.webhook("", f"Travelling: {planter.title()} Planter ({field.title()}), {method.title()}", "light blue")
-        if not self.goToField(field, "north"):
+        if direct:
+            self.runPath(f"planter_to_center/{self.location}", fileMustExist=False)
+            self.runPath(direct)
+            self.location = field
+            self.faceDirection(field, "north")
+        elif not self.goToField(field, "north"):
             return False
         if is_stopped():
             return False
@@ -469,10 +476,11 @@ class PlanterMixin:
         self.logger.webhook("", f"Planter {planter.title()} still not found in inventory after {attempts} attempts. Keeping planter state and retrying later.", "orange", "screen")
         return False
 
-    def placePlanterInCycle(self, slot, cycle):
+    def placePlanterInCycle(self, slot, cycle, nextField=None):
         '''
         Returns planter, field, time planter is finish, if gather in field
         Returns none if placing it failed
+        nextField: the field of the next planter. When there is a direct path to it, stay here instead of resetting.
         '''
         planter = self.setdat[f"cycle{cycle}_{slot+1}_planter"]
         field = self.setdat[f"cycle{cycle}_{slot+1}_field"]
@@ -503,6 +511,7 @@ class PlanterMixin:
 
         if is_stopped():
             return
-        self.reset()
+        if not (nextField and self.directPath(nextField)):
+            self.reset()
 
         return (planter, field, planterCompleteTime, gather)

@@ -954,6 +954,20 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             else: 
                 return False
 
+        # Field of the next manual planter after slot i, or "none". planterData is None on the first pass (cycle 1).
+        # A wrong guess only costs a reset: the planters task resets after the last placement.
+        def nextPlanterField(i, planterData=None):
+            for j in range(i + 1, 3):
+                if planterData is None:
+                    cycle = 1
+                elif planterData["planters"][j]:
+                    continue
+                else:
+                    cycle = goToNextCycle(planterData["cycles"][j], j)
+                if cycle and macro.setdat[f"cycle{cycle}_{j+1}_planter"] != "none" and macro.setdat[f"cycle{cycle}_{j+1}_field"] != "none":
+                    return macro.setdat[f"cycle{cycle}_{j+1}_field"]
+            return "none"
+
         def saveManualPlanterData(planterData):
             nonlocal planterDataRaw
             normalized = normalizeManualPlanterData(planterData)
@@ -1155,7 +1169,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                         for i in range(3):
                             if macro.setdat[f"cycle1_{i+1}_planter"] == "none" or macro.setdat[f"cycle1_{i+1}_field"] == "none":
                                 continue
-                            planter = runTask(macro.placePlanterInCycle, args = (i, 1),resetAfter=False, allowAFB=False)
+                            nextField = nextPlanterField(i)
+                            planter = runTask(macro.placePlanterInCycle, args = (i, 1, nextField),resetAfter=False, allowAFB=False)
                             if planter:
                                 planterData["planters"][i] = planter[0]
                                 planterData["fields"][i] = planter[1]
@@ -1199,7 +1214,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                             if fieldToPlace in otherSlotFields:
                                 continue
                             
-                            planter = runTask(macro.placePlanterInCycle, args = (i, nextCycle),resetAfter=False, allowAFB=False)
+                            nextField = nextPlanterField(i, planterData)
+                            planter = runTask(macro.placePlanterInCycle, args = (i, nextCycle, nextField),resetAfter=False, allowAFB=False)
                             if planter:
                                 planterData["cycles"][i] = nextCycle
                                 planterData["planters"][i] = planter[0]
@@ -1714,9 +1730,13 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                             "dark brown"
                         )
 
+                        # With a direct path to the next planter's field, stay here instead of resetting
+                        stayInField = len(plannedPlacements) > 1 and not gatherFlag and bool(
+                            macro.directPath(plannedPlacements[1][0]["field"], candidate["field"]))
                         if runTask(
                             macro.placePlanter,
                             args=(candidate["planter"], candidate["field"], False),
+                            resetAfter=not stayInField,
                             convertAfter=False,
                             allowAFB=False
                         ):
@@ -1724,6 +1744,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                             if gatherFlag:
                                 runTask(macro.gather, args=(candidate["field"],), resetAfter=False)
                         else:
+                            if stayInField and macro.location != "spawn":
+                                macro.reset(convert=False)
                             failure = getattr(macro, "lastPlanterPlacementFailure", None)
                             if failure == "maxplanters":
                                 # The game already has 3 planters out, so every other placement would fail too
@@ -1802,6 +1824,9 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                         regularMobTasksChecked.add(taskId)
                     # Execute the task
                     taskExecuted = executeTask(taskId)
+                    # Planters can leave the player in the last field when the next planter is a direct walk away
+                    if taskId == "planters" and not is_stopped() and macro.location != "spawn":
+                        runTask(macro.reset, resetAfter=False, allowAFB=False)
                     if taskExecuted:
                         anyTaskExecuted = True
                         # For regular mob kill tasks, don't mark as executed so they can be checked again in next iteration
