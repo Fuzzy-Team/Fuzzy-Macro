@@ -15,9 +15,6 @@
     <div id="setting-discord" class="config-tab-item" style="display: flex; align-items: center">
       Discord
     </div>
-    <div id="setting-stream" class="config-tab-item" style="display: flex; align-items: center">
-      Stream
-    </div>
     <div id="setting-profiles" class="config-tab-item">
       User Profiles
     </div>
@@ -660,52 +657,6 @@
         },
       ]);
 
-      buildStandardContainer(parentOther, "Hourly / Session Reports", "", [
-        {
-          id: "hourly_report_time_format",
-          title: "Report Time Format",
-          desc: "Choose between 12-hour (AM/PM) or 24-hour format for report time labels",
-          type: {
-            name: "dropdown",
-            data: [12, 24],
-            default: 24,
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-        {
-          id: "item_monitor",
-          title: "Item Monitor",
-          desc: "Track loot toast popups (+N Item) and send a separate Item Monitor report with hourly/session reports",
-          type: {
-            name: "checkbox",
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-        {
-          id: "hourly_report_uptime_buffs",
-          title: "Buff Uptime Options",
-          desc: "Choose buff keys to track for hourly/session reports. The first 16 selected keys are visible.",
-          type: {
-            name: "multicheck",
-            variant: "report-buffs",
-            data: hourlyReportUptimeBuffOptions,
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-        {
-          id: "hourly_report_hourly_buffs",
-          title: "Side Buff Options",
-          desc: "Choose up to 5 buff keys to show in the report side Buffs card.",
-          type: {
-            name: "multicheck",
-            variant: "report-buffs compact",
-            maxSelections: 5,
-            data: hourlyReportSideBuffOptions,
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-      ]);
-
       buildStandardContainer(parentOther, "Keybinds", "", [
         {
           id: "start_keybind",
@@ -830,7 +781,7 @@
   <div id="discord" class="standard-container sub-tab-panel" style="display: none">
     <script>
       const parentDiscord = document.getElementById("discord");
-      buildStandardContainer(parentDiscord, "Discord Delivery", "", [
+      buildStandardContainer(parentDiscord, "Setup", "", [
         {
           id: "discord_delivery_mode",
           title: "Delivery Mode",
@@ -854,17 +805,6 @@
             name: "textbox",
             inputType: "string",
             length: 13,
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-        {
-          id: "webhook_time_format",
-          title: "Webhook Time Format",
-          desc: "Choose between 12-hour (AM/PM) or 24-hour format for webhook message timestamps",
-          type: {
-            name: "dropdown",
-            data: [12, 24],
-            default: 24,
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
@@ -908,7 +848,7 @@
         if (tokenDesc) tokenDesc.innerHTML += "<br><strong>On this macOS version, bot commands use <code>fuzz!</code> instead of <code>/</code>, e.g. <code>fuzz!status</code>. To use <code>fuzz!</code> commands in guild channels, enable Message Content access in the Discord Developer Portal. If it is unavailable, mention the bot instead, e.g. <code>@Bot status</code>.</strong>";
       });
 
-      buildStandardContainer(parentDiscord, "Message Options", "", [
+      buildStandardContainer(parentDiscord, "Messages", "", [
         {
           id: "send_screenshot",
           title: "Send Screenshots",
@@ -936,33 +876,64 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
-      ]);
-
-      const discordRouteCategories = [
-        ["route_macro_status", "Macro", "Start, stop, pause, resume, and profile messages"],
-        ["route_reports", "Reports", "Hourly and final report images"],
-        ["route_gathering", "Gathering", "Gathering start/end and live gather report messages"],
-        ["route_combat", "Combat", "Mobs, Vicious Bee, and character death messages"],
-        ["route_activities", "Activities", "Boosts, crafting, stickers, ant challenge, planters, quests, collectibles, and conversion messages"],
-        ["route_system", "System", "Critical errors, disconnects, stream messages, and other system-level notices"],
-      ];
-
-      buildStandardContainer(
-        parentDiscord,
-        "Notification Routes",
-        "Optional category-specific destinations. Paste a Discord webhook URL or a Discord channel ID.",
-        discordRouteCategories.map(([routeId, title, desc]) => ({
-          id: routeId,
-          title,
-          desc,
+        {
+          id: "webhook_time_format",
+          title: "Webhook Time Format",
+          desc: "Choose between 12-hour (AM/PM) or 24-hour format for webhook message timestamps",
           type: {
-            name: "textbox",
-            inputType: "string",
-            length: 16,
+            name: "dropdown",
+            data: [12, 24],
+            default: 24,
             triggerFunction: saveGeneralTriggerFunction,
           },
-        }))
-      );
+        },
+      ]);
+
+      buildStandardContainer(parentDiscord, "Hourly / Session Reports", "", [
+        {
+          id: "hourly_report_time_format",
+          title: "Report Time Format",
+          desc: "Choose between 12-hour (AM/PM) or 24-hour format for report time labels",
+          type: {
+            name: "dropdown",
+            data: [12, 24],
+            default: 24,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "item_monitor",
+          title: "Item Monitor",
+          desc: "Track loot toast popups (+N Item) and send a separate Item Monitor report with hourly/session reports",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "hourly_report_uptime_buffs",
+          title: "Buff Uptime Options",
+          desc: "Choose buff keys to track for hourly/session reports. The first 16 selected keys are visible.",
+          type: {
+            name: "multicheck",
+            variant: "report-buffs",
+            data: hourlyReportUptimeBuffOptions,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "hourly_report_hourly_buffs",
+          title: "Side Buff Options",
+          desc: "Choose up to 5 buff keys to show in the report side Buffs card.",
+          type: {
+            name: "multicheck",
+            variant: "report-buffs compact",
+            maxSelections: 5,
+            data: hourlyReportSideBuffOptions,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+      ]);
 
       buildStandardContainer(parentDiscord, "Discord Pings", "", [
         {
@@ -1059,6 +1030,64 @@
         },
       ]);
 
+      buildStandardContainer(parentDiscord, "Stream", "Stream your screen in real-time through a web link. Visit the gitbook for instructions on how to set it up", [
+        {
+          id: "enable_stream",
+          title: "Enable Stream",
+          desc: "Automatically start streaming",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "pin_stream_url",
+          title: "Pin Stream URL in Discord",
+          desc: "Automatically pin the stream URL message in Discord when streaming starts.<br>Requires both Discord Bot and Webhook to be enabled",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+      ]);
+
+      parentDiscord.insertAdjacentHTML("beforeend", `
+        <details class="model-downloads">
+          <summary>
+            <span>Advanced</span>
+            <span class="model-download-summary">Notification routes and bot command permissions</span>
+          </summary>
+          <div id="discord-advanced" class="model-download-content"></div>
+        </details>
+      `);
+      const advancedDiscord = document.getElementById("discord-advanced");
+
+      const discordRouteCategories = [
+        ["route_macro_status", "Macro", "Start, stop, pause, resume, and profile messages"],
+        ["route_reports", "Reports", "Hourly and final report images"],
+        ["route_gathering", "Gathering", "Gathering start/end and live gather report messages"],
+        ["route_combat", "Combat", "Mobs, Vicious Bee, and character death messages"],
+        ["route_activities", "Activities", "Boosts, crafting, stickers, ant challenge, planters, quests, collectibles, and conversion messages"],
+        ["route_system", "System", "Critical errors, disconnects, stream messages, and other system-level notices"],
+      ];
+
+      buildStandardContainer(
+        advancedDiscord,
+        "Notification Routes",
+        "Optional category-specific destinations. Paste a Discord webhook URL or a Discord channel ID.",
+        discordRouteCategories.map(([routeId, title, desc]) => ({
+          id: routeId,
+          title,
+          desc,
+          type: {
+            name: "textbox",
+            inputType: "string",
+            length: 16,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        }))
+      );
+
       const discordPermissionCategories = [
         [
           "discord_permission_public_info_ids",
@@ -1108,7 +1137,7 @@
       ];
 
       buildStandardContainer(
-        parentDiscord,
+        advancedDiscord,
         "Bot Command Permissions",
         "Enter Discord user IDs allowed to use each category. Separate multiple IDs with commas. Leave a category blank to allow everyone.",
         discordPermissionCategories.map(([id, title, desc]) => ({
@@ -1124,36 +1153,6 @@
         }))
       );
 
-    </script>
-  </div>
-  <div id="stream" class="standard-container sub-tab-panel" style="display: none">
-    <script>
-      const parentStream = document.getElementById("stream");
-      buildStandardContainer(
-        parentStream,
-        "Stream",
-        "Stream your screen in real-time through a web link. Visit the gitbook for instructions on how to set it up",
-        [
-          {
-            id: "enable_stream",
-            title: "Enable Stream",
-            desc: "Automatically start streaming",
-            type: {
-              name: "checkbox",
-              triggerFunction: saveGeneralTriggerFunction,
-            },
-          },
-          {
-            id: "pin_stream_url",
-            title: "Pin Stream URL in Discord",
-            desc: "Automatically pin the stream URL message in Discord when streaming starts.<br>Requires both Discord Bot and Webhook to be enabled",
-            type: {
-              name: "checkbox",
-              triggerFunction: saveGeneralTriggerFunction,
-            },
-          },
-        ]
-      );
     </script>
   </div>
 
