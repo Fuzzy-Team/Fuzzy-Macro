@@ -113,6 +113,15 @@
             triggerFunction: saveProfileTriggerFunction,
           },
         },
+        {
+          id: "walk_to_fields",
+          title: "Walk to Fields",
+          desc: "Walk from the hive to each field instead of using the cannon. Slower than the cannon, but it doesn't depend on finding the cannon. Mushroom always walks.",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
       ]);
 
       buildStandardContainer(parentBSS, "Hotbar Items", "", [

@@ -1,3 +1,4 @@
+import os
 import threading
 import traceback
 import modules.controls.mouse as mouse
@@ -314,7 +315,11 @@ class GatherMixin:
                 except Exception:
                     pass
                 #Mushroom is reached on foot from the ramp. The cannon lands in the wrong place.
-                fromRamp = field == "mushroom"
+                #Other fields walk too when the setting is on and they have a ramp path.
+                fromRamp = field == "mushroom" or (
+                    self.setdat.get("walk_to_fields", False)
+                    and os.path.isfile(f"../paths/ramp_to_field/{normalized_field}.py")
+                )
                 if fromRamp:
                     self.walkToRamp()
                 elif not isHiveHubField:
