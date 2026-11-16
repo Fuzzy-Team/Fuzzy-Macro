@@ -52,6 +52,7 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'stump_snail_amulet': 'keep',
  'stump_snail_balloon_interval': 0,
  'stump_snail_convert': False,
+ 'stump_snail_pattern': 'click',
  'stinger_spider': True,
  'stinger_cactus': True,
  'stinger_rose': True,
