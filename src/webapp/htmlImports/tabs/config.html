@@ -1,19 +1,19 @@
 <div class="main-content-container">
   <div id="config-nav" class="sub-nav-bar poppins-regular" style="margin-bottom: 2rem;">
     <div id="setting-bss" class="config-tab-item active">
-      Bee Swarm Config
+      Bee Swarm
     </div>
     <div id="setting-priorities" class="config-tab-item">
       Task Priorities
     </div>
+    <div id="setting-rejoin" class="config-tab-item">
+      Rejoin &amp; Recovery
+    </div>
     <div id="setting-other" class="config-tab-item">
-      Other Settings
+      App Settings
     </div>
     <div id="setting-discord" class="config-tab-item" style="display: flex; align-items: center">
-      Discord Config
-    </div>
-    <div id="setting-stream" class="config-tab-item" style="display: flex; align-items: center">
-      Stream Config
+      Discord
     </div>
     <div id="setting-profiles" class="config-tab-item">
       User Profiles
@@ -22,7 +22,7 @@
   <div id="bss" class="standard-container sub-tab-panel active">
     <script>
       const parentBSS = document.getElementById("bss");
-      buildStandardContainer(parentBSS, "Basic", "", [
+      buildStandardContainer(parentBSS, "Hive", "", [
         {
           id: "preferred_hive_slot",
           title: "Preferred Hive Slot",
@@ -95,9 +95,27 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
+        {
+          id: "haste_compensation",
+          title: "Enable Haste Compensation",
+          desc: "Adjust the macro's movements based on the amount of haste the player has. This is done by searching for haste and bear morph buffs on the screen",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "pine_tree_fast_return",
+          title: "Fast Return Path",
+          desc: "Use an alternate glider path when returning from Pine Tree field to the hive. Faster than the default walk path",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
       ]);
 
-      buildStandardContainer(parentBSS, "Sprinkler", "", [
+      buildStandardContainer(parentBSS, "Hotbar Items", "", [
         {
           id: "sprinkler_type",
           title: "Sprinkler Type",
@@ -110,7 +128,7 @@
         },
         {
           id: "sprinkler_slot",
-          title: "Slot",
+          title: "Sprinkler Slot",
           desc: "The hotbar slot of the sprinkler",
           type: {
             name: "dropdown",
@@ -118,46 +136,6 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
-        {
-          id: "use_sprinkler_model_for_drift_compensation",
-          title: "Use Sprinkler Model For Field Drift Compensation",
-          desc: "Use AI to detect your sprinkler for field drift compensation instead of the color-based method. If the model cannot run, the macro falls back automatically.",
-          type: {
-            name: "checkbox",
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-        {
-          id: "ai_gather_model",
-          title: "AI Gather Model",
-          desc: "Choose the token detection model used by AI Gathering. Light and Mini automatically fall back to Standard if they cannot load.",
-          type: {
-            name: "dropdown",
-            data: [
-              "Standard",
-              { label: "Light (macOS 12+)", value: "Light" },
-              { label: "Mini (macOS 12+)", value: "Mini" },
-            ],
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-          {
-            id: "blooms_ai_model",
-            title: "BloomsAI Model",
-            desc: "Choose the bloom and petal detector. Standard is most accurate; Light and Mini trade accuracy for faster inference.",
-            type: {
-              name: "dropdown",
-              data: [
-                "Standard",
-                { label: "Light (Faster)", value: "Light" },
-                { label: "Mini (Fastest)", value: "Mini" },
-              ],
-              triggerFunction: saveGeneralTriggerFunction,
-            },
-          },
-      ]);
-
-      buildStandardContainer(parentBSS, "Gumdrops", "", [
         {
           id: "goo_slot",
           title: "Gumdrop Slot",
@@ -168,9 +146,6 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
-      ]);
-
-      buildStandardContainer(parentBSS, "Glitter", "", [
         {
           id: "glitter_slot",
           title: "Glitter Slot",
@@ -183,7 +158,7 @@
         },
       ]);
 
-      buildStandardContainer(parentBSS, "Balloon", "", [
+      buildStandardContainer(parentBSS, "Converting", "", [
         {
           id: "convert_balloon",
           title: "Convert Balloon",
@@ -216,21 +191,6 @@
             triggerFunction: saveProfileTriggerFunction,
           },
         },
-      ]);
-
-      buildStandardContainer(parentBSS, "Pine Tree", "", [
-        {
-          id: "pine_tree_fast_return",
-          title: "Fast Return Path",
-          desc: "Use an alternate glider path when returning from Pine Tree field to the hive. Faster than the default walk path",
-          type: {
-            name: "checkbox",
-            triggerFunction: saveProfileTriggerFunction,
-          },
-        },
-      ]);
-
-      buildStandardContainer(parentBSS, "Preferences", "", [
         {
           id: "convert_wait",
           title: "Wait X secs after converting",
@@ -263,18 +223,64 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
+      ]);
+
+      buildStandardContainer(parentBSS, "AI Models", "", [
         {
-          id: "coconut_crab_max_kill_time",
-          title: "Coconut Crab Max Kill Time (Mins)",
-          desc: "Maximum minutes to attempt killing Coconut Crab before timing out.",
+          id: "use_sprinkler_model_for_drift_compensation",
+          title: "Use Sprinkler Model For Field Drift Compensation",
+          desc: "Use AI to detect your sprinkler for field drift compensation instead of the color-based method. If the model cannot run, the macro falls back automatically.",
           type: {
-            name: "textbox",
-            inputType: "int",
-            inputLimit: 3,
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "ai_gather_model",
+          title: "AI Gather Model",
+          desc: "Choose the token detection model used by AI Gathering. Light and Mini automatically fall back to Standard if they cannot load.",
+          type: {
+            name: "dropdown",
+            data: [
+              "Standard",
+              { label: "Light (macOS 12+)", value: "Light" },
+              { label: "Mini (macOS 12+)", value: "Mini" },
+            ],
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "blooms_ai_model",
+          title: "BloomsAI Model",
+          desc: "Choose the bloom and petal detector. Standard is most accurate; Light and Mini trade accuracy for faster inference.",
+          type: {
+            name: "dropdown",
+            data: [
+              "Standard",
+              { label: "Light (Faster)", value: "Light" },
+              { label: "Mini (Fastest)", value: "Mini" },
+            ],
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
       ]);
+
+      parentBSS.insertAdjacentHTML("beforeend", `
+        <details class="model-downloads">
+          <summary>
+            <span>Model Downloads</span>
+            <span id="model-download-summary" class="model-download-summary">Checking…</span>
+          </summary>
+          <div class="model-download-content">
+            <p>Download only the AI models that are missing from this Mac.</p>
+            <div class="model-download-actions">
+              <button id="download-missing-models-button" class="purple-button" type="button" onclick="downloadMissingModels()">Download Missing Models</button>
+            </div>
+            <div id="model-download-status" class="model-download-status" aria-live="polite">Checking installed models…</div>
+            <div id="model-download-list" class="model-download-list"></div>
+          </div>
+        </details>
+      `);
     </script>
   </div>
   <div id="priorities" class="standard-container sub-tab-panel" style="display: none">
@@ -451,10 +457,10 @@
       }, 100);
     </script>
   </div>
-  <div id="other" class="standard-container sub-tab-panel" style="display: none">
+  <div id="rejoin" class="standard-container sub-tab-panel" style="display: none">
     <script>
-      const parentOther = document.getElementById("other");
-      buildStandardContainer(parentOther, "Rejoining", "", [
+      const parentRejoin = document.getElementById("rejoin");
+      buildStandardContainer(parentRejoin, "Joining", "", [
         {
           id: "always_rejoin",
           title: "Always Rejoin",
@@ -494,6 +500,20 @@
             triggerFunction: "openFallbackPrivateServersPopup()",
           },
         },
+        {
+          id: "rejoin_attempts",
+          title: "Rejoin Attempts Per Private Server",
+          desc: "Number of attempts the macro makes on each private server link before moving on to the next one, then to a public server. Raise it if your connection can stay down for a while.",
+          type: {
+            name: "textbox",
+            inputType: "int",
+            inputLimit: 2,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+      ]);
+
+      buildStandardContainer(parentRejoin, "Scheduled Rejoin", "", [
         {
           id: "rejoin_schedule_type",
           title: "Scheduled Rejoin Mode",
@@ -542,17 +562,9 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
-        {
-          id: "rejoin_attempts",
-          title: "Rejoin Attempts Per Private Server",
-          desc: "Number of attempts the macro makes on each private server link before moving on to the next one, then to a public server. Raise it if your connection can stay down for a while.",
-          type: {
-            name: "textbox",
-            inputType: "int",
-            inputLimit: 2,
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
+      ]);
+
+      buildStandardContainer(parentRejoin, "Failsafes", "", [
         {
           id: "max_cannon_attempts",
           title: "Max Cannon Attempts Before Rejoin",
@@ -575,9 +587,29 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
+        {
+          id: "inactive_honey_reset",
+          title: "Inactive Honey Reset (Beta)",
+          desc: "Reset and retry when the macro detects no active honey gain for an extended period while gathering or converting.",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "auto_stop_after",
+          title: "Stop Macro After X Hours",
+          desc: "Automatically stop the macro after this many hours from startup. Set to 0 to disable auto stop.",
+          type: {
+            name: "textbox",
+            inputType: "float",
+            inputLimit: 5,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
       ]);
 
-      parentOther.insertAdjacentHTML("beforeend", `
+      parentRejoin.insertAdjacentHTML("beforeend", `
         <div id="fallback-private-servers-modal" class="modal-overlay" style="display:none;">
           <div class="modal-dialog poppins-regular" style="max-width:42rem;">
             <h3>Fallback Private Servers</h3>
@@ -595,46 +627,12 @@
           </div>
         </div>
       `);
-
-      buildStandardContainer(parentOther, "Auto Stop", "", [
-        {
-          id: "auto_stop_after",
-          title: "Stop Macro After X Hours",
-          desc: "Automatically stop the macro after this many hours from startup. Set to 0 to disable auto stop.",
-          type: {
-            name: "textbox",
-            inputType: "float",
-            inputLimit: 5,
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-      ]);
-
-      buildStandardContainer(parentOther, "Inactive Honey Reset", "", [
-        {
-          id: "inactive_honey_reset",
-          title: "Inactive Honey Reset (Beta)",
-          desc: "Reset and retry when the macro detects no active honey gain for an extended period while gathering or converting.",
-          type: {
-            name: "checkbox",
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-      ]);
-
-      buildStandardContainer(parentOther, "Haste Compensation", "", [
-        {
-          id: "haste_compensation",
-          title: "Enable Haste Compensation",
-          desc: "Adjust the macro's movements based on the amount of haste the player has. This is done by searching for haste and bear morph buffs on the screen",
-          type: {
-            name: "checkbox",
-            triggerFunction: saveProfileTriggerFunction,
-          },
-        },
-      ]);
-
-      buildStandardContainer(parentOther, "Macro Theme", "", [
+    </script>
+  </div>
+  <div id="other" class="standard-container sub-tab-panel" style="display: none">
+    <script>
+      const parentOther = document.getElementById("other");
+      buildStandardContainer(parentOther, "Appearance", "", [
         {
           id: "gui_theme",
           title: "GUI Theme",
@@ -645,9 +643,6 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
-      ]);
-
-      buildStandardContainer(parentOther, "Gather Patterns", "", [
         {
           id: "hidden_patterns",
           title: "Hidden Patterns",
@@ -658,68 +653,6 @@
             data: [],
             length: 16,
             triggerFunction: "saveHiddenPatterns(this)",
-          },
-        },
-      ]);
-
-      buildStandardContainer(parentOther, "Update Settings", "", [
-        {
-          id: "update_channel",
-          title: "Update Channel",
-          desc: "Stable: Only stable releases | Beta: Includes pre-release versions for testing",
-          type: {
-            name: "dropdown",
-            data: [
-              { label: "Stable Releases", value: "stable" },
-              { label: "Beta Releases", value: "beta" },
-            ],
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-      ]);
-
-      buildStandardContainer(parentOther, "Hourly / Session Reports", "", [
-        {
-          id: "hourly_report_time_format",
-          title: "Report Time Format",
-          desc: "Choose between 12-hour (AM/PM) or 24-hour format for report time labels",
-          type: {
-            name: "dropdown",
-            data: [12, 24],
-            default: 24,
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-        {
-          id: "item_monitor",
-          title: "Item Monitor",
-          desc: "Track loot toast popups (+N Item) and send a separate Item Monitor report with hourly/session reports",
-          type: {
-            name: "checkbox",
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-        {
-          id: "hourly_report_uptime_buffs",
-          title: "Buff Uptime Options",
-          desc: "Choose buff keys to track for hourly/session reports. The first 16 selected keys are visible.",
-          type: {
-            name: "multicheck",
-            variant: "report-buffs",
-            data: hourlyReportUptimeBuffOptions,
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-        {
-          id: "hourly_report_hourly_buffs",
-          title: "Side Buff Options",
-          desc: "Choose up to 5 buff keys to show in the report side Buffs card.",
-          type: {
-            name: "multicheck",
-            variant: "report-buffs compact",
-            maxSelections: 5,
-            data: hourlyReportSideBuffOptions,
-            triggerFunction: saveGeneralTriggerFunction,
           },
         },
       ]);
@@ -788,6 +721,38 @@
         },
       ]);
 
+      buildStandardContainer(parentOther, "Updates", "", [
+        {
+          id: "update_channel",
+          title: "Update Channel",
+          desc: "Stable: Only stable releases | Beta: Includes pre-release versions for testing",
+          type: {
+            name: "dropdown",
+            data: [
+              { label: "Stable Releases", value: "stable" },
+              { label: "Beta Releases", value: "beta" },
+            ],
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "beta_update_row",
+          title: "Beta Testing",
+          desc: "Enter a 7-character code from the Fuzzy Macro Discord server.",
+          type: {
+            name: "textbox_with_button",
+            inputId: "beta_commit_hash",
+            inputType: "string",
+            inputLimit: 7,
+            inputWidth: 12,
+            buttonId: "beta_update_button",
+            buttonText: "Test Update",
+            buttonWidth: 7,
+            buttonFunction: "triggerBetaUpdate()",
+          },
+        },
+      ]);
+
       // Standalone Export Debug container
       buildStandardContainer(parentOther, "Export Debug", "Create a zip with your exported profile, recent logs, macOS + macro version and chip info.", [
         {
@@ -811,49 +776,12 @@
           },
         },
       ]);
-      
-      // Advanced: Beta Testing (input + button on same row)
-      buildStandardContainer(parentOther, "Advanced", "", [
-        {
-          id: "beta_update_row",
-          title: "Beta Testing",
-          desc: "Enter a 7-character code from the Fuzzy Macro Discord server.",
-          type: {
-            name: "textbox_with_button",
-            inputId: "beta_commit_hash",
-            inputType: "string",
-            inputLimit: 7,
-            inputWidth: 12,
-            buttonId: "beta_update_button",
-            buttonText: "Test Update",
-            buttonWidth: 7,
-            buttonFunction: "triggerBetaUpdate()",
-          },
-        },
-      ]);
-
-      parentOther.insertAdjacentHTML("beforeend", `
-        <details class="model-downloads">
-          <summary>
-            <span>AI Models</span>
-            <span id="model-download-summary" class="model-download-summary">Checking…</span>
-          </summary>
-          <div class="model-download-content">
-            <p>Download only the AI models that are missing from this Mac.</p>
-            <div class="model-download-actions">
-              <button id="download-missing-models-button" class="purple-button" type="button" onclick="downloadMissingModels()">Download Missing Models</button>
-            </div>
-            <div id="model-download-status" class="model-download-status" aria-live="polite">Checking installed models…</div>
-            <div id="model-download-list" class="model-download-list"></div>
-          </div>
-        </details>
-      `);
     </script>
   </div>
   <div id="discord" class="standard-container sub-tab-panel" style="display: none">
     <script>
       const parentDiscord = document.getElementById("discord");
-      buildStandardContainer(parentDiscord, "Discord Delivery", "", [
+      buildStandardContainer(parentDiscord, "Setup", "", [
         {
           id: "discord_delivery_mode",
           title: "Delivery Mode",
@@ -877,17 +805,6 @@
             name: "textbox",
             inputType: "string",
             length: 13,
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-        {
-          id: "webhook_time_format",
-          title: "Webhook Time Format",
-          desc: "Choose between 12-hour (AM/PM) or 24-hour format for webhook message timestamps",
-          type: {
-            name: "dropdown",
-            data: [12, 24],
-            default: 24,
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
@@ -931,7 +848,7 @@
         if (tokenDesc) tokenDesc.innerHTML += "<br><strong>On this macOS version, bot commands use <code>fuzz!</code> instead of <code>/</code>, e.g. <code>fuzz!status</code>. To use <code>fuzz!</code> commands in guild channels, enable Message Content access in the Discord Developer Portal. If it is unavailable, mention the bot instead, e.g. <code>@Bot status</code>.</strong>";
       });
 
-      buildStandardContainer(parentDiscord, "Message Options", "", [
+      buildStandardContainer(parentDiscord, "Messages", "", [
         {
           id: "send_screenshot",
           title: "Send Screenshots",
@@ -959,33 +876,64 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
-      ]);
-
-      const discordRouteCategories = [
-        ["route_macro_status", "Macro", "Start, stop, pause, resume, and profile messages"],
-        ["route_reports", "Reports", "Hourly and final report images"],
-        ["route_gathering", "Gathering", "Gathering start/end and live gather report messages"],
-        ["route_combat", "Combat", "Mobs, Vicious Bee, and character death messages"],
-        ["route_activities", "Activities", "Boosts, crafting, stickers, ant challenge, planters, quests, collectibles, and conversion messages"],
-        ["route_system", "System", "Critical errors, disconnects, stream messages, and other system-level notices"],
-      ];
-
-      buildStandardContainer(
-        parentDiscord,
-        "Notification Routes",
-        "Optional category-specific destinations. Paste a Discord webhook URL or a Discord channel ID.",
-        discordRouteCategories.map(([routeId, title, desc]) => ({
-          id: routeId,
-          title,
-          desc,
+        {
+          id: "webhook_time_format",
+          title: "Webhook Time Format",
+          desc: "Choose between 12-hour (AM/PM) or 24-hour format for webhook message timestamps",
           type: {
-            name: "textbox",
-            inputType: "string",
-            length: 16,
+            name: "dropdown",
+            data: [12, 24],
+            default: 24,
             triggerFunction: saveGeneralTriggerFunction,
           },
-        }))
-      );
+        },
+      ]);
+
+      buildStandardContainer(parentDiscord, "Hourly / Session Reports", "", [
+        {
+          id: "hourly_report_time_format",
+          title: "Report Time Format",
+          desc: "Choose between 12-hour (AM/PM) or 24-hour format for report time labels",
+          type: {
+            name: "dropdown",
+            data: [12, 24],
+            default: 24,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "item_monitor",
+          title: "Item Monitor",
+          desc: "Track loot toast popups (+N Item) and send a separate Item Monitor report with hourly/session reports",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "hourly_report_uptime_buffs",
+          title: "Buff Uptime Options",
+          desc: "Choose buff keys to track for hourly/session reports. The first 16 selected keys are visible.",
+          type: {
+            name: "multicheck",
+            variant: "report-buffs",
+            data: hourlyReportUptimeBuffOptions,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "hourly_report_hourly_buffs",
+          title: "Side Buff Options",
+          desc: "Choose up to 5 buff keys to show in the report side Buffs card.",
+          type: {
+            name: "multicheck",
+            variant: "report-buffs compact",
+            maxSelections: 5,
+            data: hourlyReportSideBuffOptions,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+      ]);
 
       buildStandardContainer(parentDiscord, "Discord Pings", "", [
         {
@@ -1082,6 +1030,64 @@
         },
       ]);
 
+      buildStandardContainer(parentDiscord, "Stream", "Stream your screen in real-time through a web link. Visit the gitbook for instructions on how to set it up", [
+        {
+          id: "enable_stream",
+          title: "Enable Stream",
+          desc: "Automatically start streaming",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "pin_stream_url",
+          title: "Pin Stream URL in Discord",
+          desc: "Automatically pin the stream URL message in Discord when streaming starts.<br>Requires both Discord Bot and Webhook to be enabled",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+      ]);
+
+      parentDiscord.insertAdjacentHTML("beforeend", `
+        <details class="model-downloads">
+          <summary>
+            <span>Advanced</span>
+            <span class="model-download-summary">Notification routes and bot command permissions</span>
+          </summary>
+          <div id="discord-advanced" class="model-download-content"></div>
+        </details>
+      `);
+      const advancedDiscord = document.getElementById("discord-advanced");
+
+      const discordRouteCategories = [
+        ["route_macro_status", "Macro", "Start, stop, pause, resume, and profile messages"],
+        ["route_reports", "Reports", "Hourly and final report images"],
+        ["route_gathering", "Gathering", "Gathering start/end and live gather report messages"],
+        ["route_combat", "Combat", "Mobs, Vicious Bee, and character death messages"],
+        ["route_activities", "Activities", "Boosts, crafting, stickers, ant challenge, planters, quests, collectibles, and conversion messages"],
+        ["route_system", "System", "Critical errors, disconnects, stream messages, and other system-level notices"],
+      ];
+
+      buildStandardContainer(
+        advancedDiscord,
+        "Notification Routes",
+        "Optional category-specific destinations. Paste a Discord webhook URL or a Discord channel ID.",
+        discordRouteCategories.map(([routeId, title, desc]) => ({
+          id: routeId,
+          title,
+          desc,
+          type: {
+            name: "textbox",
+            inputType: "string",
+            length: 16,
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        }))
+      );
+
       const discordPermissionCategories = [
         [
           "discord_permission_public_info_ids",
@@ -1131,7 +1137,7 @@
       ];
 
       buildStandardContainer(
-        parentDiscord,
+        advancedDiscord,
         "Bot Command Permissions",
         "Enter Discord user IDs allowed to use each category. Separate multiple IDs with commas. Leave a category blank to allow everyone.",
         discordPermissionCategories.map(([id, title, desc]) => ({
@@ -1147,36 +1153,6 @@
         }))
       );
 
-    </script>
-  </div>
-  <div id="stream" class="standard-container sub-tab-panel" style="display: none">
-    <script>
-      const parentStream = document.getElementById("stream");
-      buildStandardContainer(
-        parentStream,
-        "Stream",
-        "Stream your screen in real-time through a web link. Visit the gitbook for instructions on how to set it up",
-        [
-          {
-            id: "enable_stream",
-            title: "Enable Stream",
-            desc: "Automatically start streaming",
-            type: {
-              name: "checkbox",
-              triggerFunction: saveGeneralTriggerFunction,
-            },
-          },
-          {
-            id: "pin_stream_url",
-            title: "Pin Stream URL in Discord",
-            desc: "Automatically pin the stream URL message in Discord when streaming starts.<br>Requires both Discord Bot and Webhook to be enabled",
-            type: {
-              name: "checkbox",
-              triggerFunction: saveGeneralTriggerFunction,
-            },
-          },
-        ]
-      );
     </script>
   </div>
 

@@ -34,8 +34,10 @@ async function loadConfig() {
   await loadModelStatus();
 
   // Restore active subtab
+  // a remembered sub-tab that no longer exists (the old Stream tab) opens the first one
   switchConfigTab(
-    document.getElementById(getActiveSubtab("activeConfigSubtab", "setting-bss"))
+    document.getElementById(getActiveSubtab("activeConfigSubtab", "setting-bss")) ||
+      document.getElementById("setting-bss")
   );
 
   // Initialize drag and drop for priority list
