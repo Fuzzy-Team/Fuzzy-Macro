@@ -182,6 +182,8 @@ async function loadTasks() {
   const setdat = await loadAllSettings();
   let out = "";
 
+  if (!homeDividerDrag) applyHomeLayout(setdat);
+
   // Update macro mode dropdown to match current settings (only if user is not actively changing it)
   const macroModeDropdown = document.getElementById("macro_mode");
   if (macroModeDropdown && !isUserChangingMode) {
@@ -694,6 +696,101 @@ async function checkAndUpdateButtonState() {
   }
 }
 
+/*
+=============================================
+Home layout
+=============================================
+Logs can sit on the right or at the bottom, and two dividers resize the panels.
+The layout is three general settings, set on #home-layout for style.css to use.
+*/
+
+//the original layout; "home_logs_height" 0 means Logs fills its column
+const HOME_LAYOUT_DEFAULTS = { home_logs_position: "right", home_tasks_width: 50, home_logs_height: 0 };
+const HOME_DIVIDER_STEP = 2; //percent moved by one arrow key press
+const HOME_DIVIDER_SETTINGS = { "home-divider-width": "home_tasks_width", "home-divider-height": "home_logs_height" };
+let homeDividerDrag = null;
+let homeLayoutSaveTimers = {};
+
+//show saved layout values; a setting missing from `settings` leaves that part as it is
+function applyHomeLayout(settings) {
+  const layout = document.getElementById("home-layout");
+  if (!layout) return;
+  const percent = (value, fallback) => (Number.isFinite(Number(value)) && Number(value) > 0 ? Math.min(90, Math.max(10, Number(value))) : fallback);
+  if ("home_logs_position" in settings) {
+    layout.dataset.logsPosition = settings.home_logs_position === "bottom" ? "bottom" : "right";
+  }
+  if ("home_tasks_width" in settings) {
+    const width = percent(settings.home_tasks_width, HOME_LAYOUT_DEFAULTS.home_tasks_width);
+    layout.style.setProperty("--home-tasks-width", width);
+    document.getElementById("home-divider-width").setAttribute("aria-valuenow", Math.round(width));
+  }
+  if ("home_logs_height" in settings) {
+    const height = percent(settings.home_logs_height, 0);
+    const divider = document.getElementById("home-divider-height");
+    if (height) {
+      layout.dataset.logsSized = "";
+      layout.style.setProperty("--home-logs-height", height);
+      divider.setAttribute("aria-valuenow", Math.round(height));
+      divider.removeAttribute("aria-valuetext");
+    } else {
+      delete layout.dataset.logsSized;
+      layout.style.removeProperty("--home-logs-height");
+      divider.removeAttribute("aria-valuenow");
+      divider.setAttribute("aria-valuetext", "Automatic");
+    }
+  }
+}
+
+//what a divider resizes, in px: its current size, the room it shares, and the smallest and largest size it may take
+function homeDividerMetrics(kind) {
+  const layout = document.getElementById("home-layout");
+  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  if (kind === "width") {
+    const room = layout.clientWidth - rem; //the gap between the columns isn't shared
+    return { size: layout.querySelector(".home-tasks-col").offsetWidth, room, min: 15 * rem, max: room - 15 * rem, sign: 1 };
+  }
+  const logs = layout.querySelector(".home-logs-panel");
+  const bottom = layout.dataset.logsPosition === "bottom";
+  const margin = (el) => parseFloat(getComputedStyle(el).marginBottom);
+  //at the bottom Logs' row also holds the panel's bottom margin
+  const size = logs.offsetHeight + (bottom ? margin(logs) : 0);
+  const room = layout.clientHeight;
+  if (bottom) return { size, room, min: 10 * rem, max: room - 15 * rem, sign: -1 };
+  //beside Tasks the Vic Hop and Planter panels under Logs keep their full height, so Logs can't take their space
+  const under = Array.from(layout.querySelectorAll(".home-side > *")).filter((el) => el.offsetHeight).pop();
+  const below = under ? under.getBoundingClientRect().bottom + margin(under) - logs.getBoundingClientRect().bottom : 10 * rem;
+  return { size, room, min: 10 * rem, max: Math.max(10 * rem, room - below), sign: 1 };
+}
+
+//resize one panel to `size` px and return the setting value (percent of the room) it now has
+function resizeHomePanel(kind, metrics, size) {
+  const percent = Math.round((Math.min(metrics.max, Math.max(metrics.min, size)) / metrics.room) * 1000) / 10;
+  applyHomeLayout(kind === "width" ? { home_tasks_width: percent } : { home_logs_height: percent });
+  return percent;
+}
+
+//save a layout setting once the user stops changing it
+function saveHomeLayout(setting, value) {
+  clearTimeout(homeLayoutSaveTimers[setting]);
+  homeLayoutSaveTimers[setting] = setTimeout(() => saveSettingValue("general", setting, value), 300);
+}
+
+function resetHomeDivider(divider) {
+  const setting = HOME_DIVIDER_SETTINGS[divider.id];
+  applyHomeLayout({ [setting]: HOME_LAYOUT_DEFAULTS[setting] });
+  saveHomeLayout(setting, HOME_LAYOUT_DEFAULTS[setting]);
+}
+
+//Reset layout button in Config
+async function resetHomeLayout() {
+  for (const [setting, value] of Object.entries(HOME_LAYOUT_DEFAULTS)) {
+    clearTimeout(homeLayoutSaveTimers[setting]);
+    await saveSettingValue("general", setting, value);
+  }
+  applyHomeLayout(HOME_LAYOUT_DEFAULTS);
+  loadInputs({ home_logs_position: HOME_LAYOUT_DEFAULTS.home_logs_position });
+}
+
 // Start polling for button state updates
 let buttonStateInterval;
 
@@ -774,6 +871,46 @@ $("#home-placeholder")
       stopBtn.textContent = "Stopping...";
     }
     await eel.stop()();
+  })
+  .on("pointerdown", ".home-divider", (event) => {
+    if (event.button !== 0) return;
+    const divider = event.currentTarget;
+    const kind = divider.id.replace("home-divider-", "");
+    homeDividerDrag = { kind, divider, metrics: homeDividerMetrics(kind), start: kind === "width" ? event.clientX : event.clientY, percent: null };
+    divider.setPointerCapture(event.originalEvent.pointerId);
+    divider.classList.add("dragging");
+    event.preventDefault();
+  })
+  .on("pointermove", ".home-divider", (event) => {
+    const drag = homeDividerDrag;
+    if (!drag || drag.divider !== event.currentTarget) return;
+    const delta = (drag.kind === "width" ? event.clientX : event.clientY) - drag.start;
+    drag.percent = resizeHomePanel(drag.kind, drag.metrics, drag.metrics.size + drag.metrics.sign * delta);
+  })
+  .on("pointerup pointercancel", ".home-divider", (event) => {
+    const drag = homeDividerDrag;
+    if (!drag || drag.divider !== event.currentTarget) return;
+    homeDividerDrag = null;
+    drag.divider.classList.remove("dragging");
+    if (drag.percent !== null) saveHomeLayout(HOME_DIVIDER_SETTINGS[drag.divider.id], drag.percent);
+  })
+  .on("dblclick", ".home-divider", (event) => resetHomeDivider(event.currentTarget))
+  .on("keydown", ".home-divider", (event) => {
+    const divider = event.currentTarget;
+    if (event.key === "Enter") {
+      event.preventDefault();
+      resetHomeDivider(divider);
+      return;
+    }
+    const kind = divider.id.replace("home-divider-", "");
+    const bottom = document.getElementById("home-layout").dataset.logsPosition === "bottom";
+    //which way each arrow key makes the panel bigger
+    const grow = kind === "width" ? { ArrowRight: 1, ArrowLeft: -1 } : bottom ? { ArrowUp: 1, ArrowDown: -1 } : { ArrowDown: 1, ArrowUp: -1 };
+    if (!grow[event.key]) return;
+    event.preventDefault();
+    const metrics = homeDividerMetrics(kind);
+    const percent = resizeHomePanel(kind, metrics, metrics.size + grow[event.key] * (HOME_DIVIDER_STEP / 100) * metrics.room);
+    saveHomeLayout(HOME_DIVIDER_SETTINGS[divider.id], percent);
   })
   // .on("click", "#pause-btn", async (event) => {
   //   //pause/resume button - toggle between pause and resume

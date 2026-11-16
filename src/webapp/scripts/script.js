@@ -1519,6 +1519,9 @@ function dropdownClicked(event) {
     if (parentEle.id === "gui_theme") {
       applyTheme(getDropdownValue(parentEle));
     }
+    if (parentEle.id === "home_logs_position") {
+      applyHomeLayout({ home_logs_position: getDropdownValue(parentEle) });
+    }
     let funcParams = parentEle.dataset.onchange.replace("this", "parentEle");
     eval(funcParams);
     if (!isMulti) dropdownOpen = false;
