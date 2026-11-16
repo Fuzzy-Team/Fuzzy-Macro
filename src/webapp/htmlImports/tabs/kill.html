@@ -190,6 +190,17 @@
           },
         },
         {
+          id: "stump_snail_pattern",
+          title: "Pattern",
+          desc: "How to fight the stump snail.<br><br><strong>Click</strong> - stand at the sprinkler and click<br><strong>AI Gather</strong> - gather at the sprinkler with AI Gathering, walking out for the Stump token list's tokens (Focus, Melody and so on) and back to the sprinkler. Needs the AI Gathering models.",
+          type: {
+            name: "dropdown",
+            data: ["Click", "AI Gather"],
+            triggerFunction: saveProfileTriggerFunction,
+            length: 12,
+          },
+        },
+        {
           id: "stump_snail_balloon_interval",
           title: "Regain Balloons Every (Minutes)",
           desc: "Return to the Pine Field to regain balloons after this many minutes of attacking. Set to 0 to disable periodic balloon recovery.",

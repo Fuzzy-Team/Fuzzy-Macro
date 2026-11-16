@@ -434,7 +434,9 @@ class MobMixin:
         except (TypeError, ValueError):
             sideTaskInterval = 0
         convertWhenFull = self.setdat.get("stump_snail_convert", False)
+        useAIGather = self.setdat.get("stump_snail_pattern", "click") == "ai gather"
         patternDuration = 120
+        aiFight = None  # (runner, namespace) while Fuzzy AI Gather is running at the sprinkler
 
         def goToStump():
             for _ in range(3):
@@ -499,6 +501,76 @@ class MobMixin:
                 mouse.mouseUp()
                 patternRunner.finish(nameSpace)
 
+        def startAIFight():
+            """Start Fuzzy AI Gather at the sprinkler just placed: it gathers in place, walks out for the
+            stump field's wanted tokens and returns to the sprinkler. None if it can't run."""
+            stump = self.fieldSettings["stump"]
+            preset = stump.get("pattern_presets", {}).get("fuzzy_ai_gather", {})
+            fieldSetting = {**stump, "shape": "fuzzy_ai_gather", **{k: preset[k] for k in ("size", "width", "field_drift_compensation") if k in preset}}
+            # sprout idle square: stand at the sprinkler with tiny steps until a wanted token appears
+            runner = GatherPatternRunner(
+                settingsManager.getProjectRoot(),
+                "fuzzy_ai_gather",
+                alert=lambda failedPattern, error: self.logger.webhook(
+                    "Gather Pattern Failed",
+                    f"{failedPattern}: {error}. Clicking in place for the rest of the fight.",
+                    "red",
+                    ping_category="ping_critical_errors",
+                ),
+                fatal_exceptions=(InterruptRequested,),
+            )
+            self._fuzzy_ai_gather_state = {}  # the pattern tracks its position from this new sprinkler
+            nameSpace = {
+                "self": self,
+                "setPatternYaw": lambda targetYaw: None,
+                "pattern_ai_warmup_only": True,
+                **self.aiGatherPatternVariables("stump", fieldSetting, sproutIdleSquare=True),
+                **field_pattern_variables(fieldSetting),
+                **vars(patternEnvironment),
+            }
+            try:
+                runner.warmup(nameSpace)
+                state = self._fuzzy_ai_gather_state
+                if runner.active_pattern == "fuzzy_ai_gather" and not state.get("ready"):
+                    runner.mark_failed(state.get("error") or "initialisation failed")
+                if runner.active_pattern != "fuzzy_ai_gather":
+                    runner.finish(nameSpace)
+                    return None
+                self.configureAIGatherCamera()
+            except BaseException:
+                runner.finish(nameSpace)
+                raise
+            nameSpace["pattern_ai_warmup_only"] = False
+            return runner, nameSpace
+
+        def fightStep():
+            nonlocal aiFight, useAIGather
+            if useAIGather and aiFight is None:
+                aiFight = startAIFight()
+                useAIGather = aiFight is not None
+            if not useAIGather:
+                mouse.click()
+                return
+            runner, nameSpace = aiFight
+            mouse.mouseDown()
+            try:
+                runner.run_cycle(nameSpace, owner=self)
+            finally:
+                mouse.mouseUp()
+            if runner.active_pattern != "fuzzy_ai_gather":
+                endFight()
+                useAIGather = False
+
+        def endFight():
+            """Release the mouse and stop the AI's scanner threads. Safe to call at any point, however the fight stops."""
+            nonlocal aiFight
+            mouse.mouseUp()
+            if aiFight is not None:
+                runner, nameSpace = aiFight
+                aiFight = None
+                self.keyboard.releaseMovement()
+                runner.finish(nameSpace)
+
         def runSideTask():
             self.logger.webhook("", "Stump Snail: Running periodic side task", "dark brown")
             self.reset(convert=False)
@@ -542,10 +614,10 @@ class MobMixin:
                         mouse.mouseUp()
                         self.clear_task_status()
                         return
-                    mouse.click()
+                    fightStep()
                     keepOldData = self.keepOldCheck()
                     if keepOldData is not None:
-                        mouse.mouseUp()
+                        endFight()
                         break
                     backpackFull = convertWhenFull and self.getBackpack() >= 100
                     if backpackFull or sideTaskInterval <= 0 or time.time() - cycleStart >= sideTaskInterval:
@@ -554,6 +626,9 @@ class MobMixin:
 
                 if keepOldData is not None:
                     break
+                # The sprinkler is replaced after a side task or convert, so the AI restarts there
+                if sideTaskInterval > 0 and time.time() - cycleStart >= sideTaskInterval or backpackFull:
+                    endFight()
                 # The periodic side task already converts, so it covers a full backpack too
                 if sideTaskInterval > 0 and time.time() - cycleStart >= sideTaskInterval:
                     if not runSideTask():
@@ -564,6 +639,7 @@ class MobMixin:
                     self.clear_task_status()
                     return
         finally:
+            endFight()  # also on stop or interrupt, so no keys or mouse button stay held
             self.set_task_status(None, update_presence=False)  # Reset status after attack
         if is_stopped():
             self.clear_task_status()

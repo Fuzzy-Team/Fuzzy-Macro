@@ -93,6 +93,56 @@ class GatherMixin:
         s = n % 60
         return f"{int(m)}m {int(s):02d}s"
 
+    def configureAIGatherCamera(self):
+        for _ in range(11):
+            self.keyboard.press("pageup", 0.01)
+            sleep(0.01)
+        for _ in range(3):
+            self.keyboard.press("pagedown", 0.01)
+            sleep(0.01)
+
+    def aiGatherPatternVariables(self, field, fieldSetting, sproutIdleSquare=False):
+        """The pattern_* names Fuzzy AI Gather reads: AI Gathering defaults, the field's token lists and its sprinkler."""
+        defaults = settingsManager.FUZZY_AI_RUNTIME_DEFAULTS
+        model = str(fieldSetting.get("ai_gather_model", self.setdat.get("ai_gather_model", "Standard")))
+        ranking = settingsManager.loadFuzzyAITokenRanking(field, model)
+        sprinklerLabels = {
+            "basic": "Sprinkler",
+            "silver": "Sprinkler",
+            "golden": "Sprinkler",
+            "gold": "Sprinkler",
+            "diamond": "Sprinkler",
+            "saturator": "Supreme",
+            "supreme": "Supreme",
+        }
+        return {
+            "pattern_ai_gather_model": model,
+            "pattern_capture_backend": defaults["fuzzy_ai_capture_backend"],
+            "pattern_confidence_threshold": defaults["fuzzy_ai_confidence_threshold"],
+            "pattern_sprinkler_confidence_threshold": defaults["fuzzy_ai_sprinkler_confidence_threshold"],
+            "pattern_min_token_distance": defaults["fuzzy_ai_min_token_distance"],
+            "pattern_idle_return_interval": defaults["fuzzy_ai_idle_return_interval"],
+            "pattern_no_token_recalibration_timeout": defaults["fuzzy_ai_no_token_recalibration_timeout"],
+            "pattern_movements_before_recalibration": defaults["fuzzy_ai_movements_before_recalibration"],
+            "pattern_sprinkler_arrival_threshold": defaults["fuzzy_ai_sprinkler_arrival_threshold"],
+            "pattern_max_sprinkler_distance": defaults["fuzzy_ai_max_sprinkler_distance"],
+            "pattern_sprinkler_rescan_attempts": defaults["fuzzy_ai_sprinkler_rescan_attempts"],
+            "pattern_sprinkler_rescan_delay": defaults["fuzzy_ai_sprinkler_rescan_delay"],
+            "pattern_debug_mode": defaults["fuzzy_ai_debug_mode"],
+            "pattern_record_video": defaults["fuzzy_ai_record_video"],
+            "pattern_record_video_fps": defaults["fuzzy_ai_record_video_fps"],
+            "pattern_ai_gather_model_file": str(fieldSetting.get("ai_gather_model_file", "")),
+            "pattern_field_drift_compensation": bool(fieldSetting.get("field_drift_compensation", False)),
+            "pattern_field_dimensions": startLocationDimensions.get(field.replace("_", " ")),
+            "pattern_use_sprinkler_model_for_drift_compensation": bool(
+                self.setdat.get("use_sprinkler_model_for_drift_compensation", False)
+            ),
+            "pattern_target_sprinkler_label": sprinklerLabels.get(str(self.setdat.get("sprinkler_type", "")).strip().lower(), ""),
+            "pattern_preferred_tokens": fieldSetting.get("fuzzy_ai_preferred_tokens", ranking.get("preferred_tokens", "")),
+            "pattern_ignored_tokens": fieldSetting.get("fuzzy_ai_ignored_tokens", ranking.get("ignored_tokens", "")),
+            "pattern_sprout_idle_square": sproutIdleSquare,
+        }
+
     def gather(self, field, settingsOverride = {}, questObjective=None, stopWhen=None):
         self.robloxWindow.questMenuVisibleForAI = False
         if not (questObjective and self.setdat.get("quest_progress_watch", False)):
@@ -157,49 +207,11 @@ class GatherMixin:
         preloadedAIGatherNameSpace = None
         if pattern == "fuzzy_ai_gather":
             try:
-                fuzzyAIRuntimeDefaults = settingsManager.FUZZY_AI_RUNTIME_DEFAULTS
-                pattern_ai_gather_model = str(fieldSetting.get("ai_gather_model", self.setdat.get("ai_gather_model", "Standard")))
-                fuzzyAITokenRanking = settingsManager.loadFuzzyAITokenRanking(field, pattern_ai_gather_model)
-                pattern_capture_backend = fuzzyAIRuntimeDefaults["fuzzy_ai_capture_backend"]
-                pattern_confidence_threshold = fuzzyAIRuntimeDefaults["fuzzy_ai_confidence_threshold"]
-                pattern_sprinkler_confidence_threshold = fuzzyAIRuntimeDefaults["fuzzy_ai_sprinkler_confidence_threshold"]
-                pattern_min_token_distance = fuzzyAIRuntimeDefaults["fuzzy_ai_min_token_distance"]
-                pattern_idle_return_interval = fuzzyAIRuntimeDefaults["fuzzy_ai_idle_return_interval"]
-                pattern_no_token_recalibration_timeout = fuzzyAIRuntimeDefaults["fuzzy_ai_no_token_recalibration_timeout"]
-                pattern_movements_before_recalibration = fuzzyAIRuntimeDefaults["fuzzy_ai_movements_before_recalibration"]
-                pattern_sprinkler_arrival_threshold = fuzzyAIRuntimeDefaults["fuzzy_ai_sprinkler_arrival_threshold"]
-                pattern_max_sprinkler_distance = fuzzyAIRuntimeDefaults["fuzzy_ai_max_sprinkler_distance"]
-                pattern_sprinkler_rescan_attempts = fuzzyAIRuntimeDefaults["fuzzy_ai_sprinkler_rescan_attempts"]
-                pattern_sprinkler_rescan_delay = fuzzyAIRuntimeDefaults["fuzzy_ai_sprinkler_rescan_delay"]
-                pattern_debug_mode = fuzzyAIRuntimeDefaults["fuzzy_ai_debug_mode"]
-                pattern_record_video = fuzzyAIRuntimeDefaults["fuzzy_ai_record_video"]
-                pattern_record_video_fps = fuzzyAIRuntimeDefaults["fuzzy_ai_record_video_fps"]
-                pattern_ai_gather_model_file = str(fieldSetting.get("ai_gather_model_file", ""))
-                pattern_field_drift_compensation = bool(fieldSetting.get("field_drift_compensation", False))
-                pattern_field_dimensions = startLocationDimensions.get(normalized_field)
-                pattern_use_sprinkler_model_for_drift_compensation = bool(
-                    self.setdat.get("use_sprinkler_model_for_drift_compensation", False)
-                )
-                sprinklerLabelMap = {
-                    "basic": "Sprinkler",
-                    "silver": "Sprinkler",
-                    "golden": "Sprinkler",
-                    "gold": "Sprinkler",
-                    "diamond": "Sprinkler",
-                    "saturator": "Supreme",
-                    "supreme": "Supreme",
-                }
-                pattern_target_sprinkler_label = sprinklerLabelMap.get(
-                    str(self.setdat.get("sprinkler_type", "")).strip().lower(),
-                    "",
-                )
-                pattern_preferred_tokens = fieldSetting.get("fuzzy_ai_preferred_tokens", fuzzyAITokenRanking.get("preferred_tokens", ""))
-                pattern_ignored_tokens = fieldSetting.get("fuzzy_ai_ignored_tokens", fuzzyAITokenRanking.get("ignored_tokens", ""))
-                pattern_sprout_idle_square = isSproutGather
+                aiPatternVariables = self.aiGatherPatternVariables(field, fieldSetting, isSproutGather)
                 pattern_ai_warmup_only = True
                 if isSproutGather and pattern == "fuzzy_ai_gather":
                     self._fuzzy_ai_gather_state = {}
-                preloadedAIGatherNameSpace = {**locals(), **field_pattern_variables(fieldSetting), **vars(patternEnvironment)}
+                preloadedAIGatherNameSpace = {**locals(), **aiPatternVariables, **field_pattern_variables(fieldSetting), **vars(patternEnvironment)}
                 pattern = patternRunner.warmup(preloadedAIGatherNameSpace)
             except InterruptRequested:
                 raise
@@ -305,17 +317,9 @@ class GatherMixin:
             for _ in range(abs(delta)):
                 self.keyboard.press(rotationKey)
             patternYawApplied = True
-        def configureAIGatherCamera():
-            for _ in range(11):
-                self.keyboard.press("pageup", 0.01)
-                sleep(0.01)
-            for _ in range(3):
-                self.keyboard.press("pagedown", 0.01)
-                sleep(0.01)
-
         aiCameraConfigured = False
         if pattern in aiPatternLabels:
-            configureAIGatherCamera()
+            self.configureAIGatherCamera()
             aiCameraConfigured = True
         sproutFinalLootStart = None
         sproutFinalLootSeconds = self._sproutFinalLootSeconds()
@@ -360,7 +364,7 @@ class GatherMixin:
         if not altMode and fieldSetting.get("plant_sprout", False):
             self.ensure_shift_lock_off("sprouts")
             if pattern in aiPatternLabels and not aiCameraConfigured:
-                configureAIGatherCamera()
+                self.configureAIGatherCamera()
             initialSproutPlantResult = plantSproutBean()
             if initialSproutPlantResult == "limit":
                 self.logger.webhook("", "Sprout bean limit reached before planting", "orange", route_category="activities")
@@ -372,49 +376,9 @@ class GatherMixin:
         maxGatherTime = fieldSetting["mins"]*60
         gatherTimeLimit = "Until next task" if stopWhen else "Infinite" if infiniteGather else self.convertSecsToMinsAndSecs(maxGatherTime)
         returnType = "rejoin" if isHiveHubField else fieldSetting["return"]
-        fuzzyAIRuntimeDefaults = settingsManager.FUZZY_AI_RUNTIME_DEFAULTS
         pattern_blooms_ai_model = str(self.setdat.get("blooms_ai_model", "Standard"))
         pattern_pine_dupe_detection = str(fieldSetting.get("pine_dupe_detection", "Pixel"))
-        pattern_ai_gather_model = str(fieldSetting.get("ai_gather_model", self.setdat.get("ai_gather_model", "Standard")))
-        fuzzyAITokenRanking = settingsManager.loadFuzzyAITokenRanking(field, pattern_ai_gather_model)
-        pattern_capture_backend = fuzzyAIRuntimeDefaults["fuzzy_ai_capture_backend"]
-        pattern_confidence_threshold = fuzzyAIRuntimeDefaults["fuzzy_ai_confidence_threshold"]
-        pattern_sprinkler_confidence_threshold = fuzzyAIRuntimeDefaults["fuzzy_ai_sprinkler_confidence_threshold"]
-        pattern_min_token_distance = fuzzyAIRuntimeDefaults["fuzzy_ai_min_token_distance"]
-        pattern_idle_return_interval = fuzzyAIRuntimeDefaults["fuzzy_ai_idle_return_interval"]
-        pattern_no_token_recalibration_timeout = fuzzyAIRuntimeDefaults["fuzzy_ai_no_token_recalibration_timeout"]
-        pattern_movements_before_recalibration = fuzzyAIRuntimeDefaults["fuzzy_ai_movements_before_recalibration"]
-        pattern_sprinkler_arrival_threshold = fuzzyAIRuntimeDefaults["fuzzy_ai_sprinkler_arrival_threshold"]
-        pattern_max_sprinkler_distance = fuzzyAIRuntimeDefaults["fuzzy_ai_max_sprinkler_distance"]
-        pattern_sprinkler_rescan_attempts = fuzzyAIRuntimeDefaults["fuzzy_ai_sprinkler_rescan_attempts"]
-        pattern_sprinkler_rescan_delay = fuzzyAIRuntimeDefaults["fuzzy_ai_sprinkler_rescan_delay"]
-        pattern_debug_mode = fuzzyAIRuntimeDefaults["fuzzy_ai_debug_mode"]
-        pattern_record_video = fuzzyAIRuntimeDefaults["fuzzy_ai_record_video"]
-        pattern_record_video_fps = fuzzyAIRuntimeDefaults["fuzzy_ai_record_video_fps"]
-        pattern_ai_gather_model_file = str(fieldSetting.get("ai_gather_model_file", ""))
-        pattern_field_drift_compensation = bool(fieldSetting.get("field_drift_compensation", False))
-        pattern_field_dimensions = startLocationDimensions.get(normalized_field)
-        pattern_use_sprinkler_model_for_drift_compensation = bool(
-            self.setdat.get("use_sprinkler_model_for_drift_compensation", False)
-        )
-        pattern_ai_gather_model = str(fieldSetting.get("ai_gather_model", self.setdat.get("ai_gather_model", "Standard")))
-        pattern_ai_gather_model_file = str(fieldSetting.get("ai_gather_model_file", ""))
-        sprinklerLabelMap = {
-            "basic": "Sprinkler",
-            "silver": "Sprinkler",
-            "golden": "Sprinkler",
-            "gold": "Sprinkler",
-            "diamond": "Sprinkler",
-            "saturator": "Supreme",
-            "supreme": "Supreme",
-        }
-        pattern_target_sprinkler_label = sprinklerLabelMap.get(
-            str(self.setdat.get("sprinkler_type", "")).strip().lower(),
-            "",
-        )
-        pattern_preferred_tokens = fieldSetting.get("fuzzy_ai_preferred_tokens", fuzzyAITokenRanking.get("preferred_tokens", ""))
-        pattern_ignored_tokens = fieldSetting.get("fuzzy_ai_ignored_tokens", fuzzyAITokenRanking.get("ignored_tokens", ""))
-        pattern_sprout_idle_square = isSproutGather
+        aiPatternVariables = self.aiGatherPatternVariables(field, fieldSetting, isSproutGather)
         # monotonic, like the paused time it subtracts, so a clock change can't shorten a gather
         gatherSession = GatherSession(patternRunner, time.monotonic)
         gatherSession.start()
@@ -422,11 +386,11 @@ class GatherMixin:
         self.died = False
         #time to gather
         if preloadedAIGatherNameSpace is not None:
-            preloadedAIGatherNameSpace.update({**locals(), **field_pattern_variables(fieldSetting), **vars(patternEnvironment), "pattern_ai_warmup_only": False})
+            preloadedAIGatherNameSpace.update({**locals(), **aiPatternVariables, **field_pattern_variables(fieldSetting), **vars(patternEnvironment), "pattern_ai_warmup_only": False})
             preloadedAIGatherNameSpace["setPatternYaw"] = setPatternYaw
             gatherNameSpace = preloadedAIGatherNameSpace
         else:
-            gatherNameSpace = {**locals(), **field_pattern_variables(fieldSetting), **vars(patternEnvironment)}
+            gatherNameSpace = {**locals(), **aiPatternVariables, **field_pattern_variables(fieldSetting), **vars(patternEnvironment)}
             gatherNameSpace["setPatternYaw"] = setPatternYaw
         if isSproutGather:
             self.set_task_status("collect_sprouts", task="collect", field=field, activity="sprouts")
