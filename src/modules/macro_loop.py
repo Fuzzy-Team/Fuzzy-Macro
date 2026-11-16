@@ -142,8 +142,12 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         run.value = 0
         from modules.controls.keyboard import keyboard
         from modules.logging import log as logModule
-        keyboard.releaseMovement()
-        mouse.mouseUp()
+        # A tripped PyAutoGUI fail-safe must not hide the display error below.
+        for release in (keyboard.releaseMovement, mouse.mouseUp):
+            try:
+                release()
+            except Exception as releaseError:
+                print(f"Could not release input after the display error: {releaseError}")
         settings = settingsManager.loadMacroProfile()["settings"]
         logger = logModule.log(
             logQueue, logModule.delivery_uses_webhook(settings),
