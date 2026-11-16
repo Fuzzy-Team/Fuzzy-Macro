@@ -159,6 +159,7 @@ class EventDetectionMixin:
         
         if self.canDetectNight and isNight():
             self.night = True
+            self.moonSproutsStart = self.sproutBeansUsed
             self.logger.webhook("","Night detected","purple", "screen", ping_category="ping_night")
             time.sleep(200) #wait for night to end
             self.night = False

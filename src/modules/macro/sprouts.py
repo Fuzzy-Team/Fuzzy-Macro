@@ -201,6 +201,18 @@ class SproutMixin:
             self.logSproutBeanLimitReached("Sprout bean limit reached", "orange")
             return False
 
+        gatherLimit = self._sproutGatherBeanLimit()
+        if self.setdat.get("moon_sprouts_enable", False):
+            # Moon sprouts only appear at night: wait for the night detector, then plant the chosen amount.
+            try:
+                moonLimit = max(1, min(500, int(self.setdat.get("moon_sprouts_count", 5) or 5)))
+            except Exception:
+                moonLimit = 5
+            moonLeft = moonLimit - (self.sproutBeansUsed - self.moonSproutsStart)
+            if not self.night or moonLeft <= 0:
+                return False
+            gatherLimit = min(gatherLimit, moonLeft)
+
         field = str(self.setdat.get("sprouts_field", "sunflower") or "sunflower").replace("_", " ").strip().lower()
         if field not in startLocationDimensions:
             field = "sunflower"
@@ -243,14 +255,13 @@ class SproutMixin:
             "infinite_gather": True,
             "plant_sprout": True,
             "sprout_magic_bean_slot": slot,
-            "sprout_max_beans_per_gather": self._sproutGatherBeanLimit(),
+            "sprout_max_beans_per_gather": gatherLimit,
             "ai_gather_model": sproutModelName,
             "ai_gather_model_file": sproutModelFile,
             "fuzzy_ai_preferred_tokens": self.buildSproutTokenPriority(field),
             "fuzzy_ai_ignored_tokens": str(self.setdat.get("sprouts_ignored_tokens", "") or ""),
         }
         nextSessionBean = self.sproutBeansUsed + 1
-        gatherLimit = self._sproutGatherBeanLimit()
         sessionLimit = self._sproutBeanLimit()
         self.logger.webhook(
             "Sprouts",
