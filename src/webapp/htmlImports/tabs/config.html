@@ -25,7 +25,7 @@
   <div id="bss" class="standard-container sub-tab-panel active">
     <script>
       const parentBSS = document.getElementById("bss");
-      buildStandardContainer(parentBSS, "Basic", "", [
+      buildStandardContainer(parentBSS, "Hive", "", [
         {
           id: "preferred_hive_slot",
           title: "Preferred Hive Slot",
@@ -107,9 +107,18 @@
             triggerFunction: saveProfileTriggerFunction,
           },
         },
+        {
+          id: "pine_tree_fast_return",
+          title: "Fast Return Path",
+          desc: "Use an alternate glider path when returning from Pine Tree field to the hive. Faster than the default walk path",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
       ]);
 
-      buildStandardContainer(parentBSS, "Sprinkler", "", [
+      buildStandardContainer(parentBSS, "Hotbar Items", "", [
         {
           id: "sprinkler_type",
           title: "Sprinkler Type",
@@ -122,7 +131,7 @@
         },
         {
           id: "sprinkler_slot",
-          title: "Slot",
+          title: "Sprinkler Slot",
           desc: "The hotbar slot of the sprinkler",
           type: {
             name: "dropdown",
@@ -130,46 +139,6 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
-        {
-          id: "use_sprinkler_model_for_drift_compensation",
-          title: "Use Sprinkler Model For Field Drift Compensation",
-          desc: "Use AI to detect your sprinkler for field drift compensation instead of the color-based method. If the model cannot run, the macro falls back automatically.",
-          type: {
-            name: "checkbox",
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-        {
-          id: "ai_gather_model",
-          title: "AI Gather Model",
-          desc: "Choose the token detection model used by AI Gathering. Light and Mini automatically fall back to Standard if they cannot load.",
-          type: {
-            name: "dropdown",
-            data: [
-              "Standard",
-              { label: "Light (macOS 12+)", value: "Light" },
-              { label: "Mini (macOS 12+)", value: "Mini" },
-            ],
-            triggerFunction: saveGeneralTriggerFunction,
-          },
-        },
-          {
-            id: "blooms_ai_model",
-            title: "BloomsAI Model",
-            desc: "Choose the bloom and petal detector. Standard is most accurate; Light and Mini trade accuracy for faster inference.",
-            type: {
-              name: "dropdown",
-              data: [
-                "Standard",
-                { label: "Light (Faster)", value: "Light" },
-                { label: "Mini (Fastest)", value: "Mini" },
-              ],
-              triggerFunction: saveGeneralTriggerFunction,
-            },
-          },
-      ]);
-
-      buildStandardContainer(parentBSS, "Gumdrops", "", [
         {
           id: "goo_slot",
           title: "Gumdrop Slot",
@@ -180,9 +149,6 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
-      ]);
-
-      buildStandardContainer(parentBSS, "Glitter", "", [
         {
           id: "glitter_slot",
           title: "Glitter Slot",
@@ -195,7 +161,7 @@
         },
       ]);
 
-      buildStandardContainer(parentBSS, "Balloon", "", [
+      buildStandardContainer(parentBSS, "Converting", "", [
         {
           id: "convert_balloon",
           title: "Convert Balloon",
@@ -228,21 +194,6 @@
             triggerFunction: saveProfileTriggerFunction,
           },
         },
-      ]);
-
-      buildStandardContainer(parentBSS, "Pine Tree", "", [
-        {
-          id: "pine_tree_fast_return",
-          title: "Fast Return Path",
-          desc: "Use an alternate glider path when returning from Pine Tree field to the hive. Faster than the default walk path",
-          type: {
-            name: "checkbox",
-            triggerFunction: saveProfileTriggerFunction,
-          },
-        },
-      ]);
-
-      buildStandardContainer(parentBSS, "Preferences", "", [
         {
           id: "convert_wait",
           title: "Wait X secs after converting",
@@ -275,18 +226,64 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
+      ]);
+
+      buildStandardContainer(parentBSS, "AI Models", "", [
         {
-          id: "coconut_crab_max_kill_time",
-          title: "Coconut Crab Max Kill Time (Mins)",
-          desc: "Maximum minutes to attempt killing Coconut Crab before timing out.",
+          id: "use_sprinkler_model_for_drift_compensation",
+          title: "Use Sprinkler Model For Field Drift Compensation",
+          desc: "Use AI to detect your sprinkler for field drift compensation instead of the color-based method. If the model cannot run, the macro falls back automatically.",
           type: {
-            name: "textbox",
-            inputType: "int",
-            inputLimit: 3,
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "ai_gather_model",
+          title: "AI Gather Model",
+          desc: "Choose the token detection model used by AI Gathering. Light and Mini automatically fall back to Standard if they cannot load.",
+          type: {
+            name: "dropdown",
+            data: [
+              "Standard",
+              { label: "Light (macOS 12+)", value: "Light" },
+              { label: "Mini (macOS 12+)", value: "Mini" },
+            ],
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "blooms_ai_model",
+          title: "BloomsAI Model",
+          desc: "Choose the bloom and petal detector. Standard is most accurate; Light and Mini trade accuracy for faster inference.",
+          type: {
+            name: "dropdown",
+            data: [
+              "Standard",
+              { label: "Light (Faster)", value: "Light" },
+              { label: "Mini (Fastest)", value: "Mini" },
+            ],
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
       ]);
+
+      parentBSS.insertAdjacentHTML("beforeend", `
+        <details class="model-downloads">
+          <summary>
+            <span>AI Models</span>
+            <span id="model-download-summary" class="model-download-summary">Checking…</span>
+          </summary>
+          <div class="model-download-content">
+            <p>Download only the AI models that are missing from this Mac.</p>
+            <div class="model-download-actions">
+              <button id="download-missing-models-button" class="purple-button" type="button" onclick="downloadMissingModels()">Download Missing Models</button>
+            </div>
+            <div id="model-download-status" class="model-download-status" aria-live="polite">Checking installed models…</div>
+            <div id="model-download-list" class="model-download-list"></div>
+          </div>
+        </details>
+      `);
     </script>
   </div>
   <div id="priorities" class="standard-container sub-tab-panel" style="display: none">
@@ -828,23 +825,6 @@
           },
         },
       ]);
-      
-      parentOther.insertAdjacentHTML("beforeend", `
-        <details class="model-downloads">
-          <summary>
-            <span>AI Models</span>
-            <span id="model-download-summary" class="model-download-summary">Checking…</span>
-          </summary>
-          <div class="model-download-content">
-            <p>Download only the AI models that are missing from this Mac.</p>
-            <div class="model-download-actions">
-              <button id="download-missing-models-button" class="purple-button" type="button" onclick="downloadMissingModels()">Download Missing Models</button>
-            </div>
-            <div id="model-download-status" class="model-download-status" aria-live="polite">Checking installed models…</div>
-            <div id="model-download-list" class="model-download-list"></div>
-          </div>
-        </details>
-      `);
     </script>
   </div>
   <div id="discord" class="standard-container sub-tab-panel" style="display: none">
