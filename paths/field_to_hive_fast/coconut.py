@@ -1,0 +1,12 @@
+# coconut to the ramp side of the hive row. Starts at the center of the field facing the hive (after faceDirection south), ends facing the same way.
+self.keyboard.tileWalk("d", 20.25)
+self.keyboard.keyDown("s", False)
+self.keyboard.tileWait(22.5)
+self.keyboard.press("space", 0.05)
+self.keyboard.tileWait(31.5)
+self.keyboard.keyUp("s", False)
+self.keyboard.tileWalk("a", 33.75)
+self.keyboard.tileWalk("w", 13.5)
+self.keyboard.tileWalk("s", 1.5)
+self.keyboard.tileWalk("d", 10)
+self.keyboard.tileWalk("s", 2.7)

@@ -1,0 +1,10 @@
+# strawberry to the ramp side of the hive row. Starts at the center of the field facing the hive (after faceDirection south), ends facing the same way.
+self.keyboard.tileWalk("s", 12)
+self.keyboard.multiTileWalk(["s", "a"], 15)
+self.keyboard.tileWalk("a", 18)
+self.keyboard.tileWalk("w", 15)
+self.keyboard.tileWalk("a", 6)
+self.keyboard.tileWalk("w", 95)
+self.keyboard.tileWalk("s", 1.5)
+self.keyboard.tileWalk("d", 35)
+self.keyboard.tileWalk("s", 2.7)
