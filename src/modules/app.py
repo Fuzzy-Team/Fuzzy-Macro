@@ -896,8 +896,14 @@ def runApp(macroTarget):
             # checking every few seconds is enough to catch a disconnect
             disconnectCooldownUntil = time.time() + 5
             img = adjustImage("./images/menu", "disconnect", screenInfo["display_type"])
-            wmx, wmy, wmw, wmh = getWindowSize("roblox roblox")
-            if locateImageOnScreen(img, wmx+wmw/3, wmy+wmh/2.8, wmw/2.3, wmh/5, 0.7):
+            try:
+                wmx, wmy, wmw, wmh = getWindowSize("roblox roblox")
+                disconnected = locateImageOnScreen(img, wmx+wmw/3, wmy+wmh/2.8, wmw/2.3, wmh/5, 0.7)
+            except virtual_display.DisplayError:
+                # Roblox has no window on the virtual display yet (starting or rejoining).
+                # A failing display is stopped by the display check above.
+                disconnected = False
+            if disconnected:
                 print("disconnected")
                 run.value = 4
                 disconnectCooldownUntil = time.time() + 300  # 5 min cooldown
