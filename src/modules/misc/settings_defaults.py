@@ -66,6 +66,7 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'manual_planters_collect_full': False,
  'manual_planters_check': False,
  'planters_collect_loot': True,
+ 'planters_fast_paths': True,
  'cycle1_1_planter': 'none',
  'cycle1_2_planter': 'none',
  'cycle1_3_planter': 'none',
