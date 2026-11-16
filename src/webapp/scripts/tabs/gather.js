@@ -826,6 +826,13 @@ $("#gather-placeholder")
     await saveFuzzyAITokenPopup();
     closeFuzzyAITokenPopup();
   })
+  .on("click", "#select-all-fuzzy-ai-tokens-button, #select-none-fuzzy-ai-tokens-button", function(event) {
+    event.preventDefault();
+    const checked = event.currentTarget.id === "select-all-fuzzy-ai-tokens-button";
+    document.querySelectorAll(".fuzzy-ai-token-enabled").forEach((box) => {
+      box.checked = checked;
+    });
+  })
   .on("click", "#fuzzy-ai-token-modal", function(event) {
     if (event.target === this) {
       closeFuzzyAITokenPopup();
