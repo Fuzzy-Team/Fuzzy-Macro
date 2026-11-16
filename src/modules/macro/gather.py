@@ -716,14 +716,14 @@ class GatherMixin:
                         self.logger.webhook("Sprouts", "Final sprout loot collection finished. Resetting to hive.", "light green", route_category="activities")
                         self.reset()
                         return
-                elif not altMode and self.setdat["Auto_Field_Boost"] and not self.AFBLIMIT and self.canAFBInterruptGather():
+                elif not altMode and self.setdat.get("macro_mode") != "resources" and self.setdat["Auto_Field_Boost"] and not self.AFBLIMIT and self.canAFBInterruptGather():
                     # stopGather already turns shift lock off, so AFB must not toggle it again
                     stopGather()
                     self.AFB(gatherInterrupt=True, turnOffShiftLock=False)
                     return
                 #check for gather interrupts
                 elif (
-                    self.setdat.get("macro_mode", "normal") not in ("quest", "alt")
+                    self.setdat.get("macro_mode", "normal") not in ("quest", "alt", "boost")
                     and self.night
                     and self.setdat["stinger_hunt"]
                 ):
@@ -733,7 +733,7 @@ class GatherMixin:
                     self.reset(convert=False)
                     break
                 elif (
-                    self.setdat.get("macro_mode", "normal") not in ("quest", "alt")
+                    self.setdat.get("macro_mode", "normal") not in ("quest", "alt", "boost")
                     and self.setdat["mondo_buff"]
                     and self.hasMondoRespawned()
                     and self.setdat["mondo_buff_interrupt_gathering"]
@@ -744,7 +744,7 @@ class GatherMixin:
                     self.collectMondoBuff()
                     break
                 elif (
-                    self.setdat.get("macro_mode", "normal") not in ("quest", "alt")
+                    self.setdat.get("macro_mode", "normal") not in ("quest", "alt", "boost")
                     and self.setdat["sticker_stack"]
                     and self.setdat.get("sticker_stack_interrupt_gathering", False)
                     and self.hasStickerStackRespawned()
