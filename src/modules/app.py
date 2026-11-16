@@ -642,6 +642,8 @@ def runApp(macroTarget):
                 "field": "Field Mode",
                 "quest": "Quest Mode",
                 "bug": "Bug Run Mode",
+                "boost": "Boost Mode",
+                "resources": "Resources Mode",
                 "vic": "Vic Hop Mode",
             }
             start_details = [

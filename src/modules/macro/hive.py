@@ -138,7 +138,7 @@ class HiveMixin:
 
             if (
                 self.vicFields
-                and self.setdat.get("macro_mode", "normal") not in ("quest", "alt", "vic")
+                and self.setdat.get("macro_mode", "normal") not in ("quest", "alt", "vic", "boost")
                 and self.night
                 and self.setdat["stinger_hunt"]
             ):

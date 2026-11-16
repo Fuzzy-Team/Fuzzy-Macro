@@ -163,6 +163,15 @@ def getUserDataPath(filename):
     """Get an absolute path under the runtime user data directory."""
     return os.path.join(getUserDataDir(), filename)
 
+def modeRunsTask(mode, taskId):
+    """Boost and Resources modes run only some task types from the task list; other modes run everything."""
+    if mode == "boost":
+        return taskId.startswith("gather_") or taskId in (
+            "auto_field_boost", "collect_blue_booster", "collect_red_booster", "collect_mountain_booster")
+    if mode == "resources":
+        return taskId.startswith(("kill_", "collect_")) or taskId in ("ant_challenge", "stinger_hunt", "mondo_buff")
+    return True
+
 def getDefaultProfileSettings():
     """Return a deep copy of hardcoded profile settings defaults."""
     return deepcopy_default(DEFAULT_PROFILE_SETTINGS)

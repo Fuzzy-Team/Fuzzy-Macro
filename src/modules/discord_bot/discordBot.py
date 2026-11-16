@@ -1134,6 +1134,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         ("quest", "Quests"),
         ("field", "Field"),
         ("bug", "Bug Runs"),
+        ("boost", "Boost"),
+        ("resources", "Resources"),
         ("vic", "Vic Hop"),
     ]
 
@@ -1651,6 +1653,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         if macro_mode == "quest" and not task_id.startswith("quest_"):
             return False
         if macro_mode == "bug" and not (task_id.startswith("kill_") or task_id in ("ant_challenge", "stinger_hunt")):
+            return False
+        if not settingsManager.modeRunsTask(macro_mode, task_id):
             return False
 
         return _is_task_toggle_enabled(task_id, settings)
@@ -2653,6 +2657,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 "quest": "Quests",
                 "field": "Field",
                 "bug": "Bug Runs",
+                "boost": "Boost",
+                "resources": "Resources",
                 "vic": "Vic Hop",
             }.get(settings.get("macro_mode", "normal"), settings.get("macro_mode", "normal"))
 
@@ -3843,6 +3849,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         app_commands.Choice(name="quests", value="quest"),
         app_commands.Choice(name="field", value="field"),
         app_commands.Choice(name="bug runs", value="bug"),
+        app_commands.Choice(name="boost", value="boost"),
+        app_commands.Choice(name="resources", value="resources"),
         app_commands.Choice(name="vic hop", value="vic"),
     ])
     async def macro_mode(interaction: discord.Interaction, mode: str):
@@ -3863,6 +3871,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 "quest": "Quest",
                 "field": "Field",
                 "bug": "Bug Runs",
+                "boost": "Boost",
+                "resources": "Resources",
                 "vic": "Vic Hop"
             }
 
@@ -3882,7 +3892,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         embed.add_field(name="**Quest Management**", value="`/quests` - View quest configuration\n`/quest <quest> <true/false>` - Enable or disable a quest", inline=False)
 
-        embed.add_field(name="**Macro Mode**", value="`/macromode <normal/alt/quests/field>` - Set macro mode. Alt mode only gathers slot 1 and ignores the task list and automatic gather interrupts.", inline=False)
+        embed.add_field(name="**Macro Mode**", value="`/macromode <normal/alt/quests/field/bug runs/boost/resources/vic hop>` - Set macro mode. Alt mode only gathers slot 1 and ignores the task list and automatic gather interrupts.", inline=False)
 
         embed.add_field(name="**Collectibles**", value="`/collectibles` - View collectibles\n`/collectible <item> <true/false>` - Enable or disable collectible", inline=False)
 

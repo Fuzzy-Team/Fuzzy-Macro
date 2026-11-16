@@ -318,8 +318,21 @@ async function loadTasks() {
     return;
   }
 
+  // Boost and Resources modes show only their own task types (same rule as the macro loop)
+  const boosters = ["collect_blue_booster", "collect_red_booster", "collect_mountain_booster"];
+  const modeRunsTask = {
+    boost: (id) => id.startsWith("gather_") || id === "auto_field_boost" || boosters.includes(id),
+    resources: (id) =>
+      id.startsWith("kill_") || id.startsWith("collect_") || ["ant_challenge", "stinger_hunt", "mondo_buff"].includes(id),
+  }[setdat.macro_mode];
+  if (setdat.macro_mode === "boost") {
+    out += taskHTML("Boost Mode", "🚀 Boosters, boost buffs and gathering only");
+  } else if (setdat.macro_mode === "resources") {
+    out += taskHTML("Resources Mode", "📦 Kills and collects only");
+  }
+
   // Get priority order from settings, or use default order if not set
-  const priorityOrder = setdat.task_priority_order || [];
+  const priorityOrder = (setdat.task_priority_order || []).filter((id) => !modeRunsTask || modeRunsTask(id));
 
   // Helper function to check if a task is enabled and get its display info
   function getTaskDisplayInfo(taskId) {
@@ -527,7 +540,7 @@ async function loadTasks() {
         }
       }
     }
-  } else {
+  } else if (!modeRunsTask) {
     // Fallback to old order for non-gather tasks if no priority order is set
     //load quest givers
     for (const [k, v] of Object.entries(questGiverEmojis)) {

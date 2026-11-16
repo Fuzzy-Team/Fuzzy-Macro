@@ -359,6 +359,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             # Quest and Alt modes stay isolated from priority tasks.
             if not is_stopped() and (
                 macro.setdat.get("macro_mode", "normal") not in ("quest", "alt", "vic")
+                and modeRuns("stinger_hunt")
                 and macro.setdat["stinger_hunt"]
                 and ((getattr(macro, "_viciousAttackTarget", None)
                       and time.time() - macro._viciousAttackTarget[1] <= 180)
@@ -369,6 +370,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 taskCompleted = True
             if not is_stopped() and (
                 macro.setdat.get("macro_mode", "normal") not in ("quest", "alt", "vic")
+                and modeRuns("mondo_buff")
                 and macro.setdat["mondo_buff"]
                 and macro.hasMondoRespawned()
             ):
@@ -381,7 +383,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 taskCompleted = True
             
             #auto field boost (can be disabled per-call via allowAFB)
-            if not is_stopped() and allowAFB and macro.setdat["Auto_Field_Boost"] and not macro.AFBLIMIT:
+            if not is_stopped() and allowAFB and modeRuns("auto_field_boost") and macro.setdat["Auto_Field_Boost"] and not macro.AFBLIMIT:
                 if macro.hasAFBRespawned("AFB_dice_cd", macro.setdat["AFB_rebuff"]*60) or macro.hasAFBRespawned("AFB_glitter_cd", macro.setdat["AFB_rebuff"]*60-30):
                     macro.AFB(gatherInterrupt=False)
                     taskCompleted = True
@@ -553,14 +555,16 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         return True
 
     #macro.rejoin()
+    def modeRuns(taskId):
+        return settingsManager.modeRunsTask(macro.setdat.get("macro_mode", "normal"), taskId)
+
     def get_task_list_order(settings):
         task_list = settings.get("task_list", None)
-        if isinstance(task_list, list):
-            return task_list
-        task_queue = settings.get("task_queue", None)
-        if isinstance(task_queue, list):
-            return task_queue
-        return settings.get("task_priority_order", [])
+        if not isinstance(task_list, list):
+            task_list = settings.get("task_queue", None)
+        if not isinstance(task_list, list):
+            task_list = settings.get("task_priority_order", [])
+        return [taskId for taskId in task_list if modeRuns(taskId)]
 
     def completedQuestGivers():
         """Givers whose last quest-menu read showed every objective complete, in giver order."""
@@ -677,9 +681,9 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         if macro.hasScheduledRejoinArrived():
             return True
         mode = macro.setdat.get("macro_mode", "normal")
-        if mode not in ("quest", "alt") and macro.setdat.get("mondo_buff", False) and macro.hasMondoRespawned():
+        if mode not in ("quest", "alt") and modeRuns("mondo_buff") and macro.setdat.get("mondo_buff", False) and macro.hasMondoRespawned():
             return True
-        if mode != "bug" and any(giver not in questCache and canClaimTimedBearQuest(giver)
+        if mode not in ("bug", "boost", "resources") and any(giver not in questCache and canClaimTimedBearQuest(giver)
                                  for giver in quest_giver_order(macro.setdat)):
             return True
         tasks = macro.questTaskWatchers if mode == "quest" else get_task_list_order(macro.setdat)
@@ -934,13 +938,18 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
             # Skip to next iteration
             continue
 
+        # Boost and Resources modes run only their own task types, so quests, planter gathers
+        # and the old-order fallback below are skipped.
+        taskTypeMode = macro.setdat.get("macro_mode", "normal") in ("boost", "resources")
+
         # Discover support tasks without claiming quests out of priority order.
-        for giver in quest_giver_order(macro.setdat):
-            if canClaimTimedBearQuest(giver):
-                requiredTasks, _ = handleQuest(giver, executeQuest=False)
-                for task in requiredTasks:
-                    macro.setdat[task] = True
-        runReadyQuestInterruptMobs()
+        if not taskTypeMode:
+            for giver in quest_giver_order(macro.setdat):
+                if canClaimTimedBearQuest(giver):
+                    requiredTasks, _ = handleQuest(giver, executeQuest=False)
+                    for task in requiredTasks:
+                        macro.setdat[task] = True
+            runReadyQuestInterruptMobs()
 
         # Helper function for manual planters
         def goToNextCycle(cycle, slot):
@@ -1819,7 +1828,7 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 # If no tasks were executed, break the loop
                 if not anyTaskExecuted:
                     break
-        else:
+        elif not taskTypeMode:
             # Fallback to old order if no priority order is set
             #collect
             for k, _ in macroModule.collectData.items():
@@ -1834,6 +1843,12 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
                 blenderData = loadBlenderData()
                 if blenderData["collectTime"] > -1 and time.time() > blenderData["collectTime"]:
                     runTask(macro.blender, args=(blenderData,))
+
+        if taskTypeMode:
+            if taskCompleted:
+                mouse.click()
+            waitForReadyTask()
+            continue
 
         allGatheredFields = runQuestGathers()
 
