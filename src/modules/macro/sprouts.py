@@ -203,13 +203,13 @@ class SproutMixin:
 
         gatherLimit = self._sproutGatherBeanLimit()
         if self.setdat.get("moon_sprouts_enable", False):
-            # Moon sprouts only appear at night: wait for the night check, then plant the chosen amount.
+            # Moon sprouts only appear at night: wait for the night detector, then plant the chosen amount.
             try:
                 moonLimit = max(1, min(500, int(self.setdat.get("moon_sprouts_count", 5) or 5)))
             except Exception:
                 moonLimit = 5
             moonLeft = moonLimit - (self.sproutBeansUsed - self.moonSproutsStart)
-            if not self.night or moonLeft <= 0 or not self.confirmNight():
+            if not self.night or moonLeft <= 0:
                 return False
             gatherLimit = min(gatherLimit, moonLeft)
 
