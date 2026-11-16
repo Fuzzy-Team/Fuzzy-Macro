@@ -925,6 +925,8 @@ class GatherMixin:
                 self.logger.webhook("",f"Walking back to hive: {field.title()}", "light blue")
                 if field == "pine tree" and self.setdat.get("pine_tree_fast_return", False):
                     pathResult = self.runPath("field_to_hive/pine tree fast")
+                elif self.setdat.get("fast_return_paths", False) and os.path.isfile(f"../paths/field_to_hive_fast/{field}.py"):
+                    pathResult = self.runPath(f"field_to_hive_fast/{field}")
                 else:
                     pathResult = self.runPath(f"field_to_hive/{field}")
             finally:

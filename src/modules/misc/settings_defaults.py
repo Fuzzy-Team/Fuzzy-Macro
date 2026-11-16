@@ -43,6 +43,7 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'haste_compensation': True,
  'pine_tree_fast_return': False,
  'walk_to_fields': False,
+ 'fast_return_paths': False,
  'stump_snail': False,
  'ladybug': False,
  'rhinobeetle': False,
