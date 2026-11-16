@@ -53,6 +53,16 @@
             </form>
             <form style="display: flex; align-items:flex-start; justify-content: space-between; padding-right: 5%; margin-top:1rem">
                 <div style="width: 70%;">
+                    <label>Fast Planter Paths</label>
+                    <p>Walk straight from one planter field to the next after placing a planter. Disable this to reset and cannon to every field instead.</p>
+                </div>
+                <label class="checkbox-container" style="margin-top: 0.6rem;">
+                    <input type="checkbox" id="manual_planters_fast_paths" data-setting-id="planters_fast_paths" onchange="saveSetting(this, 'profile')">
+                    <span class="checkmark"></span>
+                </label>
+            </form>
+            <form style="display: flex; align-items:flex-start; justify-content: space-between; padding-right: 5%; margin-top:1rem">
+                <div style="width: 70%;">
                     <label>Planter check</label>
                     <p>Check inventory after looting planters and make sure that the planter was in fact collected.</p>
                 </div>
@@ -116,6 +126,16 @@
                 </div>
                 <label class="checkbox-container" style="margin-top: 0.6rem;">
                     <input type="checkbox" id="auto_planters_collect_loot" data-setting-id="planters_collect_loot" onchange="saveSetting(this, 'profile')">
+                    <span class="checkmark"></span>
+                </label>
+            </form>
+            <form style="display: flex; align-items:flex-start; justify-content: space-between; padding-right: 5%; margin-top:1rem">
+                <div style="width: 70%;">
+                    <label>Fast Planter Paths</label>
+                    <p>Walk straight from one planter field to the next after placing a planter. Disable this to reset and cannon to every field instead.</p>
+                </div>
+                <label class="checkbox-container" style="margin-top: 0.6rem;">
+                    <input type="checkbox" id="auto_planters_fast_paths" data-setting-id="planters_fast_paths" onchange="saveSetting(this, 'profile')">
                     <span class="checkmark"></span>
                 </label>
             </form>

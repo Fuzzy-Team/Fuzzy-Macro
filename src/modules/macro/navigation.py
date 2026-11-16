@@ -112,8 +112,10 @@ class NavigationMixin:
 
     #after a planter is placed the player stands at its spot and location is "planter <field>".
     #paths/field_to_field/<from>/<to>.py starts at the center of <from> facing north and ends like cannon_to_field/<to>.py
-    #returns None unless the player just placed a planter and a path exists for the pair
+    #returns None unless fast planter paths are on, the player just placed a planter and a path exists for the pair
     def directPath(self, field, start=None):
+        if not self.setdat.get("planters_fast_paths", True):
+            return None
         if start is None:
             if not self.location.startswith("planter "):
                 return None
