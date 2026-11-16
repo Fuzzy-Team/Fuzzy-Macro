@@ -29,6 +29,9 @@ sprinklerCount = {
 STUDS_PER_MS = 18/1000
 STUDS_PER_TILE = 4
 
+#sprinklers can't be placed within 8 tiles of each other unless placed middair. One more tile covers walking error
+MIN_SPRINKLER_GAP = 9
+
 #where to place each sprinkler so every one covers its own part of the field
 #the field is split into equal zones, one per sprinkler: 2 and 3 sprinklers are strips along the longer side, 4 is a square
 #fieldDimensions is the [length, width] from startLocationDimensions
@@ -122,22 +125,25 @@ class GatherMixin:
     #walk to each spot and place one sprinkler there, then walk back to where the player started
     def placeSprinklersSpread(self, sprinklerSlot, spots, startOffset):
         x, y = startOffset
-        for i, (spotX, spotY) in enumerate(spots):
+        placed = []
+        for spotX, spotY in spots:
             if not self.walkTiles(spotX - x, spotY - y):
                 return False
             x, y = spotX, spotY
-            if i == 0:
-                #the first one goes on the ground, and checks if its in field
+            if any(max(abs(spotX - px), abs(spotY - py)) < MIN_SPRINKLER_GAP for px, py in placed):
+                #too close to an earlier sprinkler, so place middair. Sprinklers have a 1 second cooldown, so a
+                #1 second window places only one here and never pushes out the previous spot's sprinkler
+                if not self.jumpAndPlaceSprinklers(sprinklerSlot, 1):
+                    return False
+            else:
                 self.keyboard.press(sprinklerSlot)
                 time.sleep(1)
                 if is_stopped():
                     return False
-                if self.blueTextImageSearch("notinfield"):
+                #the first one also checks if its in field
+                if not placed and self.blueTextImageSearch("notinfield"):
                     return False
-            #the rest are placed middair. Sprinklers have a 1 second cooldown, so a 1 second window places only
-            #one here and never pushes out the previous spot's sprinkler
-            elif not self.jumpAndPlaceSprinklers(sprinklerSlot, 1):
-                return False
+            placed.append((spotX, spotY))
         #walk back to the start location, where gathering begins
         return self.walkTiles(startOffset[0] - x, startOffset[1] - y)
 
