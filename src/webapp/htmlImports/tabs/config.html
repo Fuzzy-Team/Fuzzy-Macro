@@ -644,6 +644,26 @@
           },
         },
         {
+          id: "home_logs_position",
+          title: "Logs Position",
+          desc: "Show the Logs on the right of the Tasks, or below them. Drag the edge between panels on the Home tab to resize them. Double-click an edge to reset it.",
+          type: {
+            name: "dropdown",
+            data: ["Right", "Bottom"],
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "reset_home_layout_button",
+          title: "Reset Home Layout",
+          desc: "Puts the Logs back on the right and the Home panels back to their original sizes.",
+          type: {
+            name: "button",
+            text: "Reset Layout",
+            triggerFunction: "resetHomeLayout()",
+          },
+        },
+        {
           id: "hidden_patterns",
           title: "Hidden Patterns",
           desc: "Patterns selected here are hidden from the pattern selector in the Gather tab. A field that already uses a hidden pattern keeps showing it.",
