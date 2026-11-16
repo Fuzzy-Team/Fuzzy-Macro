@@ -5,7 +5,9 @@ import modules.logging.log as logModule
 import modules.misc.settingsManager as settingsManager
 import modules.screen.ocr as ocr
 from modules.controls.sleep import pause_aware_time as time
+from modules.screen.imageSearch import captureRegionBGR
 from modules.screen.screenshot import mssScreenshot
+from modules.macro.events import BUFF_BAND_HEIGHT
 from modules.reports.buffs import BUFF_RENDER_CONFIG, FIELD_BOOST_BUFFS
 from modules.reports.live_gather import LiveGatherReport, LiveQuestProgressReport
 
@@ -147,6 +149,9 @@ class ReportMixin:
                 uptimeBearBuffs = self.hourlyReport.uptimeBearBuffs
                 monitoredBuffs = set(self.hourlyReport.configuredUptimeBuffDataKeys(self.setdat))
                 selectedUptimeRows = set(self.hourlyReport.configuredUptimeBuffs)
+                monitoredFieldBoosts = [key for key in FIELD_BOOST_BUFFS if key in monitoredBuffs]
+                # full-height buff band for the field icons, taken right after `screen` so both see the same buff bar
+                fieldBand = captureRegionBGR(self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw, BUFF_BAND_HEIGHT) if monitoredFieldBoosts else None
 
                 sampleValues = {}
                 def parseOcrBuffValue(value, default=1):
@@ -200,7 +205,6 @@ class ReportMixin:
                         x += 44*self.multi
                 #print(bd.detectBuffColorInImage(screen, 0xff242424, variation=12, minSize=(3*2,2*2), show=True))
 
-                monitoredFieldBoosts = [key for key in FIELD_BOOST_BUFFS if key in monitoredBuffs]
                 if monitoredFieldBoosts or any(buff in monitoredBuffs for buff in ("blue_boost", "red_boost", "white_boost")):
                     x = screen.shape[1]
                     for _ in range(3):
@@ -229,7 +233,7 @@ class ReportMixin:
                                 sampleValues[buffType] = value
                             if isFieldTile:
                                 # tiles are 40px apart, so this crop holds one tile of the full-height buff band
-                                tile = self.captureBuffBand()[:, max(0, int(x-40*self.multi)):int(x)]
+                                tile = fieldBand[:, max(0, int(x-40*self.multi)):int(x)]
                                 for key in monitoredFieldBoosts:
                                     if self.boostIconVisible(tile, FIELD_BOOST_BUFFS[key]):
                                         sampleValues[key] = value
