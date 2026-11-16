@@ -597,9 +597,11 @@ def loadFuzzyAITokenRanking(field_name, model="standard"):
         ranking = field_rankings.get(model, {})
     if not isinstance(ranking, dict):
         ranking = {}
+    # An empty ignored list is a real choice (ignore nothing), so only a missing one gets the default.
+    ignored = ranking.get("ignored_tokens")
     return {
         "preferred_tokens": ranking.get("preferred_tokens") or defaults["preferred_tokens"],
-        "ignored_tokens": ranking.get("ignored_tokens") or defaults["ignored_tokens"],
+        "ignored_tokens": defaults["ignored_tokens"] if ignored is None else ignored,
     }
 
 def saveFuzzyAITokenRanking(field_name, ranking, model="standard"):
