@@ -1,5 +1,6 @@
 # Starts at the foot of the hive ramp. Jump onto the ramp, run right along the top, hop the ledges and the rocks, then forward to the center.
-def jump(seconds):
+#paths run with self only in the local namespace, so bind it for the helper
+def jump(seconds, self=self):
     self.keyboard.press("space", seconds)
 
 try:
