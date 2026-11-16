@@ -31,6 +31,9 @@ NATRO_BUFF_CHARACTER_TEMPLATES = {
 # "multi": combined row — color_or_colors is list of (data_key, rgb)
 BUFF_RENDER_CONFIG = {
     "boost":         ("multi",     10,  [("blue_boost",(77,147,193)),("red_boost",(200,90,80)),("white_boost",(220,220,220))], "boost_buff"),
+    "pine_tree_boost":   ("stackable", 4, (34,  139, 34),  "pine_tree_boost_buff"),
+    "bamboo_boost":      ("stackable", 4, (120, 200, 80),  "bamboo_boost_buff"),
+    "blue_flower_boost": ("stackable", 4, (60,  100, 255), "blue_flower_boost_buff"),
     "haste":         ("stackable", 10,  (210, 210, 210), "haste_buff"),
     "focus":         ("stackable", 10,  (30,  191, 5),   "focus_buff"),
     "bomb_combo":    ("stackable", 10,  (160, 160, 160), "bomb_combo_buff"),
@@ -53,6 +56,15 @@ BUFF_RENDER_CONFIG = {
     "scorching_star": ("binary",   1,   (255, 52,  0),   "scorching_star_buff"),
     "gummy_star":    ("binary",    1,   (241, 145, 255), "gummy_star_buff"),
     "guiding":       ("binary",    1,   (255, 255, 128), "guiding_buff"),
+}
+
+
+# Uptime rows that split the blue field boost tiles by field. Each row reads the same stack count as the
+# "boost" row, for the tile whose icon matches the field (row key -> field name in BUFF_BAR_BOOST_FIELDS).
+FIELD_BOOST_BUFFS = {
+    "pine_tree_boost": "pine tree",
+    "bamboo_boost": "bamboo",
+    "blue_flower_boost": "blue flower",
 }
 
 

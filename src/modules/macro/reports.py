@@ -6,7 +6,7 @@ import modules.misc.settingsManager as settingsManager
 import modules.screen.ocr as ocr
 from modules.controls.sleep import pause_aware_time as time
 from modules.screen.screenshot import mssScreenshot
-from modules.reports.buffs import BUFF_RENDER_CONFIG
+from modules.reports.buffs import BUFF_RENDER_CONFIG, FIELD_BOOST_BUFFS
 from modules.reports.live_gather import LiveGatherReport, LiveQuestProgressReport
 
 
@@ -200,7 +200,8 @@ class ReportMixin:
                         x += 44*self.multi
                 #print(bd.detectBuffColorInImage(screen, 0xff242424, variation=12, minSize=(3*2,2*2), show=True))
 
-                if any(buff in monitoredBuffs for buff in ("blue_boost", "red_boost", "white_boost")):
+                monitoredFieldBoosts = [key for key in FIELD_BOOST_BUFFS if key in monitoredBuffs]
+                if monitoredFieldBoosts or any(buff in monitoredBuffs for buff in ("blue_boost", "red_boost", "white_boost")):
                     x = screen.shape[1]
                     for _ in range(3):
                         res = self.buffDetector.detectBuffColorInImage(screen, uptimeBuffsColors["boost"][0], uptimeBuffsColors["boost"][1], y1=30*self.multi, x2=x, variation=uptimeBuffsColorVariations.get("boost", 0), searchDirection=7)
@@ -215,14 +216,23 @@ class ReportMixin:
                         else:
                             buffType = "white_boost"
 
-                        if buffType in monitoredBuffs:
+                        isFieldTile = buffType == "blue_boost" and monitoredFieldBoosts
+                        if buffType in monitoredBuffs or isFieldTile:
                             x1 = max(0, int(x-25*self.multi))
                             y1 = int(15*self.multi)
                             y2 = int(50*self.multi)
                             buffImg = screen[y1:y2, x1: int(x)]
-                            sampleValues[buffType] = parseOcrBuffValue(
+                            value = parseOcrBuffValue(
                                 self.buffDetector.getBuffQuantityFromImgTight(buffImg)
                             )
+                            if buffType in monitoredBuffs:
+                                sampleValues[buffType] = value
+                            if isFieldTile:
+                                # tiles are 40px apart, so this crop holds one tile of the full-height buff band
+                                tile = self.captureBuffBand()[:, max(0, int(x-40*self.multi)):int(x)]
+                                for key in monitoredFieldBoosts:
+                                    if self.boostIconVisible(tile, FIELD_BOOST_BUFFS[key]):
+                                        sampleValues[key] = value
 
                         x -= 40*self.multi
                 
