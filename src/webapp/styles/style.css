@@ -1818,7 +1818,8 @@ select:focus {
   display: contents;
 }
 
-#home-layout[data-logs-sized] .home-logs-panel {
+/* A saved Logs height only applies while a panel sits under Logs; otherwise Logs fills its column */
+#home-layout[data-logs-sized]:where(:has(.home-side :is(#vic-hop-stats:not(.d-none), #planter-timers-container.show:not(.d-none)))) .home-logs-panel {
   flex: 0 0 calc(var(--home-logs-height) * 1%);
   box-sizing: border-box;
 }
@@ -1889,7 +1890,7 @@ select:focus {
 }
 
 /* Right column: Logs' divider is only needed when something sits under Logs */
-#home-layout:has(.home-side :is(#vic-hop-stats:not(.d-none), #planter-timers-container.show)) .home-divider-height {
+#home-layout:has(.home-side :is(#vic-hop-stats:not(.d-none), #planter-timers-container.show:not(.d-none))) .home-divider-height {
   display: block;
 }
 
@@ -1937,12 +1938,12 @@ select:focus {
 }
 
 /* With nothing beside Tasks, it takes the whole top row */
-#home-layout[data-logs-position="bottom"]:not(:has(.home-side :is(#vic-hop-stats:not(.d-none), #planter-timers-container.show))) {
+#home-layout[data-logs-position="bottom"]:not(:has(.home-side :is(#vic-hop-stats:not(.d-none), #planter-timers-container.show:not(.d-none)))) {
   grid-template-columns: minmax(0, 1fr);
 }
 
-#home-layout[data-logs-position="bottom"]:not(:has(.home-side :is(#vic-hop-stats:not(.d-none), #planter-timers-container.show))) .home-side,
-#home-layout[data-logs-position="bottom"]:not(:has(.home-side :is(#vic-hop-stats:not(.d-none), #planter-timers-container.show))) .home-divider-width {
+#home-layout[data-logs-position="bottom"]:not(:has(.home-side :is(#vic-hop-stats:not(.d-none), #planter-timers-container.show:not(.d-none)))) .home-side,
+#home-layout[data-logs-position="bottom"]:not(:has(.home-side :is(#vic-hop-stats:not(.d-none), #planter-timers-container.show:not(.d-none)))) .home-divider-width {
   display: none;
 }
 
