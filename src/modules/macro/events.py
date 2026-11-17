@@ -266,7 +266,7 @@ class EventDetectionMixin:
             return
         self.lastBlueTextScan = now
 
-        generation = self.serverGeneration
+        self.scanGeneration = generation = self.serverGeneration
         text = self.readBlueText()
         if generation != self.serverGeneration:
             return
@@ -350,9 +350,10 @@ class EventDetectionMixin:
             return
 
         field = detectedFields[-1]
-        if now - self.guidingStarLastAnnounced.get(field, 0) < 10 * 60:
-            return
-        self.guidingStarLastAnnounced[field] = now
+        with self.serverLock:
+            if self.scanGeneration != self.serverGeneration or now - self.guidingStarLastAnnounced.get(field, 0) < 10 * 60:
+                return
+            self.guidingStarLastAnnounced[field] = now
         self.logger.webhook("Guiding Star", f"Detected in {field.title()}", "light blue", "screen", ping_category="ping_guiding_star")
 
     def guidingStarTapField(self):

@@ -134,7 +134,10 @@ class macro(
         self.latestMM = "normal"
         self.lastBlueTextScan = 0
         self.guidingStarLastAnnounced = {}
-        self.serverGeneration = 0 # bumped on each rejoin so a scan that began on the old server can be dropped
+        # serverGeneration is bumped on each rejoin; a scan that began on the old server must not publish its detections
+        self.serverGeneration = 0
+        self.scanGeneration = 0
+        self.serverLock = threading.Lock()
         self.guidingStarTappedAt = {}
         self.tapGatherMultiplier = 1
         self.unusualSproutLastAnnounced = {}
