@@ -138,8 +138,7 @@ class macro(
         self.serverGeneration = 0
         self.scanGeneration = 0
         self.serverLock = threading.Lock()
-        self.guidingStarTappedAt = {}
-        self.tapGatherMultiplier = 1
+        self.tappedAt = {}
         self.unusualSproutLastAnnounced = {}
         self.windyBeeLastAnnounced = {}
         self.gummyballLevel = None
@@ -376,8 +375,10 @@ class macro(
         self.buffBandScreen = None #captured on first use by captureBuffBand
         self.scanGummyballBuff()
         self.scanBuffBarBoost()
+        self.useHotbar()
 
-        #hotbar
+    def useHotbar(self, tapping=False):
+        """Press the hotbar slots that are due. A tap visit presses only the Tap slots, which are skipped otherwise (Tap + Gather also fires while gathering)."""
         if all(self.setdat[f"hotbar{i}_use_when"] == "never" for i in range(1,8)):
             return
         try:
@@ -392,6 +393,10 @@ class macro(
             if slotUseWhen == "never":
                 continue
             elif self.status.value == "rejoining":
+                continue
+            elif tapping and slotUseWhen not in ("tap", "tap + gather"):
+                continue
+            elif not tapping and (slotUseWhen == "tap" or (slotUseWhen == "tap + gather" and not getattr(self, "isGathering", False))):
                 continue
             # Only use hotbar slots configured for 'Gathering' when the macro
             # is actively gathering in-field (self.isGathering True). This

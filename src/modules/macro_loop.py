@@ -423,10 +423,10 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
             if not is_stopped() and (
                 macro.setdat.get("macro_mode", "normal") not in ("quest", "alt", "vic")
                 and modeRuns("guiding_star_tap")
-                and (tapField := macro.guidingStarTapField())
+                and macro.stumpTapDue()
             ):
                 macro.closeQuestMenu()
-                macro.tapGuidingStarField(tapField)
+                macro.tapField("stump")
                 if not is_stopped():
                     macro.reset(convert=True)
                 taskCompleted = True
@@ -736,7 +736,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
         mode = macro.setdat.get("macro_mode", "normal")
         if mode not in ("quest", "alt") and modeRuns("mondo_buff") and macro.setdat.get("mondo_buff", False) and macro.hasMondoRespawned():
             return True
-        if mode not in ("quest", "alt") and modeRuns("guiding_star_tap") and macro.guidingStarTapField():
+        if mode not in ("quest", "alt") and modeRuns("guiding_star_tap") and macro.stumpTapDue():
             return True
         if mode not in ("bug", "boost", "resources") and any(giver not in questCache and canClaimTimedBearQuest(giver)
                                  for giver in quest_giver_order(macro.setdat)):
@@ -1118,6 +1118,8 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                         if macro.setdat[collectName] and macro.hasRespawned(collectName, macro.collectCooldowns[collectName]) and macro.hasRespawned("last_booster", macro.setdat["boost_seperate"]*60):
                             boostedField = runTask(macro.collect, args=(collectName,))
                             if macro.setdat["gather_boosted"] and boostedField:
+                                if modeRuns("guiding_star_tap") and macro.pineTapDue(boostedField):
+                                    runTask(macro.tapField, args=("pine tree",), convertAfter=False)
                                 # Gather in boosted field for 15 minutes
                                 st = time.time()
                                 pausedAtStart = paused_seconds()
