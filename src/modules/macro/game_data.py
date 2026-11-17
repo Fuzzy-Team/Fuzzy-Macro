@@ -531,6 +531,7 @@ PING_SETTING_KEYS = [
     "ping_sticker_events",
     "ping_mob_events",
     "ping_conversion_events",
+    "ping_emergency_balloon",
     "ping_hourly_reports",
     "ping_guiding_star",
     "ping_unusual_sprouts",

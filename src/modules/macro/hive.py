@@ -87,6 +87,7 @@ class HiveMixin:
                     convertBalloon = False
 
         convertedBackpack = False
+        timedOut = False
         balloonStartHoney = 0
         balloonBlessing = "0"
         inactiveHoneyChecks = 0
@@ -202,6 +203,7 @@ class HiveMixin:
                     return False
 
                 # Default behavior is "move on"
+                timedOut = True
                 break
 
             #check for afb
@@ -231,7 +233,10 @@ class HiveMixin:
                     self.set_task_status("converting", activity="converting")
                 if not self.converting: break
 
-        if convertBalloon: self.saveTiming("convert_balloon")
+        if convertBalloon:
+            self.saveTiming("convert_balloon")
+            # A timed-out conversion leaves the balloon unfinished, so it doesn't reset the emergency ping.
+            if not timedOut: self.balloonConvertedAt = time.time()
         self.clear_task_status()
         if liveGatherReport:
             liveGatherReport.stop()
