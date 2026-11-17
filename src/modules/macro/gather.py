@@ -664,10 +664,6 @@ class GatherMixin:
                     stopGather()
                     raise
 
-                # A Stump star that shows up while gathering here is tapped in place, before a cooldown gather can end for it
-                if normalized_field == "stump" and self.stumpTapDue() and self.stampTap(normalized_field):
-                    self.useHotbar(tapping=True)
-
                 if stopWhen and stopWhen():
                     keepGathering = False
                     self.logger.webhook("Cooldown gathering finished", "A task is ready or settings changed. Returning to the task queue.",
@@ -693,6 +689,10 @@ class GatherMixin:
                     mouse.mouseUp()
                     stopGather()
                     raise
+
+                # A Stump star that showed up during the pattern is tapped here, before any check can end the gather for it
+                if normalized_field == "stump" and self.stumpTapDue() and self.stampTap(normalized_field):
+                    self.useHotbar(tapping=True)
 
                 #field drift compensation — AI patterns already manage sprinkler
                 # anchoring / idle patrol themselves, so skip the post-cycle nudge
