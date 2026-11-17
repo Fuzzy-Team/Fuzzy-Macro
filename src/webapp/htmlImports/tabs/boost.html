@@ -16,7 +16,7 @@
         { slot: 6 },
         { slot: 7 },
       ];
-      const useWhenOptions = ["Never", "Always", "Gathering", "Converting", "Attacking", "Tap", "Tap + Gather"];
+      const useWhenOptions = ["Never", "Always", "Gathering", "Converting", "Attacking", "Tap", { label: "Tap + Gather", value: "tap_gather" }];
       const useEveryOptions = ["Secs", "Mins"];
 
       hotbarParent.innerHTML = `

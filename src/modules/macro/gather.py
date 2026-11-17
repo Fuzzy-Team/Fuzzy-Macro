@@ -463,7 +463,7 @@ class GatherMixin:
         maxGatherTime = fieldSetting["mins"]*60
         if not (stopWhen or infiniteGather):
             maxGatherTime *= self.tapGatherFactor(maxGatherTime)
-        self.stampTap(field)
+        self.stampTap(normalized_field)
         gatherTimeLimit = "Until next task" if stopWhen else "Infinite" if infiniteGather else self.convertSecsToMinsAndSecs(maxGatherTime)
         returnType = "rejoin" if isHiveHubField else fieldSetting["return"]
         pattern_blooms_ai_model = str(self.setdat.get("blooms_ai_model", "Standard"))
@@ -797,16 +797,17 @@ class GatherMixin:
                     self.reset(convert=False)
                     self.collectMondoBuff()
                     break
-                elif (
-                    self.setdat.get("macro_mode", "normal") not in ("quest", "alt", "vic")
-                    and settingsManager.modeRunsTask(self.setdat.get("macro_mode", "normal"), "guiding_star_tap")
-                    and self.stumpTapDue()
-                ):
-                    #rely on the post-task check in main to do the tap
-                    stopGather()
-                    self.logger.webhook("Gathering: interrupted", "Stump Tap", "orange")
-                    self.reset(convert=False)
-                    break
+                elif self.stumpTapDue():
+                    if normalized_field == "stump":
+                        #already here, so tap in place
+                        self.stampTap(normalized_field)
+                        self.useHotbar(tapping=True)
+                    else:
+                        #rely on the post-task check in main to do the tap
+                        stopGather()
+                        self.logger.webhook("Gathering: interrupted", "Stump Tap", "orange")
+                        self.reset(convert=False)
+                        break
                 elif (
                     self.setdat.get("macro_mode", "normal") not in ("quest", "alt", "boost")
                     and self.setdat["sticker_stack"]

@@ -5,6 +5,7 @@ import requests
 import threading
 from pathlib import Path
 from functools import lru_cache
+import modules.misc.settingsManager as settingsManager
 
 
 @lru_cache(maxsize=9)
@@ -85,8 +86,7 @@ BUFF_BAR_BOOST_FIELDS = {
 }
 BUFF_BAR_BOOST_TOLERANCE = 30
 
-# Fields the macro visits ("taps") when a Guiding Star is announced there, with the setting that turns each on.
-# A Guiding Star seen in the last 10 minutes and not yet tapped is due.
+# Fields the macro taps, with the setting that turns each on. Stump is tapped for a Guiding Star, Pine after a booster.
 GUIDING_STAR_TAP_FIELDS = {"stump": "stump_tap", "pine tree": "pine_tap"}
 GUIDING_STAR_WINDOW = 10 * 60
 # A tap visit is only started this long into a star, so the star still covers the arrival
@@ -361,26 +361,35 @@ class EventDetectionMixin:
             self.guidingStarLastAnnounced[field] = now
         self.logger.webhook("Guiding Star", f"Detected in {field.title()}", "light blue", "screen", ping_category="ping_guiding_star")
 
+    def tapsAllowed(self):
+        """Taps are off in Quest, Alt and Vic modes, and in modes that skip the task."""
+        mode = self.setdat.get("macro_mode", "normal")
+        return mode not in ("quest", "alt", "vic") and settingsManager.modeRunsTask(mode, "guiding_star_tap")
+
     def stumpTapDue(self):
-        """Stump has a Guiding Star that hasn't been tapped yet."""
+        """Stump has a Guiding Star that hasn't been tapped or tried yet."""
         seenAt = self.guidingStarLastAnnounced.get("stump", 0)
-        return bool(self.setdat.get("stump_tap", False) and time.time() - seenAt < GUIDING_STAR_TAP_VISIT_WINDOW
-                    and self.tappedAt.get("stump", 0) < seenAt)
+        return bool(self.setdat.get("stump_tap", False) and self.tapsAllowed()
+                    and time.time() - seenAt < GUIDING_STAR_TAP_VISIT_WINDOW
+                    and max(self.tappedAt.get("stump", 0), self.tapTriedAt.get("stump", 0)) < seenAt)
 
     def pineTapDue(self, boostedField):
         """Pine is tapped right after a Blue Flower or Bamboo booster is collected, at most every 14.98 minutes, and not while a Stump tap is waiting."""
-        return bool(self.setdat.get("pine_tap", False) and not self.stumpTapDue()
+        return bool(self.setdat.get("pine_tap", False) and self.tapsAllowed() and not self.stumpTapDue()
                     and boostedField in ("blue flower", "bamboo")
                     and self.setdat.get("field_booster_glitter_extend_enabled", False)
                     and time.time() - max(self.tappedAt.values(), default=0) >= PINE_TAP_INTERVAL)
 
     def stampTap(self, field):
         """Record a tap: gathering in Stump under a live Guiding Star, or in Pine."""
+        if not self.tapsAllowed():
+            return
         if field == "pine tree" or (field == "stump" and time.time() - self.guidingStarLastAnnounced.get("stump", 0) < GUIDING_STAR_WINDOW):
             self.tappedAt[field] = time.time()
 
     def tapField(self, field):
-        """Go to the field, record the tap and press the Tap hotbar slots."""
+        """Go to the field, record the tap and press the Tap hotbar slots. A failed trip isn't retried for the same star."""
+        self.tapTriedAt[field] = time.time()
         self.set_task_status(f"travelling_{field}", activity="travelling", field=field)
         if not self.travelViaCannon("Tapping") or not self.goToField(field):
             return False
@@ -393,8 +402,9 @@ class EventDetectionMixin:
         """How much longer a gather runs after a tap. It fades out over the 15 minutes after the tap, quadratically once less of that is left than the gather is long."""
         for field, setting in GUIDING_STAR_TAP_FIELDS.items():
             left = self.tappedAt.get(field, 0) + TAP_GATHER_WINDOW - time.time()
-            if self.setdat.get(setting, False) and left > 0:
-                multiplier = float(self.setdat.get(f"{setting}_duration_mult", 1))
+            if self.setdat.get(setting, False) and self.tapsAllowed() and left > 0:
+                # An empty or zero box would shorten gathers, so anything under 1 counts as 1
+                multiplier = max(1.0, float(self.setdat.get(f"{setting}_duration_mult", 1) or 1))
                 return 1 + (multiplier - 1) * min(1, left / max(gatherSecs, 1)) ** 2
         return 1
 
