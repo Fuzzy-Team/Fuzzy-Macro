@@ -102,8 +102,8 @@ class macro(
         pingSettings = {key: self.setdat.get(key, False) for key in PING_SETTING_KEYS}
         
         self.logger = logModule.log(logQueue, logModule.delivery_uses_webhook(self.setdat), logModule.get_default_delivery_route(self.setdat), self.setdat.get("send_screenshot", True), hourlyReportOnly=self.setdat.get("only_send_hourly_report", False), robloxWindow=self.robloxWindow, enableDiscordPing=True, discordUserID=self.setdat.get("discord_user_id", ""), pingSettings=pingSettings, webhookTimeFormat=self.setdat.get("webhook_time_format", 24), enableDiscordBot=logModule.delivery_uses_bot_messages(self.setdat), discordMessageQueue=discordMessageQueue, routeSettings=logModule.build_route_settings(self.setdat))
-        # Balloon age only counts time the macro has been running, so a stale timing from a previous session doesn't ping on start.
-        self.balloonPingStart = time.time()
+        # Balloon age counts from the last finished balloon conversion, or from macro start, so an old session doesn't ping on launch.
+        self.balloonConvertedAt = time.time()
         self.balloonPingedFor = None
         self.tadAltSync = TadAltSync(
             self.setdat,
@@ -348,9 +348,9 @@ class macro(
         convertSetting = str(self.setdat.get("convert_balloon", "")).lower()
         if not self.setdat.get("ping_emergency_balloon", False) or mins <= 0 or convertSetting == "never":
             return
-        lastConvert = max(self.getTiming("convert_balloon"), self.balloonPingStart)
-        # One ping per balloon: a conversion saves a new timing, which re-arms the ping.
-        if lastConvert == self.balloonPingedFor or not self.hasRespawned("convert_balloon", mins * 60, timing=lastConvert):
+        lastConvert = self.balloonConvertedAt
+        # One ping per balloon: a finished conversion sets a new time, which re-arms the ping.
+        if lastConvert == self.balloonPingedFor or time.time() - lastConvert < mins * 60:
             return
         self.balloonPingedFor = lastConvert
         age = int((time.time() - lastConvert) // 60)
