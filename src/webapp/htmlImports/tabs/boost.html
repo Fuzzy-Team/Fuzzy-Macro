@@ -16,7 +16,7 @@
         { slot: 6 },
         { slot: 7 },
       ];
-      const useWhenOptions = ["Never", "Always", "Gathering", "Converting", "Attacking"];
+      const useWhenOptions = ["Never", "Always", "Gathering", "Converting", "Attacking", "Tap", { label: "Tap + Gather", value: "tap_gather" }];
       const useEveryOptions = ["Secs", "Mins"];
 
       hotbarParent.innerHTML = `
@@ -158,6 +158,48 @@
           desc: "Collect the white field booster at mountain top field",
           type: {
             name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+      ]);
+      buildStandardContainer(buffsParent, "Guiding Star Tapping", "", [
+        {
+          id: "stump_tap",
+          title: "Stump Tap",
+          desc: "Visit the Stump Field when it has a Guiding Star",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "stump_tap_duration_mult",
+          title: "Stump Tap Gather Multiplier",
+          desc: "How much longer gathers run after a Stump tap. The extra fades out over the next 15 minutes. 1 keeps gathers the same",
+          type: {
+            name: "textbox",
+            inputType: "float",
+            inputLimit: 4,
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "pine_tap",
+          title: "Pine Tap",
+          desc: "Visit the Pine Tree Forest after collecting a Blue Flower or Bamboo booster, at most every 15 minutes. Needs Gather in boosted fields and Glitter Extending",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "pine_tap_duration_mult",
+          title: "Pine Tap Gather Multiplier",
+          desc: "How much longer gathers run after a Pine tap. The extra fades out over the next 15 minutes. 1 keeps gathers the same",
+          type: {
+            name: "textbox",
+            inputType: "float",
+            inputLimit: 4,
             triggerFunction: saveProfileTriggerFunction,
           },
         },

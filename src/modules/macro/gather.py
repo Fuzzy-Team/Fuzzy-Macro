@@ -461,6 +461,9 @@ class GatherMixin:
                 return
         infiniteGather = altMode or bool(fieldSetting.get("infinite_gather", False))
         maxGatherTime = fieldSetting["mins"]*60
+        if not (stopWhen or infiniteGather):
+            maxGatherTime *= self.tapGatherFactor(maxGatherTime)
+        self.stampTap(normalized_field)
         gatherTimeLimit = "Until next task" if stopWhen else "Infinite" if infiniteGather else self.convertSecsToMinsAndSecs(maxGatherTime)
         returnType = "rejoin" if isHiveHubField else fieldSetting["return"]
         pattern_blooms_ai_model = str(self.setdat.get("blooms_ai_model", "Standard"))
@@ -661,6 +664,10 @@ class GatherMixin:
                     stopGather()
                     raise
 
+                # Tap a Stump star in place before the cooldown check, so the star can't end a gather in Stump
+                if normalized_field == "stump" and self.stumpTapDue() and self.stampTap(normalized_field):
+                    self.useHotbar(tapping=True)
+
                 if stopWhen and stopWhen():
                     keepGathering = False
                     self.logger.webhook("Cooldown gathering finished", "A task is ready or settings changed. Returning to the task queue.",
@@ -686,6 +693,10 @@ class GatherMixin:
                     mouse.mouseUp()
                     stopGather()
                     raise
+
+                # A Stump star that showed up during the pattern is tapped here, before any check can end the gather for it
+                if normalized_field == "stump" and self.stumpTapDue() and self.stampTap(normalized_field):
+                    self.useHotbar(tapping=True)
 
                 #field drift compensation — AI patterns already manage sprinkler
                 # anchoring / idle patrol themselves, so skip the post-cycle nudge
@@ -793,6 +804,12 @@ class GatherMixin:
                     self.logger.webhook("Gathering: interrupted","Mondo Buff","orange")
                     self.reset(convert=False)
                     self.collectMondoBuff()
+                    break
+                elif normalized_field != "stump" and self.stumpTapDue():
+                    #rely on the post-task check in main to do the tap
+                    stopGather()
+                    self.logger.webhook("Gathering: interrupted", "Stump Tap", "orange")
+                    self.reset(convert=False)
                     break
                 elif (
                     self.setdat.get("macro_mode", "normal") not in ("quest", "alt", "boost")

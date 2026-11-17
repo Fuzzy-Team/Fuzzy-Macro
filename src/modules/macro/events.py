@@ -5,6 +5,7 @@ import requests
 import threading
 from pathlib import Path
 from functools import lru_cache
+import modules.misc.settingsManager as settingsManager
 
 
 @lru_cache(maxsize=9)
@@ -84,6 +85,14 @@ BUFF_BAR_BOOST_FIELDS = {
     "red": ("strawberry", "rose", "pepper"),
 }
 BUFF_BAR_BOOST_TOLERANCE = 30
+
+# Fields the macro taps, with the setting that turns each on. Stump is tapped for a Guiding Star, Pine after a booster.
+GUIDING_STAR_TAP_FIELDS = {"stump": "stump_tap", "pine tree": "pine_tap"}
+GUIDING_STAR_WINDOW = 10 * 60
+# A tap visit is only started this long into a star, so the star still covers the arrival
+GUIDING_STAR_TAP_VISIT_WINDOW = 9.98 * 60
+TAP_GATHER_WINDOW = 15 * 60
+PINE_TAP_INTERVAL = 14.98 * 60
 
 
 # a one-word file on main ("true" or "false") that says whether Beesmas is running. It is read from
@@ -241,12 +250,14 @@ class EventDetectionMixin:
 
     def scanBlueTextAnnouncements(self):
         """Read the blue text once and pass it to every enabled announcement detector."""
+        # Taken before the rejoin check: a rejoin sets its status first, then bumps the generation
+        self.scanGeneration = generation = self.serverGeneration
         if self.status.value == "rejoining":
             return
         detectors = []  # (detector, seconds between scans)
         if self.setdat.get("macro_mode", "normal") == "vic" or self.setdat.get("stinger_hunt", False):
             detectors.append((self.detectViciousAnnouncement, 1))
-        if self.setdat.get("ping_guiding_star", False):
+        if self.setdat.get("ping_guiding_star", False) or self.setdat.get("stump_tap", False):
             detectors.append((self.detectGuidingStarAnnouncement, 10))
         if self.setdat.get("ping_unusual_sprouts", False):
             detectors.append((self.detectUnusualSproutAnnouncement, 10))
@@ -262,6 +273,8 @@ class EventDetectionMixin:
         self.lastBlueTextScan = now
 
         text = self.readBlueText()
+        if generation != self.serverGeneration:
+            return
         for detect, _ in detectors:
             detect(text, now)
 
@@ -342,10 +355,61 @@ class EventDetectionMixin:
             return
 
         field = detectedFields[-1]
-        if now - self.guidingStarLastAnnounced.get(field, 0) < 10 * 60:
-            return
-        self.guidingStarLastAnnounced[field] = now
-        self.logger.webhook("Guiding Star", f"Detected in {field.title()}", "light blue", "screen", ping_category="ping_guiding_star")
+        with self.serverLock:
+            if self.scanGeneration != self.serverGeneration or now - self.guidingStarLastAnnounced.get(field, 0) < 10 * 60:
+                return
+            self.guidingStarLastAnnounced[field] = now
+        if self.setdat.get("ping_guiding_star", False):
+            self.logger.webhook("Guiding Star", f"Detected in {field.title()}", "light blue", "screen", ping_category="ping_guiding_star")
+
+    def tapsAllowed(self):
+        """Taps are off in Quest, Alt and Vic modes, and in modes that skip the task."""
+        mode = self.setdat.get("macro_mode", "normal")
+        return mode not in ("quest", "alt", "vic") and settingsManager.modeRunsTask(mode, "guiding_star_tap")
+
+    def stumpTapDue(self):
+        """Stump has a Guiding Star that hasn't been tapped or tried yet."""
+        seenAt = self.guidingStarLastAnnounced.get("stump", 0)
+        return bool(self.setdat.get("stump_tap", False) and self.tapsAllowed()
+                    and time.time() - seenAt < GUIDING_STAR_TAP_VISIT_WINDOW
+                    and max(self.tappedAt.get("stump", 0), self.tapTriedAt.get("stump", 0)) < seenAt)
+
+    def pineTapDue(self, boostedField):
+        """Pine is tapped right after a Blue Flower or Bamboo booster is collected, at most every 14.98 minutes, and not while a Stump tap is waiting."""
+        return bool(self.setdat.get("pine_tap", False) and self.tapsAllowed() and not self.stumpTapDue()
+                    and boostedField in ("blue flower", "bamboo")
+                    and self.setdat.get("field_booster_glitter_extend_enabled", False)
+                    and time.time() - max(self.tappedAt.values(), default=0) >= PINE_TAP_INTERVAL)
+
+    def stampTap(self, field):
+        """Record a tap: being in Stump under a live Guiding Star, or in Pine. Returns whether it counted."""
+        if not self.tapsAllowed():
+            return False
+        if field == "pine tree" or (field == "stump" and time.time() - self.guidingStarLastAnnounced.get("stump", 0) < GUIDING_STAR_WINDOW):
+            self.tappedAt[field] = time.time()
+            return True
+        return False
+
+    def tapField(self, field):
+        """Go to the field, record the tap and press the Tap hotbar slots. A failed trip isn't retried for the same star."""
+        self.tapTriedAt[field] = time.time()
+        self.set_task_status(f"travelling_{field}", activity="travelling", field=field)
+        # The star can run out on the way (a rejoin clears it), and then there's nothing to tap
+        if not self.travelViaCannon("Tapping") or not self.goToField(field) or not self.stampTap(field):
+            return False
+        self.useHotbar(tapping=True)
+        self.logger.webhook("", f"Tapped {field.title()}", "light blue", route_category="gathering")
+        return True
+
+    def tapGatherFactor(self, gatherSecs):
+        """How much longer a gather runs after a tap. It fades out over the 15 minutes after the tap, quadratically once less of that is left than the gather is long."""
+        for field, setting in GUIDING_STAR_TAP_FIELDS.items():
+            left = self.tappedAt.get(field, 0) + TAP_GATHER_WINDOW - time.time()
+            if self.setdat.get(setting, False) and self.tapsAllowed() and left > 0:
+                # An empty or zero box would shorten gathers, so anything under 1 counts as 1
+                multiplier = max(1.0, float(self.setdat.get(f"{setting}_duration_mult", 1) or 1))
+                return 1 + (multiplier - 1) * min(1, left / max(gatherSecs, 1)) ** 2
+        return 1
 
     def detectUnusualSproutAnnouncement(self, text, now):
         if "sprout" not in text:

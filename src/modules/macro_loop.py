@@ -420,6 +420,12 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                 macro.closeQuestMenu()
                 macro.collectMondoBuff()
                 taskCompleted = True
+            if not is_stopped() and macro.stumpTapDue():
+                macro.closeQuestMenu()
+                macro.tapField("stump")
+                if not is_stopped():
+                    macro.reset(convert=True)
+                taskCompleted = True
             if not is_stopped() and macro.setdat.get("macro_mode", "normal") not in ("alt", "vic") and macro.hasScheduledRejoinArrived():
                 if macro.rejoin("Rejoining (Scheduled)"):
                     macro.saveTiming("rejoin_every")
@@ -725,6 +731,9 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
             return True
         mode = macro.setdat.get("macro_mode", "normal")
         if mode not in ("quest", "alt") and modeRuns("mondo_buff") and macro.setdat.get("mondo_buff", False) and macro.hasMondoRespawned():
+            return True
+        # A Stump gather taps its star in place, so the star doesn't end it
+        if macro.stumpTapDue() and macro.status.value != "gather_stump":
             return True
         if mode not in ("bug", "boost", "resources") and any(giver not in questCache and canClaimTimedBearQuest(giver)
                                  for giver in quest_giver_order(macro.setdat)):
@@ -1106,6 +1115,8 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                         if macro.setdat[collectName] and macro.hasRespawned(collectName, macro.collectCooldowns[collectName]) and macro.hasRespawned("last_booster", macro.setdat["boost_seperate"]*60):
                             boostedField = runTask(macro.collect, args=(collectName,))
                             if macro.setdat["gather_boosted"] and boostedField:
+                                if macro.pineTapDue(boostedField):
+                                    runTask(macro.tapField, args=("pine tree",), convertAfter=False)
                                 # Gather in boosted field for 15 minutes
                                 st = time.time()
                                 pausedAtStart = paused_seconds()
