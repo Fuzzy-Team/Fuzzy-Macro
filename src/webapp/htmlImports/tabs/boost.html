@@ -162,6 +162,48 @@
           },
         },
       ]);
+      buildStandardContainer(buffsParent, "Guiding Star Tapping", "", [
+        {
+          id: "stump_tap",
+          title: "Stump Tap",
+          desc: "Visit the Stump Field when it has a Guiding Star",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "stump_tap_duration_mult",
+          title: "Stump Tap Gather Multiplier",
+          desc: "Multiply the next gather's time limit by this after a Stump tap. 1 keeps it the same",
+          type: {
+            name: "textbox",
+            inputType: "float",
+            inputLimit: 4,
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "pine_tap",
+          title: "Pine Tap",
+          desc: "Visit the Pine Tree Forest when it has a Guiding Star",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "pine_tap_duration_mult",
+          title: "Pine Tap Gather Multiplier",
+          desc: "Multiply the next gather's time limit by this after a Pine tap. 1 keeps it the same",
+          type: {
+            name: "textbox",
+            inputType: "float",
+            inputLimit: 4,
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+      ]);
       const diceIconsArray = toImgArray(diceIcons);
       buildStandardContainer(buffsParent, "Automatic Field Boost ⬆️ 🎲", "Automatically maintains glitter and dice boosts. Created by Sev", [
         {

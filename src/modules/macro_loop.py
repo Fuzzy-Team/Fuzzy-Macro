@@ -420,6 +420,16 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                 macro.closeQuestMenu()
                 macro.collectMondoBuff()
                 taskCompleted = True
+            if not is_stopped() and (
+                macro.setdat.get("macro_mode", "normal") not in ("quest", "alt", "vic")
+                and modeRuns("guiding_star_tap")
+                and (tapField := macro.guidingStarTapField())
+            ):
+                macro.closeQuestMenu()
+                macro.tapGuidingStarField(tapField)
+                if not is_stopped():
+                    macro.reset(convert=True)
+                taskCompleted = True
             if not is_stopped() and macro.setdat.get("macro_mode", "normal") not in ("alt", "vic") and macro.hasScheduledRejoinArrived():
                 if macro.rejoin("Rejoining (Scheduled)"):
                     macro.saveTiming("rejoin_every")

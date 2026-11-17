@@ -461,6 +461,10 @@ class GatherMixin:
                 return
         infiniteGather = altMode or bool(fieldSetting.get("infinite_gather", False))
         maxGatherTime = fieldSetting["mins"]*60
+        # A Guiding Star tap lengthens the next timed gather once
+        if not (stopWhen or infiniteGather):
+            maxGatherTime *= self.tapGatherMultiplier
+            self.tapGatherMultiplier = 1
         gatherTimeLimit = "Until next task" if stopWhen else "Infinite" if infiniteGather else self.convertSecsToMinsAndSecs(maxGatherTime)
         returnType = "rejoin" if isHiveHubField else fieldSetting["return"]
         pattern_blooms_ai_model = str(self.setdat.get("blooms_ai_model", "Standard"))

@@ -134,6 +134,8 @@ class macro(
         self.latestMM = "normal"
         self.lastBlueTextScan = 0
         self.guidingStarLastAnnounced = {}
+        self.guidingStarTappedAt = {}
+        self.tapGatherMultiplier = 1
         self.unusualSproutLastAnnounced = {}
         self.windyBeeLastAnnounced = {}
         self.gummyballLevel = None

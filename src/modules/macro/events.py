@@ -85,6 +85,11 @@ BUFF_BAR_BOOST_FIELDS = {
 }
 BUFF_BAR_BOOST_TOLERANCE = 30
 
+# Fields the macro visits ("taps") when a Guiding Star is announced there, with the setting that turns each on.
+# A Guiding Star seen in the last 10 minutes and not yet tapped is due.
+GUIDING_STAR_TAP_FIELDS = {"stump": "stump_tap", "pine tree": "pine_tap"}
+GUIDING_STAR_TAP_WINDOW = 10 * 60
+
 
 # a one-word file on main ("true" or "false") that says whether Beesmas is running. It is read from
 # GitHub each time the macro starts, so turning Beesmas on or off needs no macro update.
@@ -246,7 +251,7 @@ class EventDetectionMixin:
         detectors = []  # (detector, seconds between scans)
         if self.setdat.get("macro_mode", "normal") == "vic" or self.setdat.get("stinger_hunt", False):
             detectors.append((self.detectViciousAnnouncement, 1))
-        if self.setdat.get("ping_guiding_star", False):
+        if any(self.setdat.get(setting, False) for setting in ("ping_guiding_star", *GUIDING_STAR_TAP_FIELDS.values())):
             detectors.append((self.detectGuidingStarAnnouncement, 10))
         if self.setdat.get("ping_unusual_sprouts", False):
             detectors.append((self.detectUnusualSproutAnnouncement, 10))
@@ -346,6 +351,28 @@ class EventDetectionMixin:
             return
         self.guidingStarLastAnnounced[field] = now
         self.logger.webhook("Guiding Star", f"Detected in {field.title()}", "light blue", "screen", ping_category="ping_guiding_star")
+
+    def guidingStarTapField(self):
+        """The first field with tapping on whose Guiding Star is still due a visit, or None."""
+        now = time.time()
+        for field, setting in GUIDING_STAR_TAP_FIELDS.items():
+            seenAt = self.guidingStarLastAnnounced.get(field, 0)
+            if (self.setdat.get(setting, False) and now - seenAt < GUIDING_STAR_TAP_WINDOW
+                    and self.guidingStarTappedAt.get(field, 0) < seenAt):
+                return field
+        return None
+
+    def tapGuidingStarField(self, field):
+        """Visit the field under the Guiding Star, then lengthen the next timed gather by the field's tap multiplier."""
+        # Marked before travelling so a failed trip is not retried for the same star.
+        self.guidingStarTappedAt[field] = time.time()
+        self.set_task_status(f"travelling_{field}", activity="travelling", field=field)
+        if not self.travelViaCannon("Tapping") or not self.goToField(field):
+            return False
+        multiplier = float(self.setdat.get(f"{GUIDING_STAR_TAP_FIELDS[field]}_duration_mult", 1) or 1)
+        self.tapGatherMultiplier = max(self.tapGatherMultiplier, multiplier)
+        self.logger.webhook("", f"Tapped {field.title()} (Guiding Star), next gather x{multiplier:g}", "light blue", route_category="gathering")
+        return True
 
     def detectUnusualSproutAnnouncement(self, text, now):
         if "sprout" not in text:
