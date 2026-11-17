@@ -18,6 +18,8 @@ import math
 import time
 
 from modules.controls.sleep import is_paused
+from modules.misc.ai_gather_common import (
+    AT_CROP, ROBLOX_VIEWPORT_HEIGHT, compute_homography, relative_distance)
 from modules.screen.imageSearch import captureLogicalBGR, findPixelInFrame, locateImageOnScreen
 
 TARGET = 0xFFCD6B         # token target, searched outward from the middle row
@@ -33,6 +35,7 @@ SCORCHING_ACTIVE = "./images/buffs/scorching_active"
 # buff icons included). 0.5 sits in that gap. It has not been checked against a real capture.
 SCORCHING_THRESHOLD = 0.5
 ICON_BAND_HEIGHT = 100
+CROP_TOP = AT_CROP[1] / ROBLOX_VIEWPORT_HEIGHT   # top row the homography is proven for, as a share of the height
 
 
 class SenseStopped(Exception):
@@ -91,6 +94,7 @@ class SensePattern:
     def start(self):
         window = self.macro.robloxWindow
         self.w, self.h = window.mw, window.mh
+        self.homography = compute_homography(self.w, self.h)
         for _ in range(4):
             self.idle()
             self.macro.keyboard.press(self.rot_up, 0.017)  # Camera tap hold: 17 ms.
@@ -171,10 +175,13 @@ class SensePattern:
 
     def _aim(self, x, y):
         """Release the literal keys, then return the key and length of each screen axis
-        (in tiles) as ((x key, x length), (y key, y length))."""
+        (in tiles) as ((x key, x length), (y key, y length)). Pixels become tiles through
+        the AI gather homography, so targets high on the screen walk further than a flat
+        scale says. The homography is only proven below the AI gather's crop line; above
+        it, it runs off toward the horizon, so rows are held to that line."""
         self.last_found = (x, y)
-        mx = (x - self.w * 0.5) / self.h * 17
-        my = (y - self.h * 0.5) / self.h * 16
+        mx, forward = relative_distance(x, max(y, self.h * CROP_TOP), self.homography)
+        my = -forward
         self.keys("W- A- S- D-")
         return ("D" if mx > 0 else "A", abs(mx)), ("S" if my > 0 else "W", abs(my))
 
