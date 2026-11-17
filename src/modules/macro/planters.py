@@ -1,5 +1,7 @@
 import cv2
+import numpy as np
 import os
+import re
 import threading
 from modules.controls.keyboard import keyboard
 # path files run by goToPlanter use time and sleep
@@ -7,6 +9,24 @@ from modules.controls.sleep import is_stopped, pause_aware_time as time, sleep
 from modules.macro.game_data import planterGrowthData
 from modules.screen.imageSearch import findColorObjectRGB
 from modules.screen.screenshot import mssScreenshotNP
+
+# Planters whose harvest is confirmed by any "Planter" message, without the "+1"
+NAME_ONLY_HARVEST_PLANTERS = ("ticket", "sticker", "festive")
+
+
+def compactText(text):
+    return ''.join(ch for ch in str(text or "").lower() if ch.isalnum())
+
+
+def hasPlanterCountMessage(text, planter, signs):
+    '''True when the blue text holds "<sign>1 <planter> Planter", e.g. "-1 Plastic Planter" after placing'''
+    target = compactText(planter)
+    if "planter" not in target:
+        target += "planter"
+    for match in re.finditer(rf"[{re.escape(signs)}]\s*1", text):
+        if compactText(text[match.end():]).startswith(target):
+            return True
+    return False
 
 
 class PlanterMixin:
@@ -95,6 +115,16 @@ class PlanterMixin:
         if slot < 1 or slot > 7:
             return 0
         return slot
+
+    def planterGrowthBarVisible(self):
+        '''A run of the empty growth bar colour above the player, which a just-placed planter shows'''
+        w = self.robloxWindow
+        screen = mssScreenshotNP(w.mx+w.mw//2-100, w.my+w.yOffset+100, 200, w.mh//2-100)
+        screen = cv2.cvtColor(screen, cv2.COLOR_BGRA2BGR)
+        mask = cv2.inRange(screen, (70, 118, 84), (74, 122, 88)) #RGB (86, 120, 72) +-2
+        runLength = max(1, round(w.mh*0.06*w.multi))
+        run = cv2.erode(mask, np.ones((1, runLength), np.uint8), borderType=cv2.BORDER_CONSTANT, borderValue=0)
+        return bool(run.any())
 
     #place the planter and return true if successfully placed
     def placePlanter(self, planter, field, glitter):
@@ -202,28 +232,40 @@ class PlanterMixin:
                     return False
                 self.useItemInInventory(x=self.planterCoords[0], y=self.planterCoords[1])
 
-            #check if planter is placed
+            #wait up to 6s for proof: the "-1 <planter>" message, or the new growth bar seen twice
+            deadline = time.time() + 6
             time.sleep(0.5)
-            placedPlanter = True
+            placedPlanter = False
             placementError = None
-            for _ in range(7):
+            growthBarSightings = 0
+            while time.time() < deadline:
                 if is_stopped():
                     updateHourlyTime()
                     return False
-                if self.blueTextImageSearch("notinfield"):
+                blueText = self.blueTextScreen()
+                if self.blueTextImageSearch("notinfield", screen=blueText):
                     placementError = "notinfield"
-                    placedPlanter = False
                     break
                 # The max-planters message appears for hotbar and inventory placement,
                 # so neither path may assume the planter was placed when it shows.
-                if self.blueTextImageSearch("maxplanters"):
+                if self.blueTextImageSearch("maxplanters", screen=blueText):
                     placementError = "maxplanters"
-                    placedPlanter = False
                     break
+                if hasPlanterCountMessage(self.readBlueText(), planter, "-\u2013\u2014\u2212"):
+                    placedPlanter = True
+                    break
+                if self.planterGrowthBarVisible():
+                    growthBarSightings += 1
+                    if growthBarSightings >= 2:
+                        placedPlanter = True
+                        break
                 time.sleep(0.3)
             if is_stopped():
                 updateHourlyTime()
                 return False
+            #no message or bar: the planter's own harvest prompt here also proves it was placed
+            if not placedPlanter and placementError is None:
+                placedPlanter = recoverAlreadyPlacedPlanterState()
             if placedPlanter: 
                 self.logger.webhook("",f"Placed {planter.title()} Planter", "light green", "screen")
                 #use glitter
@@ -243,7 +285,7 @@ class PlanterMixin:
             elif placementError == "maxplanters":
                 failMsg = f"Already at max planters, couldn't place {planter.title()}"
             else:
-                failMsg = f"Failed to place {planter.title()}"
+                failMsg = f"Couldn't confirm {planter.title()} was placed"
             if is_stopped():
                 updateHourlyTime()
                 return False
@@ -430,6 +472,27 @@ class PlanterMixin:
             if is_stopped():
                 updateHourlyTime()
                 return False
+            if not self.confirmPlanterHarvest(planter):
+                if is_stopped():
+                    updateHourlyTime()
+                    return False
+                #no harvest message: the planter being back in the inventory also proves it
+                self.planterCoords = None
+                self.findPlanterInInventory(name)
+                if not is_stopped():
+                    self.toggleInventory("close")
+                if is_stopped():
+                    updateHourlyTime()
+                    return False
+                if self.planterCoords is not None:
+                    self.logger.webhook("", f"Found {planter.title()} in inventory after harvest", "bright green", "screen")
+                    return finishCollected()
+                self.logger.webhook("", f"Couldn't confirm {planter.title()} was harvested", "red", "screen")
+                self.reset()
+                if attempt == attempts - 1:
+                    updateHourlyTime()
+                    return False
+                continue
             self.logger.webhook("", f"Looting: {planter.title()} planter", "bright green", "screen", ping_category="ping_conversion_events")
             if collect_loot_enabled:
                 self.keyboard.multiWalk(["s","d"], 0.87)
@@ -472,6 +535,24 @@ class PlanterMixin:
 
         # Exhausted attempts — move on but warn the user
         self.logger.webhook("", f"Planter {planter.title()} still not found in inventory after {attempts} attempts. Keeping planter state and retrying later.", "orange", "screen")
+        return False
+
+    def confirmPlanterHarvest(self, planter):
+        '''Wait up to 3s for the "+1 <planter> Planter" message (just "Planter" for some planters)'''
+        name = compactText(planter)
+        if name == "paper":
+            return True #its harvest message is unknown, so it isn't checked
+        deadline = time.time() + 3
+        while time.time() < deadline:
+            if is_stopped():
+                return False
+            text = self.readBlueText()
+            if name in NAME_ONLY_HARVEST_PLANTERS:
+                if "planter" in compactText(text):
+                    return True
+            elif hasPlanterCountMessage(text, planter, "+"):
+                return True
+            time.sleep(0.1)
         return False
 
     def placePlanterInCycle(self, slot, cycle, nextField=None):
