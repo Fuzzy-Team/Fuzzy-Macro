@@ -835,11 +835,6 @@ DEFAULT_GENERAL_SETTINGS = {'use_1080p_virtual_display': False,
  'max_cannon_attempts': 3,
  'rejoin_attempts': 5,
  'gui_theme': 'Brown',
- # Home tab layout: where the Logs panel sits, Tasks' share of the row in percent, and
- # Logs' share of its column in percent (0 = automatic). The defaults are the original layout.
- 'home_logs_position': 'right',
- 'home_tasks_width': 50,
- 'home_logs_height': 0,
  'update_channel': 'stable',
  'auto_update_check_disabled': False,
  'webhook_time_format': 24,
