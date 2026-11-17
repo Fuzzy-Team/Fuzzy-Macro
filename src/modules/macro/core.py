@@ -102,6 +102,9 @@ class macro(
         pingSettings = {key: self.setdat.get(key, False) for key in PING_SETTING_KEYS}
         
         self.logger = logModule.log(logQueue, logModule.delivery_uses_webhook(self.setdat), logModule.get_default_delivery_route(self.setdat), self.setdat.get("send_screenshot", True), hourlyReportOnly=self.setdat.get("only_send_hourly_report", False), robloxWindow=self.robloxWindow, enableDiscordPing=True, discordUserID=self.setdat.get("discord_user_id", ""), pingSettings=pingSettings, webhookTimeFormat=self.setdat.get("webhook_time_format", 24), enableDiscordBot=logModule.delivery_uses_bot_messages(self.setdat), discordMessageQueue=discordMessageQueue, routeSettings=logModule.build_route_settings(self.setdat))
+        # Balloon age only counts time the macro has been running, so a stale timing from a previous session doesn't ping on start.
+        self.balloonPingStart = time.time()
+        self.balloonPingedFor = None
         self.tadAltSync = TadAltSync(
             self.setdat,
             self.logger,
@@ -340,9 +343,23 @@ class macro(
     def getCurrentMinute(self):
         return datetime.now().minute
 
+    def checkEmergencyBalloon(self):
+        mins = int(self.setdat.get("emergency_balloon_mins", 60) or 0)
+        convertSetting = str(self.setdat.get("convert_balloon", "")).lower()
+        if not self.setdat.get("ping_emergency_balloon", False) or mins <= 0 or convertSetting == "never":
+            return
+        lastConvert = max(self.getTiming("convert_balloon"), self.balloonPingStart)
+        # One ping per balloon: a conversion saves a new timing, which re-arms the ping.
+        if lastConvert == self.balloonPingedFor or not self.hasRespawned("convert_balloon", mins * 60, timing=lastConvert):
+            return
+        self.balloonPingedFor = lastConvert
+        age = int((time.time() - lastConvert) // 60)
+        self.logger.webhook("Emergency Balloon", f"The balloon hasn't been converted in {age} minutes", "orange", ping_category="ping_emergency_balloon")
+
     def backgroundOnce(self):
         if is_stopped() or is_paused():
             return
+        self.checkEmergencyBalloon()
         if virtual_display.active() and (self.status.value == "rejoining" or not virtual_display.state().get("window_ready")):
             return
         #night detection

@@ -1022,6 +1022,25 @@
           },
         },
         {
+          id: "ping_emergency_balloon",
+          title: "Emergency Balloon",
+          desc: "Ping when the balloon hasn't been converted by the emergency time. Pings once per balloon",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "emergency_balloon_mins",
+          title: "Emergency Balloon Time (m)",
+          desc: "Minutes since the last balloon conversion before the emergency ping is sent. Set it higher than the convert balloon settings",
+          type: {
+            name: "textbox",
+            inputType: "int",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
           id: "ping_hourly_reports",
           title: "Hourly/Session Reports",
           desc: "Ping when hourly or session reports are sent",
