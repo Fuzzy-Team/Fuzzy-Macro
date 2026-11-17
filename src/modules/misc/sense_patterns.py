@@ -173,21 +173,22 @@ class SensePattern:
 
     # --- walking toward a point ---
 
-    def _aim(self, x, y):
+    def _aim(self, x, y, dx=0, dy=0):
         """Release the literal keys, then return the key and length of each screen axis
         (in tiles) as ((x key, x length), (y key, y length)). Pixels become tiles through
         the AI gather homography, so targets high on the screen walk further than a flat
         scale says. The homography is only proven below the AI gather's crop line; above
-        it, it runs off toward the horizon, so rows are held to that line."""
+        it, it runs off toward the horizon, so rows are held to that line. dx and dy are
+        extra tiles (right, down) added after the conversion."""
         self.last_found = (x, y)
         mx, forward = relative_distance(x, max(y, self.h * CROP_TOP), self.homography)
-        my = -forward
+        mx, my = mx + dx, -forward + dy
         self.keys("W- A- S- D-")
         return ("D" if mx > 0 else "A", abs(mx)), ("S" if my > 0 else "W", abs(my))
 
-    def go_to(self, x, y):
+    def go_to(self, x, y, dx=0, dy=0):
         """GoToXYPosition: the diagonal first, then the rest of the longer axis."""
-        (x_key, x_len), (y_key, y_len) = self._aim(x, y)
+        (x_key, x_len), (y_key, y_len) = self._aim(x, y, dx, dy)
         major, minor = ((x_key, x_len), (y_key, y_len)) if x_len > y_len else ((y_key, y_len), (x_key, x_len))
         self.keys(f"{x_key}+ {y_key}+")
         self.walk(minor[1] * 1.414)
@@ -211,7 +212,7 @@ class SensePattern:
             self.keys(minor_key + "+")
 
     def go_to_sprinkler_corner(self, x, y, scale):
-        self.go_to(x + self.h * scale, y - self.h * scale)
+        self.go_to(x, y, 17 * scale, -16 * scale)   # the corner offset stays a fixed number of tiles
 
     def go_to_mirror_of_last_found(self):
         """The point opposite the last target through the middle of the screen."""
