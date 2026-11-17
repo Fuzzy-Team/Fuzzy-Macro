@@ -267,10 +267,19 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
             handled = True
         return handled
 
+    # Consecutive failures per task (keyed by function and its first two args), cleared when a gather finishes
+    MAX_TASK_FAILURES = 3
+    taskFailures = {}
+
     #function to run a task
     #makes it easy to do any checks after a task is complete (like stinger hunt, rejoin every, etc)
-    def runTask(func = None, args = (), resetAfter = True, convertAfter = True, allowAFB = True):
+    #capFailures: the task returns a falsy value when it fails, so it is skipped after MAX_TASK_FAILURES
+    #failures in a row until the next gather
+    def runTask(func = None, args = (), resetAfter = True, convertAfter = True, allowAFB = True, capFailures = False):
         nonlocal taskCompleted
+        failureKey = (getattr(func, "__name__", ""), args[:2]) if capFailures else None
+        if failureKey and taskFailures.get(failureKey, 0) >= MAX_TASK_FAILURES:
+            return None
 
         def watchedTaskKey():
             if func is None:
@@ -343,7 +352,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                 macro.cAFBDice = False
                 return None
             if action == INTERRUPT_RESET and func:
-                return runTask(func, args=args, resetAfter=resetAfter, convertAfter=convertAfter, allowAFB=allowAFB)
+                return runTask(func, args=args, resetAfter=resetAfter, convertAfter=convertAfter, allowAFB=allowAFB, capFailures=capFailures)
             return None
 
         pending_action = int(skipTask.value)
@@ -369,8 +378,16 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                     return None
             #execute the task
             if func:
-                returnVal = func(*args) 
+                returnVal = func(*args)
                 taskCompleted = True
+                if func == macro.gather:
+                    taskFailures.clear()
+                elif failureKey and returnVal:
+                    taskFailures.pop(failureKey, None)
+                elif failureKey and not is_stopped():
+                    taskFailures[failureKey] = taskFailures.get(failureKey, 0) + 1
+                    if taskFailures[failureKey] == MAX_TASK_FAILURES:
+                        macro.logger.webhook("", f"{func.__name__} failed {MAX_TASK_FAILURES} times in a row, skipping it until the next gather", "orange")
             else:
                 returnVal = None
             if questWatchContext:
@@ -1204,7 +1221,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                             if macro.setdat[f"cycle1_{i+1}_planter"] == "none" or macro.setdat[f"cycle1_{i+1}_field"] == "none":
                                 continue
                             nextField = nextPlanterField(i)
-                            planter = runTask(macro.placePlanterInCycle, args = (i, 1, nextField),resetAfter=False, allowAFB=False)
+                            planter = runTask(macro.placePlanterInCycle, args = (i, 1, nextField),resetAfter=False, allowAFB=False, capFailures=True)
                             if planter:
                                 planterData["planters"][i] = planter[0]
                                 planterData["fields"][i] = planter[1]
@@ -1222,7 +1239,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                         for i in range(3):
                             cycle = planterData["cycles"][i]
                             if planterData["planters"][i] and time.time() > planterData["harvestTimes"][i]:
-                                if runTask(macro.collectPlanter, args=(planterData["planters"][i], planterData["fields"][i])):
+                                if runTask(macro.collectPlanter, args=(planterData["planters"][i], planterData["fields"][i]), capFailures=True):
                                     planterData["harvestTimes"][i] = 0
                                     planterData["planters"][i] = ""
                                     planterData["fields"][i] = ""
@@ -1249,7 +1266,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                                 continue
                             
                             nextField = nextPlanterField(i, planterData)
-                            planter = runTask(macro.placePlanterInCycle, args = (i, nextCycle, nextField),resetAfter=False, allowAFB=False)
+                            planter = runTask(macro.placePlanterInCycle, args = (i, nextCycle, nextField),resetAfter=False, allowAFB=False, capFailures=True)
                             if planter:
                                 planterData["cycles"][i] = nextCycle
                                 planterData["planters"][i] = planter[0]
@@ -1602,7 +1619,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                         planter = planterData[slot]
                         if not planter["planter"]:
                             continue
-                        if runTask(macro.collectPlanter, args=(planter["planter"], planter["field"])):
+                        if runTask(macro.collectPlanter, args=(planter["planter"], planter["field"]), capFailures=True):
                             recordFieldDegradation(planter)
                             planterData[slot] = emptyAutoPlanterSlot()
                             currentNectarCache.clear()
