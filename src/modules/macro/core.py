@@ -134,6 +134,7 @@ class macro(
         self.latestMM = "normal"
         self.lastBlueTextScan = 0
         self.guidingStarLastAnnounced = {}
+        self.serverGeneration = 0 # bumped on each rejoin so a scan that began on the old server can be dropped
         self.guidingStarTappedAt = {}
         self.tapGatherMultiplier = 1
         self.unusualSproutLastAnnounced = {}

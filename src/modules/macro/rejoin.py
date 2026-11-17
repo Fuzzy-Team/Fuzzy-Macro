@@ -187,6 +187,7 @@ class RejoinMixin:
         self.location = "spawn"
         self.cannonFromHive = False
         # Guiding Stars belong to the old server
+        self.serverGeneration += 1
         self.guidingStarLastAnnounced.clear()
         placeId = str(placeId or MAIN_GAME_PLACE_ID)
         privateServerLinks = self._getRejoinServerLinks(usePrivateServer)

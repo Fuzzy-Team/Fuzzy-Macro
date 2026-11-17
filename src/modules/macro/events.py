@@ -266,7 +266,10 @@ class EventDetectionMixin:
             return
         self.lastBlueTextScan = now
 
+        generation = self.serverGeneration
         text = self.readBlueText()
+        if generation != self.serverGeneration:
+            return
         for detect, _ in detectors:
             detect(text, now)
 
