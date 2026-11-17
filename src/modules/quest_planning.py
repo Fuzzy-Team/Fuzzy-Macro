@@ -113,6 +113,15 @@ def make_quest_objectives(giver, title, actions, statuses):
     return objectives
 
 
+def kill_objective_mob(action):
+    """The mob a kill objective asks for ("kill_10_ladybug" -> "ladybug"), or None."""
+    kind, _, target = action.partition("_")
+    if kind != "kill":
+        return None
+    count, _, mob = target.partition("_")
+    return mob if count.isdigit() and mob else target
+
+
 def quest_uses_ant_challenge(action, settings):
     return action == "token_rage" and settings.get("quest_objective_token_rage_field", "auto") == "auto"
 

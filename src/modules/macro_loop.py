@@ -3,7 +3,7 @@ import json
 import time
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
-from modules.quest_planning import quest_giver_order, choose_quest_gather, is_gather_objective, allowed_fields, quest_uses_ant_challenge
+from modules.quest_planning import quest_giver_order, choose_quest_gather, is_gather_objective, allowed_fields, quest_uses_ant_challenge, kill_objective_mob
 from modules.controls.sleep import (
     InterruptRequested,
     INTERRUPT_NONE,
@@ -509,7 +509,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
             kind, _, target = objective.partition("_")
             tasks = []
             if kind == "kill":
-                mob = target.split("_", 1)[1] if target.split("_", 1)[0].isdigit() else target
+                mob = kill_objective_mob(objective)
                 if "ant" in mob and mob != "mantis":
                     tasks = ["ant_challenge", "ant_pass_dispenser"]
                 else:

@@ -5,7 +5,7 @@ import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
 from modules.controls.sleep import INTERRUPT_NONE, InterruptRequested, is_stopped, pause_aware_time as time, paused_seconds, sleep
 from modules.gather_session import pattern_supports_field, field_pattern_variables, GatherPatternRunner, GatherSession
-from modules.quest_planning import quest_check_due
+from modules.quest_planning import quest_check_due, kill_objective_mob
 import modules.macro.pattern_environment as patternEnvironment
 from modules.macro.game_data import (
     collectData,
@@ -845,6 +845,15 @@ class GatherMixin:
                             # Recheck because another field run can update shared mob timings.
                             if self.hasMobRespawned(mob, mobField):
                                 self.killMob(mob, mobField)
+                        # Reread the quests these kills counted toward so a finished
+                        # kill objective stops interrupting later gathers.
+                        killedMobs = {mob for mob, _ in respawnedQuestMobs}
+                        for questGiver, mobs in questMobsByGiver.items():
+                            if not (mobs & killedMobs) or is_stopped():
+                                continue
+                            remaining = self.findQuest(questGiver, logDetection=False)
+                            if remaining is not None:
+                                mobs &= {kill_objective_mob(action) for action in remaining}
                         break
                 if self.died:
                     self.clear_task_status()
