@@ -665,8 +665,7 @@ class GatherMixin:
                     raise
 
                 # A Stump star that shows up while gathering here is tapped in place, before a cooldown gather can end for it
-                if normalized_field == "stump" and self.stumpTapDue():
-                    self.stampTap(normalized_field)
+                if normalized_field == "stump" and self.stumpTapDue() and self.stampTap(normalized_field):
                     self.useHotbar(tapping=True)
 
                 if stopWhen and stopWhen():
@@ -802,7 +801,7 @@ class GatherMixin:
                     self.reset(convert=False)
                     self.collectMondoBuff()
                     break
-                elif self.stumpTapDue():
+                elif normalized_field != "stump" and self.stumpTapDue():
                     #rely on the post-task check in main to do the tap
                     stopGather()
                     self.logger.webhook("Gathering: interrupted", "Stump Tap", "orange")
