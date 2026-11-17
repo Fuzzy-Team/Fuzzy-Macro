@@ -102,6 +102,9 @@ class macro(
         pingSettings = {key: self.setdat.get(key, False) for key in PING_SETTING_KEYS}
         
         self.logger = logModule.log(logQueue, logModule.delivery_uses_webhook(self.setdat), logModule.get_default_delivery_route(self.setdat), self.setdat.get("send_screenshot", True), hourlyReportOnly=self.setdat.get("only_send_hourly_report", False), robloxWindow=self.robloxWindow, enableDiscordPing=True, discordUserID=self.setdat.get("discord_user_id", ""), pingSettings=pingSettings, webhookTimeFormat=self.setdat.get("webhook_time_format", 24), enableDiscordBot=logModule.delivery_uses_bot_messages(self.setdat), discordMessageQueue=discordMessageQueue, routeSettings=logModule.build_route_settings(self.setdat))
+        # Balloon age counts from the last finished balloon conversion, or from macro start, so an old session doesn't ping on launch.
+        self.balloonConvertedAt = time.time()
+        self.balloonPingedFor = None
         self.tadAltSync = TadAltSync(
             self.setdat,
             self.logger,
@@ -121,6 +124,7 @@ class macro(
         self._applySettingsState()
         self.canDetectNight = True
         self.night = False
+        self.beesmas = False   # set by checkBeesmas() when the macro starts
         self.moonSproutsStart = 0 #sproutBeansUsed when the current night was detected
         self.location = "spawn"
 
@@ -340,9 +344,23 @@ class macro(
     def getCurrentMinute(self):
         return datetime.now().minute
 
+    def checkEmergencyBalloon(self):
+        mins = int(self.setdat.get("emergency_balloon_mins", 60) or 0)
+        convertSetting = str(self.setdat.get("convert_balloon", "")).lower()
+        if not self.setdat.get("ping_emergency_balloon", False) or mins <= 0 or convertSetting == "never":
+            return
+        lastConvert = self.balloonConvertedAt
+        # One ping per balloon: a finished conversion sets a new time, which re-arms the ping.
+        if lastConvert == self.balloonPingedFor or time.time() - lastConvert < mins * 60:
+            return
+        self.balloonPingedFor = lastConvert
+        age = int((time.time() - lastConvert) // 60)
+        self.logger.webhook("Emergency Balloon", f"The balloon hasn't been converted in {age} minutes", "orange", ping_category="ping_emergency_balloon")
+
     def backgroundOnce(self):
         if is_stopped() or is_paused():
             return
+        self.checkEmergencyBalloon()
         if virtual_display.active() and (self.status.value == "rejoining" or not virtual_display.state().get("window_ready")):
             return
         #night detection
@@ -457,6 +475,7 @@ class macro(
     def start(self):
         print("macro object started")
         self.resetAFBSessionTimings()
+        self.checkBeesmas()
 
         if self.setdat.get("macro_mode", "normal") != "alt":
             self.tadAltSync.initialize_alts()

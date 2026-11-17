@@ -32,6 +32,11 @@ SCORCHING_ACTIVE = "./images/buffs/scorching_active"
 # it: on made-up strips it scored 0.57-0.85 with the icon and under 0.25 without it (other
 # buff icons included). 0.5 sits in that gap. It has not been checked against a real capture.
 SCORCHING_THRESHOLD = 0.5
+# The original matched its own Precision 10x crop exactly, and that crop was never shipped. This is
+# the 3 px strip target_sense uses, at its threshold. It matches any 10x stack; whether the
+# original's crop matched only a fresh one is unknown.
+PRECISION_10X = "./images/buffs/precision_10x"
+PRECISION_THRESHOLD = 0.8
 ICON_BAND_HEIGHT = 100
 
 
@@ -475,6 +480,7 @@ class StrabrySense(SensePattern):
     of the diagonal-first approach."""
 
     PRECISION_SECONDS = 1
+    PRECISION_STACK_SECONDS = 8
 
     def start(self):
         super().start()
@@ -511,9 +517,13 @@ class StrabrySense(SensePattern):
             self.keys(key + "-")
 
     def after_circle_search(self):
-        # source: Precision 10x also sets the timer to 8, but that icon is not shipped, so
-        # nothing extends precise mode beyond its first second.
+        """Precise mode runs for PRECISION_STACK_SECONDS while Precision 10x is up, and stops
+        while Scorching Star is active or when neither icon is seen."""
         if self.icon_visible(SCORCHING_ACTIVE, SCORCHING_THRESHOLD):
+            self.precision_until = 0
+        elif self.icon_visible(PRECISION_10X, PRECISION_THRESHOLD):
+            self.precision_until = time.monotonic() + self.PRECISION_STACK_SECONDS
+        else:
             self.precision_until = 0
 
     def targets_missing(self):

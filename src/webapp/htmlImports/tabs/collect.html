@@ -183,9 +183,20 @@
         {
           id: "mondo_buff",
           title: "Enable Task",
-          desc: "Collect the Mondo Chick buff. The macro will only go to Mondo in the first 10 minutes of the hour.",
+          desc: "Collect the Mondo Chick buff. The macro will only go to Mondo shortly before the hour and in the first 10 minutes of the hour.",
           type: {
             name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "mondo_prep_time",
+          title: "Prep time (seconds)",
+          desc: "How many seconds before the hour to stop and walk to Mondo, so you're in place when it spawns. 0 waits until it has spawned.",
+          type: {
+            name: "textbox",
+            inputType: "int",
+            inputLimit: 3,
             triggerFunction: saveProfileTriggerFunction,
           },
         },

@@ -659,6 +659,14 @@
         },
       ]);
       document.getElementById("use_1080p_virtual_display").setAttribute("aria-label", "Use 1080p virtual display");
+      buildStandardContainer(parentOther, "Beesmas", "", [
+        {
+          id: "beesmas_override",
+          title: "Force Beesmas On",
+          desc: "Treat Beesmas as running. Normally the macro checks online whether Beesmas is on each time it starts. Changes apply the next time you start the macro.",
+          type: { name: "checkbox", triggerFunction: saveGeneralTriggerFunction },
+        },
+      ]);
       buildStandardContainer(parentOther, "Appearance", "", [
         {
           id: "gui_theme",
@@ -998,6 +1006,25 @@
           desc: "Ping when the character dies",
           type: {
             name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "ping_emergency_balloon",
+          title: "Emergency Balloon",
+          desc: "Ping when the balloon hasn't been converted by the emergency time. Pings once per balloon",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "emergency_balloon_mins",
+          title: "Emergency Balloon Time (m)",
+          desc: "Minutes since the last balloon conversion before the emergency ping is sent. Set it higher than the convert balloon settings",
+          type: {
+            name: "textbox",
+            inputType: "int",
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
