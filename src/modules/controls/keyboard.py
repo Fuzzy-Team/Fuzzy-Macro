@@ -60,27 +60,20 @@ class keyboard:
         corrected_target = target_distance - self.accumulated_error
         
         traveled_distance = 0
-        start_time = time.perf_counter()
-        last_time = start_time
-        
-        #safety distance, just in case of infinite drifting
-        max_time = duration * 1.2
+        last_time = time.perf_counter()
 
         #sleep_interval = 0.01  # Or even 0.02 would probably work fine
-        
+
         while traveled_distance < corrected_target and not is_stopped():
             paused = _pausePoint()
-            start_time += paused
             last_time += paused
             current_time = time.perf_counter()
-            elapsed = current_time - start_time
-            
-            # Safety timeout
-            if elapsed >= max_time:
+
+            #the walk runs until the distance is covered, however slow. A speed of zero would never get there
+            speed = self.getMoveSpeed()
+            if speed <= 0:
                 break
 
-            speed = self.getMoveSpeed()
-            
             delta_t = current_time - last_time
             distance_increment = speed * delta_t
             traveled_distance += distance_increment
