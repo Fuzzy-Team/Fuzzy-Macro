@@ -129,9 +129,10 @@ class SensePattern:
                 self.macro.keyboard.keyUp(key, False)
                 self.held.discard(key)
 
-    def walk(self, tiles):
+    def walk(self, tiles, until=None):
+        """Walk with the held keys. until() ends it early; returns False when it did."""
         self.idle()
-        self.macro.keyboard.tileWait(tiles)
+        return self.macro.keyboard.tileWait(tiles, until=until)
 
     def wait_ms(self, milliseconds):
         """Sleep in slices, so a pause that lands mid-wait releases and re-presses held keys."""

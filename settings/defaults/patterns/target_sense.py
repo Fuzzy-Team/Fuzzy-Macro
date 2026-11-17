@@ -1,14 +1,16 @@
 # target_sense: Precision, Scorching Star and X-Flame boosting. The pattern runs once per
-# gather cycle with its state in globals; where the original ran a buff-watcher loop and a
-# target-finder loop, each cycle does both checks instead. The decision table, timers,
-# colours and X-Flame spin follow the original pattern.
+# gather cycle with its state in globals. Each cycle checks the buffs; a search thread looks
+# for targets on every frame, and the walk turns toward the newest one as soon as it is seen.
+# The decision table, timers, colours and X-Flame spin follow the original pattern.
 # Timer lengths come from Windows timing and are unverified on macOS.
 import math
+import threading
 import time
 
 import cv2
 import numpy as np
 
+from modules.controls.sleep import is_paused, is_stopped
 from modules.misc.sense_patterns import (
     SCORCHING_ACTIVE, SCORCHING_THRESHOLD, SensePattern, SenseStopped,
 )
@@ -31,9 +33,11 @@ NEW_X_FLAME_SECONDS = 3     # The original used 5.2 with Flame Fuel; that icon i
 BAG_FULL_SECONDS = 10
 TARGETS_GRACE_SECONDS = 8 / 60   # The original used 8 frames, and a timer of 8 / max framerate (default 60)
 
-# Fuzzy walks this far (in tiles) per cycle, then looks again. The original walks the whole way
-# on a second thread and is told to stop when a new target appears.
-STEP_TILES = 2
+# A cycle chasing targets ends after this long, so the gather can check its time limit and
+# backpack and the buffs are read again.
+CYCLE_SECONDS = 1
+# The search thread looks at most this often.
+SEARCH_TICK = 0.01
 AVOID_RADIUS = 2.2
 
 # Colours are 0xRRGGBB. A pair bounds each channel between its two colours.
@@ -298,16 +302,24 @@ def detour(target, obstacle, radius):
 
 
 class TargetSense(SensePattern):
-    """The Sense engine's input and pause helpers, running the buff watcher and target
-    finder once per cycle."""
+    """The Sense engine's input and pause helpers. Each cycle runs the buff watcher, then
+    walks toward what the search thread last saw."""
+
+    search_thread = None
+    search_error = None
+    # (frame number, target or None, points to avoid), written by the search thread only
+    found = (0, None, [])
 
     def run(self):
         try:
             window = self.macro.robloxWindow
             self.w, self.h = window.mw, window.mh
+            if self.search_error:
+                error, self.search_error = self.search_error, None
+                raise error
             self.scan()
-            priority = target_priority()
-            if priority == "x_flame" and boost["timers"]["new_x_flame"] != boost["x_flame_window"]:
+            self.priority = target_priority()
+            if self.priority == "x_flame" and boost["timers"]["new_x_flame"] != boost["x_flame_window"]:
                 boost["x_flame_window"] = boost["timers"]["new_x_flame"]
                 self.x_flame()
             shot = self.screenshot()
@@ -316,9 +328,9 @@ class TargetSense(SensePattern):
                 if boost["last_fog"] == seen:   # a change counts once it is seen twice in a row
                     boost["fog"] = seen
                 boost["last_fog"] = seen
-            target, avoid = self.pick(priority, shot)
-            if target:
-                self.go_to(target, avoid)
+            self.start_search()
+            if self.found[1]:
+                self.chase()
             else:
                 self.search_step()
             self.hold()
@@ -327,6 +339,14 @@ class TargetSense(SensePattern):
         except Exception:
             self.finish()   # the gather falls back to another pattern: don't leave keys held
             raise
+
+    def finish(self):
+        """Stop the search thread and let go of every key. Runs when the gather ends."""
+        thread, self.search_thread = self.search_thread, None
+        if thread:
+            thread.stopping = True
+            thread.join(1)
+        super().finish()
 
     # --- the buff watcher ---
 
@@ -385,8 +405,11 @@ class TargetSense(SensePattern):
     # --- the target finder ---
 
     def screenshot(self):
-        """The Roblox window as a BGR array in window pixels."""
         self.idle()
+        return self.capture()
+
+    def capture(self):
+        """The Roblox window as a BGR array in window pixels."""
         window = self.macro.robloxWindow
         shot = captureRegionBGR(window.mx, window.my, self.w, self.h)
         if shot.shape[:2] != (self.h, self.w):
@@ -414,6 +437,31 @@ class TargetSense(SensePattern):
             return None, avoid
         return nearest(points, (self.w * 0.5, self.h * 0.5)), avoid
 
+    def start_search(self):
+        if self.search_thread is None or not self.search_thread.is_alive():
+            self.found = (0, None, [])
+            self.search_thread = threading.Thread(target=self.search, daemon=True)
+            self.search_thread.stopping = False
+            self.search_thread.start()
+
+    def search(self):
+        """The search thread: on every frame, pick a target with the priority the last buff
+        check chose. The walk re-plans from each new frame."""
+        thread = threading.current_thread()
+        try:
+            while not thread.stopping and not is_stopped():
+                if is_paused():
+                    time.sleep(0.1)
+                    continue
+                started = time.monotonic()
+                target, avoid = self.pick(self.priority, self.capture())
+                self.found = (self.found[0] + 1, target, avoid)
+                time.sleep(max(0, started + SEARCH_TICK - time.monotonic()))
+        except Exception as error:
+            self.search_error = error   # the next cycle raises it, so the gather falls back
+        finally:
+            self.found = (self.found[0] + 1, None, [])
+
     # --- moving ---
 
     def hold(self, *letters):
@@ -430,13 +478,24 @@ class TargetSense(SensePattern):
         factor = (24.4 - 5.8 * scale) / self.h
         return (x - self.w * 0.5) * factor, (y - self.h * 0.5) * factor
 
-    def go_to(self, target, avoid):
+    def chase(self):
+        """Walk to the newest target. Each new frame from the search thread replaces the walk
+        with one planned from that frame, keeping keys that stay the same held. Ends at the
+        target, when no target is in sight, or after CYCLE_SECONDS."""
+        end = time.monotonic() + CYCLE_SECONDS
+        frame, target, avoid = self.found
+        while target:
+            newer = lambda: self.found[0] != frame or time.monotonic() >= end
+            if self.go_to(target, avoid, newer) or time.monotonic() >= end:
+                return
+            frame, target, avoid = self.found
+
+    def go_to(self, target, avoid, until=None):
         """Short walk: the diagonal and the straight part, in the order the original picks,
-        steering around the points to avoid. Stops after STEP_TILES so the next cycle can
-        look again."""
+        steering around the points to avoid. until() ends it early; returns False when it did."""
         goal = self.tiles(*target)
         if abs(goal[0]) < 0.1 and abs(goal[1]) < 0.1:
-            return
+            return True
         waypoints = [goal]
         obstacles = sorted((self.tiles(*spot) for spot in avoid),
                            key=lambda o: o[0] ** 2 + o[1] ** 2, reverse=True)
@@ -444,7 +503,6 @@ class TargetSense(SensePattern):
             waypoint = detour(waypoints[0], obstacle, AVOID_RADIUS)
             if waypoint:
                 waypoints.insert(0, waypoint)
-        budget = STEP_TILES
         here = (0, 0)
         for waypoint in waypoints:
             dx, dy = waypoint[0] - here[0], waypoint[1] - here[1]
@@ -457,24 +515,23 @@ class TargetSense(SensePattern):
             diagonal = ((major, minor), short * 1.414)
             straight = ((major,), long - short)
             for letters, tiles in ((diagonal, straight) if short * 1.414 > long - short else (straight, diagonal)):
-                tiles = min(tiles, budget)
                 if tiles <= 0:
                     continue
                 self.hold(*letters)
-                self.walk(tiles)
-                budget -= tiles
-                if budget <= 0:
-                    return
+                if not self.walk(tiles, until):
+                    return False
+        return True
 
     def search_step(self):
-        """No target: one leg of Fuzzy's small search loop per cycle."""
+        """No target: one leg of Fuzzy's small search loop per cycle, cut short when the search
+        thread sees a target."""
         steps = ((tcfbkey, 0.45), (tclrkey, 0.12), (afcfbkey, 0.45), (tclrkey, 0.12),
                  (afcfbkey, 0.45), (afclrkey, 0.12), (tcfbkey, 0.45), (afclrkey, 0.12))
         key, seconds = steps[boost["search_step"] % len(steps)]
         boost["search_step"] += 1
         self.hold()
         self.idle()
-        self.macro.keyboard.walk(key, seconds)
+        self.macro.keyboard.walk(key, seconds, until=lambda: self.found[1] is not None)
 
     def x_flame(self):
         """X-Flame move: the camera turns left eight times (one full circle) in

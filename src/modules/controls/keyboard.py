@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pyautogui as pag
 from modules.screen import virtual_display
+import threading
 import time
 from typing import TYPE_CHECKING
 from modules.controls.sleep import is_paused, is_stopped, wait_while_paused
@@ -11,6 +12,11 @@ if TYPE_CHECKING:
 
 #keys currently held down through keyboard.keyDown, so a pause can let go of them and press them again
 _held = []
+
+#walks re-plan the distance left this often, from the latest movespeed
+WALK_TICK = 0.01
+#the movespeed thread stops once no walk has asked for the speed for this long
+SPEED_IDLE_SECONDS = 1
 
 
 def _pausePoint():
@@ -30,15 +36,18 @@ def _pausePoint():
     return time.perf_counter() - start
 
 
-def _holdFor(duration):
-    """Sleep while the keys stay held, pausing and stopping promptly. Time spent paused doesn't count."""
+def _holdFor(duration, until=None):
+    """Sleep while the keys stay held, pausing and stopping promptly. Time spent paused doesn't count.
+    until() is checked every 10 ms and ends the wait early when it returns True."""
     end = time.perf_counter() + duration
     while not is_stopped():
         end += _pausePoint()
+        if until and until():
+            return
         remaining = end - time.perf_counter()
         if remaining <= 0:
             return
-        time.sleep(min(0.05, remaining))
+        time.sleep(min(WALK_TICK, remaining))
 
 
 class keyboard:
@@ -47,54 +56,68 @@ class keyboard:
         self.enableHasteCompensation = enableHasteCompensation
         self.hasteCompensation = hasteCompensation
 
-        self.detection_interval = 0.01
-        
-        #drift compensation
-        self.accumulated_error = 0
-        self.error_correction_factor = 0.1
-    
-    
-    def predictiveTimeWait(self, duration):
-        base_speed = 28
-        target_distance = base_speed * duration
-        corrected_target = target_distance - self.accumulated_error
-        
-        traveled_distance = 0
-        last_time = time.perf_counter()
+        #latest movespeed, kept current by a background thread while walks are running
+        self._speed = 0
+        self._speedWanted = 0
+        self._speedThread = None
 
-        #sleep_interval = 0.01  # Or even 0.02 would probably work fine
+    def currentSpeed(self):
+        """The movespeed from the buff bar. A background thread reads it while walks keep asking,
+        so a walk never waits on a screen capture. The first call after a quiet spell reads it here."""
+        self._speedWanted = time.monotonic() + SPEED_IDLE_SECONDS
+        if self._speedThread is None or not self._speedThread.is_alive():
+            self._speed = self.hasteCompensation.getHaste()
+            self._speedThread = threading.Thread(target=self._readSpeed, daemon=True)
+            self._speedThread.start()
+        return self._speed
 
-        while traveled_distance < corrected_target and not is_stopped():
-            paused = _pausePoint()
-            last_time += paused
-            current_time = time.perf_counter()
+    def _readSpeed(self):
+        while time.monotonic() < self._speedWanted and not is_stopped():
+            if is_paused():
+                time.sleep(0.1)
+                continue
+            self._speed = self.hasteCompensation.getHaste()
+            time.sleep(WALK_TICK)
 
-            #the walk runs until the distance is covered, however slow. A speed of zero would never get there
-            speed = self.getMoveSpeed()
+    def _walkDistance(self, distance, until=None):
+        """Keep the held keys down until distance (studs) is covered. Every 10 ms it takes the
+        latest movespeed and works out what is left, so a speed change mid-walk changes how long
+        the rest takes. The walk runs until the distance is covered, however slow.
+        until() is checked on every tick and ends the walk early when it returns True.
+        Returns False if until() ended it."""
+        last = time.perf_counter()
+        speed = self.currentSpeed()
+        while distance > 0 and not is_stopped():
+            last += _pausePoint()
+            if until and until():
+                return False
+            #a speed of zero would never get there
             if speed <= 0:
                 break
+            time.sleep(min(WALK_TICK, distance / speed))
+            now = time.perf_counter()
+            distance -= speed * (now - last)
+            last = now
+            speed = self.currentSpeed()
+        return True
 
-            delta_t = current_time - last_time
-            distance_increment = speed * delta_t
-            traveled_distance += distance_increment
-            
-            last_time = current_time
-            #time.sleep(sleep_interval)
-        
-    
-    def walk(self, k, t, applyHaste=True, method='predictive'):
-        if applyHaste and self.enableHasteCompensation:
-            keyboard.keyDown(k, False)
-            try:
+    #duration is seconds at the base speed of 28
+    def predictiveTimeWait(self, duration, until=None):
+        return self._walkDistance(28 * duration, until)
+
+    def walk(self, k, t, applyHaste=True, method='predictive', until=None):
+        keyboard.keyDown(k, False)
+        try:
+            if applyHaste and self.enableHasteCompensation:
                 if method == 'predictive':
-                    self.predictiveTimeWait(t)
+                    self.predictiveTimeWait(t, until)
                 else:
                     self.timeWait(t)  # Original method
-            finally:
-                keyboard.keyUp(k, False)
-        else:
-            self.press(k, t * 28 / self.ws)
-    
+            else:
+                _holdFor(t * 28 / self.ws, until)
+        finally:
+            keyboard.keyUp(k, False)
+
     def multiWalk(self, keys, t, applyHaste=True, method='predictive'):
         try:
             for k in keys:
@@ -181,28 +204,10 @@ class keyboard:
             prevSpeed = speed
 
 
-    #recreate natro's walk function
-    def tileWait(self, n, hasteCap=0):
-        #self.getMoveSpeed takes too fast to run
-        def a():
-            st = time.perf_counter()
-            a = self.hasteCompensation.getHaste()
-            et = time.perf_counter()
-            return st, et, a
-        freq = 1  # Simulated frequency constant
-        d = freq / 8
-        l = n * freq * 4
+    #walk n tiles (4 studs each) with the keys already held, less a 1/8 stud head start
+    def tileWait(self, n, hasteCap=0, until=None):
+        return self._walkDistance(n * 4 - 1 / 8, until)
 
-        s, f, v = a()
-        d += v * (f - s) 
-
-        while d < l and not is_stopped():
-            _pausePoint()
-            prev_v = v
-            s, f, v = a()
-            d += ((prev_v + v) / 2) * (f - s) 
-        
-    
     def tileWalk(self, key, tiles, applyHaste = True):
         if applyHaste:
             self.keyDown(key, False)
