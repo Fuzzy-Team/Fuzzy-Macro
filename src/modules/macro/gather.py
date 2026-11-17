@@ -838,6 +838,7 @@ class GatherMixin:
                     break
                 elif (
                     self.setdat.get("macro_mode", "normal") not in ("quest", "alt", "boost")
+                    and not isSproutGather
                     and self.isBalloonEveryDue()
                 ):
                     # the balloon timer is due, so head back and let convert() refresh it
