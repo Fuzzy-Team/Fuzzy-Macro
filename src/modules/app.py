@@ -588,6 +588,8 @@ def runApp(macroTarget):
                     pass
                 if virtual_display.active():
                     try:
+                        # Moves Roblox back onto the virtual display it left on pause.
+                        virtual_display.prepare_window()
                         virtual_display.command("show")
                     except virtual_display.DisplayError as error:
                         logger.webhook("1080p Display Error", str(error), "red")
@@ -600,7 +602,8 @@ def runApp(macroTarget):
                 mouse.mouseUp()
                 if virtual_display.active():
                     try:
-                        virtual_display.command("hide")
+                        # Moves Roblox back to the user's screen while paused.
+                        virtual_display.command("release")
                     except virtual_display.DisplayError as error:
                         logger.webhook("1080p Display Error", str(error), "red")
                         run.value = 0
@@ -717,12 +720,8 @@ def runApp(macroTarget):
             macroProcStartedAt = 0.0
             nextRestartAt = 0.0
             crashRestartCount = 0
-            if virtual_display.active():
-                try:
-                    virtual_display.command("hide")
-                except virtual_display.DisplayError:
-                    # A failed helper must not prevent Stop from finishing.
-                    pass
+            # Closing the helper moves Roblox back to the user's screen and removes the virtual display.
+            displaySession.close()
 
             run.value = 3
             showRunState(3)

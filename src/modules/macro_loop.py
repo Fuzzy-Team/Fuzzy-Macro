@@ -14,7 +14,7 @@ from modules.controls.sleep import (
     INTERRUPT_STICKER_SPROUT,
     INTERRUPT_FIND_ITEM,
     HANG_FILE,
-    is_paused,
+    wait_while_paused,
     is_stopped,
     paused_seconds,
     start_hang_watchdog,
@@ -787,9 +787,8 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
         time.sleep(1)
 
     while True:
-        # Check for pause - wait while paused
-        while is_paused():
-            time.sleep(0.1)  # Wait while paused
+        # Wait while paused; on resume this puts Roblox back in place before the next task.
+        wait_while_paused()
         # Check if stop was requested while paused
         if run.value == 0:
             break  # Exit macro loop if stop requested
