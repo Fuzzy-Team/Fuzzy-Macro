@@ -186,14 +186,14 @@ class RejoinMixin:
         self.questMenuOpen = False
         self.location = "spawn"
         self.cannonFromHive = False
-        # Guiding Stars belong to the old server
-        with self.serverLock:
-            self.serverGeneration += 1
-            self.guidingStarLastAnnounced.clear()
         placeId = str(placeId or MAIN_GAME_PLACE_ID)
         privateServerLinks = self._getRejoinServerLinks(usePrivateServer)
         self.logger.webhook("",rejoinMsg, "dark brown")
         self.set_task_status("rejoining", activity="rejoining")
+        # Guiding Stars belong to the old server. Scans are blocked from here on, and any that began earlier are dropped.
+        with self.serverLock:
+            self.serverGeneration += 1
+            self.guidingStarLastAnnounced.clear()
         mouse.mouseUp()
         keyboard.releaseMovement()
 

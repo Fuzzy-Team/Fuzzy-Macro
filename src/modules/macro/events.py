@@ -246,6 +246,8 @@ class EventDetectionMixin:
 
     def scanBlueTextAnnouncements(self):
         """Read the blue text once and pass it to every enabled announcement detector."""
+        # Taken before the rejoin check: a rejoin sets its status first, then bumps the generation
+        self.scanGeneration = generation = self.serverGeneration
         if self.status.value == "rejoining":
             return
         detectors = []  # (detector, seconds between scans)
@@ -266,7 +268,6 @@ class EventDetectionMixin:
             return
         self.lastBlueTextScan = now
 
-        self.scanGeneration = generation = self.serverGeneration
         text = self.readBlueText()
         if generation != self.serverGeneration:
             return
