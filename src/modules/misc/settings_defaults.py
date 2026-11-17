@@ -38,6 +38,7 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'glue_dispenser_use_gumdrop_slot': False,
  'wreath': False,
  'mondo_buff_wait': 2,
+ 'mondo_prep_time': 60,
  'sticker_printer': False,
  'sticker_printer_egg': 'basic',
  'haste_compensation': True,
