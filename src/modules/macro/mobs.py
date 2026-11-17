@@ -1,5 +1,6 @@
 import threading
 import traceback
+from datetime import datetime
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
 from modules.controls.sleep import InterruptRequested, is_paused, is_stopped, pause_aware_time as time, paused_seconds, sleep, wait_while_paused
@@ -14,12 +15,18 @@ from modules.screen.imageSearch import locateImageOnScreen
 
 
 class MobMixin:
+    def isMondoPrepWindow(self):
+        #the last "mondo_prep_time" seconds before the hour, when mondo is about to spawn
+        now = datetime.now()
+        seconds_to_hour = 3600 - (now.minute * 60 + now.second)
+        return seconds_to_hour <= self.setdat["mondo_prep_time"]
+
     def hasMondoRespawned(self):
-        #check if mondo can be collected (first 10mins)
+        #check if mondo can be collected (prep window before the hour, then the first 10mins)
         minute = self.getCurrentMinute()
         #set respawn time to 20mins
         #mostly just to prevent the macro from going to mondo over and over again for the 10mins
-        return minute <= 10 and self.hasRespawned("mondo", 20*60)
+        return (minute <= 10 or self.isMondoPrepWindow()) and self.hasRespawned("mondo", 20*60)
 
     def collectMondoBuff(self, gatherInterrupt = False):
         self.set_task_status("mondo_buff", activity="mondo")
@@ -35,7 +42,13 @@ class MobMixin:
         sleep(2.5)
         self.logger.webhook("","Collecting: Mondo Buff","yellow", "screen")
         self.keyboard.walk("w",1)
-        self.keyboard.walk("d",3) 
+        self.keyboard.walk("d",3)
+        #arrived before the hour: wait for mondo to spawn so the timers and 15min limit start from the spawn
+        while self.isMondoPrepWindow() and not is_stopped():
+            sleep(0.5)
+        if is_stopped():
+            self.clear_task_status()
+            return False
         if self.setdat["mondo_buff_damage"]:
             mondo_buff_wait = self.setdat["mondo_buff_wait"]
             end_time = time.perf_counter() + mondo_buff_wait * 60
