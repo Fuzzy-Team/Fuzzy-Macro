@@ -659,6 +659,14 @@
         },
       ]);
       document.getElementById("use_1080p_virtual_display").setAttribute("aria-label", "Use 1080p virtual display");
+      buildStandardContainer(parentOther, "Beesmas", "", [
+        {
+          id: "beesmas_override",
+          title: "Force Beesmas On",
+          desc: "Treat Beesmas as running. Normally the macro checks online whether Beesmas is on each time it starts. Changes apply the next time you start the macro.",
+          type: { name: "checkbox", triggerFunction: saveGeneralTriggerFunction },
+        },
+      ]);
       buildStandardContainer(parentOther, "Appearance", "", [
         {
           id: "gui_theme",
