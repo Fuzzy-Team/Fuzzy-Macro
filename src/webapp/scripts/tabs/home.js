@@ -182,7 +182,7 @@ async function loadTasks() {
   const setdat = await loadAllSettings();
   let out = "";
 
-  if (!homeDividerDrag) applyHomeLayout(setdat);
+  showSavedHomeLayout(setdat);
 
   // Update macro mode dropdown to match current settings (only if user is not actively changing it)
   const macroModeDropdown = document.getElementById("macro_mode");
@@ -679,6 +679,7 @@ async function loadTasks() {
   } else {
     planterTimerContainer.classList.remove("show");
   }
+  updateHomeSlots();
 }
 
 eel.expose(closeWindow);
@@ -713,95 +714,82 @@ async function checkAndUpdateButtonState() {
 =============================================
 Home layout
 =============================================
-Logs can sit on the right or at the bottom, and two dividers resize the panels.
-The layout is three general settings, set on #home-layout for style.css to use.
+Tasks, Logs and the Planter or Vic Hop panel fill slots in a saved order (style.css lays the slots out).
+Drag a panel's grip onto another panel to swap them, or onto the bar that appears while dragging to switch
+between side by side and a full-width bottom panel. The arrow keys on a grip do the same.
 */
 
-//the original layout; "home_logs_height" 0 means Logs fills its column
-const HOME_LAYOUT_DEFAULTS = { home_logs_position: "right", home_tasks_width: 50, home_logs_height: 0 };
-const HOME_DIVIDER_STEP = 2; //percent moved by one arrow key press
-const HOME_DIVIDER_SETTINGS = { "home-divider-width": "home_tasks_width", "home-divider-height": "home_logs_height" };
-let homeDividerDrag = null;
-let homeLayoutSaveTimers = {};
+const HOME_PANELS = { tasks: "Tasks", logs: "Logs", side: "Planters and statistics" };
+const HOME_DEFAULT_ORDER = ["tasks", "logs", "side"];
+let homeDragPanel = null;
+let homeLayoutBusy = false; //true while a change is saving, so older saved values aren't shown over it
 
-//show saved layout values; a setting missing from `settings` leaves that part as it is
-function applyHomeLayout(settings) {
+//give each visible panel a slot in `order`; a panel with nothing to show takes none
+function applyHomeLayout(order, stacked) {
   const layout = document.getElementById("home-layout");
   if (!layout) return;
-  const percent = (value, fallback) => (Number.isFinite(Number(value)) && Number(value) > 0 ? Math.min(90, Math.max(10, Number(value))) : fallback);
-  if ("home_logs_position" in settings) {
-    layout.dataset.logsPosition = settings.home_logs_position === "bottom" ? "bottom" : "right";
-  }
-  if ("home_tasks_width" in settings) {
-    const width = percent(settings.home_tasks_width, HOME_LAYOUT_DEFAULTS.home_tasks_width);
-    layout.style.setProperty("--home-tasks-width", width);
-    document.getElementById("home-divider-width").setAttribute("aria-valuenow", Math.round(width));
-  }
-  if ("home_logs_height" in settings) {
-    const height = percent(settings.home_logs_height, 0);
-    const divider = document.getElementById("home-divider-height");
-    if (height) {
-      layout.dataset.logsSized = "";
-      layout.style.setProperty("--home-logs-height", height);
-      divider.setAttribute("aria-valuenow", Math.round(height));
-      divider.removeAttribute("aria-valuetext");
-    } else {
-      delete layout.dataset.logsSized;
-      layout.style.removeProperty("--home-logs-height");
-      divider.removeAttribute("aria-valuenow");
-      divider.setAttribute("aria-valuetext", "Automatic");
-    }
+  const panelOf = (name) => layout.querySelector(`[data-panel="${name}"]`);
+  const shown = order.filter((name) => Array.from(panelOf(name).children).some((child) => !child.classList.contains("home-grip") && getComputedStyle(child).display !== "none"));
+  layout.dataset.order = order.join(",");
+  layout.dataset.stacked = stacked;
+  layout.dataset.count = shown.length;
+  for (const name of order) {
+    const slot = shown.indexOf(name);
+    if (slot < 0) delete panelOf(name).dataset.slot;
+    else panelOf(name).dataset.slot = slot;
   }
 }
 
-//what a divider resizes, in px: its current size, the room it shares, and the smallest and largest size it may take
-function homeDividerMetrics(kind) {
+//slots can change when Planter Timers or Vic Hop statistics appear or go away
+function updateHomeSlots() {
   const layout = document.getElementById("home-layout");
-  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-  if (kind === "width") {
-    const room = layout.clientWidth - rem; //the gap between the columns isn't shared
-    return { size: layout.querySelector(".home-tasks-col").offsetWidth, room, min: 15 * rem, max: room - 15 * rem, sign: 1 };
+  if (layout && !homeDragPanel) applyHomeLayout(layout.dataset.order.split(","), layout.dataset.stacked === "true");
+}
+
+function showSavedHomeLayout(settings) {
+  if (homeDragPanel || homeLayoutBusy) return;
+  const saved = String(settings.home_panel_order || "").split(",");
+  const valid = saved.length === HOME_DEFAULT_ORDER.length && HOME_DEFAULT_ORDER.every((name) => saved.includes(name));
+  applyHomeLayout(valid ? saved : HOME_DEFAULT_ORDER, settings.home_stacked === true);
+}
+
+async function setHomeLayout(order, stacked, announcement) {
+  homeLayoutBusy = true;
+  applyHomeLayout(order, stacked);
+  document.getElementById("home-layout-status").textContent = announcement;
+  try {
+    await saveSettingValue("general", "home_panel_order", order.join(","));
+    await saveSettingValue("general", "home_stacked", stacked);
+  } finally {
+    homeLayoutBusy = false;
   }
-  const logs = layout.querySelector(".home-logs-panel");
-  const bottom = layout.dataset.logsPosition === "bottom";
-  const margin = (el) => parseFloat(getComputedStyle(el).marginBottom);
-  //at the bottom Logs' row also holds the panel's bottom margin
-  const size = logs.offsetHeight + (bottom ? margin(logs) : 0);
-  const room = layout.clientHeight;
-  if (bottom) return { size, room, min: 10 * rem, max: room - 15 * rem, sign: -1 };
-  //beside Tasks the Vic Hop and Planter panels under Logs keep their full height, so Logs can't take their space
-  const under = Array.from(layout.querySelectorAll(".home-side > *")).filter((el) => el.offsetHeight).pop();
-  const below = under ? under.getBoundingClientRect().bottom + margin(under) - logs.getBoundingClientRect().bottom : 10 * rem;
-  return { size, room, min: 10 * rem, max: Math.max(10 * rem, room - below), sign: 1 };
 }
 
-//resize one panel to `size` px and return the setting value (percent of the room) it now has
-function resizeHomePanel(kind, metrics, size) {
-  const percent = Math.round((Math.min(metrics.max, Math.max(metrics.min, size)) / metrics.room) * 1000) / 10;
-  applyHomeLayout(kind === "width" ? { home_tasks_width: percent } : { home_logs_height: percent });
-  return percent;
+function homeLayoutState() {
+  const layout = document.getElementById("home-layout");
+  return { layout, order: layout.dataset.order.split(","), stacked: layout.dataset.stacked === "true" };
 }
 
-//save a layout setting once the user stops changing it
-function saveHomeLayout(setting, value) {
-  clearTimeout(homeLayoutSaveTimers[setting]);
-  homeLayoutSaveTimers[setting] = setTimeout(() => saveSettingValue("general", setting, value), 300);
+function swapHomePanels(a, b) {
+  const { order, stacked } = homeLayoutState();
+  const next = order.slice();
+  next[order.indexOf(a)] = b;
+  next[order.indexOf(b)] = a;
+  return setHomeLayout(next, stacked, `${HOME_PANELS[a]} swapped with ${HOME_PANELS[b]}`);
 }
 
-function resetHomeDivider(divider) {
-  const setting = HOME_DIVIDER_SETTINGS[divider.id];
-  applyHomeLayout({ [setting]: HOME_LAYOUT_DEFAULTS[setting] });
-  saveHomeLayout(setting, HOME_LAYOUT_DEFAULTS[setting]);
+//"bottom": last slot of a stacked layout; "left": the tall left panel of a side by side one
+function moveHomePanel(name, edge) {
+  const others = homeLayoutState().order.filter((other) => other !== name);
+  return edge === "bottom"
+    ? setHomeLayout([...others, name], true, `${HOME_PANELS[name]} moved to the bottom`)
+    : setHomeLayout([name, ...others], false, `${HOME_PANELS[name]} moved to the left`);
 }
 
-//Reset layout button in Config
-async function resetHomeLayout() {
-  for (const [setting, value] of Object.entries(HOME_LAYOUT_DEFAULTS)) {
-    clearTimeout(homeLayoutSaveTimers[setting]);
-    await saveSettingValue("general", setting, value);
-  }
-  applyHomeLayout(HOME_LAYOUT_DEFAULTS);
-  loadInputs({ home_logs_position: HOME_LAYOUT_DEFAULTS.home_logs_position });
+function endHomeDrag() {
+  document.getElementById("home-layout")?.classList.remove("home-layout-dragging");
+  document.querySelectorAll("#home-layout .dragging, #home-layout .drop-target").forEach((el) => el.classList.remove("dragging", "drop-target"));
+  homeDragPanel = null;
 }
 
 // Start polling for button state updates
@@ -885,45 +873,47 @@ $("#home-placeholder")
     }
     await eel.stop()();
   })
-  .on("pointerdown", ".home-divider", (event) => {
-    if (event.button !== 0) return;
-    const divider = event.currentTarget;
-    const kind = divider.id.replace("home-divider-", "");
-    homeDividerDrag = { kind, divider, metrics: homeDividerMetrics(kind), start: kind === "width" ? event.clientX : event.clientY, percent: null };
-    divider.setPointerCapture(event.originalEvent.pointerId);
-    divider.classList.add("dragging");
+  .on("dragstart", ".home-grip", (event) => {
+    const panel = event.currentTarget.closest(".home-panel");
+    const transfer = event.originalEvent.dataTransfer;
+    transfer.effectAllowed = "move";
+    transfer.setData("text/plain", panel.dataset.panel);
+    transfer.setDragImage(panel, 24, 16);
+    homeDragPanel = panel;
+    const { layout, stacked } = homeLayoutState();
+    document.getElementById("home-layout-mode").textContent = stacked ? "Drop here to go side by side" : "Drop here for a full-width bottom row";
+    layout.classList.add("home-layout-dragging");
+    requestAnimationFrame(() => panel.classList.add("dragging")); //after the browser has captured the drag image
+  })
+  .on("dragover", ".home-panel, #home-layout-mode", (event) => {
+    if (!homeDragPanel || event.currentTarget === homeDragPanel) return;
     event.preventDefault();
+    event.originalEvent.dataTransfer.dropEffect = "move";
+    event.currentTarget.classList.add("drop-target");
   })
-  .on("pointermove", ".home-divider", (event) => {
-    const drag = homeDividerDrag;
-    if (!drag || drag.divider !== event.currentTarget) return;
-    const delta = (drag.kind === "width" ? event.clientX : event.clientY) - drag.start;
-    drag.percent = resizeHomePanel(drag.kind, drag.metrics, drag.metrics.size + drag.metrics.sign * delta);
+  .on("dragleave", ".home-panel, #home-layout-mode", (event) => {
+    if (!event.currentTarget.contains(event.originalEvent.relatedTarget)) event.currentTarget.classList.remove("drop-target");
   })
-  .on("pointerup pointercancel", ".home-divider", (event) => {
-    const drag = homeDividerDrag;
-    if (!drag || drag.divider !== event.currentTarget) return;
-    homeDividerDrag = null;
-    drag.divider.classList.remove("dragging");
-    if (drag.percent !== null) saveHomeLayout(HOME_DIVIDER_SETTINGS[drag.divider.id], drag.percent);
-  })
-  .on("dblclick", ".home-divider", (event) => resetHomeDivider(event.currentTarget))
-  .on("keydown", ".home-divider", (event) => {
-    const divider = event.currentTarget;
-    if (event.key === "Enter") {
-      event.preventDefault();
-      resetHomeDivider(divider);
-      return;
-    }
-    const kind = divider.id.replace("home-divider-", "");
-    const bottom = document.getElementById("home-layout").dataset.logsPosition === "bottom";
-    //which way each arrow key makes the panel bigger
-    const grow = kind === "width" ? { ArrowRight: 1, ArrowLeft: -1 } : bottom ? { ArrowUp: 1, ArrowDown: -1 } : { ArrowDown: 1, ArrowUp: -1 };
-    if (!grow[event.key]) return;
+  .on("drop", ".home-panel, #home-layout-mode", (event) => {
+    if (!homeDragPanel || event.currentTarget === homeDragPanel) return;
     event.preventDefault();
-    const metrics = homeDividerMetrics(kind);
-    const percent = resizeHomePanel(kind, metrics, metrics.size + grow[event.key] * (HOME_DIVIDER_STEP / 100) * metrics.room);
-    saveHomeLayout(HOME_DIVIDER_SETTINGS[divider.id], percent);
+    const dragged = homeDragPanel.dataset.panel;
+    if (event.currentTarget.id === "home-layout-mode") moveHomePanel(dragged, homeLayoutState().stacked ? "left" : "bottom");
+    else swapHomePanels(dragged, event.currentTarget.dataset.panel);
+  })
+  .on("dragend", ".home-grip", endHomeDrag)
+  .on("keydown", ".home-grip", (event) => {
+    const name = event.currentTarget.dataset.for;
+    const { layout } = homeLayoutState();
+    if (event.shiftKey && event.key === "ArrowDown") moveHomePanel(name, "bottom");
+    else if (event.shiftKey && (event.key === "ArrowUp" || event.key === "ArrowLeft")) moveHomePanel(name, "left");
+    else if (!event.shiftKey && event.key.startsWith("Arrow")) {
+      //swap with the neighbouring panel in slot order
+      const shown = Array.from(layout.querySelectorAll(".home-panel[data-slot]")).sort((a, b) => a.dataset.slot - b.dataset.slot).map((panel) => panel.dataset.panel);
+      const neighbour = shown[shown.indexOf(name) + (event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 1)];
+      if (neighbour) swapHomePanels(name, neighbour);
+    } else return;
+    event.preventDefault();
   })
   // .on("click", "#pause-btn", async (event) => {
   //   //pause/resume button - toggle between pause and resume
@@ -1048,6 +1038,7 @@ async function refreshVicHopStats() {
   const visible = document.getElementById("macro_mode")?.value === "vic";
   panel.classList.toggle("d-none", !visible);
   document.getElementById("planter-timers-container")?.classList.toggle("d-none", visible);
+  updateHomeSlots();
   if (!visible) return;
   try {
     const rows = await eel.getVicHopStats()();

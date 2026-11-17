@@ -24,20 +24,20 @@
     </div>
   </div>
 
-  <!-- Bottom Row: Tasks and Logs/Planters. Logs can move below Tasks and the dividers resize the panels (see Home layout in home.js). -->
-  <div id="home-layout" class="flex-row gap-md flex-grow-1" data-logs-position="right">
-    <!-- Left Column: Tasks -->
-    <div class="home-tasks-col flex-col gap-md">
+  <!-- Bottom area: three panels in slots. Drag a grip onto another panel to swap them (see Home layout in home.js). -->
+  <div id="home-layout" class="flex-grow-1" data-order="tasks,logs,side" data-stacked="false" data-count="2">
+    <div class="home-panel" data-panel="tasks" data-slot="0">
+      <button type="button" class="home-grip" draggable="true" data-for="tasks" aria-label="Move Tasks panel"
+        title="Drag to rearrange. Arrow keys swap places. Shift+Down moves it to the bottom, Shift+Up to the left."></button>
       <div class="home-tasks-panel poppins-medium standard-container flex-grow-1 overflow-y-auto">
         <h2>Tasks</h2>
         <div id="task-list" class="task-list-scroll w-100"></div>
       </div>
-      <div id="home-divider-width" class="home-divider home-divider-width" role="separator" tabindex="0"
-        aria-orientation="vertical" aria-valuemin="10" aria-valuemax="90" aria-label="Tasks width" title="Drag to resize. Double-click to reset."></div>
     </div>
 
-    <!-- Right Column: Logs and Planters -->
-    <div class="home-right-col flex-col gap-md">
+    <div class="home-panel" data-panel="logs" data-slot="1">
+      <button type="button" class="home-grip" draggable="true" data-for="logs" aria-label="Move Logs panel"
+        title="Drag to rearrange. Arrow keys swap places. Shift+Down moves it to the bottom, Shift+Up to the left."></button>
       <div class="home-logs-panel poppins-regular standard-container flex-grow-1 overflow-y-auto flex-col gap-xs">
         <div class="flex-row space-between align-items-center mb-05 border-bottom">
           <h2 style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">Logs</h2>
@@ -58,32 +58,38 @@
           <!-- Logs will be appended here -->
         </div>
       </div>
-      <div id="home-divider-height" class="home-divider home-divider-height" role="separator" tabindex="0"
-        aria-orientation="horizontal" aria-valuemin="10" aria-valuemax="90" aria-label="Logs height" title="Drag to resize. Double-click to reset."></div>
-      <div class="home-side">
-        <div id="vic-hop-stats" class="standard-container d-none">
-          <h2>Vic Hop statistics</h2>
-          <div class="overflow-y-auto">
-            <table class="w-100" aria-label="Vic Hop last session and total statistics">
-              <thead><tr>
-                <th scope="col" style="text-align: left; padding: 0.35rem 0.75rem;">Statistic</th>
-                <th scope="col" style="text-align: right; padding: 0.35rem 0.75rem;">Last session</th>
-                <th scope="col" style="text-align: right; padding: 0.35rem 0.75rem;">Total</th>
-              </tr></thead>
-              <tbody id="vic-hop-stats-body"></tbody>
-            </table>
-          </div>
-        </div>
-        <div class="poppins-medium standard-container flex-col" id="planter-timers-container">
-          <div class="flex-row space-between">
-            <h2>Planter Timers</h2>
-            <button class="purple-button" id="clear-timers-btn">
-              Reset All Timers
-            </button>
-          </div>
-          <div class="planter-timers"></div>
+    </div>
+
+    <!-- Vic Hop statistics or Planter Timers; the panel only takes a slot while one of them shows -->
+    <div class="home-panel" data-panel="side">
+      <button type="button" class="home-grip" draggable="true" data-for="side" aria-label="Move Planters and statistics panel"
+        title="Drag to rearrange. Arrow keys swap places. Shift+Down moves it to the bottom, Shift+Up to the left."></button>
+      <div id="vic-hop-stats" class="standard-container d-none">
+        <h2>Vic Hop statistics</h2>
+        <div class="overflow-y-auto">
+          <table class="w-100" aria-label="Vic Hop last session and total statistics">
+            <thead><tr>
+              <th scope="col" style="text-align: left; padding: 0.35rem 0.75rem;">Statistic</th>
+              <th scope="col" style="text-align: right; padding: 0.35rem 0.75rem;">Last session</th>
+              <th scope="col" style="text-align: right; padding: 0.35rem 0.75rem;">Total</th>
+            </tr></thead>
+            <tbody id="vic-hop-stats-body"></tbody>
+          </table>
         </div>
       </div>
+      <div class="poppins-medium standard-container flex-col" id="planter-timers-container">
+        <div class="flex-row space-between">
+          <h2>Planter Timers</h2>
+          <button class="purple-button" id="clear-timers-btn">
+            Reset All Timers
+          </button>
+        </div>
+        <div class="planter-timers"></div>
+      </div>
     </div>
+
+    <!-- Shown while dragging: dropping here switches between side by side and a full-width bottom panel -->
+    <div id="home-layout-mode" class="home-mode-drop" aria-hidden="true"></div>
+    <span id="home-layout-status" class="sr-only" aria-live="polite"></span>
   </div>
 </div>
