@@ -14,7 +14,7 @@ from modules.controls.sleep import (
     INTERRUPT_STICKER_SPROUT,
     INTERRUPT_FIND_ITEM,
     HANG_FILE,
-    is_paused,
+    wait_while_paused,
     is_stopped,
     paused_seconds,
     start_hang_watchdog,
@@ -135,6 +135,32 @@ def canClaimTimedBearQuest(name):
 # (set_enabled moved into RichPresenceManager class)
 #controller for the macro
 def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMessageQueue=None, planterCommandQueue=None, skipServer=None):
+    from modules.screen.virtual_display import DisplayError
+    try:
+        _run_macro(status, logQueue, updateGUI, run, skipTask, presence, discordMessageQueue, planterCommandQueue, skipServer)
+    except DisplayError as error:
+        run.value = 0
+        from modules.controls.keyboard import keyboard
+        from modules.logging import log as logModule
+        # A tripped PyAutoGUI fail-safe must not hide the display error below.
+        for release in (keyboard.releaseMovement, mouse.mouseUp):
+            try:
+                release()
+            except Exception as releaseError:
+                print(f"Could not release input after the display error: {releaseError}")
+        settings = settingsManager.loadMacroProfile()["settings"]
+        logger = logModule.log(
+            logQueue, logModule.delivery_uses_webhook(settings),
+            logModule.get_default_delivery_route(settings), False,
+            enableDiscordBot=logModule.delivery_uses_bot_messages(settings),
+            discordMessageQueue=discordMessageQueue,
+            routeSettings=logModule.build_route_settings(settings),
+            webhookTimeFormat=settings.get("webhook_time_format", 24),
+        )
+        logger.webhook("1080p Display Error", str(error), "red", ping_category="ping_critical_errors")
+
+
+def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMessageQueue=None, planterCommandQueue=None, skipServer=None):
     start_hang_watchdog(settingsManager.getUserDataPath(HANG_FILE))
     # imported here so the GUI process, which only passes this function to the macro
     # process, doesn't load the macro package (OCR, cv2, Vision, pyautogui)
@@ -761,9 +787,8 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
         time.sleep(1)
 
     while True:
-        # Check for pause - wait while paused
-        while is_paused():
-            time.sleep(0.1)  # Wait while paused
+        # Wait while paused; on resume this puts Roblox back in place before the next task.
+        wait_while_paused()
         # Check if stop was requested while paused
         if run.value == 0:
             break  # Exit macro loop if stop requested

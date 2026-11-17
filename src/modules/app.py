@@ -36,6 +36,7 @@ def runApp(macroTarget):
     import gui
     import modules.screen.screenData as screenData
     from modules.controls.keyboard import keyboard as keyboardModule
+    from modules.screen import virtual_display
     import modules.logging.log as logModule
     import modules.misc.appManager as appManager
     import modules.misc.settingsManager as settingsManager
@@ -53,6 +54,7 @@ def runApp(macroTarget):
     macroProcStartedAt = 0.0
     nextRestartAt = 0.0
     crashRestartCount = 0
+    displaySession = virtual_display.DisplaySession()
     #set screen data
     screenData.setScreenData()
     screenInfo = screenData.getScreenData()
@@ -179,6 +181,7 @@ def runApp(macroTarget):
             stopApp()
         except Exception as e:
             print(f"Error during shutdown cleanup: {e!r}")
+        displaySession.close()
         # Reset timed bear quest states on exit so macro resumes checking next run
         try:
             settingsManager.saveSettingFile("brown_bear_quest_state", 0, settingsManager.getUserDataPath("timings.txt"))
@@ -583,17 +586,47 @@ def runApp(macroTarget):
                     appManager.openApp("Roblox")
                 except Exception:
                     pass
+                if virtual_display.active():
+                    try:
+                        # Moves Roblox back onto the virtual display it left on pause.
+                        virtual_display.prepare_window()
+                        virtual_display.command("show")
+                    except virtual_display.DisplayError as error:
+                        logger.webhook("1080p Display Error", str(error), "red")
+                        run.value = 0
+                        continue
                 logger.webhook("Macro Resumed", "Fuzzy Macro", "bright green", route_category="macro_status")
             # Check for pause (transition from running to paused)
             elif prevRunState == 2 and run.value == 6:
                 keyboardModule.releaseMovement()
                 mouse.mouseUp()
+                if virtual_display.active():
+                    try:
+                        # Moves Roblox back to the user's screen while paused.
+                        virtual_display.command("release")
+                    except virtual_display.DisplayError as error:
+                        logger.webhook("1080p Display Error", str(error), "red")
+                        run.value = 0
                 logger.webhook("Macro Paused", "Use F2 or /resume to continue", "orange", route_category="macro_status")
 
             showRunState(run.value)
             prevRunState = run.value
 
         if run.value == 1:
+            try:
+                if setdat.get("use_1080p_virtual_display", False):
+                    displaySession.start()
+                else:
+                    displaySession.close()
+                screenData.setScreenData()
+                screenInfo = screenData.getScreenData()
+            except Exception as error:
+                releaseInputsSafely()
+                logger.webhook("1080p Display Error", str(error), "red", route_category="system")
+                messageBox.msgBox(title="1080p Display Error", text=str(error))
+                run.value = 3
+                showRunState(3)
+                continue
             if standbyState.active:
                 stopStandbyKeepAwake()
                 standbyState.active = False
@@ -687,6 +720,8 @@ def runApp(macroTarget):
             macroProcStartedAt = 0.0
             nextRestartAt = 0.0
             crashRestartCount = 0
+            # Closing the helper moves Roblox back to the user's screen and removes the virtual display.
+            displaySession.close()
 
             run.value = 3
             showRunState(3)
@@ -773,6 +808,15 @@ def runApp(macroTarget):
                 showRunState(2)
         # Note: run.value == 6 (paused) is handled in the macro process loop - it waits for resume
         
+        if virtual_display.active() and run.value in (2, 6):
+            try:
+                virtual_display.state()
+            except virtual_display.DisplayError as error:
+                releaseInputsSafely()
+                logger.webhook("1080p Display Error", str(error), "red")
+                run.value = 0
+                continue
+
         # Check for crash (non-zero exitcodes). Log signal name to aid diagnosis.
         # The dead process stays assigned until the scheduled restart so Stop,
         # Pause and standby keep seeing a running session during the backoff.
@@ -851,8 +895,14 @@ def runApp(macroTarget):
             # checking every few seconds is enough to catch a disconnect
             disconnectCooldownUntil = time.time() + 5
             img = adjustImage("./images/menu", "disconnect", screenInfo["display_type"])
-            wmx, wmy, wmw, wmh = getWindowSize("roblox roblox")
-            if locateImageOnScreen(img, wmx+wmw/3, wmy+wmh/2.8, wmw/2.3, wmh/5, 0.7):
+            try:
+                wmx, wmy, wmw, wmh = getWindowSize("roblox roblox")
+                disconnected = locateImageOnScreen(img, wmx+wmw/3, wmy+wmh/2.8, wmw/2.3, wmh/5, 0.7)
+            except virtual_display.DisplayError:
+                # Roblox has no window on the virtual display yet (starting or rejoining).
+                # A failing display is stopped by the display check above.
+                disconnected = False
+            if disconnected:
                 print("disconnected")
                 run.value = 4
                 disconnectCooldownUntil = time.time() + 300  # 5 min cooldown

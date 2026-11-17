@@ -1,11 +1,13 @@
 import mss
 import mss.darwin
 import numpy as np
+from modules.screen import virtual_display
 
 mss.darwin.IMAGE_OPTIONS = 0
 
 
 def getPixelColor(x, y):
+    x, y = virtual_display.to_global(x, y)
     region = {'top': y, 'left': x, 'width': 1, 'height': 1}
     with mss.mss() as sct:
         img = sct.grab(region)

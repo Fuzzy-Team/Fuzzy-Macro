@@ -1,6 +1,8 @@
 import os
 import subprocess
+import time
 import pyautogui as pag
+from modules.screen import virtual_display
 from AppKit import NSWorkspace
 mw,mh = pag.size()
 
@@ -49,6 +51,11 @@ def openDeeplink(link):
     openWith(link)
 
 def closeApp(app):
+    pids = [
+        runningApp.processIdentifier()
+        for runningApp in NSWorkspace.sharedWorkspace().runningApplications()
+        if (runningApp.localizedName() or "").casefold() == app.casefold()
+    ]
     try:
         subprocess.call(["pkill", app], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
     except Exception:
@@ -57,8 +64,21 @@ def closeApp(app):
         subprocess.run(["osascript", "-e", 'quit application "{}"'.format(app)], timeout=10)
     except subprocess.TimeoutExpired:
         print("quit application timed out")
+    deadline = time.monotonic() + 10
+    for pid in pids:
+        while True:
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                break
+            if time.monotonic() >= deadline:
+                raise RuntimeError("{} did not exit. Close it before restarting the macro.".format(app))
+            time.sleep(0.1)
 
 def getWindowSize(windowName):
+    if virtual_display.active() and "roblox" in windowName.lower():
+        virtual_display.state(require_window=True)
+        return 0, 0, virtual_display.WIDTH, virtual_display.HEIGHT
     import Quartz
     
     windowList = Quartz.CGWindowListCopyWindowInfo(
