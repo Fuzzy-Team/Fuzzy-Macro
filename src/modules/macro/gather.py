@@ -836,6 +836,13 @@ class GatherMixin:
                     time.sleep(0.4)
                     self.reset()
                     break
+                elif (
+                    self.setdat.get("macro_mode", "normal") not in ("quest", "alt", "boost")
+                    and self.isBalloonEveryDue()
+                ):
+                    # the balloon timer is due, so head back and let convert() refresh it
+                    self.logger.webhook("Gathering: Ended", f"Time: {gatherTime} - Balloon Due - Return: {returnType.title()}", "light green", "screen", route_category="gathering")
+                    keepGathering = False
                 elif not infiniteGather and not stopWhen and getGatherTime() > maxGatherTime:
                     if honeyWreathReturnEnabled and isHoneyWreathReady():
                         backpack = self.getBackpack()

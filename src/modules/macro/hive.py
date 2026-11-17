@@ -40,6 +40,10 @@ def _restore_reset_state_on_interrupt(func):
 
 
 class HiveMixin:
+    def isBalloonEveryDue(self):
+        conv_setting = str(self.setdat.get("convert_balloon", "")).lower().replace(" ", "_")
+        return conv_setting == "every" and self.hasRespawned("convert_balloon", int(self.setdat.get("convert_balloon_every", 30))*60)
+
     def convert(self, bypass = False, forced_convert_balloon=None):
         self.location = "spawn"
         if not bypass:
@@ -67,7 +71,7 @@ class HiveMixin:
         #check if convert balloon
         conv_setting = str(self.setdat.get("convert_balloon", "")).lower().replace(" ", "_")
         convertBalloon = (conv_setting == "always") or \
-                (conv_setting == "every" and self.hasRespawned("convert_balloon", int(self.setdat.get("convert_balloon_every", 30))*60)) or \
+                self.isBalloonEveryDue() or \
                 (conv_setting == "every_gather" and forced_convert_balloon is True)
         
         if conv_setting == "balloon_blessing":
