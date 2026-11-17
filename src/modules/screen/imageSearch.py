@@ -111,9 +111,28 @@ def findPixel(window, x1, y1, x2, y2, color=0x000000, variation=0):
     """
     x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
     width, height = abs(x2 - x1) + 1, abs(y2 - y1) + 1
-    screen = captureRegionBGR(window.mx + min(x1, x2), window.my + min(y1, y2), width, height)
+    screen = captureLogicalBGR(window.mx + min(x1, x2), window.my + min(y1, y2), width, height)
+    return _firstMatch(screen, x1, y1, x2, y2, color, variation)
+
+
+def captureLogicalBGR(x, y, width, height):
+    """captureRegionBGR, sampled down to width x height logical pixels on a retina display."""
+    screen = captureRegionBGR(x, y, width, height)
     if screen.shape[:2] != (height, width):
         screen = cv2.resize(screen, (width, height), interpolation=cv2.INTER_NEAREST_EXACT)
+    return screen
+
+
+def findPixelInFrame(frame, x1, y1, x2, y2, color=0x000000, variation=0):
+    """findPixel on a frame from captureLogicalBGR of the whole window, so several searches
+    share one screenshot. The rectangle must lie inside the frame."""
+    x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+    region = frame[min(y1, y2):max(y1, y2) + 1, min(x1, x2):max(x1, x2) + 1]
+    return _firstMatch(region, x1, y1, x2, y2, color, variation)
+
+
+def _firstMatch(screen, x1, y1, x2, y2, color, variation):
+    width = screen.shape[1]
     bgr = np.array([color & 255, color >> 8 & 255, color >> 16 & 255])
     hits = cv2.inRange(screen, np.clip(bgr - variation, 0, 255).astype(np.uint8),
                        np.clip(bgr + variation, 0, 255).astype(np.uint8)) > 0

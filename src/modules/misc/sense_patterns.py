@@ -18,7 +18,7 @@ import math
 import time
 
 from modules.controls.sleep import is_paused
-from modules.screen.imageSearch import findPixel, locateImageOnScreen
+from modules.screen.imageSearch import captureLogicalBGR, findPixelInFrame, locateImageOnScreen
 
 TARGET = 0xFFCD6B         # token target, searched outward from the middle row
 PURPLE_TARGET = 0xCD66FF
@@ -57,6 +57,7 @@ class SensePattern:
                        "W": "w", "A": "a", "S": "s", "D": "d", "space": space}
         self.held = set()
         self.started = False
+        self.frame = None
 
     # --- running ---
 
@@ -70,6 +71,7 @@ class SensePattern:
                 self.start()
             self.press_held()
             for _ in range(self.LOOPED_PARTS):
+                self.look()
                 self.looped_part()
             self.release_held()
         except SenseStopped:
@@ -145,9 +147,18 @@ class SensePattern:
         if (max(x1, x2) < 0 or min(x1, x2) > right
                 or max(y1, y2) < 0 or min(y1, y2) > bottom):
             return None
+        if self.frame is None:
+            window = self.macro.robloxWindow
+            self.frame = captureLogicalBGR(window.mx, window.my, self.w, self.h)
         clip = lambda value, limit: min(max(value, 0), limit)
-        return findPixel(self.macro.robloxWindow, clip(x1, right), clip(y1, bottom),
-                         clip(x2, right), clip(y2, bottom), color, variation)
+        return findPixelInFrame(self.frame, clip(x1, right), clip(y1, bottom),
+                                clip(x2, right), clip(y2, bottom), color, variation)
+
+    def look(self):
+        """Drop the saved frame, so the next search takes a new one. Every probe of one
+        search (all its colours and retries) reads the same frame; call this after the
+        character has moved."""
+        self.frame = None
 
     def icon_visible(self, path, threshold):
         """ImageSearch in the buff row at the top of the window, by similarity."""
@@ -229,6 +240,7 @@ class SensePattern:
                 or self.pixel(0, middle + 2, self.w, self.h, color, 0))
 
     def find_sprinkler(self, variation=8):
+        self.look()
         return self.pixel(0, 0, self.w, self.h, SPRINKLER, variation)
 
     def shift_out(self, y):
