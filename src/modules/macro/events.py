@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import re
+import requests
 import threading
 from pathlib import Path
 from functools import lru_cache
@@ -85,7 +86,26 @@ BUFF_BAR_BOOST_FIELDS = {
 BUFF_BAR_BOOST_TOLERANCE = 30
 
 
+# A one-word file on main ("on" or "off") that says whether Beesmas is running. It is read from
+# GitHub each time the macro starts, so turning Beesmas on or off needs no macro update.
+BEESMAS_URL = "https://raw.githubusercontent.com/Fuzzy-Team/Fuzzy-Macro/refs/heads/main/beesmas.txt"
+
+
 class EventDetectionMixin:
+    def checkBeesmas(self):
+        """Set self.beesmas: the "Force Beesmas" setting, else the file on GitHub. Beesmas is
+        off when the file can't be read."""
+        self.beesmas = bool(self.setdat.get("beesmas_override", False))
+        if self.beesmas:
+            return
+        try:
+            response = requests.get(BEESMAS_URL, timeout=5,
+                                    headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+            response.raise_for_status()
+            self.beesmas = response.text.strip().lower() == "on"
+        except Exception as error:
+            print(f"Could not check whether Beesmas is on ({error}); assuming it is off")
+
     #thread to detect night
     #night detection is done by converting the screenshot to hsv and checking the average brightness
     #TODO:

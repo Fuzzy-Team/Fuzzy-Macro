@@ -121,6 +121,7 @@ class macro(
         self._applySettingsState()
         self.canDetectNight = True
         self.night = False
+        self.beesmas = False   # set by checkBeesmas() when the macro starts
         self.moonSproutsStart = 0 #sproutBeansUsed when the current night was detected
         self.location = "spawn"
 
@@ -457,6 +458,7 @@ class macro(
     def start(self):
         print("macro object started")
         self.resetAFBSessionTimings()
+        self.checkBeesmas()
 
         if self.setdat.get("macro_mode", "normal") != "alt":
             self.tadAltSync.initialize_alts()

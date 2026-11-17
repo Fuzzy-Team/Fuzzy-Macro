@@ -45,7 +45,19 @@ TARGET_COLOURS = {
         (0x7542FF, 0x7644FF)),
     3: (0xFFD371, 0xDB9FFF, (0x01FF01, 0x20FF2F), (0x01FF01, 0x08FF2F), 0x7237FF),
 }
+# Sprinkler colours by fog level, with the safety distances (fractions of the window height)
+# and the blob length each table is searched with. While Beesmas is on, honeystorm has its
+# own colour; otherwise it falls inside the white fog range, and the third colour is snowstorm.
+# source: the original also lists a fifth Beesmas colour for a weather it never handles, so it is left out.
 SPRINKLER_COLOURS = ((0x00D7FF, 0x02D9FF), (0x07D6FF, 0x37DAFF), (0x71DAFE, 0x9BE5FF))
+SPRINKLER_SAFETIES = (0.003, 0.003, 0.006)
+SPRINKLER_BLOB_SAFETIES = (0.001, 0.001, 0.003)
+SPRINKLER_BLOB_LENGTH = 0.02
+BEESMAS_SPRINKLER_COLOURS = ((0x00D7FF, 0x02D9FF), (0x07D6FF, 0x37D7FF), (0x16D7FE, 0x49DCFF),
+                             (0x71DAFE, 0x9BE5FF))
+BEESMAS_SPRINKLER_SAFETIES = (0.003, 0.003, 0.004, 0.006)
+BEESMAS_SPRINKLER_BLOB_SAFETIES = (0.001, 0.001, 0.002, 0.003)
+BEESMAS_SPRINKLER_BLOB_LENGTH = 0.001
 
 field_yaws = {
     "pepper": 2,
@@ -219,30 +231,36 @@ def find_targets(shot, search_all, fog, scorching):
     return found
 
 
-def sprinkler_colour_index(shot, yaw, limit=2):
+def sprinkler_colour_index(shot, yaw, beesmas, limit=3):
     """The first sprinkler colour (up to index limit) found on screen, or None."""
     height = shot.shape[0]
     sign = -1 if yaw in (2, 6) else 1   # source: the checks run the other way for yaw 2 and 6
-    safeties = (0.003, 0.003, 0.006)
-    blob_safeties = (0.001, 0.001, 0.003)
-    for index, colour in enumerate(SPRINKLER_COLOURS[:limit + 1]):
-        if pixel_search(shot, colour, sign * height * safeties[index], height * 0.02, height * 0.16,
-                        -sign * height * blob_safeties[index]):
+    if beesmas:
+        colours, safeties, blob_safeties = (BEESMAS_SPRINKLER_COLOURS, BEESMAS_SPRINKLER_SAFETIES,
+                                            BEESMAS_SPRINKLER_BLOB_SAFETIES)
+        blob_length = BEESMAS_SPRINKLER_BLOB_LENGTH
+    else:
+        colours, safeties, blob_safeties = (SPRINKLER_COLOURS, SPRINKLER_SAFETIES,
+                                            SPRINKLER_BLOB_SAFETIES)
+        blob_length = SPRINKLER_BLOB_LENGTH
+    for index, colour in enumerate(colours[:limit + 1]):
+        if pixel_search(shot, colour, sign * height * safeties[index], height * blob_length,
+                        height * 0.16, -sign * height * blob_safeties[index]):
             return index
     return None
 
 
-def read_fog(shot, yaw, new_shot):
-    """The fog level from the sprinkler's colour, or None if it is not on screen. Like
-    the original, the third colour first reads as fog 3, and any fog above 0 is then searched again
-    on a fresh capture (new_shot()) for a colour at or below that level. So the third colour
-    settles on 2 and fog 3 only stands if that second look finds nothing."""
-    index = sprinkler_colour_index(shot, yaw)
+def read_fog(shot, yaw, new_shot, beesmas):
+    """The fog level from the sprinkler's colour, or None if it is not on screen. Any fog above 0
+    is searched again on a fresh capture (new_shot()) for a colour at or below that level. Without
+    Beesmas the third colour first reads as fog 3, like the original, so it settles on 2 and
+    fog 3 only stands if that second look finds nothing."""
+    index = sprinkler_colour_index(shot, yaw, beesmas)
     if index is None:
         return None
-    fog = 3 if index == 2 else index
+    fog = 3 if index == 2 and not beesmas else index
     if fog:
-        again = sprinkler_colour_index(new_shot(), yaw, fog)
+        again = sprinkler_colour_index(new_shot(), yaw, beesmas, fog)
         if again is not None:
             fog = again
     return fog
@@ -293,7 +311,7 @@ class TargetSense(SensePattern):
                 boost["x_flame_window"] = boost["timers"]["new_x_flame"]
                 self.x_flame()
             shot = self.screenshot()
-            seen = read_fog(shot, self.yaw, self.screenshot)
+            seen = read_fog(shot, self.yaw, self.screenshot, self.macro.beesmas)
             if seen is not None:
                 if boost["last_fog"] == seen:   # a change counts once it is seen twice in a row
                     boost["fog"] = seen
