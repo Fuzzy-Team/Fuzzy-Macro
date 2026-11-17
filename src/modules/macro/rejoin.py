@@ -186,6 +186,8 @@ class RejoinMixin:
         self.questMenuOpen = False
         self.location = "spawn"
         self.cannonFromHive = False
+        # Guiding Stars belong to the old server
+        self.guidingStarLastAnnounced.clear()
         placeId = str(placeId or MAIN_GAME_PLACE_ID)
         privateServerLinks = self._getRejoinServerLinks(usePrivateServer)
         self.logger.webhook("",rejoinMsg, "dark brown")

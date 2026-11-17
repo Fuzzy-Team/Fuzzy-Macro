@@ -736,6 +736,8 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
         mode = macro.setdat.get("macro_mode", "normal")
         if mode not in ("quest", "alt") and modeRuns("mondo_buff") and macro.setdat.get("mondo_buff", False) and macro.hasMondoRespawned():
             return True
+        if mode not in ("quest", "alt") and modeRuns("guiding_star_tap") and macro.guidingStarTapField():
+            return True
         if mode not in ("bug", "boost", "resources") and any(giver not in questCache and canClaimTimedBearQuest(giver)
                                  for giver in quest_giver_order(macro.setdat)):
             return True

@@ -167,7 +167,7 @@ def modeRunsTask(mode, taskId):
     """Boost and Resources modes run only some task types from the task list; other modes run everything."""
     if mode == "boost":
         return taskId.startswith("gather_") or taskId in (
-            "auto_field_boost", "collect_blue_booster", "collect_red_booster", "collect_mountain_booster")
+            "auto_field_boost", "collect_blue_booster", "collect_red_booster", "collect_mountain_booster", "guiding_star_tap")
     if mode == "resources":
         return taskId.startswith(("kill_", "collect_")) or taskId in ("ant_challenge", "stinger_hunt", "mondo_buff")
     return True
