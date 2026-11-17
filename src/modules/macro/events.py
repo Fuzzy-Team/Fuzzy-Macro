@@ -359,7 +359,8 @@ class EventDetectionMixin:
             if self.scanGeneration != self.serverGeneration or now - self.guidingStarLastAnnounced.get(field, 0) < 10 * 60:
                 return
             self.guidingStarLastAnnounced[field] = now
-        self.logger.webhook("Guiding Star", f"Detected in {field.title()}", "light blue", "screen", ping_category="ping_guiding_star")
+        if self.setdat.get("ping_guiding_star", False):
+            self.logger.webhook("Guiding Star", f"Detected in {field.title()}", "light blue", "screen", ping_category="ping_guiding_star")
 
     def tapsAllowed(self):
         """Taps are off in Quest, Alt and Vic modes, and in modes that skip the task."""
@@ -381,19 +382,21 @@ class EventDetectionMixin:
                     and time.time() - max(self.tappedAt.values(), default=0) >= PINE_TAP_INTERVAL)
 
     def stampTap(self, field):
-        """Record a tap: gathering in Stump under a live Guiding Star, or in Pine."""
+        """Record a tap: being in Stump under a live Guiding Star, or in Pine. Returns whether it counted."""
         if not self.tapsAllowed():
-            return
+            return False
         if field == "pine tree" or (field == "stump" and time.time() - self.guidingStarLastAnnounced.get("stump", 0) < GUIDING_STAR_WINDOW):
             self.tappedAt[field] = time.time()
+            return True
+        return False
 
     def tapField(self, field):
         """Go to the field, record the tap and press the Tap hotbar slots. A failed trip isn't retried for the same star."""
         self.tapTriedAt[field] = time.time()
         self.set_task_status(f"travelling_{field}", activity="travelling", field=field)
-        if not self.travelViaCannon("Tapping") or not self.goToField(field):
+        # The star can run out on the way (a rejoin clears it), and then there's nothing to tap
+        if not self.travelViaCannon("Tapping") or not self.goToField(field) or not self.stampTap(field):
             return False
-        self.stampTap(field)
         self.useHotbar(tapping=True)
         self.logger.webhook("", f"Tapped {field.title()}", "light blue", route_category="gathering")
         return True
