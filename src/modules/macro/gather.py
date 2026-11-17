@@ -798,6 +798,16 @@ class GatherMixin:
                     self.collectMondoBuff()
                     break
                 elif (
+                    self.setdat.get("macro_mode", "normal") not in ("quest", "alt", "vic")
+                    and settingsManager.modeRunsTask(self.setdat.get("macro_mode", "normal"), "guiding_star_tap")
+                    and self.stumpTapDue()
+                ):
+                    #rely on the post-task check in main to do the tap
+                    stopGather()
+                    self.logger.webhook("Gathering: interrupted", "Stump Tap", "orange")
+                    self.reset(convert=False)
+                    break
+                elif (
                     self.setdat.get("macro_mode", "normal") not in ("quest", "alt", "boost")
                     and self.setdat["sticker_stack"]
                     and self.setdat.get("sticker_stack_interrupt_gathering", False)
