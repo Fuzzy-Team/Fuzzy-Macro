@@ -665,6 +665,10 @@ class GatherMixin:
                     raise
 
                 if stopWhen and stopWhen():
+                    # The star itself can end a cooldown gather, but here in Stump it's tapped in place instead
+                    if normalized_field == "stump" and self.stumpTapDue() and self.stampTap(normalized_field):
+                        self.useHotbar(tapping=True)
+                        continue
                     keepGathering = False
                     self.logger.webhook("Cooldown gathering finished", "A task is ready or settings changed. Returning to the task queue.",
                                         "light blue", route_category="gathering")
