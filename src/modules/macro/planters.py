@@ -484,15 +484,14 @@ class PlanterMixin:
                 if is_stopped():
                     updateHourlyTime()
                     return False
-                if self.planterCoords is not None:
-                    self.logger.webhook("", f"Found {planter.title()} in inventory after harvest", "bright green", "screen")
-                    return finishCollected()
-                self.logger.webhook("", f"Couldn't confirm {planter.title()} was harvested", "red", "screen")
-                self.reset()
-                if attempt == attempts - 1:
-                    updateHourlyTime()
-                    return False
-                continue
+                if self.planterCoords is None:
+                    self.logger.webhook("", f"Couldn't confirm {planter.title()} was harvested", "red", "screen")
+                    self.reset()
+                    if attempt == attempts - 1:
+                        updateHourlyTime()
+                        return False
+                    continue
+                self.logger.webhook("", f"Found {planter.title()} in inventory after harvest", "bright green", "screen")
             self.logger.webhook("", f"Looting: {planter.title()} planter", "bright green", "screen", ping_category="ping_conversion_events")
             if collect_loot_enabled:
                 self.keyboard.multiWalk(["s","d"], 0.87)
