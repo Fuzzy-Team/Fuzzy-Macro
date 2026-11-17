@@ -756,7 +756,9 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                 blender = loadBlenderData()
                 if blender["collectTime"] > -1 and time.time() > blender["collectTime"]:
                     return True
-            elif task == "planters" and mode == "normal" and macro.setdat.get("planters_mode", 0):
+            elif (task == "planters" and mode == "normal" and macro.setdat.get("planters_mode", 0)
+                    and MAX_TASK_FAILURES not in taskFailures.values()):
+                # A capped planter task stays skipped until a gather ends, so it must not cut the gather short
                 if macro.setdat["planters_mode"] == 1:
                     try:
                         planters = normalizeManualPlanterData(settingsManager.loadUserLiteral("manualplanters.txt"))
@@ -812,6 +814,8 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
 
         # Idle passes reuse the board until work or a settings change can affect it.
         settingsChanged = macro.checkAndReloadSettings()
+        if settingsChanged:
+            taskFailures.clear()  # a changed planter or field is a different task
         if taskCompleted or settingsChanged:
             questCache.clear()
             macro.questObservations = {}
