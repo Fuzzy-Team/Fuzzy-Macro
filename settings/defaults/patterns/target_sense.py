@@ -584,7 +584,7 @@ class TargetSense(SensePattern):
             route["goo_pass"] = 0
             self.collect_tokens()
 
-    def find_sprinkler(self):
+    def sprinkler_point(self):
         """The sprinkler's position on screen, or None. A miss lets go of the keys."""
         for _ in range(2):
             point = sprinkler_hit(self.screenshot(), self.yaw, self.macro.beesmas)[1]
@@ -610,7 +610,7 @@ class TargetSense(SensePattern):
         route["goo_active"] = False
         route["goo_pass"] = 0
         route["after_target"] = False
-        point = self.find_sprinkler()
+        point = self.sprinkler_point()
         if point:
             self.walk_from_sprinkler(point, (0, 0), [])
 
@@ -625,7 +625,7 @@ class TargetSense(SensePattern):
         found = None
         if route["after_target"] or not route["goo_pass"]:
             route["after_target"] = False
-            found = self.find_sprinkler()
+            found = self.sprinkler_point()
             corner = CORNERS[route["goo_heading"] * 2 + 1]
             offset = (GOO_SPREAD_LENGTH * corner[0], GOO_SPREAD_LENGTH * corner[1])
             route["goo_heading"] = (route["goo_heading"] + 1) % 4
@@ -664,7 +664,7 @@ class TargetSense(SensePattern):
         found = None
         if route["after_target"] or not route["token_pass"]:
             route["after_target"] = False
-            found = self.find_sprinkler()
+            found = self.sprinkler_point()
             diameter = TOKEN_DIAMETERS[route["diameter"]]
             if found:
                 route["token_heading"] = (route["token_heading"] + 1) % 8
