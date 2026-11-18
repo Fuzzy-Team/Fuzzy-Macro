@@ -420,6 +420,10 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                 macro.closeQuestMenu()
                 macro.collectMondoBuff()
                 taskCompleted = True
+            #hopped to find mondos and none is left this hour: go back to the private server
+            if not is_stopped() and macro.mondoHopped and not macro.hasMondoRespawned():
+                macro.mondoHopReturn()
+                taskCompleted = True
             if not is_stopped() and macro.stumpTapDue():
                 macro.closeQuestMenu()
                 macro.tapField("stump")

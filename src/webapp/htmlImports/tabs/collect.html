@@ -230,6 +230,15 @@
           },
         },
         {
+          id: "mondo_buff_hop",
+          title: "Hop Servers For More Mondos",
+          desc: "Requires 'Collect Loot From Mondo' active<br>After looting, join a new public server and do Mondo again until minute 14.75. Returns to your private server afterwards.",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
           id: "mondo_loot_times",
           title: "Loops",
           desc: "Requires 'Collect Loot From Mondo' active <br>How many loops while collecting loot<br>One loop is going up then down once.<br>1-2 is recommended",
@@ -242,7 +251,7 @@
         {
           id: "mondo_collect_token",
           title: "Collect Tokens From Bees",
-          desc: "Collect tokens during from bees by moving every few seconds. <br> Recommend if you don't have a Cub Buddy.<br>Note: Your avatar may move slightly and drift away from the wall.<br> It is recommend to have a animation that minimizes slight movement.",
+          desc: "Only used when 'Collect Loot From Mondo' and 'Damage Mondo' are off.<br>Collect tokens during from bees by moving every few seconds. <br> Recommend if you don't have a Cub Buddy.<br>Note: Your avatar may move slightly and drift away from the wall.<br> It is recommend to have a animation that minimizes slight movement.",
           type: {
             name: "checkbox",
             triggerFunction: saveProfileTriggerFunction,

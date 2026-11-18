@@ -179,7 +179,7 @@ class RejoinMixin:
         text = " ".join(result[1][0] for result in ocr.ocrRead(dialog))
         return self._joinErrorFromText(text)
 
-    def rejoin(self, rejoinMsg = "Rejoining", placeId = MAIN_GAME_PLACE_ID, claimHive = True, usePrivateServer = True, nightOnly = False):
+    def rejoin(self, rejoinMsg = "Rejoining", placeId = MAIN_GAME_PLACE_ID, claimHive = True, usePrivateServer = True, nightOnly = False, keepOpen = False):
         if self.skipServer is not None:
             self.skipServer.value = 0
         self.canDetectNight = False
@@ -207,7 +207,9 @@ class RejoinMixin:
             self.clear_task_status()
             return result
 
-        if not nightOnly and appManager.isAppOpen("roblox"):
+        # Hops teleport the running client with a deeplink instead of restarting it.
+        keepOpen = keepOpen or nightOnly
+        if not keepOpen and appManager.isAppOpen("roblox"):
             self.logger.webhook("", "Closing Roblox before rejoining", "dark brown")
             appManager.closeApp("Roblox")
             time.sleep(3)
@@ -371,7 +373,7 @@ class RejoinMixin:
                     # Vic Hop must see loading before trusting the hotbar;
                     # the previous server can still be visible after launch.
                     # Other rejoins retain their existing readiness rule.
-                    or (not nightOnly and time.time() >= softRejoinReadyAt)
+                    or (not keepOpen and time.time() >= softRejoinReadyAt)
                 ):
                     gameLoaded = True
                     break

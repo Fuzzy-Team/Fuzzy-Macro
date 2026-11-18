@@ -46,6 +46,7 @@ from modules.macro.rejoin import RejoinMixin
 from modules.macro.reports import ReportMixin
 from modules.macro.gather import GatherMixin
 from modules.macro.mobs import MobMixin
+from modules.macro.mondo import MondoMixin
 from modules.macro.vicious import ViciousMixin
 from modules.macro.planters import PlanterMixin
 from modules.macro.quests import QuestMixin
@@ -66,6 +67,7 @@ class macro(
     ReportMixin,
     GatherMixin,
     MobMixin,
+    MondoMixin,
     ViciousMixin,
     PlanterMixin,
     QuestMixin,
