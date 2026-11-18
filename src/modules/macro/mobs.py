@@ -48,6 +48,9 @@ class MobMixin:
         self.mondoHopped = True
         servers = 0
         while not is_stopped():
+            now = datetime.now()
+            if now.minute + now.second/60 >= MONDO_HOP_UNTIL:
+                return False    #too late; the main loop takes us back to the private server
             servers += 1
             if self.rejoin(rejoinMsg=f"Mondo hop: joining a new public server ({servers})", usePrivateServer=False, keepOpen=True):
                 return True
@@ -157,6 +160,8 @@ class MobMixin:
                         self.keyboard.walk("a",2.65)
             else:
                 self.logger.webhook("", "Mondo: the mondo was never found, skipping the loot", "red", "screen")
+                if not self.isMondoHopOn():
+                    self.saveTiming("mondo")
             if self.isMondoHopOn() and not is_stopped():
                 now = datetime.now()
                 if now.minute + now.second/60 < MONDO_HOP_UNTIL:
