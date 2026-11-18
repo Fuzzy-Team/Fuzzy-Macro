@@ -141,6 +141,7 @@ async function saveAutoPlanterEnabledAndRefresh(ele, planter){
     const settings = await loadAllSettings()
     loadPlanterHotbarSections(settings)
     loadInputsWithDuplicateSelects(settings)
+    updatePlanterDropToggles(settings)
 }
 
 async function savePlanterHotbarSlot(ele){
@@ -159,6 +160,23 @@ function refreshPlanterHotbarSlotSelects(settings){
             select.value = value
         })
     })
+}
+
+//a planter drop can only be turned on while one of the planters it uses is selected
+async function updatePlanterDropToggles(settings){
+    const dropPlanters = await eel.getPlanterDropPlanters()()
+    Object.entries(dropPlanters).forEach(([settingId, names]) => {
+        const box = document.querySelector(`input[data-setting-id="${settingId}"]`)
+        const hint = document.getElementById(`${box.id}_hint`)
+        const unavailable = !names.some(name => settings[`auto_planter_${name}`]) && !box.checked
+        box.disabled = unavailable
+        hint.style.display = unavailable ? "" : "none"
+    })
+}
+
+async function savePlanterDropSetting(ele){
+    await saveSetting(ele, 'profile')
+    updatePlanterDropToggles(await loadAllSettings())
 }
 
 function loadInputsWithDuplicateSelects(settings){
@@ -316,6 +334,7 @@ async function loadPlanters(){
     const settings = await loadAllSettings()
     loadPlanterHotbarSections(settings)
     loadInputsWithDuplicateSelects(settings)
+    updatePlanterDropToggles(settings)
     // Ensure per-planter field keys default to allowed
     try{
         // For each per-planter-field checkbox, if the setting is not present in the profile,
