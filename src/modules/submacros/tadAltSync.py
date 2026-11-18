@@ -218,3 +218,81 @@ class TadAltSync:
             self._log("TAD Alt Sync", f"Could not restore TAD alt(s): {', '.join(map(str, failures))}", "red")
         else:
             self._log("TAD Alt Sync", f"TAD alt(s) returned to {default_field.title()}", "bright green")
+
+
+# Account roles. The main posts these messages to the field alt webhook, and each
+# field alt's Discord bot reads them. Field alts run their normal macro and only
+# change which field they gather in.
+GO_TO = "Field alts: go to "
+GO_TO_END = " for 15m"
+STAY_IN = "Field alts: stay in "
+STAY_IN_END = " for another 15m"
+REVERT_DISLIKED = "Field alts: revert to your normal field, I didn't like the boosted one"
+REVERT_UNSEEN = "Field alts: revert to your normal field, I didn't see the boosted one"
+REVERT_ENDING = "Field alts: revert to your normal field, the boost is ending and I won't be back"
+MAIN_FIELD_SECONDS = 14.96 * 60  # a field alt gathers the main's field this long after its last message
+BOOST_OVER_SECONDS = 15 * 60  # a field alt still in the main's field leaves after this
+
+
+def is_field_alt(settings):
+    return str(settings.get("account_role", "solo") or "solo").startswith("field alt")
+
+
+def broadcast_to_field_alts(settings, message):
+    """Post a message for the field alts. Only the main sends, and without blocking the macro."""
+    if settings.get("account_role") != "main":
+        return
+    url = str(settings.get("field_alt_webhook", "") or "").strip()
+    if not url:
+        return
+
+    def post():
+        try:
+            TadAltSync._post_command(url, message)
+        except Exception as error:
+            print(f"Could not message the field alts: {error}")
+
+    threading.Thread(target=post, name="field-alt-broadcast", daemon=True).start()
+
+
+def own_gather_field(settings):
+    """A field alt's own field: its first enabled gather field."""
+    for field, enabled in zip(settings.get("fields", []), settings.get("fields_enabled", [])):
+        if enabled and field:
+            return field
+    return ""
+
+
+def field_alt_update(content, settings, now):
+    """Turn a main message into the settings a field alt saves, or None if it isn't one.
+    field_alt_move is where the alt should go now; a gather elsewhere stops for it."""
+    if content.startswith(GO_TO) and content.endswith(GO_TO_END):
+        field = content[len(GO_TO):-len(GO_TO_END)].strip().lower()
+        return {"main_boosted_field": field, "main_boosted_field_time": now,
+                "field_alt_move": field, "field_alt_move_time": now}
+    if content.startswith(STAY_IN) and content.endswith(STAY_IN_END):
+        return {"main_boosted_field_time": now}
+    if content in (REVERT_DISLIKED, REVERT_UNSEEN, REVERT_ENDING):
+        return {"main_boosted_field": "", "main_boosted_field_time": now - 3600,
+                "field_alt_move": own_gather_field(settings), "field_alt_move_time": now}
+    return None
+
+
+def main_field_for_alt(settings, now):
+    """The main's field a field alt should gather in instead of its own, or None."""
+    field = str(settings.get("main_boosted_field", "") or "")
+    if is_field_alt(settings) and field and now < float(settings.get("main_boosted_field_time", 0) or 0) + MAIN_FIELD_SECONDS:
+        return field
+    return None
+
+
+def field_alt_leave_reason(settings, field, since, now):
+    """Why a field alt gathering in field since `since` should stop, or None."""
+    move = str(settings.get("field_alt_move", "") or "")
+    if move and move != field and float(settings.get("field_alt_move_time", 0) or 0) > since:
+        return "Main wants me back in my field" if move == own_gather_field(settings) else "Main wants me to move"
+    mainField = str(settings.get("main_boosted_field", "") or "")
+    if (mainField == field and field != own_gather_field(settings)
+            and now > float(settings.get("main_boosted_field_time", 0) or 0) + BOOST_OVER_SECONDS):
+        return "Boost over"
+    return None
