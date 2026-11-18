@@ -250,6 +250,9 @@ class HiveMixin:
             if balloonBlessing not in (None, "", "0"):
                 balloonLines.append(f"Balloon Blessing x{balloonBlessing}")
         self.logger.webhook(f"Finished converting (Time: {self.convertSecsToMinsAndSecs(time.time()-st)})", "\n".join(balloonLines), "brown", "screen", ping_category="ping_conversion_events")
+        # Finish Conversion: after a completed balloon conversion, hold at the hive 4.5s more. A timeout skips it.
+        if convertBalloon and convertedBackpack and not timedOut and self.setdat.get("finish_balloon_conversion", False):
+            time.sleep(4.5)
         wait = self.setdat["convert_wait"]
         if (wait):
             self.logger.webhook("", f'Waiting for an additional {wait} seconds', "light green")

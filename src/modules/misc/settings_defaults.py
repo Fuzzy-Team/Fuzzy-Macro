@@ -265,6 +265,7 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'convert_balloon_min_blessing': 0,
  'convert_balloon_always_after': 50,
  'convert_balloon': 'always',
+ 'finish_balloon_conversion': False,
  'polar_bear_quest': False,
  'brown_bear_quest': False,
  'black_bear_quest': False,
