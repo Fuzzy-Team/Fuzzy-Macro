@@ -7,7 +7,7 @@ import os
 import modules.misc.update as updateModule
 import modules.misc.modelManager as modelManager
 import modules.controls.mouse as mouseControl
-from modules.misc.appManager import getWindowSize
+from modules.misc.appManager import getWindowSize, isAppFocused
 import subprocess
 import sys
 import ast
@@ -420,9 +420,9 @@ class HotbarBuffRunner:
         return {"ok": True, "message": "Hotbar buff tool stop requested."}
 
     def _hold_loop(self):
-        """Auto holder: each time the right button goes down over the Roblox window, release and press left click so it stays held.
+        """Auto holder: each time the right button goes down over the focused Roblox window, release and press left click so it stays held.
         Like an auto clicker you can't forget about: click yourself to let go. Nothing is released when the tool stops."""
-        was_pressed = False
+        was_pressed = mouseControl.rightButtonPressed() #a right button already held when the tool starts is not a press
         enabled = False
         bounds = (0, 0, 0, 0)
         last_refresh = 0
@@ -433,10 +433,8 @@ class HotbarBuffRunner:
                     if enabled:
                         bounds = getWindowSize("roblox roblox")
                     last_refresh = time.time()
-                if not enabled:
-                    continue
                 pressed = mouseControl.rightButtonPressed()
-                if pressed and not was_pressed:
+                if enabled and pressed and not was_pressed and isAppFocused("Roblox"):
                     x, y = mouseControl.getPos()
                     left, top, width, height = bounds
                     if left <= x <= left + width and top <= y <= top + height:
@@ -534,6 +532,7 @@ class HotbarBuffRunner:
             _clear_tool_presence("tool_hotbar_buff")
             _send_tool_webhook("Tool Error", f"Hotbar Buff: {str(exc)}", "red")
         finally:
+            self._stop_event.set() #the auto holder ends with the tool, even when it ended on an error
             with self._lock:
                 self._thread = None
                 if self._status.get("state") != "finished" or self._status.get("running"):
