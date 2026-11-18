@@ -122,9 +122,11 @@
 
       const hotbarBuffStrip = document.getElementById("hotbar-buff-tool-strip");
       const hotbarBuffPanels = document.getElementById("hotbar-buff-tool-panels");
-      for (let slot = 1; slot <= 7; slot += 1) {
+      for (const slot of ["1", "2", "3", "4", "5", "6", "7", "o"]) {
+        const isZoom = slot === "o";
+        const slotName = isZoom ? "Zoom Out" : `Slot ${slot}`;
         hotbarBuffStrip.innerHTML += `
-          <button type="button" id="hotbar-buff-tool-slot-${slot}" class="boost-hotbar-slot hotbar-buff-tool-slot" onclick="switchHotbarBuffToolSlot(${slot})" title="Slot ${slot}">
+          <button type="button" id="hotbar-buff-tool-slot-${slot}" class="boost-hotbar-slot hotbar-buff-tool-slot" onclick="switchHotbarBuffToolSlot('${slot}')" title="${slotName}">
             <span class="boost-hotbar-slot-number">[${slot}]</span>
             <span class="boost-hotbar-slot-frame">
               <span class="boost-hotbar-slot-empty"></span>
@@ -139,14 +141,14 @@
                 <span class="boost-hotbar-slot-empty"></span>
               </div>
               <div>
-                <h3 class="poppins-semibold">Slot ${slot}</h3>
-                <p class="poppins-regular">Enable this slot and set how often it should be pressed.</p>
+                <h3 class="poppins-semibold">${slotName}</h3>
+                <p class="poppins-regular">${isZoom ? "Presses the O key to zoom the camera out, for when it gets blocked." : "Enable this slot and set how often it should be pressed."}</p>
               </div>
             </div>
             <form class="boost-hotbar-form-row">
               <div class="boost-hotbar-form-copy">
                 <label>Enabled</label>
-                <p>Allow the tool to press this hotbar slot.</p>
+                <p>${isZoom ? "Allow the tool to zoom out." : "Allow the tool to press this hotbar slot."}</p>
               </div>
               ${buildInput(`hotbar_buff_tool_slot${slot}_enabled`, {
                 name: "checkbox",
@@ -156,7 +158,7 @@
             <form class="boost-hotbar-form-row">
               <div class="boost-hotbar-form-copy">
                 <label>Use Every</label>
-                <p>Set the cooldown for repeated use of this slot.</p>
+                <p>${isZoom ? "Set how often to zoom out." : "Set the cooldown for repeated use of this slot."}</p>
               </div>
               <div class="boost-hotbar-frequency">
               ${buildInput(`hotbar_buff_tool_slot${slot}_use_every_value`, {

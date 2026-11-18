@@ -843,7 +843,7 @@ function renderHotbarBuffStatus(status) {
   const stopButton = document.getElementById("hotbar-buff-stop");
 
   if (state) state.textContent = status.state || "idle";
-  if (lastSlot) lastSlot.textContent = status.last_slot ? `Slot ${status.last_slot}` : "None";
+  if (lastSlot) lastSlot.textContent = status.last_slot ? (status.last_slot === "o" ? "Zoom out" : `Slot ${status.last_slot}`) : "None";
   if (message) message.textContent = status.message || "Ready";
 
   if (startButton) {

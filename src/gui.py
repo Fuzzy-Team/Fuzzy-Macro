@@ -9,7 +9,6 @@ import modules.misc.modelManager as modelManager
 import modules.controls.mouse as mouseControl
 import subprocess
 import sys
-import ast
 import json
 import time
 import threading
@@ -417,26 +416,6 @@ class HotbarBuffRunner:
             thread.join(timeout=0.3)
         return {"ok": True, "message": "Hotbar buff tool stop requested."}
 
-    def _timings_path(self):
-        return os.path.join(settingsManager.getProjectRoot(), "src", "data", "user", "hotbar_buff_tool_timings.txt")
-
-    def _load_timings(self):
-        timings_path = self._timings_path()
-        try:
-            with open(timings_path, "r") as f:
-                timings = ast.literal_eval(f.read())
-        except Exception:
-            timings = {}
-        for slot in range(1, 8):
-            timings.setdefault(slot, 0)
-        return timings
-
-    def _save_timings(self, timings):
-        timings_path = self._timings_path()
-        os.makedirs(os.path.dirname(timings_path), exist_ok=True)
-        with open(timings_path, "w") as f:
-            f.write(str(timings))
-
     def _slot_interval_seconds(self, settings, slot):
         try:
             interval = float(settings.get(f"hotbar_buff_tool_slot{slot}_use_every_value", 30))
@@ -448,13 +427,15 @@ class HotbarBuffRunner:
 
     def _run(self):
         try:
+            # slots 1-7 plus "o", the zoom out key; every timer starts counting when the tool starts
+            keys = ("1", "2", "3", "4", "5", "6", "7", "o")
+            timings = {key: time.time() for key in keys}
             while not self._stop_event.is_set():
                 settings = settingsManager.loadAllSettings()
-                timings = self._load_timings()
                 used_slot = None
                 enabled_count = 0
 
-                for slot in range(1, 8):
+                for slot in keys:
                     if self._stop_event.is_set():
                         break
                     if not settings.get(f"hotbar_buff_tool_slot{slot}_enabled", False):
@@ -462,23 +443,24 @@ class HotbarBuffRunner:
                     enabled_count += 1
 
                     interval_seconds = self._slot_interval_seconds(settings, slot)
-                    if time.time() - float(timings.get(slot, 0) or 0) < interval_seconds:
+                    if time.time() - timings[slot] < interval_seconds:
                         continue
 
-                    for _ in range(2):
+                    # hotbar slots are pressed twice like the macro does; zoom out is one press
+                    for _ in range(1 if slot == "o" else 2):
                         if self._stop_event.is_set():
                             break
-                        keyboardModule.keyboard.pagPress(str(slot))
+                        keyboardModule.keyboard.pagPress(slot)
                         if self._stop_event.wait(0.4):
                             break
 
                     timings[slot] = time.time()
-                    self._save_timings(timings)
                     used_slot = slot
+                    label = "zoom out" if slot == "o" else f"hotbar slot {slot}"
                     self._update_status(
                         running=True,
                         state="running",
-                        message=f"Pressed hotbar slot {slot}. Stop it with the macro's configured stop hotkey.",
+                        message=f"Pressed {label}. Stop it with the macro's configured stop hotkey.",
                         last_slot=slot,
                     )
 
