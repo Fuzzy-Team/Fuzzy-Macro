@@ -4,24 +4,31 @@
 # The decision table, timers, colours and X-Flame spin follow the original pattern.
 # Timer lengths come from Windows timing and are unverified on macOS.
 import math
+import re
 import threading
 import time
+from collections import Counter
 
 import cv2
 import numpy as np
+from PIL import Image
 
 from modules.controls.sleep import is_paused, is_stopped
-from modules.misc.sense_patterns import (
-    SCORCHING_ACTIVE, SCORCHING_THRESHOLD, SensePattern, SenseStopped,
-)
-from modules.screen.imageSearch import captureRegionBGR, locateImageOnScreen
+from modules.misc.sense_patterns import SensePattern, SenseStopped
+from modules.screen.imageSearch import captureRegionBGR, locateImageInScreen
+from modules.screen.ocr import ocrRead
 
 # The original matched these icons exactly; Fuzzy matches by similarity, which approximates that.
-# They are 3 px and 6 px crops captured on Windows, so a match on macOS is not guaranteed.
+# They are crops of a few pixels captured on Windows, so a match on macOS is not guaranteed.
 ICON_THRESHOLD = 0.8
 PRECISION_ICONS = ("./images/buffs/precision_8x", "./images/buffs/precision_9x",
                    "./images/buffs/precision_10x")
 X_FLAME_ICON = "./images/buffs/x_flame"
+SCORCHING_ICON = "./images/buffs/scorching_icon"
+# The stack count sits under its icon: (x, y) offset from the icon's top-left, then width and height.
+COUNT_BOX = (0, 7, 19, 12)
+COUNT_READS = 2
+OCR_DIGITS = str.maketrans("OoIl", "0011")
 
 # Timer names follow the original. A timer exists while now < its end time.
 PRECISION_SECONDS = {"rose": 54.842, "strawberry": 52.842, "mushroom": 46.842}
@@ -82,15 +89,47 @@ def stop_timer(name):
     boost["timers"].pop(name, None)
 
 
+def start_hit_timers():
+    no_hits = self.setdat["target_sense_no_hits_until"]
+    start_timer("no_hit", no_hits)
+    start_timer("get_hit", no_hits + self.setdat["target_sense_hits_until"])
+
+
+def stack_priority(scorching, x_flame):
+    """While Scorching Star is off cooldown it is being built. The goal for its stack count is
+    a line over the X-Flame count (0 to 25): stack 1 to stack 2, capped below stack 3, or
+    stack 5 to stack 6. Above the goal only precise targets are taken, within the acceptable
+    range under it marks and hits alternate, and further under it hits are chased."""
+    stack = lambda n: self.setdat[f"target_sense_scorch_stack{n}"]
+    margin = self.setdat["target_sense_acceptable_range"]
+    first = x_flame * (stack(2) - stack(1)) * 0.04 + stack(1)
+    second = x_flame * (stack(6) - stack(5)) * 0.04 + stack(5)
+    if scorching > first and scorching < stack(3) or scorching > second:
+        return "only_prec"
+    if scorching > first - margin and scorching < stack(3) or scorching > second - margin:
+        if timer_running("no_hit"):
+            return "marks"
+        if not timer_running("get_hit"):
+            start_hit_timers()
+        return "hits!o"
+    if timer_running("no_hit"):
+        return "hits!o"
+    if not timer_running("get_hit"):
+        start_hit_timers()
+    return "only_hit"
+
+
 def target_priority():
     """Which targets to chase, from which timers are running (the decision table, in
     order). Falling through to the last rule starts the no-hits and hits timers.
-    Returns 'hit', 'prec', 'x_flame', 'marks', 'only_prec' or 'hits!o'."""
+    Returns 'hit', 'prec', 'x_flame', 'marks', 'only_prec', 'hits!o' or 'only_hit'."""
     if timer_running("full_bag"):
         return "hit"
     if not timer_running("precision"):
         return "prec"
-    if (timer_running("scorching_star_cd") and timer_running("build_flames")
+    if not timer_running("scorching_star_cd"):
+        return stack_priority(boost["scorching_count"], boost["x_flame_count"])
+    if (timer_running("build_flames")
             and timer_running("new_x_flame")):
         return "x_flame"
     if timer_running("get_targets"):
@@ -101,9 +140,7 @@ def target_priority():
         return "hits!o"
     if timer_running("get_hit"):
         return "marks"
-    no_hits = self.setdat["target_sense_no_hits_until"]
-    start_timer("no_hit", no_hits)
-    start_timer("get_hit", no_hits + self.setdat["target_sense_hits_until"])
+    start_hit_timers()
     return "marks"
 
 
@@ -133,6 +170,8 @@ def choose_targets(priority, orange, violet, green, purple, hit_waiting, size):
         return precise or hits, []
     if priority == "only_prec":
         return precise, []
+    if priority == "only_hit":
+        return hits, [p for p in (orange,) if p]
     if priority == "marks":
         return [p for p in (violet,) if p], [p for p in (orange,) if p]
     if priority == "hits!o":
@@ -350,12 +389,47 @@ class TargetSense(SensePattern):
 
     # --- the buff watcher ---
 
-    def icon_in(self, path, x, y, width, height):
-        """Look for an icon in a window-relative rectangle."""
+    def bar_icons(self):
+        """The Scorching Star and X-Flame icons in the bar above the hotbar (520 x 26 px, 128 px
+        above the bottom), as {name: (x, y)} top-left corners in screen pixels."""
         self.idle()
         window = self.macro.robloxWindow
-        return locateImageOnScreen(path, window.mx + x, window.my + y, width, height,
-                                   ICON_THRESHOLD, scales=[1.0]) is not None
+        left, top = window.mx + round(self.w * 0.5 - 260), window.my + self.h - 128
+        shot = captureRegionBGR(left, top, 520, 26)
+        scale = shot.shape[1] / 520   # 2 on a retina display
+        icons = {}
+        for name, path in (("scorching", SCORCHING_ICON), ("x_flame", X_FLAME_ICON)):
+            match = locateImageInScreen(path, shot, ICON_THRESHOLD, scales=[1.0])
+            if match:
+                icons[name] = (left + match[1][0] / scale, top + match[1][1] / scale)
+        return icons
+
+    def read_count(self, name, icon):
+        """The stack count under an icon, or None if no digits were read. The box is read
+        COUNT_READS times; the leading digit most reads agree on wins, then the longest read,
+        then the most confident one. A box that looks the same as last time keeps that count."""
+        x, y = icon
+        dx, dy, width, height = COUNT_BOX
+        region = (round(x + dx), round(y + dy), width, height)
+        candidates = []
+        for i in range(COUNT_READS):
+            self.idle()
+            crop = captureRegionBGR(*region)
+            if i == 0:
+                last = boost["count_reads"].get(name)
+                if last and np.array_equal(last[0], crop):
+                    return last[1]
+                first_crop = crop
+            for _, (text, confidence) in ocrRead(Image.fromarray(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB))):
+                digits = re.sub("[^0-9]", "", text.translate(OCR_DIGITS))
+                if digits:
+                    candidates.append((digits, len(digits), digits[0], float(confidence)))
+        if not candidates:
+            return None
+        lead = Counter(c[2] for c in candidates).most_common(1)[0][0]
+        count = int(max((c for c in candidates if c[2] == lead), key=lambda c: (c[1], c[3]))[0])
+        boost["count_reads"][name] = (first_crop, count)
+        return count
 
     def scan(self):
         """The bag, then the Precision, Scorching Star and X-Flame icons start, restart and
@@ -373,29 +447,36 @@ class TargetSense(SensePattern):
             stop_timer("full_bag")
             boost["bag_timer_started"] = False
 
-        # The original reads Scorching Star's stack icon in the bar above the hotbar and starts
-        # these timers when it disappears. Fuzzy already has the buff icon in the top row
-        # (the Sense patterns use it), which appears at that moment, so the timers start
-        # when it shows up, and the star is ready again once it and its 45 s timer are gone.
-        scorching = self.icon_visible(SCORCHING_ACTIVE, SCORCHING_THRESHOLD)
-        if scorching and boost["scorching_ready"]:
+        # Scorching Star's and X-Flame's icons sit in the bar above the hotbar while they are
+        # ready, with their stack counts under them. When an icon goes, that ability is on
+        # cooldown and its count starts again from 0.
+        icons = self.bar_icons()
+        if "scorching" in icons:
+            for name in ("scorching_star_cd", "scorching_star", "get_targets", "build_flames"):
+                stop_timer(name)
+            boost["scorching_ready"] = True
+            count = self.read_count("scorching", icons["scorching"])
+            if count is not None:   # a failed read keeps the last count
+                boost["scorching_count"] = count
+        elif boost["scorching_ready"]:
             boost["scorching_ready"] = False
             start_timer("scorching_star_cd", SCORCHING_STAR_COOLDOWN)
             start_timer("scorching_star", SCORCHING_STAR_SECONDS)
             start_timer("get_targets", self.macro.setdat["target_sense_scorch_get_marks"])
             start_timer("build_flames", self.macro.setdat["target_sense_build_flames"])
-        elif not scorching and not timer_running("scorching_star"):
-            boost["scorching_ready"] = True
+            boost["scorching_count"] = 0
 
-        # X-Flame's icon (same bar as the original: 520 x 26 px, 128 px above the bottom) is
-        # shown while it is ready; when it goes, X-Flame is on cooldown.
-        if self.icon_in(X_FLAME_ICON, round(self.w * 0.5 - 260), self.h - 128, 520, 26):
+        if "x_flame" in icons:
             stop_timer("x_flame_cd")
             boost["x_flame_ready"] = True
+            count = self.read_count("x_flame", icons["x_flame"])
+            if count is not None:
+                boost["x_flame_count"] = count
         elif boost["x_flame_ready"]:
             boost["x_flame_ready"] = False
             start_timer("x_flame_cd", X_FLAME_COOLDOWN)
             start_timer("new_x_flame", NEW_X_FLAME_SECONDS)
+            boost["x_flame_count"] = 0
 
         # The original restarts the Precision timer on every look that finds the icon.
         if any(self.icon_visible(path, ICON_THRESHOLD) for path in PRECISION_ICONS):
@@ -564,7 +645,8 @@ class TargetSense(SensePattern):
 
 if "boost" not in globals():
     boost = {"timers": {}, "bag_timer_started": False, "scorching_ready": True,
-             "x_flame_ready": True, "x_flame_window": None, "fog": 0, "last_fog": 0,
+             "x_flame_ready": True, "scorching_count": 0, "x_flame_count": 0, "count_reads": {},
+             "x_flame_window": None, "fog": 0, "last_fog": 0,
              "targets_until": 0, "hit_wait_started": False, "search_step": 0}
 
 yaw = field_yaws.get(str(field).replace("_", " ").lower(), 0)
