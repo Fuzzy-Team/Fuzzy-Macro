@@ -435,6 +435,7 @@ class HotbarBuffRunner:
                 settings = settingsManager.loadAllSettings()
                 used_slot = None
                 enabled_count = 0
+                wait_seconds = 1 #re-read settings at least this often; shorter when a timer is due sooner
 
                 for slot in keys:
                     if self._stop_event.is_set():
@@ -444,18 +445,24 @@ class HotbarBuffRunner:
                     enabled_count += 1
 
                     interval_seconds = self._slot_interval_seconds(settings, slot)
-                    if time.time() - timings[slot] < interval_seconds:
+                    remaining = interval_seconds - (time.time() - timings[slot])
+                    if remaining > 0:
+                        wait_seconds = min(wait_seconds, remaining)
                         continue
 
                     # hotbar slots are pressed twice like the macro does; zoom out is one press
-                    for _ in range(1 if slot == "o" else 2):
-                        if self._stop_event.is_set():
-                            break
+                    if slot == "o":
                         keyboardModule.keyboard.pagPress(slot)
-                        if self._stop_event.wait(0.4):
-                            break
+                    else:
+                        for _ in range(2):
+                            if self._stop_event.is_set():
+                                break
+                            keyboardModule.keyboard.pagPress(slot)
+                            if self._stop_event.wait(0.4):
+                                break
 
                     timings[slot] = time.time()
+                    wait_seconds = min(wait_seconds, max(0.05, interval_seconds))
                     used_slot = slot
                     label = "zoom out" if slot == "o" else f"hotbar slot {slot}"
                     self._update_status(
@@ -477,7 +484,7 @@ class HotbarBuffRunner:
                         state="running",
                         message="Hotbar buff tool running. Waiting for the next configured slot timer.",
                     )
-                if self._stop_event.wait(1):
+                if self._stop_event.wait(wait_seconds):
                     break
         except Exception as exc:
             self._update_status(
