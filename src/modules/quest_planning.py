@@ -222,7 +222,8 @@ def objective_matches_text(action, text):
         if target == "any":
             # Any-colour pollen names no colour or field; otherwise every gather row would match it.
             return ("pollen" if kind == "pollen" else "goo") in words and not words.intersection(("white", "blue", "red", "field", "from"))
-        return target in words and ("pollen" in words or "goo" in words)
+        # "Red Pollen from the Cactus Field" belongs to the field row, not the any-field colour row.
+        return target in words and ("goo" in words or ("pollen" in words and "from" not in words))
     if kind == "token":
         names = {"blueboost": ("blue", "boost"), "redboost": ("red", "boost"),
                  "blueability": ("blue", "ability"), "redability": ("red", "ability")}
