@@ -22,9 +22,10 @@ def _firstPixel(frame, color, variation=0, rightToLeft=False, run=0):
     bgr = np.array([color & 255, color >> 8 & 255, color >> 16 & 255])
     hits = cv2.inRange(frame, np.clip(bgr - variation, 0, 255).astype(np.uint8),
                        np.clip(bgr + variation, 0, 255).astype(np.uint8)) > 0
+    colored = hits.copy()
     for step in range(1, run + 1):
         below = np.zeros_like(hits)
-        below[:-step] = hits[step:]
+        below[:-step] = colored[step:]
         hits &= below
     if rightToLeft:
         hits = hits[:, ::-1]
@@ -49,14 +50,10 @@ class MondoMixin:
 
     def mondoHealthBar(self, frame, withGreen):
         """The health bar's position as the middle of what is found scanning from the left and from
-        the right. Red wins; green is only used when asked and there is no red. Returns
-        (point or None, red was seen)."""
+        the right. Red wins; green is only used when asked and there is no red."""
         run = int(frame.shape[0] * 0.002)
         both = lambda color: _middle([_firstPixel(frame, color, run=run), _firstPixel(frame, color, rightToLeft=True, run=run)])
-        red = both(HEALTH_RED)
-        if red or not withGreen:
-            return red, bool(red)
-        return both(HEALTH_GREEN), False
+        return both(HEALTH_RED) or (both(HEALTH_GREEN) if withGreen else None)
 
     def mondoSprinkler(self):
         return _firstPixel(self.mondoFrame(), SPRINKLER, 8)
@@ -131,7 +128,7 @@ class MondoMixin:
                 if now.minute + now.second / 60 >= 15 or (endTime and now > endTime):
                     return "time"
                 lookingForGreen = time.monotonic() - startedAt < RED_ONLY_AFTER
-                bar, redSeen = self.mondoHealthBar(self.mondoFrame(), lookingForGreen)
+                bar = self.mondoHealthBar(self.mondoFrame(), lookingForGreen)
                 if bar:
                     self.mondoSeen = True
                     misses = 0

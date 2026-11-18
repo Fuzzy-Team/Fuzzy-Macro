@@ -86,15 +86,20 @@ class MobMixin:
             return False
         if self.setdat["mondo_buff_damage"]:
             mondo_buff_wait = self.setdat["mondo_buff_wait"]
-            end_time = time.perf_counter() + mondo_buff_wait * 60
             self.logger.webhook("", f"Damaging Mondo for {mondo_buff_wait:g} minutes", "yellow")
             self.enableShiftLock()
-            self.mondoFight(datetime.now() + timedelta(minutes=mondo_buff_wait))
+            result = self.mondoFight(datetime.now() + timedelta(minutes=mondo_buff_wait))
             if is_stopped():
                 self.clear_task_status()
                 return False
             self.saveTiming("mondo")
-            self.logger.webhook("","Collected: Mondo Buff","light green", ping_category="ping_mondo_buff")
+            if result == "died":
+                self.died = True
+                self.logger.webhook("", "Player Died", "red", "screen", ping_category="ping_character_deaths")
+            elif self.mondoSeen:
+                self.logger.webhook("","Collected: Mondo Buff","light green", ping_category="ping_mondo_buff")
+            else:
+                self.logger.webhook("", "Mondo: the mondo was never found", "red", "screen")
         elif self.setdat["mondo_buff_loot"]: # If looting is enabled, wait until mondo is defeated
             self.logger.webhook("", "Waiting for Mondo to be defeated", "light green")
             self.enableShiftLock() #moves slightly up (or down) when hitting wall, so this reduces that
@@ -170,7 +175,7 @@ class MobMixin:
                     return self.mondoHop()
                 #too late for another mondo this hour
                 self.saveTiming("mondo")
-                if self.mondoHopped:
+                if self.mondoHopped and self._getRejoinServerLinks(True):
                     self.clear_task_status()
                     return self.mondoHopReturn()
         else: #if loot off, just idle
