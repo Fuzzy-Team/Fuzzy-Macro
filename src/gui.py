@@ -10,6 +10,7 @@ import modules.controls.mouse as mouseControl
 import subprocess
 import sys
 import json
+import ast
 import time
 import threading
 import plistlib
