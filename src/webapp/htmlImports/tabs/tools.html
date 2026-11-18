@@ -115,6 +115,17 @@
           <p id="hotbar-buff-message" style="font-size:0.95rem; opacity:0.85; margin-top:1rem;">Ready</p>
 
           <div class="seperator"></div>
+          <form class="boost-hotbar-form-row">
+            <div class="boost-hotbar-form-copy">
+              <label>Auto Holder</label>
+              <p>While the tool runs, right click holds left click. Click yourself to let go.</p>
+            </div>
+            ${buildInput("hotbar_buff_tool_auto_holder", {
+              name: "checkbox",
+              triggerFunction: saveProfileTriggerFunction,
+            })}
+          </form>
+          <div class="seperator"></div>
           <div class="boost-hotbar-strip" id="hotbar-buff-tool-strip"></div>
           <div class="boost-hotbar-panels" id="hotbar-buff-tool-panels"></div>
         </div>

@@ -7,6 +7,7 @@ import os
 import modules.misc.update as updateModule
 import modules.misc.modelManager as modelManager
 import modules.controls.mouse as mouseControl
+from modules.misc.appManager import getWindowSize
 import subprocess
 import sys
 import ast
@@ -388,6 +389,7 @@ class HotbarBuffRunner:
             )
             self._thread = threading.Thread(target=self._run, daemon=True)
             self._thread.start()
+            threading.Thread(target=self._hold_loop, daemon=True).start()
 
         return {"ok": True, "message": "Hotbar buff tool started."}
 
@@ -416,6 +418,33 @@ class HotbarBuffRunner:
         if thread and thread.is_alive():
             thread.join(timeout=0.3)
         return {"ok": True, "message": "Hotbar buff tool stop requested."}
+
+    def _hold_loop(self):
+        """Auto holder: each time the right button goes down over the Roblox window, release and press left click so it stays held.
+        Like an auto clicker you can't forget about: click yourself to let go. Nothing is released when the tool stops."""
+        was_pressed = False
+        enabled = False
+        bounds = (0, 0, 0, 0)
+        last_refresh = 0
+        while not self._stop_event.wait(0.01):
+            try:
+                if time.time() - last_refresh > 1:
+                    enabled = bool(settingsManager.loadAllSettings().get("hotbar_buff_tool_auto_holder", False))
+                    if enabled:
+                        bounds = getWindowSize("roblox roblox")
+                    last_refresh = time.time()
+                if not enabled:
+                    continue
+                pressed = mouseControl.rightButtonPressed()
+                if pressed and not was_pressed:
+                    x, y = mouseControl.getPos()
+                    left, top, width, height = bounds
+                    if left <= x <= left + width and top <= y <= top + height:
+                        mouseControl.mouseUp()
+                        mouseControl.mouseDown()
+                was_pressed = pressed
+            except Exception as exc:
+                print(f"Auto holder error: {exc}")
 
     def _timings_path(self):
         return os.path.join(settingsManager.getProjectRoot(), "src", "data", "user", "hotbar_buff_tool_timings.txt")

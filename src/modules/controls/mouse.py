@@ -32,6 +32,9 @@ def mouseDown():
 def mouseUp():
     postLeftButton(Quartz.kCGEventLeftMouseUp)
 
+def rightButtonPressed():
+    return bool(Quartz.CGEventSourceButtonState(Quartz.kCGEventSourceStateCombinedSessionState, Quartz.kCGMouseButtonRight))
+
 def moveBy(x = 0,y = 0, pause=True):
     if virtual_display.active(): virtual_display.state(require_window=True)
     pag.move(x, y, _pause=pause)  
