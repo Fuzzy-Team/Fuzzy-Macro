@@ -3,6 +3,7 @@ import json
 import time
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
+import modules.macro.planter_bonus_loot as bonusLoot
 from modules.quest_planning import quest_giver_order, choose_quest_gather, is_gather_objective, allowed_fields, quest_uses_ant_challenge, kill_objective_mob
 from modules.controls.sleep import (
     InterruptRequested,
@@ -45,7 +46,8 @@ def emptyManualPlanterData():
         "planters": ["", "", ""],
         "fields": ["", "", ""],
         "gatherFields": ["", "", ""],
-        "harvestTimes": [0, 0, 0]
+        "harvestTimes": [0, 0, 0],
+        "placedTimes": [0, 0, 0]
     }
 
 
@@ -71,7 +73,7 @@ def normalizeManualPlanterData(rawData):
                 except Exception:
                     cycle = 1
                 normalized[key].append(min(5, max(1, cycle)))
-        elif key == "harvestTimes":
+        elif key in ("harvestTimes", "placedTimes"):
             normalized[key] = []
             for value in cleaned:
                 try:
@@ -210,6 +212,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
             "placed_time": 0,
             "grow_duration": 0,
             "natural_grow_duration": 0,
+            "bonus": False,
         }
 
     def clearCollectedPlanterState(command):
@@ -1038,6 +1041,37 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
             planterDataRaw = str(normalized)
             settingsManager.saveUserText("manualplanters.txt", planterDataRaw)
             return normalized
+
+        def saveManualPlacement(planterData, i, planter, field, harvestTime, gather):
+            planterData["planters"][i] = planter
+            planterData["fields"][i] = field
+            planterData["harvestTimes"][i] = harvestTime
+            planterData["placedTimes"][i] = time.time()
+            planterData["gatherFields"][i] = field if gather else ""
+            updateGUI.value = 1
+            return saveManualPlanterData(planterData)
+
+        # Planter drops claim empty slots before the cycles and grow fully.
+        # Returns the planters partway through a drop chain, which the cycles must not use.
+        def placeManualPlanterDrops(planterData):
+            if not bonusLoot.enabled(macro.setdat):
+                return planterData, set()
+            openSlots = [i for i in range(3) if not planterData["planters"][i]]
+            occupiedPlanters = {bonusLoot.planterKey(planter) for planter in planterData["planters"] if planter}
+            allowedPlanters = [name for name in macroModule.allPlanters
+                               if bonusLoot.planterEnabled(macro.setdat, name) and name not in occupiedPlanters]
+            disallowedFields = {field for field in planterData["fields"] if field} | {
+                field for field in bonusLoot.FIELD_NECTAR if not bonusLoot.fieldEnabled(macro.setdat, field)}
+            bonusPicks, lockedPlanters = bonusLoot.choosePicks(macro.setdat, allowedPlanters, disallowedFields, len(openSlots))
+            for planterName, field in bonusPicks:
+                i = planterData["planters"].index("")
+                macro.logger.webhook("", f"Planting {planterName.replace('_', ' ').title()} in {field.title()} for a planter drop", "dark brown")
+                if runTask(macro.placePlanter, args=(planterName, field, False), convertAfter=False, allowAFB=False, capFailures=True):
+                    growSeconds = bonusLoot.growHours(planterName, field) * 3600
+                    planterData = saveManualPlacement(planterData, i, planterName.replace("_", " "), field, time.time() + growSeconds, False)
+                elif getattr(macro, "lastPlanterPlacementFailure", None) == "maxplanters":
+                    break
+            return planterData, set(lockedPlanters)
         
         # Get priority order from settings, or use empty list if not set
         priorityOrder = get_task_list_order(macro.setdat)
@@ -1231,18 +1265,20 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                         f.close()
                     
                     if not planterDataRaw.strip():
-                        planterData = emptyManualPlanterData()
+                        planterData, lockedPlanters = placeManualPlanterDrops(emptyManualPlanterData())
                         for i in range(3):
                             if macro.setdat[f"cycle1_{i+1}_planter"] == "none" or macro.setdat[f"cycle1_{i+1}_field"] == "none":
+                                continue
+                            if planterData["planters"][i]:
+                                continue
+                            if (bonusLoot.planterKey(macro.setdat[f"cycle1_{i+1}_planter"]) in lockedPlanters
+                                    or macro.setdat[f"cycle1_{i+1}_planter"] in planterData["planters"]
+                                    or macro.setdat[f"cycle1_{i+1}_field"] in planterData["fields"]):
                                 continue
                             nextField = nextPlanterField(i)
                             planter = runTask(macro.placePlanterInCycle, args = (i, 1, nextField),resetAfter=False, allowAFB=False, capFailures=True)
                             if planter:
-                                planterData["planters"][i] = planter[0]
-                                planterData["fields"][i] = planter[1]
-                                planterData["harvestTimes"][i] = planter[2]
-                                planterData["gatherFields"][i] = planter[1] if planter[3] else ""
-                                planterData = saveManualPlanterData(planterData)
+                                planterData = saveManualPlacement(planterData, i, *planter)
                         executedTasks.add(taskId)
                         return True
                     else:
@@ -1255,13 +1291,17 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                             cycle = planterData["cycles"][i]
                             if planterData["planters"][i] and time.time() > planterData["harvestTimes"][i]:
                                 if runTask(macro.collectPlanter, args=(planterData["planters"][i], planterData["fields"][i]), capFailures=True):
+                                    bonusLoot.trackHarvest(planterData["planters"][i], planterData["fields"][i], bonusLoot.fullyGrown(
+                                        planterData["planters"][i], planterData["fields"][i], planterData["placedTimes"][i]))
                                     planterData["harvestTimes"][i] = 0
+                                    planterData["placedTimes"][i] = 0
                                     planterData["planters"][i] = ""
                                     planterData["fields"][i] = ""
                                     planterData["gatherFields"][i] = ""
                                     planterData = saveManualPlanterData(planterData)
                                     updateGUI.value = 1
-                        
+
+                        planterData, lockedPlanters = placeManualPlanterDrops(planterData)
                         for i in range(3):
                             cycle = planterData["cycles"][i]
                             if planterData["planters"][i]:
@@ -1272,7 +1312,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                             
                             planterToPlace = macro.setdat[f"cycle{nextCycle}_{i+1}_planter"]
                             otherSlotPlanters = planterData["planters"][:i] + planterData["planters"][i+1:]
-                            if planterToPlace in otherSlotPlanters:
+                            if planterToPlace in otherSlotPlanters or bonusLoot.planterKey(planterToPlace) in lockedPlanters:
                                 continue
                             
                             fieldToPlace = macro.setdat[f"cycle{nextCycle}_{i+1}_field"]
@@ -1284,12 +1324,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                             planter = runTask(macro.placePlanterInCycle, args = (i, nextCycle, nextField),resetAfter=False, allowAFB=False, capFailures=True)
                             if planter:
                                 planterData["cycles"][i] = nextCycle
-                                planterData["planters"][i] = planter[0]
-                                planterData["fields"][i] = planter[1]
-                                planterData["harvestTimes"][i] = planter[2]
-                                planterData["gatherFields"][i] = planter[1] if planter[3] else ""
-                                planterData = saveManualPlanterData(planterData)
-                                updateGUI.value = 1
+                                planterData = saveManualPlacement(planterData, i, *planter)
                         executedTasks.add(taskId)
                         return True
                 
@@ -1537,7 +1572,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                         except Exception:
                             pass
 
-                    def savePlacedPlanter(slot, field, planterObj, nectar, placementPlan):
+                    def savePlacedPlanter(slot, field, planterObj, nectar, placementPlan, bonus=False):
                         planterData[slot] = {
                             "planter": planterObj["name"],
                             "nectar": nectar,
@@ -1546,7 +1581,8 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                             "nectar_est_percent": placementPlan["nectar_est_percent"],
                             "placed_time": placementPlan["placed_time"],
                             "grow_duration": placementPlan["grow_duration"],
-                            "natural_grow_duration": placementPlan["natural_grow_duration"]
+                            "natural_grow_duration": placementPlan["natural_grow_duration"],
+                            "bonus": bonus
                         }
                         planterReady = time.strftime("%H:%M:%S", time.gmtime(placementPlan["grow_duration"]))
                         macro.logger.webhook("", f"Planter will be ready in: {planterReady}", "light blue")
@@ -1609,7 +1645,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                                 continue
 
                             for slot, planter in enumerate(planterData):
-                                if planter["planter"] and planter.get("nectar") == nectarName:
+                                if planter["planter"] and planter.get("nectar") == nectarName and not planter.get("bonus"):
                                     matchingPlanters.append((slot, planter, getNaturalPlanterProgress(planter)))
 
                             matchingPlanters.sort(key=lambda item: (-item[2], item[1]["harvest_time"]))
@@ -1635,6 +1671,8 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                         if not planter["planter"]:
                             continue
                         if runTask(macro.collectPlanter, args=(planter["planter"], planter["field"]), capFailures=True):
+                            bonusLoot.trackHarvest(planter["planter"], planter["field"], bonusLoot.fullyGrown(
+                                planter["planter"], planter["field"], planter["placed_time"], planter["natural_grow_duration"] or None))
                             recordFieldDegradation(planter)
                             planterData[slot] = emptyAutoPlanterSlot()
                             currentNectarCache.clear()
@@ -1649,6 +1687,48 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
 
                     blockedPlacements = set()
                     blockedPlanters = set()
+                    gameFull = False
+
+                    # Planter drops claim open slots first and grow fully
+                    openSlots = [idx for idx, planter in enumerate(planterData) if not planter["planter"]]
+                    plantersPlaced = sum(bool(planter["planter"]) for planter in planterData)
+                    numberToPlant = min(len(openSlots), maxAllowedPlanters - plantersPlaced)
+                    if bonusLoot.enabled(macro.setdat) and numberToPlant > 0:
+                        occupiedFields = {planter["field"] for planter in planterData if planter["field"]}
+                        occupiedPlanters = {planter["planter"] for planter in planterData if planter["planter"]}
+                        allowedPlanters = [name for name in macroModule.allPlanters
+                                           if bonusLoot.planterEnabled(macro.setdat, name) and name not in occupiedPlanters]
+                        disallowedFields = occupiedFields | {field for field in fieldToNectar
+                                                             if not bonusLoot.fieldEnabled(macro.setdat, field)}
+                        nectarHours = {nectar: getCurrentNectarPercent(nectar) * 0.24 for nectar in macroModule.nectarNames}
+                        bonusPicks, lockedPlanters = bonusLoot.choosePicks(
+                            macro.setdat, allowedPlanters, disallowedFields, numberToPlant, nectarHours, getFieldDegradationHours)
+                        blockedPlanters.update(lockedPlanters)
+                        for planterName, field in bonusPicks:
+                            slot = next(idx for idx, planter in enumerate(planterData) if not planter["planter"])
+                            macro.logger.webhook("", f"Planting {planterName.replace('_', ' ').title()} in {field.title()} for a planter drop", "dark brown")
+                            if runTask(macro.placePlanter, args=(planterName, field, False), resetAfter=True, convertAfter=False, allowAFB=False):
+                                growHours = bonusLoot.growHours(planterName, field, getFieldDegradationHours(field))
+                                multiplier, growth = bonusLoot.GROWTH[(planterName, field)]
+                                now = time.time()
+                                savePlacedPlanter(slot, field, {"name": planterName}, fieldToNectar[field], {
+                                    "grow_duration": growHours * 3600,
+                                    "harvest_time": now + growHours * 3600,
+                                    "placed_time": now,
+                                    "nectar_est_percent": min(100.0, round(growth * multiplier / 0.24, 1)),
+                                    "natural_grow_duration": growHours * 3600
+                                }, bonus=True)
+                                if gatherFlag:
+                                    runTask(macro.gather, args=(field,), resetAfter=False)
+                                continue
+                            failure = getattr(macro, "lastPlanterPlacementFailure", None)
+                            if failure == "maxplanters":
+                                gameFull = True
+                                break
+                            if failure == "missing_inventory":
+                                blockedPlanters.add(planterName)
+                            else:
+                                blockedPlacements.add((planterName, field))
 
                     def getAvailableFields(occupiedFields):
                         return [
@@ -1763,7 +1843,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
 
                         return bestScore, bestPlacements
 
-                    while True:
+                    while not gameFull:
                         plantersPlaced = sum(bool(planter["planter"]) for planter in planterData)
                         if plantersPlaced >= maxAllowedPlanters:
                             break
