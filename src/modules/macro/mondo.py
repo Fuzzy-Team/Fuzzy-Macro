@@ -97,6 +97,7 @@ class MondoMixin:
         self.mondoSeen = False
         mouse.moveTo(window.mx + 350, window.my + 120)
         mouse.mouseDown()
+        pausedSeen = paused_seconds()
         try:
             anchored = self.placeSprinkler()    # to come back to when the search wanders off
             startedAt = time.monotonic()
@@ -104,10 +105,10 @@ class MondoMixin:
             recentered = False
             offsetX, offsetY = AIM[202]
             while not is_stopped():
-                pausedBefore = paused_seconds()
                 if self.checkPauseAndWait():
                     break
-                if paused_seconds() > pausedBefore:   # pausing releases the mouse
+                if paused_seconds() > pausedSeen:   # a pause, even one waited out mid-walk, releases the mouse
+                    pausedSeen = paused_seconds()
                     mouse.moveTo(window.mx + 350, window.my + 120)
                     mouse.mouseDown()
                 loops += 1
