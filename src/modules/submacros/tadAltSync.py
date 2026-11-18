@@ -230,6 +230,16 @@ STAY_IN_END = " for another 15m"
 REVERT_DISLIKED = "Field alts: revert to your normal field, I didn't like the boosted one"
 REVERT_UNSEEN = "Field alts: revert to your normal field, I didn't see the boosted one"
 REVERT_ENDING = "Field alts: revert to your normal field, the boost is ending and I won't be back"
+PREP = "Field alts: the {} booster is ready, so prep the fields for me."
+PREP_SECONDS = 10 * 60  # a prep message counts as a main message this far in the future
+# booster colour -> (field alt 1's default, field alt 2's field, field alt 3's field)
+PREP_FIELDS = {
+    "blue": ("pine tree", "blue flower", "bamboo"),
+    "white": ("spider", "dandelion", "sunflower"),
+    "red": ("pepper", "strawberry", "rose"),
+}
+# checked in this order when more than one booster is ready
+PREP_BOOSTERS = (("blue_booster", "blue"), ("mountain_booster", "white"), ("red_booster", "red"))
 MAIN_FIELD_SECONDS = 14.96 * 60  # a field alt gathers the main's field this long after its last message
 BOOST_OVER_SECONDS = 15 * 60  # a field alt still in the main's field leaves after this
 
@@ -263,6 +273,19 @@ def own_gather_field(settings):
     return ""
 
 
+def prep_field(colour, settings):
+    """The field a field alt pre-pollinates for the main's booster colour.
+    Alt 1 stays in its own field if it is one of the colour's fields, alt 2 avoids alt 1's default."""
+    alt1, alt2, alt3 = PREP_FIELDS[colour]
+    own = own_gather_field(settings)
+    role = str(settings.get("account_role", ""))
+    if role.endswith("1"):
+        return own if own in PREP_FIELDS[colour] else alt1
+    if role.endswith("2"):
+        return alt1 if own == alt2 else alt2
+    return alt3
+
+
 def field_alt_update(content, settings, now):
     """Turn a main message into the settings a field alt saves, or None if it isn't one.
     field_alt_move is where the alt should go now; a gather elsewhere stops for it."""
@@ -270,6 +293,11 @@ def field_alt_update(content, settings, now):
         field = content[len(GO_TO):-len(GO_TO_END)].strip().lower()
         return {"main_boosted_field": field, "main_boosted_field_time": now,
                 "field_alt_move": field, "field_alt_move_time": now}
+    for colour in PREP_FIELDS:
+        if content == PREP.format(colour):
+            field = prep_field(colour, settings)
+            return {"main_boosted_field": field, "main_boosted_field_time": now + PREP_SECONDS,
+                    "field_alt_move": field, "field_alt_move_time": now}
     if content.startswith(STAY_IN) and content.endswith(STAY_IN_END):
         return {"main_boosted_field_time": now}
     if content in (REVERT_DISLIKED, REVERT_UNSEEN, REVERT_ENDING):
