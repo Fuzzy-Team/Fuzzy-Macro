@@ -73,26 +73,6 @@
                 </form>
             <form style="display: flex; align-items:flex-start; justify-content: space-between; padding-right: 5%; margin-top:1rem">
                 <div style="width: 70%;">
-                    <label for="manual_drops_monthly_waxes">Monthly Waxes</label>
-                    <p>Plant the planter and field pairs that drop a Caustic or Swirled Wax when their cooldown is up. These go before the other planters and grow fully. Uses the planters and fields allowed below.</p>
-                </div>
-                <label class="checkbox-container" style="margin-top: 0.6rem;">
-                    <input type="checkbox" id="manual_drops_monthly_waxes" data-setting-id="planter_monthly_waxes" onchange="savePlanterDropSetting(this)">
-                    <span class="checkmark"></span>
-                </label>
-            </form>
-            <form style="display: flex; align-items:flex-start; justify-content: space-between; padding-right: 5%; margin-top:1rem">
-                <div style="width: 70%;">
-                    <label for="manual_drops_bonus_loot">Bonus Loot</label>
-                    <p>Plant the pairs and field orders that drop other loot, like Glue, Oil, Blue Extract and Neonberries, when their cooldown is up. These go before the other planters and grow fully. Uses the planters and fields allowed below.</p>
-                </div>
-                <label class="checkbox-container" style="margin-top: 0.6rem;">
-                    <input type="checkbox" id="manual_drops_bonus_loot" data-setting-id="planter_bonus_loot" onchange="savePlanterDropSetting(this)">
-                    <span class="checkmark"></span>
-                </label>
-            </form>
-            <form style="display: flex; align-items:flex-start; justify-content: space-between; padding-right: 5%; margin-top:1rem">
-                <div style="width: 70%;">
                     <label>Clear Planter Timers</label>
                     <p>Resets the macro's tracking data for the planters</p>
                 </div>
@@ -105,8 +85,6 @@
             <h2>Planter Cycles</h2>
             <p style = "font-weight:500; font-size:1rem;">The macro can place and collect up to 3 planters at once each cycle. Setting a field or planter as 'none' will make the macro ignore that slot</p>
         </div>
-
-        <div id="manual-planter-allowed-anchor"></div>
 
         <div class="poppins-medium standard-container" style="flex-direction: column; padding-top: 1rem; justify-content: unset;">
             <h2>Selected Planters</h2>
@@ -177,7 +155,7 @@
                     <p>Plant the planter and field pairs that drop a Caustic or Swirled Wax when their cooldown is up. These go before the other planters and grow fully. Uses the planters and fields allowed below.</p>
                 </div>
                 <label class="checkbox-container" style="margin-top: 0.6rem;">
-                    <input type="checkbox" id="auto_drops_monthly_waxes" data-setting-id="planter_monthly_waxes" onchange="savePlanterDropSetting(this)">
+                    <input type="checkbox" id="auto_drops_monthly_waxes" data-setting-id="planter_monthly_waxes" onchange="saveSetting(this, 'profile')">
                     <span class="checkmark"></span>
                 </label>
             </form>
@@ -187,7 +165,7 @@
                     <p>Plant the pairs and field orders that drop other loot, like Glue, Oil, Blue Extract and Neonberries, when their cooldown is up. These go before the other planters and grow fully. Uses the planters and fields allowed below.</p>
                 </div>
                 <label class="checkbox-container" style="margin-top: 0.6rem;">
-                    <input type="checkbox" id="auto_drops_bonus_loot" data-setting-id="planter_bonus_loot" onchange="savePlanterDropSetting(this)">
+                    <input type="checkbox" id="auto_drops_bonus_loot" data-setting-id="planter_bonus_loot" onchange="saveSetting(this, 'profile')">
                     <span class="checkmark"></span>
                 </label>
             </form>
@@ -268,12 +246,9 @@
 
         <!-- Allowed Planters merged into Planter Field Restrictions (enable toggle moved into each planter panel) -->
 
-        <div id="auto-planter-allowed-anchor"></div>
-        <!-- Shared by auto planters and planter drops. changePlanterMode moves it into the manual tab when planter drops are on. -->
-        <div id="planter-allowed-sections">
         <div class="poppins-medium standard-container" style="flex-direction: column; padding-top: 1rem; justify-content: unset;">
             <h2>Planters Allowed & Restrictions</h2>
-            <p style="font-weight:500; font-size:1rem;">Pick the planters you own and which fields each one can be placed in. Auto Planters and planter drops use these.</p>
+            <p style="font-weight:500; font-size:1rem;">Restrict which fields each planter can be placed in when using Auto Planters.</p>
             <div class="seperator"></div>
             <div id="auto-planter-field-restrictions">
 
@@ -287,7 +262,6 @@
             <div id="auto-allowed-fields">
 
             </div>
-        </div>
         </div>
 
         <div class="poppins-medium standard-container" style="flex-direction: column; padding-top: 1rem; justify-content: unset;">

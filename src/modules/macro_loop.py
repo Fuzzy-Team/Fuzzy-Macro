@@ -46,8 +46,7 @@ def emptyManualPlanterData():
         "planters": ["", "", ""],
         "fields": ["", "", ""],
         "gatherFields": ["", "", ""],
-        "harvestTimes": [0, 0, 0],
-        "placedTimes": [0, 0, 0]
+        "harvestTimes": [0, 0, 0]
     }
 
 
@@ -73,7 +72,7 @@ def normalizeManualPlanterData(rawData):
                 except Exception:
                     cycle = 1
                 normalized[key].append(min(5, max(1, cycle)))
-        elif key in ("harvestTimes", "placedTimes"):
+        elif key == "harvestTimes":
             normalized[key] = []
             for value in cleaned:
                 try:
@@ -226,11 +225,6 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
             with open(settingsManager.ensureUserFile("manualplanters.txt"), "r") as f:
                 raw = f.read().strip()
             planterData = ast.literal_eval(raw) if raw else {"planters": ["", "", ""], "fields": ["", "", ""], "gatherFields": ["", "", ""], "harvestTimes": [0, 0, 0], "cycles": [1, 1, 1]}
-            placedTimes = planterData.get("placedTimes", [])
-            if index < len(placedTimes):
-                bonusLoot.trackHarvest(command["planter"], command["field"], bonusLoot.fullyGrown(
-                    command["planter"], command["field"], placedTimes[index]))
-                placedTimes[index] = 0
             for key, emptyValue in (("planters", ""), ("fields", ""), ("gatherFields", "")):
                 if key in planterData and index < len(planterData[key]):
                     planterData[key][index] = emptyValue
@@ -1049,37 +1043,6 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
             planterDataRaw = str(normalized)
             settingsManager.saveUserText("manualplanters.txt", planterDataRaw)
             return normalized
-
-        def saveManualPlacement(planterData, i, planter, field, harvestTime, gather):
-            planterData["planters"][i] = planter
-            planterData["fields"][i] = field
-            planterData["harvestTimes"][i] = harvestTime
-            planterData["placedTimes"][i] = time.time()
-            planterData["gatherFields"][i] = field if gather else ""
-            updateGUI.value = 1
-            return saveManualPlanterData(planterData)
-
-        # Planter drops claim empty slots before the cycles and grow fully.
-        # Returns the planters partway through a drop chain, which the cycles must not use.
-        def placeManualPlanterDrops(planterData):
-            if not bonusLoot.enabled(macro.setdat):
-                return planterData, set()
-            openSlots = [i for i in range(3) if not planterData["planters"][i]]
-            occupiedPlanters = {bonusLoot.planterKey(planter) for planter in planterData["planters"] if planter}
-            allowedPlanters = [name for name in macroModule.allPlanters
-                               if bonusLoot.planterEnabled(macro.setdat, name) and name not in occupiedPlanters]
-            disallowedFields = {field for field in planterData["fields"] if field} | {
-                field for field in bonusLoot.FIELD_NECTAR if not bonusLoot.fieldEnabled(macro.setdat, field)}
-            bonusPicks, lockedPlanters = bonusLoot.choosePicks(macro.setdat, allowedPlanters, disallowedFields, len(openSlots))
-            for planterName, field in bonusPicks:
-                i = planterData["planters"].index("")
-                macro.logger.webhook("", f"Planting {planterName.replace('_', ' ').title()} in {field.title()} for a planter drop", "dark brown")
-                if runTask(macro.placePlanter, args=(planterName, field, False), convertAfter=False, allowAFB=False, capFailures=True):
-                    growSeconds = bonusLoot.growHours(planterName, field) * 3600
-                    planterData = saveManualPlacement(planterData, i, planterName.replace("_", " "), field, time.time() + growSeconds, False)
-                elif getattr(macro, "lastPlanterPlacementFailure", None) == "maxplanters":
-                    break
-            return planterData, set(lockedPlanters)
         
         # Get priority order from settings, or use empty list if not set
         priorityOrder = get_task_list_order(macro.setdat)
@@ -1273,24 +1236,18 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                         f.close()
                     
                     if not planterDataRaw.strip():
-                        # Slots cycle 1 doesn't fill now start from cycle 1 once free
                         planterData = emptyManualPlanterData()
-                        planterData["cycles"] = [5, 5, 5]
-                        planterData, lockedPlanters = placeManualPlanterDrops(planterData)
                         for i in range(3):
                             if macro.setdat[f"cycle1_{i+1}_planter"] == "none" or macro.setdat[f"cycle1_{i+1}_field"] == "none":
-                                continue
-                            if planterData["planters"][i]:
-                                continue
-                            if (bonusLoot.planterKey(macro.setdat[f"cycle1_{i+1}_planter"]) in lockedPlanters
-                                    or macro.setdat[f"cycle1_{i+1}_planter"] in planterData["planters"]
-                                    or macro.setdat[f"cycle1_{i+1}_field"] in planterData["fields"]):
                                 continue
                             nextField = nextPlanterField(i)
                             planter = runTask(macro.placePlanterInCycle, args = (i, 1, nextField),resetAfter=False, allowAFB=False, capFailures=True)
                             if planter:
-                                planterData["cycles"][i] = 1
-                                planterData = saveManualPlacement(planterData, i, *planter)
+                                planterData["planters"][i] = planter[0]
+                                planterData["fields"][i] = planter[1]
+                                planterData["harvestTimes"][i] = planter[2]
+                                planterData["gatherFields"][i] = planter[1] if planter[3] else ""
+                                planterData = saveManualPlanterData(planterData)
                         executedTasks.add(taskId)
                         return True
                     else:
@@ -1303,17 +1260,13 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                             cycle = planterData["cycles"][i]
                             if planterData["planters"][i] and time.time() > planterData["harvestTimes"][i]:
                                 if runTask(macro.collectPlanter, args=(planterData["planters"][i], planterData["fields"][i]), capFailures=True):
-                                    bonusLoot.trackHarvest(planterData["planters"][i], planterData["fields"][i], bonusLoot.fullyGrown(
-                                        planterData["planters"][i], planterData["fields"][i], planterData["placedTimes"][i]))
                                     planterData["harvestTimes"][i] = 0
-                                    planterData["placedTimes"][i] = 0
                                     planterData["planters"][i] = ""
                                     planterData["fields"][i] = ""
                                     planterData["gatherFields"][i] = ""
                                     planterData = saveManualPlanterData(planterData)
                                     updateGUI.value = 1
-
-                        planterData, lockedPlanters = placeManualPlanterDrops(planterData)
+                        
                         for i in range(3):
                             cycle = planterData["cycles"][i]
                             if planterData["planters"][i]:
@@ -1324,7 +1277,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                             
                             planterToPlace = macro.setdat[f"cycle{nextCycle}_{i+1}_planter"]
                             otherSlotPlanters = planterData["planters"][:i] + planterData["planters"][i+1:]
-                            if planterToPlace in otherSlotPlanters or bonusLoot.planterKey(planterToPlace) in lockedPlanters:
+                            if planterToPlace in otherSlotPlanters:
                                 continue
                             
                             fieldToPlace = macro.setdat[f"cycle{nextCycle}_{i+1}_field"]
@@ -1336,7 +1289,12 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                             planter = runTask(macro.placePlanterInCycle, args = (i, nextCycle, nextField),resetAfter=False, allowAFB=False, capFailures=True)
                             if planter:
                                 planterData["cycles"][i] = nextCycle
-                                planterData = saveManualPlacement(planterData, i, *planter)
+                                planterData["planters"][i] = planter[0]
+                                planterData["fields"][i] = planter[1]
+                                planterData["harvestTimes"][i] = planter[2]
+                                planterData["gatherFields"][i] = planter[1] if planter[3] else ""
+                                planterData = saveManualPlanterData(planterData)
+                                updateGUI.value = 1
                         executedTasks.add(taskId)
                         return True
                 

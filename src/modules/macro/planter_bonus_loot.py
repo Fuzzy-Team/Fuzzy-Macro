@@ -157,10 +157,10 @@ def planterEnabled(setdat, planter):
     return bool(setdat.get(f"auto_planter_{planterKey(planter)}", False))
 
 
-def choosePicks(setdat, allowedPlanters, disallowedFields, numberToPlant, nectarHours=None, degradationHours=None):
+def choosePicks(setdat, allowedPlanters, disallowedFields, numberToPlant, nectarHours, degradationHours):
     '''
     Returns ([(planter, field)], lockedPlanters). Locked planters are partway through a chain
-    and must not be used elsewhere. nectarHours ({nectar: hours}) orders picks by nectar need in auto mode.
+    and must not be used elsewhere. nectarHours ({nectar: hours}) orders picks by nectar need.
     '''
     picks, lockedPlanters = [], []
     if not enabled(setdat):
@@ -232,15 +232,15 @@ def nectarOrder(setdat):
     return order
 
 
-def orderPicks(setdat, others, nectarHours=None, degradationHours=None):
+def orderPicks(setdat, others, nectarHours, degradationHours):
     '''
-    Shortest to finish first. In auto mode, each next pick is the one that best fills
-    the most wanted nectar still under the target, per hour of growth.
+    Each next pick is the one that best fills the most wanted nectar still under the target,
+    per hour of growth. Picks that fill no wanted nectar go last, shortest to finish first.
     '''
     rows = []
     for p, f, fields in others:
         multiplier, growth = GROWTH[(p, f)]
-        degradation = degradationHours(f) if degradationHours else 0
+        degradation = degradationHours(f)
         rowGrowHours = growth + degradation
         hours = rowGrowHours + sum(GROWTH[(p, other)][1] for other in fields[1:])
         rows.append({
@@ -248,9 +248,6 @@ def orderPicks(setdat, others, nectarHours=None, degradationHours=None):
             "grow_hours": rowGrowHours, "key": (hours, round(degradation)),
         })
     left = sorted(rows, key=lambda row: row["key"])
-    if setdat.get("planters_mode") != 2 or nectarHours is None:
-        return [(row["planter"], row["field"]) for row in left]
-
     amounts = dict(nectarHours)
     ordered = []
     while left:

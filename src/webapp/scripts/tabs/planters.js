@@ -17,29 +17,6 @@ function changePlanterMode(){
     Array.from(document.getElementsByClassName("planter-tab")).forEach(x => x.style.display="none")
     
     document.getElementById(`planters-${planterMode[ele.value]}`).style.display = "block"
-    placePlanterAllowedSections()
-}
-
-function planterDropsEnabled(){
-    return ["manual_drops_monthly_waxes", "manual_drops_bonus_loot"].some(id => document.getElementById(id)?.checked)
-}
-
-//the allowed planters and fields live in the auto tab, and show in the manual tab while planter drops are on
-function placePlanterAllowedSections(){
-    const sections = document.getElementById("planter-allowed-sections")
-    if (!sections) return
-    const manual = document.getElementById("planters_mode").value == 1
-    const anchor = document.getElementById(manual ? "manual-planter-allowed-anchor" : "auto-planter-allowed-anchor")
-    anchor.after(sections)
-    sections.style.display = manual && !planterDropsEnabled() ? "none" : ""
-}
-
-async function savePlanterDropSetting(ele){
-    await saveSetting(ele, 'profile')
-    placePlanterAllowedSections()
-    const settings = await loadAllSettings()
-    loadPlanterHotbarSections(settings)
-    refreshPlanterHotbarSlotSelects(settings)
 }
 
 const planters = Object.keys(planterIcons)
@@ -125,8 +102,7 @@ function loadSelectedPlanterHotbarSlots(containerId, enabledPlanters){
 }
 
 function getManualSelectedPlanters(settings){
-    //planter drops can place any allowed planter
-    const enabled = settings.planter_monthly_waxes || settings.planter_bonus_loot ? getAutoEnabledPlanters(settings) : []
+    const enabled = []
     for (let cycle = 1; cycle <= 5; cycle++){
         for (let slot = 1; slot <= 3; slot++){
             const planter = settings[`cycle${cycle}_${slot}_planter`]
