@@ -6,7 +6,7 @@ import modules.misc.settingsManager as settingsManager
 import modules.macro.planter_bonus_loot as bonusLoot
 from modules.macro.game_data import quest_data, MAIN_GAME_PLACE_ID
 from modules.misc.badgeData import badge_id_from_task, gather_overrides, get_badge, resolve_gather_field, setting_key
-from modules.submacros.tadAltSync import is_field_alt, main_field_for_alt
+from modules.submacros.tadAltSync import PREP, PREP_BOOSTERS, broadcast_to_field_alts, is_field_alt, main_field_for_alt
 from modules.quest_planning import (quest_giver_order, bee_locked_quest_givers, choose_quest_gather, is_gather_objective, allowed_fields,
                                     quest_uses_ant_challenge, kill_objective_mob, manual_objective_name, objective_allowed,
                                     FIXED_LINE_GIVERS, QUEST_BLENDER_SETTING, QUEST_VICIOUS_SETTING)
@@ -1311,6 +1311,13 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
         
         # Track which tasks have been executed to avoid duplicates
         executedTasks = set()
+
+        # Once a pass, the main asks the field alts to pre-pollinate for its next booster.
+        for booster, colour in PREP_BOOSTERS:
+            if (macro.setdat.get(booster) and macro.hasRespawned(booster, macro.collectCooldowns[booster])
+                    and macro.hasRespawned("last_booster", macro.setdat["boost_seperate"]*60)):
+                broadcast_to_field_alts(macro.setdat, PREP.format(colour))
+                break
         
         # Track planter data for gather fields
         planterDataRaw = None
