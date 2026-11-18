@@ -3,7 +3,7 @@ Planter drops that need a planter grown fully in a set field, on a cooldown in d
 Monthly waxes and singles take one harvest. Sequences and repeats need one fully grown
 harvest per field in order, with the same planter, before the cooldown starts.
 
-The planters task asks choosePicks for placements before its normal manual or auto picks,
+The auto planters task asks choosePicks for placements before its normal picks,
 then calls trackHarvest after every successful harvest. Cooldowns and chain progress live in
 data/user/planter_bonus_loot.json as {key: next eligible epoch time, name_counter: next field index}.
 '''
@@ -103,6 +103,14 @@ def planterKey(planter):
 
 def fieldKey(field):
     return str(field or "").lower().replace("_", " ")
+
+
+def dropPlanters():
+    '''The planters each drop setting can use, so the GUI only offers a drop when one of them is selected'''
+    return {
+        "planter_monthly_waxes": sorted({row[0] for row in WAXES}),
+        "planter_bonus_loot": sorted({row[0] for row in SINGLES + SEQUENCES + REPEATS}),
+    }
 
 
 def enabled(setdat):

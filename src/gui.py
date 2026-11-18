@@ -3,6 +3,7 @@ from modules.gather_session import PATTERN_FIELDS
 import eel.chrome
 import webbrowser
 import modules.misc.settingsManager as settingsManager
+import modules.macro.planter_bonus_loot as planterBonusLoot
 import os
 import modules.misc.update as updateModule
 import modules.misc.modelManager as modelManager
@@ -783,6 +784,10 @@ def getAutoPlanterData():
         return normalizeAutoPlanterData(settingsManager.loadUserJson("auto_planters.json"))
     except Exception:
         return defaultAutoPlanterData()
+
+@eel.expose
+def getPlanterDropPlanters():
+    return planterBonusLoot.dropPlanters()
 
 @eel.expose
 def clearAutoPlanters():
