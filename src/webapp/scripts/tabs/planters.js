@@ -21,7 +21,7 @@ function changePlanterMode(){
 }
 
 function planterDropsEnabled(){
-    return ["manual_planter_monthly_waxes", "manual_planter_bonus_loot"].some(id => document.getElementById(id)?.checked)
+    return ["manual_drops_monthly_waxes", "manual_drops_bonus_loot"].some(id => document.getElementById(id)?.checked)
 }
 
 //the allowed planters and fields live in the auto tab, and show in the manual tab while planter drops are on

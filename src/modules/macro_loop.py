@@ -226,6 +226,11 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
             with open(settingsManager.ensureUserFile("manualplanters.txt"), "r") as f:
                 raw = f.read().strip()
             planterData = ast.literal_eval(raw) if raw else {"planters": ["", "", ""], "fields": ["", "", ""], "gatherFields": ["", "", ""], "harvestTimes": [0, 0, 0], "cycles": [1, 1, 1]}
+            placedTimes = planterData.get("placedTimes", [])
+            if index < len(placedTimes):
+                bonusLoot.trackHarvest(command["planter"], command["field"], bonusLoot.fullyGrown(
+                    command["planter"], command["field"], placedTimes[index]))
+                placedTimes[index] = 0
             for key, emptyValue in (("planters", ""), ("fields", ""), ("gatherFields", "")):
                 if key in planterData and index < len(planterData[key]):
                     planterData[key][index] = emptyValue
@@ -237,6 +242,9 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                 autoData = json.load(f)
             planters = autoData.get("planters", [])
             if index < len(planters):
+                slot = planters[index] if isinstance(planters[index], dict) else {}
+                bonusLoot.trackHarvest(command["planter"], command["field"], bonusLoot.fullyGrown(
+                    command["planter"], command["field"], slot.get("placed_time", 0), slot.get("natural_grow_duration") or None))
                 planters[index] = emptyAutoPlanterSlot()
             autoData["planters"] = planters
             settingsManager.saveUserJson("auto_planters.json", autoData)
