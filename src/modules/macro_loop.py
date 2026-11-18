@@ -1196,15 +1196,21 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                 # in quest order instead of the global gather priority queue.
                 questObjectives = gatherObjectives()
                 selectedQuestGather = choose_quest_gather(questObjectives, macro.setdat, macro.fieldSettings)
-                if (any(obj["field"] == fieldName for obj in questObjectives)
-                        or (selectedQuestGather and selectedQuestGather["field"] == fieldName)):
+                questFields = {obj["field"] for obj in questObjectives}
+                if selectedQuestGather:
+                    questFields.add(selectedQuestGather["field"])
+                if fieldName in questFields:
                     return False
                 
                 # Check if this field is enabled in gather tab
                 for i in range(len(macro.setdat["fields_enabled"])):
                     if macro.setdat["fields_enabled"][i] and macro.setdat["fields"][i] == fieldName:
-                        # A field boosted by the Wind Shrine takes the place of the planned field.
-                        runTask(macro.gather, args=(macro.windGatherField() or fieldName,), resetAfter=False)
+                        # A field boosted by the Wind Shrine takes the place of the planned field,
+                        # unless a quest has it reserved.
+                        windField = macro.windGatherField()
+                        if windField in questFields:
+                            windField = None
+                        runTask(macro.gather, args=(windField or fieldName,), resetAfter=False)
                         executedTasks.add(taskId)
                         return True
                 
