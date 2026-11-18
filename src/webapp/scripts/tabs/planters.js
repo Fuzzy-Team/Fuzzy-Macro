@@ -37,7 +37,9 @@ function placePlanterAllowedSections(){
 async function savePlanterDropSetting(ele){
     await saveSetting(ele, 'profile')
     placePlanterAllowedSections()
-    loadPlanterHotbarSections(await loadAllSettings())
+    const settings = await loadAllSettings()
+    loadPlanterHotbarSections(settings)
+    refreshPlanterHotbarSlotSelects(settings)
 }
 
 const planters = Object.keys(planterIcons)

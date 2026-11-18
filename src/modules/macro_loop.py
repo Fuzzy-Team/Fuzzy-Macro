@@ -1265,7 +1265,10 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                         f.close()
                     
                     if not planterDataRaw.strip():
-                        planterData, lockedPlanters = placeManualPlanterDrops(emptyManualPlanterData())
+                        # Slots cycle 1 doesn't fill now start from cycle 1 once free
+                        planterData = emptyManualPlanterData()
+                        planterData["cycles"] = [5, 5, 5]
+                        planterData, lockedPlanters = placeManualPlanterDrops(planterData)
                         for i in range(3):
                             if macro.setdat[f"cycle1_{i+1}_planter"] == "none" or macro.setdat[f"cycle1_{i+1}_field"] == "none":
                                 continue
@@ -1278,6 +1281,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                             nextField = nextPlanterField(i)
                             planter = runTask(macro.placePlanterInCycle, args = (i, 1, nextField),resetAfter=False, allowAFB=False, capFailures=True)
                             if planter:
+                                planterData["cycles"][i] = 1
                                 planterData = saveManualPlacement(planterData, i, *planter)
                         executedTasks.add(taskId)
                         return True
