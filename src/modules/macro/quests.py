@@ -894,6 +894,8 @@ class QuestMixin:
         step = self.questMenuStep if manageQuestUi else (i if len(questScreens) > 1 else None)
         if step is not None:
             self.questGiverSteps[questGiver] = step
+        # The screens after the title's, for a quest that runs past the bottom of the screen it was found on.
+        screensAfterTitle = questScreens[i + 1:] if questScreens is not None else []
 
         def objectiveTextShowsIncompleteProgress(textChunk):
             import re
@@ -1103,6 +1105,7 @@ class QuestMixin:
 
         #merge the texts into chunks. Using those chunks, compare it with the known objectives
         #assume that the merging is done properly, so 1st chunk = 1st objective
+        titleScreenFull = screen
         screen = cv2.cvtColor(np.array(screen), cv2.COLOR_RGBA2BGR)
         #crop it just above the quest title
         screen = screen[questTitleYPos: , : ]
@@ -1194,7 +1197,7 @@ class QuestMixin:
             matches = [row for row, action in enumerate(objectives) if objective_matches_text(action, text)]
             if len(matches) == 1:
                 row = matches[0]
-            elif len(objectivePanels) >= len(objectives):
+            elif index is not None and len(objectivePanels) >= len(objectives):
                 row = index
             else:
                 return
@@ -1203,6 +1206,64 @@ class QuestMixin:
             if progress:
                 done, total = (int(re.sub(r"\D", "", part)) for part in progress.groups())
                 observedRemaining[row] = max(0, total - done)
+
+        def screensBelowTitle():
+            """Scroll on from the title's screen, one notch at a time, until the list stops moving."""
+            if questScreens is not None:
+                yield from screensAfterTitle
+                return
+            lastHash = average_hash(Image.fromarray(screenshotQuest(100)))
+            for _ in range(60):
+                if is_stopped():
+                    return
+                mouse.scroll(-1, True)
+                time.sleep(0.06)
+                currentHash = average_hash(Image.fromarray(screenshotQuest(100)))
+                if currentHash == lastHash:
+                    return
+                lastHash = currentHash
+                self.questMenuStep += 1
+                yield screenshotQuest(self.robloxWindow.mh, mode="RGBA")
+
+        def notchHeight(before, after):
+            """How far one scroll notch moved the list: the offset that lines the two screens up."""
+            a = cv2.cvtColor(np.array(before), cv2.COLOR_RGBA2GRAY).astype(np.int16)
+            b = cv2.cvtColor(np.array(after), cv2.COLOR_RGBA2GRAY).astype(np.int16)
+            return min(range(1, a.shape[0] // 2), key=lambda offset: np.abs(a[offset:] - b[:-offset]).mean())
+
+        def readRowsBelow():
+            """A long quest runs past the bottom of the screen: scroll on and read the rows below by their text."""
+            seen = set()
+            rowsTop = questTitleYPos + endIndex  # where the quest's rows start on the title's screen
+            notch = None
+            for nextScreen in screensBelowTitle():
+                if notch is None:
+                    notch = notchHeight(titleScreenFull, nextScreen)
+                rowsTop -= notch
+                below = cv2.cvtColor(np.array(nextScreen), cv2.COLOR_RGBA2BGR)
+                # Above the rows are the quests before this one, and below them the next quest.
+                end = findQuestSectionEnd(below, rowsTop + int(60*self.robloxWindow.multi) if rowsTop > 0 else 0)
+                for panel in detectObjectivePanels(below):
+                    x, y, w, h = panel["bbox"]
+                    # Rows cut off by the screen's edge are read whole on a neighbouring screen.
+                    cutOff = y == 0 or (y + h >= below.shape[0] if end is None else y >= end)
+                    if cutOff or y < rowsTop - 2:
+                        continue
+                    panelPixels = below[y:y+h, x:x+w]
+                    rowKey = hash(panelPixels.tobytes())
+                    if rowKey in seen:
+                        continue
+                    seen.add(rowKey)
+                    lines = [self.convertCyrillic(line[1][0].strip().lower()) for line in ocr.ocrRead(Image.fromarray(panelPixels))]
+                    text = ' '.join(lines)
+                    status = panel["status"]
+                    if re.search(r"\bcomplete(?:d)?\b", text, re.IGNORECASE):
+                        status = "complete"
+                    if objectiveTextShowsIncompleteProgress(''.join(lines)):
+                        status = "incomplete"
+                    observeRow(None, text, status)
+                if end is not None or "unknown" not in observedStatuses:
+                    return
 
         if objectivePanels:
             for i, panel in enumerate(objectivePanels[:len(objectives)]):
@@ -1249,6 +1310,8 @@ class QuestMixin:
                 cv2.rectangle(screenOriginal, (x, drawY), (x+w, drawY+h), color, 2)
                 cv2.putText(screenOriginal, objectives[i], (x, max(0, drawY-10)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
 
+            if not bottomIsQuestEnd and "unknown" in observedStatuses:
+                readRowsBelow()
         else:
             i = 0
             for _, contour in indexedContours:
