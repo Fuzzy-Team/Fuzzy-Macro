@@ -95,9 +95,9 @@ class MondoMixin:
         self.mondoSeen says whether mondo or its message was seen."""
         window = self.robloxWindow
         self.mondoSeen = False
+        pausedSeen = paused_seconds()
         mouse.moveTo(window.mx + 350, window.my + 120)
         mouse.mouseDown()
-        pausedSeen = paused_seconds()
         try:
             anchored = self.placeSprinkler()    # to come back to when the search wanders off
             startedAt = time.monotonic()
