@@ -592,16 +592,16 @@ manual_collect 100 pineapple tokens
 -meticulously crafted
 manual_discover 23 bee types
 manual_earn 15 badges
-manual_craft 10 ingredients with the blender
+craft_10
 gather_pumpkin
 gather_cactus
 
 -smart, not hard
 manual_discover 24 bee types
-manual_use 1 field booster
+collect_field-booster
 collect_red-booster
 collect_blue-booster
-manual_craft 14 ingredients with the blender
+craft_14
 pollen_white
 pollen_blue
 pollen_red
@@ -611,15 +611,15 @@ manual_discover 25 bee types
 manual_earn 10 hotshot badges
 manual_collect 250 token link tokens
 gather_dandelion
-manual_craft 50 ingredients with the blender
+craft_50
 kill_50_ant
 
 -patterns and probability
 manual_discover 26 bee types
 manual_collect 77 sparkles tokens
 gather_clover
-manual_defeat 7 vicious bees
-manual_craft 7 ingredients with the blender
+vicious_7
+craft_7
 manual_use 7 royal jellies
 
 -chemical analysis
@@ -630,7 +630,7 @@ pollengoo_blue
 gathergoo_sunflower
 gather_sunflower
 gather_blue flower
-manual_craft 27 ingredients with the blender
+craft_27
 kill_27_ladybug
 
 -mark mechanics
@@ -639,7 +639,7 @@ manual_collect 282 mark tokens
 gather_pine tree
 gather_mushroom
 kill_28_fireant
-manual_craft 28 ingredients with the blender
+craft_28
 kill_2_werewolf
 
 -meditating on phenomenon
@@ -660,7 +660,7 @@ gather_pine tree
 gather_mountain top
 pollen_red
 pollen_blue
-manual_craft 20 ingredients with blender
+craft_20
 kill_20_rhinobeetle
 kill_20_ladybug
 
@@ -675,7 +675,7 @@ gathergoo_bamboo
 gathergoo_pineapple
 manual_collect 16,000 ability tokens
 manual_use 32 royal jellies
-manual_craft 64 ingredients with the blender
+craft_64
 manual_collect 1,280 focus tokens
 
 -hive minded bias
@@ -689,7 +689,7 @@ manual_use 1 enzymes
 manual_use 1 oil
 manual_collect 44 inspire tokens
 kill_44_fireant
-manual_craft 44 ingredients with the blender
+craft_44
 kill_1_kingbeetle
 
 -mushroom measurement monotony
@@ -705,11 +705,11 @@ token_bomb
 manual_collect 3,300 token link tokens
 manual_collect 880 mark tokens
 manual_collect 440 tokens from sparkles
-manual_use 3 strawberry dispenser
-manual_use 3 blueberry dispenser
+collect_strawberry-dispenser
+collect_blueberry-dispenser
 collect_glue-dispenser
-manual_craft 22 ingredients with the blender
-manual_defeat 5 vicious bees
+craft_22
+vicious_5
 kill_1_tunnelbear
 
 -testing teamwork
@@ -734,7 +734,7 @@ manual_feed 101 moon charms to your bees
 manual_use 10 glue
 use_10_blueextract
 use_10_redextract
-manual_craft 101 ingredients with the blender
+craft_101
 kill_101_rhinobeetle
 kill_10_werewolf
 kill_1_tunnelbear
@@ -851,7 +851,7 @@ token_honey
 kill_100_fireant
 kill_100_ladybug
 manual_use 10 red portal
-manual_use 5 red field booster
+collect_red-booster
 
 -star journey 3
 pollen_blue
@@ -866,7 +866,7 @@ kill_200_flyingant
 kill_200_rhinobeetle
 kill_1_kingbeetle
 manual_use 20 blue portal
-manual_use 10 blue field booster
+collect_blue-booster
 
 -star journey 4
 pollen_white
@@ -989,7 +989,7 @@ gather_stump
 pollengoo_red
 use_10_fielddice
 feed_500_treat
-manual_complete 1 polar bear quest
+quest_polar-bear
 manual_collect 200 tokens from sprouts
 donate_3_blue extract
 donate_3_red extract
@@ -1015,7 +1015,7 @@ pollengoo_blue
 token_honey
 manual_collect 100 tokens from leaves
 donate_500_sunflower seed
-manual_use 3 wealth clock
+collect_wealth-clock
 pairs_10
 
 -beans becoming
@@ -1083,7 +1083,7 @@ use_5_redextract
 manual_catch 20 falling coconuts
 manual_collect 300 sunflower seed tokens
 manual_collect 300 pineapple tokens
-manual_use 3 wealth clock
+collect_wealth-clock
 pairs_10
 donate_5_tropical drink
 
@@ -1141,7 +1141,7 @@ manual_collect 1 red extract token
 manual_collect 300 tokens from leaves
 use_10_fielddice
 manual_use 1 moon amulet generator
-manual_use 5 wealth clock
+collect_wealth-clock
 donate_50_royal jelly
 donate_10_red extract
 
@@ -1204,7 +1204,7 @@ manual_collect 5 enzymes tokens
 manual_collect 100 gumdrops tokens
 manual_collect 1,000 tokens from sprouts
 manual_use 1 moon amulet generator
-manual_use 5 wealth clock
+collect_wealth-clock
 donate_25_blue extract
 
 -spirit spree

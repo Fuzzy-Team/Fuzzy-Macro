@@ -92,7 +92,7 @@ class ViciousMixin:
         announcement = match.group(0) if match else None
         if announcement is not None and announcement != getattr(self, "_viciousLastAttack", None):
             field = match.group(1)
-            if self.setdat.get("macro_mode", "normal") == "vic" or field in self.vicFields or (field == "clover" and self.vicFields):
+            if self.viciousSearchesAllFields() or field in self.vicFields or (field == "clover" and self.vicFields):
                 self._viciousAttackTarget = (field, now)
         self._viciousLastAttack = announcement
 
@@ -102,7 +102,7 @@ class ViciousMixin:
         if target is None or time.time() - target[1] > 180:
             return None
         field = target[0]
-        if self.setdat.get("macro_mode", "normal") != "vic" and field not in self.vicFields and not (field == "clover" and self.vicFields):
+        if not self.viciousSearchesAllFields() and field not in self.vicFields and not (field == "clover" and self.vicFields):
             return None
         if self.checkPauseAndWait():
             return False
@@ -134,7 +134,7 @@ class ViciousMixin:
                 return result
             self.set_task_status("stinger_hunt", activity=field)
             self.viciousField = field.replace(" back", "").lower()
-            if self.setdat.get("macro_mode", "normal") != "vic" and self.viciousField not in self.vicFields:
+            if not self.viciousSearchesAllFields() and self.viciousField not in self.vicFields:
                 return None
             if not self.detectViciousBee():
                 self.logger.webhook("Vic Hop", f"{field}: no Vicious Bee detected", "dark brown", "screen")
@@ -160,7 +160,7 @@ class ViciousMixin:
         if result is not None:
             return result
         # Detect before rotating toward the next field.
-        enabled = self.setdat.get("macro_mode", "normal") == "vic" or "mountain top" in self.vicFields
+        enabled = self.viciousSearchesAllFields() or "mountain top" in self.vicFields
         found = enabled and self.detectViciousBee()
         self.viciousRotate("right", 1)
         if found:
@@ -442,6 +442,10 @@ class ViciousMixin:
         boxes = np.stack((cx - width / 2, cy - height / 2, width, height), axis=1)
         return len(cv2.dnn.NMSBoxes(boxes.tolist(), scores[mask].tolist(), 0.4, 0.5)) > 0
 
+
+    def viciousSearchesAllFields(self):
+        """Vic Hop Mode and quest vic hops fight in every field; Stinger Hunt only in its chosen fields."""
+        return self.setdat.get("macro_mode", "normal") == "vic" or self.questVicHopped
 
     def viciousHop(self):
         """Run one server search; the main loop reloads settings between hops."""

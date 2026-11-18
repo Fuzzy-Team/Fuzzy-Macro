@@ -1332,7 +1332,11 @@ class QuestMixin:
         for _ in range(3):
             if is_stopped():
                 return False
-            if not self.travelViaCannon(questGiver.title()):
+            # Mother Bear's path walks from the hive instead of the cannon.
+            if questGiver == "mother bear":
+                if not self.reset(convert=False):
+                    return False
+            elif not self.travelViaCannon(questGiver.title()):
                 return False
             if is_stopped():
                 return False

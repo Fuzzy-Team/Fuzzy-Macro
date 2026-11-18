@@ -139,6 +139,8 @@ class macro(
         self.questItemUses = {}
         self.questItemShort = {}
         self.questCollectBackoff = {}
+        # Away from the user's own server hunting vicious bees for a quest.
+        self.questVicHopped = False
         self.lastBlueTextScan = 0
         self.guidingStarLastAnnounced = {}
         # serverGeneration is bumped on each rejoin; a scan that began on the old server must not publish its detections

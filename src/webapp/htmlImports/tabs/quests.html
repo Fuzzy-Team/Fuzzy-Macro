@@ -208,6 +208,26 @@
             triggerFunction: saveProfileTriggerFunction,
           },
         },
+        {
+          id: "quest_hunt_vicious",
+          title: "Vicious Bees",
+          desc: "Vic hop public servers when a quest asks for vicious bee kills, checking every field they spawn in, then rejoin your server",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "quest_blender_item",
+          title: "Blender Crafts",
+          desc: "Item to craft when a quest asks for blender crafts. None leaves those to you",
+          type: {
+            name: "dropdown",
+            data: toImgArray(blenderIcons),
+            triggerFunction: saveProfileTriggerFunction,
+            length: 16,
+          },
+        },
       ]);
 
       buildStandardContainer(questsSettingsParent, "Petal Gather", "Petal objectives use BloomsAI by default. Individual objective settings take priority.", [
