@@ -165,7 +165,21 @@
                     <p>Maximum number of planters that can be placed at any time</p>
                 </div>
                 <input type="text" id="auto_max_planters" style="width: 8rem; margin-top: 0.6rem;" class="poppins-regular textbox" data-input-type="int" data-input-limit="1" onkeypress="return textboxRestriction(this, event)" onchange="saveSetting(this, 'profile')">
-            </form> 
+            </form>
+            <form style="display: flex; align-items:flex-start; justify-content: space-between; padding-right: 5%; margin-top: 1rem;">
+                <div style="width: 70%;">
+                    <label for="auto_degradation_weight">Degradation Weight</label>
+                    <p>When choosing a field, count its degradation this many times worse, so planters spread across more fields for more loot. Doesn't change how long planters grow</p>
+                </div>
+                <input type="text" id="auto_degradation_weight" style="width: 8rem; margin-top: 0.6rem;" class="poppins-regular textbox" data-input-type="float" data-input-limit="4" onkeypress="return textboxRestriction(this, event)" onchange="saveSetting(this, 'profile')">
+            </form>
+            <form style="display: flex; align-items:flex-start; justify-content: space-between; padding-right: 5%; margin-top: 1rem;">
+                <div style="width: 70%;">
+                    <label for="auto_upkeep_nectars">Nectars to Upkeep</label>
+                    <p>How many nectars from the top of the Nectar Priority list get planters (1-5). Lower it if you can't keep all 5 up</p>
+                </div>
+                <input type="text" id="auto_upkeep_nectars" style="width: 8rem; margin-top: 0.6rem;" class="poppins-regular textbox" data-input-type="int" data-input-limit="1" onkeypress="return textboxRestriction(this, event)" onchange="saveSetting(this, 'profile')">
+            </form>
             <form style="display: flex; align-items:flex-start; justify-content: space-between; padding-right: 5%; margin-top:1rem">
                 <div style="width: 70%;">
                     <label>Clear Planter Timers</label>

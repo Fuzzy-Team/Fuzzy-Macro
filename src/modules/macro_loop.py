@@ -1312,6 +1312,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                     fieldDegradation = data.get("field_degradation", {})
 
                     priorityMap = {}
+                    priorityOrder = []
                     for i in range(5):
                         nectar = macro.setdat[f"auto_priority_{i}_nectar"]
                         if nectar == "none":
@@ -1321,6 +1322,14 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                             "index": i,
                             "weight": max(0.5, 1.35 - (i * 0.12))
                         }
+                        if nectar not in priorityOrder:
+                            priorityOrder.append(nectar)
+
+                    # Below 5, only the first N priority nectars get new planters
+                    upkeepCount = max(1, min(5, int(macro.setdat["auto_upkeep_nectars"])))
+                    upkeptNectars = set(priorityOrder[:upkeepCount]) if upkeepCount < 5 else None
+                    # Degradation counts this many times worse when choosing a field, without changing grow times
+                    degradationWeight = max(0.0, float(macro.setdat["auto_degradation_weight"]))
 
                     def emptyFieldDegradationState():
                         return {
@@ -1659,6 +1668,8 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                     def buildPlacementCandidates(occupiedFields, occupiedPlanters):
                         candidates = []
                         for field in getAvailableFields(occupiedFields):
+                            if upkeptNectars is not None and fieldToNectar[field] not in upkeptNectars:
+                                continue
                             addedForField = 0
                             for planterObj in macroModule.autoPlanterRankings.get(field, []):
                                 planterName = planterObj["name"]
@@ -1707,10 +1718,11 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                         if availableFieldCounts.get(nectar, 0) > 1 and nectarLastFields.get(nectar) == candidate["field"]:
                             score *= 0.97
 
-                        degradationHours = getFieldDegradationHours(candidate["field"])
+                        degradationHours = getFieldDegradationHours(candidate["field"]) * degradationWeight
                         degradationPenalty = 1 / (1 + (degradationHours / 12.0))
                         score *= degradationPenalty
-                        score *= max(0.1, candidate["planter_obj"]["grow_time"] / max(0.1, placementPlan["natural_grow_duration"] / 3600.0))
+                        growHours = candidate["planter_obj"]["grow_time"]
+                        score *= max(0.1, growHours / max(0.1, growHours + degradationHours))
 
                         return {
                             "score": score,

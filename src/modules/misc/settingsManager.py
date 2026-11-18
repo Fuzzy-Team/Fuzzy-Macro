@@ -1012,6 +1012,8 @@ def _isPlanterSettingKey(key):
         "auto_planters_collect_auto",
         "auto_planters_check",
         "auto_max_planters",
+        "auto_degradation_weight",
+        "auto_upkeep_nectars",
         "auto_preset",
     }:
         return True
