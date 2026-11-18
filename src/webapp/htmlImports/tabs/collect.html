@@ -402,6 +402,13 @@
       ]);
 
       const windShrineItemsArray = toImgArray(blenderIcons);
+      const windShrineFieldOptions = [
+        "sunflower", "dandelion", "mushroom", "clover", "blue flower", "strawberry", "spider", "bamboo", "pineapple",
+        "stump", "rose", "pine tree", "cactus", "pumpkin", "mountain top", "coconut", "pepper",
+      ].map((field) => ({
+        label: field.split(" ").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" "),
+        value: field,
+      }));
       buildStandardContainer(parentCollectActivities, "Wind Shrine", "", [
         {
           id: "wind_shrine",
@@ -430,6 +437,16 @@
             name: "textbox",
             inputType: "int",
             inputLimit: 4,
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "wind_shrine_fields",
+          title: "Gather In Winds Field",
+          desc: "After a donation, if the shrine sends winds to one of these fields, gather there for 14 minutes instead of the planned field",
+          type: {
+            name: "multicheck",
+            data: windShrineFieldOptions,
             triggerFunction: saveProfileTriggerFunction,
           },
         },
