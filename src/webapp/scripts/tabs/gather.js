@@ -21,6 +21,8 @@ const gatherFieldProperties = [
   "use_whirlwig_fallback",
   "start_location",
   "distance",
+  "sprinkler_offset_x",
+  "sprinkler_offset_y",
   "goo",
   "goo_interval",
   "pine_dupe_detection",

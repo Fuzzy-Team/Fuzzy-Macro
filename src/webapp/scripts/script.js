@@ -1091,6 +1091,10 @@ function textboxRestriction(ele, evt) {
   if (ele.dataset.inputLimit != 0 && ele.value.length >= ele.dataset.inputLimit)
     return false;
   if (ele.dataset.inputType == "float") {
+    //a minus sign is only allowed first, and only on inputs that opt in
+    if (charCode == 45) {
+      return ele.dataset.allowNegative == "1" && ele.selectionStart === 0 && !ele.value.includes("-");
+    }
     if (charCode == 46) {
       //Check if the text already contains the . character
       if (ele.value.indexOf(".") === -1) {
