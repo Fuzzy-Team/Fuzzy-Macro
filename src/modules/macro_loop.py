@@ -185,6 +185,8 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                 regularMobData[x] = [k]
     #Limit werewolf to just pumpkin 
     regularMobData["werewolf"] = ["pumpkin"]
+    # Selected planters a drop could not find in the inventory, left out of drops until the macro restarts
+    missingDropPlanters = set()
     bossCooldowns = {"coconut_crab": 36*60*60, "king_beetle": 24*60*60,
                      "tunnel_bear": 48*60*60, "stump_snail": 96*60*60}
     
@@ -1615,7 +1617,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                                 continue
 
                             for slot, planter in enumerate(planterData):
-                                if planter["planter"] and planter.get("nectar") == nectarName and not planter.get("bonus"):
+                                if planter["planter"] and planter.get("nectar") == nectarName and not (planter.get("bonus") and bonusLoot.enabled(macro.setdat)):
                                     matchingPlanters.append((slot, planter, getNaturalPlanterProgress(planter)))
 
                             matchingPlanters.sort(key=lambda item: (-item[2], item[1]["harvest_time"]))
@@ -1667,7 +1669,8 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                         occupiedFields = {planter["field"] for planter in planterData if planter["field"]}
                         occupiedPlanters = {bonusLoot.planterKey(planter["planter"]) for planter in planterData if planter["planter"]}
                         allowedPlanters = [name for name in macroModule.allPlanters
-                                           if bonusLoot.planterEnabled(macro.setdat, name) and name not in occupiedPlanters]
+                                           if bonusLoot.planterEnabled(macro.setdat, name) and name not in occupiedPlanters
+                                           and name not in missingDropPlanters]
                         disallowedFields = occupiedFields | {field for field in fieldToNectar
                                                              if not bonusLoot.fieldEnabled(macro.setdat, field)}
                         nectarHours = {nectar: getCurrentNectarPercent(nectar) * 0.24 for nectar in macroModule.nectarNames}
@@ -1679,6 +1682,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                             slot = next(idx for idx, planter in enumerate(planterData) if not planter["planter"])
                             macro.logger.webhook("", f"Planting {planterName.replace('_', ' ').title()} in {field.title()} for a planter drop", "dark brown")
                             rankedName = planterName.replace("_", " ")
+                            macro.lastPlanterPlacementFailure = None
                             if runTask(macro.placePlanter, args=(rankedName, field, False), resetAfter=True, convertAfter=False, allowAFB=False):
                                 growHours = bonusLoot.growHours(planterName, field, getFieldDegradationHours(field))
                                 multiplier, growth = bonusLoot.GROWTH[(planterName, field)]
@@ -1699,6 +1703,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                                 break
                             if failure == "missing_inventory":
                                 blockedPlanters.add(rankedName)
+                                missingDropPlanters.add(planterName)
                             else:
                                 blockedPlacements.add((rankedName, field))
 

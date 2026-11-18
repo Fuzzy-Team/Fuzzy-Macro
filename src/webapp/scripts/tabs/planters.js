@@ -174,6 +174,11 @@ async function updatePlanterDropToggles(settings){
     })
 }
 
+async function savePlanterDropSetting(ele){
+    await saveSetting(ele, 'profile')
+    updatePlanterDropToggles(await loadAllSettings())
+}
+
 function loadInputsWithDuplicateSelects(settings){
     loadInputs(settings)
     refreshPlanterHotbarSlotSelects(settings)
