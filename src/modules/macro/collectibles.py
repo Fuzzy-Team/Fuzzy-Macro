@@ -7,6 +7,7 @@ from datetime import timedelta
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
 from modules.misc.settings_defaults import glitter_slot, glitter_slot_label
+from modules.submacros.tadAltSync import GO_TO, GO_TO_END, REVERT_DISLIKED, REVERT_UNSEEN, STAY_IN, STAY_IN_END, broadcast_to_field_alts
 import modules.screen.ocr as ocr
 from modules.controls.sleep import is_stopped, pause_aware_time as time, paused_seconds, sleep
 from modules.macro.game_data import (
@@ -229,6 +230,9 @@ class CollectiblesMixin:
                     self.logger.webhook("", f"Could not extend field booster: {error}", "red")
                 return
             self.logger.webhook("", f"Used Glitter from {glitter_slot_label(glitterSlot)}; extending field booster", "bright green")
+            if self.mainBoost:
+                self.mainBoost = (self.mainBoost[0], time.time())
+                broadcast_to_field_alts(self.setdat, f"{STAY_IN}{self.mainBoost[0]}{STAY_IN_END}")
 
         threading.Thread(target=useGlitter, name="field-booster-glitter-extension", daemon=True).start()
 
@@ -629,6 +633,12 @@ class CollectiblesMixin:
                 returnVal = boostedField
                 self.logger.webhook("", f"Collected: {displayName}, Boosted Field: {boostedField.title()}", "bright green", "screen")
                 if boostedField:
+                    #field alts follow the main only into a boosted field it gathers in
+                    if self.setdat.get("gather_boosted", False):
+                        self.mainBoost = (boostedField, time.time())
+                        broadcast_to_field_alts(self.setdat, f"{GO_TO}{boostedField}{GO_TO_END}")
+                    else:
+                        broadcast_to_field_alts(self.setdat, REVERT_DISLIKED)
                     extendFieldBooster = self.setdat.get("field_booster_glitter_extend_enabled", False)
                     self.tadAltSync.sync_to_boost(
                         boostedField,
@@ -638,6 +648,7 @@ class CollectiblesMixin:
                     if extendFieldBooster:
                         self.scheduleFieldBoosterGlitterExtension()
                 else:
+                    broadcast_to_field_alts(self.setdat, REVERT_UNSEEN)
                     self.tadAltSync.initialize_alts()
                 if is_stopped():
                     updateHourlyTime()

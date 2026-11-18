@@ -27,6 +27,7 @@ from modules.controls.sleep import INTERRUPT_SKIP, INTERRUPT_RESET, INTERRUPT_AF
 
 from modules.misc import settingsManager
 from modules.misc.cooldowns import get_cooldown_rows
+from modules.submacros.tadAltSync import field_alt_update, is_field_alt
 from modules.screen.shiftLock import detect_shift_lock, detect_shift_lock_with_retries
 
 # Hourly report dependencies
@@ -847,6 +848,18 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 )
                 await message.channel.send(embed=_apply_embed_footer(embed))
                 return
+            # A field alt follows the main's messages from the field alt webhook.
+            if is_field_alt(get_cached_settings()):
+                settings = settingsManager.loadSettings()
+                update = field_alt_update(message.content, settings, time.time())
+                if update is not None:
+                    if update.get("main_boosted_field", "") and update["main_boosted_field"] not in settingsManager.loadFields():
+                        print(f"Ignored field alt message for an unknown field: {message.content}")
+                        return
+                    for key, value in update.items():
+                        settingsManager.saveProfileSetting(key, value)
+                    clear_settings_cache()
+                    return
             # Only an alt takes commands from the host's webhook.
             if get_cached_settings().get("macro_mode") != "alt":
                 return

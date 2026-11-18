@@ -3,6 +3,7 @@
     <div id="boost-hotbar" class="boost-tab-item">Hotbar</div>
     <div id="boost-buffs" class="boost-tab-item">Buffs</div>
     <div id="boost-tad-alt-sync" class="boost-tab-item">TAD Alt Sync</div>
+    <div id="boost-account-role" class="boost-tab-item">Account Role</div>
   </div>
   <div id="boost-hotbar-tab" class="standard-container sub-tab-panel active">
     <script>
@@ -501,6 +502,24 @@
           title: "Glitter Hotbar Slot",
           desc: "The hotbar slot of the Glitter used for TAD alt extending. Set to 0 to find Glitter in the inventory.",
           type: { name: "dropdown", data: [0, 1, 2, 3, 4, 5, 6, 7], triggerFunction: saveProfileTriggerFunction },
+        },
+      ]);
+    </script>
+  </div>
+  <div id="boost-account-role-tab" class="standard-container sub-tab-panel">
+    <script>
+      buildStandardContainer(document.getElementById("boost-account-role-tab"), "Account Role", "Run several accounts together. Field alts gather their own field and join the main in its boosted field.", [
+        {
+          id: "account_role",
+          title: "Role",
+          desc: "Solo works on its own. Main tells the field alts which boosted field to gather in. Field Alt 1 to 3 follow the main for 15 minutes after each message, then go back to their first gather field. Field alts don't gather in their own boosted fields.",
+          type: { name: "dropdown", data: ["Solo", "Main", "Field Alt 1", "Field Alt 2", "Field Alt 3"], triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "field_alt_webhook",
+          title: "Field Alt Webhook",
+          desc: "Main only. A webhook in a channel that every field alt's Fuzzy Discord bot can read. Each field alt needs its own Discord bot running.",
+          type: { name: "textbox", inputType: "string", length: 24, triggerFunction: saveProfileTriggerFunction },
         },
       ]);
     </script>

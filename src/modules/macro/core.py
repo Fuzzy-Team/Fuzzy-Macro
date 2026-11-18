@@ -110,6 +110,8 @@ class macro(
             self.logger,
             use_glitter=self.useGlitterFromSlot,
         )
+        self.mainBoost = None #(field, time) the main last sent the field alts to
+        self.mainBoostEndSent = None
         self._fieldBoosterGlitterGeneration = 0
         self._fieldBoosterGlitterLock = threading.Lock()
         self._inventoryInteractionLock = threading.RLock()
@@ -377,6 +379,7 @@ class macro(
         self.buffBandScreen = None #captured on first use by captureBuffBand
         self.scanGummyballBuff()
         self.scanBuffBarBoost()
+        self.checkMainBoostEnd()
         self.useHotbar()
 
     def useHotbar(self, tapping=False):

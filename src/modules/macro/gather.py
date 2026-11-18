@@ -6,6 +6,7 @@ import modules.misc.settingsManager as settingsManager
 from modules.controls.sleep import INTERRUPT_NONE, InterruptRequested, is_stopped, pause_aware_time as time, paused_seconds, sleep
 from modules.gather_session import pattern_supports_field, field_pattern_variables, GatherPatternRunner, GatherSession
 from modules.quest_planning import quest_check_due, kill_objective_mob
+from modules.submacros.tadAltSync import field_alt_leave_reason, is_field_alt
 import modules.macro.pattern_environment as patternEnvironment
 from modules.macro.game_data import (
     collectData,
@@ -226,6 +227,7 @@ class GatherMixin:
         }
 
     def gather(self, field, settingsOverride = {}, questObjective=None, stopWhen=None):
+        gatherCalledAt = time.time() #a field alt leaves for main messages that arrive after this
         self.robloxWindow.questMenuVisibleForAI = False
         if not (questObjective and self.setdat.get("quest_progress_watch", False)):
             self.closeQuestMenu()
@@ -683,6 +685,13 @@ class GatherMixin:
                     self.logger.webhook("Cooldown gathering finished", "A task is ready or settings changed. Returning to the task queue.",
                                         "light blue", route_category="gathering")
                     break
+
+                if is_field_alt(self.setdat):
+                    leaveReason = field_alt_leave_reason(settingsManager.loadSettings(), normalized_field, gatherCalledAt, time.time())
+                    if leaveReason:
+                        keepGathering = False
+                        self.logger.webhook("Gathering: Ended", leaveReason, "light green", route_category="gathering")
+                        break
 
                 patternStartTime = time.time()
                 # wait for any inventory interaction to finish before clicking again
