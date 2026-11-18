@@ -856,8 +856,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                     if update.get("main_boosted_field", "") and update["main_boosted_field"] not in settingsManager.loadFields():
                         print(f"Ignored field alt message for an unknown field: {message.content}")
                         return
-                    for key, value in update.items():
-                        settingsManager.saveProfileSetting(key, value)
+                    settingsManager.saveDictProfileSettings(update)
                     clear_settings_cache()
                     return
             # Only an alt takes commands from the host's webhook.

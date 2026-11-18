@@ -904,7 +904,8 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                 if taskId.startswith("gather_"):
                     fieldName = taskId.replace("gather_", "").replace("_", " ")
                     if taskId not in executedTasks:
-                        runTask(macro.gather, args=(fieldName,), resetAfter=False)
+                        mainField = main_field_for_alt(settingsManager.loadSettings(), time.time()) if is_field_alt(macro.setdat) else None
+                        runTask(macro.gather, args=(mainField or fieldName,), resetAfter=False)
                         executedTasks.add(taskId)
 
             # Skip to next iteration
