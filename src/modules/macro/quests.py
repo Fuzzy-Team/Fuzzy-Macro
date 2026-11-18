@@ -1250,7 +1250,7 @@ class QuestMixin:
                     if cutOff or y < rowsTop - 2:
                         continue
                     panelPixels = below[y:y+h, x:x+w]
-                    rowKey = hash(panelPixels.tobytes())
+                    rowKey = panelPixels.tobytes()
                     if rowKey in seen:
                         continue
                     seen.add(rowKey)
