@@ -5,7 +5,7 @@ import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
 from modules.quest_planning import (quest_giver_order, choose_quest_gather, is_gather_objective, allowed_fields,
                                     quest_uses_ant_challenge, kill_objective_mob, manual_objective_name, objective_allowed,
-                                    FIXED_LINE_GIVERS)
+                                    FIXED_LINE_GIVERS, QUEST_BLENDER_SETTING, QUEST_VICIOUS_SETTING)
 from modules.controls.sleep import (
     InterruptRequested,
     INTERRUPT_NONE,
@@ -550,6 +550,9 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                     if mob in regularMobData:
                         macro.questGatherInterruptMobs.setdefault(questGiver, set()).add(mob)
                 watchTask = "kill_" + mob
+            elif kind == "collect" and target == "field-booster":
+                tasks = ["field_booster"]
+                watchTask = None
             elif kind == "collect":
                 tasks = [target.replace("-", "_")]
                 watchTask = "collect_" + tasks[0]
@@ -569,6 +572,12 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
             elif kind == "donate" and macro.setdat.get("quest_donate_wind_shrine"):
                 macro.questTaskWatchers.setdefault("collect_wind_shrine", []).append((questGiver, objective))
                 continue
+            elif kind == "vicious" and macro.setdat.get(QUEST_VICIOUS_SETTING):
+                tasks = ["vicious_quest_hop"]
+                watchTask = None
+            elif kind == "craft" and macro.setdat.get(QUEST_BLENDER_SETTING, "none") != "none":
+                tasks = ["blender_quest_craft"]
+                watchTask = None
             elif kind == "pairs" and macro.setdat.get("quest_play_memory_match"):
                 for task in ("collect_memory_match", "collect_mega_memory_match", "collect_extreme_memory_match"):
                     macro.questTaskWatchers.setdefault(task, []).append((questGiver, objective))
@@ -615,6 +624,31 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                 taskCompleted = True
                 continue
 
+            if taskName == "field_booster":
+                # Any booster counts, so take whichever is off cooldown.
+                ready = [name for name in macroModule.fieldBoosterData if macro.hasRespawned(name, macro.collectCooldowns[name])]
+                if ready:
+                    runTask(macro.collect, args=(ready[0],))
+                    taskCompleted = True
+                continue
+
+            if taskName == "vicious_quest_hop":
+                if macro.pendingQuestObjectives("vicious"):
+                    macro.questVicHopped = True
+                    runTask(macro.viciousHop, resetAfter=False, allowAFB=False)
+                    taskCompleted = True
+                continue
+
+            if taskName == "blender_quest_craft":
+                rows = macro.pendingQuestObjectives("craft")
+                blenderData = loadBlenderData()
+                if rows and time.time() >= blenderData["collectTime"]:
+                    craft = (macro.setdat[QUEST_BLENDER_SETTING], macro.questItemsLeft(rows[0]))
+                    if runTask(macro.blender, args=(blenderData, craft)) is False:
+                        macro.questItemShort[rows[0]["id"]] = time.time()
+                    taskCompleted = True
+                continue
+
             if taskName in ("king_beetle", "tunnel_bear"):
                 if macro.hasRespawned(taskName, bossCooldowns[taskName], applyMobRespawnBonus=True):
                     runTask(macro.kingBeetle if taskName == "king_beetle" else macro.tunnelBear)
@@ -629,6 +663,12 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                         killedInAnyField = True
                 if killedInAnyField:
                     taskCompleted = True
+
+    def returnFromQuestVicHop():
+        """Rejoin the user's own server once no quest needs vicious bees any more."""
+        if macro.questVicHopped and not macro.pendingQuestObjectives("vicious"):
+            macro.questVicHopped = False
+            runTask(macro.rejoin, resetAfter=False)
 
     def runReadyQuestInterruptMobs():
         """Kill ready quest mobs before the normal task queue starts gathering."""
@@ -962,12 +1002,16 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
             # Hand in every finished quest before starting work on any quest, new or old.
             claimed = [handleQuest(giver) for giver in quest_giver_order(macro.setdat)
                        if canClaimTimedBearQuest(giver)]
+            returnFromQuestVicHop()
             for requiredTasks, feeds in claimed:
                 for task in requiredTasks:
                     macro.setdat[task] = True
                 runQuestSupportTasks(requiredTasks)
                 for item, quantity in feeds:
                     runTask(macro.feedBee, args=(item, quantity), resetAfter=False)
+            if macro.questVicHopped:
+                # Keep hopping until the quest log shows the vicious bees done, rather than working in a public server.
+                continue
             for name in QUEST_COLLECTS:
                 if macro.questWantsCollect(name) and macro.hasRespawned(name, macro.collectCooldowns[name]):
                     runTask(macro.collect, args=(name,))
@@ -1132,8 +1176,9 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                 for requiredTasks, feeds in claimed:
                     for item, quantity in feeds:
                         runTask(macro.feedBee, args=(item, quantity), resetAfter=False)
-                    if "jelly_beans" in requiredTasks:
-                        runQuestSupportTasks(["jelly_beans"])
+                    runQuestSupportTasks([task for task in requiredTasks
+                                          if task in ("jelly_beans", "field_booster", "vicious_quest_hop", "blender_quest_craft")])
+                returnFromQuestVicHop()
                 return True
 
             # Handle collect tasks

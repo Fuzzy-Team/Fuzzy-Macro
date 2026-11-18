@@ -33,6 +33,8 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'quest_use_extracts': False,
  'quest_donate_wind_shrine': False,
  'quest_play_memory_match': False,
+ 'quest_hunt_vicious': False,
+ 'quest_blender_item': 'none',
  'panda_bear_quest_gather_interrupt': False,
  'science_bear_quest_gather_interrupt': False,
  'mother_bear_quest_gather_interrupt': False,

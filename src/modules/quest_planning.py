@@ -25,6 +25,8 @@ QUEST_ITEMS = {
 # Row kinds that need a setting before the macro will spend items or tickets on them.
 QUEST_DONATE_SETTING = "quest_donate_wind_shrine"
 QUEST_PAIRS_SETTING = "quest_play_memory_match"
+QUEST_VICIOUS_SETTING = "quest_hunt_vicious"
+QUEST_BLENDER_SETTING = "quest_blender_item"
 BLUE_FIELDS = ("blue flower", "bamboo", "pine tree", "stump")
 RED_FIELDS = ("mushroom", "strawberry", "rose", "pepper")
 FIELDS = ("sunflower", "dandelion", "mushroom", "blue flower", "clover", "strawberry",
@@ -125,6 +127,12 @@ def manual_objective_name(action):
         return f"Donate {count} {item.title()} to the Wind Shrine"
     if kind == "pairs":
         return f"Match {target} Memory Match pairs"
+    if kind == "quest":
+        return f"Complete a {target.replace('-', ' ').title()} quest"
+    if kind == "vicious":
+        return f"Defeat {target} Vicious Bees"
+    if kind == "craft":
+        return f"Craft {target} ingredients with the Blender"
     return target.title()
 
 
@@ -142,6 +150,13 @@ def objective_allowed(objective, settings):
         return bool(settings.get(QUEST_DONATE_SETTING))
     if kind == "pairs":
         return bool(settings.get(QUEST_PAIRS_SETTING))
+    if kind == "vicious":
+        return bool(settings.get(QUEST_VICIOUS_SETTING))
+    if kind == "craft":
+        return settings.get(QUEST_BLENDER_SETTING, "none") not in (None, "none")
+    if kind == "quest":
+        # Done by working that giver's own quests, so it needs that giver switched on.
+        return bool(settings.get(objective["action"].partition("_")[2].replace("-", "_") + "_quest"))
     return kind != "manual"
 
 
@@ -221,6 +236,9 @@ def objective_matches_text(action, text):
         item = target.split("_", 1)[-1]
         return {singular(word) for word in item.replace("_", " ").split()}.issubset(words) and bool(words.intersection(("feed", "give")))
     if kind == "collect":
+        if target == "field-booster":
+            # Any booster: the row names no colour, unlike the red and blue booster rows.
+            return {"field", "booster"}.issubset(words) and not words.intersection(("red", "blue", "mountain"))
         return set(re.findall(r"[a-z]+", target)).issubset(words)
     if kind == "fieldtoken":
         return target in words and bool(words.intersection(("collect", "token")))
@@ -230,6 +248,12 @@ def objective_matches_text(action, text):
         return {singular(word) for word in item.split()}.issubset(words) and bool(words.intersection(verbs))
     if kind == "pairs":
         return "pair" in words
+    if kind == "quest":
+        return set(target.split("-")).issubset(words) and "quest" in words
+    if kind == "vicious":
+        return bool(re.search(r"\bvicious\b", text.lower())) and bool(words.intersection(("defeat", "kill", "slay", "destroy")))
+    if kind == "craft":
+        return "blender" in words
     return False
 
 
