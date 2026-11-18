@@ -430,7 +430,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                 if not is_stopped():
                     macro.reset(convert=True)
                 taskCompleted = True
-            if not is_stopped() and macro.setdat.get("macro_mode", "normal") not in ("alt", "vic") and macro.hasScheduledRejoinArrived():
+            if not is_stopped() and macro.setdat.get("macro_mode", "normal") not in ("alt", "vic") and not macro.mondoHopped and macro.hasScheduledRejoinArrived():
                 if macro.rejoin("Rejoining (Scheduled)"):
                     macro.saveTiming("rejoin_every")
                 taskCompleted = True

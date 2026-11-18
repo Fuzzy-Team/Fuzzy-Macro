@@ -164,7 +164,7 @@ class MobMixin:
                         self.keyboard.walk("s",0.20)
                         self.keyboard.walk("a",2.65)
             else:
-                self.logger.webhook("", "Mondo: the mondo was never found, skipping the loot", "red", "screen")
+                self.logger.webhook("", "Mondo: the fight ended without a confirmed defeat, skipping the loot", "red", "screen")
                 if not self.isMondoHopOn():
                     self.saveTiming("mondo")
             if self.isMondoHopOn() and not is_stopped():

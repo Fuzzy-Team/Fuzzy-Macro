@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 import modules.controls.mouse as mouse
 from datetime import datetime
-from modules.controls.sleep import is_paused, is_stopped, pause_aware_time as time
+from modules.controls.sleep import is_stopped, pause_aware_time as time, paused_seconds
 from modules.screen.imageSearch import captureLogicalBGR
 
 HEALTH_RED = 0x6B131A
@@ -104,10 +104,10 @@ class MondoMixin:
             recentered = False
             offsetX, offsetY = AIM[202]
             while not is_stopped():
-                wasPaused = is_paused()
+                pausedBefore = paused_seconds()
                 if self.checkPauseAndWait():
                     break
-                if wasPaused:   # pausing releases the mouse
+                if paused_seconds() > pausedBefore:   # pausing releases the mouse
                     mouse.moveTo(window.mx + 350, window.my + 120)
                     mouse.mouseDown()
                 loops += 1
